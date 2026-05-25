@@ -16,14 +16,9 @@ const LEAGUES = [
   {id:"golf",label:"Golf",icon:"⛳",color:"#22c55e"},
 ];
 
-const TABS = ["Overview","H2H","Players","Weather"];
+const TABS = ["Box Score","H2H","Players","Weather"];
 const sc = s=>/live|inprog/i.test(s||"")?"#22c55e":/final|closed/i.test(s||"")?"#6b7280":"#60a5fa";
 const sl = s=>/live|inprog/i.test(s||"")?"LIVE":/final|closed/i.test(s||"")?"FINAL":"TODAY";
-
-// Static detail data for featured matchups
-const DETAILS = {
-  // Add details for live games dynamically
-};
 
 export default function DashboardPage() {
   const {user,signOut} = useAuth();
@@ -32,9 +27,11 @@ export default function DashboardPage() {
   const [games,setGames] = useState([]);
   const [gamesLoading,setGamesLoading] = useState(true);
   const [selected,setSelected] = useState(null);
-  const [tab,setTab] = useState("Overview");
+  const [tab,setTab] = useState("Box Score");
   const [plan,setPlan] = useState({tier:"free"});
   const [menuOpen,setMenuOpen] = useState(false);
+  const [boxScore,setBoxScore] = useState(null);
+  const [boxLoading,setBoxLoading] = useState(false);
   const lg = LEAGUES.find(l=>l.id===league);
   const isPro = plan.tier==="pro"||plan.tier==="elite";
 
@@ -51,8 +48,19 @@ export default function DashboardPage() {
 
   useEffect(()=>{ loadGames(league); },[league,loadGames]);
 
-  const pick = (g)=>{ setSelected(g); setTab("Overview"); };
-  const back = ()=>setSelected(null);
+  const pick = async(g)=>{
+    setSelected(g); setTab("Box Score"); setBoxScore(null);
+    // Load box score automatically
+    if(g.status==="live"||g.status==="final"||g.status==="closed") {
+      setBoxLoading(true);
+      try {
+        const res = await gamesApi.getBoxScore(league, g.id);
+        setBoxScore(res.boxScore);
+      } catch(e) { console.error(e); }
+      setBoxLoading(false);
+    }
+  };
+  const back = ()=>{ setSelected(null); setBoxScore(null); };
 
   return (
     <div style={{minHeight:"100vh",background:"#080810",color:"#e2e8f0",fontFamily:"'Inter',system-ui,sans-serif"}}>
@@ -65,7 +73,6 @@ export default function DashboardPage() {
         .gc{transition:all .18s ease;cursor:pointer}
         .gc:active{transform:scale(.97)}
         ::-webkit-scrollbar{width:3px;height:3px}
-        ::-webkit-scrollbar-track{background:transparent}
         ::-webkit-scrollbar-thumb{background:#334155;border-radius:2px}
       `}</style>
 
@@ -132,11 +139,14 @@ export default function DashboardPage() {
                 </div>
               ))}
               <div style={{display:"flex",gap:10,marginTop:12,alignItems:"center",flexWrap:"wrap"}}>
-                <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:10,background:sc(selected.status)+"18",color:sc(selected.status),border:`1px solid ${sc(selected.status)}38`}}>
-                  {/live|inprog/i.test(selected.status||"")&&<span style={{display:"inline-block",width:5,height:5,borderRadius:"50%",background:"#22c55e",marginRight:5,animation:"pulse2 1.4s infinite"}}/>}
+                <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:10,background:sc(selected.status)+"18",color:sc(selected.status),border:`1px solid ${sc(selected.status)}38`,display:"inline-flex",alignItems:"center",gap:4}}>
+                  {/live/i.test(selected.status||"")&&<span style={{display:"inline-block",width:5,height:5,borderRadius:"50%",background:"#22c55e",marginRight:5,animation:"pulse2 1.4s infinite"}}/>}
                   {sl(selected.status)}
                 </span>
                 <span style={{fontSize:12,color:"#475569"}}>{selected.time}</span>
+                {selected.inning&&<span style={{fontSize:12,color:lg.color,fontWeight:700}}>{selected.inning}</span>}
+                {selected.quarter&&<span style={{fontSize:12,color:lg.color,fontWeight:700}}>Q{selected.quarter}</span>}
+                {selected.clock&&<span style={{fontSize:12,color:"#475569"}}>{selected.clock}</span>}
               </div>
             </div>
 
@@ -144,81 +154,150 @@ export default function DashboardPage() {
             <div style={{display:"flex",borderBottom:"1px solid #1e2235",background:"#080810",position:"sticky",top:61,zIndex:99}}>
               {TABS.map(t=>(
                 <button key={t} onClick={()=>setTab(t)}
-                  style={{flex:1,padding:"12px 4px",background:"none",border:"none",borderBottom:`2px solid ${tab===t?lg.color:"transparent"}`,color:tab===t?lg.color:"#475569",fontSize:13,fontWeight:tab===t?700:500,cursor:"pointer",fontFamily:"inherit",marginBottom:-1}}>
+                  style={{flex:1,padding:"12px 4px",background:"none",border:"none",borderBottom:`2px solid ${tab===t?lg.color:"transparent"}`,color:tab===t?lg.color:"#475569",fontSize:12,fontWeight:tab===t?700:500,cursor:"pointer",fontFamily:"inherit",marginBottom:-1}}>
                   {t}
                 </button>
               ))}
             </div>
 
             {/* Pro gate */}
-            {!isPro&&tab!=="Overview"&&(
+            {!isPro&&(
               <div style={{margin:16,background:"linear-gradient(135deg,#ef444418,#f9731408)",border:"1px solid #ef444430",borderRadius:16,padding:28,textAlign:"center"}}>
                 <div style={{fontSize:32,marginBottom:12}}>🔒</div>
-                <div style={{fontSize:17,fontWeight:800,color:"#fff",marginBottom:8}}>{tab} requires All-Access</div>
-                <div style={{fontSize:13,color:"#64748b",marginBottom:20}}>Upgrade to access H2H records, player stats, weather analysis and more.</div>
+                <div style={{fontSize:17,fontWeight:800,color:"#fff",marginBottom:8}}>Unlock Full Stats</div>
+                <div style={{fontSize:13,color:"#64748b",marginBottom:20}}>Get box scores, H2H records, player matchup stats, weather analysis and more.</div>
                 <button onClick={()=>navigate("/pricing")} style={{background:"#ef4444",color:"#fff",border:"none",borderRadius:10,padding:"12px 32px",fontSize:14,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>
                   Upgrade — $6.99/mo →
                 </button>
               </div>
             )}
 
-            {/* Tab content */}
-            {(isPro||tab==="Overview")&&(
+            {/* Tab content — Pro only */}
+            {isPro&&(
               <div style={{padding:16,animation:"fadeIn .2s ease"}}>
-                {tab==="Overview"&&(
+
+                {/* BOX SCORE */}
+                {tab==="Box Score"&&(
                   <div>
-                    {/* Game info */}
-                    <div style={{background:"#0d0d1a",border:"1px solid #1e2235",borderRadius:16,padding:20,marginBottom:12}}>
-                      <div style={{fontSize:11,color:"#475569",fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:12}}>Game Info</div>
-                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-                        <div>
-                          <div style={{fontSize:10,color:"#475569",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>Venue</div>
-                          <div style={{fontSize:13,fontWeight:600,color:"#e2e8f0"}}>{selected.venue||"TBD"}</div>
-                        </div>
-                        <div>
-                          <div style={{fontSize:10,color:"#475569",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>Location</div>
-                          <div style={{fontSize:13,fontWeight:600,color:"#e2e8f0"}}>{selected.city||"TBD"}</div>
-                        </div>
-                        <div>
-                          <div style={{fontSize:10,color:"#475569",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>Time</div>
-                          <div style={{fontSize:13,fontWeight:600,color:"#e2e8f0"}}>{selected.time||"TBD"}</div>
-                        </div>
-                        <div>
-                          <div style={{fontSize:10,color:"#475569",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>Status</div>
-                          <div style={{fontSize:13,fontWeight:600,color:sc(selected.status)}}>{sl(selected.status)}</div>
-                        </div>
+                    {boxLoading&&(
+                      <div style={{textAlign:"center",padding:40}}>
+                        <div style={{width:28,height:28,border:"3px solid #1e2235",borderTopColor:lg.color,borderRadius:"50%",animation:"spin .8s linear infinite",margin:"0 auto 14px"}}/>
+                        <div style={{fontSize:13,color:"#475569"}}>Loading box score...</div>
                       </div>
-                    </div>
-                    {!isPro&&(
-                      <div onClick={()=>navigate("/pricing")} style={{background:"linear-gradient(135deg,#ef444412,#ef444406)",border:"1px solid #ef444430",borderRadius:14,padding:"16px 20px",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                        <div>
-                          <div style={{fontSize:14,fontWeight:700,color:"#ef4444",marginBottom:4}}>🔒 Unlock Full Analysis</div>
-                          <div style={{fontSize:12,color:"#64748b"}}>H2H records · Player stats · Weather · Betting lines</div>
+                    )}
+                    {!boxLoading&&!boxScore&&(
+                      <div style={{textAlign:"center",padding:40}}>
+                        <div style={{fontSize:36,marginBottom:12}}>⏱</div>
+                        <div style={{fontSize:14,color:"#475569"}}>Box score available once the game starts</div>
+                      </div>
+                    )}
+                    {!boxLoading&&boxScore&&(
+                      <div>
+                        {/* Score summary */}
+                        <div style={{background:"#0d0d1a",border:"1px solid #1e2235",borderRadius:14,padding:16,marginBottom:12,display:"grid",gridTemplateColumns:"1fr auto 1fr",gap:8,alignItems:"center",textAlign:"center"}}>
+                          <div>
+                            <div style={{fontSize:12,color:"#64748b",marginBottom:4}}>{selected.away}</div>
+                            <div style={{fontFamily:"'Barlow Condensed'",fontSize:44,fontWeight:900,color:"#e2e8f0"}}>{boxScore.awayScore??"-"}</div>
+                          </div>
+                          <div style={{color:"#1e2235",fontFamily:"'Barlow Condensed'",fontSize:18,fontWeight:700}}>
+                            {boxScore.inning?`${boxScore.inning} Inn`:"FINAL"}
+                          </div>
+                          <div>
+                            <div style={{fontSize:12,color:"#64748b",marginBottom:4}}>{selected.home}</div>
+                            <div style={{fontFamily:"'Barlow Condensed'",fontSize:44,fontWeight:900,color:lg.color}}>{boxScore.homeScore??"-"}</div>
+                          </div>
                         </div>
-                        <span style={{color:"#ef4444",fontSize:20}}>›</span>
+
+                        {/* Away team stats */}
+                        {boxScore.away?.length>0&&(
+                          <div style={{marginBottom:16}}>
+                            <div style={{fontSize:11,fontWeight:700,color:"#64748b",letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:8,paddingLeft:4}}>{selected.away}</div>
+                            <div style={{overflowX:"auto",borderRadius:12,background:"#0a0a16"}}>
+                              <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:320}}>
+                                <thead>
+                                  <tr style={{borderBottom:"1px solid #1e2235"}}>
+                                    <th style={{textAlign:"left",padding:"8px 10px",color:"#475569",fontWeight:600}}>Player</th>
+                                    {Object.keys(boxScore.away[0]).filter(k=>k!=="name"&&k!=="pos").map(k=>(
+                                      <th key={k} style={{padding:"8px 6px",color:"#475569",fontWeight:600,textAlign:"center",textTransform:"uppercase"}}>{k}</th>
+                                    ))}
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {boxScore.away.map((p,i)=>(
+                                    <tr key={i} style={{borderBottom:"1px solid #0d1120"}}>
+                                      <td style={{padding:"8px 10px",fontWeight:600,color:"#e2e8f0",whiteSpace:"nowrap"}}>
+                                        <span style={{fontSize:10,color:"#334155",marginRight:6}}>{p.pos}</span>{p.name}
+                                      </td>
+                                      {Object.entries(p).filter(([k])=>k!=="name"&&k!=="pos").map(([k,v])=>(
+                                        <td key={k} style={{padding:"8px 6px",textAlign:"center",color:"#64748b"}}>{v}</td>
+                                      ))}
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Home team stats */}
+                        {boxScore.home?.length>0&&(
+                          <div>
+                            <div style={{fontSize:11,fontWeight:700,color:lg.color,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:8,paddingLeft:4}}>{selected.home}</div>
+                            <div style={{overflowX:"auto",borderRadius:12,background:"#0a0a16"}}>
+                              <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:320}}>
+                                <thead>
+                                  <tr style={{borderBottom:"1px solid #1e2235"}}>
+                                    <th style={{textAlign:"left",padding:"8px 10px",color:"#475569",fontWeight:600}}>Player</th>
+                                    {Object.keys(boxScore.home[0]).filter(k=>k!=="name"&&k!=="pos").map(k=>(
+                                      <th key={k} style={{padding:"8px 6px",color:"#475569",fontWeight:600,textAlign:"center",textTransform:"uppercase"}}>{k}</th>
+                                    ))}
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {boxScore.home.map((p,i)=>(
+                                    <tr key={i} style={{borderBottom:"1px solid #0d1120"}}>
+                                      <td style={{padding:"8px 10px",fontWeight:600,color:"#e2e8f0",whiteSpace:"nowrap"}}>
+                                        <span style={{fontSize:10,color:"#334155",marginRight:6}}>{p.pos}</span>{p.name}
+                                      </td>
+                                      {Object.entries(p).filter(([k])=>k!=="name"&&k!=="pos").map(([k,v])=>(
+                                        <td key={k} style={{padding:"8px 6px",textAlign:"center",color:"#64748b"}}>{v}</td>
+                                      ))}
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
                 )}
-                {tab==="H2H"&&isPro&&(
-                  <div style={{background:"#0d0d1a",border:"1px solid #1e2235",borderRadius:16,padding:20,textAlign:"center"}}>
+
+                {/* H2H */}
+                {tab==="H2H"&&(
+                  <div style={{background:"#0d0d1a",border:"1px solid #1e2235",borderRadius:16,padding:24,textAlign:"center"}}>
                     <div style={{fontSize:32,marginBottom:12}}>⚔️</div>
                     <div style={{fontSize:16,fontWeight:700,color:"#fff",marginBottom:8}}>{selected.away} vs {selected.home}</div>
-                    <div style={{fontSize:13,color:"#475569"}}>H2H data loading from live database...</div>
+                    <div style={{fontSize:13,color:"#475569",marginBottom:20}}>Full H2H history coming soon</div>
                   </div>
                 )}
-                {tab==="Players"&&isPro&&(
-                  <div style={{background:"#0d0d1a",border:"1px solid #1e2235",borderRadius:16,padding:20,textAlign:"center"}}>
+
+                {/* Players */}
+                {tab==="Players"&&(
+                  <div style={{background:"#0d0d1a",border:"1px solid #1e2235",borderRadius:16,padding:24,textAlign:"center"}}>
                     <div style={{fontSize:32,marginBottom:12}}>🎯</div>
                     <div style={{fontSize:16,fontWeight:700,color:"#fff",marginBottom:8}}>Player Matchups</div>
-                    <div style={{fontSize:13,color:"#475569"}}>Player stats loading from live database...</div>
+                    <div style={{fontSize:13,color:"#475569"}}>Player vs opponent stats coming soon</div>
                   </div>
                 )}
-                {tab==="Weather"&&isPro&&(
-                  <div style={{background:"#0d0d1a",border:"1px solid #1e2235",borderRadius:16,padding:20,textAlign:"center"}}>
+
+                {/* Weather */}
+                {tab==="Weather"&&(
+                  <div style={{background:"#0d0d1a",border:"1px solid #1e2235",borderRadius:16,padding:24,textAlign:"center"}}>
                     <div style={{fontSize:32,marginBottom:12}}>🌤</div>
                     <div style={{fontSize:16,fontWeight:700,color:"#fff",marginBottom:8}}>Weather Conditions</div>
-                    <div style={{fontSize:13,color:"#475569"}}>Weather data loading for {selected.city}...</div>
+                    <div style={{fontSize:13,color:"#475569"}}>Live weather for {selected.city} coming soon</div>
                   </div>
                 )}
               </div>
@@ -234,7 +313,7 @@ export default function DashboardPage() {
                 style={{background:"linear-gradient(135deg,#ef444412,#f9731408)",border:"1px solid #ef444425",borderRadius:12,padding:"12px 16px",marginBottom:14,display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer"}}>
                 <div>
                   <div style={{fontSize:13,fontWeight:700,color:"#ef4444"}}>⚡ Unlock Full Stats + Daily Picks</div>
-                  <div style={{fontSize:11,color:"#475569",marginTop:2}}>H2H, player matchups, weather, betting lines — $6.99/mo</div>
+                  <div style={{fontSize:11,color:"#475569",marginTop:2}}>Box scores, H2H, player matchups, weather — $6.99/mo</div>
                 </div>
                 <span style={{color:"#ef4444",fontSize:18}}>›</span>
               </div>
@@ -259,7 +338,7 @@ export default function DashboardPage() {
               {games.map(g=>(
                 <div key={g.id} className="gc" onClick={()=>pick(g)}
                   style={{background:"#0d0d1a",border:"1px solid #1e2235",borderRadius:16,padding:16,position:"relative",overflow:"hidden"}}>
-                  <div style={{position:"absolute",left:0,top:0,bottom:0,width:3,background:/live|inprog/i.test(g.status||"")?"#22c55e":"#1a1a2e",borderRadius:"3px 0 0 3px"}}/>
+                  <div style={{position:"absolute",left:0,top:0,bottom:0,width:3,background:/live/i.test(g.status||"")?"#22c55e":"#1a1a2e",borderRadius:"3px 0 0 3px"}}/>
                   <div style={{paddingLeft:10}}>
                     {[{team:g.away,score:g.awayScore},{team:g.home,score:g.homeScore}].map(({team,score},i)=>(
                       <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:i===0?5:0}}>
@@ -269,10 +348,11 @@ export default function DashboardPage() {
                     ))}
                     <div style={{display:"flex",gap:8,marginTop:10,alignItems:"center",flexWrap:"wrap"}}>
                       <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:10,background:sc(g.status)+"18",color:sc(g.status),border:`1px solid ${sc(g.status)}38`,display:"inline-flex",alignItems:"center",gap:4}}>
-                        {/live|inprog/i.test(g.status||"")&&<span style={{width:5,height:5,borderRadius:"50%",background:"#22c55e",animation:"pulse2 1.4s infinite",display:"inline-block"}}/>}
+                        {/live/i.test(g.status||"")&&<span style={{width:5,height:5,borderRadius:"50%",background:"#22c55e",animation:"pulse2 1.4s infinite",display:"inline-block"}}/>}
                         {sl(g.status)}
                       </span>
                       <span style={{fontSize:11,color:"#475569"}}>{g.time}</span>
+                      {g.inning&&<span style={{fontSize:11,color:lg.color,fontWeight:700}}>{g.inning}</span>}
                       {g.venue&&<span style={{fontSize:11,color:"#2d3748"}}>· {g.venue}</span>}
                     </div>
                   </div>
