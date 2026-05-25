@@ -34,12 +34,10 @@ async function getMLBGamesWithScores(date) {
         const box = await srGet(`/mlb/trial/v7/en/games/${g.id}/boxscore.json`);
         awayScore = box.game?.away?.runs ?? null;
         homeScore = box.game?.home?.runs ?? null;
-        
         if (box.game?.outcome) {
           const o = box.game.outcome;
           inning = `${o.current_inning_half==="T"?"Top":"Bot"} ${o.current_inning}`;
         }
-        
         if (box.game?.weather) {
           const w = box.game.weather.current_conditions || box.game.weather.forecast;
           weather = {
@@ -47,7 +45,6 @@ async function getMLBGamesWithScores(date) {
             condition: w?.condition || null,
             humidity: w?.humidity ? `${w.humidity}%` : null,
             wind: w?.wind ? `${w.wind.speed_mph} mph ${w.wind.direction}` : null,
-            cloudCover: w?.cloud_cover ? `${w.cloud_cover}%` : null,
           };
         }
       } catch(e) {
@@ -140,60 +137,68 @@ router.get("/:league/:gameId/boxscore", async (req, res) => {
     if (league === "mlb") {
       const data = await srGet(`/mlb/trial/v7/en/games/${gameId}/boxscore.json`);
       const game = data.game;
-      
-      // Parse lineup from batters array
-      const fmtTeam = (team) => {
-        if (!team) return [];
-        const batters = team.batters || team.lineup || [];
-        return batters.slice(0,9).map(p => ({
-          name: `${p.preferred_name||p.first_name||""} ${p.last_name||""}`.trim(),
-          pos: p.primary_position||p.position||"",
-          ab: p.ab??p.at_bats??"-",
-          h: p.hits??"-",
-          r: p.runs??"-",
-          rbi: p.rbi??"-",
-          hr: p.home_runs??p.hr??"-",
-          bb: p.walks??p.bb??"-",
-          avg: p.avg??"-",
-        }));
-      };
+      const away = game?.away;
+      const home = game?.home;
 
-      // Get weather
+      // Parse linescore innings
+      const parseInnings = (scoring=[]) => scoring
+        .filter(s=>s.type==="inning")
+        .map(s=>({ inning:s.number, runs:s.runs, hits:s.hits, errors:s.errors }));
+
+      // Parse pitcher info
+      const parsePitcher = (p) => p ? {
+        name: p.full_name||`${p.preferred_name||""} ${p.last_name||""}`.trim(),
+        win: p.win??"-", loss: p.loss??"-", era: p.era??"-",
+      } : null;
+
+      // Weather
       let weather = null;
       if (game?.weather) {
         const w = game.weather.current_conditions || game.weather.forecast;
         weather = {
           temp: w?.temp_f ? `${w.temp_f}°F` : null,
-          condition: w?.condition || null,
+          condition: w?.condition||null,
           humidity: w?.humidity ? `${w.humidity}%` : null,
           wind: w?.wind ? `${w.wind.speed_mph} mph ${w.wind.direction}` : null,
           cloudCover: w?.cloud_cover ? `${w.cloud_cover}%` : null,
+          dewPoint: w?.dew_point_f ? `${w.dew_point_f}°F` : null,
         };
       }
 
-      // Get inning info
+      // Inning
       let inning = null;
+      let count = null;
       if (game?.outcome) {
         const o = game.outcome;
         inning = `${o.current_inning_half==="T"?"Top":"Bot"} ${o.current_inning}`;
+        if (o.count) {
+          count = `${o.count.balls}-${o.count.strikes}, ${o.count.outs} out`;
+        }
       }
 
-      // Get linescore (runs per inning)
-      const awayLinescore = game?.away?.linescore||[];
-      const homeLinescore = game?.home?.linescore||[];
-
       result = {
-        away: fmtTeam(game?.away),
-        home: fmtTeam(game?.home),
-        awayScore: game?.away?.runs??null,
-        homeScore: game?.home?.runs??null,
-        awayHits: game?.away?.hits??null,
-        homeHits: game?.home?.hits??null,
-        awayErrors: game?.away?.errors??null,
-        homeErrors: game?.home?.errors??null,
-        awayLinescore,
-        homeLinescore,
-        inning,
+        // Team totals
+        awayScore: away?.runs??null,
+        homeScore: home?.runs??null,
+        awayHits: away?.hits??null,
+        homeHits: home?.hits??null,
+        awayErrors: away?.errors??null,
+        homeErrors: home?.errors??null,
+        awayRecord: away?.win!=null ? `${away.win}-${away.loss}` : null,
+        homeRecord: home?.win!=null ? `${home.win}-${home.loss}` : null,
+
+        // Pitchers
+        awayStarter: parsePitcher(away?.starting_pitcher),
+        homeStarter: parsePitcher(home?.starting_pitcher),
+        awayCurrent: parsePitcher(away?.current_pitcher),
+        homeCurrent: parsePitcher(home?.current_pitcher),
+
+        // Linescore
+        awayLinescore: parseInnings(away?.scoring),
+        homeLinescore: parseInnings(home?.scoring),
+
+        // Game state
+        inning, count,
         status: game?.status,
         weather,
       };
