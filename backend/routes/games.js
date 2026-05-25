@@ -9,24 +9,27 @@ const SR_BASE = "https://api.sportradar.com";
 async function srGet(path) {
   const res = await axios.get(`${SR_BASE}${path}`, {
     params: { api_key: SR_KEY },
-    timeout: 10000,
+    timeout: 15000,
   });
   return res.data;
 }
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 async function getMLBGamesWithScores(date) {
   const [y,m,d] = date.split("-");
   const data = await srGet(`/mlb/trial/v7/en/games/${y}/${m}/${d}/schedule.json`);
   const games = data.games || [];
-  
-  // For each non-scheduled game, fetch the boxscore to get scores
-  const results = await Promise.all(games.map(async (g) => {
+  const results = [];
+
+  for (const g of games) {
     let awayScore = null;
     let homeScore = null;
     let inning = null;
-    
+
     if (g.status === "closed" || g.status === "inprogress") {
       try {
+        await sleep(500); // avoid rate limiting
         const box = await srGet(`/mlb/trial/v7/en/games/${g.id}/boxscore.json`);
         awayScore = box.game?.away?.runs ?? null;
         homeScore = box.game?.home?.runs ?? null;
@@ -34,27 +37,23 @@ async function getMLBGamesWithScores(date) {
           inning = box.game?.inning ? `${box.game?.inning_half==="T"?"Top":"Bot"} ${box.game?.inning}` : null;
         }
       } catch(e) {
-        console.error(`Boxscore error for ${g.id}:`, e.message);
+        console.error(`Boxscore error ${g.id}:`, e.message);
       }
     }
 
-    return {
-      id: g.id,
-      league: "mlb",
+    results.push({
+      id: g.id, league: "mlb",
       away: `${g.away?.market||""} ${g.away?.name||""}`.trim(),
       home: `${g.home?.market||""} ${g.home?.name||""}`.trim(),
-      awayId: g.away?.id,
-      homeId: g.home?.id,
-      awayScore,
-      homeScore,
+      awayId: g.away?.id, homeId: g.home?.id,
+      awayScore, homeScore,
       status: g.status==="inprogress"?"live":g.status==="closed"?"final":"scheduled",
       inning,
       time: new Date(g.scheduled).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit",timeZone:"America/New_York"})+" ET",
       venue: g.venue?.name||"",
       city: `${g.venue?.city||""}, ${g.venue?.state||""}`,
-    };
-  }));
-  
+    });
+  }
   return results;
 }
 
@@ -62,110 +61,32 @@ async function getNBAGamesWithScores(date) {
   const [y,m,d] = date.split("-");
   const data = await srGet(`/nba/trial/v8/en/games/${y}/${m}/${d}/schedule.json`);
   const games = data.games || [];
+  const results = [];
 
-  const results = await Promise.all(games.map(async (g) => {
+  for (const g of games) {
     let awayScore = g.away_points ?? null;
     let homeScore = g.home_points ?? null;
 
-    if ((g.status === "closed" || g.status === "inprogress") && (awayScore === null)) {
+    if ((g.status === "closed" || g.status === "inprogress") && awayScore === null) {
       try {
-        const box = await srGet(
-cd ~/Downloads/sportsintel && cat > backend/routes/games.js << 'ENDOFFILE'
-const express = require("express");
-const router = express.Router();
-const axios = require("axios");
-const { getCachedGames, cacheGames } = require("../services/sportsData");
-
-const SR_KEY = process.env.SPORTRADAR_API_KEY;
-const SR_BASE = "https://api.sportradar.com";
-
-async function srGet(path) {
-  const res = await axios.get(`${SR_BASE}${path}`, {
-    params: { api_key: SR_KEY },
-    timeout: 10000,
-  });
-  return res.data;
-}
-
-async function getMLBGamesWithScores(date) {
-  const [y,m,d] = date.split("-");
-  const data = await srGet(`/mlb/trial/v7/en/games/${y}/${m}/${d}/schedule.json`);
-  const games = data.games || [];
-  
-  // For each non-scheduled game, fetch the boxscore to get scores
-  const results = await Promise.all(games.map(async (g) => {
-    let awayScore = null;
-    let homeScore = null;
-    let inning = null;
-    
-    if (g.status === "closed" || g.status === "inprogress") {
-      try {
-        const box = await srGet(`/mlb/trial/v7/en/games/${g.id}/boxscore.json`);
-        awayScore = box.game?.away?.runs ?? null;
-        homeScore = box.game?.home?.runs ?? null;
-        if (g.status === "inprogress") {
-          inning = box.game?.inning ? `${box.game?.inning_half==="T"?"Top":"Bot"} ${box.game?.inning}` : null;
-        }
-      } catch(e) {
-        console.error(`Boxscore error for ${g.id}:`, e.message);
-      }
-    }
-
-    return {
-      id: g.id,
-      league: "mlb",
-      away: `${g.away?.market||""} ${g.away?.name||""}`.trim(),
-      home: `${g.home?.market||""} ${g.home?.name||""}`.trim(),
-      awayId: g.away?.id,
-      homeId: g.home?.id,
-      awayScore,
-      homeScore,
-      status: g.status==="inprogress"?"live":g.status==="closed"?"final":"scheduled",
-      inning,
-      time: new Date(g.scheduled).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit",timeZone:"America/New_York"})+" ET",
-      venue: g.venue?.name||"",
-      city: `${g.venue?.city||""}, ${g.venue?.state||""}`,
-    };
-  }));
-  
-  return results;
-}
-
-async function getNBAGamesWithScores(date) {
-  const [y,m,d] = date.split("-");
-  const data = await srGet(`/nba/trial/v8/en/games/${y}/${m}/${d}/schedule.json`);
-  const games = data.games || [];
-
-  const results = await Promise.all(games.map(async (g) => {
-    let awayScore = g.away_points ?? null;
-    let homeScore = g.home_points ?? null;
-
-    if ((g.status === "closed" || g.status === "inprogress") && (awayScore === null)) {
-      try {
+        await sleep(500);
         const box = await srGet(`/nba/trial/v8/en/games/${g.id}/boxscore.json`);
         awayScore = box.game?.away_points ?? null;
         homeScore = box.game?.home_points ?? null;
       } catch(e) {}
     }
 
-    return {
-      id: g.id,
-      league: "nba",
-      away: g.away?.name||"",
-      home: g.home?.name||"",
-      awayId: g.away?.id,
-      homeId: g.home?.id,
-      awayScore,
-      homeScore,
+    results.push({
+      id: g.id, league: "nba",
+      away: g.away?.name||"", home: g.home?.name||"",
+      awayId: g.away?.id, homeId: g.home?.id,
+      awayScore, homeScore,
       status: g.status==="inprogress"?"live":g.status==="closed"?"final":"scheduled",
-      quarter: g.quarter??null,
-      clock: g.clock??null,
       time: new Date(g.scheduled).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit",timeZone:"America/New_York"})+" ET",
       venue: g.venue?.name||"",
       city: `${g.venue?.city||""}, ${g.venue?.state||""}`,
-    };
-  }));
-
+    });
+  }
   return results;
 }
 
@@ -173,9 +94,10 @@ router.get("/:league/today", async (req, res) => {
   try {
     const { league } = req.params;
     const today = new Date().toISOString().split("T")[0];
-
-    // For live/recent games don't use cache so scores stay fresh
     let games;
+
+    // Check cache first — only bypass for mlb/nba to get live scores
+    const cached = await getCachedGames(league, today);
 
     if (league === "mlb") {
       games = await getMLBGamesWithScores(today);
@@ -186,11 +108,8 @@ router.get("/:league/today", async (req, res) => {
     } else if (league === "nfl") {
       return res.json({ games: [], message: "NFL season starts September 2026" });
     } else {
-      // For other leagues use cached data
-      games = await getCachedGames(league, today);
-      if (!games) {
-        return res.json({ games: [], message: `No ${league} games today` });
-      }
+      if (cached) return res.json({ games: cached, date: today, league });
+      return res.json({ games: [], message: `No ${league} games available today` });
     }
 
     res.json({ games, date: today, league });
