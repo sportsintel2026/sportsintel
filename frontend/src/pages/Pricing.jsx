@@ -12,7 +12,7 @@ const PICKS = [
 const COMPETITORS = [
   { name:"Picks Sites", price:"$20–$100+/mo", note:"Sell you picks. No guarantees." },
   { name:"ESPN+", price:"$10.99/mo", note:"Scores only. No deep stats." },
-  { name:"SportsIntel", price:"$6.99/mo", highlight:true, note:"Everything you need to make your OWN picks." },
+  { name:"SportsIntel", price:"$7/mo", highlight:true, note:"Everything you need to make your OWN picks." },
 ];
 
 export default function PricingPage() {
@@ -58,7 +58,7 @@ export default function PricingPage() {
             Other sites charge <strong style={{color:"#e2e8f0"}}>$20 to $100+ a month</strong> to sell you picks that aren't guaranteed. There's no such thing as a guaranteed pick in sports — but there <em style={{color:"#e2e8f0"}}>is</em> such a thing as being better informed than everyone else.
           </p>
           <p style={{fontSize:15,color:"#64748b",lineHeight:1.8,maxWidth:480,margin:"16px auto 0"}}>
-            For just <strong style={{color:"#ef4444"}}>$6.99/month</strong>, SportsIntel gives you the <strong style={{color:"#e2e8f0"}}>exact same data the pros use</strong> — live scores, H2H records, player matchup stats, weather conditions, and betting lines — so you can make smarter picks yourself.
+            For just <strong style={{color:"#ef4444"}}>$7/month</strong>, SportsIntel gives you the <strong style={{color:"#e2e8f0"}}>exact same data the pros use</strong> — live scores, H2H records, player matchup stats, weather conditions, and betting lines — so you can make smarter picks yourself.
           </p>
         </div>
 
@@ -87,7 +87,7 @@ export default function PricingPage() {
             ONE PLAN · EVERYTHING INCLUDED
           </div>
           <h2 style={{fontFamily:"'Barlow Condensed'",fontSize:36,fontWeight:900,color:"#fff",marginBottom:4,marginTop:8,lineHeight:1}}>ALL-ACCESS MEMBERSHIP</h2>
-          <div style={{fontFamily:"'Barlow Condensed'",fontSize:64,fontWeight:900,color:"#ef4444",lineHeight:1,marginBottom:2}}>$6.99</div>
+          <div style={{fontFamily:"'Barlow Condensed'",fontSize:64,fontWeight:900,color:"#ef4444",lineHeight:1,marginBottom:2}}>$7.00</div>
           <div style={{color:"#475569",fontSize:13,marginBottom:24}}>per month · cancel anytime · no contracts</div>
 
           <div style={{textAlign:"left",marginBottom:28,background:"#080810",borderRadius:12,padding:"16px"}}>
@@ -116,7 +116,7 @@ export default function PricingPage() {
 
           <button onClick={handleSubscribe} disabled={loading}
             style={{width:"100%",background:"linear-gradient(135deg,#ef4444,#dc2626)",color:"#fff",border:"none",borderRadius:12,padding:"18px",fontSize:18,fontWeight:800,cursor:loading?"wait":"pointer",fontFamily:"inherit",boxShadow:"0 8px 32px #ef444440",marginBottom:12}}>
-            {loading?"Redirecting...":"Get All-Access for $6.99/mo →"}
+            {loading?"Redirecting...":"Get All-Access for $7/mo →"}
           </button>
           <div style={{fontSize:12,color:"#334155"}}>Instant access · Cancel anytime · No hidden fees</div>
         </div>
@@ -155,7 +155,7 @@ export default function PricingPage() {
           <div style={{fontSize:13,color:"#64748b",marginBottom:16,lineHeight:1.6}}>Join thousands of sports bettors who use SportsIntel to make more informed picks every single day.</div>
           <button onClick={handleSubscribe} disabled={loading}
             style={{background:"#ef4444",color:"#fff",border:"none",borderRadius:10,padding:"13px 40px",fontSize:15,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>
-            Start Today — $6.99/mo →
+            Start Today — $7/mo →
           </button>
         </div>
 
