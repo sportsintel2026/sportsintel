@@ -16,9 +16,9 @@ const LEAGUES = [
   {id:"golf",label:"Golf",icon:"⛳",color:"#22c55e"},
 ];
 
-const TABS = ["Box Score","H2H","Players","Weather"];
-const sc = s=>/live|inprog/i.test(s||"")?"#22c55e":/final|closed/i.test(s||"")?"#6b7280":"#60a5fa";
-const sl = s=>/live|inprog/i.test(s||"")?"LIVE":/final|closed/i.test(s||"")?"FINAL":"TODAY";
+const TABS = ["Box Score","Weather","H2H","Players"];
+const sc = s=>/live/i.test(s||"")?"#22c55e":/final|closed/i.test(s||"")?"#6b7280":"#60a5fa";
+const sl = s=>/live/i.test(s||"")?"LIVE":/final|closed/i.test(s||"")?"FINAL":"TODAY";
 
 export default function DashboardPage() {
   const {user,signOut} = useAuth();
@@ -50,7 +50,6 @@ export default function DashboardPage() {
 
   const pick = async(g)=>{
     setSelected(g); setTab("Box Score"); setBoxScore(null);
-    // Load box score automatically
     if(g.status==="live"||g.status==="final"||g.status==="closed") {
       setBoxLoading(true);
       try {
@@ -60,6 +59,7 @@ export default function DashboardPage() {
       setBoxLoading(false);
     }
   };
+
   const back = ()=>{ setSelected(null); setBoxScore(null); };
 
   return (
@@ -121,7 +121,6 @@ export default function DashboardPage() {
         {/* DETAIL VIEW */}
         {selected&&(
           <div style={{animation:"fadeIn .22s ease",paddingBottom:80}}>
-            {/* Game header */}
             <div style={{background:`linear-gradient(160deg,${lg.color}18 0%,#0a0a14 60%)`,borderBottom:"1px solid #1e2235",padding:"14px 16px 20px"}}>
               <button onClick={back} style={{display:"flex",alignItems:"center",gap:6,background:"none",border:"none",color:"#64748b",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:600,padding:"0 0 14px"}}>
                 <span style={{fontSize:20}}>‹</span> All Games
@@ -129,11 +128,14 @@ export default function DashboardPage() {
               <div style={{fontSize:11,color:"#475569",fontWeight:600,letterSpacing:"0.08em",marginBottom:10,textTransform:"uppercase"}}>
                 {selected.venue} · {selected.city}
               </div>
-              {[{team:selected.away,score:selected.awayScore,away:true},{team:selected.home,score:selected.homeScore,away:false}].map(({team,score,away})=>(
+              {[{team:selected.away,score:selected.awayScore,record:boxScore?.awayRecord,away:true},{team:selected.home,score:selected.homeScore,record:boxScore?.homeRecord,away:false}].map(({team,score,record,away})=>(
                 <div key={team} style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
                   <div style={{display:"flex",alignItems:"center",gap:10}}>
                     <div style={{width:3,height:28,borderRadius:2,background:away?"#334155":lg.color}}/>
-                    <span style={{fontSize:18,fontWeight:800,color:away?"#94a3b8":"#fff"}}>{team}</span>
+                    <div>
+                      <span style={{fontSize:18,fontWeight:800,color:away?"#94a3b8":"#fff"}}>{team}</span>
+                      {record&&<span style={{fontSize:11,color:"#475569",marginLeft:8}}>{record}</span>}
+                    </div>
                   </div>
                   <span style={{fontFamily:"'Barlow Condensed'",fontSize:34,fontWeight:900,color:score!=null?away?"#94a3b8":"#fff":"#1e2235"}}>{score!=null?score:"—"}</span>
                 </div>
@@ -144,9 +146,9 @@ export default function DashboardPage() {
                   {sl(selected.status)}
                 </span>
                 <span style={{fontSize:12,color:"#475569"}}>{selected.time}</span>
-                {selected.inning&&<span style={{fontSize:12,color:lg.color,fontWeight:700}}>{selected.inning}</span>}
+                {(boxScore?.inning||selected.inning)&&<span style={{fontSize:12,color:lg.color,fontWeight:700}}>{boxScore?.inning||selected.inning}</span>}
+                {boxScore?.count&&<span style={{fontSize:11,color:"#475569"}}>{boxScore.count}</span>}
                 {selected.quarter&&<span style={{fontSize:12,color:lg.color,fontWeight:700}}>Q{selected.quarter}</span>}
-                {selected.clock&&<span style={{fontSize:12,color:"#475569"}}>{selected.clock}</span>}
               </div>
             </div>
 
@@ -160,23 +162,21 @@ export default function DashboardPage() {
               ))}
             </div>
 
-            {/* Pro gate */}
             {!isPro&&(
               <div style={{margin:16,background:"linear-gradient(135deg,#ef444418,#f9731408)",border:"1px solid #ef444430",borderRadius:16,padding:28,textAlign:"center"}}>
                 <div style={{fontSize:32,marginBottom:12}}>🔒</div>
                 <div style={{fontSize:17,fontWeight:800,color:"#fff",marginBottom:8}}>Unlock Full Stats</div>
-                <div style={{fontSize:13,color:"#64748b",marginBottom:20}}>Get box scores, H2H records, player matchup stats, weather analysis and more.</div>
+                <div style={{fontSize:13,color:"#64748b",marginBottom:20}}>Get box scores, linescore, pitcher stats, weather analysis and more.</div>
                 <button onClick={()=>navigate("/pricing")} style={{background:"#ef4444",color:"#fff",border:"none",borderRadius:10,padding:"12px 32px",fontSize:14,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>
                   Upgrade — $6.99/mo →
                 </button>
               </div>
             )}
 
-            {/* Tab content — Pro only */}
             {isPro&&(
               <div style={{padding:16,animation:"fadeIn .2s ease"}}>
 
-                {/* BOX SCORE */}
+                {/* BOX SCORE TAB */}
                 {tab==="Box Score"&&(
                   <div>
                     {boxLoading&&(
@@ -193,79 +193,55 @@ export default function DashboardPage() {
                     )}
                     {!boxLoading&&boxScore&&(
                       <div>
-                        {/* Score summary */}
-                        <div style={{background:"#0d0d1a",border:"1px solid #1e2235",borderRadius:14,padding:16,marginBottom:12,display:"grid",gridTemplateColumns:"1fr auto 1fr",gap:8,alignItems:"center",textAlign:"center"}}>
-                          <div>
-                            <div style={{fontSize:12,color:"#64748b",marginBottom:4}}>{selected.away}</div>
-                            <div style={{fontFamily:"'Barlow Condensed'",fontSize:44,fontWeight:900,color:"#e2e8f0"}}>{boxScore.awayScore??"-"}</div>
-                          </div>
-                          <div style={{color:"#1e2235",fontFamily:"'Barlow Condensed'",fontSize:18,fontWeight:700}}>
-                            {boxScore.inning?`${boxScore.inning} Inn`:"FINAL"}
-                          </div>
-                          <div>
-                            <div style={{fontSize:12,color:"#64748b",marginBottom:4}}>{selected.home}</div>
-                            <div style={{fontFamily:"'Barlow Condensed'",fontSize:44,fontWeight:900,color:lg.color}}>{boxScore.homeScore??"-"}</div>
-                          </div>
+                        {/* R H E Summary */}
+                        <div style={{background:"#0d0d1a",border:"1px solid #1e2235",borderRadius:14,padding:16,marginBottom:12,overflowX:"auto"}}>
+                          <table style={{width:"100%",borderCollapse:"collapse",fontSize:13,minWidth:280}}>
+                            <thead>
+                              <tr style={{borderBottom:"1px solid #1e2235"}}>
+                                <th style={{textAlign:"left",padding:"6px 10px",color:"#475569",fontWeight:600}}>Team</th>
+                                {boxScore.awayLinescore?.length>0&&boxScore.awayLinescore.map(inn=>(
+                                  <th key={inn.inning} style={{padding:"6px 6px",color:"#475569",fontWeight:600,textAlign:"center",fontSize:11}}>{inn.inning}</th>
+                                ))}
+                                <th style={{padding:"6px 8px",color:"#ef4444",fontWeight:700,textAlign:"center"}}>R</th>
+                                <th style={{padding:"6px 8px",color:"#475569",fontWeight:600,textAlign:"center"}}>H</th>
+                                <th style={{padding:"6px 8px",color:"#475569",fontWeight:600,textAlign:"center"}}>E</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <tr style={{borderBottom:"1px solid #0d1120"}}>
+                                <td style={{padding:"8px 10px",fontWeight:700,color:"#94a3b8",whiteSpace:"nowrap"}}>{selected.away}</td>
+                                {boxScore.awayLinescore?.map((inn,i)=>(
+                                  <td key={i} style={{padding:"8px 6px",textAlign:"center",color:"#64748b",fontSize:12}}>{inn.runs}</td>
+                                ))}
+                                <td style={{padding:"8px 8px",textAlign:"center",fontFamily:"'Barlow Condensed'",fontSize:20,fontWeight:900,color:"#e2e8f0"}}>{boxScore.awayScore??"-"}</td>
+                                <td style={{padding:"8px 8px",textAlign:"center",color:"#64748b"}}>{boxScore.awayHits??"-"}</td>
+                                <td style={{padding:"8px 8px",textAlign:"center",color:"#64748b"}}>{boxScore.awayErrors??"-"}</td>
+                              </tr>
+                              <tr>
+                                <td style={{padding:"8px 10px",fontWeight:700,color:"#fff",whiteSpace:"nowrap"}}>{selected.home}</td>
+                                {boxScore.homeLinescore?.map((inn,i)=>(
+                                  <td key={i} style={{padding:"8px 6px",textAlign:"center",color:"#64748b",fontSize:12}}>{inn.runs==="X"?"·":inn.runs}</td>
+                                ))}
+                                <td style={{padding:"8px 8px",textAlign:"center",fontFamily:"'Barlow Condensed'",fontSize:20,fontWeight:900,color:lg.color}}>{boxScore.homeScore??"-"}</td>
+                                <td style={{padding:"8px 8px",textAlign:"center",color:"#64748b"}}>{boxScore.homeHits??"-"}</td>
+                                <td style={{padding:"8px 8px",textAlign:"center",color:"#64748b"}}>{boxScore.homeErrors??"-"}</td>
+                              </tr>
+                            </tbody>
+                          </table>
                         </div>
 
-                        {/* Away team stats */}
-                        {boxScore.away?.length>0&&(
-                          <div style={{marginBottom:16}}>
-                            <div style={{fontSize:11,fontWeight:700,color:"#64748b",letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:8,paddingLeft:4}}>{selected.away}</div>
-                            <div style={{overflowX:"auto",borderRadius:12,background:"#0a0a16"}}>
-                              <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:320}}>
-                                <thead>
-                                  <tr style={{borderBottom:"1px solid #1e2235"}}>
-                                    <th style={{textAlign:"left",padding:"8px 10px",color:"#475569",fontWeight:600}}>Player</th>
-                                    {Object.keys(boxScore.away[0]).filter(k=>k!=="name"&&k!=="pos").map(k=>(
-                                      <th key={k} style={{padding:"8px 6px",color:"#475569",fontWeight:600,textAlign:"center",textTransform:"uppercase"}}>{k}</th>
-                                    ))}
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {boxScore.away.map((p,i)=>(
-                                    <tr key={i} style={{borderBottom:"1px solid #0d1120"}}>
-                                      <td style={{padding:"8px 10px",fontWeight:600,color:"#e2e8f0",whiteSpace:"nowrap"}}>
-                                        <span style={{fontSize:10,color:"#334155",marginRight:6}}>{p.pos}</span>{p.name}
-                                      </td>
-                                      {Object.entries(p).filter(([k])=>k!=="name"&&k!=="pos").map(([k,v])=>(
-                                        <td key={k} style={{padding:"8px 6px",textAlign:"center",color:"#64748b"}}>{v}</td>
-                                      ))}
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Home team stats */}
-                        {boxScore.home?.length>0&&(
-                          <div>
-                            <div style={{fontSize:11,fontWeight:700,color:lg.color,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:8,paddingLeft:4}}>{selected.home}</div>
-                            <div style={{overflowX:"auto",borderRadius:12,background:"#0a0a16"}}>
-                              <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:320}}>
-                                <thead>
-                                  <tr style={{borderBottom:"1px solid #1e2235"}}>
-                                    <th style={{textAlign:"left",padding:"8px 10px",color:"#475569",fontWeight:600}}>Player</th>
-                                    {Object.keys(boxScore.home[0]).filter(k=>k!=="name"&&k!=="pos").map(k=>(
-                                      <th key={k} style={{padding:"8px 6px",color:"#475569",fontWeight:600,textAlign:"center",textTransform:"uppercase"}}>{k}</th>
-                                    ))}
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {boxScore.home.map((p,i)=>(
-                                    <tr key={i} style={{borderBottom:"1px solid #0d1120"}}>
-                                      <td style={{padding:"8px 10px",fontWeight:600,color:"#e2e8f0",whiteSpace:"nowrap"}}>
-                                        <span style={{fontSize:10,color:"#334155",marginRight:6}}>{p.pos}</span>{p.name}
-                                      </td>
-                                      {Object.entries(p).filter(([k])=>k!=="name"&&k!=="pos").map(([k,v])=>(
-                                        <td key={k} style={{padding:"8px 6px",textAlign:"center",color:"#64748b"}}>{v}</td>
-                                      ))}
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
+                        {/* Pitchers */}
+                        {(boxScore.awayStarter||boxScore.homeStarter)&&(
+                          <div style={{background:"#0d0d1a",border:"1px solid #1e2235",borderRadius:14,padding:16,marginBottom:12}}>
+                            <div style={{fontSize:11,color:"#475569",fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:12}}>Pitchers</div>
+                            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                              {[{label:`${selected.away} SP`,p:boxScore.awayStarter},{label:`${selected.home} SP`,p:boxScore.homeStarter}].map(({label,p})=>p?(
+                                <div key={label} style={{background:"#080810",borderRadius:10,padding:12}}>
+                                  <div style={{fontSize:10,color:"#475569",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>{label}</div>
+                                  <div style={{fontSize:14,fontWeight:700,color:"#e2e8f0",marginBottom:4}}>{p.name}</div>
+                                  <div style={{fontSize:12,color:"#64748b"}}>{p.win}W-{p.loss}L · ERA {p.era}</div>
+                                </div>
+                              ):null)}
                             </div>
                           </div>
                         )}
@@ -274,30 +250,69 @@ export default function DashboardPage() {
                   </div>
                 )}
 
-                {/* H2H */}
+                {/* WEATHER TAB */}
+                {tab==="Weather"&&(
+                  <div>
+                    {(boxScore?.weather||selected.weather)?(
+                      <div>
+                        <div style={{background:"#0d0d1a",border:"1px solid #1e2235",borderRadius:16,padding:20,marginBottom:12}}>
+                          <div style={{fontSize:11,color:"#475569",fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:14}}>
+                            Live Conditions · {selected.venue}
+                          </div>
+                          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                            {[
+                              ["🌡 Temperature",(boxScore?.weather||selected.weather)?.temp],
+                              ["☁️ Condition",(boxScore?.weather||selected.weather)?.condition],
+                              ["💧 Humidity",(boxScore?.weather||selected.weather)?.humidity],
+                              ["💨 Wind",(boxScore?.weather||selected.weather)?.wind],
+                              ["☁ Cloud Cover",(boxScore?.weather||selected.weather)?.cloudCover],
+                            ].filter(([,v])=>v).map(([label,val])=>(
+                              <div key={label} style={{background:"#080810",borderRadius:10,padding:12}}>
+                                <div style={{fontSize:10,color:"#475569",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.06em"}}>{label}</div>
+                                <div style={{fontSize:15,fontWeight:700,color:"#e2e8f0"}}>{val}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                        <div style={{background:`${lg.color}10`,border:`1px solid ${lg.color}30`,borderRadius:14,padding:16}}>
+                          <div style={{fontSize:11,color:lg.color,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>⚡ Game Impact</div>
+                          <div style={{fontSize:13,color:"#cbd5e1",lineHeight:1.7}}>
+                            {(()=>{
+                              const w = boxScore?.weather||selected.weather;
+                              const wind = parseInt(w?.wind)||0;
+                              const temp = parseInt(w?.temp)||70;
+                              if(wind>15) return `Strong ${wind} mph wind — expect reduced home run distances and potential affect on fly balls. Pitchers may have an advantage today.`;
+                              if(temp<55) return `Cold ${temp}°F conditions — ball doesn't carry as well in cold air. Pitchers typically benefit in cold weather games.`;
+                              if(temp>85) return `Hot ${temp}°F conditions — ball carries further in warm air. Good conditions for hitters and home runs.`;
+                              return `Comfortable ${temp}°F with ${wind} mph winds. Neutral conditions — expect normal ball flight and standard game conditions.`;
+                            })()}
+                          </div>
+                        </div>
+                      </div>
+                    ):(
+                      <div style={{textAlign:"center",padding:40}}>
+                        <div style={{fontSize:36,marginBottom:12}}>🌤</div>
+                        <div style={{fontSize:14,color:"#475569"}}>Weather data available for live and completed games</div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* H2H TAB */}
                 {tab==="H2H"&&(
                   <div style={{background:"#0d0d1a",border:"1px solid #1e2235",borderRadius:16,padding:24,textAlign:"center"}}>
                     <div style={{fontSize:32,marginBottom:12}}>⚔️</div>
                     <div style={{fontSize:16,fontWeight:700,color:"#fff",marginBottom:8}}>{selected.away} vs {selected.home}</div>
-                    <div style={{fontSize:13,color:"#475569",marginBottom:20}}>Full H2H history coming soon</div>
+                    <div style={{fontSize:13,color:"#475569"}}>Full H2H history coming soon in next update</div>
                   </div>
                 )}
 
-                {/* Players */}
+                {/* PLAYERS TAB */}
                 {tab==="Players"&&(
                   <div style={{background:"#0d0d1a",border:"1px solid #1e2235",borderRadius:16,padding:24,textAlign:"center"}}>
                     <div style={{fontSize:32,marginBottom:12}}>🎯</div>
                     <div style={{fontSize:16,fontWeight:700,color:"#fff",marginBottom:8}}>Player Matchups</div>
-                    <div style={{fontSize:13,color:"#475569"}}>Player vs opponent stats coming soon</div>
-                  </div>
-                )}
-
-                {/* Weather */}
-                {tab==="Weather"&&(
-                  <div style={{background:"#0d0d1a",border:"1px solid #1e2235",borderRadius:16,padding:24,textAlign:"center"}}>
-                    <div style={{fontSize:32,marginBottom:12}}>🌤</div>
-                    <div style={{fontSize:16,fontWeight:700,color:"#fff",marginBottom:8}}>Weather Conditions</div>
-                    <div style={{fontSize:13,color:"#475569"}}>Live weather for {selected.city} coming soon</div>
+                    <div style={{fontSize:13,color:"#475569"}}>Career stats vs opponent coming soon in next update</div>
                   </div>
                 )}
               </div>
@@ -313,7 +328,7 @@ export default function DashboardPage() {
                 style={{background:"linear-gradient(135deg,#ef444412,#f9731408)",border:"1px solid #ef444425",borderRadius:12,padding:"12px 16px",marginBottom:14,display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer"}}>
                 <div>
                   <div style={{fontSize:13,fontWeight:700,color:"#ef4444"}}>⚡ Unlock Full Stats + Daily Picks</div>
-                  <div style={{fontSize:11,color:"#475569",marginTop:2}}>Box scores, H2H, player matchups, weather — $6.99/mo</div>
+                  <div style={{fontSize:11,color:"#475569",marginTop:2}}>Box scores, linescore, pitchers, weather — $6.99/mo</div>
                 </div>
                 <span style={{color:"#ef4444",fontSize:18}}>›</span>
               </div>
