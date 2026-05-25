@@ -139,7 +139,7 @@ export default function DashboardPage() {
               </div>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
                 <span style={{fontSize:14,color:"#fff",fontWeight:600}}>{selected.home}{boxScore?.homeRecord&&<span style={{fontSize:10,color:"#334155",marginLeft:6}}>{boxScore.homeRecord}</span>}</span>
-                <span style={{fontSize:20,fontWeight:700,color:selected.homeScore!=null?lg.color:"#1a1a2e"}}>{selected.homeScore!=null?selected.homeScore:"–"}</span>
+                <span style={{fontSize:20,fontWeight:700,color:selected.homeScore!=null?"#fff":"#1a1a2e"}}>{selected.homeScore!=null?selected.homeScore:"–"}</span>
               </div>
               <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
                 <span style={{fontSize:10,padding:"2px 7px",borderRadius:8,background:sc(selected.status)+"15",color:sc(selected.status),border:`1px solid ${sc(selected.status)}30`,display:"inline-flex",alignItems:"center",gap:3}}>
@@ -361,7 +361,7 @@ export default function DashboardPage() {
                     </div>
                     <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
                       <span style={{fontSize:13,fontWeight:600,color:"#fff"}}>{g.home}</span>
-                      <span style={{fontSize:16,fontWeight:700,color:g.homeScore!=null?lg.color:"#1a1a2e"}}>{g.homeScore!=null?g.homeScore:""}</span>
+                      <span style={{fontSize:16,fontWeight:700,color:g.homeScore!=null?"#fff":"#1a1a2e"}}>{g.homeScore!=null?g.homeScore:""}</span>
                     </div>
                     <div style={{display:"flex",gap:8,alignItems:"center"}}>
                       <span style={{fontSize:10,padding:"1px 6px",borderRadius:6,background:sc(g.status)+"12",color:sc(g.status),border:`1px solid ${sc(g.status)}25`,display:"inline-flex",alignItems:"center",gap:3}}>
