@@ -1,155 +1,125 @@
 const axios = require("axios");
-const { supabase } = require("../middleware/auth");
+const { createClient } = require("@supabase/supabase-js");
 
-const SR_BASE = "https://api.sportradar.com";
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_KEY
+);
+
 const SR_KEY = process.env.SPORTRADAR_API_KEY;
+const SR_BASE = "https://api.sportradar.com";
 
-// ── Sportradar API helpers ─────────────────────────────────────────────────────
 async function srGet(path) {
-  const url = `${SR_BASE}${path}`;
-  const res = await axios.get(url, {
+  const res = await axios.get(`${SR_BASE}${path}`, {
     params: { api_key: SR_KEY },
     timeout: 10000,
   });
   return res.data;
 }
 
-// ── MLB ────────────────────────────────────────────────────────────────────────
 async function fetchMLBSchedule(date) {
-  // date format: YYYY/MM/DD
-  const [year, month, day] = date.split("-");
-  const data = await srGet(`/mlb/trial/v7/en/games/${year}/${month}/${day}/schedule.json`);
-  return data.games || [];
+  const [y, m, d] = date.split("-");
+  const data = await srGet(`/mlb/trial/v7/en/games/${y}/${m}/${d}/schedule.json`);
+  return (data.games || []).map(g => ({
+    id: g.id,
+    league: "mlb",
+    away: `${g.away.market} ${g.away.name}`,
+    home: `${g.home.market} ${g.home.name}`,
+    awayId: g.away.id,
+    homeId: g.home.id,
+    awayScore: g.away_team?.runs ?? null,
+    homeScore: g.home_team?.runs ?? null,
+    status: g.status,
+    time: new Date(g.scheduled).toLocaleTimeString("en-US", {hour:"numeric",minute:"2-digit",timeZone:"America/New_York"}) + " ET",
+    venue: g.venue?.name || "",
+    city: `${g.venue?.city || ""}, ${g.venue?.state || ""}`,
+  }));
+}
+
+async function fetchNBASchedule(date) {
+  const [y, m, d] = date.split("-");
+  const data = await srGet(`/nba/trial/v8/en/games/${y}/${m}/${d}/schedule.json`);
+  return (data.games || []).map(g => ({
+    id: g.id,
+    league: "nba",
+    away: g.away.name,
+    home: g.home.name,
+    awayId: g.away.id,
+    homeId: g.home.id,
+    awayScore: g.away_points ?? null,
+    homeScore: g.home_points ?? null,
+    status: g.status,
+    time: new Date(g.scheduled).toLocaleTimeString("en-US", {hour:"numeric",minute:"2-digit",timeZone:"America/New_York"}) + " ET",
+    venue: g.venue?.name || "",
+    city: `${g.venue?.city || ""}, ${g.venue?.state || ""}`,
+  }));
 }
 
 async function fetchMLBBoxScore(gameId) {
-  const data = await srGet(`/mlb/trial/v7/en/games/${gameId}/boxscore.json`);
-  return data;
-}
-
-async function fetchMLBH2H(homeTeamId, awayTeamId) {
-  const data = await srGet(`/mlb/trial/v7/en/teams/${homeTeamId}/versus/${awayTeamId}/statistics.json`);
-  return data;
-}
-
-// ── NBA ────────────────────────────────────────────────────────────────────────
-async function fetchNBASchedule(date) {
-  const [year, month, day] = date.split("-");
-  const data = await srGet(`/nba/trial/v8/en/games/${year}/${month}/${day}/schedule.json`);
-  return data.games || [];
+  return await srGet(`/mlb/trial/v7/en/games/${gameId}/boxscore.json`);
 }
 
 async function fetchNBABoxScore(gameId) {
-  const data = await srGet(`/nba/trial/v8/en/games/${gameId}/boxscore.json`);
-  return data;
+  return await srGet(`/nba/trial/v8/en/games/${gameId}/boxscore.json`);
 }
 
-// ── NFL ────────────────────────────────────────────────────────────────────────
-async function fetchNFLSchedule(season, week) {
-  const data = await srGet(`/nfl/official/trial/v7/en/games/${season}/REG/${week}/schedule.json`);
-  return data.week?.games || [];
+async function fetchMLBPitcherVsBatter(pitcherId, batterId) {
+  return await srGet(`/mlb/trial/v7/en/players/${pitcherId}/versus/${batterId}/statistics.json`);
 }
 
-// ── Cache helpers (store in Supabase) ─────────────────────────────────────────
+async function fetchMLBRoster(teamId) {
+  return await srGet(`/mlb/trial/v7/en/teams/${teamId}/roster.json`);
+}
+
+async function fetchNBARoster(teamId) {
+  return await srGet(`/nba/trial/v8/en/teams/${teamId}/roster.json`);
+}
+
 async function cacheGames(league, date, games) {
-  const { error } = await supabase.from("games_cache").upsert({
-    league,
-    date,
+  await supabase.from("games_cache").upsert({
+    league, date,
     games: JSON.stringify(games),
     updated_at: new Date().toISOString(),
   }, { onConflict: "league,date" });
-
-  if (error) console.error("Cache write error:", error.message);
 }
 
 async function getCachedGames(league, date) {
-  const { data, error } = await supabase
+  const { data } = await supabase
     .from("games_cache")
     .select("games, updated_at")
     .eq("league", league)
     .eq("date", date)
     .single();
-
-  if (error || !data) return null;
-
-  // Cache is stale if older than 5 minutes
+  if (!data) return null;
   const age = Date.now() - new Date(data.updated_at).getTime();
   if (age > 5 * 60 * 1000) return null;
-
   return JSON.parse(data.games);
 }
 
-// ── Main refresh function (called by cron) ────────────────────────────────────
 async function refreshDailyGames() {
   const today = new Date().toISOString().split("T")[0];
-
   try {
-    const [mlbGames, nbaGames] = await Promise.allSettled([
+    const [mlb, nba] = await Promise.allSettled([
       fetchMLBSchedule(today),
       fetchNBASchedule(today),
     ]);
-
-    if (mlbGames.status === "fulfilled") {
-      await cacheGames("mlb", today, mlbGames.value);
-    }
-    if (nbaGames.status === "fulfilled") {
-      await cacheGames("nba", today, nbaGames.value);
-    }
+    if (mlb.status === "fulfilled") await cacheGames("mlb", today, mlb.value);
+    if (nba.status === "fulfilled") await cacheGames("nba", today, nba.value);
+    console.log("[Sports] Daily games refreshed successfully");
   } catch (err) {
-    console.error("refreshDailyGames error:", err.message);
-    throw err;
+    console.error("[Sports] Refresh failed:", err.message);
   }
-}
-
-// ── Normalize game data to our format ─────────────────────────────────────────
-function normalizeMLBGame(g) {
-  return {
-    id: g.id,
-    league: "mlb",
-    away: g.away?.name || g.away?.market + " " + g.away?.name,
-    home: g.home?.name || g.home?.market + " " + g.home?.name,
-    awayId: g.away?.id,
-    homeId: g.home?.id,
-    awayScore: g.away_team?.runs ?? null,
-    homeScore: g.home_team?.runs ?? null,
-    status: g.status,
-    scheduledTime: g.scheduled,
-    venue: g.venue?.name,
-    city: g.venue?.city + ", " + g.venue?.state,
-    inning: g.inning ? `${g.inning_half === "T" ? "Top" : "Bot"} ${g.inning}` : null,
-  };
-}
-
-function normalizeNBAGame(g) {
-  return {
-    id: g.id,
-    league: "nba",
-    away: g.away?.name,
-    home: g.home?.name,
-    awayId: g.away?.id,
-    homeId: g.home?.id,
-    awayScore: g.away_points ?? null,
-    homeScore: g.home_points ?? null,
-    status: g.status,
-    scheduledTime: g.scheduled,
-    venue: g.venue?.name,
-    city: g.venue?.city + ", " + g.venue?.state,
-    quarter: g.quarter ?? null,
-    clock: g.clock ?? null,
-    seriesInfo: g.title || null,
-  };
 }
 
 module.exports = {
   fetchMLBSchedule,
-  fetchMLBBoxScore,
-  fetchMLBH2H,
   fetchNBASchedule,
+  fetchMLBBoxScore,
   fetchNBABoxScore,
-  fetchNFLSchedule,
+  fetchMLBPitcherVsBatter,
+  fetchMLBRoster,
+  fetchNBARoster,
   refreshDailyGames,
   getCachedGames,
   cacheGames,
-  normalizeMLBGame,
-  normalizeNBAGame,
 };
