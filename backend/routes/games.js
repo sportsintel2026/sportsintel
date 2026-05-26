@@ -105,7 +105,7 @@ async function getNBAGamesWithScores(date) {
 router.get("/:league/today", async (req, res) => {
   try {
     const { league } = req.params;
-    const today = new Date().toISOString().split("T")[0];
+    const today = new Date().toLocaleDateString("en-CA", {timeZone:"America/New_York"});
     let games;
 
     if (league === "mlb") {
