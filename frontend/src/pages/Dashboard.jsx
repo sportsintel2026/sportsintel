@@ -19,13 +19,14 @@ export default function DashboardPage() {
   const [edges, setEdges] = useState(null);
   const [edgesLoading, setEdgesLoading] = useState(true);
   const [picks, setPicks] = useState([]);
-  const [plan, setPlan] = useState({ tier: "free" });
+  const [plan, setPlan] = useState({ tier: "free", isAdmin: false });
   const [menuOpen, setMenuOpen] = useState(false);
+  const isAdmin = plan.isAdmin === true;
   const isPro = plan.tier === "pro" || plan.tier === "elite";
+  const hasFullAccess = isAdmin || isPro;
 
   useEffect(() => { subscriptionApi.getMyPlan().then(setPlan).catch(() => {}); }, []);
 
-  // Load editorial picks from daily_picks
   useEffect(() => {
     const loadPicks = async () => {
       try {
@@ -37,7 +38,6 @@ export default function DashboardPage() {
     loadPicks();
   }, []);
 
-  // Load edges for MLB only
   const loadEdges = useCallback(async () => {
     if (league !== "mlb") {
       setEdges(null);
@@ -73,10 +73,7 @@ export default function DashboardPage() {
         .tab-btn:hover{color:#fff}
       `}</style>
 
-      {/* HEADER */}
-      <Header user={user} plan={plan} signOut={signOut} navigate={navigate} menuOpen={menuOpen} setMenuOpen={setMenuOpen} isPro={isPro} />
-
-      {/* LEAGUE TABS */}
+      <Header user={user} plan={plan} signOut={signOut} navigate={navigate} menuOpen={menuOpen} setMenuOpen={setMenuOpen} isAdmin={isAdmin} hasFullAccess={hasFullAccess} />
       <LeagueTabs league={league} setLeague={setLeague} />
 
       {menuOpen && <div onClick={() => setMenuOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 99 }} />}
@@ -87,7 +84,7 @@ export default function DashboardPage() {
             edges={edges}
             loading={edgesLoading}
             picks={picks}
-            isPro={isPro}
+            hasFullAccess={hasFullAccess}
             navigate={navigate}
             onRefresh={loadEdges}
           />
@@ -99,9 +96,16 @@ export default function DashboardPage() {
   );
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
+function Header({ user, plan, signOut, navigate, menuOpen, setMenuOpen, isAdmin, hasFullAccess }) {
+  let badge;
+  if (isAdmin) {
+    badge = { text: "ADMIN", bg: "#a855f715", fg: "#a855f7", border: "#a855f730" };
+  } else if (hasFullAccess) {
+    badge = { text: "SUBSCRIBED", bg: "#22c55e15", fg: "#22c55e", border: "#22c55e30" };
+  } else {
+    badge = { text: "FREE", bg: "#1c2128", fg: "#6b7280", border: "#1f2937" };
+  }
 
-function Header({ user, plan, signOut, navigate, menuOpen, setMenuOpen, isPro }) {
   return (
     <div style={{ background: "#0a0e14", borderBottom: "1px solid #1a1f28", position: "sticky", top: 0, zIndex: 100 }}>
       <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 16px", display: "flex", alignItems: "center", justifyContent: "space-between", height: 56 }}>
@@ -114,26 +118,31 @@ function Header({ user, plan, signOut, navigate, menuOpen, setMenuOpen, isPro })
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <span style={{
             fontSize: 10, padding: "4px 10px", borderRadius: 4, fontWeight: 700, letterSpacing: "0.06em",
-            background: isPro ? "#22c55e15" : "#1c2128",
-            color: isPro ? "#22c55e" : "#6b7280",
-            border: `1px solid ${isPro ? "#22c55e30" : "#1f2937"}`,
+            background: badge.bg, color: badge.fg, border: `1px solid ${badge.border}`,
           }}>
-            {isPro ? "SUBSCRIBED" : "FREE"}
+            {badge.text}
           </span>
           <div style={{ position: "relative" }}>
             <button
               onClick={() => setMenuOpen(o => !o)}
               style={{
                 width: 32, height: 32, borderRadius: "50%",
-                background: "linear-gradient(135deg,#ef4444,#dc2626)",
+                background: isAdmin ? "linear-gradient(135deg,#a855f7,#7e22ce)" : "linear-gradient(135deg,#ef4444,#dc2626)",
                 border: "none", color: "#fff", fontSize: 13, fontWeight: 800, cursor: "pointer", fontFamily: "inherit",
               }}>
               {user?.email?.[0]?.toUpperCase() || "U"}
             </button>
             {menuOpen && (
               <div style={{ position: "absolute", right: 0, top: 40, background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 8, minWidth: 220, zIndex: 200, boxShadow: "0 12px 40px #00000080" }}>
-                <div style={{ padding: "8px 12px", fontSize: 11, color: "#6b7280", borderBottom: "1px solid #1a1f28", marginBottom: 6 }}>{user?.email}</div>
-                {!isPro && (
+                <div style={{ padding: "8px 12px", fontSize: 11, color: "#6b7280", borderBottom: "1px solid #1a1f28", marginBottom: 6 }}>
+                  {user?.email}
+                  {isAdmin && (
+                    <div style={{ marginTop: 4, fontSize: 10, color: "#a855f7", fontWeight: 700, letterSpacing: "0.05em" }}>
+                      OWNER ACCOUNT
+                    </div>
+                  )}
+                </div>
+                {!hasFullAccess && (
                   <button onClick={() => { navigate("/pricing"); setMenuOpen(false); }}
                     style={{ width: "100%", textAlign: "left", background: "#ef444412", border: "1px solid #ef444430", borderRadius: 6, padding: "8px 12px", fontSize: 12, color: "#ef4444", fontWeight: 700, cursor: "pointer", fontFamily: "inherit", marginBottom: 6 }}>
                     ⚡ Subscribe — $7/mo
@@ -189,9 +198,7 @@ function LeagueTabs({ league, setLeague }) {
   );
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-
-function MLBDashboard({ edges, loading, picks, isPro, navigate, onRefresh }) {
+function MLBDashboard({ edges, loading, picks, hasFullAccess, navigate, onRefresh }) {
   if (loading) return <Loader />;
   if (!edges) return <ErrorState onRetry={onRefresh} />;
 
@@ -200,7 +207,6 @@ function MLBDashboard({ edges, loading, picks, isPro, navigate, onRefresh }) {
 
   return (
     <div style={{ animation: "fadeIn .3s ease" }}>
-      {/* TITLE */}
       <div style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 8 }}>
         <h1 style={{ margin: 0, fontSize: 26, fontWeight: 700 }}>Today's edges · {date.split(",")[0]}</h1>
         <span style={{ fontSize: 12, color: "#6b7280" }}>
@@ -211,17 +217,14 @@ function MLBDashboard({ edges, loading, picks, isPro, navigate, onRefresh }) {
         Model projections vs sportsbook lines. Sorted by edge.
       </p>
 
-      {/* MODEL BETA NOTICE */}
       <div style={{ background: "#1a1410", border: "1px solid #f5970022", borderLeft: "3px solid #f59700", borderRadius: 6, padding: "10px 14px", marginBottom: 20, fontSize: 12, color: "#fbbf24" }}>
         <strong>Model v0.1 · Research-grade.</strong> <span style={{ color: "#a8915c" }}>Projections are based on season-to-date stats and public park factors. No model beats the market — use as one input among many, not gospel.</span>
       </div>
 
-      {/* EDITORIAL BEST BETS */}
       {picks.length > 0 && (
-        <EditorialBestBets picks={picks} isPro={isPro} navigate={navigate} />
+        <EditorialBestBets picks={picks} hasFullAccess={hasFullAccess} navigate={navigate} />
       )}
 
-      {/* TWO COLUMN: MONEYLINE + TOTALS */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16, gridAutoRows: "1fr" }}>
         <EdgePanel
           title="Top moneyline edges"
@@ -229,7 +232,7 @@ function MLBDashboard({ edges, loading, picks, isPro, navigate, onRefresh }) {
           edges={edges.moneylineEdges || []}
           renderRow={(e) => <MoneylineRow edge={e} key={e.gameId + e.side} />}
           emptyText="No edges found in current slate"
-          isPro={isPro}
+          hasFullAccess={hasFullAccess}
           navigate={navigate}
         />
         <EdgePanel
@@ -238,12 +241,11 @@ function MLBDashboard({ edges, loading, picks, isPro, navigate, onRefresh }) {
           edges={edges.totalsEdges || []}
           renderRow={(e) => <TotalsRow edge={e} key={e.gameId + e.side} />}
           emptyText="No edges found in current slate"
-          isPro={isPro}
+          hasFullAccess={hasFullAccess}
           navigate={navigate}
         />
       </div>
 
-      {/* HR PROPS */}
       <div style={{ marginBottom: 16 }}>
         <EdgePanel
           title="Top home run props"
@@ -251,21 +253,18 @@ function MLBDashboard({ edges, loading, picks, isPro, navigate, onRefresh }) {
           edges={edges.hrPropEdges || []}
           renderRow={(e) => <HRPropRow edge={e} key={e.player + e.game} />}
           emptyText="HR prop data updates closer to first pitch"
-          isPro={isPro}
+          hasFullAccess={hasFullAccess}
           navigate={navigate}
           wide
         />
       </div>
 
-      {/* ALL GAMES TABLE */}
-      <AllGamesTable games={edges.games || []} isPro={isPro} navigate={navigate} />
+      <AllGamesTable games={edges.games || []} hasFullAccess={hasFullAccess} navigate={navigate} />
     </div>
   );
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-
-function EditorialBestBets({ picks, isPro, navigate }) {
+function EditorialBestBets({ picks, hasFullAccess, navigate }) {
   return (
     <div style={{
       background: "linear-gradient(180deg,#1a1410 0%,#0f1419 100%)",
@@ -278,7 +277,7 @@ function EditorialBestBets({ picks, isPro, navigate }) {
       </div>
       <div style={{ display: "grid", gridTemplateColumns: `repeat(${Math.min(picks.length, 3)}, 1fr)`, gap: 12 }}>
         {picks.map((p, i) => {
-          const locked = !isPro && i > 0;
+          const locked = !hasFullAccess && i > 0;
           return (
             <div key={i} style={{
               position: "relative", background: "#0f1419", borderRadius: 6,
@@ -306,10 +305,9 @@ function EditorialBestBets({ picks, isPro, navigate }) {
   );
 }
 
-function EdgePanel({ title, icon, edges, renderRow, emptyText, isPro, navigate, wide }) {
-  // Free users see top 1, blurred for rest
-  const visible = isPro ? edges : edges.slice(0, 1);
-  const hidden = isPro ? [] : edges.slice(1, 5);
+function EdgePanel({ title, icon, edges, renderRow, emptyText, hasFullAccess, navigate, wide }) {
+  const visible = hasFullAccess ? edges : edges.slice(0, 1);
+  const hidden = hasFullAccess ? [] : edges.slice(1, 5);
   return (
     <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 8, padding: 14, display: "flex", flexDirection: "column" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
@@ -390,7 +388,7 @@ function HRPropRow({ edge }) {
   );
 }
 
-function AllGamesTable({ games, isPro, navigate }) {
+function AllGamesTable({ games, hasFullAccess, navigate }) {
   if (games.length === 0) return null;
   return (
     <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 8, padding: 14 }}>
@@ -446,8 +444,6 @@ function td(align = "left") {
   return { padding: "10px 6px", textAlign: align, color: "#e4e7eb", fontSize: 12 };
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-
 function EdgeBadge({ edge }) {
   if (edge == null) return <span style={{ fontSize: 11, color: "#6b7280" }}>—</span>;
   const positive = edge > 0;
@@ -482,8 +478,6 @@ function formatOdds(american) {
   if (american == null) return "—";
   return american > 0 ? `+${american}` : `${american}`;
 }
-
-// ──────────────────────────────────────────────────────────────────────────────
 
 function Loader() {
   return (
