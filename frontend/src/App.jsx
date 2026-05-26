@@ -6,6 +6,7 @@ import { SignupPage } from "./pages/Login";
 import DashboardPage from "./pages/Dashboard";
 import PricingPage from "./pages/Pricing";
 import ResetPasswordPage from "./pages/ResetPassword";
+import AdminPage from "./pages/Admin";
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth();
@@ -35,6 +36,11 @@ export default function App() {
           <Route path="/signup" element={<SignupPage />} />
           <Route path="/pricing" element={<PricingPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
+          <Route path="/admin" element={
+            <PrivateRoute>
+              <AdminPage />
+            </PrivateRoute>
+          } />
           <Route path="/dashboard" element={
             <PrivateRoute>
               <DashboardPage />
