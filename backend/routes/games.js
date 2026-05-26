@@ -36,8 +36,20 @@ async function getMLBGamesWithScores(date) {
     const home = g.home || {};
     
     let inning = null;
-    if (g.status === "inprogress" && g.outcome) {
+    if ((g.status === "inprogress") && g.outcome) {
       inning = `${g.outcome.current_inning_half==="T"?"Top":"Bot"} ${g.outcome.current_inning}`;
+    }
+
+    // Weather from live games
+    let weather = null;
+    if (g.weather) {
+      const w = g.weather.current_conditions || g.weather.forecast;
+      if (w) weather = {
+        temp: w.temp_f ? `${w.temp_f}°F` : null,
+        condition: w.condition || null,
+        humidity: w.humidity ? `${w.humidity}%` : null,
+        wind: w.wind ? `${w.wind.speed_mph} mph ${w.wind.direction}` : null,
+      };
     }
 
     return {
@@ -47,7 +59,7 @@ async function getMLBGamesWithScores(date) {
       awayId: away.id, homeId: home.id,
       awayScore: away.runs ?? null,
       homeScore: home.runs ?? null,
-      weather: null,
+      weather,
       status: g.status==="inprogress"?"live":g.status==="closed"?"final":"scheduled",
       inning,
       date,
