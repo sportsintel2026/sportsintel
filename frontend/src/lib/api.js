@@ -19,14 +19,22 @@ async function apiFetch(path, options = {}) {
   return res.json();
 }
 
+// Existing — keep for now (NBA tab might use, plus boxscore detail later)
 export const gamesApi = {
   getToday: (league) => apiFetch(`/api/games/${league}/today`),
   getBoxScore: (league, gameId) => apiFetch(`/api/games/${league}/${gameId}/boxscore`),
 };
 
+// Existing news API (still wired if you use it later)
 export const newsApi = {
   getHeadlines: (sport) => apiFetch(`/api/news/headlines/${sport}`),
   getInjuries: (league) => apiFetch(`/api/news/${league}/injuries`),
+};
+
+// NEW — edges API for MLB analytics dashboard
+export const edgesApi = {
+  getMLB: () => apiFetch("/api/edges/mlb"),
+  clearCache: () => apiFetch("/api/edges/cache", { method: "DELETE" }),
 };
 
 export const subscriptionApi = {
