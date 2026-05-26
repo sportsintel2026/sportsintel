@@ -1,124 +1,226 @@
 import { Link } from "react-router-dom";
-
-const features = [
-  { icon: "⚡", title: "Live Scores", desc: "Real-time scores across MLB, NBA & NFL updated every 5 minutes during games." },
-  { icon: "📊", title: "Deep Stats", desc: "Box scores, player stats, and performance breakdowns for every game." },
-  { icon: "⚔️", title: "Head-to-Head History", desc: "All-time and recent matchup records between any two teams going back decades." },
-  { icon: "🎯", title: "Player vs. Opponent", desc: "Career stats for every player against today's opponent — know who's hot." },
-  { icon: "🌤", title: "Weather Analysis", desc: "Real-time conditions with game-impact analysis per ballpark." },
-  { icon: "🏆", title: "Playoff Tracker", desc: "Full playoff bracket, series records, and win probability for every game." },
-];
-
-const plans = [
-  { name: "Free", price: "$0", color: "#475569", features: ["Live scores", "Basic standings", "Today's schedule"] },
-  { name: "Pro", price: "$4.99", per: "/mo", color: "#ef4444", popular: true, features: ["Everything in Free", "H2H records", "Player vs opponent stats", "Weather impact analysis", "Box scores"] },
-  { name: "Elite", price: "$9.99", per: "/mo", color: "#f59e0b", features: ["Everything in Pro", "All leagues", "Betting line data", "Push notifications", "No ads"] },
-];
+import { useState, useEffect } from "react";
+import { supabase } from "../lib/api";
 
 export default function LandingPage() {
+  const [picks, setPicks] = useState([]);
+
+  useEffect(() => {
+    const loadPicks = async () => {
+      try {
+        const today = new Date().toISOString().split("T")[0];
+        const { data } = await supabase
+          .from("daily_picks")
+          .select("*")
+          .eq("date", today)
+          .single();
+        if (data?.picks) setPicks(JSON.parse(data.picks));
+      } catch(e) {}
+    };
+    loadPicks();
+  }, []);
+
+  const FEATURES = [
+    { icon:"⚡", title:"Live Scores", desc:"Real-time updates every 5 minutes across all major leagues" },
+    { icon:"📊", title:"Box Scores", desc:"Full game stats, linescore, and pitcher matchups" },
+    { icon:"⚔️", title:"H2H Records", desc:"All-time head-to-head history between teams" },
+    { icon:"🎯", title:"Player Matchups", desc:"Career stats for every player vs today's opponent" },
+    { icon:"🌤", title:"Weather Analysis", desc:"Live conditions with game impact breakdown" },
+    { icon:"💰", title:"Betting Lines", desc:"Live odds so you always know the market" },
+  ];
+
+  const COMPETITORS = [
+    { name:"Picks Sites", price:"$20–$100+/mo", desc:"Sell you picks. No guarantees.", highlight:false },
+    { name:"ESPN+", price:"$10.99/mo", desc:"Scores only. No deep stats.", highlight:false },
+    { name:"SportsIntel", price:"$7/mo", desc:"Everything the pros use. Make your own picks.", highlight:true },
+  ];
+
   return (
-    <div style={{ minHeight: "100vh", background: "#080810", color: "#e2e8f0", fontFamily: "'Inter',system-ui,sans-serif" }}>
+    <div style={{minHeight:"100vh",background:"#080810",color:"#e2e8f0",fontFamily:"'Inter',system-ui,sans-serif",fontSize:14}}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Barlow+Condensed:wght@700;800;900&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
         *{box-sizing:border-box;margin:0;padding:0}
         @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
-        @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+        @keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+        .btn-red{background:#ef4444;color:#fff;border:none;border-radius:8px;padding:13px 28px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .2s;text-decoration:none;display:inline-block}
+        .btn-red:hover{background:#dc2626;transform:translateY(-1px);box-shadow:0 6px 20px #ef444435}
+        .btn-outline{background:transparent;color:#94a3b8;border:1px solid #1e2235;border-radius:8px;padding:11px 22px;font-size:13px;cursor:pointer;font-family:inherit;transition:all .2s;text-decoration:none;display:inline-block}
+        .btn-outline:hover{border-color:#334155;color:#e2e8f0}
+        .card{background:#0a0a14;border:1px solid #1a1a2e;border-radius:12px;transition:all .2s}
+        .card:hover{border-color:#252535;transform:translateY(-2px)}
+        a{text-decoration:none}
       `}</style>
 
-      {/* Nav */}
-      <nav style={{ padding: "20px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", maxWidth: 1100, margin: "0 auto" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e", display: "inline-block", boxShadow: "0 0 10px #22c55e", animation: "pulse 2s infinite" }} />
-          <span style={{ fontFamily: "'Barlow Condensed'", fontSize: 22, fontWeight: 900, letterSpacing: "0.08em" }}>SPORTSINTEL</span>
-        </div>
-        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-          <Link to="/pricing" style={{ color: "#94a3b8", textDecoration: "none", fontSize: 14, fontWeight: 500 }}>Pricing</Link>
-          <Link to="/login" style={{ color: "#94a3b8", textDecoration: "none", fontSize: 14, fontWeight: 500 }}>Sign In</Link>
-          <Link to="/signup" style={{ background: "#ef4444", color: "#fff", textDecoration: "none", padding: "8px 20px", borderRadius: 8, fontSize: 14, fontWeight: 700 }}>Get Started</Link>
+      {/* NAV */}
+      <nav style={{padding:"0 20px",background:"#080810",borderBottom:"1px solid #0f0f1a",position:"sticky",top:0,zIndex:100}}>
+        <div style={{maxWidth:960,margin:"0 auto",display:"flex",alignItems:"center",justifyContent:"space-between",height:56}}>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <span style={{width:7,height:7,borderRadius:"50%",background:"#22c55e",display:"inline-block",boxShadow:"0 0 6px #22c55e",animation:"pulse 2s infinite"}}/>
+            <span style={{fontSize:16,fontWeight:800,color:"#fff",letterSpacing:"0.01em"}}>SportsIntel</span>
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <Link to="/pricing" style={{fontSize:13,color:"#64748b",padding:"6px 12px"}}>Pricing</Link>
+            <Link to="/login" className="btn-outline" style={{padding:"7px 16px",fontSize:13}}>Sign In</Link>
+            <Link to="/signup" className="btn-red" style={{padding:"7px 16px",fontSize:13}}>Get Started</Link>
+          </div>
         </div>
       </nav>
 
-      {/* Hero */}
-      <div style={{ textAlign: "center", padding: "80px 24px 60px", maxWidth: 800, margin: "0 auto" }}>
-        <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "#ef444420", border: "1px solid #ef444440", borderRadius: 20, padding: "6px 16px", marginBottom: 28, fontSize: 12, color: "#ef4444", fontWeight: 600, letterSpacing: "0.06em" }}>
-          🔴 LIVE · MAY 22, 2026 · 15 MLB GAMES TODAY
-        </div>
-        <h1 style={{ fontFamily: "'Barlow Condensed'", fontSize: "clamp(42px,8vw,80px)", fontWeight: 900, lineHeight: 1, letterSpacing: "-0.01em", marginBottom: 24, color: "#fff" }}>
-          YOUR EDGE ON<br />
-          <span style={{ color: "#ef4444" }}>EVERY GAME</span>
-        </h1>
-        <p style={{ fontSize: "clamp(16px,2.5vw,20px)", color: "#64748b", lineHeight: 1.7, marginBottom: 40, maxWidth: 560, margin: "0 auto 40px" }}>
-          Live scores, deep stats, H2H history, player matchup data, and weather analysis — all in one place.
-        </p>
-        <div style={{ display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap" }}>
-          <Link to="/signup" style={{ background: "#ef4444", color: "#fff", textDecoration: "none", padding: "14px 36px", borderRadius: 10, fontSize: 16, fontWeight: 800, letterSpacing: "0.02em" }}>
-            Start Free →
-          </Link>
-          <Link to="/pricing" style={{ background: "transparent", color: "#94a3b8", textDecoration: "none", padding: "14px 36px", borderRadius: 10, fontSize: 16, fontWeight: 600, border: "1px solid #1e2235" }}>
-            See Plans
-          </Link>
-        </div>
-        <p style={{ marginTop: 16, fontSize: 13, color: "#334155" }}>No credit card required · Free forever plan available</p>
-      </div>
+      <div style={{maxWidth:960,margin:"0 auto",padding:"0 20px"}}>
 
-      {/* League badges */}
-      <div style={{ display: "flex", justifyContent: "center", gap: 16, padding: "0 24px 60px", flexWrap: "wrap" }}>
-        {[["⚾","MLB","15 games today"],["🏀","NBA","Playoffs live"],["🏈","NFL","Season Sep '26"]].map(([icon,label,sub])=>(
-          <div key={label} style={{ background: "#0d0d1a", border: "1px solid #1e2235", borderRadius: 12, padding: "14px 24px", textAlign: "center", minWidth: 120 }}>
-            <div style={{ fontSize: 28, marginBottom: 6 }}>{icon}</div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0" }}>{label}</div>
-            <div style={{ fontSize: 11, color: "#475569", marginTop: 2 }}>{sub}</div>
+        {/* HERO */}
+        <div style={{padding:"64px 0 56px",animation:"fadeIn .6s ease"}}>
+          <div style={{display:"flex",gap:8,marginBottom:20,flexWrap:"wrap"}}>
+            {["⚾ MLB","🏀 NBA","🏈 NFL","🏒 NHL","⚽ Soccer","🥊 MMA","⛳ Golf"].map(l=>(
+              <span key={l} style={{fontSize:11,padding:"3px 10px",borderRadius:6,background:"#0f0f1a",border:"1px solid #1a1a2e",color:"#64748b"}}>{l}</span>
+            ))}
           </div>
-        ))}
-      </div>
-
-      {/* Features */}
-      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "0 24px 80px" }}>
-        <h2 style={{ textAlign: "center", fontFamily: "'Barlow Condensed'", fontSize: 40, fontWeight: 900, color: "#fff", marginBottom: 48, letterSpacing: "0.02em" }}>
-          EVERYTHING YOU NEED
-        </h2>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))", gap: 20 }}>
-          {features.map(f => (
-            <div key={f.title} style={{ background: "#0d0d1a", border: "1px solid #1e2235", borderRadius: 16, padding: 24 }}>
-              <div style={{ fontSize: 32, marginBottom: 12 }}>{f.icon}</div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: "#fff", marginBottom: 8 }}>{f.title}</div>
-              <div style={{ fontSize: 14, color: "#64748b", lineHeight: 1.6 }}>{f.desc}</div>
-            </div>
-          ))}
+          <h1 style={{fontSize:"clamp(32px,6vw,58px)",fontWeight:900,color:"#fff",lineHeight:1.1,marginBottom:18,letterSpacing:"-0.02em"}}>
+            The Smarter Way<br/>
+            <span style={{color:"#ef4444"}}>to Bet on Sports.</span>
+          </h1>
+          <p style={{fontSize:16,color:"#64748b",maxWidth:500,marginBottom:14,lineHeight:1.8}}>
+            Other sites charge <strong style={{color:"#e2e8f0"}}>$20–$100+/month</strong> selling picks with no guarantees. There's no such thing as a guaranteed pick in sports — but there <em style={{color:"#94a3b8"}}>is</em> such a thing as being better informed than everyone else.
+          </p>
+          <p style={{fontSize:15,color:"#64748b",maxWidth:480,marginBottom:32,lineHeight:1.8}}>
+            For <strong style={{color:"#ef4444"}}>$7/month</strong>, SportsIntel gives you the exact same data the pros use. Make smarter picks yourself.
+          </p>
+          <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
+            <Link to="/signup" className="btn-red" style={{fontSize:15,padding:"14px 32px"}}>Get All-Access — $7/mo</Link>
+            <Link to="/signup" className="btn-outline">Try Free First →</Link>
+          </div>
+          <div style={{fontSize:11,color:"#1e2235",marginTop:14}}>No credit card required · Cancel anytime</div>
         </div>
-      </div>
 
-      {/* Pricing preview */}
-      <div style={{ maxWidth: 900, margin: "0 auto", padding: "0 24px 80px" }}>
-        <h2 style={{ textAlign: "center", fontFamily: "'Barlow Condensed'", fontSize: 40, fontWeight: 900, color: "#fff", marginBottom: 12, letterSpacing: "0.02em" }}>SIMPLE PRICING</h2>
-        <p style={{ textAlign: "center", color: "#64748b", marginBottom: 48, fontSize: 15 }}>Start free. Upgrade when you're ready.</p>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: 20 }}>
-          {plans.map(p => (
-            <div key={p.name} style={{ background: p.popular ? "#0f0f1f" : "#0d0d1a", border: `1px solid ${p.popular ? p.color + "60" : "#1e2235"}`, borderRadius: 16, padding: 28, position: "relative" }}>
-              {p.popular && <div style={{ position: "absolute", top: -12, left: "50%", transform: "translateX(-50%)", background: p.color, color: "#fff", fontSize: 11, fontWeight: 800, padding: "3px 14px", borderRadius: 20, letterSpacing: "0.08em" }}>MOST POPULAR</div>}
-              <div style={{ fontSize: 14, fontWeight: 600, color: p.color, marginBottom: 8, letterSpacing: "0.06em" }}>{p.name.toUpperCase()}</div>
-              <div style={{ fontFamily: "'Barlow Condensed'", fontSize: 44, fontWeight: 900, color: "#fff", lineHeight: 1 }}>
-                {p.price}<span style={{ fontSize: 18, color: "#64748b" }}>{p.per}</span>
-              </div>
-              <div style={{ marginTop: 20, marginBottom: 24 }}>
-                {p.features.map(f => (
-                  <div key={f} style={{ fontSize: 13, color: "#94a3b8", marginBottom: 8, display: "flex", gap: 8, alignItems: "center" }}>
-                    <span style={{ color: p.color }}>✓</span> {f}
+        {/* DIVIDER */}
+        <div style={{borderTop:"1px solid #0f0f1a",marginBottom:56}}/>
+
+        {/* PICKS SECTION */}
+        <div style={{marginBottom:64}}>
+          <div style={{display:"flex",alignItems:"flex-end",justifyContent:"space-between",marginBottom:24,flexWrap:"wrap",gap:12}}>
+            <div>
+              <div style={{fontSize:11,color:"#ef4444",fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:8}}>🎯 Free Daily Picks</div>
+              <h2 style={{fontSize:"clamp(20px,4vw,30px)",fontWeight:800,color:"#fff"}}>Today's Top Picks</h2>
+            </div>
+            <Link to="/signup" style={{fontSize:12,color:"#475569",border:"1px solid #1a1a2e",borderRadius:8,padding:"6px 14px"}}>Subscribe for full analysis →</Link>
+          </div>
+
+          {picks.length === 0 ? (
+            <div style={{background:"#0a0a14",border:"1px solid #1a1a2e",borderRadius:12,padding:32,textAlign:"center"}}>
+              <div style={{fontSize:24,marginBottom:10}}>🎯</div>
+              <div style={{fontSize:13,fontWeight:600,color:"#e2e8f0",marginBottom:6}}>Today's picks coming soon</div>
+              <div style={{fontSize:12,color:"#475569"}}>Check back later — picks are updated daily</div>
+            </div>
+          ) : (
+            <div style={{display:"flex",flexDirection:"column",gap:10}}>
+              {picks.map((p, i) => (
+                <div key={i} style={{background:"#0a0a14",border:"1px solid #1a1a2e",borderRadius:12,padding:18,position:"relative",overflow:"hidden"}}>
+                  {i > 0 && (
+                    <div style={{position:"absolute",inset:0,backdropFilter:"blur(8px)",background:"#08081085",zIndex:2,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:12}}>
+                      <div style={{textAlign:"center"}}>
+                        <div style={{fontSize:18,marginBottom:6}}>🔒</div>
+                        <Link to="/signup" style={{fontSize:12,color:"#ef4444",fontWeight:700}}>Subscribe to unlock →</Link>
+                      </div>
+                    </div>
+                  )}
+                  <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:16,flexWrap:"wrap"}}>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:11,color:"#475569",marginBottom:5,fontWeight:500}}>
+                        {p.league==="MLB"?"⚾":p.league==="NBA"?"🏀":p.league==="NFL"?"🏈":p.league==="NHL"?"🏒":p.league==="Soccer"?"⚽":p.league==="MMA"?"🥊":"⛳"} {p.league} · {p.game}
+                      </div>
+                      <div style={{fontSize:17,fontWeight:700,color:"#fff",marginBottom:5}}>
+                        {p.pick} <span style={{fontSize:13,color:"#64748b",fontWeight:400"}}>{p.odds}</span>
+                      </div>
+                      <div style={{fontSize:12,color:"#64748b",lineHeight:1.7}}>{p.analysis}</div>
+                    </div>
+                    <div style={{flexShrink:0}}>
+                      <span style={{background:p.confidence==="HIGH"?"#22c55e15":p.confidence==="MEDIUM"?"#f59e0b15":"#ef444415",border:`1px solid ${p.confidence==="HIGH"?"#22c55e30":p.confidence==="MEDIUM"?"#f59e0b30":"#ef444430"}`,borderRadius:6,padding:"3px 10px",fontSize:10,fontWeight:700,color:p.confidence==="HIGH"?"#22c55e":p.confidence==="MEDIUM"?"#f59e0b":"#ef4444"}}>
+                        {p.confidence}
+                      </span>
+                    </div>
                   </div>
-                ))}
-              </div>
-              <Link to="/signup" style={{ display: "block", textAlign: "center", background: p.popular ? p.color : "transparent", color: p.popular ? "#fff" : "#94a3b8", border: `1px solid ${p.popular ? p.color : "#1e2235"}`, textDecoration: "none", padding: "10px", borderRadius: 8, fontSize: 14, fontWeight: 700 }}>
-                {p.name === "Free" ? "Get Started" : `Subscribe to ${p.name}`}
-              </Link>
+                </div>
+              ))}
             </div>
-          ))}
+          )}
+
+          <div style={{textAlign:"center",marginTop:20}}>
+            <Link to="/signup" className="btn-red">Unlock All Picks — $7/mo</Link>
+          </div>
         </div>
+
+        {/* DIVIDER */}
+        <div style={{borderTop:"1px solid #0f0f1a",marginBottom:56}}/>
+
+        {/* FEATURES */}
+        <div style={{marginBottom:64}}>
+          <div style={{marginBottom:28}}>
+            <div style={{fontSize:11,color:"#ef4444",fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:8}}>What You Get</div>
+            <h2 style={{fontSize:"clamp(20px,4vw,30px)",fontWeight:800,color:"#fff"}}>Everything the Pros Use</h2>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:12}}>
+            {FEATURES.map((f,i)=>(
+              <div key={i} className="card" style={{padding:18}}>
+                <div style={{fontSize:24,marginBottom:10}}>{f.icon}</div>
+                <div style={{fontSize:13,fontWeight:700,color:"#e2e8f0",marginBottom:5}}>{f.title}</div>
+                <div style={{fontSize:12,color:"#475569",lineHeight:1.7}}>{f.desc}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* DIVIDER */}
+        <div style={{borderTop:"1px solid #0f0f1a",marginBottom:56}}/>
+
+        {/* COMPARISON */}
+        <div style={{marginBottom:64}}>
+          <div style={{marginBottom:28}}>
+            <div style={{fontSize:11,color:"#ef4444",fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:8}}>Compare</div>
+            <h2 style={{fontSize:"clamp(20px,4vw,30px)",fontWeight:800,color:"#fff"}}>Why SportsIntel Wins</h2>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {COMPETITORS.map((c,i)=>(
+              <div key={i} style={{background:c.highlight?"#ef44440a":"#0a0a14",border:`1px solid ${c.highlight?"#ef444430":"#1a1a2e"}`,borderRadius:12,padding:"14px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
+                <div>
+                  <div style={{fontSize:13,fontWeight:700,color:c.highlight?"#fff":"#64748b",marginBottom:3}}>{c.name}</div>
+                  <div style={{fontSize:12,color:c.highlight?"#94a3b8":"#334155"}}>{c.desc}</div>
+                </div>
+                <div style={{textAlign:"right"}}>
+                  <div style={{fontSize:16,fontWeight:800,color:c.highlight?"#ef4444":"#334155"}}>{c.price}</div>
+                  {c.highlight&&<div style={{fontSize:10,color:"#22c55e",fontWeight:700,marginTop:2}}>BEST VALUE ✓</div>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* CTA */}
+        <div style={{background:"#0a0a14",border:"1px solid #1a1a2e",borderRadius:16,padding:"48px 32px",textAlign:"center",marginBottom:64}}>
+          <h2 style={{fontSize:"clamp(22px,4vw,36px)",fontWeight:800,color:"#fff",marginBottom:12}}>
+            Ready to Bet Smarter?
+          </h2>
+          <p style={{fontSize:14,color:"#64748b",maxWidth:400,margin:"0 auto 28px",lineHeight:1.8}}>
+            Join thousands of sports bettors who use SportsIntel every day to make more informed picks.
+          </p>
+          <Link to="/signup" className="btn-red" style={{fontSize:15,padding:"14px 36px"}}>
+            Get All-Access — $7/mo →
+          </Link>
+          <div style={{fontSize:11,color:"#334155",marginTop:12}}>Cancel anytime · No contracts · Instant access</div>
+        </div>
+
       </div>
 
-      {/* Footer */}
-      <div style={{ borderTop: "1px solid #1e2235", padding: "32px 24px", textAlign: "center", color: "#334155", fontSize: 13 }}>
-        <div style={{ fontFamily: "'Barlow Condensed'", fontSize: 18, fontWeight: 800, color: "#475569", marginBottom: 8 }}>SPORTSINTEL</div>
-        © 2026 SportsIntel. All rights reserved.
+      {/* FOOTER */}
+      <div style={{borderTop:"1px solid #0f0f1a",padding:"20px 24px",textAlign:"center"}}>
+        <div style={{maxWidth:960,margin:"0 auto",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:12}}>
+          <span style={{fontSize:13,fontWeight:700,color:"#1e2235"}}>SportsIntel</span>
+          <div style={{display:"flex",gap:16}}>
+            <Link to="/pricing" style={{fontSize:12,color:"#334155"}}>Pricing</Link>
+            <Link to="/login" style={{fontSize:12,color:"#334155"}}>Sign In</Link>
+            <Link to="/signup" style={{fontSize:12,color:"#334155"}}>Sign Up</Link>
+          </div>
+          <span style={{fontSize:11,color:"#1e2235"}}>© 2026 SportsIntel</span>
+        </div>
       </div>
     </div>
   );
