@@ -16,6 +16,13 @@ async function srGet(path) {
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
+// Get US Eastern date string
+function getEasternDate(offsetDays = 0) {
+  const d = new Date();
+  d.setDate(d.getDate() + offsetDays);
+  return d.toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+}
+
 async function getMLBGamesWithScores(date) {
   const [y,m,d] = date.split("-");
   const data = await srGet(`/mlb/trial/v7/en/games/${y}/${m}/${d}/schedule.json`);
@@ -60,6 +67,7 @@ async function getMLBGamesWithScores(date) {
       awayScore, homeScore, weather,
       status: g.status==="inprogress"?"live":g.status==="closed"?"final":"scheduled",
       inning,
+      date,
       time: new Date(g.scheduled).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit",timeZone:"America/New_York"})+" ET",
       venue: g.venue?.name||"",
       city: `${g.venue?.city||""}, ${g.venue?.state||""}`,
@@ -94,6 +102,7 @@ async function getNBAGamesWithScores(date) {
       awayScore, homeScore,
       status: g.status==="inprogress"?"live":g.status==="closed"?"final":"scheduled",
       quarter: g.quarter??null, clock: g.clock??null,
+      date,
       time: new Date(g.scheduled).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit",timeZone:"America/New_York"})+" ET",
       venue: g.venue?.name||"",
       city: `${g.venue?.city||""}, ${g.venue?.state||""}`,
@@ -105,21 +114,38 @@ async function getNBAGamesWithScores(date) {
 router.get("/:league/today", async (req, res) => {
   try {
     const { league } = req.params;
-    const today = new Date().toLocaleDateString("en-CA", {timeZone:"America/New_York"});
-    let games;
+    const today = getEasternDate(0);
+    const tomorrow = getEasternDate(1);
+    let games = [];
 
     if (league === "mlb") {
-      games = await getMLBGamesWithScores(today);
+      // Fetch today and tomorrow
+      const [todayGames, tomorrowGames] = await Promise.all([
+        getMLBGamesWithScores(today),
+        getMLBGamesWithScores(tomorrow),
+      ]);
+      // Combine — today's games first, then tomorrow's scheduled
+      games = [
+        ...todayGames,
+        ...tomorrowGames.filter(g => g.status === "scheduled"),
+      ];
       await cacheGames(league, today, games);
     } else if (league === "nba") {
-      games = await getNBAGamesWithScores(today);
+      const [todayGames, tomorrowGames] = await Promise.all([
+        getNBAGamesWithScores(today),
+        getNBAGamesWithScores(tomorrow),
+      ]);
+      games = [
+        ...todayGames,
+        ...tomorrowGames.filter(g => g.status === "scheduled"),
+      ];
       await cacheGames(league, today, games);
     } else if (league === "nfl") {
       return res.json({ games: [], message: "NFL season starts September 2026" });
     } else {
       const cached = await getCachedGames(league, today);
       if (cached) return res.json({ games: cached, date: today, league });
-      return res.json({ games: [], message: `No ${league} games available today` });
+      return res.json({ games: [], message: `No ${league} games available` });
     }
 
     res.json({ games, date: today, league });
@@ -140,18 +166,15 @@ router.get("/:league/:gameId/boxscore", async (req, res) => {
       const away = game?.away;
       const home = game?.home;
 
-      // Parse linescore innings
       const parseInnings = (scoring=[]) => scoring
         .filter(s=>s.type==="inning")
         .map(s=>({ inning:s.number, runs:s.runs, hits:s.hits, errors:s.errors }));
 
-      // Parse pitcher info
       const parsePitcher = (p) => p ? {
         name: p.full_name||`${p.preferred_name||""} ${p.last_name||""}`.trim(),
         win: p.win??"-", loss: p.loss??"-", era: p.era??"-",
       } : null;
 
-      // Weather
       let weather = null;
       if (game?.weather) {
         const w = game.weather.current_conditions || game.weather.forecast;
@@ -161,23 +184,18 @@ router.get("/:league/:gameId/boxscore", async (req, res) => {
           humidity: w?.humidity ? `${w.humidity}%` : null,
           wind: w?.wind ? `${w.wind.speed_mph} mph ${w.wind.direction}` : null,
           cloudCover: w?.cloud_cover ? `${w.cloud_cover}%` : null,
-          dewPoint: w?.dew_point_f ? `${w.dew_point_f}°F` : null,
         };
       }
 
-      // Inning
       let inning = null;
       let count = null;
       if (game?.outcome) {
         const o = game.outcome;
         inning = `${o.current_inning_half==="T"?"Top":"Bot"} ${o.current_inning}`;
-        if (o.count) {
-          count = `${o.count.balls}-${o.count.strikes}, ${o.count.outs} out`;
-        }
+        if (o.count) count = `${o.count.balls}-${o.count.strikes}, ${o.count.outs} out`;
       }
 
       result = {
-        // Team totals
         awayScore: away?.runs??null,
         homeScore: home?.runs??null,
         awayHits: away?.hits??null,
@@ -186,18 +204,12 @@ router.get("/:league/:gameId/boxscore", async (req, res) => {
         homeErrors: home?.errors??null,
         awayRecord: away?.win!=null ? `${away.win}-${away.loss}` : null,
         homeRecord: home?.win!=null ? `${home.win}-${home.loss}` : null,
-
-        // Pitchers
         awayStarter: parsePitcher(away?.starting_pitcher),
         homeStarter: parsePitcher(home?.starting_pitcher),
         awayCurrent: parsePitcher(away?.current_pitcher),
         homeCurrent: parsePitcher(home?.current_pitcher),
-
-        // Linescore
         awayLinescore: parseInnings(away?.scoring),
         homeLinescore: parseInnings(home?.scoring),
-
-        // Game state
         inning, count,
         status: game?.status,
         weather,
