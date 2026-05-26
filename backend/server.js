@@ -82,3 +82,15 @@ app.listen(PORT, () => {
 });
 
 module.exports = app;
+
+// Clear cache endpoint
+app.delete('/api/cache', async (req, res) => {
+  try {
+    const { createClient } = require('@supabase/supabase-js');
+    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+    await supabase.from('games_cache').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    res.json({ success: true, message: 'Cache cleared' });
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
+});
