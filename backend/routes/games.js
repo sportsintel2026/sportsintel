@@ -25,55 +25,37 @@ function getEasternDate(offsetDays = 0) {
 
 async function getMLBGamesWithScores(date) {
   const [y,m,d] = date.split("-");
-  const data = await srGet(`/mlb/trial/v7/en/games/${y}/${m}/${d}/schedule.json`);
-  const games = data.games || [];
-  const results = [];
-
-  for (const g of games) {
-    let awayScore = null;
-    let homeScore = null;
+  
+  // Use summary endpoint - returns ALL games with scores in one call!
+  const data = await srGet(`/mlb/trial/v7/en/games/${y}/${m}/${d}/summary.json`);
+  const games = data.league?.games || [];
+  
+  return games.map(item => {
+    const g = item.game || item;
+    const away = g.away || {};
+    const home = g.home || {};
+    
     let inning = null;
-    let weather = null;
-
-    if (g.status === "inprogress") {
-      try {
-        await sleep(300);
-        const box = await srGet(`/mlb/trial/v7/en/games/${g.id}/boxscore.json`);
-        awayScore = box.game?.away?.runs ?? null;
-        homeScore = box.game?.home?.runs ?? null;
-        if (box.game?.outcome) {
-          const o = box.game.outcome;
-          inning = `${o.current_inning_half==="T"?"Top":"Bot"} ${o.current_inning}`;
-        }
-        if (box.game?.weather) {
-          const w = box.game.weather.current_conditions || box.game.weather.forecast;
-          weather = {
-            temp: w?.temp_f ? `${w.temp_f}°F` : null,
-            condition: w?.condition || null,
-            humidity: w?.humidity ? `${w.humidity}%` : null,
-            wind: w?.wind ? `${w.wind.speed_mph} mph ${w.wind.direction}` : null,
-          };
-        }
-      } catch(e) {
-        console.error(`Boxscore error ${g.id}:`, e.message);
-      }
+    if (g.status === "inprogress" && g.outcome) {
+      inning = `${g.outcome.current_inning_half==="T"?"Top":"Bot"} ${g.outcome.current_inning}`;
     }
 
-    results.push({
+    return {
       id: g.id, league: "mlb",
-      away: `${g.away?.market||""} ${g.away?.name||""}`.trim(),
-      home: `${g.home?.market||""} ${g.home?.name||""}`.trim(),
-      awayId: g.away?.id, homeId: g.home?.id,
-      awayScore, homeScore, weather,
+      away: `${away.market||""} ${away.name||""}`.trim(),
+      home: `${home.market||""} ${home.name||""}`.trim(),
+      awayId: away.id, homeId: home.id,
+      awayScore: away.runs ?? null,
+      homeScore: home.runs ?? null,
+      weather: null,
       status: g.status==="inprogress"?"live":g.status==="closed"?"final":"scheduled",
       inning,
       date,
       time: new Date(g.scheduled).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit",timeZone:"America/New_York"})+" ET",
       venue: g.venue?.name||"",
       city: `${g.venue?.city||""}, ${g.venue?.state||""}`,
-    });
-  }
-  return results;
+    };
+  });
 }
 
 async function getNBAGamesWithScores(date) {
