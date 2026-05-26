@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-import { gamesApi, subscriptionApi, supabase } from "../lib/api";
+import { gamesApi, newsApi, subscriptionApi, supabase } from "../lib/api";
 
 const LEAGUES = [
   {id:"mlb",label:"MLB",icon:"⚾",color:"#ef4444"},
@@ -16,7 +16,7 @@ const LEAGUES = [
   {id:"golf",label:"Golf",icon:"⛳",color:"#22c55e"},
 ];
 
-const TABS = ["Box Score","Weather","H2H","Players"];
+const TABS = ["Box Score","Weather","Injuries","News"];
 const sc = s=>/live/i.test(s||"")?"#22c55e":/final|closed/i.test(s||"")?"#6b7280":"#60a5fa";
 const sl = s=>/live/i.test(s||"")?"LIVE":/final|closed/i.test(s||"")?"FINAL":"UPCOMING";
 
@@ -34,6 +34,9 @@ export default function DashboardPage() {
   const [boxLoading,setBoxLoading] = useState(false);
   const [picks,setPicks] = useState([]);
   const [showPicks,setShowPicks] = useState(false);
+  const [injuries,setInjuries] = useState([]);
+  const [headlines,setHeadlines] = useState([]);
+  const [newsLoading,setNewsLoading] = useState(false);
   const lg = LEAGUES.find(l=>l.id===league);
   const isPro = plan.tier==="pro"||plan.tier==="elite";
 
@@ -61,6 +64,23 @@ export default function DashboardPage() {
 
   useEffect(()=>{ loadGames(league); },[league,loadGames]);
 
+  // Load news and injuries when league changes
+  useEffect(()=>{
+    const loadNews = async () => {
+      setNewsLoading(true);
+      try {
+        const [newsRes, injuryRes] = await Promise.allSettled([
+          newsApi.getHeadlines(league),
+          (league==="mlb"||league==="nba") ? newsApi.getInjuries(league) : Promise.resolve({injuries:[]}),
+        ]);
+        if(newsRes.status==="fulfilled") setHeadlines(newsRes.value.headlines||[]);
+        if(injuryRes.status==="fulfilled") setInjuries(injuryRes.value.injuries||[]);
+      } catch(e) {}
+      setNewsLoading(false);
+    };
+    loadNews();
+  },[league]);
+
   const pick = async(g)=>{
     setSelected(g); setTab("Box Score"); setBoxScore(null);
     if(g.status==="live"||g.status==="final"||g.status==="closed") {
@@ -74,10 +94,15 @@ export default function DashboardPage() {
   };
 
   const back = ()=>{ setSelected(null); setBoxScore(null); };
-
   const liveGames = games.filter(g=>/live/i.test(g.status||""));
   const finalGames = games.filter(g=>/final|closed/i.test(g.status||""));
   const upcomingGames = games.filter(g=>g.status==="scheduled");
+
+  // Filter injuries for selected game
+  const gameInjuries = selected ? injuries.filter(inj =>
+    inj.team.toLowerCase().includes(selected.away.split(" ").pop().toLowerCase()) ||
+    inj.team.toLowerCase().includes(selected.home.split(" ").pop().toLowerCase())
+  ) : [];
 
   return (
     <div style={{minHeight:"100vh",background:"#080810",color:"#e2e8f0",fontFamily:"'Inter',system-ui,sans-serif",fontSize:14}}>
@@ -128,12 +153,10 @@ export default function DashboardPage() {
               </div>
             </div>
           </div>
-
-          {/* League tabs */}
           <div style={{display:"flex",overflowX:"auto",gap:0,scrollbarWidth:"none",borderTop:"1px solid #0f0f1a"}}>
             {LEAGUES.map(l=>(
               <button key={l.id} onClick={()=>{setLeague(l.id);setSelected(null);setMenuOpen(false);setShowPicks(false);}}
-                style={{flexShrink:0,padding:"8px 12px",background:"none",border:"none",borderBottom:`2px solid ${league===l.id?l.color:"transparent"}`,color:league===l.id?l.color:"#475569",fontSize:11,fontWeight:league===l.id?600:400,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:3,whiteSpace:"nowrap",transition:"color .15s"}}>
+                style={{flexShrink:0,padding:"8px 12px",background:"none",border:"none",borderBottom:`2px solid ${league===l.id?l.color:"transparent"}`,color:league===l.id?l.color:"#475569",fontSize:11,fontWeight:league===l.id?600:400,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:3,whiteSpace:"nowrap"}}>
                 <span style={{fontSize:12}}>{l.icon}</span><span>{l.label}</span>
               </button>
             ))}
@@ -179,6 +202,24 @@ export default function DashboardPage() {
           </div>
         )}
 
+        {/* NEWS TICKER — shows when no game selected */}
+        {!selected&&headlines.length>0&&(
+          <div style={{padding:"10px 14px 0"}}>
+            <div style={{background:"#0a0a12",border:"1px solid #0f0f1a",borderRadius:10,padding:"10px 14px"}}>
+              <div style={{fontSize:10,color:lg.color,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:8}}>📰 Latest {lg.label} News</div>
+              <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                {headlines.slice(0,3).map((h,i)=>(
+                  <a key={i} href={h.link} target="_blank" rel="noopener noreferrer"
+                    style={{display:"flex",justifyContent:"space-between",gap:12,textDecoration:"none"}}>
+                    <div style={{fontSize:12,color:"#94a3b8",lineHeight:1.5,flex:1}}>{h.title}</div>
+                    <div style={{fontSize:10,color:"#334155",flexShrink:0,marginTop:2}}>{h.timeAgo}</div>
+                  </a>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* DETAIL VIEW */}
         {selected&&(
           <div style={{animation:"fadeIn .2s ease",paddingBottom:60}}>
@@ -190,11 +231,17 @@ export default function DashboardPage() {
                 {selected.venue} · {selected.city}
               </div>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
-                <span style={{fontSize:14,color:"#94a3b8",fontWeight:500}}>{selected.away}{boxScore?.awayRecord&&<span style={{fontSize:10,color:"#334155",marginLeft:6}}>{boxScore.awayRecord}</span>}</span>
+                <div>
+                  <span style={{fontSize:14,color:"#94a3b8",fontWeight:500}}>{selected.away}</span>
+                  {boxScore?.awayRecord&&<span style={{fontSize:10,color:"#334155",marginLeft:6}}>{boxScore.awayRecord}</span>}
+                </div>
                 <span style={{fontSize:22,fontWeight:700,color:"#fff",minWidth:32,textAlign:"right"}}>{selected.awayScore!=null?selected.awayScore:"–"}</span>
               </div>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-                <span style={{fontSize:14,fontWeight:600,color:"#fff"}}>{selected.home}{boxScore?.homeRecord&&<span style={{fontSize:10,color:"#334155",marginLeft:6}}>{boxScore.homeRecord}</span>}</span>
+                <div>
+                  <span style={{fontSize:14,fontWeight:600,color:"#fff"}}>{selected.home}</span>
+                  {boxScore?.homeRecord&&<span style={{fontSize:10,color:"#334155",marginLeft:6}}>{boxScore.homeRecord}</span>}
+                </div>
                 <span style={{fontSize:22,fontWeight:700,color:"#fff",minWidth:32,textAlign:"right"}}>{selected.homeScore!=null?selected.homeScore:"–"}</span>
               </div>
               <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
@@ -221,7 +268,7 @@ export default function DashboardPage() {
               <div style={{margin:14,background:"#0a0a12",border:"1px solid #1a1a2e",borderRadius:12,padding:24,textAlign:"center"}}>
                 <div style={{fontSize:22,marginBottom:10}}>🔒</div>
                 <div style={{fontSize:14,fontWeight:700,color:"#fff",marginBottom:6}}>All-Access Required</div>
-                <div style={{fontSize:12,color:"#475569",marginBottom:16,lineHeight:1.6}}>Unlock box scores, linescore, pitchers, weather and more.</div>
+                <div style={{fontSize:12,color:"#475569",marginBottom:16,lineHeight:1.6}}>Unlock box scores, injuries, weather, news and more.</div>
                 <button onClick={()=>navigate("/pricing")} style={{background:"#ef4444",color:"#fff",border:"none",borderRadius:8,padding:"10px 24px",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>
                   Upgrade — $7/mo →
                 </button>
@@ -230,6 +277,8 @@ export default function DashboardPage() {
 
             {isPro&&(
               <div style={{padding:14}}>
+
+                {/* BOX SCORE */}
                 {tab==="Box Score"&&(
                   <div>
                     {boxLoading&&<div style={{textAlign:"center",padding:32}}><div style={{width:22,height:22,border:"2px solid #1a1a2e",borderTopColor:lg.color,borderRadius:"50%",animation:"spin .8s linear infinite",margin:"0 auto 10px"}}/><div style={{fontSize:12,color:"#334155"}}>Loading...</div></div>}
@@ -285,6 +334,8 @@ export default function DashboardPage() {
                     )}
                   </div>
                 )}
+
+                {/* WEATHER */}
                 {tab==="Weather"&&(
                   <div>
                     {(boxScore?.weather||selected.weather)?(
@@ -312,8 +363,63 @@ export default function DashboardPage() {
                     )}
                   </div>
                 )}
-                {tab==="H2H"&&<div style={{textAlign:"center",padding:32}}><div style={{fontSize:22,marginBottom:10}}>⚔️</div><div style={{fontSize:13,fontWeight:600,color:"#e2e8f0",marginBottom:6}}>{selected.away} vs {selected.home}</div><div style={{fontSize:12,color:"#475569"}}>H2H history coming soon</div></div>}
-                {tab==="Players"&&<div style={{textAlign:"center",padding:32}}><div style={{fontSize:22,marginBottom:10}}>🎯</div><div style={{fontSize:13,fontWeight:600,color:"#e2e8f0",marginBottom:6}}>Player Matchups</div><div style={{fontSize:12,color:"#475569"}}>Player vs opponent stats coming soon</div></div>}
+
+                {/* INJURIES */}
+                {tab==="Injuries"&&(
+                  <div>
+                    <div style={{fontSize:10,color:"#334155",fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:10}}>
+                      Injury Report · {selected.away} & {selected.home}
+                    </div>
+                    {gameInjuries.length===0?(
+                      <div style={{textAlign:"center",padding:32,color:"#334155",fontSize:12}}>
+                        <div style={{fontSize:22,marginBottom:8}}>✅</div>
+                        No reported injuries for these teams
+                      </div>
+                    ):(
+                      <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                        {gameInjuries.map((inj,i)=>(
+                          <div key={i} style={{background:"#0a0a12",borderRadius:10,padding:12,borderLeft:`2px solid ${inj.status==="Out"?"#ef4444":inj.status==="Questionable"?"#f59e0b":"#22c55e"}`}}>
+                            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+                              <div>
+                                <div style={{fontSize:13,fontWeight:600,color:"#e2e8f0",marginBottom:2}}>{inj.player}</div>
+                                <div style={{fontSize:11,color:"#475569",marginBottom:4}}>{inj.team} · {inj.position}</div>
+                                <div style={{fontSize:11,color:"#64748b",lineHeight:1.5}}>{inj.description}</div>
+                              </div>
+                              <span style={{flexShrink:0,fontSize:10,padding:"2px 8px",borderRadius:6,fontWeight:700,background:inj.status==="Out"?"#ef444415":inj.status==="Questionable"?"#f59e0b15":"#22c55e15",color:inj.status==="Out"?"#ef4444":inj.status==="Questionable"?"#f59e0b":"#22c55e",border:`1px solid ${inj.status==="Out"?"#ef444425":inj.status==="Questionable"?"#f59e0b25":"#22c55e25"}`}}>
+                                {inj.status}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* NEWS */}
+                {tab==="News"&&(
+                  <div>
+                    <div style={{fontSize:10,color:"#334155",fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:10}}>
+                      Latest {lg.label} Headlines
+                    </div>
+                    {newsLoading?(
+                      <div style={{textAlign:"center",padding:32}}><div style={{width:22,height:22,border:"2px solid #1a1a2e",borderTopColor:lg.color,borderRadius:"50%",animation:"spin .8s linear infinite",margin:"0 auto"}}/></div>
+                    ):headlines.length===0?(
+                      <div style={{textAlign:"center",padding:32,color:"#334155",fontSize:12}}>No headlines available</div>
+                    ):(
+                      <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                        {headlines.map((h,i)=>(
+                          <a key={i} href={h.link} target="_blank" rel="noopener noreferrer"
+                            style={{background:"#0a0a12",borderRadius:10,padding:14,textDecoration:"none",display:"block",border:"1px solid #0f0f1a"}}>
+                            <div style={{fontSize:13,fontWeight:600,color:"#e2e8f0",marginBottom:5,lineHeight:1.4}}>{h.title}</div>
+                            <div style={{fontSize:11,color:"#475569",lineHeight:1.5,marginBottom:6}}>{h.description}</div>
+                            <div style={{fontSize:10,color:"#334155"}}>{h.timeAgo}</div>
+                          </a>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -326,7 +432,7 @@ export default function DashboardPage() {
               <div onClick={()=>navigate("/pricing")} style={{background:"#0a0a12",border:"1px solid #1a1a2e",borderRadius:10,padding:"10px 14px",marginBottom:12,display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer"}}>
                 <div>
                   <div style={{fontSize:12,fontWeight:600,color:"#ef4444"}}>⚡ Unlock Full Stats + Daily Picks</div>
-                  <div style={{fontSize:11,color:"#334155",marginTop:1}}>Box scores, linescore, pitchers, weather — $7/mo</div>
+                  <div style={{fontSize:11,color:"#334155",marginTop:1}}>Box scores, injuries, weather, news — $7/mo</div>
                 </div>
                 <span style={{color:"#ef4444",fontSize:16,marginLeft:8}}>›</span>
               </div>
@@ -336,7 +442,6 @@ export default function DashboardPage() {
 
             {!gamesLoading&&games.length===0&&<div style={{textAlign:"center",padding:"40px 20px"}}><div style={{fontSize:32,marginBottom:10}}>{lg.icon}</div><div style={{fontSize:14,fontWeight:600,color:"#e2e8f0",marginBottom:6}}>No games today</div><div style={{fontSize:12,color:"#334155"}}>Check back later</div></div>}
 
-            {/* Live games */}
             {liveGames.length>0&&(
               <div style={{marginBottom:16}}>
                 <div style={{fontSize:10,color:"#22c55e",fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:8,display:"flex",alignItems:"center",gap:5}}>
@@ -349,7 +454,6 @@ export default function DashboardPage() {
               </div>
             )}
 
-            {/* Final games */}
             {finalGames.length>0&&(
               <div style={{marginBottom:16}}>
                 <div style={{fontSize:10,color:"#6b7280",fontWeight:600,letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:8}}>
@@ -361,7 +465,6 @@ export default function DashboardPage() {
               </div>
             )}
 
-            {/* Upcoming games */}
             {upcomingGames.length>0&&(
               <div>
                 <div style={{fontSize:10,color:"#60a5fa",fontWeight:600,letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:8}}>
@@ -395,7 +498,7 @@ function GameCard({g, lg, onClick}) {
           <span style={{fontSize:13,fontWeight:600,color:"#fff"}}>{g.home}</span>
           <span style={{fontSize:15,fontWeight:600,color:"#fff",minWidth:28,textAlign:"right"}}>{g.homeScore!=null?g.homeScore:"–"}</span>
         </div>
-        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+        <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
           {isLive&&<span style={{fontSize:10,color:"#22c55e",fontWeight:600,display:"flex",alignItems:"center",gap:3}}><span style={{width:4,height:4,borderRadius:"50%",background:"#22c55e",animation:"pulse2 1.4s infinite",display:"inline-block"}}/>LIVE</span>}
           {isFinal&&<span style={{fontSize:10,color:"#6b7280",fontWeight:500}}>FINAL</span>}
           {!isLive&&!isFinal&&<span style={{fontSize:10,color:"#60a5fa",fontWeight:500}}>{g.time}</span>}
