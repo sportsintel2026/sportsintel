@@ -129,7 +129,7 @@ export default function LandingPage() {
                         {p.league==="MLB"?"⚾":p.league==="NBA"?"🏀":p.league==="NFL"?"🏈":p.league==="NHL"?"🏒":p.league==="Soccer"?"⚽":p.league==="MMA"?"🥊":"⛳"} {p.league} · {p.game}
                       </div>
                       <div style={{fontSize:17,fontWeight:700,color:"#fff",marginBottom:5}}>
-                        {p.pick} <span style={{fontSize:13,color:"#64748b",fontWeight:400"}}>{p.odds}</span>
+                        {p.pick} <span style={{fontSize:13,color:"#64748b",fontWeight:400}}>{p.odds}</span>
                       </div>
                       <div style={{fontSize:12,color:"#64748b",lineHeight:1.7}}>{p.analysis}</div>
                     </div>
