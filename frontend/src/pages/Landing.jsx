@@ -21,12 +21,12 @@ export default function LandingPage() {
   }, []);
 
   const FEATURES = [
-    { icon:"⚡", title:"Live Scores", desc:"Real-time updates every 5 minutes across all major leagues" },
-    { icon:"📊", title:"Box Scores", desc:"Full game stats, linescore, and pitcher matchups" },
-    { icon:"⚔️", title:"H2H Records", desc:"All-time head-to-head history between teams" },
-    { icon:"🎯", title:"Player Matchups", desc:"Career stats for every player vs today's opponent" },
-    { icon:"🌤", title:"Weather Analysis", desc:"Live conditions with game impact breakdown" },
-    { icon:"💰", title:"Betting Lines", desc:"Live odds so you always know the market" },
+    { icon:"📊", title:"Model Projections", desc:"Win probabilities, projected totals, and HR odds calculated from real stats" },
+    { icon:"💰", title:"Edge Detection", desc:"We compare our model to sportsbook lines and surface the biggest gaps" },
+    { icon:"🎯", title:"Editorial Picks", desc:"Daily best bets from our analyst — the why is as important as the what" },
+    { icon:"📈", title:"Line Movement", desc:"Track opening vs current lines to spot sharp money moves" },
+    { icon:"🌤", title:"Real Context", desc:"Weather, ballpark factors, and pitcher matchups baked into the math" },
+    { icon:"🔔", title:"Smart Alerts", desc:"Get notified when a strong edge appears — coming with the next release" },
   ];
 
   const COMPETITORS = [
@@ -51,7 +51,6 @@ export default function LandingPage() {
         a{text-decoration:none}
       `}</style>
 
-      {/* NAV */}
       <nav style={{padding:"0 20px",background:"#080810",borderBottom:"1px solid #0f0f1a",position:"sticky",top:0,zIndex:100}}>
         <div style={{maxWidth:960,margin:"0 auto",display:"flex",alignItems:"center",justifyContent:"space-between",height:56}}>
           <div style={{display:"flex",alignItems:"center",gap:8}}>
@@ -68,7 +67,6 @@ export default function LandingPage() {
 
       <div style={{maxWidth:960,margin:"0 auto",padding:"0 20px"}}>
 
-        {/* HERO */}
         <div style={{padding:"64px 0 56px",animation:"fadeIn .6s ease"}}>
           <div style={{display:"flex",gap:8,marginBottom:20,flexWrap:"wrap"}}>
             {["⚾ MLB","🏀 NBA","🏈 NFL","🏒 NHL","⚽ Soccer","🥊 MMA","⛳ Golf"].map(l=>(
@@ -92,10 +90,8 @@ export default function LandingPage() {
           <div style={{fontSize:11,color:"#1e2235",marginTop:14}}>No credit card required · Cancel anytime</div>
         </div>
 
-        {/* DIVIDER */}
         <div style={{borderTop:"1px solid #0f0f1a",marginBottom:56}}/>
 
-        {/* PICKS SECTION */}
         <div style={{marginBottom:64}}>
           <div style={{display:"flex",alignItems:"flex-end",justifyContent:"space-between",marginBottom:24,flexWrap:"wrap",gap:12}}>
             <div>
@@ -149,10 +145,8 @@ export default function LandingPage() {
           </div>
         </div>
 
-        {/* DIVIDER */}
         <div style={{borderTop:"1px solid #0f0f1a",marginBottom:56}}/>
 
-        {/* FEATURES */}
         <div style={{marginBottom:64}}>
           <div style={{marginBottom:28}}>
             <div style={{fontSize:11,color:"#ef4444",fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:8}}>What You Get</div>
@@ -169,10 +163,8 @@ export default function LandingPage() {
           </div>
         </div>
 
-        {/* DIVIDER */}
         <div style={{borderTop:"1px solid #0f0f1a",marginBottom:56}}/>
 
-        {/* COMPARISON */}
         <div style={{marginBottom:64}}>
           <div style={{marginBottom:28}}>
             <div style={{fontSize:11,color:"#ef4444",fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:8}}>Compare</div>
@@ -194,7 +186,6 @@ export default function LandingPage() {
           </div>
         </div>
 
-        {/* CTA */}
         <div style={{background:"#0a0a14",border:"1px solid #1a1a2e",borderRadius:16,padding:"48px 32px",textAlign:"center",marginBottom:64}}>
           <h2 style={{fontSize:"clamp(22px,4vw,36px)",fontWeight:800,color:"#fff",marginBottom:12}}>
             Ready to Bet Smarter?
@@ -210,7 +201,6 @@ export default function LandingPage() {
 
       </div>
 
-      {/* FOOTER */}
       <div style={{borderTop:"1px solid #0f0f1a",padding:"20px 24px",textAlign:"center"}}>
         <div style={{maxWidth:960,margin:"0 auto",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:12}}>
           <span style={{fontSize:13,fontWeight:700,color:"#1e2235"}}>SportsIntel</span>
