@@ -35,7 +35,7 @@ async function getMLBGamesWithScores(date) {
     let inning = null;
     let weather = null;
 
-    if (g.status === "closed" || g.status === "inprogress") {
+    if (g.status === "inprogress") {
       try {
         await sleep(300);
         const box = await srGet(`/mlb/trial/v7/en/games/${g.id}/boxscore.json`);
