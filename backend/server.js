@@ -10,6 +10,7 @@ const gamesRoutes = require("./routes/games");
 const statsRoutes = require("./routes/stats");
 const subscriptionRoutes = require("./routes/subscriptions");
 const webhookRoutes = require("./routes/webhooks");
+const picksRoutes = require("./routes/picks");
 const { refreshDailyGames } = require("./services/sportsData");
 
 const app = express();
@@ -41,6 +42,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/games", gamesRoutes);
 app.use("/api/stats", statsRoutes);
 app.use("/api/subscriptions", subscriptionRoutes);
+app.use("/api/picks", picksRoutes);
 
 // Health check
 app.get("/api/health", (req, res) => {
