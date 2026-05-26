@@ -4,6 +4,7 @@ import LandingPage from "./pages/Landing";
 import { LoginPage } from "./pages/Login";
 import { SignupPage } from "./pages/Login";
 import DashboardPage from "./pages/Dashboard";
+import GameDetailPage from "./pages/GameDetail";
 import PricingPage from "./pages/Pricing";
 import ResetPasswordPage from "./pages/ResetPassword";
 import AdminPage from "./pages/Admin";
@@ -44,6 +45,11 @@ export default function App() {
           <Route path="/dashboard" element={
             <PrivateRoute>
               <DashboardPage />
+            </PrivateRoute>
+          } />
+          <Route path="/game/mlb/:gameId" element={
+            <PrivateRoute>
+              <GameDetailPage />
             </PrivateRoute>
           } />
           <Route path="*" element={<Navigate to="/" replace />} />
