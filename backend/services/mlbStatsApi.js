@@ -1,173 +1,245 @@
-// Weather API client — Open-Meteo (free, no API key required)
-// Docs: https://open-meteo.com/en/docs
+// MLB Stats API client (statsapi.mlb.com) — free, official, no key required
+// Docs: https://github.com/toddrob99/MLB-StatsAPI/wiki
 
 const axios = require("axios");
 
-// MLB venue coordinates (lat, lon, orientation in degrees)
-// orientation = bearing from home plate to center field (degrees from North)
-// Used to determine if wind is blowing IN, OUT, or across
-const VENUE_COORDS = {
-  "Rogers Centre": { lat: 43.6414, lon: -79.3894, orientation: 0, indoor: true },
-  "Progressive Field": { lat: 41.4962, lon: -81.6852, orientation: 0 },
-  "American Family Field": { lat: 43.0280, lon: -87.9712, orientation: 135, indoor: true },
-  "Sutter Health Park": { lat: 38.5805, lon: -121.5135, orientation: 30 },
-  "Oracle Park": { lat: 37.7786, lon: -122.3893, orientation: 90 },
-  "Petco Park": { lat: 32.7073, lon: -117.1566, orientation: 0 },
-  "Oriole Park at Camden Yards": { lat: 39.2839, lon: -76.6217, orientation: 33 },
-  "Comerica Park": { lat: 42.3390, lon: -83.0485, orientation: 150 },
-  "PNC Park": { lat: 40.4469, lon: -80.0057, orientation: 117 },
-  "Fenway Park": { lat: 42.3467, lon: -71.0972, orientation: 45 },
-  "Citi Field": { lat: 40.7571, lon: -73.8458, orientation: 25 },
-  "Rate Field": { lat: 41.8300, lon: -87.6338, orientation: 130 },
-  "Kauffman Stadium": { lat: 39.0517, lon: -94.4803, orientation: 45 },
-  "Globe Life Field": { lat: 32.7473, lon: -97.0847, orientation: 0, indoor: true },
-  "UNIQLO Field at Dodger Stadium": { lat: 34.0739, lon: -118.2400, orientation: 25 },
-  "Dodger Stadium": { lat: 34.0739, lon: -118.2400, orientation: 25 },
-  "Yankee Stadium": { lat: 40.8296, lon: -73.9262, orientation: 75 },
-  "Wrigley Field": { lat: 41.9484, lon: -87.6553, orientation: 36 },
-  "Truist Park": { lat: 33.8908, lon: -84.4677, orientation: 144 },
-  "loanDepot park": { lat: 25.7781, lon: -80.2197, orientation: 40, indoor: true },
-  "Minute Maid Park": { lat: 29.7572, lon: -95.3554, orientation: 30, indoor: true },
-  "T-Mobile Park": { lat: 47.5914, lon: -122.3325, orientation: 45, indoor: true },
-  "Coors Field": { lat: 39.7559, lon: -104.9942, orientation: 0 },
-  "Great American Ball Park": { lat: 39.0974, lon: -84.5071, orientation: 122 },
-  "Busch Stadium": { lat: 38.6226, lon: -90.1928, orientation: 67 },
-  "Target Field": { lat: 44.9817, lon: -93.2776, orientation: 90 },
-  "Tropicana Field": { lat: 27.7682, lon: -82.6534, orientation: 45, indoor: true },
-  "Nationals Park": { lat: 38.8730, lon: -77.0074, orientation: 30 },
-  "Citizens Bank Park": { lat: 39.9061, lon: -75.1665, orientation: 15 },
-  "Angel Stadium": { lat: 33.8003, lon: -117.8827, orientation: 41 },
+const MLB_BASE = "https://statsapi.mlb.com/api/v1";
+
+// ── Static lookup tables ──────────────────────────────────────────────────────
+
+const PARK_HR_FACTOR = {
+  "Coors Field": 1.31,
+  "Great American Ball Park": 1.22,
+  "Yankee Stadium": 1.18,
+  "Citizens Bank Park": 1.14,
+  "Globe Life Field": 1.11,
+  "Truist Park": 1.08,
+  "Wrigley Field": 1.07,
+  "Minute Maid Park": 1.06,
+  "Target Field": 1.05,
+  "Rogers Centre": 1.05,
+  "American Family Field": 1.04,
+  "Citi Field": 1.03,
+  "Dodger Stadium": 1.02,
+  "Chase Field": 1.02,
+  "Angel Stadium": 1.01,
+  "PNC Park": 1.00,
+  "Progressive Field": 0.99,
+  "Comerica Park": 0.99,
+  "Kauffman Stadium": 0.97,
+  "Petco Park": 0.95,
+  "Busch Stadium": 0.94,
+  "Fenway Park": 0.94,
+  "Camden Yards": 0.93,
+  "Tropicana Field": 0.92,
+  "Nationals Park": 0.91,
+  "T-Mobile Park": 0.90,
+  "loanDepot park": 0.88,
+  "Oracle Park": 0.85,
+  "Oakland Coliseum": 0.84,
+  "Sutter Health Park": 1.05,
 };
 
-const cache = new Map();
-const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour — weather doesn't change that fast
+const PARK_RUN_FACTOR = {
+  "Coors Field": 1.18,
+  "Great American Ball Park": 1.08,
+  "Globe Life Field": 1.07,
+  "Yankee Stadium": 1.05,
+  "Citizens Bank Park": 1.04,
+  "Fenway Park": 1.04,
+  "Truist Park": 1.03,
+  "Wrigley Field": 1.02,
+  "Minute Maid Park": 1.02,
+  "Rogers Centre": 1.01,
+  "American Family Field": 1.01,
+  "Citi Field": 1.00,
+  "Dodger Stadium": 0.99,
+  "Target Field": 0.99,
+  "PNC Park": 0.99,
+  "Angel Stadium": 0.98,
+  "Comerica Park": 0.98,
+  "Progressive Field": 0.97,
+  "Chase Field": 0.97,
+  "Busch Stadium": 0.96,
+  "Kauffman Stadium": 0.96,
+  "Camden Yards": 0.95,
+  "Nationals Park": 0.94,
+  "Petco Park": 0.93,
+  "Tropicana Field": 0.92,
+  "loanDepot park": 0.91,
+  "T-Mobile Park": 0.90,
+  "Oracle Park": 0.89,
+  "Oakland Coliseum": 0.88,
+  "Sutter Health Park": 1.02,
+};
 
-function isCacheValid(entry) {
-  return entry && (Date.now() - entry.fetchedAt) < CACHE_TTL_MS;
+function getParkHRFactor(venueName) {
+  return PARK_HR_FACTOR[venueName] ?? 1.0;
 }
 
-// Get weather for a venue (returns null if indoor or unknown venue)
-async function getWeatherForVenue(venueName, gameTimeISO) {
-  const venue = VENUE_COORDS[venueName];
-  if (!venue) {
-    console.log(`[Weather] Unknown venue: ${venueName}`);
-    return null;
-  }
-  if (venue.indoor) {
-    return {
-      indoor: true,
-      venue: venueName,
-      summary: "Indoor stadium — weather doesn't affect play",
-    };
-  }
+function getParkRunFactor(venueName) {
+  return PARK_RUN_FACTOR[venueName] ?? 1.0;
+}
 
-  const cacheKey = `${venueName}_${gameTimeISO || "now"}`;
-  const cached = cache.get(cacheKey);
-  if (isCacheValid(cached)) return cached.data;
+// ── HTTP helper ───────────────────────────────────────────────────────────────
 
-  try {
-    const res = await axios.get("https://api.open-meteo.com/v1/forecast", {
-      params: {
-        latitude: venue.lat,
-        longitude: venue.lon,
-        current: "temperature_2m,wind_speed_10m,wind_direction_10m,precipitation,weather_code",
-        temperature_unit: "fahrenheit",
-        wind_speed_unit: "mph",
-        timezone: "auto",
-      },
-      timeout: 5000,
-    });
+async function mlbGet(path, params = {}) {
+  const res = await axios.get(`${MLB_BASE}${path}`, {
+    params,
+    timeout: 10000,
+  });
+  return res.data;
+}
 
-    const current = res.data?.current;
-    if (!current) return null;
+// ── Today's slate ─────────────────────────────────────────────────────────────
 
-    const tempF = Math.round(current.temperature_2m);
-    const windMph = Math.round(current.wind_speed_10m);
-    const windDir = current.wind_direction_10m; // degrees from N
-    const precip = current.precipitation;
-    const code = current.weather_code;
+function getEasternDate(offsetDays = 0) {
+  const d = new Date();
+  d.setDate(d.getDate() + offsetDays);
+  return d.toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+}
 
-    // Calculate wind direction relative to home plate → CF
-    // If wind direction matches venue orientation (±45deg), wind is "out to CF"
-    // If wind direction is 180° opposite, wind is "in from CF" (suppresses HRs)
-    const relativeAngle = Math.abs(((windDir - venue.orientation + 540) % 360) - 180);
-    let windEffect;
-    let windLabel;
-    if (windMph < 5) {
-      windEffect = "calm";
-      windLabel = "Calm winds";
-    } else if (relativeAngle < 45) {
-      windEffect = "in"; // blowing toward home plate from CF — suppresses
-      windLabel = `Wind blowing IN ${windMph} mph`;
-    } else if (relativeAngle > 135) {
-      windEffect = "out"; // blowing out to CF — boosts HRs
-      windLabel = `Wind blowing OUT ${windMph} mph`;
-    } else {
-      windEffect = "cross";
-      windLabel = `Cross wind ${windMph} mph`;
+async function getScheduleForDate(date) {
+  const data = await mlbGet(`/schedule`, {
+    sportId: 1,
+    date,
+    hydrate: "probablePitcher,team,venue,linescore,gameInfo,weather",
+  });
+
+  const games = [];
+  for (const dateBlock of data.dates || []) {
+    for (const g of dateBlock.games || []) {
+      games.push(parseGame(g, date));
     }
+  }
+  return games;
+}
 
-    // Temperature effect: warm air = ball flies farther
-    let tempEffect;
-    if (tempF > 80) tempEffect = "hot"; // boosts offense
-    else if (tempF < 55) tempEffect = "cold"; // suppresses
-    else tempEffect = "neutral";
+function parseGame(g, date) {
+  const away = g.teams?.away;
+  const home = g.teams?.home;
+  const venue = g.venue?.name || "";
+  const status = mapStatus(g.status?.abstractGameState, g.status?.detailedState);
 
-    const conditions = describeWeatherCode(code);
-    const isRaining = precip > 0.1;
+  return {
+    id: String(g.gamePk),
+    league: "mlb",
+    date,
+    away: away?.team?.name || "Away",
+    home: home?.team?.name || "Home",
+    awayAbbr: away?.team?.abbreviation || "",
+    homeAbbr: home?.team?.abbreviation || "",
+    awayId: away?.team?.id,
+    homeId: home?.team?.id,
+    awayScore: away?.score ?? null,
+    homeScore: home?.score ?? null,
+    awayRecord: away?.leagueRecord ? `${away.leagueRecord.wins}-${away.leagueRecord.losses}` : null,
+    homeRecord: home?.leagueRecord ? `${home.leagueRecord.wins}-${home.leagueRecord.losses}` : null,
+    status,
+    inning: g.linescore?.currentInning
+      ? `${g.linescore.inningState || ""} ${g.linescore.currentInning}`.trim()
+      : null,
+    time: new Date(g.gameDate).toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      timeZone: "America/New_York",
+    }) + " ET",
+    venue,
+    city: g.venue?.location?.city || "",
+    awayProbable: away?.probablePitcher ? {
+      id: away.probablePitcher.id,
+      name: away.probablePitcher.fullName,
+    } : null,
+    homeProbable: home?.probablePitcher ? {
+      id: home.probablePitcher.id,
+      name: home.probablePitcher.fullName,
+    } : null,
+    parkHRFactor: getParkHRFactor(venue),
+    parkRunFactor: getParkRunFactor(venue),
+  };
+}
 
-    const result = {
-      indoor: false,
-      venue: venueName,
-      tempF,
-      windMph,
-      windDir,
-      windEffect, // "in" | "out" | "cross" | "calm"
-      windLabel,
-      tempEffect, // "hot" | "cold" | "neutral"
-      conditions,
-      isRaining,
-      summary: buildSummary({ tempF, windEffect, windMph, tempEffect, conditions, isRaining }),
+function mapStatus(abstractState, detailedState) {
+  if (abstractState === "Live") return "live";
+  if (abstractState === "Final") return "final";
+  if (detailedState === "Postponed") return "postponed";
+  if (detailedState === "Cancelled") return "cancelled";
+  return "scheduled";
+}
+
+// ── Pitcher stats ─────────────────────────────────────────────────────────────
+
+async function getPitcherSeasonStats(playerId, season) {
+  if (!playerId) return null;
+  const yr = season || new Date().getFullYear();
+  try {
+    const data = await mlbGet(`/people/${playerId}/stats`, {
+      stats: "season",
+      group: "pitching",
+      season: yr,
+    });
+    const splits = data.stats?.[0]?.splits || [];
+    if (!splits.length) return null;
+    const s = splits[0].stat || {};
+    return {
+      gamesStarted: parseIntSafe(s.gamesStarted),
+      inningsPitched: parseFloat(s.inningsPitched) || 0,
+      era: parseFloat(s.era) || null,
+      whip: parseFloat(s.whip) || null,
+      strikeoutsPer9: parseFloat(s.strikeoutsPer9Inn) || null,
+      walksPer9: parseFloat(s.walksPer9Inn) || null,
+      homeRunsPer9: parseFloat(s.homeRunsPer9) || null,
+      strikeoutWalkRatio: parseFloat(s.strikeoutWalkRatio) || null,
+      battingAvgAgainst: parseFloat(s.avg) || null,
+      wins: parseIntSafe(s.wins),
+      losses: parseIntSafe(s.losses),
+      hits: parseIntSafe(s.hits),
+      earnedRuns: parseIntSafe(s.earnedRuns),
+      homeRuns: parseIntSafe(s.homeRuns),
+      strikeouts: parseIntSafe(s.strikeOuts),
+      walks: parseIntSafe(s.baseOnBalls),
     };
-
-    cache.set(cacheKey, { data: result, fetchedAt: Date.now() });
-    return result;
   } catch (e) {
-    console.error(`[Weather] Error for ${venueName}:`, e.message);
     return null;
   }
 }
 
-function describeWeatherCode(code) {
-  // Open-Meteo WMO weather codes
-  if (code === 0) return "Clear";
-  if (code === 1 || code === 2) return "Partly cloudy";
-  if (code === 3) return "Cloudy";
-  if (code >= 45 && code <= 48) return "Foggy";
-  if (code >= 51 && code <= 67) return "Rain";
-  if (code >= 71 && code <= 77) return "Snow";
-  if (code >= 80 && code <= 82) return "Rain showers";
-  if (code >= 95) return "Thunderstorm";
-  return "Unknown";
-}
+// ── Batter stats ──────────────────────────────────────────────────────────────
 
-function buildSummary({ tempF, windEffect, windMph, tempEffect, conditions, isRaining }) {
-  if (isRaining) return `🌧 Rain — game may be delayed`;
-
-  let summary = `${conditions}, ${tempF}°F`;
-  if (windMph >= 5) {
-    if (windEffect === "out") summary += ` · 💨 Wind OUT (${windMph}mph — favors hitters)`;
-    else if (windEffect === "in") summary += ` · 💨 Wind IN (${windMph}mph — favors pitchers)`;
-    else summary += ` · 💨 Cross wind ${windMph}mph`;
+async function getBatterSeasonStats(playerId, season) {
+  if (!playerId) return null;
+  const yr = season || new Date().getFullYear();
+  try {
+    const data = await mlbGet(`/people/${playerId}/stats`, {
+      stats: "season",
+      group: "hitting",
+      season: yr,
+    });
+    const splits = data.stats?.[0]?.splits || [];
+    if (!splits.length) return null;
+    const s = splits[0].stat || {};
+    return {
+      atBats: parseIntSafe(s.atBats),
+      plateAppearances: parseIntSafe(s.plateAppearances),
+      hits: parseIntSafe(s.hits),
+      homeRuns: parseIntSafe(s.homeRuns),
+      doubles: parseIntSafe(s.doubles),
+      triples: parseIntSafe(s.triples),
+      rbi: parseIntSafe(s.rbi),
+      walks: parseIntSafe(s.baseOnBalls),
+      strikeouts: parseIntSafe(s.strikeOuts),
+      avg: parseFloat(s.avg) || null,
+      obp: parseFloat(s.obp) || null,
+      slg: parseFloat(s.slg) || null,
+      ops: parseFloat(s.ops) || null,
+      iso: s.slg && s.avg ? parseFloat(s.slg) - parseFloat(s.avg) : null,
+      hrPerPA: s.plateAppearances ? parseIntSafe(s.homeRuns) / parseIntSafe(s.plateAppearances) : null,
+    };
+  } catch (e) {
+    return null;
   }
-  if (tempEffect === "hot") summary += ` · 🔥 Warm air carries`;
-  if (tempEffect === "cold") summary += ` · 🥶 Cold air suppresses`;
-  return summary;
 }
 
-module.exports = {
-  getWeatherForVenue,
-};
 // ── Team stats ────────────────────────────────────────────────────────────────
 
 async function getTeamSeasonStats(teamId, season) {
@@ -258,6 +330,7 @@ async function getLinescore(gamePk) {
 }
 
 // ── NEW: Batter vs Pitcher career history ────────────────────────────────────
+// Returns the batter's career stats specifically against this pitcher
 
 async function getBatterVsPitcherHistory(batterId, pitcherId) {
   if (!batterId || !pitcherId) return null;
@@ -268,9 +341,11 @@ async function getBatterVsPitcherHistory(batterId, pitcherId) {
       opposingPlayerId: pitcherId,
       sportId: 1,
     });
+    // BvP data comes back differently — find the "career" total
     const splits = data.stats?.[0]?.splits || [];
     if (!splits.length) return null;
 
+    // Aggregate across all splits (different seasons)
     let totals = { atBats: 0, hits: 0, homeRuns: 0, doubles: 0, triples: 0, rbi: 0, walks: 0, strikeouts: 0 };
     for (const sp of splits) {
       const s = sp.stat || {};
@@ -305,6 +380,7 @@ async function getBatterVsPitcherHistory(batterId, pitcherId) {
 }
 
 // ── NEW: Pitcher's last N starts ─────────────────────────────────────────────
+// Returns the pitcher's most recent N starts with line-score-level detail
 
 async function getPitcherRecentStarts(pitcherId, count = 3) {
   if (!pitcherId) return [];
@@ -316,6 +392,7 @@ async function getPitcherRecentStarts(pitcherId, count = 3) {
       season: yr,
     });
     const splits = data.stats?.[0]?.splits || [];
+    // Filter to only starts (not relief appearances)
     const starts = splits
       .filter(sp => parseIntSafe(sp.stat?.gamesStarted) > 0)
       .map(sp => {
