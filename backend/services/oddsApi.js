@@ -7,9 +7,8 @@ const axios = require("axios");
 const ODDS_BASE = "https://api.the-odds-api.com/v4";
 const ODDS_API_KEY = process.env.ODDS_API_KEY;
 
-// In-memory cache: { mlb_h2h_totals: {data, fetchedAt} }
 const cache = new Map();
-const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes — protects free tier quota
+const CACHE_TTL_MS = 30 * 60 * 1000;
 
 function isCacheValid(entry) {
   return entry && (Date.now() - entry.fetchedAt) < CACHE_TTL_MS;
@@ -23,7 +22,6 @@ async function oddsGet(path, params = {}) {
     params: { apiKey: ODDS_API_KEY, ...params },
     timeout: 10000,
   });
-  // Surface quota headers so we can monitor usage
   const remaining = res.headers["x-requests-remaining"];
   const used = res.headers["x-requests-used"];
   if (remaining != null) {
@@ -41,7 +39,6 @@ async function getMLBMainOdds() {
     console.log("[OddsAPI] Returning cached MLB main odds");
     return cached.data;
   }
-
   try {
     const data = await oddsGet("/sports/baseball_mlb/odds", {
       regions: "us",
@@ -49,27 +46,23 @@ async function getMLBMainOdds() {
       oddsFormat: "american",
       dateFormat: "iso",
     });
-
     const games = (data || []).map(parseMainOddsEvent);
     cache.set(cacheKey, { data: games, fetchedAt: Date.now() });
     return games;
   } catch (e) {
     console.error("[OddsAPI] MLB main odds error:", e.message);
-    if (cached) return cached.data; // stale fallback
+    if (cached) return cached.data;
     return [];
   }
 }
 
 function parseMainOddsEvent(ev) {
-  // Best (most extreme) line from major books for each market
   const h2h = { away: null, home: null, awayBook: null, homeBook: null };
   const totals = { line: null, over: null, under: null, overBook: null, underBook: null };
-
   const PREFERRED_BOOKS = ["draftkings", "fanduel", "betmgm", "caesars", "pointsbetus"];
 
   for (const bm of ev.bookmakers || []) {
     if (!PREFERRED_BOOKS.includes(bm.key)) continue;
-
     for (const m of bm.markets || []) {
       if (m.key === "h2h") {
         const awayOutcome = m.outcomes?.find(o => o.name === ev.away_team);
@@ -83,7 +76,6 @@ function parseMainOddsEvent(ev) {
           h2h.homeBook = bm.title;
         }
       } else if (m.key === "totals") {
-        // Use the median line from the first preferred book that has it
         if (totals.line == null && m.outcomes?.length >= 2) {
           totals.line = m.outcomes[0].point;
           const over = m.outcomes.find(o => o.name === "Over");
@@ -106,21 +98,41 @@ function parseMainOddsEvent(ev) {
 }
 
 // ── MLB Player HR Props ───────────────────────────────────────────────────────
-// Note: Player props require per-event lookups, which uses MORE quota.
-// We cache aggressively and limit to first ~5 games to conserve quota.
 
 async function getMLBHRPropsForEvent(eventId) {
   const cacheKey = `mlb_hr_${eventId}`;
   const cached = cache.get(cacheKey);
-  if (isCacheValid(cached)) return cached.data;
-
+  if (isCacheValid(cached)) {
+    console.log(`[OddsAPI] HR cached for ${eventId}: ${cached.data.length} props`);
+    return cached.data;
+  }
   try {
     const data = await oddsGet(`/sports/baseball_mlb/events/${eventId}/odds`, {
       regions: "us",
       markets: "batter_home_runs",
       oddsFormat: "american",
     });
+
+    // DIAGNOSTIC LOGGING — see what the API actually returns
+    const bookmakerCount = data?.bookmakers?.length ?? 0;
+    console.log(`[OddsAPI-HR] Event ${eventId}: received ${bookmakerCount} bookmakers`);
+    if (bookmakerCount > 0) {
+      const firstBm = data.bookmakers[0];
+      console.log(`[OddsAPI-HR] First bookmaker: ${firstBm.key}, markets: ${JSON.stringify((firstBm.markets || []).map(m => m.key))}`);
+      const hrMarket = (firstBm.markets || []).find(m => m.key === "batter_home_runs");
+      if (hrMarket) {
+        console.log(`[OddsAPI-HR] HR market found with ${hrMarket.outcomes?.length ?? 0} outcomes`);
+        if (hrMarket.outcomes && hrMarket.outcomes.length > 0) {
+          console.log(`[OddsAPI-HR] Sample outcomes: ${JSON.stringify(hrMarket.outcomes.slice(0, 3))}`);
+        }
+      } else {
+        console.log(`[OddsAPI-HR] No batter_home_runs market in first bookmaker`);
+      }
+    }
+
     const props = parseHRProps(data);
+    console.log(`[OddsAPI-HR] Parsed ${props.length} HR props from event ${eventId}`);
+
     cache.set(cacheKey, { data: props, fetchedAt: Date.now() });
     return props;
   } catch (e) {
@@ -139,10 +151,18 @@ function parseHRProps(ev) {
     for (const m of bm.markets || []) {
       if (m.key !== "batter_home_runs") continue;
       for (const o of m.outcomes || []) {
-        // "name" is "Over" or "Under", "description" is the player name
-        if (o.name !== "Over") continue;
-        const player = o.description;
+        // Accept multiple possible outcome name formats: "Over", "Yes", or player name itself
+        const isYesOutcome =
+          o.name === "Over" ||
+          o.name === "Yes" ||
+          (o.description && o.name === o.description) ||
+          (!o.description && o.name);
+
+        if (!isYesOutcome) continue;
+
+        const player = o.description || o.name;
         if (!player) continue;
+
         const current = playerMap.get(player);
         if (!current || o.price > current.price) {
           playerMap.set(player, {
@@ -155,12 +175,10 @@ function parseHRProps(ev) {
       }
     }
   }
-
   return Array.from(playerMap.values());
 }
 
 async function getMLBHRPropsForAllEvents(eventIds, maxEvents = 5) {
-  // Limit to maxEvents to protect quota
   const targets = eventIds.slice(0, maxEvents);
   const results = {};
   for (const id of targets) {
@@ -180,7 +198,9 @@ function americanToImpliedProb(american) {
 // ── Cache management ──────────────────────────────────────────────────────────
 
 function clearOddsCache() {
+  const size = cache.size;
   cache.clear();
+  console.log(`[OddsAPI] Cleared cache (${size} entries)`);
 }
 
 function getCacheStats() {
