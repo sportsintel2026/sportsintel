@@ -10,6 +10,17 @@ const ODDS_API_KEY = process.env.ODDS_API_KEY;
 const cache = new Map();
 const CACHE_TTL_MS = 30 * 60 * 1000;
 
+// Sportsbooks we accept odds from
+// Main markets (h2h, totals) — major US books
+const PREFERRED_BOOKS_MAIN = ["draftkings", "fanduel", "betmgm", "caesars", "pointsbetus"];
+// HR props — broader list because major books often don't post HR props
+const PREFERRED_BOOKS_HR = [
+  "draftkings", "fanduel", "betmgm", "caesars",
+  "betrivers", "betonlineag", "bovada", "betus",
+  "mybookieag", "lowvig", "williamhill_us", "espnbet",
+  "fanatics", "hardrockbet",
+];
+
 function isCacheValid(entry) {
   return entry && (Date.now() - entry.fetchedAt) < CACHE_TTL_MS;
 }
@@ -59,10 +70,9 @@ async function getMLBMainOdds() {
 function parseMainOddsEvent(ev) {
   const h2h = { away: null, home: null, awayBook: null, homeBook: null };
   const totals = { line: null, over: null, under: null, overBook: null, underBook: null };
-  const PREFERRED_BOOKS = ["draftkings", "fanduel", "betmgm", "caesars", "pointsbetus"];
 
   for (const bm of ev.bookmakers || []) {
-    if (!PREFERRED_BOOKS.includes(bm.key)) continue;
+    if (!PREFERRED_BOOKS_MAIN.includes(bm.key)) continue;
     for (const m of bm.markets || []) {
       if (m.key === "h2h") {
         const awayOutcome = m.outcomes?.find(o => o.name === ev.away_team);
@@ -113,22 +123,9 @@ async function getMLBHRPropsForEvent(eventId) {
       oddsFormat: "american",
     });
 
-    // DIAGNOSTIC LOGGING — see what the API actually returns
     const bookmakerCount = data?.bookmakers?.length ?? 0;
-    console.log(`[OddsAPI-HR] Event ${eventId}: received ${bookmakerCount} bookmakers`);
-    if (bookmakerCount > 0) {
-      const firstBm = data.bookmakers[0];
-      console.log(`[OddsAPI-HR] First bookmaker: ${firstBm.key}, markets: ${JSON.stringify((firstBm.markets || []).map(m => m.key))}`);
-      const hrMarket = (firstBm.markets || []).find(m => m.key === "batter_home_runs");
-      if (hrMarket) {
-        console.log(`[OddsAPI-HR] HR market found with ${hrMarket.outcomes?.length ?? 0} outcomes`);
-        if (hrMarket.outcomes && hrMarket.outcomes.length > 0) {
-          console.log(`[OddsAPI-HR] Sample outcomes: ${JSON.stringify(hrMarket.outcomes.slice(0, 3))}`);
-        }
-      } else {
-        console.log(`[OddsAPI-HR] No batter_home_runs market in first bookmaker`);
-      }
-    }
+    const bmKeys = (data?.bookmakers || []).map(b => b.key);
+    console.log(`[OddsAPI-HR] Event ${eventId}: ${bookmakerCount} bookmakers: ${JSON.stringify(bmKeys)}`);
 
     const props = parseHRProps(data);
     console.log(`[OddsAPI-HR] Parsed ${props.length} HR props from event ${eventId}`);
@@ -143,33 +140,33 @@ async function getMLBHRPropsForEvent(eventId) {
 }
 
 function parseHRProps(ev) {
-  const PREFERRED_BOOKS = ["draftkings", "fanduel", "betmgm", "caesars"];
+  // Only accept the "to hit a HR" line (point = 0.5 means at least 1 HR)
+  // Other lines like 1.5 are "at least 2 HRs" which is a different (much harder) bet
   const playerMap = new Map();
 
   for (const bm of ev.bookmakers || []) {
-    if (!PREFERRED_BOOKS.includes(bm.key)) continue;
+    if (!PREFERRED_BOOKS_HR.includes(bm.key)) continue;
     for (const m of bm.markets || []) {
       if (m.key !== "batter_home_runs") continue;
       for (const o of m.outcomes || []) {
-        // Accept multiple possible outcome name formats: "Over", "Yes", or player name itself
-        const isYesOutcome =
-          o.name === "Over" ||
-          o.name === "Yes" ||
-          (o.description && o.name === o.description) ||
-          (!o.description && o.name);
+        // Only "Over" outcomes (the "Yes, will hit a HR" side)
+        if (o.name !== "Over") continue;
+        // Only the standard 0.5 line (at least 1 HR)
+        // Skip 1.5, 2.5 lines — those are different bets
+        const line = o.point ?? 0.5;
+        if (line !== 0.5) continue;
 
-        if (!isYesOutcome) continue;
-
-        const player = o.description || o.name;
+        const player = o.description;
         if (!player) continue;
 
+        // Keep best (highest) odds across books
         const current = playerMap.get(player);
         if (!current || o.price > current.price) {
           playerMap.set(player, {
             player,
             price: o.price,
             book: bm.title,
-            line: o.point ?? 0.5,
+            line,
           });
         }
       }
