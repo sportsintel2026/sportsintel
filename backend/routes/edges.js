@@ -173,12 +173,17 @@ router.get("/mlb", async (req, res) => {
     try {
       const topGamesForHR = gamesWithOdds.slice(0, 5).filter(g => g._oddsEventId);
       const eventIds = topGamesForHR.map(g => g._oddsEventId);
+      console.log(`[Edges-HR] DIAGNOSTIC — gamesWithOdds.length=${gamesWithOdds.length}, topGamesForHR.length=${topGamesForHR.length}, eventIds=${JSON.stringify(eventIds)}`);
+      console.log(`[Edges-HR] First 5 games and their _oddsEventId: ${gamesWithOdds.slice(0, 5).map(g => `${g.awayAbbr}@${g.homeAbbr}:${g._oddsEventId || 'NULL'}`).join(', ')}`);
       if (eventIds.length > 0) {
         const hrOddsByEvent = await getMLBHRPropsForAllEvents(eventIds, 5);
         hrPropEdges = await calculateHRPropEdges(topGamesForHR, hrOddsByEvent);
+      } else {
+        console.log("[Edges-HR] NO eventIds — HR props skipped");
       }
     } catch (e) {
       console.error("[Edges] HR props failed:", e.message);
+      console.error(e.stack);
     }
 
     const result = {
