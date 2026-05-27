@@ -79,6 +79,8 @@ router.get("/mlb", async (req, res) => {
     try {
       oddsEvents = await getMLBMainOdds();
       console.log(`[Edges] Got odds for ${oddsEvents.length} events`);
+      console.log(`[Edges-Match] Odds events teams: ${oddsEvents.slice(0, 8).map(e => `${e.awayTeam}@${e.homeTeam}`).join(' | ')}`);
+      console.log(`[Edges-Match] Our MLB games: ${games.slice(0, 8).map(g => `${g.away}@${g.home}`).join(' | ')}`);
     } catch (e) {
       console.error("[Edges] Odds fetch failed, proceeding without odds:", e.message);
     }
