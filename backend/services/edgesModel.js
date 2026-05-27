@@ -1,5 +1,5 @@
-// Edges model v0.3 — research-grade MLB betting projections
-// + Weather, Batter vs Pitcher, Pitcher recent form, Statcast (exit velo / barrel rate)
+// Edges model v0.4 — research-grade MLB betting projections
+// + Weather, Batter vs Pitcher, Pitcher recent form, Lineup BvP
 
 const {
   getPitcherSeasonStats,
@@ -11,6 +11,7 @@ const {
   getPitcherRecentStarts,
   getBatterRecentStats,
   getBatterStatcast,
+  getProjectedLineup,
 } = require("./mlbStatsApi");
 
 const { americanToImpliedProb } = require("./oddsApi");
@@ -130,6 +131,39 @@ function rateConfidence(edge) {
   return "NEUTRAL";
 }
 
+// ── NEW: Lineup BvP — fetches BvP for projected starting lineup ──────────────
+
+async function getLineupBvP(teamId, opposingPitcherId) {
+  if (!teamId || !opposingPitcherId) return [];
+  try {
+    const lineup = await getProjectedLineup(teamId);
+    if (!lineup.length) return [];
+
+    // Fetch BvP for each lineup batter in parallel
+    const bvpResults = await Promise.all(
+      lineup.map(async batter => {
+        const bvp = await getBatterVsPitcherHistory(batter.id, opposingPitcherId);
+        if (!bvp || bvp.atBats < 5) return null; // Skip players with no meaningful history
+        return {
+          batterId: batter.id,
+          batterName: batter.name,
+          position: batter.position,
+          atBats: bvp.atBats,
+          hits: bvp.hits,
+          homeRuns: bvp.homeRuns,
+          avg: bvp.avg,
+          ops: bvp.ops,
+        };
+      })
+    );
+
+    return bvpResults.filter(Boolean);
+  } catch (e) {
+    console.error("[getLineupBvP] Error:", e.message);
+    return [];
+  }
+}
+
 // ── ORCHESTRATION ─────────────────────────────────────────────────────────────
 
 const MAX_HR_GAMES = 5;
@@ -145,6 +179,8 @@ async function calculateGameEdges(game, oddsForGame) {
     weather,
     awayPitcherRecent,
     homePitcherRecent,
+    awayLineupBvP,
+    homeLineupBvP,
   ] = await Promise.all([
     game.awayProbable ? getPitcherSeasonStats(game.awayProbable.id) : null,
     game.homeProbable ? getPitcherSeasonStats(game.homeProbable.id) : null,
@@ -155,6 +191,8 @@ async function calculateGameEdges(game, oddsForGame) {
     getWeatherForVenue(game.venue),
     game.awayProbable ? getPitcherRecentStarts(game.awayProbable.id, 3) : [],
     game.homeProbable ? getPitcherRecentStarts(game.homeProbable.id, 3) : [],
+    game.homeProbable ? getLineupBvP(game.awayId, game.homeProbable.id) : [],
+    game.awayProbable ? getLineupBvP(game.homeId, game.awayProbable.id) : [],
   ]);
 
   const ml = calculateMoneylineProjection(game, awayPitcher, homePitcher, awayTeamHit, homeTeamHit, awayTeamPit, homeTeamPit);
@@ -204,6 +242,10 @@ async function calculateGameEdges(game, oddsForGame) {
       } : null,
     },
     weather,
+    lineupBvP: {
+      away: awayLineupBvP,  // Away batters vs HOME pitcher
+      home: homeLineupBvP,  // Home batters vs AWAY pitcher
+    },
     moneyline: {
       awayWinProb: ml.awayWinProb,
       homeWinProb: ml.homeWinProb,
