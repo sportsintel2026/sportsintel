@@ -66,6 +66,8 @@ export default function DashboardPage() {
         .game-row:hover{background:#131820}
         .tab-btn{transition:all .15s;cursor:pointer}
         .tab-btn:hover{color:#fff}
+        .section-header{transition:color .15s;cursor:pointer}
+        .section-header:hover{color:#fff!important}
       `}</style>
       <Header user={user} plan={plan} signOut={signOut} navigate={navigate} menuOpen={menuOpen} setMenuOpen={setMenuOpen} isAdmin={isAdmin} hasFullAccess={hasFullAccess} />
       <LeagueTabs league={league} setLeague={setLeague} />
@@ -149,6 +151,13 @@ function MLBDashboard({ edges, loading, picks, hasFullAccess, navigate, onRefres
   if (!edges) return <ErrorState onRetry={onRefresh} />;
   const date = new Date().toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
   const gameCount = edges.games?.length || 0;
+
+  // Split games by status
+  const allGames = edges.games || [];
+  const liveGames = allGames.filter(g => g.status === "live");
+  const upcomingGames = allGames.filter(g => g.status !== "live" && g.status !== "final");
+  const finalGames = allGames.filter(g => g.status === "final");
+
   return (
     <div style={{ animation: "fadeIn .3s ease" }}>
       <div style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 8 }}>
@@ -161,7 +170,7 @@ function MLBDashboard({ edges, loading, picks, hasFullAccess, navigate, onRefres
         Model projections vs sportsbook lines · weather, batter vs pitcher history, recent form. <span style={{ color: "#ef4444", fontWeight: 600 }}>Click any game</span> for deep analysis.
       </p>
       <div style={{ background: "#1a1410", border: "1px solid #f5970022", borderLeft: "3px solid #f59700", borderRadius: 6, padding: "10px 14px", marginBottom: 20, fontSize: 12, color: "#fbbf24" }}>
-        <strong>Model v0.3 · Research-grade.</strong> <span style={{ color: "#a8915c" }}>Now factoring in weather, BvP history, and recent form. No model beats the market — use as one input among many, not gospel.</span>
+        <strong>Model v0.3 · Research-grade.</strong> <span style={{ color: "#a8915c" }}>Pre-game model — live games show in-game odds. Use as one input among many, not gospel.</span>
       </div>
       {picks.length > 0 && <EditorialBestBets picks={picks} hasFullAccess={hasFullAccess} navigate={navigate} />}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16, gridAutoRows: "1fr" }}>
@@ -171,7 +180,41 @@ function MLBDashboard({ edges, loading, picks, hasFullAccess, navigate, onRefres
       <div style={{ marginBottom: 16 }}>
         <EdgePanel title="Top home run props" icon="💣" edges={edges.hrPropEdges || []} renderRow={(e) => <HRPropRow edge={e} key={e.player + e.game} />} emptyText="HR prop data updates closer to first pitch" hasFullAccess={hasFullAccess} navigate={navigate} wide />
       </div>
-      <AllGamesTable games={edges.games || []} hasFullAccess={hasFullAccess} navigate={navigate} />
+
+      {/* Live games — top priority */}
+      {liveGames.length > 0 && (
+        <GamesSection
+          title="🔴 LIVE NOW"
+          titleColor="#ef4444"
+          games={liveGames}
+          navigate={navigate}
+          defaultOpen
+          showLiveBadge
+        />
+      )}
+
+      {/* Upcoming games — main attention */}
+      {upcomingGames.length > 0 && (
+        <GamesSection
+          title="⏰ UPCOMING"
+          titleColor="#9ca3af"
+          games={upcomingGames}
+          navigate={navigate}
+          defaultOpen
+        />
+      )}
+
+      {/* Final games — collapsed by default */}
+      {finalGames.length > 0 && (
+        <GamesSection
+          title="✅ FINAL"
+          titleColor="#6b7280"
+          games={finalGames}
+          navigate={navigate}
+          defaultOpen={false}
+          showFinalScore
+        />
+      )}
     </div>
   );
 }
@@ -239,13 +282,25 @@ function EdgePanel({ title, icon, edges, renderRow, emptyText, hasFullAccess, na
     </div>
   );
 }
+function LiveBadge() {
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 9, fontWeight: 800, padding: "2px 6px", borderRadius: 3, background: "#ef444415", color: "#ef4444", border: "1px solid #ef444440", letterSpacing: "0.05em", marginLeft: 6 }}>
+      <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#ef4444", animation: "pulse 1.5s infinite" }} />
+      LIVE
+    </span>
+  );
+}
 function MoneylineRow({ edge, navigate }) {
+  const isLive = edge.status === "live";
   return (
     <div className="edge-row" onClick={() => navigate(`/game/mlb/${edge.gameId}`)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: 10, background: "#0a0e14", borderRadius: 4 }}>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 2 }}>{edge.teamAbbr} ML</div>
+        <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 2, display: "flex", alignItems: "center" }}>
+          {edge.teamAbbr} ML
+          {isLive && <LiveBadge />}
+        </div>
         <div style={{ fontSize: 10, color: "#6b7280", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-          {edge.matchup} · {formatOdds(edge.odds)} {edge.time && `· ${edge.time}`}
+          {edge.matchup} · {formatOdds(edge.odds)} {isLive && edge.inning ? `· ${edge.inning}` : edge.time && `· ${edge.time}`}
         </div>
       </div>
       <div style={{ textAlign: "right", marginLeft: 10 }}>
@@ -256,12 +311,16 @@ function MoneylineRow({ edge, navigate }) {
   );
 }
 function TotalsRow({ edge, navigate }) {
+  const isLive = edge.status === "live";
   return (
     <div className="edge-row" onClick={() => navigate(`/game/mlb/${edge.gameId}`)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: 10, background: "#0a0e14", borderRadius: 4 }}>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 2 }}>{edge.side === "over" ? "Over" : "Under"} {edge.line}</div>
+        <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 2, display: "flex", alignItems: "center" }}>
+          {edge.side === "over" ? "Over" : "Under"} {edge.line}
+          {isLive && <LiveBadge />}
+        </div>
         <div style={{ fontSize: 10, color: "#6b7280", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-          {edge.matchup} · {formatOdds(edge.odds)}
+          {edge.matchup} · {formatOdds(edge.odds)} {isLive && edge.inning ? `· ${edge.inning}` : ""}
         </div>
       </div>
       <div style={{ textAlign: "right", marginLeft: 10 }}>
@@ -272,7 +331,6 @@ function TotalsRow({ edge, navigate }) {
   );
 }
 function HRPropRow({ edge }) {
-  // Build secondary info line with BvP and recent 15 data
   const bvpText = edge.bvp && edge.bvp.atBats > 0
     ? `BvP: ${edge.bvp.hits}/${edge.bvp.atBats}${edge.bvp.hr > 0 ? `, ${edge.bvp.hr} HR` : ""}`
     : null;
@@ -301,57 +359,84 @@ function HRPropRow({ edge }) {
     </div>
   );
 }
-function AllGamesTable({ games, hasFullAccess, navigate }) {
-  if (games.length === 0) return null;
+function GamesSection({ title, titleColor, games, navigate, defaultOpen, showLiveBadge, showFinalScore }) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
   return (
-    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 8, padding: 14 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-        <span style={{ fontSize: 11, letterSpacing: 1, color: "#9ca3af", fontWeight: 500 }}>📋 ALL GAMES · CLICK FOR DEEP ANALYSIS</span>
-        <span style={{ fontSize: 10, color: "#6b7280" }}>{games.length} games</span>
+    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 8, padding: 14, marginBottom: 12 }}>
+      <div
+        className="section-header"
+        onClick={() => setIsOpen(!isOpen)}
+        style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: isOpen ? 12 : 0 }}
+      >
+        <span style={{ fontSize: 11, letterSpacing: 1, color: titleColor, fontWeight: 700 }}>
+          {title} {showLiveBadge && <span style={{ marginLeft: 4 }}>· {games.length} game{games.length === 1 ? "" : "s"}</span>}
+          {!showLiveBadge && <span style={{ marginLeft: 4, color: "#6b7280" }}>· {games.length} game{games.length === 1 ? "" : "s"}</span>}
+        </span>
+        <span style={{ fontSize: 12, color: "#6b7280" }}>{isOpen ? "▲ hide" : "▼ show"}</span>
       </div>
-      <div style={{ overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-          <thead>
-            <tr style={{ borderBottom: "1px solid #1f2937", color: "#6b7280" }}>
-              <th style={th()}>Game</th>
-              <th style={th()}>Time</th>
-              <th style={th()}>Pitchers</th>
-              <th style={th("center")}>Weather</th>
-              <th style={th("right")}>Model</th>
-              <th style={th("right")}>Total</th>
-              <th style={th("right")}>Park</th>
-              <th style={th("right")}></th>
-            </tr>
-          </thead>
-          <tbody>
-            {games.map(g => (
-              <tr key={g.id} className="game-row" onClick={() => navigate(`/game/mlb/${g.id}`)} style={{ borderBottom: "1px solid #131820" }}>
-                <td style={td()}>{g.awayAbbr} @ {g.homeAbbr}</td>
-                <td style={td()}>{g.time}</td>
-                <td style={td()}>
-                  <div style={{ color: "#9ca3af" }}>{g.pitchers?.away?.name || "TBD"}</div>
-                  <div style={{ color: "#9ca3af" }}>{g.pitchers?.home?.name || "TBD"}</div>
-                </td>
-                <td style={td("center")}>
-                  <WeatherIndicator weather={g.weather} />
-                </td>
-                <td style={td("right")}>
-                  {g.moneyline?.awayWinProb != null ? `${Math.round(g.moneyline.awayWinProb * 100)}% / ${Math.round(g.moneyline.homeWinProb * 100)}%` : "—"}
-                </td>
-                <td style={td("right")}>{g.totals?.projected ?? "—"}</td>
-                <td style={td("right")}>
-                  <span style={{ color: g.parkRunFactor > 1.05 ? "#22c55e" : g.parkRunFactor < 0.95 ? "#ef4444" : "#9ca3af" }}>
-                    {g.parkRunFactor?.toFixed(2)}
-                  </span>
-                </td>
-                <td style={td("right")}>
-                  <span style={{ color: "#ef4444", fontSize: 14 }}>→</span>
-                </td>
+      {isOpen && (
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+            <thead>
+              <tr style={{ borderBottom: "1px solid #1f2937", color: "#6b7280" }}>
+                <th style={th()}>Game</th>
+                <th style={th()}>{showFinalScore ? "Final" : "Status"}</th>
+                <th style={th()}>Pitchers</th>
+                <th style={th("center")}>Weather</th>
+                <th style={th("right")}>Model</th>
+                <th style={th("right")}>Total</th>
+                <th style={th("right")}>Park</th>
+                <th style={th("right")}></th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {games.map(g => (
+                <tr key={g.id} className="game-row" onClick={() => navigate(`/game/mlb/${g.id}`)} style={{ borderBottom: "1px solid #131820" }}>
+                  <td style={td()}>{g.awayAbbr} @ {g.homeAbbr}</td>
+                  <td style={td()}>
+                    {g.status === "live" && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#ef4444", animation: "pulse 1.5s infinite" }} />
+                        <span style={{ color: "#ef4444", fontWeight: 700, fontSize: 11 }}>LIVE</span>
+                        {g.awayScore != null && <span style={{ color: "#9ca3af", fontSize: 11 }}>{g.awayScore}-{g.homeScore}</span>}
+                        {g.inning && <span style={{ color: "#6b7280", fontSize: 10 }}>{g.inning}</span>}
+                      </div>
+                    )}
+                    {g.status === "final" && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ color: "#22c55e", fontWeight: 700, fontSize: 11 }}>FINAL</span>
+                        {g.awayScore != null && <span style={{ color: "#e4e7eb", fontSize: 11, fontWeight: 600 }}>{g.awayScore}-{g.homeScore}</span>}
+                      </div>
+                    )}
+                    {g.status !== "live" && g.status !== "final" && (
+                      <span style={{ color: "#9ca3af" }}>{g.time}</span>
+                    )}
+                  </td>
+                  <td style={td()}>
+                    <div style={{ color: "#9ca3af" }}>{g.pitchers?.away?.name || "TBD"}</div>
+                    <div style={{ color: "#9ca3af" }}>{g.pitchers?.home?.name || "TBD"}</div>
+                  </td>
+                  <td style={td("center")}>
+                    <WeatherIndicator weather={g.weather} />
+                  </td>
+                  <td style={td("right")}>
+                    {g.moneyline?.awayWinProb != null ? `${Math.round(g.moneyline.awayWinProb * 100)}% / ${Math.round(g.moneyline.homeWinProb * 100)}%` : "—"}
+                  </td>
+                  <td style={td("right")}>{g.totals?.projected ?? "—"}</td>
+                  <td style={td("right")}>
+                    <span style={{ color: g.parkRunFactor > 1.05 ? "#22c55e" : g.parkRunFactor < 0.95 ? "#ef4444" : "#9ca3af" }}>
+                      {g.parkRunFactor?.toFixed(2)}
+                    </span>
+                  </td>
+                  <td style={td("right")}>
+                    <span style={{ color: "#ef4444", fontSize: 14 }}>→</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
