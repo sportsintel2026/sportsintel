@@ -173,7 +173,7 @@ router.get("/mlb", async (req, res) => {
 
     let hrPropEdges = [];
     try {
-      const topGamesForHR = gamesWithOdds.slice(0, 5).filter(g => g._oddsEventId);
+      const topGamesForHR = gamesWithOdds.filter(g => g._oddsEventId).slice(0, 5);
       const eventIds = topGamesForHR.map(g => g._oddsEventId);
       console.log(`[Edges-HR] DIAGNOSTIC — gamesWithOdds.length=${gamesWithOdds.length}, topGamesForHR.length=${topGamesForHR.length}, eventIds=${JSON.stringify(eventIds)}`);
       console.log(`[Edges-HR] First 5 games and their _oddsEventId: ${gamesWithOdds.slice(0, 5).map(g => `${g.awayAbbr}@${g.homeAbbr}:${g._oddsEventId || 'NULL'}`).join(', ')}`);
