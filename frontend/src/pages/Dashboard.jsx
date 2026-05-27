@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { edgesApi, subscriptionApi, supabase } from "../lib/api";
-
 const LEAGUES = [
   { id: "mlb", label: "MLB", icon: "⚾", live: true },
   { id: "nba", label: "NBA", icon: "🏀", live: false },
@@ -11,7 +10,6 @@ const LEAGUES = [
   { id: "soccer", label: "Soccer", icon: "⚽", live: false },
   { id: "golf", label: "Golf", icon: "⛳", live: false },
 ];
-
 export default function DashboardPage() {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
@@ -24,9 +22,7 @@ export default function DashboardPage() {
   const isAdmin = plan.isAdmin === true;
   const isPro = plan.tier === "pro" || plan.tier === "elite";
   const hasFullAccess = isAdmin || isPro;
-
   useEffect(() => { subscriptionApi.getMyPlan().then(setPlan).catch(() => {}); }, []);
-
   useEffect(() => {
     const loadPicks = async () => {
       try {
@@ -37,7 +33,6 @@ export default function DashboardPage() {
     };
     loadPicks();
   }, []);
-
   const loadEdges = useCallback(async () => {
     if (league !== "mlb") {
       setEdges(null);
@@ -54,9 +49,7 @@ export default function DashboardPage() {
     }
     setEdgesLoading(false);
   }, [league]);
-
   useEffect(() => { loadEdges(); }, [loadEdges]);
-
   return (
     <div style={{ minHeight: "100vh", background: "#0a0e14", color: "#e4e7eb", fontFamily: "'Inter',system-ui,-apple-system,sans-serif" }}>
       <style>{`
@@ -74,12 +67,9 @@ export default function DashboardPage() {
         .tab-btn{transition:all .15s;cursor:pointer}
         .tab-btn:hover{color:#fff}
       `}</style>
-
       <Header user={user} plan={plan} signOut={signOut} navigate={navigate} menuOpen={menuOpen} setMenuOpen={setMenuOpen} isAdmin={isAdmin} hasFullAccess={hasFullAccess} />
       <LeagueTabs league={league} setLeague={setLeague} />
-
       {menuOpen && <div onClick={() => setMenuOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 99 }} />}
-
       <div style={{ maxWidth: 1200, margin: "0 auto", padding: "20px 16px 60px" }}>
         {league === "mlb" ? (
           <MLBDashboard edges={edges} loading={edgesLoading} picks={picks} hasFullAccess={hasFullAccess} navigate={navigate} onRefresh={loadEdges} />
@@ -90,13 +80,11 @@ export default function DashboardPage() {
     </div>
   );
 }
-
 function Header({ user, plan, signOut, navigate, menuOpen, setMenuOpen, isAdmin, hasFullAccess }) {
   let badge;
   if (isAdmin) badge = { text: "ADMIN", bg: "#a855f715", fg: "#a855f7", border: "#a855f730" };
   else if (hasFullAccess) badge = { text: "SUBSCRIBED", bg: "#22c55e15", fg: "#22c55e", border: "#22c55e30" };
   else badge = { text: "FREE", bg: "#1c2128", fg: "#6b7280", border: "#1f2937" };
-
   return (
     <div style={{ background: "#0a0e14", borderBottom: "1px solid #1a1f28", position: "sticky", top: 0, zIndex: 100 }}>
       <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 16px", display: "flex", alignItems: "center", justifyContent: "space-between", height: 56 }}>
@@ -133,13 +121,11 @@ function Header({ user, plan, signOut, navigate, menuOpen, setMenuOpen, isAdmin,
     </div>
   );
 }
-
 function MenuButton({ children, onClick }) {
   return (
     <button onClick={onClick} style={{ width: "100%", textAlign: "left", background: "none", border: "none", padding: "8px 12px", fontSize: 12, color: "#9ca3af", cursor: "pointer", fontFamily: "inherit", borderRadius: 6 }}>{children}</button>
   );
 }
-
 function LeagueTabs({ league, setLeague }) {
   return (
     <div style={{ background: "#0a0e14", borderBottom: "1px solid #1a1f28" }}>
@@ -158,14 +144,11 @@ function LeagueTabs({ league, setLeague }) {
     </div>
   );
 }
-
 function MLBDashboard({ edges, loading, picks, hasFullAccess, navigate, onRefresh }) {
   if (loading) return <Loader />;
   if (!edges) return <ErrorState onRetry={onRefresh} />;
-
   const date = new Date().toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
   const gameCount = edges.games?.length || 0;
-
   return (
     <div style={{ animation: "fadeIn .3s ease" }}>
       <div style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 8 }}>
@@ -175,24 +158,19 @@ function MLBDashboard({ edges, loading, picks, hasFullAccess, navigate, onRefres
         </span>
       </div>
       <p style={{ margin: "0 0 24px", fontSize: 13, color: "#9ca3af" }}>
-        Model projections vs sportsbook lines. <span style={{ color: "#ef4444", fontWeight: 600 }}>Click any game</span> for deep analysis.
+        Model projections vs sportsbook lines · weather, batter vs pitcher history, recent form. <span style={{ color: "#ef4444", fontWeight: 600 }}>Click any game</span> for deep analysis.
       </p>
-
       <div style={{ background: "#1a1410", border: "1px solid #f5970022", borderLeft: "3px solid #f59700", borderRadius: 6, padding: "10px 14px", marginBottom: 20, fontSize: 12, color: "#fbbf24" }}>
-        <strong>Model v0.1 · Research-grade.</strong> <span style={{ color: "#a8915c" }}>Projections are based on season-to-date stats and public park factors. No model beats the market — use as one input among many, not gospel.</span>
+        <strong>Model v0.3 · Research-grade.</strong> <span style={{ color: "#a8915c" }}>Now factoring in weather, BvP history, and recent form. No model beats the market — use as one input among many, not gospel.</span>
       </div>
-
       {picks.length > 0 && <EditorialBestBets picks={picks} hasFullAccess={hasFullAccess} navigate={navigate} />}
-
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16, gridAutoRows: "1fr" }}>
         <EdgePanel title="Top moneyline edges" icon="💰" edges={edges.moneylineEdges || []} renderRow={(e) => <MoneylineRow edge={e} key={e.gameId + e.side} navigate={navigate} />} emptyText="No edges found in current slate" hasFullAccess={hasFullAccess} navigate={navigate} />
         <EdgePanel title="Top totals edges" icon="📊" edges={edges.totalsEdges || []} renderRow={(e) => <TotalsRow edge={e} key={e.gameId + e.side} navigate={navigate} />} emptyText="No edges found in current slate" hasFullAccess={hasFullAccess} navigate={navigate} />
       </div>
-
       <div style={{ marginBottom: 16 }}>
         <EdgePanel title="Top home run props" icon="💣" edges={edges.hrPropEdges || []} renderRow={(e) => <HRPropRow edge={e} key={e.player + e.game} />} emptyText="HR prop data updates closer to first pitch" hasFullAccess={hasFullAccess} navigate={navigate} wide />
       </div>
-
       <AllGamesTable games={edges.games || []} hasFullAccess={hasFullAccess} navigate={navigate} />
     </div>
   );
@@ -230,7 +208,6 @@ function EditorialBestBets({ picks, hasFullAccess, navigate }) {
     </div>
   );
 }
-
 function EdgePanel({ title, icon, edges, renderRow, emptyText, hasFullAccess, navigate, wide }) {
   const visible = hasFullAccess ? edges : edges.slice(0, 1);
   const hidden = hasFullAccess ? [] : edges.slice(1, 5);
@@ -262,7 +239,6 @@ function EdgePanel({ title, icon, edges, renderRow, emptyText, hasFullAccess, na
     </div>
   );
 }
-
 function MoneylineRow({ edge, navigate }) {
   return (
     <div className="edge-row" onClick={() => navigate(`/game/mlb/${edge.gameId}`)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: 10, background: "#0a0e14", borderRadius: 4 }}>
@@ -279,7 +255,6 @@ function MoneylineRow({ edge, navigate }) {
     </div>
   );
 }
-
 function TotalsRow({ edge, navigate }) {
   return (
     <div className="edge-row" onClick={() => navigate(`/game/mlb/${edge.gameId}`)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: 10, background: "#0a0e14", borderRadius: 4 }}>
@@ -296,15 +271,28 @@ function TotalsRow({ edge, navigate }) {
     </div>
   );
 }
-
 function HRPropRow({ edge }) {
+  // Build secondary info line with BvP and recent 15 data
+  const bvpText = edge.bvp && edge.bvp.atBats > 0
+    ? `BvP: ${edge.bvp.hits}/${edge.bvp.atBats}${edge.bvp.hr > 0 ? `, ${edge.bvp.hr} HR` : ""}`
+    : null;
+  const recentText = edge.recent15
+    ? `L15: ${(edge.recent15.avg * 1000).toFixed(0).replace(/^0/, ".")}${edge.recent15.hr > 0 ? `, ${edge.recent15.hr} HR` : ""}`
+    : null;
+  const detailLine = [bvpText, recentText].filter(Boolean).join(" · ");
+
   return (
-    <div className="edge-row" style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr 80px", gap: 10, padding: 10, background: "#0a0e14", borderRadius: 4, alignItems: "center" }}>
+    <div className="edge-row" style={{ display: "grid", gridTemplateColumns: "2.2fr 1fr 1fr 1fr 80px", gap: 10, padding: 10, background: "#0a0e14", borderRadius: 4, alignItems: "center" }}>
       <div style={{ minWidth: 0 }}>
         <div style={{ fontSize: 12, fontWeight: 600 }}>{edge.player}</div>
         <div style={{ fontSize: 10, color: "#6b7280", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
           {edge.team} · vs {edge.opposingPitcher || "TBD"}
         </div>
+        {detailLine && (
+          <div style={{ fontSize: 10, color: "#22c55e", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            {detailLine}
+          </div>
+        )}
       </div>
       <div style={{ fontSize: 11, color: "#9ca3af" }}>{formatOdds(edge.odds)}</div>
       <div style={{ fontSize: 11, color: "#9ca3af" }}>{Math.round(edge.hrProb * 100)}% model</div>
@@ -313,7 +301,6 @@ function HRPropRow({ edge }) {
     </div>
   );
 }
-
 function AllGamesTable({ games, hasFullAccess, navigate }) {
   if (games.length === 0) return null;
   return (
@@ -329,6 +316,7 @@ function AllGamesTable({ games, hasFullAccess, navigate }) {
               <th style={th()}>Game</th>
               <th style={th()}>Time</th>
               <th style={th()}>Pitchers</th>
+              <th style={th("center")}>Weather</th>
               <th style={th("right")}>Model</th>
               <th style={th("right")}>Total</th>
               <th style={th("right")}>Park</th>
@@ -343,6 +331,9 @@ function AllGamesTable({ games, hasFullAccess, navigate }) {
                 <td style={td()}>
                   <div style={{ color: "#9ca3af" }}>{g.pitchers?.away?.name || "TBD"}</div>
                   <div style={{ color: "#9ca3af" }}>{g.pitchers?.home?.name || "TBD"}</div>
+                </td>
+                <td style={td("center")}>
+                  <WeatherIndicator weather={g.weather} />
                 </td>
                 <td style={td("right")}>
                   {g.moneyline?.awayWinProb != null ? `${Math.round(g.moneyline.awayWinProb * 100)}% / ${Math.round(g.moneyline.homeWinProb * 100)}%` : "—"}
@@ -364,14 +355,49 @@ function AllGamesTable({ games, hasFullAccess, navigate }) {
     </div>
   );
 }
-
+function WeatherIndicator({ weather }) {
+  if (!weather) return <span style={{ color: "#4b5563", fontSize: 11 }}>—</span>;
+  if (weather.indoor) {
+    return <span title="Indoor stadium" style={{ fontSize: 14 }}>🏟️</span>;
+  }
+  const icons = [];
+  let tooltip = `${weather.tempF}°F`;
+  if (weather.windEffect === "out") {
+    icons.push("💨↗");
+    tooltip += ` · Wind OUT ${weather.windMph}mph (favors hitters)`;
+  } else if (weather.windEffect === "in") {
+    icons.push("💨↙");
+    tooltip += ` · Wind IN ${weather.windMph}mph (favors pitchers)`;
+  } else if (weather.windEffect === "cross") {
+    icons.push("💨");
+    tooltip += ` · Cross wind ${weather.windMph}mph`;
+  }
+  if (weather.tempEffect === "hot") {
+    icons.push("🔥");
+    tooltip += " · Warm air carries";
+  } else if (weather.tempEffect === "cold") {
+    icons.push("🥶");
+    tooltip += " · Cold air dense";
+  }
+  if (weather.isRaining) {
+    icons.push("🌧️");
+    tooltip += " · Rain";
+  }
+  if (icons.length === 0) {
+    return <span title={tooltip} style={{ fontSize: 11, color: "#6b7280" }}>{weather.tempF}°</span>;
+  }
+  return (
+    <span title={tooltip} style={{ fontSize: 13, cursor: "help" }}>
+      {icons.join(" ")}
+    </span>
+  );
+}
 function th(align = "left") {
   return { padding: "8px 6px", textAlign: align, fontWeight: 500, fontSize: 10, letterSpacing: "0.05em", textTransform: "uppercase" };
 }
 function td(align = "left") {
   return { padding: "10px 6px", textAlign: align, color: "#e4e7eb", fontSize: 12 };
 }
-
 function EdgeBadge({ edge }) {
   if (edge == null) return <span style={{ fontSize: 11, color: "#6b7280" }}>—</span>;
   const positive = edge > 0;
@@ -383,7 +409,6 @@ function EdgeBadge({ edge }) {
     </span>
   );
 }
-
 function ConfidenceBadge({ conf }) {
   const colors = {
     HIGH: { bg: "#22c55e15", fg: "#22c55e", border: "#22c55e30" },
@@ -398,12 +423,10 @@ function ConfidenceBadge({ conf }) {
     </span>
   );
 }
-
 function formatOdds(american) {
   if (american == null) return "—";
   return american > 0 ? `+${american}` : `${american}`;
 }
-
 function Loader() {
   return (
     <div style={{ textAlign: "center", padding: 64 }}>
@@ -413,7 +436,6 @@ function Loader() {
     </div>
   );
 }
-
 function ErrorState({ onRetry }) {
   return (
     <div style={{ textAlign: "center", padding: 64, background: "#0f1419", border: "1px solid #1f2937", borderRadius: 8 }}>
@@ -426,7 +448,6 @@ function ErrorState({ onRetry }) {
     </div>
   );
 }
-
 function ComingSoon({ league }) {
   return (
     <div style={{ textAlign: "center", padding: 80, background: "#0f1419", border: "1px solid #1f2937", borderRadius: 8 }}>
