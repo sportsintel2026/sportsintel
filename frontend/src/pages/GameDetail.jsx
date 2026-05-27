@@ -140,6 +140,7 @@ function GameDetail({ game, hrProps, hasFullAccess, navigate }) {
     <div style={{ animation: "fadeIn .3s ease" }}>
       <GameHeader game={game} />
       {bestEdge && <BestEdgeCard edge={bestEdge} game={game} hasFullAccess={hasFullAccess} navigate={navigate} />}
+      {game.weather && <WeatherCard weather={game.weather} />}
       <PitcherMatchup awayPitcher={awayP} homePitcher={homeP} hasFullAccess={hasFullAccess} navigate={navigate} />
       <WinProbabilityCard awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} awayProb={ml.awayWinProb} homeProb={ml.homeWinProb} awayOdds={ml.awayOdds} homeOdds={ml.homeOdds} awayEdge={ml.awayEdge} homeEdge={ml.homeEdge} hasFullAccess={hasFullAccess} navigate={navigate} />
       <TotalsCard totals={totals} hasFullAccess={hasFullAccess} navigate={navigate} />
@@ -165,6 +166,57 @@ function GameHeader({ game }) {
   );
 }
 
+function WeatherCard({ weather }) {
+  if (weather.indoor) {
+    return (
+      <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 18, marginBottom: 18, display: "flex", alignItems: "center", gap: 14 }}>
+        <div style={{ fontSize: 30 }}>🏟️</div>
+        <div>
+          <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 2 }}>
+            Game conditions
+          </div>
+          <div style={{ fontSize: 14, color: "#e4e7eb", fontWeight: 600 }}>Indoor stadium</div>
+          <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>Weather doesn't affect play in domes</div>
+        </div>
+      </div>
+    );
+  }
+
+  // Determine border color based on impact
+  const hitterFavored = weather.windEffect === "out" || weather.tempEffect === "hot";
+  const pitcherFavored = weather.windEffect === "in" || weather.tempEffect === "cold";
+  const borderColor = hitterFavored ? "#22c55e44" : pitcherFavored ? "#ef444444" : "#1f2937";
+  const accentColor = hitterFavored ? "#22c55e" : pitcherFavored ? "#ef4444" : "#9ca3af";
+
+  return (
+    <div style={{ background: "#0f1419", border: `1px solid ${borderColor}`, borderRadius: 10, padding: 20, marginBottom: 18 }}>
+      <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 14 }}>
+        🌤️ Game conditions
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12 }}>
+        <WeatherStat icon="🌡️" label="Temperature" value={`${weather.tempF}°F`} color={weather.tempEffect === "hot" ? "#22c55e" : weather.tempEffect === "cold" ? "#ef4444" : "#e4e7eb"} subtitle={weather.tempEffect === "hot" ? "Warm air carries" : weather.tempEffect === "cold" ? "Cold air dense" : null} />
+        <WeatherStat icon={weather.windEffect === "out" ? "💨↗" : weather.windEffect === "in" ? "💨↙" : "💨"} label="Wind" value={weather.windMph != null ? `${weather.windMph} mph` : "—"} color={weather.windEffect === "out" ? "#22c55e" : weather.windEffect === "in" ? "#ef4444" : "#e4e7eb"} subtitle={weather.windEffect === "out" ? "Favors hitters" : weather.windEffect === "in" ? "Favors pitchers" : weather.windEffect === "cross" ? "Cross wind" : "Calm"} />
+        <WeatherStat icon={weather.isRaining ? "🌧️" : "☁️"} label="Conditions" value={weather.conditions || "—"} color="#e4e7eb" subtitle={weather.isRaining ? "Rain expected" : null} />
+      </div>
+      <div style={{ marginTop: 14, padding: 12, background: "#0a0e14", borderRadius: 6, fontSize: 12, color: accentColor }}>
+        {weather.summary}
+      </div>
+    </div>
+  );
+}
+
+function WeatherStat({ icon, label, value, color, subtitle }) {
+  return (
+    <div style={{ background: "#0a0e14", border: "1px solid #1f2937", borderRadius: 8, padding: 12 }}>
+      <div style={{ fontSize: 10, color: "#6b7280", letterSpacing: "0.08em", fontWeight: 600, textTransform: "uppercase", marginBottom: 6 }}>
+        {icon} {label}
+      </div>
+      <div style={{ fontSize: 18, fontWeight: 700, color, lineHeight: 1.1 }}>{value}</div>
+      {subtitle && <div style={{ fontSize: 11, color: "#6b7280", marginTop: 4 }}>{subtitle}</div>}
+    </div>
+  );
+}
+
 function BestEdgeCard({ edge, game, hasFullAccess, navigate }) {
   const positive = edge.edge > 0;
   const desc = edge.type === "ML" ? `${edge.team} Moneyline` : `${edge.side === "over" ? "Over" : "Under"} ${edge.line}`;
@@ -179,6 +231,11 @@ function BestEdgeCard({ edge, game, hasFullAccess, navigate }) {
     if (edge.side === "over" && game.parkRunFactor > 1.05) reasons.push(`${game.venue} plays as +${Math.round((game.parkRunFactor - 1) * 100)}% runs`);
     if (edge.side === "under" && game.parkRunFactor < 0.95) reasons.push(`${game.venue} suppresses scoring`);
     if (edge.projected != null) reasons.push(`Model projects ${edge.projected} runs vs ${edge.line} line`);
+    if (game.weather && !game.weather.indoor) {
+      if (edge.side === "over" && game.weather.windEffect === "out") reasons.push(`Wind blowing out ${game.weather.windMph}mph favors hitters`);
+      if (edge.side === "under" && game.weather.windEffect === "in") reasons.push(`Wind blowing in ${game.weather.windMph}mph favors pitchers`);
+      if (edge.side === "over" && game.weather.tempEffect === "hot") reasons.push(`${game.weather.tempF}°F — warm air carries the ball`);
+    }
   }
 
   return (
@@ -265,8 +322,87 @@ function PitcherMatchup({ awayPitcher, homePitcher, hasFullAccess, navigate }) {
         <div style={{ fontSize: 18, color: "#4b5563", fontWeight: 600, marginTop: 30 }}>vs</div>
         <PitcherCard pitcher={homePitcher} label="HOME" hasFullAccess={hasFullAccess} navigate={navigate} />
       </div>
+      {hasFullAccess && (awayPitcher?.recentStarts?.length > 0 || homePitcher?.recentStarts?.length > 0) && (
+        <div style={{ marginTop: 18, paddingTop: 18, borderTop: "1px solid #1f2937" }}>
+          <div style={{ fontSize: 10, color: "#6b7280", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 600, marginBottom: 10 }}>
+            📈 Last 3 starts
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+            <RecentStartsTable starts={awayPitcher?.recentStarts || []} />
+            <RecentStartsTable starts={homePitcher?.recentStarts || []} />
+          </div>
+        </div>
+      )}
     </div>
   );
+}
+
+function RecentStartsTable({ starts }) {
+  if (!starts || starts.length === 0) {
+    return <div style={{ fontSize: 11, color: "#4b5563", textAlign: "center", padding: 12 }}>No recent starts</div>;
+  }
+  return (
+    <div style={{ background: "#0a0e14", border: "1px solid #1f2937", borderRadius: 6, overflow: "hidden" }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+        <thead>
+          <tr style={{ background: "#0f1419", color: "#6b7280" }}>
+            <th style={tableHeaderStyle("left")}>Date</th>
+            <th style={tableHeaderStyle("left")}>Opp</th>
+            <th style={tableHeaderStyle("right")}>IP</th>
+            <th style={tableHeaderStyle("right")}>ER</th>
+            <th style={tableHeaderStyle("right")}>K</th>
+            <th style={tableHeaderStyle("right")}>BB</th>
+            <th style={tableHeaderStyle("center")}>W/L</th>
+          </tr>
+        </thead>
+        <tbody>
+          {starts.map((s, i) => {
+            const resultColor = s.result === "W" ? "#22c55e" : s.result === "L" ? "#ef4444" : "#6b7280";
+            const erColor = s.er === 0 ? "#22c55e" : s.er >= 4 ? "#ef4444" : "#e4e7eb";
+            return (
+              <tr key={i} style={{ borderTop: i > 0 ? "1px solid #131820" : "none" }}>
+                <td style={tableCellStyle("left")}>{formatStartDate(s.date)}</td>
+                <td style={tableCellStyle("left", "#9ca3af")}>{abbrevTeam(s.opponent)}</td>
+                <td style={tableCellStyle("right", "#e4e7eb", true)}>{s.ip}</td>
+                <td style={tableCellStyle("right", erColor, true)}>{s.er}</td>
+                <td style={tableCellStyle("right", "#e4e7eb", true)}>{s.k}</td>
+                <td style={tableCellStyle("right", "#9ca3af", true)}>{s.bb}</td>
+                <td style={tableCellStyle("center", resultColor, true)}>{s.result}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function tableHeaderStyle(align) {
+  return { padding: "6px 8px", textAlign: align, fontWeight: 500, fontSize: 9, letterSpacing: "0.05em", textTransform: "uppercase" };
+}
+function tableCellStyle(align, color = "#e4e7eb", bold = false) {
+  return { padding: "6px 8px", textAlign: align, color, fontSize: 11, fontWeight: bold ? 600 : 400, fontVariantNumeric: "tabular-nums" };
+}
+
+function formatStartDate(dateStr) {
+  if (!dateStr) return "—";
+  const d = new Date(dateStr);
+  return `${d.getMonth() + 1}/${d.getDate()}`;
+}
+
+function abbrevTeam(name) {
+  if (!name) return "—";
+  const abbreviations = {
+    "Arizona Diamondbacks": "ARI", "Atlanta Braves": "ATL", "Athletics": "ATH", "Baltimore Orioles": "BAL",
+    "Boston Red Sox": "BOS", "Chicago Cubs": "CHC", "Chicago White Sox": "CWS", "Cincinnati Reds": "CIN",
+    "Cleveland Guardians": "CLE", "Colorado Rockies": "COL", "Detroit Tigers": "DET", "Houston Astros": "HOU",
+    "Kansas City Royals": "KC", "Los Angeles Angels": "LAA", "Los Angeles Dodgers": "LAD", "Miami Marlins": "MIA",
+    "Milwaukee Brewers": "MIL", "Minnesota Twins": "MIN", "New York Mets": "NYM", "New York Yankees": "NYY",
+    "Philadelphia Phillies": "PHI", "Pittsburgh Pirates": "PIT", "San Diego Padres": "SD",
+    "San Francisco Giants": "SF", "Seattle Mariners": "SEA", "St. Louis Cardinals": "STL",
+    "Tampa Bay Rays": "TB", "Texas Rangers": "TEX", "Toronto Blue Jays": "TOR", "Washington Nationals": "WSH",
+  };
+  return abbreviations[name] || name.slice(0, 3).toUpperCase();
 }
 
 function PitcherCard({ pitcher, label, hasFullAccess, navigate }) {
@@ -303,7 +439,7 @@ function PitcherCard({ pitcher, label, hasFullAccess, navigate }) {
       {!hasFullAccess && stats && (
         <div style={{ marginTop: 12, fontSize: 10, color: "#6b7280", textAlign: "center" }}>
           <button onClick={() => navigate("/pricing")} style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer", fontFamily: "inherit", fontSize: 10, fontWeight: 700 }}>
-            🔒 Unlock advanced metrics
+            🔒 Unlock recent starts + advanced metrics
           </button>
         </div>
       )}
@@ -389,12 +525,36 @@ function TotalsCard({ totals, hasFullAccess, navigate }) {
         <BigStat label="Model projects" value={totals.projected ?? "—"} color="#22c55e" />
         <BigStat label="Difference" value={delta != null ? `${delta > 0 ? "+" : ""}${delta.toFixed(1)}` : "—"} color={delta > 0 ? "#22c55e" : delta < 0 ? "#ef4444" : "#9ca3af"} />
       </div>
+      {totals.breakdown && hasFullAccess && (
+        <div style={{ marginTop: 14, padding: 12, background: "#0a0e14", borderRadius: 6, border: "1px solid #1f2937" }}>
+          <div style={{ fontSize: 10, color: "#6b7280", letterSpacing: "0.08em", fontWeight: 600, textTransform: "uppercase", marginBottom: 8 }}>Model breakdown</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 8, fontSize: 11 }}>
+            <BreakdownItem label="Base offense" value={totals.breakdown.base} />
+            <BreakdownItem label="Pitcher adj" value={totals.breakdown.pitcherAdj} signed />
+            <BreakdownItem label="Park adj" value={totals.breakdown.parkAdj} signed />
+            <BreakdownItem label="Weather adj" value={totals.breakdown.weatherAdj} signed highlight />
+          </div>
+        </div>
+      )}
       {(totals.overEdge != null || totals.underEdge != null) && (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 14 }}>
           <TotalSideBox side="OVER" line={totals.line} prob={totals.overProb} odds={totals.overOdds} edge={totals.overEdge} locked={!hasFullAccess} onUnlock={() => navigate("/pricing")} />
           <TotalSideBox side="UNDER" line={totals.line} prob={totals.underProb} odds={totals.underOdds} edge={totals.underEdge} locked={!hasFullAccess} onUnlock={() => navigate("/pricing")} />
         </div>
       )}
+    </div>
+  );
+}
+
+function BreakdownItem({ label, value, signed, highlight }) {
+  if (value == null) return null;
+  const isAdj = signed && value !== 0;
+  const color = highlight && value !== 0 ? (value > 0 ? "#22c55e" : "#ef4444") : isAdj ? (value > 0 ? "#22c55e" : "#ef4444") : "#e4e7eb";
+  const sign = isAdj && value > 0 ? "+" : "";
+  return (
+    <div style={{ background: "#0f1419", borderRadius: 4, padding: "6px 10px" }}>
+      <div style={{ fontSize: 9, color: "#6b7280", marginBottom: 2 }}>{label}</div>
+      <div style={{ fontSize: 13, fontWeight: 600, color, fontVariantNumeric: "tabular-nums" }}>{sign}{value.toFixed(2)}</div>
     </div>
   );
 }
@@ -470,11 +630,11 @@ function HRPropsCard({ hrProps, hasFullAccess, navigate }) {
   return (
     <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 20, marginBottom: 18 }}>
       <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 16 }}>
-        💣 Home run props for this game
+        💣 Home run props · BvP + recent form
       </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {hrProps.slice(0, hasFullAccess ? 10 : 1).map((p, i) => (
-          <HRPropRow key={i} prop={p} />
+          <HRPropCard key={i} prop={p} hasFullAccess={hasFullAccess} />
         ))}
         {!hasFullAccess && hrProps.length > 1 && (
           <div style={{ marginTop: 4, padding: 16, background: "#0a0e14", border: "1px solid #1f2937", borderRadius: 8, textAlign: "center" }}>
@@ -487,19 +647,110 @@ function HRPropsCard({ hrProps, hasFullAccess, navigate }) {
   );
 }
 
-function HRPropRow({ prop }) {
+function HRPropCard({ prop, hasFullAccess }) {
   const positive = prop.edge > 0;
+  const borderColor = prop.confidence === "HIGH" ? "#22c55e30" : prop.confidence === "MEDIUM" ? "#f59e0b30" : "#1f2937";
+
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 80px 60px 80px", gap: 10, padding: 10, background: "#0a0e14", borderRadius: 6, alignItems: "center", border: "1px solid #1f2937" }}>
-      <div>
-        <div style={{ fontSize: 13, fontWeight: 600 }}>{prop.player}</div>
-        <div style={{ fontSize: 11, color: "#6b7280" }}>vs {prop.opposingPitcher || "TBD"}</div>
+    <div style={{ background: "#0a0e14", border: `1px solid ${borderColor}`, borderRadius: 8, padding: 14 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10, gap: 10 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: "#fff", marginBottom: 2 }}>{prop.player}</div>
+          <div style={{ fontSize: 11, color: "#9ca3af" }}>
+            {prop.team} · vs <span style={{ color: "#e4e7eb" }}>{prop.opposingPitcher || "TBD"}</span>
+            {prop.opposingPitcherHR9 != null && <span style={{ color: "#6b7280" }}> ({prop.opposingPitcherHR9.toFixed(2)} HR/9)</span>}
+          </div>
+        </div>
+        <div style={{ textAlign: "right", flexShrink: 0 }}>
+          <div style={{ fontSize: 22, fontWeight: 800, color: positive ? "#22c55e" : "#ef4444", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>
+            {positive ? "+" : ""}{(prop.edge * 100).toFixed(1)}%
+          </div>
+          <ConfidenceBadge conf={prop.confidence} />
+        </div>
       </div>
-      <div style={{ fontSize: 12, color: "#9ca3af", textAlign: "right" }}>{formatOdds(prop.odds)}</div>
-      <div style={{ fontSize: 12, color: "#9ca3af", textAlign: "right" }}>{Math.round(prop.hrProb * 100)}%</div>
-      <div style={{ fontSize: 14, fontWeight: 700, color: positive ? "#22c55e" : "#ef4444", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
-        {positive ? "+" : ""}{(prop.edge * 100).toFixed(1)}%
+
+      <div style={{ display: "grid", gridTemplateColumns: "auto 1fr 1fr auto", gap: 12, padding: "10px 12px", background: "#0f1419", borderRadius: 6, marginBottom: 10, fontSize: 11 }}>
+        <div>
+          <div style={{ color: "#6b7280", fontSize: 9, letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 600 }}>Odds</div>
+          <div style={{ color: "#e4e7eb", fontWeight: 600, fontSize: 13, marginTop: 2 }}>{formatOdds(prop.odds)}</div>
+          <div style={{ color: "#4b5563", fontSize: 9, marginTop: 2 }}>{prop.book || ""}</div>
+        </div>
+        <div>
+          <div style={{ color: "#6b7280", fontSize: 9, letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 600 }}>Model %</div>
+          <div style={{ color: "#22c55e", fontWeight: 600, fontSize: 13, marginTop: 2 }}>{Math.round(prop.hrProb * 100)}%</div>
+        </div>
+        <div>
+          <div style={{ color: "#6b7280", fontSize: 9, letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 600 }}>Market %</div>
+          <div style={{ color: "#9ca3af", fontWeight: 600, fontSize: 13, marginTop: 2 }}>{Math.round(americanToImplied(prop.odds) * 100)}%</div>
+        </div>
+        <div style={{ textAlign: "right" }}>
+          <div style={{ color: "#6b7280", fontSize: 9, letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 600 }}>Park</div>
+          <div style={{ color: prop.parkHRFactor > 1.05 ? "#22c55e" : prop.parkHRFactor < 0.95 ? "#ef4444" : "#9ca3af", fontWeight: 600, fontSize: 13, marginTop: 2, fontVariantNumeric: "tabular-nums" }}>
+            {prop.parkHRFactor?.toFixed(2)}
+          </div>
+        </div>
       </div>
+
+      {hasFullAccess && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+          <DataPanel
+            title="Season"
+            stats={[
+              { label: "HR", value: prop.batterStats?.hr ?? "—" },
+              { label: "ISO", value: prop.batterStats?.iso != null ? prop.batterStats.iso.toFixed(3) : "—" },
+              { label: "SLG", value: prop.batterStats?.slg?.toFixed(3) ?? "—" },
+            ]}
+          />
+          <DataPanel
+            title="Last 15"
+            highlight={prop.recent15?.hr > 1 || prop.recent15?.ops > 0.900}
+            stats={[
+              { label: "AB", value: prop.recent15?.atBats ?? "—" },
+              { label: "AVG", value: prop.recent15?.avg != null ? prop.recent15.avg.toFixed(3) : "—" },
+              { label: "HR", value: prop.recent15?.hr ?? "—" },
+            ]}
+            emptyText={!prop.recent15 ? "Not enough recent data" : null}
+          />
+          <DataPanel
+            title="vs Pitcher (career)"
+            highlight={prop.bvp?.hr > 0 || (prop.bvp?.atBats >= 10 && prop.bvp?.avg > 0.300)}
+            stats={prop.bvp ? [
+              { label: "AB", value: prop.bvp.atBats },
+              { label: "AVG", value: prop.bvp.avg != null ? prop.bvp.avg.toFixed(3) : "—" },
+              { label: "HR", value: prop.bvp.hr },
+            ] : null}
+            emptyText="No career history vs this pitcher"
+          />
+        </div>
+      )}
+
+      {prop.weatherEffect && prop.weatherEffect !== "calm" && hasFullAccess && (
+        <div style={{ marginTop: 10, padding: "8px 12px", background: prop.weatherEffect === "out" ? "#0a1f15" : prop.weatherEffect === "in" ? "#1f0a0a" : "#0f1419", border: `1px solid ${prop.weatherEffect === "out" ? "#22c55e30" : prop.weatherEffect === "in" ? "#ef444430" : "#1f2937"}`, borderRadius: 6, fontSize: 11, color: prop.weatherEffect === "out" ? "#22c55e" : prop.weatherEffect === "in" ? "#ef4444" : "#9ca3af" }}>
+          {prop.weatherEffect === "out" && "💨↗ Wind blowing OUT — favors HR"}
+          {prop.weatherEffect === "in" && "💨↙ Wind blowing IN — suppresses HR"}
+          {prop.weatherEffect === "cross" && "💨 Cross wind — neutral HR impact"}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DataPanel({ title, stats, emptyText, highlight }) {
+  return (
+    <div style={{ background: "#0f1419", border: `1px solid ${highlight ? "#22c55e30" : "#1a1f28"}`, borderRadius: 6, padding: 10 }}>
+      <div style={{ fontSize: 9, color: highlight ? "#22c55e" : "#6b7280", letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 700, marginBottom: 8 }}>{title}</div>
+      {stats ? (
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+          {stats.map((s, i) => (
+            <div key={i} style={{ flex: 1, textAlign: "center" }}>
+              <div style={{ fontSize: 8, color: "#6b7280", letterSpacing: "0.05em", fontWeight: 600 }}>{s.label}</div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#e4e7eb", marginTop: 2, fontVariantNumeric: "tabular-nums" }}>{s.value}</div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div style={{ fontSize: 10, color: "#4b5563", textAlign: "center", padding: "8px 0" }}>{emptyText}</div>
+      )}
     </div>
   );
 }
@@ -514,7 +765,7 @@ function ConfidenceBadge({ conf }) {
   const c = colors[conf] || colors.NEUTRAL;
   return (
     <span style={{ fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 4, background: c.bg, color: c.fg, border: `1px solid ${c.border}`, letterSpacing: "0.05em", display: "inline-block", marginTop: 6 }}>
-      {conf || "—"} CONFIDENCE
+      {conf || "—"}
     </span>
   );
 }
