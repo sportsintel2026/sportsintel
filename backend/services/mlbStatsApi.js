@@ -453,7 +453,7 @@ async function getBatterRecentStats(batterId, days = 15) {
   }
 }
 
-// ── NEW: Statcast batting stats (exit velo, barrel rate, hard hit %) ─────────
+// ── Statcast batting stats (exit velo, barrel rate, hard hit %) ──────────────
 
 async function getBatterStatcast(batterId, season) {
   if (!batterId) return null;
@@ -482,6 +482,76 @@ async function getBatterStatcast(batterId, season) {
   }
 }
 
+// ── NEW: Projected starting lineup for a game ────────────────────────────────
+// Fetches the most recent lineup the team has fielded
+// Falls back to top batters from roster if no lineup is set yet
+
+async function getProjectedLineup(teamId) {
+  if (!teamId) return [];
+  try {
+    // Get most recent games for this team to find a recent lineup
+    const yr = new Date().getFullYear();
+    const today = new Date();
+    const startDate = new Date(today);
+    startDate.setDate(today.getDate() - 7);
+    const formatDate = d => d.toISOString().split("T")[0];
+
+    const scheduleData = await mlbGet(`/schedule`, {
+      sportId: 1,
+      teamId,
+      startDate: formatDate(startDate),
+      endDate: formatDate(today),
+    });
+
+    // Find most recent finished game
+    let lineup = [];
+    let mostRecentGameId = null;
+    for (const block of (scheduleData.dates || []).reverse()) {
+      for (const g of (block.games || []).reverse()) {
+        if (g.status?.abstractGameState === "Final") {
+          mostRecentGameId = g.gamePk;
+          break;
+        }
+      }
+      if (mostRecentGameId) break;
+    }
+
+    if (mostRecentGameId) {
+      try {
+        const boxData = await mlbGet(`/game/${mostRecentGameId}/boxscore`);
+        const teams = boxData.teams || {};
+        let teamBox = null;
+        if (teams.away?.team?.id === teamId) teamBox = teams.away;
+        else if (teams.home?.team?.id === teamId) teamBox = teams.home;
+
+        if (teamBox?.battingOrder?.length > 0) {
+          // battingOrder is array of player IDs, in batting order
+          lineup = teamBox.battingOrder.slice(0, 9).map(playerId => {
+            const player = teamBox.players?.[`ID${playerId}`];
+            return {
+              id: playerId,
+              name: player?.person?.fullName || "Unknown",
+              position: player?.position?.abbreviation || "",
+            };
+          }).filter(p => p.id);
+        }
+      } catch (e) {
+        // boxscore failed, fall through to roster
+      }
+    }
+
+    if (lineup.length === 0) {
+      // Fallback: use top batters from roster (non-pitchers)
+      const roster = await getTeamRoster(teamId);
+      lineup = roster.slice(0, 9);
+    }
+
+    return lineup;
+  } catch (e) {
+    return [];
+  }
+}
+
 // ── Utility ───────────────────────────────────────────────────────────────────
 
 function parseIntSafe(v) {
@@ -507,4 +577,5 @@ module.exports = {
   getPitcherRecentStarts,
   getBatterRecentStats,
   getBatterStatcast,
+  getProjectedLineup,
 };
