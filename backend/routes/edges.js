@@ -27,8 +27,7 @@ let edgesCache = null;
 let edgesCacheAt = 0;
 const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
 
-// Team name normalization — Odds API uses full names, MLB uses full names too,
-// but minor formatting diffs exist (e.g. "Athletics" vs "Oakland Athletics")
+// Team name normalization
 function normalizeTeam(name) {
   if (!name) return "";
   return name.toLowerCase()
@@ -57,7 +56,6 @@ function matchOddsToGame(game, oddsEvents) {
 
 router.get("/mlb", async (req, res) => {
   try {
-    // Check cache
     if (edgesCache && (Date.now() - edgesCacheAt) < CACHE_TTL_MS) {
       console.log("[Edges] Returning cached results");
       return res.json({ ...edgesCache, cached: true });
@@ -66,7 +64,6 @@ router.get("/mlb", async (req, res) => {
     const today = getEasternDate(0);
     console.log(`[Edges] Computing edges for ${today}`);
 
-    // 1. Fetch today's slate from MLB Stats API
     const allGames = await getScheduleForDate(today);
     const games = allGames.filter(g => g.status !== "postponed" && g.status !== "cancelled");
     console.log(`[Edges] Found ${games.length} MLB games`);
@@ -78,7 +75,6 @@ router.get("/mlb", async (req, res) => {
       return res.json(empty);
     }
 
-    // 2. Fetch sportsbook odds
     let oddsEvents = [];
     try {
       oddsEvents = await getMLBMainOdds();
@@ -87,13 +83,11 @@ router.get("/mlb", async (req, res) => {
       console.error("[Edges] Odds fetch failed, proceeding without odds:", e.message);
     }
 
-    // 3. Match odds to games
     const gamesWithOdds = games.map(g => {
       const oddsMatch = matchOddsToGame(g, oddsEvents);
       return { ...g, _oddsMatch: oddsMatch, _oddsEventId: oddsMatch?.eventId };
     });
 
-    // 4. Run model for each game (parallel — MLB Stats API can handle it)
     const allEdges = await Promise.all(
       gamesWithOdds.map(g => calculateGameEdges(g, g._oddsMatch).catch(err => {
         console.error(`[Edges] Game ${g.id} failed:`, err.message);
@@ -102,7 +96,6 @@ router.get("/mlb", async (req, res) => {
     );
     const gameEdges = allEdges.filter(Boolean);
 
-    // 5. Extract top moneyline edges
     const moneylineEdges = [];
     for (const ge of gameEdges) {
       if (ge.moneyline.awayEdge != null) {
@@ -138,7 +131,6 @@ router.get("/mlb", async (req, res) => {
     }
     moneylineEdges.sort((a, b) => (b.edge ?? -1) - (a.edge ?? -1));
 
-    // 6. Extract top totals edges
     const totalsEdges = [];
     for (const ge of gameEdges) {
       if (ge.totals.line == null) continue;
@@ -177,7 +169,6 @@ router.get("/mlb", async (req, res) => {
     }
     totalsEdges.sort((a, b) => (b.edge ?? -1) - (a.edge ?? -1));
 
-    // 7. HR Props — only for top 5 games to limit quota
     let hrPropEdges = [];
     try {
       const topGamesForHR = gamesWithOdds.slice(0, 5).filter(g => g._oddsEventId);
@@ -197,10 +188,11 @@ router.get("/mlb", async (req, res) => {
         moneyline: ge.moneyline,
         totals: ge.totals,
         pitchers: ge.pitchers,
+        weather: ge.weather,
       })),
       moneylineEdges: moneylineEdges.slice(0, 10),
       totalsEdges: totalsEdges.slice(0, 10),
-      hrPropEdges: hrPropEdges.slice(0, 10),
+      hrPropEdges: hrPropEdges.slice(0, 25),
       computedAt: new Date().toISOString(),
       cached: false,
     };
