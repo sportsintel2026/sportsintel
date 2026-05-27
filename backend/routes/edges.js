@@ -79,8 +79,6 @@ router.get("/mlb", async (req, res) => {
     try {
       oddsEvents = await getMLBMainOdds();
       console.log(`[Edges] Got odds for ${oddsEvents.length} events`);
-      console.log(`[Edges-Match] Odds events teams: ${oddsEvents.slice(0, 8).map(e => `${e.awayTeam}@${e.homeTeam}`).join(' | ')}`);
-      console.log(`[Edges-Match] Our MLB games: ${games.slice(0, 8).map(g => `${g.away}@${g.home}`).join(' | ')}`);
     } catch (e) {
       console.error("[Edges] Odds fetch failed, proceeding without odds:", e.message);
     }
@@ -98,8 +96,14 @@ router.get("/mlb", async (req, res) => {
     );
     const gameEdges = allEdges.filter(Boolean);
 
+    // Helper: is this game live or upcoming (eligible for edge recommendations)
+    const isCompleted = (status) => status === "final";
+
     const moneylineEdges = [];
     for (const ge of gameEdges) {
+      const sourceGame = gamesWithOdds.find(g => g.id === ge.game.id);
+      // Skip completed games from edge recommendations
+      if (isCompleted(sourceGame?.status)) continue;
       if (ge.moneyline.awayEdge != null) {
         moneylineEdges.push({
           gameId: ge.game.id,
@@ -113,6 +117,8 @@ router.get("/mlb", async (req, res) => {
           edge: ge.moneyline.awayEdge,
           confidence: ge.moneyline.awayConfidence,
           time: ge.game.time,
+          status: sourceGame?.status,
+          inning: sourceGame?.inning,
         });
       }
       if (ge.moneyline.homeEdge != null) {
@@ -128,6 +134,8 @@ router.get("/mlb", async (req, res) => {
           edge: ge.moneyline.homeEdge,
           confidence: ge.moneyline.homeConfidence,
           time: ge.game.time,
+          status: sourceGame?.status,
+          inning: sourceGame?.inning,
         });
       }
     }
@@ -135,6 +143,8 @@ router.get("/mlb", async (req, res) => {
 
     const totalsEdges = [];
     for (const ge of gameEdges) {
+      const sourceGame = gamesWithOdds.find(g => g.id === ge.game.id);
+      if (isCompleted(sourceGame?.status)) continue;
       if (ge.totals.line == null) continue;
       if (ge.totals.overEdge != null) {
         totalsEdges.push({
@@ -150,6 +160,8 @@ router.get("/mlb", async (req, res) => {
           confidence: ge.totals.overConfidence,
           venue: ge.game.venue,
           time: ge.game.time,
+          status: sourceGame?.status,
+          inning: sourceGame?.inning,
         });
       }
       if (ge.totals.underEdge != null) {
@@ -166,6 +178,8 @@ router.get("/mlb", async (req, res) => {
           confidence: ge.totals.underConfidence,
           venue: ge.game.venue,
           time: ge.game.time,
+          status: sourceGame?.status,
+          inning: sourceGame?.inning,
         });
       }
     }
@@ -173,10 +187,14 @@ router.get("/mlb", async (req, res) => {
 
     let hrPropEdges = [];
     try {
-      const topGamesForHR = gamesWithOdds.filter(g => g._oddsEventId).slice(0, 5);
+      // Take the first 5 UPCOMING/LIVE games WITH ODDS for HR props
+      // Skip completed games (sportsbooks remove HR props from finished games)
+      const eligibleGamesForHR = gamesWithOdds
+        .filter(g => g._oddsEventId)
+        .filter(g => !isCompleted(g.status));
+      const topGamesForHR = eligibleGamesForHR.slice(0, 5);
       const eventIds = topGamesForHR.map(g => g._oddsEventId);
-      console.log(`[Edges-HR] DIAGNOSTIC — gamesWithOdds.length=${gamesWithOdds.length}, topGamesForHR.length=${topGamesForHR.length}, eventIds=${JSON.stringify(eventIds)}`);
-      console.log(`[Edges-HR] First 5 games and their _oddsEventId: ${gamesWithOdds.slice(0, 5).map(g => `${g.awayAbbr}@${g.homeAbbr}:${g._oddsEventId || 'NULL'}`).join(', ')}`);
+      console.log(`[Edges-HR] eligibleGames=${eligibleGamesForHR.length}, topGamesForHR=${topGamesForHR.length}, eventIds=${JSON.stringify(eventIds)}`);
       if (eventIds.length > 0) {
         const hrOddsByEvent = await getMLBHRPropsForAllEvents(eventIds, 5);
         hrPropEdges = await calculateHRPropEdges(topGamesForHR, hrOddsByEvent);
@@ -190,13 +208,20 @@ router.get("/mlb", async (req, res) => {
 
     const result = {
       date: today,
-      games: gameEdges.map(ge => ({
-        ...ge.game,
-        moneyline: ge.moneyline,
-        totals: ge.totals,
-        pitchers: ge.pitchers,
-        weather: ge.weather,
-      })),
+      games: gameEdges.map(ge => {
+        const sourceGame = gamesWithOdds.find(g => g.id === ge.game.id);
+        return {
+          ...ge.game,
+          moneyline: ge.moneyline,
+          totals: ge.totals,
+          pitchers: ge.pitchers,
+          weather: ge.weather,
+          status: sourceGame?.status,
+          inning: sourceGame?.inning,
+          awayScore: sourceGame?.awayScore,
+          homeScore: sourceGame?.homeScore,
+        };
+      }),
       moneylineEdges: moneylineEdges.slice(0, 10),
       totalsEdges: totalsEdges.slice(0, 10),
       hrPropEdges: hrPropEdges.slice(0, 25),
