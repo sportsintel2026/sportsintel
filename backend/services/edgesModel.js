@@ -1,5 +1,5 @@
-// Edges model v0.2 — research-grade MLB betting projections
-// + Weather, Batter vs Pitcher history, Pitcher recent form
+// Edges model v0.3 — research-grade MLB betting projections
+// + Weather, Batter vs Pitcher, Pitcher recent form, Statcast (exit velo / barrel rate)
 
 const {
   getPitcherSeasonStats,
@@ -10,6 +10,7 @@ const {
   getBatterVsPitcherHistory,
   getPitcherRecentStarts,
   getBatterRecentStats,
+  getBatterStatcast,
 } = require("./mlbStatsApi");
 
 const { americanToImpliedProb } = require("./oddsApi");
@@ -64,7 +65,6 @@ function calculateTotalProjection(game, awayPitcher, homePitcher, awayTeamHit, h
   const pitcherAdj = ((awayPitcherERA + homePitcherERA) / 2 - LEAGUE_AVG.era) * 0.40;
   const parkAdj = (game.parkRunFactor - 1.0) * baseTotal;
 
-  // Weather adjustment
   let weatherAdj = 0;
   if (weather && !weather.indoor) {
     if (weather.windEffect === "out") weatherAdj += 0.4;
@@ -100,7 +100,6 @@ function calculateHRProbability(batterStats, opposingPitcherStats, game, weather
   const parkFactor = game.parkHRFactor || 1.0;
   const isoFactor = batterStats.iso ? (batterStats.iso / LEAGUE_AVG.iso) ** 0.5 : 1.0;
 
-  // Weather boost/penalty for HR likelihood
   let weatherFactor = 1.0;
   if (weather && !weather.indoor) {
     if (weather.windEffect === "out") weatherFactor *= 1.15;
@@ -134,7 +133,6 @@ function rateConfidence(edge) {
 // ── ORCHESTRATION ─────────────────────────────────────────────────────────────
 
 const MAX_HR_GAMES = 5;
-const MAX_BVP_BATTERS_PER_TEAM = 5;
 
 async function calculateGameEdges(game, oddsForGame) {
   const [
@@ -231,6 +229,7 @@ async function calculateGameEdges(game, oddsForGame) {
     },
   };
 }
+
 async function calculateHRPropEdges(games, hrOddsByEvent) {
   const targetGames = games.slice(0, MAX_HR_GAMES);
   const allHRProps = [];
@@ -246,7 +245,6 @@ async function calculateHRPropEdges(games, hrOddsByEvent) {
 
     if (!hrOdds || hrOdds.length === 0) continue;
 
-    // Get weather once per game (cached)
     const weather = await getWeatherForVenue(game.venue);
 
     let matchedCount = 0;
@@ -266,10 +264,11 @@ async function calculateHRPropEdges(games, hrOddsByEvent) {
         ? await getPitcherSeasonStats(opposingPitcherProbable.id)
         : null;
 
-      const [batterStats, recent15, bvp] = await Promise.all([
+      const [batterStats, recent15, bvp, statcast] = await Promise.all([
         getBatterSeasonStats(batter.id),
         getBatterRecentStats(batter.id, 15),
         opposingPitcherProbable ? getBatterVsPitcherHistory(batter.id, opposingPitcherProbable.id) : null,
+        getBatterStatcast(batter.id),
       ]);
 
       const hrProb = calculateHRProbability(batterStats, opposingPitcherStats, game, weather);
@@ -306,6 +305,13 @@ async function calculateHRPropEdges(games, hrOddsByEvent) {
           hr: bvp.homeRuns,
           avg: round3(bvp.avg),
           ops: bvp.ops ? round3(bvp.ops) : null,
+        } : null,
+        statcast: statcast ? {
+          avgExitVelo: statcast.avgExitVelocity,
+          maxExitVelo: statcast.maxExitVelocity,
+          barrelRate: statcast.barrelRate,
+          hardHitRate: statcast.hardHitRate,
+          xwOBA: statcast.xwOBA,
         } : null,
         parkHRFactor: game.parkHRFactor,
         opposingPitcherHR9: opposingPitcherStats?.homeRunsPer9 ?? null,
