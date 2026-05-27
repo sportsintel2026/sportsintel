@@ -136,12 +136,26 @@ function GameDetail({ game, hrProps, hasFullAccess, navigate }) {
 
   const bestEdge = candidates.length > 0 ? candidates.reduce((a, b) => (a.edge > b.edge ? a : b)) : null;
 
+  const hasLineupBvP = (game.lineupBvP?.away?.length > 0) || (game.lineupBvP?.home?.length > 0);
+
   return (
     <div style={{ animation: "fadeIn .3s ease" }}>
       <GameHeader game={game} />
       {bestEdge && <BestEdgeCard edge={bestEdge} game={game} hasFullAccess={hasFullAccess} navigate={navigate} />}
       {game.weather && <WeatherCard weather={game.weather} />}
       <PitcherMatchup awayPitcher={awayP} homePitcher={homeP} hasFullAccess={hasFullAccess} navigate={navigate} />
+      {hasLineupBvP && (
+        <LineupBvPCard
+          awayLineupBvP={game.lineupBvP?.away || []}
+          homeLineupBvP={game.lineupBvP?.home || []}
+          awayAbbr={game.awayAbbr}
+          homeAbbr={game.homeAbbr}
+          awayPitcher={awayP}
+          homePitcher={homeP}
+          hasFullAccess={hasFullAccess}
+          navigate={navigate}
+        />
+      )}
       <WinProbabilityCard awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} awayProb={ml.awayWinProb} homeProb={ml.homeWinProb} awayOdds={ml.awayOdds} homeOdds={ml.homeOdds} awayEdge={ml.awayEdge} homeEdge={ml.homeEdge} hasFullAccess={hasFullAccess} navigate={navigate} />
       <TotalsCard totals={totals} hasFullAccess={hasFullAccess} navigate={navigate} />
       <ContextCard game={game} />
@@ -182,7 +196,6 @@ function WeatherCard({ weather }) {
     );
   }
 
-  // Determine border color based on impact
   const hitterFavored = weather.windEffect === "out" || weather.tempEffect === "hot";
   const pitcherFavored = weather.windEffect === "in" || weather.tempEffect === "cold";
   const borderColor = hitterFavored ? "#22c55e44" : pitcherFavored ? "#ef444444" : "#1f2937";
@@ -311,6 +324,7 @@ function Bar({ pct, color }) {
     </div>
   );
 }
+
 function PitcherMatchup({ awayPitcher, homePitcher, hasFullAccess, navigate }) {
   return (
     <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 20, marginBottom: 18 }}>
@@ -371,6 +385,117 @@ function RecentStartsTable({ starts }) {
               </tr>
             );
           })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ── NEW: Lineup BvP card ─────────────────────────────────────────────────────
+
+function LineupBvPCard({ awayLineupBvP, homeLineupBvP, awayAbbr, homeAbbr, awayPitcher, homePitcher, hasFullAccess, navigate }) {
+  return (
+    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 20, marginBottom: 18, position: "relative" }}>
+      <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 6 }}>
+        ⚔️ Lineup vs Pitcher · Career history
+      </div>
+      <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 16 }}>
+        Showing batters with 5+ career at-bats vs the opposing starter
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, position: "relative" }}>
+        <LineupTable
+          teamAbbr={awayAbbr}
+          opposingPitcherName={homePitcher?.name}
+          lineupBvP={awayLineupBvP}
+        />
+        <LineupTable
+          teamAbbr={homeAbbr}
+          opposingPitcherName={awayPitcher?.name}
+          lineupBvP={homeLineupBvP}
+        />
+      </div>
+      {!hasFullAccess && (
+        <div style={{ position: "absolute", inset: 0, marginTop: 50, background: "rgba(10,14,20,0.92)", backdropFilter: "blur(6px)", borderRadius: 8, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div style={{ fontSize: 13, color: "#9ca3af", marginBottom: 12, textAlign: "center" }}>
+            See how every batter has fared vs the opposing starter
+          </div>
+          <button onClick={() => navigate("/pricing")} style={ctaBtnStyle}>🔒 Unlock lineup BvP — $7/mo</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LineupTable({ teamAbbr, opposingPitcherName, lineupBvP }) {
+  if (!lineupBvP || lineupBvP.length === 0) {
+    return (
+      <div style={{ background: "#0a0e14", border: "1px solid #1f2937", borderRadius: 8, padding: 14 }}>
+        <div style={{ fontSize: 11, color: "#9ca3af", fontWeight: 700, marginBottom: 10 }}>
+          {teamAbbr} batters vs {opposingPitcherName || "TBD"}
+        </div>
+        <div style={{ fontSize: 11, color: "#4b5563", textAlign: "center", padding: 24 }}>
+          No batters with 5+ career AB vs this pitcher
+        </div>
+      </div>
+    );
+  }
+
+  // Sort by AB desc (most familiarity first)
+  const sorted = [...lineupBvP].sort((a, b) => b.atBats - a.atBats);
+
+  // Compute team totals
+  const totals = sorted.reduce((acc, b) => ({
+    atBats: acc.atBats + b.atBats,
+    hits: acc.hits + b.hits,
+    homeRuns: acc.homeRuns + b.homeRuns,
+  }), { atBats: 0, hits: 0, homeRuns: 0 });
+  const teamAvg = totals.atBats > 0 ? totals.hits / totals.atBats : null;
+
+  return (
+    <div style={{ background: "#0a0e14", border: "1px solid #1f2937", borderRadius: 8, overflow: "hidden" }}>
+      <div style={{ padding: "10px 12px", borderBottom: "1px solid #1f2937", background: "#0f1419" }}>
+        <div style={{ fontSize: 11, color: "#9ca3af", fontWeight: 700 }}>
+          {teamAbbr} vs {opposingPitcherName || "TBD"}
+        </div>
+      </div>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+        <thead>
+          <tr style={{ color: "#6b7280" }}>
+            <th style={tableHeaderStyle("left")}>Player</th>
+            <th style={tableHeaderStyle("right")}>AB</th>
+            <th style={tableHeaderStyle("right")}>AVG</th>
+            <th style={tableHeaderStyle("right")}>OPS</th>
+            <th style={tableHeaderStyle("right")}>HR</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map((b, i) => {
+            // Highlight notable batters
+            const notable = b.homeRuns > 0 || (b.atBats >= 10 && b.avg > 0.300);
+            const avgColor = b.avg > 0.300 ? "#22c55e" : b.avg < 0.150 ? "#ef4444" : "#e4e7eb";
+            const opsColor = b.ops > 0.900 ? "#22c55e" : b.ops < 0.500 ? "#ef4444" : "#e4e7eb";
+            return (
+              <tr key={i} style={{ borderTop: "1px solid #131820", background: notable ? "#0f1419" : "transparent" }}>
+                <td style={{ ...tableCellStyle("left"), maxWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {notable && <span style={{ color: "#22c55e", marginRight: 4 }}>⭐</span>}
+                  {b.batterName}
+                </td>
+                <td style={tableCellStyle("right", "#9ca3af", true)}>{b.atBats}</td>
+                <td style={tableCellStyle("right", avgColor, true)}>{b.avg != null ? b.avg.toFixed(3) : "—"}</td>
+                <td style={tableCellStyle("right", opsColor, true)}>{b.ops != null ? b.ops.toFixed(3) : "—"}</td>
+                <td style={tableCellStyle("right", b.homeRuns > 0 ? "#22c55e" : "#9ca3af", true)}>{b.homeRuns}</td>
+              </tr>
+            );
+          })}
+          {totals.atBats > 0 && (
+            <tr style={{ borderTop: "2px solid #1f2937", background: "#0a0e14" }}>
+              <td style={{ ...tableCellStyle("left", "#9ca3af", true), fontSize: 10, letterSpacing: "0.05em", textTransform: "uppercase" }}>Team Total</td>
+              <td style={tableCellStyle("right", "#e4e7eb", true)}>{totals.atBats}</td>
+              <td style={tableCellStyle("right", "#e4e7eb", true)}>{teamAvg != null ? teamAvg.toFixed(3) : "—"}</td>
+              <td style={tableCellStyle("right", "#9ca3af", true)}>—</td>
+              <td style={tableCellStyle("right", totals.homeRuns > 0 ? "#22c55e" : "#9ca3af", true)}>{totals.homeRuns}</td>
+            </tr>
+          )}
         </tbody>
       </table>
     </div>
