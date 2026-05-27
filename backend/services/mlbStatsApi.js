@@ -329,8 +329,7 @@ async function getLinescore(gamePk) {
   }
 }
 
-// ── NEW: Batter vs Pitcher career history ────────────────────────────────────
-// Returns the batter's career stats specifically against this pitcher
+// ── Batter vs Pitcher career history ─────────────────────────────────────────
 
 async function getBatterVsPitcherHistory(batterId, pitcherId) {
   if (!batterId || !pitcherId) return null;
@@ -341,11 +340,9 @@ async function getBatterVsPitcherHistory(batterId, pitcherId) {
       opposingPlayerId: pitcherId,
       sportId: 1,
     });
-    // BvP data comes back differently — find the "career" total
     const splits = data.stats?.[0]?.splits || [];
     if (!splits.length) return null;
 
-    // Aggregate across all splits (different seasons)
     let totals = { atBats: 0, hits: 0, homeRuns: 0, doubles: 0, triples: 0, rbi: 0, walks: 0, strikeouts: 0 };
     for (const sp of splits) {
       const s = sp.stat || {};
@@ -379,8 +376,7 @@ async function getBatterVsPitcherHistory(batterId, pitcherId) {
   }
 }
 
-// ── NEW: Pitcher's last N starts ─────────────────────────────────────────────
-// Returns the pitcher's most recent N starts with line-score-level detail
+// ── Pitcher's last N starts ──────────────────────────────────────────────────
 
 async function getPitcherRecentStarts(pitcherId, count = 3) {
   if (!pitcherId) return [];
@@ -392,7 +388,6 @@ async function getPitcherRecentStarts(pitcherId, count = 3) {
       season: yr,
     });
     const splits = data.stats?.[0]?.splits || [];
-    // Filter to only starts (not relief appearances)
     const starts = splits
       .filter(sp => parseIntSafe(sp.stat?.gamesStarted) > 0)
       .map(sp => {
@@ -416,7 +411,7 @@ async function getPitcherRecentStarts(pitcherId, count = 3) {
   }
 }
 
-// ── NEW: Batter's recent stats (last N days) ─────────────────────────────────
+// ── Batter's recent stats (last N days) ──────────────────────────────────────
 
 async function getBatterRecentStats(batterId, days = 15) {
   if (!batterId) return null;
@@ -458,6 +453,35 @@ async function getBatterRecentStats(batterId, days = 15) {
   }
 }
 
+// ── NEW: Statcast batting stats (exit velo, barrel rate, hard hit %) ─────────
+
+async function getBatterStatcast(batterId, season) {
+  if (!batterId) return null;
+  const yr = season || new Date().getFullYear();
+  try {
+    const data = await mlbGet(`/people/${batterId}/stats`, {
+      stats: "statcast",
+      group: "hitting",
+      season: yr,
+    });
+    const splits = data.stats?.[0]?.splits || [];
+    if (!splits.length) return null;
+    const s = splits[0].stat || {};
+    return {
+      avgExitVelocity: parseFloat(s.avgExitVelocity) || null,
+      maxExitVelocity: parseFloat(s.maxExitVelocity) || null,
+      avgLaunchAngle: parseFloat(s.avgLaunchAngle) || null,
+      barrels: parseIntSafe(s.barrels),
+      barrelRate: parseFloat(s.barrelRate) || null,
+      hardHitRate: parseFloat(s.hardHitRate) || null,
+      sweetSpotRate: parseFloat(s.sweetSpotRate) || null,
+      xwOBA: parseFloat(s.xwOBA) || null,
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
 // ── Utility ───────────────────────────────────────────────────────────────────
 
 function parseIntSafe(v) {
@@ -479,8 +503,8 @@ module.exports = {
   getLinescore,
   getParkHRFactor,
   getParkRunFactor,
-  // NEW exports
   getBatterVsPitcherHistory,
   getPitcherRecentStarts,
   getBatterRecentStats,
+  getBatterStatcast,
 };
