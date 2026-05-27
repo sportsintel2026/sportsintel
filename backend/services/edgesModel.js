@@ -1,13 +1,5 @@
-// Edges model v0.1 — research-grade MLB betting projections
-//
-// PHILOSOPHY: simple, transparent, defensible math on real public data.
-// Not a market-beating model — just an honest one. Inputs are season-to-date
-// stats from MLB Stats API combined with public park factors.
-//
-// MARKETS:
-//   1. Moneyline — who wins?
-//   2. Totals — over/under runs?
-//   3. Home Run props — does player hit a HR?
+// Edges model v0.2 — research-grade MLB betting projections
+// + Weather, Batter vs Pitcher history, Pitcher recent form
 
 const {
   getPitcherSeasonStats,
@@ -15,11 +7,14 @@ const {
   getTeamSeasonStats,
   getTeamPitchingStats,
   getTeamRoster,
+  getBatterVsPitcherHistory,
+  getPitcherRecentStarts,
+  getBatterRecentStats,
 } = require("./mlbStatsApi");
 
 const { americanToImpliedProb } = require("./oddsApi");
+const { getWeatherForVenue } = require("./weatherApi");
 
-// League averages (2025 MLB) — used as fallbacks when stats are missing
 const LEAGUE_AVG = {
   era: 4.30,
   runsPerGame: 4.40,
@@ -27,6 +22,8 @@ const LEAGUE_AVG = {
   homeRunsPer9: 1.20,
   iso: 0.155,
 };
+
+// ── MONEYLINE MODEL ───────────────────────────────────────────────────────────
 
 function calculateMoneylineProjection(game, awayPitcher, homePitcher, awayTeamHit, homeTeamHit, awayTeamPit, homeTeamPit) {
   const awayPitcherFactor = awayPitcher?.era ? LEAGUE_AVG.era / Math.max(awayPitcher.era, 1.5) : 1.0;
@@ -55,7 +52,9 @@ function calculateMoneylineProjection(game, awayPitcher, homePitcher, awayTeamHi
   return { awayWinProb: round3(awayWinProb), homeWinProb: round3(homeWinProb) };
 }
 
-function calculateTotalProjection(game, awayPitcher, homePitcher, awayTeamHit, homeTeamHit) {
+// ── TOTALS MODEL ──────────────────────────────────────────────────────────────
+
+function calculateTotalProjection(game, awayPitcher, homePitcher, awayTeamHit, homeTeamHit, weather) {
   const awayRPG = awayTeamHit?.runsPerGame ?? LEAGUE_AVG.runsPerGame;
   const homeRPG = homeTeamHit?.runsPerGame ?? LEAGUE_AVG.runsPerGame;
   const baseTotal = awayRPG + homeRPG;
@@ -65,7 +64,16 @@ function calculateTotalProjection(game, awayPitcher, homePitcher, awayTeamHit, h
   const pitcherAdj = ((awayPitcherERA + homePitcherERA) / 2 - LEAGUE_AVG.era) * 0.40;
   const parkAdj = (game.parkRunFactor - 1.0) * baseTotal;
 
-  const projected = baseTotal + pitcherAdj + parkAdj;
+  // Weather adjustment
+  let weatherAdj = 0;
+  if (weather && !weather.indoor) {
+    if (weather.windEffect === "out") weatherAdj += 0.4;
+    if (weather.windEffect === "in") weatherAdj -= 0.4;
+    if (weather.tempEffect === "hot") weatherAdj += 0.3;
+    if (weather.tempEffect === "cold") weatherAdj -= 0.3;
+  }
+
+  const projected = baseTotal + pitcherAdj + parkAdj + weatherAdj;
 
   return {
     projectedTotal: round2(projected),
@@ -73,11 +81,14 @@ function calculateTotalProjection(game, awayPitcher, homePitcher, awayTeamHit, h
       base: round2(baseTotal),
       pitcherAdj: round2(pitcherAdj),
       parkAdj: round2(parkAdj),
+      weatherAdj: round2(weatherAdj),
     },
   };
 }
 
-function calculateHRProbability(batterStats, opposingPitcherStats, game) {
+// ── HR PROP MODEL ─────────────────────────────────────────────────────────────
+
+function calculateHRProbability(batterStats, opposingPitcherStats, game, weather) {
   if (!batterStats) return null;
 
   const baseHRRate = batterStats.hrPerPA ?? LEAGUE_AVG.hrPerPA;
@@ -89,12 +100,21 @@ function calculateHRProbability(batterStats, opposingPitcherStats, game) {
   const parkFactor = game.parkHRFactor || 1.0;
   const isoFactor = batterStats.iso ? (batterStats.iso / LEAGUE_AVG.iso) ** 0.5 : 1.0;
 
-  const perPAProb = Math.min(0.15, baseHRRate * pitcherFactor * parkFactor * isoFactor);
-  const noHRProb = Math.pow(1 - perPAProb, expectedPA);
-  const hrProb = 1 - noHRProb;
+  // Weather boost/penalty for HR likelihood
+  let weatherFactor = 1.0;
+  if (weather && !weather.indoor) {
+    if (weather.windEffect === "out") weatherFactor *= 1.15;
+    if (weather.windEffect === "in") weatherFactor *= 0.85;
+    if (weather.tempEffect === "hot") weatherFactor *= 1.08;
+    if (weather.tempEffect === "cold") weatherFactor *= 0.92;
+  }
 
-  return round3(hrProb);
+  const perPAProb = Math.min(0.15, baseHRRate * pitcherFactor * parkFactor * isoFactor * weatherFactor);
+  const noHRProb = Math.pow(1 - perPAProb, expectedPA);
+  return round3(1 - noHRProb);
 }
+
+// ── EDGE CALCULATION ──────────────────────────────────────────────────────────
 
 function calculateEdge(modelProb, americanOdds) {
   if (modelProb == null || americanOdds == null) return null;
@@ -111,20 +131,36 @@ function rateConfidence(edge) {
   return "NEUTRAL";
 }
 
+// ── ORCHESTRATION ─────────────────────────────────────────────────────────────
+
 const MAX_HR_GAMES = 5;
+const MAX_BVP_BATTERS_PER_TEAM = 5;
 
 async function calculateGameEdges(game, oddsForGame) {
-  const [awayPitcher, homePitcher, awayTeamHit, homeTeamHit, awayTeamPit, homeTeamPit] = await Promise.all([
+  const [
+    awayPitcher,
+    homePitcher,
+    awayTeamHit,
+    homeTeamHit,
+    awayTeamPit,
+    homeTeamPit,
+    weather,
+    awayPitcherRecent,
+    homePitcherRecent,
+  ] = await Promise.all([
     game.awayProbable ? getPitcherSeasonStats(game.awayProbable.id) : null,
     game.homeProbable ? getPitcherSeasonStats(game.homeProbable.id) : null,
     getTeamSeasonStats(game.awayId),
     getTeamSeasonStats(game.homeId),
     getTeamPitchingStats(game.awayId),
     getTeamPitchingStats(game.homeId),
+    getWeatherForVenue(game.venue),
+    game.awayProbable ? getPitcherRecentStarts(game.awayProbable.id, 3) : [],
+    game.homeProbable ? getPitcherRecentStarts(game.homeProbable.id, 3) : [],
   ]);
 
   const ml = calculateMoneylineProjection(game, awayPitcher, homePitcher, awayTeamHit, homeTeamHit, awayTeamPit, homeTeamPit);
-  const totals = calculateTotalProjection(game, awayPitcher, homePitcher, awayTeamHit, homeTeamHit);
+  const totals = calculateTotalProjection(game, awayPitcher, homePitcher, awayTeamHit, homeTeamHit, weather);
 
   const odds = oddsForGame || { h2h: {}, totals: {} };
   const awayML = odds.h2h?.away;
@@ -158,9 +194,18 @@ async function calculateGameEdges(game, oddsForGame) {
       parkRunFactor: game.parkRunFactor,
     },
     pitchers: {
-      away: game.awayProbable ? { ...game.awayProbable, stats: awayPitcher } : null,
-      home: game.homeProbable ? { ...game.homeProbable, stats: homePitcher } : null,
+      away: game.awayProbable ? {
+        ...game.awayProbable,
+        stats: awayPitcher,
+        recentStarts: awayPitcherRecent,
+      } : null,
+      home: game.homeProbable ? {
+        ...game.homeProbable,
+        stats: homePitcher,
+        recentStarts: homePitcherRecent,
+      } : null,
     },
+    weather,
     moneyline: {
       awayWinProb: ml.awayWinProb,
       homeWinProb: ml.homeWinProb,
@@ -186,7 +231,6 @@ async function calculateGameEdges(game, oddsForGame) {
     },
   };
 }
-
 async function calculateHRPropEdges(games, hrOddsByEvent) {
   const targetGames = games.slice(0, MAX_HR_GAMES);
   const allHRProps = [];
@@ -201,6 +245,9 @@ async function calculateHRPropEdges(games, hrOddsByEvent) {
     console.log(`[HRProps] Game ${game.awayAbbr}@${game.homeAbbr}: eventId=${eventId}, oddsCount=${hrOdds?.length ?? 0}`);
 
     if (!hrOdds || hrOdds.length === 0) continue;
+
+    // Get weather once per game (cached)
+    const weather = await getWeatherForVenue(game.venue);
 
     let matchedCount = 0;
     let unmatchedNames = [];
@@ -219,8 +266,13 @@ async function calculateHRPropEdges(games, hrOddsByEvent) {
         ? await getPitcherSeasonStats(opposingPitcherProbable.id)
         : null;
 
-      const batterStats = await getBatterSeasonStats(batter.id);
-      const hrProb = calculateHRProbability(batterStats, opposingPitcherStats, game);
+      const [batterStats, recent15, bvp] = await Promise.all([
+        getBatterSeasonStats(batter.id),
+        getBatterRecentStats(batter.id, 15),
+        opposingPitcherProbable ? getBatterVsPitcherHistory(batter.id, opposingPitcherProbable.id) : null,
+      ]);
+
+      const hrProb = calculateHRProbability(batterStats, opposingPitcherStats, game, weather);
       if (hrProb == null) continue;
 
       const edge = calculateEdge(hrProb, propOdds.price);
@@ -241,8 +293,23 @@ async function calculateHRPropEdges(games, hrOddsByEvent) {
           slg: batterStats.slg,
           hrPerPA: round3(batterStats.hrPerPA),
         } : null,
+        recent15: recent15 ? {
+          atBats: recent15.atBats,
+          hr: recent15.homeRuns,
+          avg: recent15.avg,
+          ops: recent15.ops,
+          hrPerAB: round3(recent15.hrPerAB),
+        } : null,
+        bvp: bvp ? {
+          atBats: bvp.atBats,
+          hits: bvp.hits,
+          hr: bvp.homeRuns,
+          avg: round3(bvp.avg),
+          ops: bvp.ops ? round3(bvp.ops) : null,
+        } : null,
         parkHRFactor: game.parkHRFactor,
         opposingPitcherHR9: opposingPitcherStats?.homeRunsPer9 ?? null,
+        weatherEffect: weather?.windEffect || null,
       });
     }
 
@@ -262,6 +329,8 @@ async function calculateHRPropEdges(games, hrOddsByEvent) {
 function findEventIdForGame(game, hrOddsByEvent) {
   return game._oddsEventId || null;
 }
+
+// ── PLAYER NAME MATCHING ──────────────────────────────────────────────────────
 
 const rosterCache = new Map();
 
@@ -309,6 +378,8 @@ async function findPlayerByName(playerName, teamIds) {
   }
   return null;
 }
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function sigmoid(x) { return 1 / (1 + Math.exp(-x)); }
 function round2(n) { return Math.round(n * 100) / 100; }
