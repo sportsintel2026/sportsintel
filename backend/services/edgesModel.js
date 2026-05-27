@@ -23,12 +23,10 @@ const { americanToImpliedProb } = require("./oddsApi");
 const LEAGUE_AVG = {
   era: 4.30,
   runsPerGame: 4.40,
-  hrPerPA: 0.032,  // ~3.2% of plate appearances result in HR
+  hrPerPA: 0.032,
   homeRunsPer9: 1.20,
   iso: 0.155,
 };
-
-// ── 1. MONEYLINE MODEL ────────────────────────────────────────────────────────
 
 function calculateMoneylineProjection(game, awayPitcher, homePitcher, awayTeamHit, homeTeamHit, awayTeamPit, homeTeamPit) {
   const awayPitcherFactor = awayPitcher?.era ? LEAGUE_AVG.era / Math.max(awayPitcher.era, 1.5) : 1.0;
@@ -57,8 +55,6 @@ function calculateMoneylineProjection(game, awayPitcher, homePitcher, awayTeamHi
   return { awayWinProb: round3(awayWinProb), homeWinProb: round3(homeWinProb) };
 }
 
-// ── 2. TOTALS MODEL ───────────────────────────────────────────────────────────
-
 function calculateTotalProjection(game, awayPitcher, homePitcher, awayTeamHit, homeTeamHit) {
   const awayRPG = awayTeamHit?.runsPerGame ?? LEAGUE_AVG.runsPerGame;
   const homeRPG = homeTeamHit?.runsPerGame ?? LEAGUE_AVG.runsPerGame;
@@ -81,8 +77,6 @@ function calculateTotalProjection(game, awayPitcher, homePitcher, awayTeamHit, h
   };
 }
 
-// ── 3. HOME RUN PROP MODEL ────────────────────────────────────────────────────
-
 function calculateHRProbability(batterStats, opposingPitcherStats, game) {
   if (!batterStats) return null;
 
@@ -102,8 +96,6 @@ function calculateHRProbability(batterStats, opposingPitcherStats, game) {
   return round3(hrProb);
 }
 
-// ── EDGE CALCULATION ──────────────────────────────────────────────────────────
-
 function calculateEdge(modelProb, americanOdds) {
   if (modelProb == null || americanOdds == null) return null;
   const implied = americanToImpliedProb(americanOdds);
@@ -118,8 +110,6 @@ function rateConfidence(edge) {
   if (edge >= 0.005) return "LOW";
   return "NEUTRAL";
 }
-
-// ── ORCHESTRATION ─────────────────────────────────────────────────────────────
 
 const MAX_HR_GAMES = 5;
 
@@ -273,21 +263,18 @@ function findEventIdForGame(game, hrOddsByEvent) {
   return game._oddsEventId || null;
 }
 
-// ── PLAYER NAME MATCHING ──────────────────────────────────────────────────────
-// Handles: accents (José→Jose), suffixes (Jr./Sr./II/III), punctuation (J.D.→JD)
-
 const rosterCache = new Map();
 
 function normalizePlayerName(name) {
   if (!name) return "";
   return name
-    .normalize("NFD")                       // split accents from letters
-    .replace(/[\u0300-\u036f]/g, "")        // strip the accent marks
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
-    .replace(/[.,'`]/g, "")                 // strip punctuation
-    .replace(/\s+(jr|sr|ii|iii|iv)\.?$/i, "") // strip suffixes from end
+    .replace(/[.,'`]/g, "")
+    .replace(/\s+(jr|sr|ii|iii|iv)\.?$/i, "")
     .trim()
-    .replace(/\s+/g, " ");                  // collapse whitespace
+    .replace(/\s+/g, " ");
 }
 
 function extractLastName(normalizedName) {
@@ -308,15 +295,12 @@ async function findPlayerByName(playerName, teamIds) {
     }
     const roster = rosterCache.get(teamId);
 
-    // 1. Exact match on normalized name
     let match = roster.find(p => normalizePlayerName(p.name) === normalized);
     if (match) return { ...match, teamId };
 
-    // 2. Last name match
     match = roster.find(p => extractLastName(normalizePlayerName(p.name)) === targetLastName);
     if (match) return { ...match, teamId };
 
-    // 3. Contains match (Odds API name appears within roster name or vice versa)
     match = roster.find(p => {
       const rn = normalizePlayerName(p.name);
       return rn.includes(normalized) || normalized.includes(rn);
@@ -325,8 +309,6 @@ async function findPlayerByName(playerName, teamIds) {
   }
   return null;
 }
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function sigmoid(x) { return 1 / (1 + Math.exp(-x)); }
 function round2(n) { return Math.round(n * 100) / 100; }
