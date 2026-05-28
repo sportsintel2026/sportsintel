@@ -3,30 +3,25 @@
 // GET /api/edges/mlb
 //   Returns today's MLB games with model projections, sportsbook odds, and edges
 //   Caches results in memory for 15 minutes
-
 const express = require("express");
 const router = express.Router();
-
 const {
   getEasternDate,
   getScheduleForDate,
 } = require("../services/mlbStatsApi");
-
 const {
   getMLBMainOdds,
   getMLBHRPropsForAllEvents,
 } = require("../services/oddsApi");
-
 const {
   calculateGameEdges,
   calculateHRPropEdges,
 } = require("../services/edgesModel");
-
+const { recordPredictions } = require("../services/predictionTracker");
 // In-memory cache
 let edgesCache = null;
 let edgesCacheAt = 0;
 const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
-
 // Team name normalization
 function normalizeTeam(name) {
   if (!name) return "";
@@ -34,7 +29,6 @@ function normalizeTeam(name) {
     .replace(/^(los angeles|new york|san francisco|san diego|st\.? louis|tampa bay|chicago|kansas city|washington|cleveland|cincinnati|colorado|arizona|atlanta|baltimore|boston|detroit|houston|miami|milwaukee|minnesota|oakland|philadelphia|pittsburgh|seattle|texas|toronto)\s+/i, "")
     .trim();
 }
-
 function matchOddsToGame(game, oddsEvents) {
   const awayN = normalizeTeam(game.away);
   const homeN = normalizeTeam(game.home);
@@ -51,30 +45,24 @@ function matchOddsToGame(game, oddsEvents) {
   }
   return null;
 }
-
 // ── Main endpoint ─────────────────────────────────────────────────────────────
-
 router.get("/mlb", async (req, res) => {
   try {
     if (edgesCache && (Date.now() - edgesCacheAt) < CACHE_TTL_MS) {
       console.log("[Edges] Returning cached results");
       return res.json({ ...edgesCache, cached: true });
     }
-
     const today = getEasternDate(0);
     console.log(`[Edges] Computing edges for ${today}`);
-
     const allGames = await getScheduleForDate(today);
     const games = allGames.filter(g => g.status !== "postponed" && g.status !== "cancelled");
     console.log(`[Edges] Found ${games.length} MLB games`);
-
     if (games.length === 0) {
       const empty = { date: today, games: [], moneylineEdges: [], totalsEdges: [], hrPropEdges: [], computedAt: new Date().toISOString() };
       edgesCache = empty;
       edgesCacheAt = Date.now();
       return res.json(empty);
     }
-
     let oddsEvents = [];
     try {
       oddsEvents = await getMLBMainOdds();
@@ -82,12 +70,10 @@ router.get("/mlb", async (req, res) => {
     } catch (e) {
       console.error("[Edges] Odds fetch failed, proceeding without odds:", e.message);
     }
-
     const gamesWithOdds = games.map(g => {
       const oddsMatch = matchOddsToGame(g, oddsEvents);
       return { ...g, _oddsMatch: oddsMatch, _oddsEventId: oddsMatch?.eventId };
     });
-
     const allEdges = await Promise.all(
       gamesWithOdds.map(g => calculateGameEdges(g, g._oddsMatch).catch(err => {
         console.error(`[Edges] Game ${g.id} failed:`, err.message);
@@ -95,10 +81,8 @@ router.get("/mlb", async (req, res) => {
       }))
     );
     const gameEdges = allEdges.filter(Boolean);
-
     // Helper: is this game live or upcoming (eligible for edge recommendations)
     const isCompleted = (status) => status === "final";
-
     const moneylineEdges = [];
     for (const ge of gameEdges) {
       const sourceGame = gamesWithOdds.find(g => g.id === ge.game.id);
@@ -140,7 +124,6 @@ router.get("/mlb", async (req, res) => {
       }
     }
     moneylineEdges.sort((a, b) => (b.edge ?? -1) - (a.edge ?? -1));
-
     const totalsEdges = [];
     for (const ge of gameEdges) {
       const sourceGame = gamesWithOdds.find(g => g.id === ge.game.id);
@@ -184,7 +167,6 @@ router.get("/mlb", async (req, res) => {
       }
     }
     totalsEdges.sort((a, b) => (b.edge ?? -1) - (a.edge ?? -1));
-
     let hrPropEdges = [];
     try {
       // Take the first 5 UPCOMING/LIVE games WITH ODDS for HR props
@@ -205,7 +187,6 @@ router.get("/mlb", async (req, res) => {
       console.error("[Edges] HR props failed:", e.message);
       console.error(e.stack);
     }
-
     const result = {
       date: today,
       games: gameEdges.map(ge => {
@@ -228,21 +209,23 @@ router.get("/mlb", async (req, res) => {
       computedAt: new Date().toISOString(),
       cached: false,
     };
-
     edgesCache = result;
     edgesCacheAt = Date.now();
+
+    // Snapshot predictions for performance tracking (fire-and-forget; deduped by
+    // unique constraint so repeated computes during the day are no-ops).
+    recordPredictions(result).catch(e => console.error("[Edges] recordPredictions failed:", e.message));
+
     res.json(result);
   } catch (err) {
     console.error("[Edges] Error:", err);
     res.status(500).json({ error: "Failed to compute edges", details: err.message });
   }
 });
-
 // Debug endpoint — clear cache
 router.delete("/cache", (req, res) => {
   edgesCache = null;
   edgesCacheAt = 0;
   res.json({ cleared: true });
 });
-
 module.exports = router;
