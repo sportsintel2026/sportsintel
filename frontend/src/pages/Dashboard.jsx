@@ -32,7 +32,7 @@ export default function DashboardPage() {
     const loadPicks = async () => {
       try {
         const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
-        const { data } = await supabase.from("daily_picks").select("*").eq("date", today).single();
+        const { data } = await supabase.from("daily_picks").select("*").eq("date", today).maybeSingle();
         if (data?.picks) setPicks(JSON.parse(data.picks));
       } catch (e) {}
     };
