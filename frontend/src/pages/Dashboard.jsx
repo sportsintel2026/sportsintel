@@ -153,11 +153,6 @@ function MLBDashboard({ edges, loading, picks, hasFullAccess, navigate, onRefres
   const date = new Date().toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
   const gameCount = edges.games?.length || 0;
 
-  const allGames = edges.games || [];
-  const liveGames = allGames.filter(g => g.status === "live");
-  const upcomingGames = allGames.filter(g => g.status !== "live" && g.status !== "final");
-  const finalGames = allGames.filter(g => g.status === "final");
-
   return (
     <div style={{ animation: "fadeIn .3s ease" }}>
       <div style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 8 }}>
@@ -181,9 +176,15 @@ function MLBDashboard({ edges, loading, picks, hasFullAccess, navigate, onRefres
         <EdgePanel title="Top home run props" icon="💣" edges={edges.hrPropEdges || []} renderRow={(e) => <HRPropRow edge={e} key={e.player + e.game} />} emptyText="HR prop data updates closer to first pitch" hasFullAccess={hasFullAccess} navigate={navigate} wide />
       </div>
 
-      {liveGames.length > 0 && <GamesSection title="🔴 LIVE NOW" titleColor="#ef4444" games={liveGames} navigate={navigate} defaultOpen showLiveBadge />}
-      {upcomingGames.length > 0 && <GamesSection title="⏰ UPCOMING" titleColor="#9ca3af" games={upcomingGames} navigate={navigate} defaultOpen />}
-      {finalGames.length > 0 && <GamesSection title="✅ FINAL" titleColor="#6b7280" games={finalGames} navigate={navigate} defaultOpen={false} showFinalScore />}
+      <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 8, padding: "16px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "#e4e7eb", marginBottom: 2 }}>⚾ Want to see all today's games?</div>
+          <div style={{ fontSize: 12, color: "#9ca3af" }}>{gameCount} games · live scores, matchups, weather & more</div>
+        </div>
+        <button onClick={() => navigate("/games")} style={{ background: "#ef4444", color: "#fff", border: "none", borderRadius: 6, padding: "10px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}>
+          View MLB Games →
+        </button>
+      </div>
     </div>
   );
 }
