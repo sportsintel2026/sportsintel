@@ -1,0 +1,215 @@
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../hooks/useAuth";
+import { subscriptionApi } from "../lib/api";
+import Sidebar from "./Sidebar";
+
+const API_BASE = import.meta.env.VITE_API_URL || "https://sportsintel-production.up.railway.app";
+
+export default function PerformancePage() {
+  const { user, signOut } = useAuth();
+  const navigate = useNavigate();
+  const [plan, setPlan] = useState({ tier: "free", isAdmin: false });
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  useEffect(() => { subscriptionApi.getMyPlan().then(setPlan).catch(() => {}); }, []);
+
+  useEffect(() => {
+    setLoading(true); setError(false);
+    fetch(`${API_BASE}/api/performance/mlb`)
+      .then(r => { if (!r.ok) throw new Error("bad"); return r.json(); })
+      .then(d => { setData(d); setLoading(false); })
+      .catch(() => { setError(true); setLoading(false); });
+  }, []);
+
+  return (
+    <div style={{ minHeight: "100vh", background: "#0a0e14", color: "#e4e7eb", fontFamily: "'Inter',system-ui,-apple-system,sans-serif" }}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+        *{box-sizing:border-box}
+        @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+        @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes spin{to{transform:rotate(360deg)}}
+        @keyframes slideIn{from{transform:translateX(-100%)}to{transform:translateX(0)}}
+        .mobile-only{display:none}
+        .desktop-sidebar{display:block}
+        @media (max-width: 768px) {
+          .desktop-sidebar{display:none!important}
+          .main-content{margin-left:0!important}
+          .mobile-only{display:flex!important}
+          .perf-grid{grid-template-columns:1fr!important}
+          .perf-content{padding:16px 14px 60px!important}
+          h1{font-size:24px!important}
+        }
+      `}</style>
+
+      <div className="desktop-sidebar">
+        <Sidebar user={user} plan={plan} signOut={signOut} navigate={navigate} />
+      </div>
+
+      {drawerOpen && (
+        <>
+          <div onClick={() => setDrawerOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 49 }} />
+          <div style={{ position: "fixed", top: 0, left: 0, bottom: 0, animation: "slideIn .2s ease-out", zIndex: 51 }}>
+            <Sidebar user={user} plan={plan} signOut={signOut} navigate={(path) => { setDrawerOpen(false); navigate(path); }} />
+          </div>
+        </>
+      )}
+
+      <div className="mobile-only" style={{ display: "none", position: "sticky", top: 0, zIndex: 40, background: "#0a0e14", borderBottom: "1px solid #1a1f28", padding: "10px 14px", alignItems: "center", justifyContent: "space-between" }}>
+        <button onClick={() => setDrawerOpen(true)} style={{ background: "none", border: "none", color: "#e4e7eb", fontSize: 22, padding: 4, cursor: "pointer" }}>☰</button>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e", animation: "pulse 2s infinite" }} />
+          <span style={{ fontSize: 15, fontWeight: 800 }}>Sports<span style={{ color: "#ef4444" }}>intel</span></span>
+        </div>
+        <div style={{ width: 30 }} />
+      </div>
+
+      <div className="main-content" style={{ marginLeft: 200 }}>
+        <div className="perf-content" style={{ maxWidth: 900, margin: "0 auto", padding: "32px 24px 80px", animation: "fadeIn .3s ease" }}>
+          <h1 style={{ margin: "0 0 8px", fontSize: 28, fontWeight: 700, letterSpacing: "-0.01em" }}>📈 Model Performance</h1>
+          <p style={{ margin: "0 0 28px", fontSize: 13, color: "#9ca3af" }}>
+            How the model's edges have actually performed · MLB moneyline & totals
+          </p>
+
+          {loading && <Loader />}
+          {error && !loading && <ErrorState />}
+          {!loading && !error && data && <PerfBody data={data} />}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PerfBody({ data }) {
+  const graded = data.totalGraded || 0;
+  const pending = data.pendingCount || 0;
+
+  if (graded === 0) {
+    return (
+      <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 40, textAlign: "center" }}>
+        <div style={{ fontSize: 40, marginBottom: 14 }}>⏳</div>
+        <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>Building the track record</div>
+        <p style={{ fontSize: 13, color: "#9ca3af", maxWidth: 420, margin: "0 auto", lineHeight: 1.7 }}>
+          The model is recording its predictions now. Once today's games finish, results start posting here.
+          {pending > 0 && ` ${pending} prediction${pending === 1 ? "" : "s"} currently tracking.`}
+        </p>
+        <div style={{ marginTop: 20, fontSize: 11, color: "#6b7280" }}>
+          A meaningful sample takes a few weeks. Every day adds data.
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {/* Disclaimer */}
+      <div style={{ background: "#1a1410", border: "1px solid #f5970022", borderLeft: "3px solid #f59700", borderRadius: 6, padding: "10px 14px", marginBottom: 20, fontSize: 12, color: "#fbbf24" }}>
+        <strong>Honest tracking.</strong> <span style={{ color: "#a8915c" }}>
+          {graded} graded result{graded === 1 ? "" : "s"} so far{pending > 0 ? ` · ${pending} still pending` : ""}. Small samples are noisy — a few weeks of data is where this gets meaningful.
+        </span>
+      </div>
+
+      {/* Overall hero */}
+      <OverallCard o={data.overall} />
+
+      {/* By market */}
+      <SectionTitle>By market</SectionTitle>
+      <div className="perf-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 24 }}>
+        {Object.entries(data.byMarket || {}).map(([market, b]) => (
+          <StatCard key={market} label={marketLabel(market)} b={b} />
+        ))}
+      </div>
+
+      {/* By confidence */}
+      <SectionTitle>By confidence tier</SectionTitle>
+      <div className="perf-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        {["HIGH", "MEDIUM", "LOW", "NEUTRAL"]
+          .filter(c => data.byConfidence?.[c])
+          .map(c => <StatCard key={c} label={c} b={data.byConfidence[c]} accent={confColor(c)} />)}
+      </div>
+    </div>
+  );
+}
+
+function OverallCard({ o }) {
+  if (!o || o.total === 0) return null;
+  const profit = o.units >= 0;
+  return (
+    <div style={{ background: "linear-gradient(180deg,#0f1419,#0a0e14)", border: "1px solid #1f2937", borderRadius: 12, padding: 24, marginBottom: 24 }}>
+      <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 16 }}>Overall record</div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16 }}>
+        <Metric label="Record" value={`${o.wins}-${o.losses}`} />
+        <Metric label="Win %" value={o.winPct != null ? `${o.winPct}%` : "—"} color={o.winPct >= 52.4 ? "#22c55e" : "#e4e7eb"} />
+        <Metric label="ROI" value={o.roi != null ? `${profit ? "+" : ""}${o.roi}%` : "—"} color={profit ? "#22c55e" : "#ef4444"} />
+      </div>
+      <div style={{ marginTop: 14, fontSize: 11, color: "#6b7280", lineHeight: 1.6 }}>
+        Win % above ~52.4% is the break-even line for standard -110 odds. ROI assumes 1 unit per play.
+      </div>
+    </div>
+  );
+}
+
+function StatCard({ label, b, accent }) {
+  if (!b || b.total === 0) return null;
+  const profit = b.units >= 0;
+  return (
+    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 16 }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: accent || "#e4e7eb", marginBottom: 12 }}>{label}</div>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+        <span style={{ fontSize: 11, color: "#6b7280" }}>Record</span>
+        <span style={{ fontSize: 13, fontWeight: 600 }}>{b.wins}-{b.losses}</span>
+      </div>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+        <span style={{ fontSize: 11, color: "#6b7280" }}>Win %</span>
+        <span style={{ fontSize: 13, fontWeight: 600, color: b.winPct >= 52.4 ? "#22c55e" : "#e4e7eb" }}>{b.winPct != null ? `${b.winPct}%` : "—"}</span>
+      </div>
+      <div style={{ display: "flex", justifyContent: "space-between" }}>
+        <span style={{ fontSize: 11, color: "#6b7280" }}>ROI</span>
+        <span style={{ fontSize: 13, fontWeight: 600, color: profit ? "#22c55e" : "#ef4444" }}>{b.roi != null ? `${profit ? "+" : ""}${b.roi}%` : "—"}</span>
+      </div>
+    </div>
+  );
+}
+
+function Metric({ label, value, color }) {
+  return (
+    <div>
+      <div style={{ fontSize: 10, color: "#6b7280", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 600, marginBottom: 6 }}>{label}</div>
+      <div style={{ fontSize: 28, fontWeight: 800, color: color || "#e4e7eb", lineHeight: 1 }}>{value}</div>
+    </div>
+  );
+}
+
+function SectionTitle({ children }) {
+  return <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#6b7280", fontWeight: 700, textTransform: "uppercase", marginBottom: 12 }}>{children}</div>;
+}
+
+function marketLabel(m) {
+  return m === "moneyline" ? "Moneyline" : m === "total" ? "Totals" : m === "hr_prop" ? "HR Props" : m;
+}
+function confColor(c) {
+  return c === "HIGH" ? "#22c55e" : c === "MEDIUM" ? "#f59e0b" : "#9ca3af";
+}
+
+function Loader() {
+  return (
+    <div style={{ textAlign: "center", padding: 64 }}>
+      <div style={{ width: 30, height: 30, border: "3px solid #1f2937", borderTopColor: "#ef4444", borderRadius: "50%", animation: "spin .8s linear infinite", margin: "0 auto 14px" }} />
+      <div style={{ fontSize: 13, color: "#6b7280" }}>Loading track record...</div>
+    </div>
+  );
+}
+
+function ErrorState() {
+  return (
+    <div style={{ textAlign: "center", padding: 48, background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10 }}>
+      <div style={{ fontSize: 28, marginBottom: 10 }}>⚠️</div>
+      <div style={{ fontSize: 14, fontWeight: 600 }}>Couldn't load performance</div>
+      <div style={{ fontSize: 12, color: "#6b7280", marginTop: 6 }}>The tracker may still be warming up. Check back shortly.</div>
+    </div>
+  );
+}
