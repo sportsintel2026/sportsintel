@@ -8,6 +8,8 @@ import GameDetailPage from "./pages/GameDetail";
 import PricingPage from "./pages/Pricing";
 import ResetPasswordPage from "./pages/ResetPassword";
 import AdminPage from "./pages/Admin";
+import SettingsPage from "./pages/Settings";
+import MyPicksPage from "./pages/MyPicks";
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth();
@@ -50,6 +52,16 @@ export default function App() {
           <Route path="/game/mlb/:gameId" element={
             <PrivateRoute>
               <GameDetailPage />
+            </PrivateRoute>
+          } />
+          <Route path="/settings" element={
+            <PrivateRoute>
+              <SettingsPage />
+            </PrivateRoute>
+          } />
+          <Route path="/my-picks" element={
+            <PrivateRoute>
+              <MyPicksPage />
             </PrivateRoute>
           } />
           <Route path="*" element={<Navigate to="/" replace />} />
