@@ -22,18 +22,18 @@ export default function LandingPage() {
 
   // The depth — what actually powers the model
   const MODEL_INPUTS = [
-    { icon: "🌤", title: "Live Weather", desc: "Real wind direction, speed, and temperature for every outdoor park — folded directly into run and HR projections" },
-    { icon: "⚔️", title: "Batter vs Pitcher", desc: "Career head-to-head history — every hitter's AVG, AB, and HR against today's opposing starter" },
-    { icon: "📈", title: "Recent Form", desc: "Last-15-day batter splits and each pitcher's last 3 starts — because season averages hide who's hot right now" },
-    { icon: "🏟️", title: "Park Factors", desc: "30 stadium-specific run and HR multipliers — Coors plays nothing like Oracle Park" },
-    { icon: "🎯", title: "Pitcher Profiles", desc: "ERA, WHIP, K/9, BB/9, HR/9 — the rate stats that actually predict outcomes" },
+    { icon: "📊", title: "Model Projections", desc: "Win probabilities and projected scoring built from real performance data, not gut feel" },
+    { icon: "⚔️", title: "Matchup History", desc: "Head-to-head history that shows how the people involved have actually performed against each other" },
+    { icon: "📈", title: "Recent Form", desc: "Who's hot and who's cold right now — because season averages hide what's happening lately" },
+    { icon: "🌤", title: "Situational Factors", desc: "Conditions, venue, and context that the raw stat line leaves out but that quietly move games" },
+    { icon: "🎯", title: "Key Performer Profiles", desc: "The rate stats that actually predict outcomes for the players who decide games" },
     { icon: "💰", title: "Live Market Lines", desc: "Real sportsbook odds from major books, compared head-to-head with our model" },
   ];
 
   const OUTPUTS = [
     { label: "Moneyline edges", desc: "Where our win probability disagrees with the market" },
     { label: "Total run edges", desc: "Projected runs vs the posted over/under line" },
-    { label: "Home run props", desc: "Per-batter HR probability with BvP + recent form + park + weather" },
+    { label: "Player props", desc: "Per-player probabilities built from matchup history, recent form, and situational context" },
   ];
 
   const COMPETITORS = [
@@ -78,14 +78,14 @@ export default function LandingPage() {
         {/* Hero — lead with the model depth */}
         <div style={{ padding: "64px 0 56px", animation: "fadeIn .6s ease" }}>
           <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "#ef444415", border: "1px solid #ef444430", borderRadius: 20, padding: "5px 14px", marginBottom: 22, fontSize: 11, color: "#ef4444", fontWeight: 700, letterSpacing: "0.06em" }}>
-            ⚾ MLB · A REAL MODEL, NOT JUST PICKS
+            🔥 A REAL MODEL, NOT JUST PICKS
           </div>
           <h1 style={{ fontSize: "clamp(32px,6vw,56px)", fontWeight: 900, color: "#fff", lineHeight: 1.08, marginBottom: 20, letterSpacing: "-0.02em" }}>
-            Every edge, backed by<br />
-            <span style={{ color: "#ef4444" }}>weather, matchups & a model.</span>
+            Your edge on<br />
+            <span style={{ color: "#ef4444" }}>every game.</span>
           </h1>
           <p style={{ fontSize: 16, color: "#94a3b8", maxWidth: 540, marginBottom: 14, lineHeight: 1.8 }}>
-            SportsIntel runs a research-grade model on every MLB game — folding in <strong style={{ color: "#e2e8f0" }}>live weather, batter-vs-pitcher career history, recent form, and park factors</strong> — then compares it against real sportsbook lines to surface where the market is wrong.
+            SportsIntel runs a research-grade model that folds in <strong style={{ color: "#e2e8f0" }}>live conditions, matchup history, recent form, and situational factors</strong> — then compares it against real sportsbook lines to surface where the market is wrong.
           </p>
           <p style={{ fontSize: 15, color: "#64748b", maxWidth: 520, marginBottom: 32, lineHeight: 1.8 }}>
             You don't buy picks here. You get the <strong style={{ color: "#e2e8f0" }}>same depth of data the pros use</strong> to make your own — for <strong style={{ color: "#ef4444" }}>$7/month</strong>.
@@ -95,6 +95,7 @@ export default function LandingPage() {
             <Link to="/pricing" className="btn-outline">See what's included</Link>
           </div>
           <div style={{ fontSize: 11, color: "#475569", marginTop: 14 }}>No credit card required · Free account gets you started</div>
+
         </div>
 
         <div style={{ borderTop: "1px solid #0f0f1a", marginBottom: 56 }} />
@@ -104,7 +105,7 @@ export default function LandingPage() {
           <div style={{ marginBottom: 8, fontSize: 11, color: "#ef4444", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase" }}>What goes into every number</div>
           <h2 style={{ fontSize: "clamp(20px,4vw,30px)", fontWeight: 800, color: "#fff", marginBottom: 8 }}>The model sees what box scores miss</h2>
           <p style={{ fontSize: 14, color: "#64748b", maxWidth: 560, marginBottom: 28, lineHeight: 1.8 }}>
-            Anyone can show you a season ERA. We fold the context that actually moves games into every projection:
+            Anyone can show you a season stat line. We fold the context that actually moves games into every projection:
           </p>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: 12 }}>
             {MODEL_INPUTS.map((f, i) => (
@@ -134,7 +135,7 @@ export default function LandingPage() {
           </div>
           <div style={{ background: "#0a0a14", border: "1px solid #1a1a2e", borderRadius: 12, padding: 20 }}>
             <div style={{ fontSize: 13, color: "#94a3b8", lineHeight: 1.8 }}>
-              <strong style={{ color: "#e2e8f0" }}>Click into any game</strong> for the full breakdown — model win probability vs the market, projected total vs the line, the starting pitcher matchup with recent starts, and a <strong style={{ color: "#e2e8f0" }}>batter-vs-pitcher career history table</strong> showing how every hitter has fared against today's opposing starter.
+              <strong style={{ color: "#e2e8f0" }}>Click into any game</strong> for the full breakdown — model win probability vs the market, projected scoring vs the line, the key matchups, and <strong style={{ color: "#e2e8f0" }}>head-to-head history</strong> showing how the people involved have actually performed against each other.
             </div>
           </div>
         </div>
