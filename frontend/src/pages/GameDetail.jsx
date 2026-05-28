@@ -55,6 +55,7 @@ export default function GameDetailPage() {
           .mobile-only{display:flex!important}
           .gd-content{padding:16px 14px 60px!important}
           h1{font-size:24px!important}
+          .bvp-grid{grid-template-columns:1fr!important}
         }
       `}</style>
 
@@ -123,6 +124,7 @@ function GameDetail({ game, hrProps, hasFullAccess, navigate }) {
       {bestEdge && !isFinal && <BestEdgeCard edge={bestEdge} game={game} hasFullAccess={hasFullAccess} navigate={navigate} />}
       {game.weather && <WeatherCard weather={game.weather} />}
       <PitcherMatchup awayPitcher={awayP} homePitcher={homeP} hasFullAccess={hasFullAccess} navigate={navigate} />
+      <BatterVsPitcherSection gameId={game.id} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} hasFullAccess={hasFullAccess} navigate={navigate} />
       <WinProbabilityCard awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} awayProb={ml.awayWinProb} homeProb={ml.homeWinProb} awayOdds={ml.awayOdds} homeOdds={ml.homeOdds} awayEdge={ml.awayEdge} homeEdge={ml.homeEdge} hasFullAccess={hasFullAccess} navigate={navigate} />
       <TotalsCard totals={totals} hasFullAccess={hasFullAccess} navigate={navigate} />
       <ContextCard game={game} />
@@ -166,6 +168,149 @@ function FinalBanner({ game }) {
       </div>
     </div>
   );
+}
+
+function BatterVsPitcherSection({ gameId, awayAbbr, homeAbbr, hasFullAccess, navigate }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(false);
+    const base = import.meta.env.VITE_API_URL || "https://sportsintel-production.up.railway.app";
+    fetch(`${base}/api/matchups/mlb/${gameId}`)
+      .then(r => { if (!r.ok) throw new Error("bad response"); return r.json(); })
+      .then(d => { if (!cancelled) { setData(d); setLoading(false); } })
+      .catch(() => { if (!cancelled) { setError(true); setLoading(false); } });
+    return () => { cancelled = true; };
+  }, [gameId]);
+
+  return (
+    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 20, marginBottom: 18, position: "relative" }}>
+      <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 6 }}>
+        ⚔️ Batter vs Pitcher · Career history
+      </div>
+      <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 16 }}>
+        Hitters with career at-bats against today's opposing starter
+      </div>
+
+      {loading && (
+        <div style={{ textAlign: "center", padding: 32 }}>
+          <div style={{ width: 26, height: 26, border: "3px solid #1f2937", borderTopColor: "#ef4444", borderRadius: "50%", animation: "spin .8s linear infinite", margin: "0 auto 12px" }} />
+          <div style={{ fontSize: 12, color: "#6b7280" }}>Loading matchup history...</div>
+        </div>
+      )}
+
+      {error && !loading && (
+        <div style={{ textAlign: "center", padding: 24, fontSize: 12, color: "#6b7280" }}>
+          Couldn't load matchup history right now.
+        </div>
+      )}
+
+      {!loading && !error && data && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, position: "relative" }} className="bvp-grid">
+          <BvPTable
+            teamAbbr={awayAbbr}
+            pitcherName={data.homePitcher?.name}
+            batters={data.awayBattersVsHomePitcher || []}
+          />
+          <BvPTable
+            teamAbbr={homeAbbr}
+            pitcherName={data.awayPitcher?.name}
+            batters={data.homeBattersVsAwayPitcher || []}
+          />
+          {!hasFullAccess && (
+            <div style={{ position: "absolute", inset: 0, background: "rgba(10,14,20,0.92)", backdropFilter: "blur(6px)", borderRadius: 8, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 20 }}>
+              <div style={{ fontSize: 13, color: "#9ca3af", marginBottom: 12, textAlign: "center" }}>
+                See how every hitter has fared vs today's starter
+              </div>
+              <button onClick={() => navigate("/pricing")} style={ctaBtnStyle}>🔒 Unlock batter vs pitcher — $7/mo</button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BvPTable({ teamAbbr, pitcherName, batters }) {
+  if (!batters || batters.length === 0) {
+    return (
+      <div style={{ background: "#0a0e14", border: "1px solid #1f2937", borderRadius: 8, padding: 14 }}>
+        <div style={{ fontSize: 11, color: "#9ca3af", fontWeight: 700, marginBottom: 10 }}>
+          {teamAbbr} vs {pitcherName || "TBD"}
+        </div>
+        <div style={{ fontSize: 11, color: "#4b5563", textAlign: "center", padding: 20 }}>
+          No hitters have faced this pitcher before
+        </div>
+      </div>
+    );
+  }
+
+  const totals = batters.reduce((a, b) => ({
+    pa: a.pa + (b.plateAppearances || 0),
+    h: a.h + (b.hits || 0),
+    hr: a.hr + (b.homeRuns || 0),
+    ab: a.ab + (b.atBats || 0),
+  }), { pa: 0, h: 0, hr: 0, ab: 0 });
+  const teamAvg = totals.ab > 0 ? totals.h / totals.ab : null;
+
+  return (
+    <div style={{ background: "#0a0e14", border: "1px solid #1f2937", borderRadius: 8, overflow: "hidden" }}>
+      <div style={{ padding: "10px 12px", borderBottom: "1px solid #1f2937", background: "#0f1419" }}>
+        <div style={{ fontSize: 11, color: "#9ca3af", fontWeight: 700 }}>
+          {teamAbbr} vs {pitcherName || "TBD"}
+        </div>
+      </div>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+        <thead>
+          <tr style={{ color: "#6b7280" }}>
+            <th style={bvpTh("left")}>Batter</th>
+            <th style={bvpTh("right")}>PA</th>
+            <th style={bvpTh("right")}>H</th>
+            <th style={bvpTh("right")}>AVG</th>
+            <th style={bvpTh("right")}>HR</th>
+          </tr>
+        </thead>
+        <tbody>
+          {batters.map((b, i) => {
+            const notable = b.homeRuns > 0 || (b.atBats >= 10 && b.avg > 0.300);
+            const avgColor = b.avg > 0.300 ? "#22c55e" : b.avg < 0.150 ? "#ef4444" : "#e4e7eb";
+            return (
+              <tr key={i} style={{ borderTop: "1px solid #131820", background: notable ? "#0f1419" : "transparent" }}>
+                <td style={{ ...bvpTd("left"), maxWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {notable && <span style={{ color: "#22c55e", marginRight: 4 }}>⭐</span>}
+                  {b.batterName}
+                </td>
+                <td style={bvpTd("right", "#9ca3af")}>{b.plateAppearances}</td>
+                <td style={bvpTd("right", "#e4e7eb")}>{b.hits}</td>
+                <td style={bvpTd("right", avgColor)}>{b.avg != null ? b.avg.toFixed(3).replace(/^0/, "") : "—"}</td>
+                <td style={bvpTd("right", b.homeRuns > 0 ? "#22c55e" : "#9ca3af")}>{b.homeRuns}</td>
+              </tr>
+            );
+          })}
+          {totals.pa > 0 && (
+            <tr style={{ borderTop: "2px solid #1f2937", background: "#0a0e14" }}>
+              <td style={{ ...bvpTd("left", "#9ca3af"), fontSize: 10, letterSpacing: "0.04em", textTransform: "uppercase", fontWeight: 700 }}>Total</td>
+              <td style={bvpTd("right", "#e4e7eb")}>{totals.pa}</td>
+              <td style={bvpTd("right", "#e4e7eb")}>{totals.h}</td>
+              <td style={bvpTd("right", "#e4e7eb")}>{teamAvg != null ? teamAvg.toFixed(3).replace(/^0/, "") : "—"}</td>
+              <td style={bvpTd("right", totals.hr > 0 ? "#22c55e" : "#9ca3af")}>{totals.hr}</td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function bvpTh(align) {
+  return { padding: "6px 8px", textAlign: align, fontWeight: 500, fontSize: 9, letterSpacing: "0.05em", textTransform: "uppercase" };
+}
+function bvpTd(align, color = "#e4e7eb") {
+  return { padding: "6px 8px", textAlign: align, color, fontSize: 11, fontWeight: 600, fontVariantNumeric: "tabular-nums" };
 }
 
 function GameHeader({ game, isLive, isFinal }) {
