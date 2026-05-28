@@ -11,6 +11,7 @@ const statsRoutes = require("./routes/stats");
 const subscriptionRoutes = require("./routes/subscriptions");
 const webhookRoutes = require("./routes/webhooks");
 const edgesRoutes = require("./routes/edges");
+const matchupsRoutes = require("./routes/matchups");
 
 const { refreshDailyGames } = require("./services/sportsData");
 
@@ -26,6 +27,7 @@ app.use(cors({
 
 // Stripe webhooks need raw body — mount BEFORE json parser
 app.use("/api/webhooks", express.raw({ type: "application/json" }), webhookRoutes);
+
 app.use(express.json());
 
 // Rate limiting
@@ -43,6 +45,7 @@ app.use("/api/games", gamesRoutes);
 app.use("/api/stats", statsRoutes);
 app.use("/api/subscriptions", subscriptionRoutes);
 app.use("/api/edges", edgesRoutes);
+app.use("/api/matchups", matchupsRoutes);
 
 // Health check
 app.get("/api/health", (req, res) => {
