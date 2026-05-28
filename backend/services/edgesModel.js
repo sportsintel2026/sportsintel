@@ -312,6 +312,7 @@ async function calculateHRPropEdges(games, hrOddsByEvent) {
       if (hrProb == null) continue;
       const edge = calculateEdge(hrProb, propOdds.price);
       allHRProps.push({
+        gameId: game.id,
         player: propOdds.player,
         team: onAwayTeam ? game.awayAbbr : game.homeAbbr,
         opposingPitcher: opposingPitcherProbable?.name,
