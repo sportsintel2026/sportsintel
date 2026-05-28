@@ -11,6 +11,7 @@ export default function MyPicksPage() {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const [plan, setPlan] = useState({ tier: "free", isAdmin: false });
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   useEffect(() => { subscriptionApi.getMyPlan().then(setPlan).catch(() => {}); }, []);
 
@@ -21,14 +22,36 @@ export default function MyPicksPage() {
         *{box-sizing:border-box}
         @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
         @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes slideIn{from{transform:translateX(-100%)}to{transform:translateX(0)}}
+        .mobile-only{display:none}
+        .desktop-sidebar{display:block}
         @media (max-width: 768px) {
-          .sidebar-container { display: none !important; }
-          .main-content { margin-left: 0 !important; }
+          .desktop-sidebar{display:none!important}
+          .main-content{margin-left:0!important}
+          .mobile-only{display:flex!important}
         }
       `}</style>
 
-      <div className="sidebar-container">
+      <div className="desktop-sidebar">
         <Sidebar user={user} plan={plan} signOut={signOut} navigate={navigate} />
+      </div>
+
+      {drawerOpen && (
+        <>
+          <div onClick={() => setDrawerOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 49 }} />
+          <div style={{ position: "fixed", top: 0, left: 0, bottom: 0, animation: "slideIn .2s ease-out", zIndex: 51 }}>
+            <Sidebar user={user} plan={plan} signOut={signOut} navigate={(path) => { setDrawerOpen(false); navigate(path); }} />
+          </div>
+        </>
+      )}
+
+      <div className="mobile-only" style={{ display: "none", position: "sticky", top: 0, zIndex: 40, background: "#0a0e14", borderBottom: "1px solid #1a1f28", padding: "10px 14px", alignItems: "center", justifyContent: "space-between" }}>
+        <button onClick={() => setDrawerOpen(true)} style={{ background: "none", border: "none", color: "#e4e7eb", fontSize: 22, padding: 4, cursor: "pointer" }}>☰</button>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e", animation: "pulse 2s infinite" }} />
+          <span style={{ fontSize: 15, fontWeight: 800 }}>Sports<span style={{ color: "#ef4444" }}>intel</span></span>
+        </div>
+        <div style={{ width: 30 }} />
       </div>
 
       <div className="main-content" style={{ marginLeft: 200 }}>
@@ -40,13 +63,11 @@ export default function MyPicksPage() {
             <div style={{ fontSize: 48, marginBottom: 16 }}>🎯</div>
             <h2 style={{ margin: "0 0 8px", fontSize: 18, fontWeight: 700, color: "#e4e7eb" }}>You haven't saved any picks yet</h2>
             <p style={{ margin: "0 0 24px", fontSize: 13, color: "#9ca3af", maxWidth: 460, marginLeft: "auto", marginRight: "auto", lineHeight: 1.6 }}>
-              From the dashboard or any game page, click the <span style={{ color: "#22c55e", fontWeight: 600 }}>save</span> button next to any edge to track it here. We'll record your picks and show how you do over time.
+              From the dashboard or any game page, click the <span style={{ color: "#22c55e", fontWeight: 600 }}>save</span> button next to any edge to track it here.
             </p>
-            <button onClick={() => navigate("/dashboard")} style={primaryBtnStyle}>
-              ← Back to edges
-            </button>
+            <button onClick={() => navigate("/dashboard")} style={primaryBtnStyle}>← Back to edges</button>
             <div style={{ marginTop: 28, paddingTop: 20, borderTop: "1px solid #1a1f28", fontSize: 11, color: "#6b7280" }}>
-              📅 Pick tracking coming soon — we're still building the "save" buttons
+              📅 Pick tracking coming soon
             </div>
           </div>
         </div>
@@ -55,14 +76,4 @@ export default function MyPicksPage() {
   );
 }
 
-const primaryBtnStyle = {
-  background: "#ef4444",
-  color: "#fff",
-  border: "none",
-  borderRadius: 6,
-  padding: "10px 18px",
-  fontSize: 13,
-  fontWeight: 600,
-  cursor: "pointer",
-  fontFamily: "inherit",
-};
+const primaryBtnStyle = { background: "#ef4444", color: "#fff", border: "none", borderRadius: 6, padding: "10px 18px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" };
