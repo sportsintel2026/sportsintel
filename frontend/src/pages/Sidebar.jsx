@@ -29,9 +29,15 @@ export default function Sidebar({ user, plan, signOut, navigate }) {
       <div style={sectionLabelStyle}>MLB</div>
       <NavLink
         to="/dashboard"
-        active={isActive("/dashboard") || isActive("/game")}
+        active={isActive("/dashboard")}
         icon="📊"
         label="Edges"
+      />
+      <NavLink
+        to="/games"
+        active={isActive("/games") || isActive("/game")}
+        icon="⚾"
+        label="MLB Games"
       />
       <NavLink
         to="/performance"
