@@ -6,6 +6,7 @@ import { SignupPage } from "./pages/Login";
 import DashboardPage from "./pages/Dashboard";
 import GameDetailPage from "./pages/GameDetail";
 import GamesPage from "./pages/Games";
+import PerformancePage from "./pages/Performance";
 import PricingPage from "./pages/Pricing";
 import ResetPasswordPage from "./pages/ResetPassword";
 import AdminPage from "./pages/Admin";
@@ -53,6 +54,11 @@ export default function App() {
           <Route path="/games" element={
             <PrivateRoute>
               <GamesPage />
+            </PrivateRoute>
+          } />
+          <Route path="/performance" element={
+            <PrivateRoute>
+              <PerformancePage />
             </PrivateRoute>
           } />
           <Route path="/game/mlb/:gameId" element={
