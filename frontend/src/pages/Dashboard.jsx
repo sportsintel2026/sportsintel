@@ -21,6 +21,7 @@ export default function DashboardPage() {
   const [edgesLoading, setEdgesLoading] = useState(true);
   const [picks, setPicks] = useState([]);
   const [plan, setPlan] = useState({ tier: "free", isAdmin: false });
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const isAdmin = plan.isAdmin === true;
   const isPro = plan.tier === "pro" || plan.tier === "elite";
   const hasFullAccess = isAdmin || isPro;
@@ -39,19 +40,10 @@ export default function DashboardPage() {
   }, []);
 
   const loadEdges = useCallback(async () => {
-    if (league !== "mlb") {
-      setEdges(null);
-      setEdgesLoading(false);
-      return;
-    }
+    if (league !== "mlb") { setEdges(null); setEdgesLoading(false); return; }
     setEdgesLoading(true);
-    try {
-      const data = await edgesApi.getMLB();
-      setEdges(data);
-    } catch (e) {
-      console.error("Failed to load edges:", e);
-      setEdges(null);
-    }
+    try { const data = await edgesApi.getMLB(); setEdges(data); }
+    catch (e) { console.error("Failed to load edges:", e); setEdges(null); }
     setEdgesLoading(false);
   }, [league]);
   useEffect(() => { loadEdges(); }, [loadEdges]);
@@ -64,6 +56,7 @@ export default function DashboardPage() {
         @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
         @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
         @keyframes spin{to{transform:rotate(360deg)}}
+        @keyframes slideIn{from{transform:translateX(-100%)}to{transform:translateX(0)}}
         ::-webkit-scrollbar{width:6px;height:6px}
         ::-webkit-scrollbar-thumb{background:#1f2937;border-radius:3px}
         .edge-row{transition:background .15s,transform .15s;cursor:pointer}
@@ -74,19 +67,56 @@ export default function DashboardPage() {
         .tab-btn:hover{color:#fff}
         .section-header{transition:color .15s;cursor:pointer}
         .section-header:hover{color:#fff!important}
+        .hamburger-btn{display:none}
+        .mobile-only{display:none}
+        .desktop-sidebar{display:block}
         @media (max-width: 768px) {
-          .sidebar-container { display: none !important; }
-          .main-content { margin-left: 0 !important; }
+          .desktop-sidebar{display:none!important}
+          .main-content{margin-left:0!important;padding-top:0!important}
+          .hamburger-btn{display:flex!important}
+          .mobile-only{display:flex!important}
+          .edge-grid-2{grid-template-columns:1fr!important}
+          .hr-prop-row{grid-template-columns:1fr!important;gap:8px!important}
+          .hr-prop-stats{display:flex!important;flex-wrap:wrap!important;gap:12px!important;justify-content:space-between!important}
+          .games-table-wrap{margin:0 -14px!important}
+          .games-table{font-size:11px!important}
+          .games-table th,.games-table td{padding:6px 4px!important}
+          .league-tabs-inner{padding:0 12px!important}
+          .dashboard-content{padding:16px 14px 60px!important}
+          h1{font-size:22px!important}
         }
       `}</style>
 
-      <div className="sidebar-container">
+      {/* Desktop sidebar — fixed left */}
+      <div className="desktop-sidebar">
         <Sidebar user={user} plan={plan} signOut={signOut} navigate={navigate} />
+      </div>
+
+      {/* Mobile drawer — slides in from left when opened */}
+      {drawerOpen && (
+        <>
+          <div onClick={() => setDrawerOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 49 }} />
+          <div style={{ position: "fixed", top: 0, left: 0, bottom: 0, animation: "slideIn .2s ease-out", zIndex: 51 }}>
+            <Sidebar user={user} plan={plan} signOut={signOut} navigate={(path) => { setDrawerOpen(false); navigate(path); }} />
+          </div>
+        </>
+      )}
+
+      {/* Mobile top bar — only shows on mobile */}
+      <div className="mobile-only" style={{ display: "none", position: "sticky", top: 0, zIndex: 40, background: "#0a0e14", borderBottom: "1px solid #1a1f28", padding: "10px 14px", alignItems: "center", justifyContent: "space-between" }}>
+        <button onClick={() => setDrawerOpen(true)} className="hamburger-btn" style={{ background: "none", border: "none", color: "#e4e7eb", fontSize: 22, padding: 4, cursor: "pointer", display: "none", alignItems: "center" }}>
+          ☰
+        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e", display: "inline-block", animation: "pulse 2s infinite" }} />
+          <span style={{ fontSize: 15, fontWeight: 800 }}>Sports<span style={{ color: "#ef4444" }}>intel</span></span>
+        </div>
+        <div style={{ width: 30 }} />
       </div>
 
       <div className="main-content" style={{ marginLeft: 200 }}>
         <LeagueTabs league={league} setLeague={setLeague} />
-        <div style={{ maxWidth: 1200, margin: "0 auto", padding: "20px 24px 60px" }}>
+        <div className="dashboard-content" style={{ maxWidth: 1200, margin: "0 auto", padding: "20px 24px 60px" }}>
           {league === "mlb" ? (
             <MLBDashboard edges={edges} loading={edgesLoading} picks={picks} hasFullAccess={hasFullAccess} navigate={navigate} onRefresh={loadEdges} />
           ) : (
@@ -100,8 +130,8 @@ export default function DashboardPage() {
 
 function LeagueTabs({ league, setLeague }) {
   return (
-    <div style={{ background: "#0a0e14", borderBottom: "1px solid #1a1f28", position: "sticky", top: 0, zIndex: 40 }}>
-      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 24px", display: "flex", gap: 4, overflowX: "auto" }}>
+    <div style={{ background: "#0a0e14", borderBottom: "1px solid #1a1f28", position: "sticky", top: 0, zIndex: 39 }}>
+      <div className="league-tabs-inner" style={{ maxWidth: 1200, margin: "0 auto", padding: "0 24px", display: "flex", gap: 4, overflowX: "auto" }}>
         {LEAGUES.map(l => {
           const active = league === l.id;
           return (
@@ -143,7 +173,7 @@ function MLBDashboard({ edges, loading, picks, hasFullAccess, navigate, onRefres
         <strong>Model v0.3 · Research-grade.</strong> <span style={{ color: "#a8915c" }}>Pre-game model — live games show in-game odds. Use as one input among many, not gospel.</span>
       </div>
       {picks.length > 0 && <EditorialBestBets picks={picks} hasFullAccess={hasFullAccess} navigate={navigate} />}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16, gridAutoRows: "1fr" }}>
+      <div className="edge-grid-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16, gridAutoRows: "1fr" }}>
         <EdgePanel title="Top moneyline edges" icon="💰" edges={edges.moneylineEdges || []} renderRow={(e) => <MoneylineRow edge={e} key={e.gameId + e.side} navigate={navigate} />} emptyText="No edges found in current slate" hasFullAccess={hasFullAccess} navigate={navigate} />
         <EdgePanel title="Top totals edges" icon="📊" edges={edges.totalsEdges || []} renderRow={(e) => <TotalsRow edge={e} key={e.gameId + e.side} navigate={navigate} />} emptyText="No edges found in current slate" hasFullAccess={hasFullAccess} navigate={navigate} />
       </div>
@@ -151,37 +181,9 @@ function MLBDashboard({ edges, loading, picks, hasFullAccess, navigate, onRefres
         <EdgePanel title="Top home run props" icon="💣" edges={edges.hrPropEdges || []} renderRow={(e) => <HRPropRow edge={e} key={e.player + e.game} />} emptyText="HR prop data updates closer to first pitch" hasFullAccess={hasFullAccess} navigate={navigate} wide />
       </div>
 
-      {liveGames.length > 0 && (
-        <GamesSection
-          title="🔴 LIVE NOW"
-          titleColor="#ef4444"
-          games={liveGames}
-          navigate={navigate}
-          defaultOpen
-          showLiveBadge
-        />
-      )}
-
-      {upcomingGames.length > 0 && (
-        <GamesSection
-          title="⏰ UPCOMING"
-          titleColor="#9ca3af"
-          games={upcomingGames}
-          navigate={navigate}
-          defaultOpen
-        />
-      )}
-
-      {finalGames.length > 0 && (
-        <GamesSection
-          title="✅ FINAL"
-          titleColor="#6b7280"
-          games={finalGames}
-          navigate={navigate}
-          defaultOpen={false}
-          showFinalScore
-        />
-      )}
+      {liveGames.length > 0 && <GamesSection title="🔴 LIVE NOW" titleColor="#ef4444" games={liveGames} navigate={navigate} defaultOpen showLiveBadge />}
+      {upcomingGames.length > 0 && <GamesSection title="⏰ UPCOMING" titleColor="#9ca3af" games={upcomingGames} navigate={navigate} defaultOpen />}
+      {finalGames.length > 0 && <GamesSection title="✅ FINAL" titleColor="#6b7280" games={finalGames} navigate={navigate} defaultOpen={false} showFinalScore />}
     </div>
   );
 }
@@ -200,9 +202,7 @@ function EditorialBestBets({ picks, hasFullAccess, navigate }) {
             <div key={i} style={{ position: "relative", background: "#0f1419", borderRadius: 6, padding: 12, border: "1px solid #1f2937", overflow: "hidden" }}>
               {locked && (
                 <div style={{ position: "absolute", inset: 0, backdropFilter: "blur(8px)", background: "#0a0e1499", zIndex: 2, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <button onClick={() => navigate("/pricing")} style={{ background: "#ef4444", color: "#fff", border: "none", borderRadius: 6, padding: "6px 14px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
-                    🔒 Unlock — $7/mo
-                  </button>
+                  <button onClick={() => navigate("/pricing")} style={{ background: "#ef4444", color: "#fff", border: "none", borderRadius: 6, padding: "6px 14px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>🔒 Unlock — $7/mo</button>
                 </div>
               )}
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
@@ -240,9 +240,7 @@ function EdgePanel({ title, icon, edges, renderRow, emptyText, hasFullAccess, na
                 {hidden.map(renderRow)}
               </div>
               <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <button onClick={() => navigate("/pricing")} style={{ background: "#ef4444", color: "#fff", border: "none", borderRadius: 6, padding: "8px 18px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
-                  🔒 Unlock all edges — $7/mo
-                </button>
+                <button onClick={() => navigate("/pricing")} style={{ background: "#ef4444", color: "#fff", border: "none", borderRadius: 6, padding: "8px 18px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>🔒 Unlock all edges — $7/mo</button>
               </div>
             </div>
           )}
@@ -313,7 +311,7 @@ function HRPropRow({ edge }) {
   const detailLine = [bvpText, recentText].filter(Boolean).join(" · ");
 
   return (
-    <div className="edge-row" style={{ display: "grid", gridTemplateColumns: "2.2fr 1fr 1fr 1fr 80px", gap: 10, padding: 10, background: "#0a0e14", borderRadius: 4, alignItems: "center" }}>
+    <div className="edge-row hr-prop-row" style={{ display: "grid", gridTemplateColumns: "2.2fr 1fr 1fr 1fr 80px", gap: 10, padding: 10, background: "#0a0e14", borderRadius: 4, alignItems: "center" }}>
       <div style={{ minWidth: 0 }}>
         <div style={{ fontSize: 12, fontWeight: 600 }}>{edge.player}</div>
         <div style={{ fontSize: 10, color: "#6b7280", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
@@ -325,10 +323,12 @@ function HRPropRow({ edge }) {
           </div>
         )}
       </div>
-      <div style={{ fontSize: 11, color: "#9ca3af" }}>{formatOdds(edge.odds)}</div>
-      <div style={{ fontSize: 11, color: "#9ca3af" }}>{Math.round(edge.hrProb * 100)}% model</div>
-      <EdgeBadge edge={edge.edge} />
-      <ConfidenceBadge conf={edge.confidence} />
+      <div className="hr-prop-stats" style={{ display: "contents" }}>
+        <div style={{ fontSize: 11, color: "#9ca3af" }}><span style={{ display: "none" }} className="mobile-only-label">Odds: </span>{formatOdds(edge.odds)}</div>
+        <div style={{ fontSize: 11, color: "#9ca3af" }}>{Math.round(edge.hrProb * 100)}% model</div>
+        <EdgeBadge edge={edge.edge} />
+        <ConfidenceBadge conf={edge.confidence} />
+      </div>
     </div>
   );
 }
@@ -337,11 +337,7 @@ function GamesSection({ title, titleColor, games, navigate, defaultOpen, showLiv
   const [isOpen, setIsOpen] = useState(defaultOpen);
   return (
     <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 8, padding: 14, marginBottom: 12 }}>
-      <div
-        className="section-header"
-        onClick={() => setIsOpen(!isOpen)}
-        style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: isOpen ? 12 : 0 }}
-      >
+      <div className="section-header" onClick={() => setIsOpen(!isOpen)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: isOpen ? 12 : 0 }}>
         <span style={{ fontSize: 11, letterSpacing: 1, color: titleColor, fontWeight: 700 }}>
           {title} {showLiveBadge && <span style={{ marginLeft: 4 }}>· {games.length} game{games.length === 1 ? "" : "s"}</span>}
           {!showLiveBadge && <span style={{ marginLeft: 4, color: "#6b7280" }}>· {games.length} game{games.length === 1 ? "" : "s"}</span>}
@@ -349,14 +345,14 @@ function GamesSection({ title, titleColor, games, navigate, defaultOpen, showLiv
         <span style={{ fontSize: 12, color: "#6b7280" }}>{isOpen ? "▲ hide" : "▼ show"}</span>
       </div>
       {isOpen && (
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+        <div className="games-table-wrap" style={{ overflowX: "auto" }}>
+          <table className="games-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
             <thead>
               <tr style={{ borderBottom: "1px solid #1f2937", color: "#6b7280" }}>
                 <th style={th()}>Game</th>
                 <th style={th()}>{showFinalScore ? "Final" : "Status"}</th>
                 <th style={th()}>Pitchers</th>
-                <th style={th("center")}>Weather</th>
+                <th style={th("center")}>Wx</th>
                 <th style={th("right")}>Model</th>
                 <th style={th("right")}>Total</th>
                 <th style={th("right")}>Park</th>
@@ -369,32 +365,27 @@ function GamesSection({ title, titleColor, games, navigate, defaultOpen, showLiv
                   <td style={td()}>{g.awayAbbr} @ {g.homeAbbr}</td>
                   <td style={td()}>
                     {g.status === "live" && (
-                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
                         <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#ef4444", animation: "pulse 1.5s infinite" }} />
                         <span style={{ color: "#ef4444", fontWeight: 700, fontSize: 11 }}>LIVE</span>
                         {g.awayScore != null && <span style={{ color: "#9ca3af", fontSize: 11 }}>{g.awayScore}-{g.homeScore}</span>}
-                        {g.inning && <span style={{ color: "#6b7280", fontSize: 10 }}>{g.inning}</span>}
                       </div>
                     )}
                     {g.status === "final" && (
-                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
                         <span style={{ color: "#22c55e", fontWeight: 700, fontSize: 11 }}>FINAL</span>
                         {g.awayScore != null && <span style={{ color: "#e4e7eb", fontSize: 11, fontWeight: 600 }}>{g.awayScore}-{g.homeScore}</span>}
                       </div>
                     )}
-                    {g.status !== "live" && g.status !== "final" && (
-                      <span style={{ color: "#9ca3af" }}>{g.time}</span>
-                    )}
+                    {g.status !== "live" && g.status !== "final" && <span style={{ color: "#9ca3af" }}>{g.time}</span>}
                   </td>
                   <td style={td()}>
-                    <div style={{ color: "#9ca3af" }}>{g.pitchers?.away?.name || "TBD"}</div>
-                    <div style={{ color: "#9ca3af" }}>{g.pitchers?.home?.name || "TBD"}</div>
+                    <div style={{ color: "#9ca3af", whiteSpace: "nowrap" }}>{g.pitchers?.away?.name || "TBD"}</div>
+                    <div style={{ color: "#9ca3af", whiteSpace: "nowrap" }}>{g.pitchers?.home?.name || "TBD"}</div>
                   </td>
-                  <td style={td("center")}>
-                    <WeatherIndicator weather={g.weather} />
-                  </td>
+                  <td style={td("center")}><WeatherIndicator weather={g.weather} /></td>
                   <td style={td("right")}>
-                    {g.moneyline?.awayWinProb != null ? `${Math.round(g.moneyline.awayWinProb * 100)}% / ${Math.round(g.moneyline.homeWinProb * 100)}%` : "—"}
+                    {g.moneyline?.awayWinProb != null ? `${Math.round(g.moneyline.awayWinProb * 100)}/${Math.round(g.moneyline.homeWinProb * 100)}` : "—"}
                   </td>
                   <td style={td("right")}>{g.totals?.projected ?? "—"}</td>
                   <td style={td("right")}>
@@ -402,9 +393,7 @@ function GamesSection({ title, titleColor, games, navigate, defaultOpen, showLiv
                       {g.parkRunFactor?.toFixed(2)}
                     </span>
                   </td>
-                  <td style={td("right")}>
-                    <span style={{ color: "#ef4444", fontSize: 14 }}>→</span>
-                  </td>
+                  <td style={td("right")}><span style={{ color: "#ef4444", fontSize: 14 }}>→</span></td>
                 </tr>
               ))}
             </tbody>
@@ -417,9 +406,7 @@ function GamesSection({ title, titleColor, games, navigate, defaultOpen, showLiv
 
 function WeatherIndicator({ weather }) {
   if (!weather) return <span style={{ color: "#4b5563", fontSize: 11 }}>—</span>;
-  if (weather.indoor) {
-    return <span title="Indoor stadium" style={{ fontSize: 14 }}>🏟️</span>;
-  }
+  if (weather.indoor) return <span title="Indoor stadium" style={{ fontSize: 14 }}>🏟️</span>;
   const icons = [];
   let tooltip = `${weather.tempF}°F`;
   if (weather.windEffect === "out") { icons.push("💨↗"); tooltip += ` · Wind OUT ${weather.windMph}mph (favors hitters)`; }
@@ -444,11 +431,7 @@ function EdgeBadge({ edge }) {
   const positive = edge > 0;
   const color = positive ? "#22c55e" : "#ef4444";
   const sign = positive ? "+" : "";
-  return (
-    <span style={{ fontSize: 14, fontWeight: 600, color, fontVariantNumeric: "tabular-nums" }}>
-      {sign}{(edge * 100).toFixed(1)}%
-    </span>
-  );
+  return <span style={{ fontSize: 14, fontWeight: 600, color, fontVariantNumeric: "tabular-nums" }}>{sign}{(edge * 100).toFixed(1)}%</span>;
 }
 
 function ConfidenceBadge({ conf }) {
@@ -459,11 +442,7 @@ function ConfidenceBadge({ conf }) {
     NEUTRAL: { bg: "#1f2937", fg: "#6b7280", border: "#374151" },
   };
   const c = colors[conf] || colors.NEUTRAL;
-  return (
-    <span style={{ fontSize: 9, fontWeight: 700, padding: "3px 7px", borderRadius: 4, background: c.bg, color: c.fg, border: `1px solid ${c.border}`, letterSpacing: "0.05em" }}>
-      {conf?.slice(0, 3) || "—"}
-    </span>
-  );
+  return <span style={{ fontSize: 9, fontWeight: 700, padding: "3px 7px", borderRadius: 4, background: c.bg, color: c.fg, border: `1px solid ${c.border}`, letterSpacing: "0.05em" }}>{conf?.slice(0, 3) || "—"}</span>;
 }
 
 function formatOdds(american) {
