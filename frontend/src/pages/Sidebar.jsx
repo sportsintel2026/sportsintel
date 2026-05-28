@@ -44,7 +44,6 @@ export default function Sidebar({ user, plan, signOut, navigate }) {
         active={isActive("/performance")}
         icon="📈"
         label="Performance"
-        soon
       />
       <NavLink
         to="/my-picks"
