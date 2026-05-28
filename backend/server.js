@@ -12,8 +12,10 @@ const subscriptionRoutes = require("./routes/subscriptions");
 const webhookRoutes = require("./routes/webhooks");
 const edgesRoutes = require("./routes/edges");
 const matchupsRoutes = require("./routes/matchups");
+const performanceRoutes = require("./routes/performance");
 
 const { refreshDailyGames } = require("./services/sportsData");
+const { gradeFinishedGames } = require("./services/predictionTracker");
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -46,6 +48,7 @@ app.use("/api/stats", statsRoutes);
 app.use("/api/subscriptions", subscriptionRoutes);
 app.use("/api/edges", edgesRoutes);
 app.use("/api/matchups", matchupsRoutes);
+app.use("/api/performance", performanceRoutes);
 
 // Health check
 app.get("/api/health", (req, res) => {
@@ -71,6 +74,16 @@ cron.schedule("0 8 * * *", async () => {
     await refreshDailyGames();
   } catch (err) {
     console.error("[CRON] Daily refresh failed:", err.message);
+  }
+}, { timezone: "America/New_York" });
+
+// Grade finished-game predictions — runs hourly, and a final sweep at 3am ET
+cron.schedule("0 * * * *", async () => {
+  console.log("[CRON] Grading finished-game predictions...");
+  try {
+    await gradeFinishedGames();
+  } catch (err) {
+    console.error("[CRON] Grading failed:", err.message);
   }
 }, { timezone: "America/New_York" });
 
