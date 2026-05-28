@@ -11,6 +11,7 @@ export default function SettingsPage() {
   const navigate = useNavigate();
   const [plan, setPlan] = useState({ tier: "free", isAdmin: false });
   const [portalLoading, setPortalLoading] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const isAdmin = plan.isAdmin === true;
   const isPro = plan.tier === "pro" || plan.tier === "elite";
@@ -37,14 +38,39 @@ export default function SettingsPage() {
         *{box-sizing:border-box}
         @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
         @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes slideIn{from{transform:translateX(-100%)}to{transform:translateX(0)}}
+        .mobile-only{display:none}
+        .desktop-sidebar{display:block}
         @media (max-width: 768px) {
-          .sidebar-container { display: none !important; }
-          .main-content { margin-left: 0 !important; }
+          .desktop-sidebar{display:none!important}
+          .main-content{margin-left:0!important}
+          .mobile-only{display:flex!important}
         }
       `}</style>
 
-      <div className="sidebar-container">
+      {/* Desktop sidebar */}
+      <div className="desktop-sidebar">
         <Sidebar user={user} plan={plan} signOut={signOut} navigate={navigate} />
+      </div>
+
+      {/* Mobile drawer */}
+      {drawerOpen && (
+        <>
+          <div onClick={() => setDrawerOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 49 }} />
+          <div style={{ position: "fixed", top: 0, left: 0, bottom: 0, animation: "slideIn .2s ease-out", zIndex: 51 }}>
+            <Sidebar user={user} plan={plan} signOut={signOut} navigate={(path) => { setDrawerOpen(false); navigate(path); }} />
+          </div>
+        </>
+      )}
+
+      {/* Mobile top bar */}
+      <div className="mobile-only" style={{ display: "none", position: "sticky", top: 0, zIndex: 40, background: "#0a0e14", borderBottom: "1px solid #1a1f28", padding: "10px 14px", alignItems: "center", justifyContent: "space-between" }}>
+        <button onClick={() => setDrawerOpen(true)} style={{ background: "none", border: "none", color: "#e4e7eb", fontSize: 22, padding: 4, cursor: "pointer" }}>☰</button>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e", animation: "pulse 2s infinite" }} />
+          <span style={{ fontSize: 15, fontWeight: 800 }}>Sports<span style={{ color: "#ef4444" }}>intel</span></span>
+        </div>
+        <div style={{ width: 30 }} />
       </div>
 
       <div className="main-content" style={{ marginLeft: 200 }}>
@@ -52,48 +78,34 @@ export default function SettingsPage() {
           <h1 style={{ margin: "0 0 8px", fontSize: 28, fontWeight: 700, letterSpacing: "-0.01em" }}>Settings</h1>
           <p style={{ margin: "0 0 32px", fontSize: 13, color: "#9ca3af" }}>Manage your account and subscription</p>
 
-          {/* Account section */}
           <Section title="Account">
             <Row label="Email" value={user?.email || "—"} />
             <Row label="Account type" value={isAdmin ? "Admin (owner)" : isPro ? "Subscribed" : "Free"} valueColor={isAdmin ? "#a855f7" : isPro ? "#22c55e" : "#9ca3af"} />
             <Row label="Member since" value={user?.created_at ? new Date(user.created_at).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "—"} />
           </Section>
 
-          {/* Subscription section */}
           <Section title="Subscription">
             {isAdmin ? (
               <div style={infoBoxStyle("#a855f7")}>
                 <div style={{ fontSize: 13, color: "#e4e7eb", fontWeight: 600, marginBottom: 4 }}>You're the owner</div>
-                <div style={{ fontSize: 12, color: "#9ca3af", lineHeight: 1.6 }}>
-                  You have full access to all features. No subscription needed.
-                </div>
+                <div style={{ fontSize: 12, color: "#9ca3af", lineHeight: 1.6 }}>You have full access to all features. No subscription needed.</div>
               </div>
             ) : isPro ? (
               <>
                 <div style={infoBoxStyle("#22c55e")}>
                   <div style={{ fontSize: 13, color: "#e4e7eb", fontWeight: 600, marginBottom: 4 }}>Subscribed — $7/month</div>
-                  <div style={{ fontSize: 12, color: "#9ca3af", lineHeight: 1.6 }}>
-                    You have full access to all edges, HR props, and game analysis.
-                  </div>
+                  <div style={{ fontSize: 12, color: "#9ca3af", lineHeight: 1.6 }}>You have full access to all edges, HR props, and game analysis.</div>
                 </div>
-                <button
-                  onClick={openStripePortal}
-                  disabled={portalLoading}
-                  style={{ ...primaryBtnStyle, marginTop: 14 }}
-                >
+                <button onClick={openStripePortal} disabled={portalLoading} style={{ ...primaryBtnStyle, marginTop: 14 }}>
                   {portalLoading ? "Opening..." : "Manage subscription & billing →"}
                 </button>
-                <div style={{ fontSize: 11, color: "#6b7280", marginTop: 8 }}>
-                  Update payment method, view invoices, or cancel.
-                </div>
+                <div style={{ fontSize: 11, color: "#6b7280", marginTop: 8 }}>Update payment method, view invoices, or cancel.</div>
               </>
             ) : (
               <>
                 <div style={infoBoxStyle("#ef4444")}>
                   <div style={{ fontSize: 13, color: "#e4e7eb", fontWeight: 600, marginBottom: 4 }}>You're on the Free plan</div>
-                  <div style={{ fontSize: 12, color: "#9ca3af", lineHeight: 1.6 }}>
-                    Subscribe to unlock all edges, HR props, model reasoning, and full game analysis.
-                  </div>
+                  <div style={{ fontSize: 12, color: "#9ca3af", lineHeight: 1.6 }}>Subscribe to unlock all edges, HR props, model reasoning, and full game analysis.</div>
                 </div>
                 <button onClick={() => navigate("/pricing")} style={{ ...primaryBtnStyle, marginTop: 14, background: "#ef4444" }}>
                   ⚡ Subscribe — $7/month
@@ -102,17 +114,13 @@ export default function SettingsPage() {
             )}
           </Section>
 
-          {/* Support section */}
           <Section title="Support">
             <Row label="Help" value={<a href="mailto:support@sportsintel.app" style={linkStyle}>support@sportsintel.app</a>} />
             <Row label="Feedback" value="Use the thumbs-down button anywhere" />
           </Section>
 
-          {/* Danger zone */}
           <Section title="Account actions">
-            <button onClick={() => { signOut(); navigate("/"); }} style={dangerBtnStyle}>
-              Sign out
-            </button>
+            <button onClick={() => { signOut(); navigate("/"); }} style={dangerBtnStyle}>Sign out</button>
           </Section>
         </div>
       </div>
@@ -124,9 +132,7 @@ function Section({ title, children }) {
   return (
     <div style={{ marginBottom: 28 }}>
       <h2 style={{ margin: "0 0 12px", fontSize: 11, color: "#6b7280", letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 700 }}>{title}</h2>
-      <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 8, padding: 16 }}>
-        {children}
-      </div>
+      <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 8, padding: 16 }}>{children}</div>
     </div>
   );
 }
@@ -141,41 +147,9 @@ function Row({ label, value, valueColor }) {
 }
 
 function infoBoxStyle(accentColor) {
-  return {
-    background: "#0a0e14",
-    border: `1px solid ${accentColor}30`,
-    borderLeft: `3px solid ${accentColor}`,
-    borderRadius: 6,
-    padding: "12px 14px",
-  };
+  return { background: "#0a0e14", border: `1px solid ${accentColor}30`, borderLeft: `3px solid ${accentColor}`, borderRadius: 6, padding: "12px 14px" };
 }
 
-const primaryBtnStyle = {
-  background: "#22c55e",
-  color: "#fff",
-  border: "none",
-  borderRadius: 6,
-  padding: "10px 18px",
-  fontSize: 13,
-  fontWeight: 600,
-  cursor: "pointer",
-  fontFamily: "inherit",
-};
-
-const dangerBtnStyle = {
-  background: "transparent",
-  color: "#ef4444",
-  border: "1px solid #ef444440",
-  borderRadius: 6,
-  padding: "10px 18px",
-  fontSize: 13,
-  fontWeight: 600,
-  cursor: "pointer",
-  fontFamily: "inherit",
-};
-
-const linkStyle = {
-  color: "#ef4444",
-  textDecoration: "none",
-  fontWeight: 600,
-};
+const primaryBtnStyle = { background: "#22c55e", color: "#fff", border: "none", borderRadius: 6, padding: "10px 18px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" };
+const dangerBtnStyle = { background: "transparent", color: "#ef4444", border: "1px solid #ef444440", borderRadius: 6, padding: "10px 18px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" };
+const linkStyle = { color: "#ef4444", textDecoration: "none", fontWeight: 600 };
