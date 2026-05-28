@@ -12,6 +12,7 @@ const subscriptionRoutes = require("./routes/subscriptions");
 const webhookRoutes = require("./routes/webhooks");
 const edgesRoutes = require("./routes/edges");
 const matchupsRoutes = require("./routes/matchups");
+const datatestRoutes = require("./routes/datatest");
 
 const { refreshDailyGames } = require("./services/sportsData");
 
@@ -46,6 +47,7 @@ app.use("/api/stats", statsRoutes);
 app.use("/api/subscriptions", subscriptionRoutes);
 app.use("/api/edges", edgesRoutes);
 app.use("/api/matchups", matchupsRoutes);
+app.use("/api/datatest", datatestRoutes);
 
 // Health check
 app.get("/api/health", (req, res) => {
