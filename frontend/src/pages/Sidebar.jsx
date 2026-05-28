@@ -14,22 +14,18 @@ export default function Sidebar({ user, plan, signOut, navigate }) {
 
   return (
     <div style={sidebarStyle}>
-      {/* Logo */}
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 24, padding: "4px 8px" }}>
-        <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e", display: "inline-block", animation: "pulse 2s infinite" }} />
-        <span style={{ fontSize: 16, fontWeight: 800, letterSpacing: "-0.01em", color: "#e4e7eb" }}>
-          Sports<span style={{ color: "#ef4444" }}>intel</span>
-        </span>
-      </div>
+      {/* Logo — clickable, goes to dashboard */}
+      <Link to="/dashboard" style={{ textDecoration: "none" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 24, padding: "4px 8px", cursor: "pointer" }}>
+          <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e", display: "inline-block", animation: "pulse 2s infinite" }} />
+          <span style={{ fontSize: 16, fontWeight: 800, letterSpacing: "-0.01em", color: "#e4e7eb" }}>
+            Sports<span style={{ color: "#ef4444" }}>intel</span>
+          </span>
+        </div>
+      </Link>
 
       {/* MLB section */}
       <div style={sectionLabelStyle}>MLB</div>
-      <NavLink
-        to="/dashboard"
-        active={isActive("/dashboard") || isActive("/game")}
-        icon="📊"
-        label="Edges"
-      />
       <NavLink
         to="/performance"
         active={isActive("/performance")}
