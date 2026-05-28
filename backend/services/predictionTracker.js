@@ -65,19 +65,28 @@ async function recordPredictions(result) {
 
   if (rows.length === 0) return;
 
+  // Defensive: drop any row missing a game_id (shouldn't happen, but the DB
+  // not-null constraint will reject the whole batch if even one is null).
+  const validRows = rows.filter(r => r.game_id);
+  const dropped = rows.length - validRows.length;
+  if (dropped > 0) {
+    console.warn(`[Tracker] Dropped ${dropped} rows missing game_id`);
+  }
+  if (validRows.length === 0) return;
+
   try {
     // upsert with ignoreDuplicates: the unique constraint (game_id, market,
     // selection, game_date) means re-runs during the day are no-ops.
     const { error } = await supabase
       .from("model_predictions")
-      .upsert(rows, {
+      .upsert(validRows, {
         onConflict: "game_id,market,selection,game_date",
         ignoreDuplicates: true,
       });
     if (error) {
       console.error("[Tracker] record error:", error.message);
     } else {
-      console.log(`[Tracker] Snapshotted ${rows.length} predictions for ${gameDate} (dups ignored)`);
+      console.log(`[Tracker] Snapshotted ${validRows.length} predictions for ${gameDate} (dups ignored)`);
     }
   } catch (e) {
     console.error("[Tracker] record exception:", e.message);
