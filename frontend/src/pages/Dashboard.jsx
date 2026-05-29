@@ -566,6 +566,7 @@ function NBADashboard({ hasFullAccess, navigate }) {
 function NBAPropsSection({ games, hasFullAccess, navigate }) {
   const [edges, setEdges] = useState(null);
   const [suspects, setSuspects] = useState([]);
+  const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -584,17 +585,25 @@ function NBAPropsSection({ games, hasFullAccess, navigate }) {
         );
         const allEdges = [];
         const allSuspects = [];
+        const allRows = [];
         for (const r of results) {
           if (!r || !r.available) continue;
           const matchup = `${nbaAbbr(r.away)} @ ${nbaAbbr(r.home)}`;
           for (const e of r.edges || []) allEdges.push({ ...e, matchup, gameId: r.gameId });
           for (const s of r.suspects || []) allSuspects.push({ ...s, matchup, gameId: r.gameId });
+          for (const p of r.players || []) {
+            if (!p.markets) continue; // skip out/unresolved players
+            allRows.push({ name: p.name, matchup, gameId: r.gameId, injuryStatus: p.injuryStatus || null, markets: p.markets });
+          }
         }
         allEdges.sort((a, b) => Math.abs(b.edge) - Math.abs(a.edge));
         allSuspects.sort((a, b) => Math.abs(b.edge) - Math.abs(a.edge));
-        if (!cancelled) { setEdges(allEdges); setSuspects(allSuspects); }
+        // biggest projection-vs-line gap (any market) first
+        const gap = (row) => Math.max(...["points", "rebounds", "assists"].map((k) => Math.abs(row.markets[k]?.edge ?? 0)));
+        allRows.sort((a, b) => gap(b) - gap(a));
+        if (!cancelled) { setEdges(allEdges); setSuspects(allSuspects); setRows(allRows); }
       } catch (e) {
-        if (!cancelled) { setEdges([]); setSuspects([]); }
+        if (!cancelled) { setEdges([]); setSuspects([]); setRows([]); }
       }
       if (!cancelled) setLoading(false);
     })();
@@ -634,6 +643,11 @@ function NBAPropsSection({ games, hasFullAccess, navigate }) {
               <NBASuspectPanel suspects={suspects} />
             </div>
           )}
+          {rows.length > 0 && (
+            <div style={{ marginTop: 12 }}>
+              <NBAAllPropsTable rows={rows} hasFullAccess={hasFullAccess} navigate={navigate} />
+            </div>
+          )}
         </>
       )}
     </div>
@@ -655,6 +669,79 @@ function NBAPropRow({ edge, navigate }) {
         <div style={{ fontSize: 11, color: "#9ca3af" }}>proj {edge.projection}</div>
         <span style={{ fontSize: 14, fontWeight: 600, color: sideColor, fontVariantNumeric: "tabular-nums" }}>{edgeText}</span>
       </div>
+    </div>
+  );
+}
+
+// Full table: every projected player, all three markets, projection vs line.
+function NBAAllPropsTable({ rows, hasFullAccess, navigate }) {
+  const [open, setOpen] = useState(true);
+  const visible = hasFullAccess ? rows : rows.slice(0, 6);
+  const lockedCount = hasFullAccess ? 0 : Math.max(0, rows.length - visible.length);
+
+  return (
+    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 8, padding: 14 }}>
+      <div className="section-header" onClick={() => setOpen(!open)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: open ? 12 : 0 }}>
+        <span style={{ fontSize: 11, letterSpacing: 1, color: "#9ca3af", fontWeight: 600 }}>📋 ALL PLAYER PROJECTIONS · {rows.length}</span>
+        <span style={{ fontSize: 12, color: "#6b7280" }}>{open ? "▲ hide" : "▼ show"}</span>
+      </div>
+      {open && (
+        <>
+          <div className="games-table-wrap" style={{ overflowX: "auto" }}>
+            <table className="games-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+              <thead>
+                <tr style={{ borderBottom: "1px solid #1f2937", color: "#6b7280" }}>
+                  <th style={th()}>Player</th>
+                  <th style={th("right")}>Points</th>
+                  <th style={th("right")}>Rebounds</th>
+                  <th style={th("right")}>Assists</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visible.map((r, i) => (
+                  <tr key={r.gameId + r.name + i} className="game-row" onClick={() => navigate(`/game/nba/${r.gameId}`)} style={{ borderBottom: "1px solid #131820" }}>
+                    <td style={td()}>
+                      <div style={{ fontWeight: 600 }}>{r.name}</div>
+                      <div style={{ fontSize: 10, color: "#6b7280" }}>
+                        {r.matchup}{r.injuryStatus ? ` · ${r.injuryStatus}` : ""}
+                      </div>
+                    </td>
+                    <td style={td("right")}><StatCell m={r.markets.points} /></td>
+                    <td style={td("right")}><StatCell m={r.markets.rebounds} /></td>
+                    <td style={td("right")}><StatCell m={r.markets.assists} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {lockedCount > 0 && (
+            <div style={{ marginTop: 12, textAlign: "center" }}>
+              <button onClick={() => navigate("/pricing")} style={{ background: "#ef4444", color: "#fff", border: "none", borderRadius: 6, padding: "8px 18px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+                🔒 Unlock {lockedCount} more player{lockedCount === 1 ? "" : "s"} — $7/mo
+              </button>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// One stat cell: projection over the book line, colored by side; ⚠ if suspect.
+function StatCell({ m }) {
+  if (!m || !m.eligible || m.line == null || m.projection == null) {
+    return <span style={{ color: "#4b5563", fontSize: 11 }}>—</span>;
+  }
+  const color = m.side === "OVER" ? "#22c55e" : "#ef4444";
+  const strong = m.flagged;
+  return (
+    <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-end", lineHeight: 1.3 }}>
+      <span style={{ fontWeight: strong ? 700 : 600, color: strong ? color : "#e4e7eb", fontVariantNumeric: "tabular-nums" }}>
+        {m.projection} {m.suspect ? "⚠" : ""}
+      </span>
+      <span style={{ fontSize: 10, color: "#6b7280", fontVariantNumeric: "tabular-nums" }}>
+        line {m.line} · <span style={{ color }}>{m.side === "OVER" ? "o" : "u"}{Math.abs(m.edge).toFixed(1)}</span>
+      </span>
     </div>
   );
 }
