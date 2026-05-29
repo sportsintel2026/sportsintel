@@ -4,6 +4,7 @@
  * GET /api/nba/predictions          -> today's NBA predictions + edges
  * GET /api/nba/predictions?date=YYYY-MM-DD -> a specific date
  * GET /api/nba/matchup/:gameId      -> rich single-game matchup detail
+ * GET /api/nba/props/:gameId        -> player prop lines (points/reb/ast)
  *
  * Mount in your main backend file next to your other routes:
  *   app.use('/api/nba', require('./routes/nba'));
@@ -14,6 +15,7 @@ const express = require('express');
 const router = express.Router();
 const { generateNbaPredictions } = require('../services/nbaService');
 const { getNbaMatchup } = require('../services/nbaMatchup');
+const { getNbaProps } = require('../services/nbaProps');
 
 router.get('/predictions', async (req, res) => {
   try {
@@ -34,6 +36,17 @@ router.get('/matchup/:gameId', async (req, res) => {
   } catch (err) {
     console.error('[nba route] matchup failed:', err);
     res.status(502).json({ error: 'Failed to load NBA matchup' });
+  }
+});
+
+// Player prop LINES for a game (Stage 1 — lines only, no projections yet)
+router.get('/props/:gameId', async (req, res) => {
+  try {
+    const data = await getNbaProps(req.params.gameId);
+    res.json(data);
+  } catch (err) {
+    console.error('[nba route] props failed:', err);
+    res.status(502).json({ error: 'Failed to load NBA props' });
   }
 });
 
