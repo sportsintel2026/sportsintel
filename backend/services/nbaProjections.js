@@ -76,6 +76,16 @@ function projectStat(games, key, line, cfg = CFG) {
   };
 }
 
+// Classify an ESPN injury status string. "out" -> skip the player entirely;
+// "risk" -> project but never flag as an edge (route to suspects). null -> healthy enough.
+function classifyInjury(status) {
+  const s = String(status || "").toLowerCase();
+  if (!s) return null;
+  if (/\b(out|inactive|injured|suspend(ed)?|not with team)\b/.test(s)) return "out";
+  if (/\b(questionable|question|doubtful|doubt|day.?to.?day|game.?time(.?decision)?|probable|gtd)\b/.test(s)) return "risk";
+  return null;
+}
+
 // Project all three markets for a player given their lines {points:{line},rebounds:{line},assists:{line}}.
 function projectPlayer(games, lines, cfg = CFG) {
   const out = {};
@@ -90,21 +100,40 @@ function projectPlayer(games, lines, cfg = CFG) {
 // `players`: Stage 1 output [{ name, points:{line,over,under}, rebounds:{...}, assists:{...} }]
 // `resolveAthleteId(name) -> id|null` and `getGamelog(id) -> parsed games[]` are injected,
 //   so the name->ESPN-id concern stays isolated (and verifiable on its own).
-async function buildPropProjections(players, resolveAthleteId, getGamelog, cfg = CFG) {
+// `injuryStatusById`: optional { athleteId -> status string } from the ESPN summary.
+async function buildPropProjections(players, resolveAthleteId, getGamelog, cfg = CFG, injuryStatusById = {}) {
   const results = [];
   const edges = [];
   const suspects = [];
   for (const p of players || []) {
     const id = await resolveAthleteId(p.name);
     if (!id) { results.push({ name: p.name, eligible: false, reason: "no athlete id" }); continue; }
+
+    // Injury gate: an "out" player is skipped entirely (no pick possible).
+    const status = injuryStatusById[id] || null;
+    const inj = classifyInjury(status);
+    if (inj === "out") {
+      results.push({ name: p.name, athleteId: id, eligible: false, reason: `injury: ${status}`, injuryStatus: status });
+      continue;
+    }
+
     let games;
     try { games = await getGamelog(id); }
     catch (e) { results.push({ name: p.name, eligible: false, reason: `gamelog fetch failed` }); continue; }
     const proj = projectPlayer(games, p, cfg);
-    results.push({ name: p.name, athleteId: id, markets: proj });
+
+    results.push({ name: p.name, athleteId: id, ...(status ? { injuryStatus: status } : {}), markets: proj });
+
     for (const key of STAT_KEYS) {
-      if (proj[key].flagged) edges.push({ name: p.name, ...proj[key] });
-      else if (proj[key].suspect && proj[key].wouldFlag) suspects.push({ name: p.name, ...proj[key] });
+      const m = proj[key];
+      // A questionable/day-to-day player never becomes an edge — route any would-be
+      // edge to suspects with the injury as the reason.
+      if (inj === "risk" && m.wouldFlag) {
+        suspects.push({ name: p.name, ...m, flagged: false, suspect: true, suspectReason: `injury risk: ${status}` });
+        continue;
+      }
+      if (m.flagged) edges.push({ name: p.name, ...m });
+      else if (m.suspect && m.wouldFlag) suspects.push({ name: p.name, ...m });
     }
   }
   // Strongest first.
@@ -113,4 +142,4 @@ async function buildPropProjections(players, resolveAthleteId, getGamelog, cfg =
   return { experimental: true, generatedAt: new Date().toISOString(), players: results, edges, suspects };
 }
 
-module.exports = { projectStat, projectPlayer, buildPropProjections, CFG, STAT_KEYS };
+module.exports = { projectStat, projectPlayer, buildPropProjections, classifyInjury, CFG, STAT_KEYS };
