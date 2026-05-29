@@ -14,6 +14,7 @@ const CFG = {
   minutesDriftMax: 8,     // recent vs season minutes drift cap (rotation change guard)
   hitAgree: 0.6,          // recent games must agree with the side >=60% of the time
   threshold: { points: 3.0, rebounds: 1.6, assists: 1.6 }, // min edge to flag
+  excludePreseason: true, // drop preseason / all-star / exhibition games (noisy, short minutes)
   // "Suspect line" guard: when the book's line sits far from the player's own
   // season norm, the book almost certainly knows something the model can't see
   // (injury, minutes restriction, questionable status). Such lines are NEVER
@@ -27,9 +28,16 @@ const STAT_KEYS = ["points", "rebounds", "assists"];
 const mean = a => (a.length ? a.reduce((s, x) => s + x, 0) / a.length : 0);
 const round = (n, d = 1) => Number(n.toFixed(d));
 
+// Preseason / all-star / exhibition games are short-minute and noisy — exclude them.
+// Matches "Preseason", "2025 Preseason", "All-Star", "All Star", "Exhibition".
+// Does NOT match "Regular Season" or "Postseason" (playoffs are kept).
+const isPreseason = st => /pre[\s.-]?season|all[\s.-]?star|exhibition/i.test(st || "");
+
 // Project one stat for one player from their parsed gamelog (newest-first).
 function projectStat(games, key, line, cfg = CFG) {
-  const played = games.filter(g => g.minutes > 0).map(g => ({ minutes: g.minutes, val: g[key] }));
+  const played = games
+    .filter(g => g.minutes > 0 && !(cfg.excludePreseason && isPreseason(g.seasonType)))
+    .map(g => ({ minutes: g.minutes, val: g[key] }));
   const n = played.length;
   if (n < cfg.minGames) return { stat: key, line, eligible: false, flagged: false, reason: `only ${n} games`, experimental: true };
   if (!(line > 0)) return { stat: key, line, eligible: false, flagged: false, reason: "no line", experimental: true };
