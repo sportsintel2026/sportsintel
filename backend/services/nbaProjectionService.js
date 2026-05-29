@@ -116,12 +116,15 @@ async function getIdDebug(gameId) {
   }
 
   const map = buildMapFromAthletes(collectAthletes(summary));
+  const injuries = parseInjuries(summary);
   return {
     gameId: String(gameId),
     summaryTopKeys: Object.keys(summary),
     summaryAthletes: Object.keys(map.full).length,
     teamIds,
     roster,
+    injuryCount: Object.keys(injuries).length,
+    injurySample: Object.entries(injuries).slice(0, 6).map(([id, status]) => ({ id, status })),
   };
 }
 
@@ -130,11 +133,24 @@ function makeResolver(map) {
   return name => map.full[norm(name)] || map.lastUnique[lastName(name)] || null;
 }
 
+// PURE: ESPN summary injuries -> { athleteId -> status string }.
+function parseInjuries(summary) {
+  const out = {};
+  for (const teamInj of (summary && summary.injuries) || []) {
+    for (const it of teamInj.injuries || []) {
+      const ath = (it && it.athlete) || {};
+      const status = it.status || (it.type && (it.type.description || it.type.name)) || null;
+      if (ath.id && status) out[String(ath.id)] = status;
+    }
+  }
+  return out;
+}
+
 // Merge summary athletes with both teams' full rosters (the reliable pre-game source).
-// Returns { map, state, date }: state is "pre"|"in"|"post", date is the game's ISO time.
+// Returns { map, state, date, injuries }: state is "pre"|"in"|"post".
 async function buildIdMap(gameId) {
   const c = idCache.get(gameId);
-  if (c && Date.now() - c.t < ID_TTL) return { map: c.map, state: c.state, date: c.date };
+  if (c && Date.now() - c.t < ID_TTL) return { map: c.map, state: c.state, date: c.date, injuries: c.injuries };
 
   const res = await fetch(`${SUMMARY}?event=${gameId}`);
   if (!res.ok) throw new Error('espn summary ' + res.status);
@@ -143,6 +159,7 @@ async function buildIdMap(gameId) {
   const comp = (summary.header && summary.header.competitions && summary.header.competitions[0]) || {};
   const state = (comp.status && comp.status.type && comp.status.type.state) || null;
   const date = comp.date || null;
+  const injuries = parseInjuries(summary);
 
   const athletes = collectAthletes(summary);
   for (const teamId of competitorTeamIds(summary)) {
@@ -155,8 +172,8 @@ async function buildIdMap(gameId) {
   const map = buildMapFromAthletes(athletes);
   // Only cache a map that actually found players — never let an empty/transient
   // result get pinned for the full TTL.
-  if (Object.keys(map.full).length) idCache.set(gameId, { t: Date.now(), map, state, date });
-  return { map, state, date };
+  if (Object.keys(map.full).length) idCache.set(gameId, { t: Date.now(), map, state, date, injuries });
+  return { map, state, date, injuries };
 }
 
 async function getGamelogCached(athleteId) {
@@ -192,7 +209,9 @@ async function getNbaPropProjections(gameId) {
   const proj = await buildPropProjections(
     props.players,
     async name => resolver(name),
-    getGamelogCached
+    getGamelogCached,
+    undefined,                 // use default CFG
+    idInfo.injuries || {}      // injury statuses by athleteId
   );
 
   const out = {
