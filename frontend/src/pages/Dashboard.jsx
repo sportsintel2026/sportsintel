@@ -9,8 +9,8 @@ const LEAGUES = [
   { id: "nba", label: "NBA", icon: "🏀", live: false },
   { id: "nhl", label: "NHL", icon: "🏒", live: false },
   { id: "nfl", label: "NFL", icon: "🏈", live: false },
-  { id: "soccer", label: "Soccer", icon: "⚽", live: false },
-  { id: "golf", label: "Golf", icon: "⛳", live: false },
+  { id: "ncaafb", label: "CFB", icon: "🏟️", live: false },
+  { id: "ncaamb", label: "CBB", icon: "🎓", live: false },
 ];
 
 export default function DashboardPage() {
