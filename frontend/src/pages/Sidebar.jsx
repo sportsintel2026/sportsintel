@@ -1,6 +1,6 @@
 // Sidebar.jsx — main navigation sidebar for the app
 //
-// Used on Dashboard, GameDetail, Settings, MyPicks pages.
+// Used on Dashboard, GameDetail, Settings, MyPicks, NBA pages.
 
 import { Link, useLocation } from "react-router-dom";
 
@@ -50,6 +50,15 @@ export default function Sidebar({ user, plan, signOut, navigate }) {
         active={isActive("/my-picks")}
         icon="🎯"
         label="My picks"
+      />
+
+      {/* NBA section */}
+      <div style={{ ...sectionLabelStyle, marginTop: 18 }}>NBA</div>
+      <NavLink
+        to="/nba"
+        active={isActive("/nba")}
+        icon="🏀"
+        label="NBA Playoffs"
       />
 
       {/* Account section */}
