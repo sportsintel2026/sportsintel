@@ -6,7 +6,7 @@ import Sidebar from "./Sidebar";
 
 const LEAGUES = [
   { id: "mlb", label: "MLB", icon: "⚾", live: true },
-  { id: "nba", label: "NBA", icon: "🏀", live: false },
+  { id: "nba", label: "NBA", icon: "🏀", live: true, path: "/nba" },
   { id: "nhl", label: "NHL", icon: "🏒", live: false },
   { id: "nfl", label: "NFL", icon: "🏈", live: false },
   { id: "ncaafb", label: "CFB", icon: "🏟️", live: false },
@@ -115,7 +115,7 @@ export default function DashboardPage() {
       </div>
 
       <div className="main-content" style={{ marginLeft: 200 }}>
-        <LeagueTabs league={league} setLeague={setLeague} />
+        <LeagueTabs league={league} setLeague={setLeague} navigate={navigate} />
         <div className="dashboard-content" style={{ maxWidth: 1200, margin: "0 auto", padding: "20px 24px 60px" }}>
           {league === "mlb" ? (
             <MLBDashboard edges={edges} loading={edgesLoading} picks={picks} hasFullAccess={hasFullAccess} navigate={navigate} onRefresh={loadEdges} />
@@ -128,14 +128,14 @@ export default function DashboardPage() {
   );
 }
 
-function LeagueTabs({ league, setLeague }) {
+function LeagueTabs({ league, setLeague, navigate }) {
   return (
     <div style={{ background: "#0a0e14", borderBottom: "1px solid #1a1f28", position: "sticky", top: 0, zIndex: 39 }}>
       <div className="league-tabs-inner" style={{ maxWidth: 1200, margin: "0 auto", padding: "0 24px", display: "flex", gap: 4, overflowX: "auto" }}>
         {LEAGUES.map(l => {
           const active = league === l.id;
           return (
-            <button key={l.id} className="tab-btn" onClick={() => setLeague(l.id)} style={{ background: "none", border: "none", padding: "14px 14px", fontSize: 13, fontWeight: active ? 700 : 500, color: active ? "#fff" : "#6b7280", borderBottom: `2px solid ${active ? "#ef4444" : "transparent"}`, marginBottom: -1, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 6 }}>
+            <button key={l.id} className="tab-btn" onClick={() => (l.path ? navigate(l.path) : setLeague(l.id))} style={{ background: "none", border: "none", padding: "14px 14px", fontSize: 13, fontWeight: active ? 700 : 500, color: active ? "#fff" : "#6b7280", borderBottom: `2px solid ${active ? "#ef4444" : "transparent"}`, marginBottom: -1, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 6 }}>
               <span>{l.icon}</span>
               <span>{l.label}</span>
               {!l.live && <span style={{ fontSize: 9, color: "#4b5563", marginLeft: 2 }}>· Soon</span>}
