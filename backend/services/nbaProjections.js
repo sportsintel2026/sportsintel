@@ -14,6 +14,12 @@ const CFG = {
   minutesDriftMax: 8,     // recent vs season minutes drift cap (rotation change guard)
   hitAgree: 0.6,          // recent games must agree with the side >=60% of the time
   threshold: { points: 3.0, rebounds: 1.6, assists: 1.6 }, // min edge to flag
+  // "Suspect line" guard: when the book's line sits far from the player's own
+  // season norm, the book almost certainly knows something the model can't see
+  // (injury, minutes restriction, questionable status). Such lines are NEVER
+  // flagged as edges — they're held aside as suspect instead.
+  suspectLowRatio: 0.6,   // line below 60% of season avg  -> suspect
+  suspectHighRatio: 1.7,  // line above 170% of season avg -> suspect
 };
 
 const STAT_KEYS = ["points", "rebounds", "assists"];
@@ -42,7 +48,13 @@ function projectStat(games, key, line, cfg = CFG) {
   const overRate = recent.filter(x => x.val > line).length / recent.length;
   const hitAgrees = side === "OVER" ? overRate >= cfg.hitAgree : (1 - overRate) >= cfg.hitAgree;
 
-  const flagged = Math.abs(edge) >= cfg.threshold[key] && minutesStable && hitAgrees;
+  // Is the line wildly out of step with the player's own season history?
+  const suspect = seasonMean > 0 &&
+    (line < cfg.suspectLowRatio * seasonMean || line > cfg.suspectHighRatio * seasonMean);
+
+  // Passes the math/stability gates? (used for both real edges and held-suspects)
+  const wouldFlag = Math.abs(edge) >= cfg.threshold[key] && minutesStable && hitAgrees;
+  const flagged = wouldFlag && !suspect; // a suspect line is never a real edge
 
   return {
     stat: key, line,
@@ -50,7 +62,9 @@ function projectStat(games, key, line, cfg = CFG) {
     recentMean: round(recentMean), seasonMean: round(seasonMean),
     recentMinutes: round(recentMin), minutesStable,
     overRate: round(overRate, 2), games: n,
-    eligible: true, flagged, experimental: true,
+    eligible: true, flagged, suspect, wouldFlag,
+    ...(suspect ? { suspectReason: "line far from season norm — likely injury/role news the model can't see" } : {}),
+    experimental: true,
   };
 }
 
@@ -71,6 +85,7 @@ function projectPlayer(games, lines, cfg = CFG) {
 async function buildPropProjections(players, resolveAthleteId, getGamelog, cfg = CFG) {
   const results = [];
   const edges = [];
+  const suspects = [];
   for (const p of players || []) {
     const id = await resolveAthleteId(p.name);
     if (!id) { results.push({ name: p.name, eligible: false, reason: "no athlete id" }); continue; }
@@ -81,11 +96,13 @@ async function buildPropProjections(players, resolveAthleteId, getGamelog, cfg =
     results.push({ name: p.name, athleteId: id, markets: proj });
     for (const key of STAT_KEYS) {
       if (proj[key].flagged) edges.push({ name: p.name, ...proj[key] });
+      else if (proj[key].suspect && proj[key].wouldFlag) suspects.push({ name: p.name, ...proj[key] });
     }
   }
-  // Strongest edges first.
+  // Strongest first.
   edges.sort((a, b) => Math.abs(b.edge) - Math.abs(a.edge));
-  return { experimental: true, generatedAt: new Date().toISOString(), players: results, edges };
+  suspects.sort((a, b) => Math.abs(b.edge) - Math.abs(a.edge));
+  return { experimental: true, generatedAt: new Date().toISOString(), players: results, edges, suspects };
 }
 
 module.exports = { projectStat, projectPlayer, buildPropProjections, CFG, STAT_KEYS };
