@@ -9,6 +9,7 @@
 const { fetchGamelog } = require('./nbaGamelog');
 const { buildPropProjections } = require('./nbaProjections');
 const { getNbaProps } = require('./nbaProps');
+const { recordNbaPropPredictions } = require('./predictionTracker');
 
 const SUMMARY = 'https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary';
 const ROSTER = 'https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams'; // /{teamId}/roster
@@ -130,13 +131,18 @@ function makeResolver(map) {
 }
 
 // Merge summary athletes with both teams' full rosters (the reliable pre-game source).
+// Returns { map, state, date }: state is "pre"|"in"|"post", date is the game's ISO time.
 async function buildIdMap(gameId) {
   const c = idCache.get(gameId);
-  if (c && Date.now() - c.t < ID_TTL) return c.map;
+  if (c && Date.now() - c.t < ID_TTL) return { map: c.map, state: c.state, date: c.date };
 
   const res = await fetch(`${SUMMARY}?event=${gameId}`);
   if (!res.ok) throw new Error('espn summary ' + res.status);
   const summary = await res.json();
+
+  const comp = (summary.header && summary.header.competitions && summary.header.competitions[0]) || {};
+  const state = (comp.status && comp.status.type && comp.status.type.state) || null;
+  const date = comp.date || null;
 
   const athletes = collectAthletes(summary);
   for (const teamId of competitorTeamIds(summary)) {
@@ -149,8 +155,8 @@ async function buildIdMap(gameId) {
   const map = buildMapFromAthletes(athletes);
   // Only cache a map that actually found players — never let an empty/transient
   // result get pinned for the full TTL.
-  if (Object.keys(map.full).length) idCache.set(gameId, { t: Date.now(), map });
-  return map;
+  if (Object.keys(map.full).length) idCache.set(gameId, { t: Date.now(), map, state, date });
+  return { map, state, date };
 }
 
 async function getGamelogCached(athleteId) {
@@ -171,9 +177,9 @@ async function getNbaPropProjections(gameId) {
     };
   }
 
-  let resolver;
+  let idInfo;
   try {
-    resolver = makeResolver(await buildIdMap(gameId));
+    idInfo = await buildIdMap(gameId);
   } catch (e) {
     return {
       gameId: String(gameId), available: false,
@@ -181,6 +187,7 @@ async function getNbaPropProjections(gameId) {
       experimental: true, players: [], edges: [],
     };
   }
+  const resolver = makeResolver(idInfo.map);
 
   const proj = await buildPropProjections(
     props.players,
@@ -188,7 +195,7 @@ async function getNbaPropProjections(gameId) {
     getGamelogCached
   );
 
-  return {
+  const out = {
     gameId: String(gameId),
     eventId: props.eventId,
     available: true,
@@ -196,8 +203,16 @@ async function getNbaPropProjections(gameId) {
     home: props.home,
     away: props.away,
     note: 'Experimental projections. Prop markets are sharp — flagged edges are rare and informational, not betting advice.',
-    ...proj, // experimental, generatedAt, players, edges
+    ...proj, // experimental, generatedAt, players, edges, suspects
   };
+
+  // Snapshot picks for the Performance tracker — pre-game only, best-effort.
+  if (idInfo.state === 'pre') {
+    recordNbaPropPredictions(out, idInfo.date)
+      .catch(e => console.error('[nbaProj] record failed:', e && e.message));
+  }
+
+  return out;
 }
 
 module.exports = { getNbaPropProjections, parseBoxscoreIds, parseRoster, buildMapFromAthletes, makeResolver, getIdDebug };
