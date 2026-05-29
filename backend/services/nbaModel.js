@@ -1,38 +1,46 @@
 /**
- * nbaModel.js — SportsIntel NBA model v0.1 (team markets: ML / spread / total)
+ * nbaModel.js — SportsIntel NBA model v0.1.1 (team markets: ML / spread / total)
  * --------------------------------------------------------------------------
- * Pure, dependency-free. Takes one game context from nbaDataSource + the
- * matched book lines, returns predictions + edges.
+ * Pure, dependency-free. Takes one game context from nbaDataSource + matched
+ * book lines, returns predictions + edges.
  *
- * Method (v0.1):
- *  - Expected points = team offense vs. opponent defense, relative to league
- *    average (per-game scoring already embeds pace, so we don't double-count it).
- *  - Home court worth ~2.5 pts (0 at a neutral site).
- *  - Win prob from projected margin via a normal model (NBA margin SD ~12).
- *  - Edges: model vs. de-vigged book probability (ML), model margin vs. spread,
- *    model total vs. book total. A pick is flagged "value" only past a threshold.
- *  - Injuries are surfaced for transparency but NOT yet weighted into the line
- *    (that needs player minutes/value — a v0.2 item).
+ * v0.1.1 adds GUARDRAILS so bad inputs can never surface as a confident pick:
+ *  - Inputs validated (points/game must be in a sane NBA range).
+ *  - Outputs sanity-checked: a v0.1 points model projecting an 18+ margin or a
+ *    >92% win is almost always bad data, so picks are suppressed and the game
+ *    is flagged dataQuality:'suspect' rather than published as a huge "edge".
+ *  - dataQuality + ratingsLoaded fields make the data state explicit.
+ *
+ * Method: expected points = team offense vs opponent defense vs league avg;
+ * home court ~2.5 pts (0 at neutral site); win prob from margin (SD ~12).
+ * Injuries are surfaced but not yet weighted into the line (v0.2).
  * -------------------------------------------------------------------------- */
 
-const LG_PPG = 114;        // league avg points/game (fallback + scaling anchor)
-const HCA_POINTS = 2.5;    // total home-court points edge; 0 at a neutral site
-const SIGMA = 12;          // std dev of NBA final margins, for prob mapping
-const EDGE_ML = 0.03;      // flag ML value at >= 3% probability edge
-const EDGE_SPREAD = 1.5;   // flag spread value at >= 1.5 projected points
-const EDGE_TOTAL = 2.0;    // flag total value at >= 2.0 projected points
+const LG_PPG = 114;
+const HCA_POINTS = 2.5;
+const SIGMA = 12;
+const EDGE_ML = 0.03;
+const EDGE_SPREAD = 1.5;
+const EDGE_TOTAL = 2.0;
+
+// guardrails
+const PPG_MIN = 90;
+const PPG_MAX = 135;
+const MAX_TRUSTED_MARGIN = 18;   // bigger than this from a points model = suspect
+const MAX_TRUSTED_WINPROB = 0.92;
 
 function r(n, d = 1) {
   if (n == null || !isFinite(n)) return null;
   const f = Math.pow(10, d);
   return Math.round(n * f) / f;
 }
-
+function sanePpg(p) {
+  return p != null && isFinite(p) && p >= PPG_MIN && p <= PPG_MAX;
+}
 function amToProb(a) {
   if (a == null || !isFinite(a)) return null;
   return a < 0 ? -a / (-a + 100) : 100 / (a + 100);
 }
-
 function erf(x) {
   const s = x < 0 ? -1 : 1;
   x = Math.abs(x);
@@ -48,8 +56,6 @@ function erf(x) {
 function normalCDF(x) {
   return 0.5 * (1 + erf(x / Math.SQRT2));
 }
-
-// team offense (off) vs opponent defense (oppDef), both per-game, vs league avg
 function expectedPoints(off, oppDef) {
   if (off != null && oppDef != null) return (off * oppDef) / LG_PPG;
   if (off != null) return off;
@@ -69,11 +75,31 @@ function predictGame(ctx, lines) {
 
   const expHome = expectedPoints(h.ppg, a.papg) + hca / 2;
   const expAway = expectedPoints(a.ppg, h.papg) - hca / 2;
-
   const projTotal = expHome + expAway;
   const projMargin = expHome - expAway; // + = home favored
   const homeWinProb = normalCDF(projMargin / SIGMA);
   const awayWinProb = 1 - homeWinProb;
+
+  // ── data-quality gate ──────────────────────────────────────────────────────
+  const ratingsLoaded = h.papg != null && a.papg != null;
+  let dataQuality = 'ok';
+  let dataNote = null;
+  if (!sanePpg(h.ppg) || !sanePpg(a.ppg)) {
+    dataQuality = 'insufficient';
+    dataNote = 'Team scoring data missing or out of range — no pick issued.';
+  } else if (
+    Math.abs(projMargin) > MAX_TRUSTED_MARGIN ||
+    homeWinProb > MAX_TRUSTED_WINPROB ||
+    homeWinProb < 1 - MAX_TRUSTED_WINPROB
+  ) {
+    dataQuality = 'suspect';
+    dataNote =
+      'Projection too extreme for a v0.1 points model — likely a data issue; pick suppressed.';
+  } else if (!ratingsLoaded) {
+    dataQuality = 'offense-only';
+    dataNote = 'Defensive ratings did not load; running on offense only — lower confidence.';
+  }
+  const trustworthy = dataQuality === 'ok' || dataQuality === 'offense-only';
 
   /* ---- moneyline ---- */
   const ml = {
@@ -89,7 +115,7 @@ function predictGame(ctx, lines) {
   if (lines && lines.home.ml != null && lines.away.ml != null) {
     const ih = amToProb(lines.home.ml);
     const ia = amToProb(lines.away.ml);
-    const fairHome = ih / (ih + ia); // de-vigged
+    const fairHome = ih / (ih + ia);
     const edgeHome = homeWinProb - fairHome;
     const edgeAway = awayWinProb - (1 - fairHome);
     const pickHome = edgeHome >= edgeAway;
@@ -97,7 +123,7 @@ function predictGame(ctx, lines) {
     ml.fair = { home: r(fairHome * 100), away: r((1 - fairHome) * 100) };
     ml.book = { home: lines.home.ml, away: lines.away.ml };
     ml.edge = r(edge * 100);
-    ml.value = edge >= EDGE_ML;
+    ml.value = trustworthy && edge >= EDGE_ML;
     ml.pick = ml.value ? (pickHome ? 'home' : 'away') : null;
     ml.pickTeam = ml.value ? (pickHome ? h.displayName : a.displayName) : null;
   }
@@ -115,7 +141,7 @@ function predictGame(ctx, lines) {
   };
   if (lines && lines.home.spread && lines.home.spread.point != null) {
     const pt = lines.home.spread.point;
-    const cover = projMargin + pt; // >0 => home covers
+    const cover = projMargin + pt;
     const pickHome = cover >= 0;
     spread.line = pt;
     spread.book = {
@@ -123,7 +149,7 @@ function predictGame(ctx, lines) {
       awayPrice: lines.away.spread ? lines.away.spread.price : null,
     };
     spread.edge = r(Math.abs(cover));
-    spread.value = Math.abs(cover) >= EDGE_SPREAD;
+    spread.value = trustworthy && Math.abs(cover) >= EDGE_SPREAD;
     spread.pick = spread.value ? (pickHome ? 'home' : 'away') : null;
     spread.pickTeam = spread.value ? (pickHome ? h.displayName : a.displayName) : null;
     spread.pickLine = spread.value ? (pickHome ? pt : -pt) : null;
@@ -144,7 +170,7 @@ function predictGame(ctx, lines) {
     total.line = T;
     total.book = { over: lines.total.overPrice, under: lines.total.underPrice };
     total.edge = r(Math.abs(diff));
-    total.value = Math.abs(diff) >= EDGE_TOTAL;
+    total.value = trustworthy && Math.abs(diff) >= EDGE_TOTAL;
     total.pick = total.value ? (diff >= 0 ? 'over' : 'under') : null;
   }
 
@@ -157,6 +183,9 @@ function predictGame(ctx, lines) {
     away: a.displayName,
     neutralSite: neutral,
     hasLines: !!lines,
+    dataQuality,
+    ratingsLoaded,
+    dataNote,
     expected: { home: r(expHome), away: r(expAway) },
     predictions: { moneyline: ml, spread, total },
     factors: {
@@ -170,7 +199,7 @@ function predictGame(ctx, lines) {
       homeInjuries: h.injuries,
       awayInjuries: a.injuries,
     },
-    modelVersion: 'nba-v0.1',
+    modelVersion: 'nba-v0.1.1',
     note: 'Ratings/pace computed from ESPN; injuries shown but not yet weighted into the line (v0.2).',
   };
 }
