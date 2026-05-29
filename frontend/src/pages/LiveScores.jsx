@@ -156,6 +156,7 @@ function Section({ title, color, count, defaultOpen, liveDot, children }) {
 }
 
 function GameCard({ g, league, meta }) {
+  const navigate = useNavigate();
   const [expanded, setExpanded] = useState(false);
   const [detail, setDetail] = useState(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -210,6 +211,16 @@ function GameCard({ g, league, meta }) {
           )}
         </div>
       )}
+
+      {/* Always-available link to the full matchup/analysis page */}
+      <div onClick={(e) => e.stopPropagation()} style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid #131820", display: "flex", justifyContent: "flex-end", cursor: "default" }}>
+        <button
+          onClick={() => navigate(`/game/${league}/${g.id}`)}
+          style={{ background: "none", border: "1px solid #1f2937", borderRadius: 6, color: "#ef4444", fontSize: 11, fontWeight: 700, padding: "6px 12px", cursor: "pointer", fontFamily: "inherit" }}
+        >
+          Full matchup & analysis →
+        </button>
+      </div>
     </div>
   );
 }
