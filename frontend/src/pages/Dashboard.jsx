@@ -545,7 +545,9 @@ function NBADashboard({ hasFullAccess, navigate }) {
         <EdgePanel title="Top totals edges" icon="📊" edges={totalEdges} renderRow={(e) => <NBATotalRow edge={e} key={e.gameId} navigate={navigate} />} emptyText="No totals edges — books are sharp here" hasFullAccess={hasFullAccess} navigate={navigate} />
       </div>
 
-      <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 8, padding: "16px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+      <NBAPropsSection games={games} hasFullAccess={hasFullAccess} navigate={navigate} />
+
+      <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 8, padding: "16px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginTop: 16 }}>
         <div>
           <div style={{ fontSize: 14, fontWeight: 700, color: "#e4e7eb", marginBottom: 2 }}>🏀 Want to see every NBA game?</div>
           <div style={{ fontSize: 12, color: "#9ca3af" }}>Full slate with projections, win %, and matchup detail</div>
@@ -553,6 +555,130 @@ function NBADashboard({ hasFullAccess, navigate }) {
         <button onClick={() => navigate("/nba")} style={{ background: "#ef4444", color: "#fff", border: "none", borderRadius: 6, padding: "10px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}>
           View NBA Playoffs →
         </button>
+      </div>
+    </div>
+  );
+}
+
+// ── NBA player props (points / rebounds / assists) ──────────────────────────────
+// Pulls projections for each game in the slate from /api/nba/props/:gameId/projections,
+// collects the model's flagged prop edges and the held-back "suspect" picks.
+function NBAPropsSection({ games, hasFullAccess, navigate }) {
+  const [edges, setEdges] = useState(null);
+  const [suspects, setSuspects] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const base = import.meta.env.VITE_API_URL || "https://sportsintel-production.up.railway.app";
+        const slate = (games || []).slice(0, 6); // cap fetches; playoff slates are small
+        const results = await Promise.all(
+          slate.map((g) =>
+            fetch(`${base}/api/nba/props/${g.gameId}/projections`)
+              .then((r) => (r.ok ? r.json() : null))
+              .catch(() => null)
+          )
+        );
+        const allEdges = [];
+        const allSuspects = [];
+        for (const r of results) {
+          if (!r || !r.available) continue;
+          const matchup = `${nbaAbbr(r.away)} @ ${nbaAbbr(r.home)}`;
+          for (const e of r.edges || []) allEdges.push({ ...e, matchup, gameId: r.gameId });
+          for (const s of r.suspects || []) allSuspects.push({ ...s, matchup, gameId: r.gameId });
+        }
+        allEdges.sort((a, b) => Math.abs(b.edge) - Math.abs(a.edge));
+        allSuspects.sort((a, b) => Math.abs(b.edge) - Math.abs(a.edge));
+        if (!cancelled) { setEdges(allEdges); setSuspects(allSuspects); }
+      } catch (e) {
+        if (!cancelled) { setEdges([]); setSuspects([]); }
+      }
+      if (!cancelled) setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [games]);
+
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4, flexWrap: "wrap", gap: 8 }}>
+        <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>🎯 Player props</h2>
+        <span style={{ fontSize: 11, color: "#6b7280" }}>points · rebounds · assists</span>
+      </div>
+      <p style={{ margin: "0 0 12px", fontSize: 12, color: "#9ca3af" }}>
+        Model projection vs the book line. Out / injured players are removed automatically;
+        questionable players are held back below. <span style={{ color: "#f59700", fontWeight: 600 }}>Experimental.</span>
+      </p>
+
+      {loading ? (
+        <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 8, padding: 28, textAlign: "center", color: "#6b7280", fontSize: 12 }}>
+          <div style={{ width: 22, height: 22, border: "3px solid #1f2937", borderTopColor: "#ef4444", borderRadius: "50%", animation: "spin .8s linear infinite", margin: "0 auto 10px" }} />
+          Loading player props…
+        </div>
+      ) : (
+        <>
+          <EdgePanel
+            title="Top player prop edges"
+            icon="🎯"
+            edges={edges || []}
+            renderRow={(e) => <NBAPropRow edge={e} key={e.gameId + e.name + e.stat} navigate={navigate} />}
+            emptyText="No prop edges cleared the guardrails in this slate"
+            hasFullAccess={hasFullAccess}
+            navigate={navigate}
+            wide
+          />
+          {suspects.length > 0 && (
+            <div style={{ marginTop: 12 }}>
+              <NBASuspectPanel suspects={suspects} />
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function NBAPropRow({ edge, navigate }) {
+  const sideColor = edge.side === "OVER" ? "#22c55e" : "#ef4444";
+  const edgeText = `${edge.edge > 0 ? "+" : ""}${Number(edge.edge).toFixed(1)}`;
+  return (
+    <div className="edge-row hr-prop-row" onClick={() => navigate(`/game/nba/${edge.gameId}`)} style={{ display: "grid", gridTemplateColumns: "2.2fr 1fr 1fr 1fr 80px", gap: 10, padding: 10, background: "#0a0e14", borderRadius: 4, alignItems: "center" }}>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 12, fontWeight: 600 }}>{edge.name}</div>
+        <div style={{ fontSize: 10, color: "#6b7280", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{edge.matchup}</div>
+      </div>
+      <div className="hr-prop-stats" style={{ display: "contents" }}>
+        <div style={{ fontSize: 11, color: "#9ca3af", textTransform: "capitalize" }}>{edge.stat}</div>
+        <div style={{ fontSize: 12, fontWeight: 700, color: sideColor }}>{edge.side} {edge.line}</div>
+        <div style={{ fontSize: 11, color: "#9ca3af" }}>proj {edge.projection}</div>
+        <span style={{ fontSize: 14, fontWeight: 600, color: sideColor, fontVariantNumeric: "tabular-nums" }}>{edgeText}</span>
+      </div>
+    </div>
+  );
+}
+
+function NBASuspectPanel({ suspects }) {
+  return (
+    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderLeft: "3px solid #f59700", borderRadius: 8, padding: 14 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+        <span style={{ fontSize: 11, letterSpacing: 1, color: "#fbbf24", fontWeight: 600 }}>⚠️ HELD BACK · LIKELY NEWS OR INJURY</span>
+        <span style={{ fontSize: 10, color: "#6b7280" }}>{suspects.length} flagged</span>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {suspects.map((s, i) => (
+          <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: 10, background: "#0a0e14", borderRadius: 4 }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 12, fontWeight: 600 }}>
+                {s.name} · <span style={{ textTransform: "capitalize", color: "#9ca3af" }}>{s.stat}</span>{" "}
+                <span style={{ color: s.side === "OVER" ? "#22c55e" : "#ef4444" }}>{s.side} {s.line}</span>
+              </div>
+              <div style={{ fontSize: 10, color: "#a8915c", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.suspectReason || "suspect line"}</div>
+            </div>
+            <span style={{ fontSize: 11, color: "#6b7280", whiteSpace: "nowrap" }}>{s.matchup}</span>
+          </div>
+        ))}
       </div>
     </div>
   );
