@@ -6,7 +6,7 @@ import Sidebar from "./Sidebar";
 
 const LEAGUES = [
   { id: "mlb", label: "MLB", icon: "⚾", live: true },
-  { id: "nba", label: "NBA", icon: "🏀", live: true, path: "/nba" },
+  { id: "nba", label: "NBA", icon: "🏀", live: true },
   { id: "nhl", label: "NHL", icon: "🏒", live: false },
   { id: "nfl", label: "NFL", icon: "🏈", live: false },
   { id: "ncaafb", label: "CFB", icon: "🏟️", live: false },
@@ -119,6 +119,8 @@ export default function DashboardPage() {
         <div className="dashboard-content" style={{ maxWidth: 1200, margin: "0 auto", padding: "20px 24px 60px" }}>
           {league === "mlb" ? (
             <MLBDashboard edges={edges} loading={edgesLoading} picks={picks} hasFullAccess={hasFullAccess} navigate={navigate} onRefresh={loadEdges} />
+          ) : league === "nba" ? (
+            <NBADashboard hasFullAccess={hasFullAccess} navigate={navigate} />
           ) : (
             <ComingSoon league={LEAGUES.find(l => l.id === league)} />
           )}
@@ -470,6 +472,134 @@ function ErrorState({ onRetry }) {
       <button onClick={onRetry} style={{ background: "#ef4444", color: "#fff", border: "none", borderRadius: 6, padding: "8px 18px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Retry</button>
     </div>
   );
+}
+
+function NBADashboard({ hasFullAccess, navigate }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true); setError(false);
+    try {
+      const base = import.meta.env.VITE_API_URL || "https://sportsintel-production.up.railway.app";
+      const res = await fetch(`${base}/api/nba/predictions`);
+      if (!res.ok) throw new Error("bad status");
+      setData(await res.json());
+    } catch (e) { console.error("Failed to load NBA edges:", e); setError(true); setData(null); }
+    setLoading(false);
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  if (loading) return <Loader />;
+  if (error) return <ErrorState onRetry={load} />;
+
+  // only resolved matchups with usable data
+  const games = (data?.predictions || []).filter(
+    (g) => !(g.home || "").includes("/") && !(g.away || "").includes("/") && g.dataQuality !== "insufficient"
+  );
+
+  const mlEdges = [];
+  const totalEdges = [];
+  for (const g of games) {
+    const matchup = `${nbaAbbr(g.away)} @ ${nbaAbbr(g.home)}`;
+    const time = nbaTime(g.date);
+    const ml = g.predictions?.moneyline;
+    if (ml?.value) {
+      const pickHome = ml.pick === "home";
+      mlEdges.push({
+        gameId: g.gameId, matchup, time,
+        teamAbbr: nbaAbbr(ml.pickTeam),
+        odds: pickHome ? ml.book?.home : ml.book?.away,
+        edgePct: ml.edge,
+        modelPct: Math.round(pickHome ? ml.homeWinProb : ml.awayWinProb),
+      });
+    }
+    const to = g.predictions?.total;
+    if (to?.value) {
+      totalEdges.push({
+        gameId: g.gameId, matchup,
+        side: to.pick, line: to.line,
+        edgePts: to.edge, projected: to.projectedTotal,
+      });
+    }
+  }
+  mlEdges.sort((a, b) => b.edgePct - a.edgePct);
+  totalEdges.sort((a, b) => b.edgePts - a.edgePts);
+
+  return (
+    <div style={{ animation: "fadeIn .3s ease" }}>
+      <div style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 8 }}>
+        <h1 style={{ margin: 0, fontSize: 26, fontWeight: 700 }}>🏀 NBA Playoff edges</h1>
+        <span style={{ fontSize: 12, color: "#6b7280" }}>{games.length} game{games.length === 1 ? "" : "s"}</span>
+      </div>
+      <p style={{ margin: "0 0 24px", fontSize: 13, color: "#9ca3af" }}>
+        Model projections vs sportsbook lines · <span style={{ color: "#ef4444", fontWeight: 600 }}>click any edge</span> for the full matchup.
+      </p>
+      <div style={{ background: "#1a1410", border: "1px solid #f5970022", borderLeft: "3px solid #f59700", borderRadius: 6, padding: "10px 14px", marginBottom: 20, fontSize: 12, color: "#fbbf24" }}>
+        <strong>Model v0.1 · playoff-adjusted.</strong> <span style={{ color: "#a8915c" }}>Totals flagged only on large gaps; injuries not yet weighted. One input among many.</span>
+      </div>
+
+      <div className="edge-grid-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16, gridAutoRows: "1fr" }}>
+        <EdgePanel title="Top moneyline edges" icon="💰" edges={mlEdges} renderRow={(e) => <NBAMoneylineRow edge={e} key={e.gameId} navigate={navigate} />} emptyText="No moneyline edges in the current slate" hasFullAccess={hasFullAccess} navigate={navigate} />
+        <EdgePanel title="Top totals edges" icon="📊" edges={totalEdges} renderRow={(e) => <NBATotalRow edge={e} key={e.gameId} navigate={navigate} />} emptyText="No totals edges — books are sharp here" hasFullAccess={hasFullAccess} navigate={navigate} />
+      </div>
+
+      <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 8, padding: "16px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "#e4e7eb", marginBottom: 2 }}>🏀 Want to see every NBA game?</div>
+          <div style={{ fontSize: 12, color: "#9ca3af" }}>Full slate with projections, win %, and matchup detail</div>
+        </div>
+        <button onClick={() => navigate("/nba")} style={{ background: "#ef4444", color: "#fff", border: "none", borderRadius: 6, padding: "10px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}>
+          View NBA Playoffs →
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function NBAMoneylineRow({ edge, navigate }) {
+  return (
+    <div className="edge-row" onClick={() => navigate(`/game/nba/${edge.gameId}`)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: 10, background: "#0a0e14", borderRadius: 4 }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 2 }}>{edge.teamAbbr} ML</div>
+        <div style={{ fontSize: 10, color: "#6b7280", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          {edge.matchup} · {formatOdds(edge.odds)}{edge.time ? ` · ${edge.time}` : ""}
+        </div>
+      </div>
+      <div style={{ textAlign: "right", marginLeft: 10 }}>
+        <span style={{ fontSize: 14, fontWeight: 600, color: "#22c55e", fontVariantNumeric: "tabular-nums" }}>+{edge.edgePct.toFixed(1)}%</span>
+        <div style={{ fontSize: 10, color: "#6b7280", marginTop: 2 }}>{edge.modelPct}% model</div>
+      </div>
+    </div>
+  );
+}
+
+function NBATotalRow({ edge, navigate }) {
+  return (
+    <div className="edge-row" onClick={() => navigate(`/game/nba/${edge.gameId}`)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: 10, background: "#0a0e14", borderRadius: 4 }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 2 }}>{edge.side === "over" ? "Over" : "Under"} {edge.line}</div>
+        <div style={{ fontSize: 10, color: "#6b7280", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{edge.matchup}</div>
+      </div>
+      <div style={{ textAlign: "right", marginLeft: 10 }}>
+        <span style={{ fontSize: 14, fontWeight: 600, color: "#22c55e", fontVariantNumeric: "tabular-nums" }}>{edge.edgePts.toFixed(1)} pts</span>
+        <div style={{ fontSize: 10, color: "#6b7280", marginTop: 2 }}>proj {edge.projected}</div>
+      </div>
+    </div>
+  );
+}
+
+function nbaAbbr(full) {
+  if (!full) return "—";
+  const parts = full.split(" ");
+  return parts[parts.length - 1];
+}
+function nbaTime(dateStr) {
+  if (!dateStr) return "";
+  try {
+    return new Date(dateStr).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" });
+  } catch { return ""; }
 }
 
 function ComingSoon({ league }) {
