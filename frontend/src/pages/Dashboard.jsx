@@ -681,12 +681,18 @@ function NBAAllPropsTable({ rows, hasFullAccess, navigate }) {
 
   return (
     <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 8, padding: 14 }}>
-      <div className="section-header" onClick={() => setOpen(!open)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: open ? 12 : 0 }}>
+      <div className="section-header" onClick={() => setOpen(!open)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: open ? 6 : 0 }}>
         <span style={{ fontSize: 11, letterSpacing: 1, color: "#9ca3af", fontWeight: 600 }}>📋 ALL PLAYER PROJECTIONS · {rows.length}</span>
         <span style={{ fontSize: 12, color: "#6b7280" }}>{open ? "▲ hide" : "▼ show"}</span>
       </div>
       {open && (
         <>
+          <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 12, lineHeight: 1.6 }}>
+            Each stat shows our <strong style={{ color: "#e4e7eb" }}>projection</strong> vs the book's <strong style={{ color: "#e4e7eb" }}>line</strong>, and which side we lean:
+            {" "}<span style={{ color: "#22c55e", fontWeight: 700 }}>OVER</span> /{" "}
+            <span style={{ color: "#ef4444", fontWeight: 700 }}>UNDER</span>.
+            {" "}<strong style={{ color: "#e4e7eb" }}>Bold</strong> = flagged edge · <span style={{ color: "#fbbf24" }}>⚠</span> = line looks off (likely news).
+          </div>
           <div className="games-table-wrap" style={{ overflowX: "auto" }}>
             <table className="games-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
               <thead>
@@ -727,20 +733,22 @@ function NBAAllPropsTable({ rows, hasFullAccess, navigate }) {
   );
 }
 
-// One stat cell: projection over the book line, colored by side; ⚠ if suspect.
+// One stat cell: projection, the book line, and a clear OVER/UNDER lean pill.
 function StatCell({ m }) {
   if (!m || !m.eligible || m.line == null || m.projection == null) {
-    return <span style={{ color: "#4b5563", fontSize: 11 }}>—</span>;
+    return <span style={{ color: "#4b5563", fontSize: 12 }}>—</span>;
   }
-  const color = m.side === "OVER" ? "#22c55e" : "#ef4444";
-  const strong = m.flagged;
+  const isOver = m.side === "OVER";
+  const color = isOver ? "#22c55e" : "#ef4444";
+  const gap = Math.abs(m.edge).toFixed(1);
   return (
-    <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-end", lineHeight: 1.3 }}>
-      <span style={{ fontWeight: strong ? 700 : 600, color: strong ? color : "#e4e7eb", fontVariantNumeric: "tabular-nums" }}>
-        {m.projection} {m.suspect ? "⚠" : ""}
+    <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-end", gap: 3, lineHeight: 1.2 }}>
+      <span style={{ fontSize: 15, fontWeight: m.flagged ? 800 : 600, color: m.flagged ? color : "#e4e7eb", fontVariantNumeric: "tabular-nums" }}>
+        {m.projection}{m.suspect ? <span style={{ color: "#fbbf24" }}> ⚠</span> : null}
       </span>
-      <span style={{ fontSize: 10, color: "#6b7280", fontVariantNumeric: "tabular-nums" }}>
-        line {m.line} · <span style={{ color }}>{m.side === "OVER" ? "o" : "u"}{Math.abs(m.edge).toFixed(1)}</span>
+      <span style={{ fontSize: 10, color: "#6b7280", fontVariantNumeric: "tabular-nums" }}>line {m.line}</span>
+      <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.4, color, background: `${color}15`, border: `1px solid ${color}33`, borderRadius: 4, padding: "2px 6px" }}>
+        {m.side} {gap}
       </span>
     </div>
   );
