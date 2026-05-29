@@ -3,9 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { subscriptionApi } from "../lib/api";
 import Sidebar from "./Sidebar";
-
 const API_BASE = import.meta.env.VITE_API_URL || "https://sportsintel-production.up.railway.app";
-
 export default function PerformancePage() {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
@@ -14,9 +12,7 @@ export default function PerformancePage() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
-
   useEffect(() => { subscriptionApi.getMyPlan().then(setPlan).catch(() => {}); }, []);
-
   useEffect(() => {
     setLoading(true); setError(false);
     fetch(`${API_BASE}/api/performance/mlb`)
@@ -24,7 +20,6 @@ export default function PerformancePage() {
       .then(d => { setData(d); setLoading(false); })
       .catch(() => { setError(true); setLoading(false); });
   }, []);
-
   return (
     <div style={{ minHeight: "100vh", background: "#0a0e14", color: "#e4e7eb", fontFamily: "'Inter',system-ui,-apple-system,sans-serif" }}>
       <style>{`
@@ -45,11 +40,9 @@ export default function PerformancePage() {
           h1{font-size:24px!important}
         }
       `}</style>
-
       <div className="desktop-sidebar">
         <Sidebar user={user} plan={plan} signOut={signOut} navigate={navigate} />
       </div>
-
       {drawerOpen && (
         <>
           <div onClick={() => setDrawerOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 49 }} />
@@ -58,7 +51,6 @@ export default function PerformancePage() {
           </div>
         </>
       )}
-
       <div className="mobile-only" style={{ display: "none", position: "sticky", top: 0, zIndex: 40, background: "#0a0e14", borderBottom: "1px solid #1a1f28", padding: "10px 14px", alignItems: "center", justifyContent: "space-between" }}>
         <button onClick={() => setDrawerOpen(true)} style={{ background: "none", border: "none", color: "#e4e7eb", fontSize: 22, padding: 4, cursor: "pointer" }}>☰</button>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -67,14 +59,12 @@ export default function PerformancePage() {
         </div>
         <div style={{ width: 30 }} />
       </div>
-
       <div className="main-content" style={{ marginLeft: 200 }}>
         <div className="perf-content" style={{ maxWidth: 900, margin: "0 auto", padding: "32px 24px 80px", animation: "fadeIn .3s ease" }}>
           <h1 style={{ margin: "0 0 8px", fontSize: 28, fontWeight: 700, letterSpacing: "-0.01em" }}>📈 Model Performance</h1>
           <p style={{ margin: "0 0 28px", fontSize: 13, color: "#9ca3af" }}>
             How the model's edges have actually performed · MLB moneyline & totals
           </p>
-
           {loading && <Loader />}
           {error && !loading && <ErrorState />}
           {!loading && !error && data && <PerfBody data={data} />}
@@ -83,11 +73,11 @@ export default function PerformancePage() {
     </div>
   );
 }
-
 function PerfBody({ data }) {
   const graded = data.totalGraded || 0;
   const pending = data.pendingCount || 0;
-
+  const full = data.fullSample || null;
+  const excluded = data.filter?.excludedCount || 0;
   if (graded === 0) {
     return (
       <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 40, textAlign: "center" }}>
@@ -103,19 +93,21 @@ function PerfBody({ data }) {
       </div>
     );
   }
-
   return (
     <div>
       {/* Disclaimer */}
       <div style={{ background: "#1a1410", border: "1px solid #f5970022", borderLeft: "3px solid #f59700", borderRadius: 6, padding: "10px 14px", marginBottom: 20, fontSize: 12, color: "#fbbf24" }}>
-        <strong>Honest tracking.</strong> <span style={{ color: "#a8915c" }}>
-          {graded} graded result{graded === 1 ? "" : "s"} so far{pending > 0 ? ` · ${pending} still pending` : ""}. Small samples are noisy — a few weeks of data is where this gets meaningful.
+        <strong>Qualified picks.</strong> <span style={{ color: "#a8915c" }}>
+          Showing the model's {graded} higher-conviction play{graded === 1 ? "" : "s"}
+          {excluded > 0 ? ` (${excluded} low-conviction play${excluded === 1 ? "" : "s"} set aside)` : ""}
+          {full && full.overall && full.overall.total
+            ? ` · full sample: ${full.overall.wins}-${full.overall.losses}, ${full.overall.winPct}% win`
+            : ""}
+          {pending > 0 ? ` · ${pending} still pending` : ""}. Small samples are noisy — a few weeks of data is where this gets meaningful.
         </span>
       </div>
-
       {/* Overall hero */}
       <OverallCard o={data.overall} />
-
       {/* By market */}
       <SectionTitle>By market</SectionTitle>
       <div className="perf-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 24 }}>
@@ -123,7 +115,6 @@ function PerfBody({ data }) {
           <StatCard key={market} label={marketLabel(market)} b={b} />
         ))}
       </div>
-
       {/* By confidence */}
       <SectionTitle>By confidence tier</SectionTitle>
       <div className="perf-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
@@ -134,7 +125,6 @@ function PerfBody({ data }) {
     </div>
   );
 }
-
 function OverallCard({ o }) {
   if (!o || o.total === 0) return null;
   const profit = o.units >= 0;
@@ -152,7 +142,6 @@ function OverallCard({ o }) {
     </div>
   );
 }
-
 function StatCard({ label, b, accent }) {
   if (!b || b.total === 0) return null;
   const profit = b.units >= 0;
@@ -174,7 +163,6 @@ function StatCard({ label, b, accent }) {
     </div>
   );
 }
-
 function Metric({ label, value, color }) {
   return (
     <div>
@@ -183,18 +171,15 @@ function Metric({ label, value, color }) {
     </div>
   );
 }
-
 function SectionTitle({ children }) {
   return <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#6b7280", fontWeight: 700, textTransform: "uppercase", marginBottom: 12 }}>{children}</div>;
 }
-
 function marketLabel(m) {
   return m === "moneyline" ? "Moneyline" : m === "total" ? "Totals" : m === "hr_prop" ? "HR Props" : m;
 }
 function confColor(c) {
   return c === "HIGH" ? "#22c55e" : c === "MEDIUM" ? "#f59e0b" : "#9ca3af";
 }
-
 function Loader() {
   return (
     <div style={{ textAlign: "center", padding: 64 }}>
@@ -203,7 +188,6 @@ function Loader() {
     </div>
   );
 }
-
 function ErrorState() {
   return (
     <div style={{ textAlign: "center", padding: 48, background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10 }}>
