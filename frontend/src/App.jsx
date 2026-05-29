@@ -12,13 +12,12 @@ import ResetPasswordPage from "./pages/ResetPassword";
 import AdminPage from "./pages/Admin";
 import SettingsPage from "./pages/Settings";
 import MyPicksPage from "./pages/MyPicks";
-
+import NBAPage from "./pages/NBA";
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth();
   if (loading) return <LoadingScreen />;
   return user ? children : <Navigate to="/login" replace />;
 }
-
 function LoadingScreen() {
   return (
     <div style={{minHeight:"100vh",background:"#080810",display:"flex",alignItems:"center",justifyContent:"center"}}>
@@ -30,7 +29,6 @@ function LoadingScreen() {
     </div>
   );
 }
-
 export default function App() {
   return (
     <AuthProvider>
@@ -54,6 +52,11 @@ export default function App() {
           <Route path="/games" element={
             <PrivateRoute>
               <GamesPage />
+            </PrivateRoute>
+          } />
+          <Route path="/nba" element={
+            <PrivateRoute>
+              <NBAPage />
             </PrivateRoute>
           } />
           <Route path="/performance" element={
