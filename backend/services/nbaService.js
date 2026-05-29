@@ -88,20 +88,44 @@ function matchOdds(ctx, oddsEvents) {
   return null;
 }
 
+const LOOKAHEAD_DAYS = 7; // show upcoming games up to a week out, not just today
+
+// list of YYYY-MM-DD strings from `fromStr` (or today) through +days
+function datesAhead(fromStr, days) {
+  const base = fromStr ? new Date(fromStr + 'T12:00:00Z') : new Date();
+  const out = [];
+  for (let i = 0; i <= days; i++) {
+    const d = new Date(base);
+    d.setUTCDate(base.getUTCDate() + i);
+    out.push(d.toISOString().slice(0, 10));
+  }
+  return out;
+}
+
 /**
- * @param {Object} [opts] - { dateStr?: 'YYYY-MM-DD' }
- * @returns {Promise<Array>} predictions for upcoming games only
+ * @param {Object} [opts] - { dateStr?: 'YYYY-MM-DD' } — if given, scans just that day
+ * @returns {Promise<Array>} predictions for upcoming games (today + next several days)
  */
 async function generateNbaPredictions(opts = {}) {
-  const [games, odds] = await Promise.all([
-    getUpcomingGamesWithContext(opts),
-    fetchNbaOdds(),
-  ]);
+  const days = opts.dateStr ? 0 : LOOKAHEAD_DAYS;
+  const dates = datesAhead(opts.dateStr, days);
 
-  // only score upcoming games; finished/in-progress excluded (see header)
-  const upcoming = games.filter((g) => g.state === 'pre');
-  const skipped = games.length - upcoming.length;
-  if (skipped > 0) console.log(`[nbaService] skipped ${skipped} non-upcoming game(s)`);
+  const odds = await fetchNbaOdds();
+  const perDay = await Promise.all(
+    dates.map((ds) => getUpcomingGamesWithContext({ dateStr: ds }).catch(() => []))
+  );
+
+  // merge across days, keep only upcoming, de-dupe by gameId
+  const seen = new Set();
+  const upcoming = [];
+  for (const dayGames of perDay) {
+    for (const g of dayGames) {
+      if (g.state !== 'pre' || seen.has(g.gameId)) continue;
+      seen.add(g.gameId);
+      upcoming.push(g);
+    }
+  }
+  upcoming.sort((a, b) => new Date(a.date) - new Date(b.date)); // soonest first
 
   return upcoming.map((g) => predictGame(g, matchOdds(g, odds)));
 }
