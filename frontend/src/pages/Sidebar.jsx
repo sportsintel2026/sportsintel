@@ -43,16 +43,22 @@ export default function Sidebar({ user, plan, signOut, navigate }) {
       <div style={{ ...sectionLabelStyle, marginTop: 18 }}>MLB</div>
       <NavLink
         to="/games"
-        active={isActive("/games") || isActive("/game")}
+        active={isActive("/games") || isActive("/game/mlb")}
         icon="⚾"
         label="MLB Games"
       />
       {/* NBA section */}
       <div style={{ ...sectionLabelStyle, marginTop: 18 }}>NBA</div>
       <NavLink
+        to="/nba-games"
+        active={isActive("/nba-games") || isActive("/game/nba")}
+        icon="🏀"
+        label="NBA Games"
+      />
+      <NavLink
         to="/nba"
         active={isActive("/nba")}
-        icon="🏀"
+        icon="📊"
         label="NBA Playoffs"
       />
       {/* Account section */}
