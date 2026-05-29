@@ -21,27 +21,65 @@ const norm = s => (s || '').toLowerCase().replace(/[^a-z]/g, '');
 const lastName = s => { const p = (s || '').trim().split(/\s+/); return norm(p[p.length - 1]); };
 
 // PURE: ESPN summary JSON -> { full:{normName->id}, lastUnique:{normLast->id} }.
+// Reads player ids from whichever section exists:
+//   - boxscore.players[].statistics[].athletes[].athlete   (played games)
+//   - rosters[].roster[].athlete                           (upcoming games)
 // lastUnique only keeps last names that map to exactly one player (avoids collisions).
+function collectAthletes(json) {
+  const found = [];
+  const teams = (json && json.boxscore && json.boxscore.players) || [];
+  for (const teamBlock of teams)
+    for (const statBlock of teamBlock.statistics || [])
+      for (const a of statBlock.athletes || [])
+        if (a && a.athlete) found.push(a.athlete);
+
+  const rosters = (json && json.rosters) || [];
+  for (const r of rosters)
+    for (const item of r.roster || [])
+      if (item && item.athlete) found.push(item.athlete);
+
+  return found;
+}
+
 function parseBoxscoreIds(json) {
   const full = {};
   const lastCount = {};
   const lastMap = {};
-  const teams = (json && json.boxscore && json.boxscore.players) || [];
-  for (const teamBlock of teams) {
-    for (const statBlock of teamBlock.statistics || []) {
-      for (const a of statBlock.athletes || []) {
-        const ath = (a && a.athlete) || {};
-        if (!ath.id || !ath.displayName) continue;
-        full[norm(ath.displayName)] = String(ath.id);
-        const ln = lastName(ath.displayName);
-        lastCount[ln] = (lastCount[ln] || 0) + 1;
-        lastMap[ln] = String(ath.id);
-      }
-    }
+  for (const ath of collectAthletes(json)) {
+    if (!ath.id || !ath.displayName) continue;
+    full[norm(ath.displayName)] = String(ath.id);
+    const ln = lastName(ath.displayName);
+    lastCount[ln] = (lastCount[ln] || 0) + 1;
+    lastMap[ln] = String(ath.id);
   }
   const lastUnique = {};
   for (const ln in lastCount) if (lastCount[ln] === 1) lastUnique[ln] = lastMap[ln];
   return { full, lastUnique };
+}
+
+// Compact diagnostic: where does ESPN keep players for THIS game? Small to paste back.
+async function getIdDebug(gameId) {
+  const res = await fetch(`${SUMMARY}?event=${gameId}`);
+  if (!res.ok) return { gameId: String(gameId), error: 'espn summary ' + res.status };
+  const json = await res.json();
+  const map = parseBoxscoreIds(json);
+  const bs = json.boxscore || {};
+  const comp = (json.header && json.header.competitions && json.header.competitions[0]) || {};
+  return {
+    gameId: String(gameId),
+    topKeys: Object.keys(json),
+    hasBoxscore: !!json.boxscore,
+    boxscoreKeys: json.boxscore ? Object.keys(bs) : null,
+    boxscorePlayersLen: Array.isArray(bs.players) ? bs.players.length : null,
+    hasRosters: !!json.rosters,
+    rostersLen: Array.isArray(json.rosters) ? json.rosters.length : null,
+    firstRosterKeys: json.rosters && json.rosters[0] ? Object.keys(json.rosters[0]) : null,
+    competitors: (comp.competitors || []).map(c => ({
+      teamId: c.team && c.team.id, homeAway: c.homeAway, abbrev: c.team && c.team.abbreviation,
+    })),
+    athletesFound: Object.keys(map.full).length,
+    sample: Object.entries(map.full).slice(0, 5).map(([n, id]) => ({ norm: n, id })),
+  };
 }
 
 // PURE: build a name->id resolver from a parsed id map.
@@ -106,4 +144,4 @@ async function getNbaPropProjections(gameId) {
   };
 }
 
-module.exports = { getNbaPropProjections, parseBoxscoreIds, makeResolver };
+module.exports = { getNbaPropProjections, parseBoxscoreIds, makeResolver, getIdDebug };
