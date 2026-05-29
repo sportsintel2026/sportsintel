@@ -21,7 +21,12 @@ const HCA_POINTS = 2.5;
 const SIGMA = 12;
 const EDGE_ML = 0.03;
 const EDGE_SPREAD = 1.5;
-const EDGE_TOTAL = 2.0;
+// Totals: books are very sharp here, and a v0.1 points model has wide error.
+// Require a large disagreement (after playoff adjustment) before claiming value.
+const EDGE_TOTAL = 7.0;
+// Playoff games score lower than the regular season (tighter defense, slower,
+// more deliberate). Deflate projected scoring so totals aren't systematically high.
+const PLAYOFF_TOTAL_FACTOR = 0.95;
 
 // guardrails
 const PPG_MIN = 90;
@@ -62,7 +67,7 @@ function expectedPoints(off, oppDef) {
   return LG_PPG;
 }
 
-function predictGame(ctx, lines) {
+function predictGame(ctx, lines, opts = {}) {
   const h = ctx.home;
   const a = ctx.away;
 
@@ -73,8 +78,12 @@ function predictGame(ctx, lines) {
   const neutral = !!ctx.neutralSite;
   const hca = neutral ? 0 : HCA_POINTS;
 
-  const expHome = expectedPoints(h.ppg, a.papg) + hca / 2;
-  const expAway = expectedPoints(a.ppg, h.papg) - hca / 2;
+  // Playoff scoring deflation (applied to base scoring, home-court kept intact)
+  const pf = opts.playoff ? PLAYOFF_TOTAL_FACTOR : 1;
+  const baseHome = expectedPoints(h.ppg, a.papg) * pf;
+  const baseAway = expectedPoints(a.ppg, h.papg) * pf;
+  const expHome = baseHome + hca / 2;
+  const expAway = baseAway - hca / 2;
   const projTotal = expHome + expAway;
   const projMargin = expHome - expAway; // + = home favored
   const homeWinProb = normalCDF(projMargin / SIGMA);
@@ -199,8 +208,10 @@ function predictGame(ctx, lines) {
       homeInjuries: h.injuries,
       awayInjuries: a.injuries,
     },
-    modelVersion: 'nba-v0.1.1',
-    note: 'Ratings/pace computed from ESPN; injuries shown but not yet weighted into the line (v0.2).',
+    modelVersion: 'nba-v0.1.2',
+    note: opts.playoff
+      ? 'Playoff scoring adjustment applied; totals flagged only on large gaps. Injuries shown but not yet weighted (v0.2).'
+      : 'Ratings/pace computed from ESPN; injuries shown but not yet weighted into the line (v0.2).',
   };
 }
 
