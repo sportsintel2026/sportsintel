@@ -14,6 +14,7 @@ const edgesRoutes = require("./routes/edges");
 const matchupsRoutes = require("./routes/matchups");
 const performanceRoutes = require("./routes/performance");
 const nbaRoutes = require("./routes/nba");
+const scoresRoutes = require("./routes/scores");
 
 const { refreshDailyGames } = require("./services/sportsData");
 const { gradeFinishedGames } = require("./services/predictionTracker");
@@ -51,6 +52,7 @@ app.use("/api/edges", edgesRoutes);
 app.use("/api/matchups", matchupsRoutes);
 app.use("/api/performance", performanceRoutes);
 app.use("/api/nba", nbaRoutes);
+app.use("/api/scores", scoresRoutes);
 
 // Health check
 app.get("/api/health", (req, res) => {
