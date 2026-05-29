@@ -1,21 +1,22 @@
 /**
  * routes/nba.js — SportsIntel NBA API route
  * --------------------------------------------------------------------------
- * GET /api/nba/predictions          -> today's NBA predictions + edges
- * GET /api/nba/predictions?date=YYYY-MM-DD -> a specific date
- * GET /api/nba/matchup/:gameId      -> rich single-game matchup detail
- * GET /api/nba/props/:gameId        -> player prop lines (points/reb/ast)
+ * GET /api/nba/predictions                  -> today's NBA predictions + edges
+ * GET /api/nba/predictions?date=YYYY-MM-DD  -> a specific date
+ * GET /api/nba/matchup/:gameId              -> rich single-game matchup detail
+ * GET /api/nba/props/:gameId                -> player prop LINES (points/reb/ast)
+ * GET /api/nba/props/:gameId/projections    -> Stage 2 projections + edges (experimental)
  *
  * Mount in your main backend file next to your other routes:
  *   app.use('/api/nba', require('./routes/nba'));
  * (adjust the relative path if your entry file isn't in backend/)
  * -------------------------------------------------------------------------- */
-
 const express = require('express');
 const router = express.Router();
 const { generateNbaPredictions } = require('../services/nbaService');
 const { getNbaMatchup } = require('../services/nbaMatchup');
 const { getNbaProps } = require('../services/nbaProps');
+const { getNbaPropProjections } = require('../services/nbaProjectionService');
 
 router.get('/predictions', async (req, res) => {
   try {
@@ -39,7 +40,7 @@ router.get('/matchup/:gameId', async (req, res) => {
   }
 });
 
-// Player prop LINES for a game (Stage 1 — lines only, no projections yet)
+// Player prop LINES for a game (Stage 1 — lines only, no projections)
 router.get('/props/:gameId', async (req, res) => {
   try {
     const data = await getNbaProps(req.params.gameId);
@@ -47,6 +48,17 @@ router.get('/props/:gameId', async (req, res) => {
   } catch (err) {
     console.error('[nba route] props failed:', err);
     res.status(502).json({ error: 'Failed to load NBA props' });
+  }
+});
+
+// Player prop PROJECTIONS + edges (Stage 2 — experimental, informational only)
+router.get('/props/:gameId/projections', async (req, res) => {
+  try {
+    const data = await getNbaPropProjections(req.params.gameId);
+    res.json(data);
+  } catch (err) {
+    console.error('[nba route] projections failed:', err);
+    res.status(502).json({ error: 'Failed to build NBA prop projections' });
   }
 });
 
