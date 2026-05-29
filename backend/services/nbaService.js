@@ -1,12 +1,15 @@
 /**
  * nbaService.js — SportsIntel NBA orchestration layer
  * --------------------------------------------------------------------------
- * Pulls upcoming games (ESPN, via nbaDataSource) and lines (The Odds API,
+ * Pulls upcoming games (ESPN, via nbaDataSource) + lines (The Odds API,
  * basketball_nba), matches them, runs nbaModel, returns predictions + edges.
  *
- * NO database writes here — serving only. Recording into your performance
- * tracker is intentionally left out until we match your exact table schema,
- * so this can't pollute your real data. That's the next, separate drop.
+ * v0.1.1: predicts ONLY upcoming games (state === 'pre'). Finished games
+ * return single-game box scores from ESPN instead of season averages, which
+ * produced bogus projections — so they're excluded here.
+ *
+ * NO database writes — serving only. Recording into your performance tracker
+ * is a separate drop once we match your tracker's schema exactly.
  *
  * Requires Node 18+ (global fetch).
  * -------------------------------------------------------------------------- */
@@ -15,15 +18,11 @@ const { getUpcomingGamesWithContext } = require('./nbaDataSource');
 const { predictGame } = require('./nbaModel');
 
 const ODDS_BASE = 'https://api.the-odds-api.com/v4/sports/basketball_nba/odds';
-
-// ⬇️ ONE THING TO CHECK: your existing Odds API key's env-var name.
-// Your README only listed SPORTRADAR_API_KEY, but you said you use The Odds API.
-// Set this to whatever the key is stored as in Railway (e.g. ODDS_API_KEY).
-const ODDS_KEY = process.env.ODDS_API_KEY;
+const ODDS_KEY = process.env.ODDS_API_KEY; // confirmed: matches your Railway variable
 
 async function fetchNbaOdds() {
   if (!ODDS_KEY) {
-    console.warn('[nbaService] No Odds API key found — serving projections without lines/edges.');
+    console.warn('[nbaService] No ODDS_API_KEY — serving projections without lines/edges.');
     return [];
   }
   const url =
@@ -43,9 +42,8 @@ async function fetchNbaOdds() {
 
 const norm = (s) => (s || '').toLowerCase().trim();
 
-// turn one Odds API event into the { home, away, total } line shape the model wants
 function extractLines(event) {
-  const bk = (event.bookmakers || [])[0]; // v0.1: first available book; consensus is v0.2
+  const bk = (event.bookmakers || [])[0]; // v0.1: first book; consensus is v0.2
   if (!bk) return null;
   const home = norm(event.home_team);
   const away = norm(event.away_team);
@@ -92,14 +90,20 @@ function matchOdds(ctx, oddsEvents) {
 
 /**
  * @param {Object} [opts] - { dateStr?: 'YYYY-MM-DD' }
- * @returns {Promise<Array>} model predictions with edges
+ * @returns {Promise<Array>} predictions for upcoming games only
  */
 async function generateNbaPredictions(opts = {}) {
   const [games, odds] = await Promise.all([
     getUpcomingGamesWithContext(opts),
     fetchNbaOdds(),
   ]);
-  return games.map((g) => predictGame(g, matchOdds(g, odds)));
+
+  // only score upcoming games; finished/in-progress excluded (see header)
+  const upcoming = games.filter((g) => g.state === 'pre');
+  const skipped = games.length - upcoming.length;
+  if (skipped > 0) console.log(`[nbaService] skipped ${skipped} non-upcoming game(s)`);
+
+  return upcoming.map((g) => predictGame(g, matchOdds(g, odds)));
 }
 
 module.exports = { generateNbaPredictions, fetchNbaOdds };
