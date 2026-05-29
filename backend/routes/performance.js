@@ -12,13 +12,13 @@ const router = express.Router();
 const { createClient } = require("@supabase/supabase-js");
 
 // --- selection rule (tune here) ---------------------------------------------
-const QUALIFYING_TIERS = ["HIGH", "MEDIUM"]; // conviction tiers we stand behind
-const MIN_EDGE = 0.04; // OR: any pick with modeled edge >= 4% qualifies regardless of tier
+// Qualified picks = the model's conviction plays. NEUTRAL/LOW are the model
+// saying "no real lean" — those are the noise that drags the record down, so
+// they're set aside. Change QUALIFYING_TIERS to widen/narrow what counts.
+const QUALIFYING_TIERS = ["HIGH", "MEDIUM"];
 function isQualified(r) {
   const conf = (r.confidence || "NEUTRAL").toUpperCase();
-  if (QUALIFYING_TIERS.includes(conf)) return true;
-  if (r.edge != null && Math.abs(r.edge) >= MIN_EDGE) return true;
-  return false;
+  return QUALIFYING_TIERS.includes(conf);
 }
 // ----------------------------------------------------------------------------
 
@@ -83,7 +83,6 @@ router.get("/mlb", async (req, res) => {
       },
       filter: {
         qualifyingTiers: QUALIFYING_TIERS,
-        minEdge: MIN_EDGE,
         excludedCount: rows.length - qualifiedRows.length,
       },
       pendingCount: pendingCount || 0,
