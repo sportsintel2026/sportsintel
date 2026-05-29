@@ -212,15 +212,17 @@ function GameCard({ g, league, meta }) {
         </div>
       )}
 
-      {/* Always-available link to the full matchup/analysis page */}
-      <div onClick={(e) => e.stopPropagation()} style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid #131820", display: "flex", justifyContent: "flex-end", cursor: "default" }}>
-        <button
-          onClick={() => navigate(`/game/${league}/${g.id}`)}
-          style={{ background: "none", border: "1px solid #1f2937", borderRadius: 6, color: "#ef4444", fontSize: 11, fontWeight: 700, padding: "6px 12px", cursor: "pointer", fontFamily: "inherit" }}
-        >
-          Full matchup & analysis →
-        </button>
-      </div>
+      {/* Always-available link to the full matchup/analysis page (when we have its id) */}
+      {g.detailId && (
+        <div onClick={(e) => e.stopPropagation()} style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid #131820", display: "flex", justifyContent: "flex-end", cursor: "default" }}>
+          <button
+            onClick={() => navigate(`/game/${league}/${g.detailId}`)}
+            style={{ background: "none", border: "1px solid #1f2937", borderRadius: 6, color: "#ef4444", fontSize: 11, fontWeight: 700, padding: "6px 12px", cursor: "pointer", fontFamily: "inherit" }}
+          >
+            Full matchup & analysis →
+          </button>
+        </div>
+      )}
     </div>
   );
 }
