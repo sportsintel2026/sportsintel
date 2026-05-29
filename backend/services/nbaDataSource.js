@@ -163,8 +163,10 @@ async function fetchStandings() {
         const id = e.team?.id;
         if (!id) continue;
         const m = statMap(e.stats);
+        const gp =
+          m.wins != null && m.losses != null ? m.wins + m.losses : m.gamesPlayed || null;
         byTeam[id] = {
-          gamesPlayed: m.gamesPlayed || null,
+          gamesPlayed: gp,
           avgPointsFor: m.avgPointsFor ?? null,
           avgPointsAgainst: m.avgPointsAgainst ?? null,
           pointDifferential: m.pointDifferential ?? m.differential ?? null,
