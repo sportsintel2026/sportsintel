@@ -69,6 +69,30 @@ function parseEvent(ev) {
   };
 }
 
+// For MLB we also fetch the app's own edges feed so we can attach the backend's
+// game id to each ESPN game (the detail page looks games up by THAT id, not ESPN's).
+// Matched by team nickname (last word of name), which both feeds share reliably.
+const EDGES_MLB = (process.env.SELF_API_BASE || "https://sportsintel-production.up.railway.app") + "/api/edges/mlb";
+
+const nick = (s) => String(s || "").trim().split(/\s+/).pop().toLowerCase();
+
+async function mlbBackendIdMap() {
+  try {
+    const res = await fetch(EDGES_MLB);
+    if (!res.ok) return {};
+    const data = await res.json();
+    const map = {};
+    for (const g of data.games || []) {
+      // key by "away|home" nicknames (last word of full team name) -> backend id
+      const key = `${nick(g.away)}|${nick(g.home)}`;
+      map[key] = String(g.id);
+    }
+    return map;
+  } catch (_) {
+    return {};
+  }
+}
+
 async function getScores(league) {
   if (!PATHS[league]) throw new Error("unknown league");
   const ck = `scores:${league}`;
@@ -84,6 +108,18 @@ async function getScores(league) {
     g.league = league;
     return g;
   });
+
+  // NBA detail pages already use ESPN ids, so detailId = ESPN id.
+  // MLB detail pages use the backend's own id — map it in (or null if no match).
+  if (league === "nba") {
+    for (const g of games) g.detailId = g.id;
+  } else if (league === "mlb") {
+    const idMap = await mlbBackendIdMap();
+    for (const g of games) {
+      const key = `${nick(g.away.name)}|${nick(g.home.name)}`;
+      g.detailId = idMap[key] || null; // null => frontend hides the button
+    }
+  }
 
   const out = {
     league,
