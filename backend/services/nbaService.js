@@ -20,6 +20,11 @@ const { predictGame } = require('./nbaModel');
 const ODDS_BASE = 'https://api.the-odds-api.com/v4/sports/basketball_nba/odds';
 const ODDS_KEY = process.env.ODDS_API_KEY; // confirmed: matches your Railway variable
 
+// This module currently serves the NBA *playoffs*. Playoff mode tells the model
+// to deflate scoring (lower totals) and be stricter about totals edges.
+// Flip to false if/when this is ever used for regular-season games.
+const PLAYOFF_MODE = true;
+
 async function fetchNbaOdds() {
   if (!ODDS_KEY) {
     console.warn('[nbaService] No ODDS_API_KEY — serving projections without lines/edges.');
@@ -127,7 +132,7 @@ async function generateNbaPredictions(opts = {}) {
   }
   upcoming.sort((a, b) => new Date(a.date) - new Date(b.date)); // soonest first
 
-  return upcoming.map((g) => predictGame(g, matchOdds(g, odds)));
+  return upcoming.map((g) => predictGame(g, matchOdds(g, odds), { playoff: PLAYOFF_MODE }));
 }
 
 module.exports = { generateNbaPredictions, fetchNbaOdds };
