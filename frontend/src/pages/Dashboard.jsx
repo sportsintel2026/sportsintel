@@ -166,9 +166,6 @@ function MLBDashboard({ edges, loading, picks, hasFullAccess, navigate, onRefres
       <p style={{ margin: "0 0 24px", fontSize: 13, color: "#9ca3af" }}>
         Model projections vs sportsbook lines · weather, batter vs pitcher history, recent form. <span style={{ color: "#ef4444", fontWeight: 600 }}>Click any game</span> for deep analysis.
       </p>
-      <div style={{ background: "#1a1410", border: "1px solid #f5970022", borderLeft: "3px solid #f59700", borderRadius: 6, padding: "10px 14px", marginBottom: 20, fontSize: 12, color: "#fbbf24" }}>
-        <strong>Model v0.3 · Research-grade.</strong> <span style={{ color: "#a8915c" }}>Pre-game model — live games show in-game odds. Use as one input among many, not gospel.</span>
-      </div>
       {picks.length > 0 && <EditorialBestBets picks={picks} hasFullAccess={hasFullAccess} navigate={navigate} />}
       <div className="edge-grid-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16, gridAutoRows: "1fr" }}>
         <EdgePanel title="Top moneyline edges" icon="💰" edges={edges.moneylineEdges || []} renderRow={(e) => <MoneylineRow edge={e} key={e.gameId + e.side} navigate={navigate} />} emptyText="No edges found in current slate" hasFullAccess={hasFullAccess} navigate={navigate} />
@@ -536,9 +533,6 @@ function NBADashboard({ hasFullAccess, navigate }) {
       <p style={{ margin: "0 0 24px", fontSize: 13, color: "#9ca3af" }}>
         Model projections vs sportsbook lines · <span style={{ color: "#ef4444", fontWeight: 600 }}>click any edge</span> for the full matchup.
       </p>
-      <div style={{ background: "#1a1410", border: "1px solid #f5970022", borderLeft: "3px solid #f59700", borderRadius: 6, padding: "10px 14px", marginBottom: 20, fontSize: 12, color: "#fbbf24" }}>
-        <strong>Model v0.1 · playoff-adjusted.</strong> <span style={{ color: "#a8915c" }}>Totals flagged only on large gaps; injuries not yet weighted. One input among many.</span>
-      </div>
 
       <div className="edge-grid-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16, gridAutoRows: "1fr" }}>
         <EdgePanel title="Top moneyline edges" icon="💰" edges={mlEdges} renderRow={(e) => <NBAMoneylineRow edge={e} key={e.gameId} navigate={navigate} />} emptyText="No moneyline edges in the current slate" hasFullAccess={hasFullAccess} navigate={navigate} />
@@ -618,7 +612,7 @@ function NBAPropsSection({ games, hasFullAccess, navigate }) {
       </div>
       <p style={{ margin: "0 0 12px", fontSize: 12, color: "#9ca3af" }}>
         Model projection vs the book line. Out / injured players are removed automatically;
-        questionable players are held back below. <span style={{ color: "#f59700", fontWeight: 600 }}>Experimental.</span>
+        questionable players are held back below.
       </p>
 
       {loading ? (
