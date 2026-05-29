@@ -147,7 +147,9 @@ async function buildIdMap(gameId) {
   }
 
   const map = buildMapFromAthletes(athletes);
-  idCache.set(gameId, { t: Date.now(), map });
+  // Only cache a map that actually found players — never let an empty/transient
+  // result get pinned for the full TTL.
+  if (Object.keys(map.full).length) idCache.set(gameId, { t: Date.now(), map });
   return map;
 }
 
