@@ -36,7 +36,12 @@ export default function NBAPage() {
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  const games = data?.predictions || [];
+  // hide games whose matchup isn't set yet (placeholder opponent like "Spurs/Thunder"
+  // or no usable team data) — they shouldn't render until the matchup is decided
+  const games = (data?.predictions || []).filter((g) => {
+    const unresolved = (g.home || "").includes("/") || (g.away || "").includes("/");
+    return !unresolved && g.dataQuality !== "insufficient";
+  });
 
   return (
     <div style={{ minHeight: "100vh", background: "#0a0e14", color: "#e4e7eb", fontFamily: "'Inter',system-ui,-apple-system,sans-serif" }}>
@@ -97,14 +102,14 @@ export default function NBAPage() {
           {loading && <Loader />}
           {!loading && error && <ErrorState onRetry={load} />}
           {!loading && !error && games.length === 0 && <EmptyState />}
-          {!loading && !error && games.length > 0 && <NBATable games={games} />}
+          {!loading && !error && games.length > 0 && <NBATable games={games} navigate={navigate} />}
         </div>
       </div>
     </div>
   );
 }
 
-function NBATable({ games }) {
+function NBATable({ games, navigate }) {
   return (
     <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 8, padding: 14 }}>
       <div className="games-table-wrap" style={{ overflowX: "auto" }}>
@@ -132,7 +137,7 @@ function NBATable({ games }) {
               if (to.value && to.pick) picks.push(`${to.pick.toUpperCase()} ${to.line}`);
               const flagged = picks.length > 0;
               return (
-                <tr key={g.gameId} className="game-row" style={{ borderBottom: "1px solid #131820" }}>
+                <tr key={g.gameId} className="game-row" onClick={() => navigate(`/game/nba/${g.gameId}`)} style={{ borderBottom: "1px solid #131820", cursor: "pointer" }}>
                   <td style={td()}>{abbrevName(g.away)} @ {abbrevName(g.home)}{g.neutralSite ? " (N)" : ""}</td>
                   <td style={{ ...td(), color: "#9ca3af" }}>{fmtTip(g.date)}</td>
                   <td style={td("right")}>{ml.awayWinProb != null ? `${Math.round(ml.awayWinProb)}/${Math.round(ml.homeWinProb)}` : "—"}</td>
@@ -144,6 +149,7 @@ function NBATable({ games }) {
                     {flagged
                       ? <span style={{ color: "#22c55e", fontWeight: 700 }}>{picks.join(" · ")}</span>
                       : <DataTag q={g.dataQuality} />}
+                    <span style={{ color: "#ef4444", marginLeft: 8 }}>→</span>
                   </td>
                 </tr>
               );
