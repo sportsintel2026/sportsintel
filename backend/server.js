@@ -13,6 +13,7 @@ const webhookRoutes = require("./routes/webhooks");
 const edgesRoutes = require("./routes/edges");
 const matchupsRoutes = require("./routes/matchups");
 const performanceRoutes = require("./routes/performance");
+const nbaRoutes = require("./routes/nba");
 
 const { refreshDailyGames } = require("./services/sportsData");
 const { gradeFinishedGames } = require("./services/predictionTracker");
@@ -49,6 +50,7 @@ app.use("/api/subscriptions", subscriptionRoutes);
 app.use("/api/edges", edgesRoutes);
 app.use("/api/matchups", matchupsRoutes);
 app.use("/api/performance", performanceRoutes);
+app.use("/api/nba", nbaRoutes);
 
 // Health check
 app.get("/api/health", (req, res) => {
