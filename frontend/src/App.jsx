@@ -13,6 +13,7 @@ import AdminPage from "./pages/Admin";
 import SettingsPage from "./pages/Settings";
 import MyPicksPage from "./pages/MyPicks";
 import NBAPage from "./pages/NBA";
+import NBADetailPage from "./pages/NBADetail";
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth();
   if (loading) return <LoadingScreen />;
@@ -57,6 +58,11 @@ export default function App() {
           <Route path="/nba" element={
             <PrivateRoute>
               <NBAPage />
+            </PrivateRoute>
+          } />
+          <Route path="/game/nba/:gameId" element={
+            <PrivateRoute>
+              <NBADetailPage />
             </PrivateRoute>
           } />
           <Route path="/performance" element={
