@@ -691,6 +691,7 @@ function NBAAllPropsTable({ rows, hasFullAccess, navigate }) {
             Each stat shows our <strong style={{ color: "#e4e7eb" }}>projection</strong> vs the book's <strong style={{ color: "#e4e7eb" }}>line</strong>, and which side we lean:
             {" "}<span style={{ color: "#22c55e", fontWeight: 700 }}>OVER</span> /{" "}
             <span style={{ color: "#ef4444", fontWeight: 700 }}>UNDER</span>.
+            {" "}The number is how far our projection sits from the line (e.g. <span style={{ color: "#22c55e", fontWeight: 700 }}>OVER by 2.5</span> = we project 2.5 more than the line).
             {" "}<strong style={{ color: "#e4e7eb" }}>Bold</strong> = flagged edge · <span style={{ color: "#fbbf24" }}>⚠</span> = line looks off (likely news).
           </div>
           <div className="games-table-wrap" style={{ overflowX: "auto" }}>
@@ -748,7 +749,7 @@ function StatCell({ m }) {
       </span>
       <span style={{ fontSize: 10, color: "#6b7280", fontVariantNumeric: "tabular-nums" }}>line {m.line}</span>
       <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.4, color, background: `${color}15`, border: `1px solid ${color}33`, borderRadius: 4, padding: "2px 6px" }}>
-        {m.side} {gap}
+        {m.side} by {gap}
       </span>
     </div>
   );
