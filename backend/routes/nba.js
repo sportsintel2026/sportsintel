@@ -16,7 +16,7 @@ const router = express.Router();
 const { generateNbaPredictions } = require('../services/nbaService');
 const { getNbaMatchup } = require('../services/nbaMatchup');
 const { getNbaProps } = require('../services/nbaProps');
-const { getNbaPropProjections } = require('../services/nbaProjectionService');
+const { getNbaPropProjections, getIdDebug } = require('../services/nbaProjectionService');
 
 router.get('/predictions', async (req, res) => {
   try {
@@ -59,6 +59,16 @@ router.get('/props/:gameId/projections', async (req, res) => {
   } catch (err) {
     console.error('[nba route] projections failed:', err);
     res.status(502).json({ error: 'Failed to build NBA prop projections' });
+  }
+});
+
+// TEMP diagnostic — where does ESPN keep player ids for this game? (safe to remove later)
+router.get('/props/:gameId/idcheck', async (req, res) => {
+  try {
+    res.json(await getIdDebug(req.params.gameId));
+  } catch (err) {
+    console.error('[nba route] idcheck failed:', err);
+    res.status(502).json({ error: 'idcheck failed' });
   }
 });
 
