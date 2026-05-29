@@ -1,12 +1,9 @@
 import { createClient } from "@supabase/supabase-js";
-
 export const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
   import.meta.env.VITE_SUPABASE_ANON_KEY
 );
-
 const API_URL = import.meta.env.VITE_API_URL || "https://sportsintel-production.up.railway.app";
-
 async function apiFetch(path, options = {}) {
   const { data: { session } } = await supabase.auth.getSession();
   const headers = {
@@ -18,25 +15,26 @@ async function apiFetch(path, options = {}) {
   if (!res.ok) throw new Error(`API error: ${res.status}`);
   return res.json();
 }
-
 // Existing — keep for now (NBA tab might use, plus boxscore detail later)
 export const gamesApi = {
   getToday: (league) => apiFetch(`/api/games/${league}/today`),
   getBoxScore: (league, gameId) => apiFetch(`/api/games/${league}/${gameId}/boxscore`),
 };
-
 // Existing news API (still wired if you use it later)
 export const newsApi = {
   getHeadlines: (sport) => apiFetch(`/api/news/headlines/${sport}`),
   getInjuries: (league) => apiFetch(`/api/news/${league}/injuries`),
 };
-
 // NEW — edges API for MLB analytics dashboard
 export const edgesApi = {
   getMLB: () => apiFetch("/api/edges/mlb"),
   clearCache: () => apiFetch("/api/edges/cache", { method: "DELETE" }),
 };
-
+// NEW — live scores (MLB + NBA): lists + per-game detail (innings/quarters + player stats)
+export const scoresApi = {
+  getScores: (league) => apiFetch(`/api/scores/${league}`),
+  getGameDetail: (league, gameId) => apiFetch(`/api/scores/${league}/${gameId}`),
+};
 export const subscriptionApi = {
   getMyPlan: () => apiFetch("/api/subscriptions/me"),
   checkout: (priceKey) => apiFetch("/api/subscriptions/checkout", {
