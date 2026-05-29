@@ -1,17 +1,13 @@
 // Sidebar.jsx — main navigation sidebar for the app
 //
 // Used on Dashboard, GameDetail, Settings, MyPicks, NBA pages.
-
 import { Link, useLocation } from "react-router-dom";
-
 export default function Sidebar({ user, plan, signOut, navigate }) {
   const location = useLocation();
   const isAdmin = plan.isAdmin === true;
   const isPro = plan.tier === "pro" || plan.tier === "elite";
   const hasFullAccess = isAdmin || isPro;
-
   const isActive = (path) => location.pathname === path || location.pathname.startsWith(path + "/");
-
   return (
     <div style={sidebarStyle}>
       {/* Logo — clickable, goes to dashboard and closes drawer */}
@@ -24,20 +20,12 @@ export default function Sidebar({ user, plan, signOut, navigate }) {
           Sports<span style={{ color: "#ef4444" }}>intel</span>
         </span>
       </div>
-
-      {/* MLB section */}
-      <div style={sectionLabelStyle}>MLB</div>
+      {/* General — applies across all sports */}
       <NavLink
         to="/dashboard"
         active={isActive("/dashboard")}
         icon="📊"
         label="Edges"
-      />
-      <NavLink
-        to="/games"
-        active={isActive("/games") || isActive("/game")}
-        icon="⚾"
-        label="MLB Games"
       />
       <NavLink
         to="/performance"
@@ -49,9 +37,16 @@ export default function Sidebar({ user, plan, signOut, navigate }) {
         to="/my-picks"
         active={isActive("/my-picks")}
         icon="🎯"
-        label="My picks"
+        label="Free picks"
       />
-
+      {/* MLB section */}
+      <div style={{ ...sectionLabelStyle, marginTop: 18 }}>MLB</div>
+      <NavLink
+        to="/games"
+        active={isActive("/games") || isActive("/game")}
+        icon="⚾"
+        label="MLB Games"
+      />
       {/* NBA section */}
       <div style={{ ...sectionLabelStyle, marginTop: 18 }}>NBA</div>
       <NavLink
@@ -60,7 +55,6 @@ export default function Sidebar({ user, plan, signOut, navigate }) {
         icon="🏀"
         label="NBA Playoffs"
       />
-
       {/* Account section */}
       <div style={{ ...sectionLabelStyle, marginTop: 18 }}>ACCOUNT</div>
       <NavLink
@@ -84,7 +78,6 @@ export default function Sidebar({ user, plan, signOut, navigate }) {
         <span style={{ fontSize: 14, opacity: 0.85 }}>↩</span>
         <span>Sign out</span>
       </button>
-
       {/* Subscriber status footer */}
       <div style={{ marginTop: "auto" }}>
         {!hasFullAccess ? (
@@ -114,7 +107,6 @@ export default function Sidebar({ user, plan, signOut, navigate }) {
     </div>
   );
 }
-
 function NavLink({ to, active, icon, label, soon }) {
   return (
     <Link
@@ -130,7 +122,6 @@ function NavLink({ to, active, icon, label, soon }) {
     </Link>
   );
 }
-
 const sidebarStyle = {
   background: "#07090e",
   borderRight: "1px solid #1a1f28",
@@ -146,7 +137,6 @@ const sidebarStyle = {
   overflowY: "auto",
   zIndex: 50,
 };
-
 const sectionLabelStyle = {
   fontSize: 9,
   color: "#6b7280",
@@ -155,7 +145,6 @@ const sectionLabelStyle = {
   padding: "0 8px",
   fontWeight: 700,
 };
-
 function navBtnStyle(active, soon) {
   return {
     display: "flex",
