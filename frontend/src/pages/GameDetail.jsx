@@ -121,6 +121,7 @@ function GameDetail({ game, hrProps, hasFullAccess, navigate }) {
     <div style={{ animation: "fadeIn .3s ease" }}>
       <GameHeader game={game} isLive={isLive} isFinal={isFinal} />
       <LiveScoreHeader gameId={game.id} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} league="mlb" />
+      <TeamForm awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} awayName={game.away} homeName={game.home} league="mlb" />
       {isLive && <LiveWarningBanner />}
       {isFinal && <FinalBanner game={game} />}
       {bestEdge && !isFinal && <BestEdgeCard edge={bestEdge} game={game} hasFullAccess={hasFullAccess} navigate={navigate} />}
@@ -131,6 +132,69 @@ function GameDetail({ game, hrProps, hasFullAccess, navigate }) {
       <TotalsCard totals={totals} hasFullAccess={hasFullAccess} navigate={navigate} />
       <ContextCard game={game} />
       {hrProps.length > 0 && <HRPropsCard hrProps={hrProps} hasFullAccess={hasFullAccess} navigate={navigate} />}
+    </div>
+  );
+}
+
+// Team form: current streak, last 10 games, record + run differential for both
+// teams. Pulled from the standings feed and matched by team abbreviation.
+function TeamForm({ awayAbbr, homeAbbr, awayName, homeName, league = "mlb" }) {
+  const [standings, setStandings] = useState(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    scoresApi.getStandings(league)
+      .then((d) => { if (!cancelled) setStandings(d); })
+      .catch(() => { if (!cancelled) setFailed(true); });
+    return () => { cancelled = true; };
+  }, [league]);
+
+  if (failed) return null;          // quietly hide if standings unavailable
+  const a = standings ? standings[String(awayAbbr).toUpperCase()] : null;
+  const h = standings ? standings[String(homeAbbr).toUpperCase()] : null;
+  if (standings && !a && !h) return null; // no match → hide rather than show empty
+
+  return (
+    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 20, marginBottom: 18 }}>
+      <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 16 }}>📈 Team form</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <FormCard abbr={awayAbbr} name={awayName} side="AWAY" form={a} loading={!standings} />
+        <FormCard abbr={homeAbbr} name={homeName} side="HOME" form={h} loading={!standings} />
+      </div>
+    </div>
+  );
+}
+
+function FormCard({ abbr, name, side, form, loading }) {
+  const streakColor = (s) => {
+    if (!s) return "#9ca3af";
+    return s.startsWith("W") ? "#22c55e" : s.startsWith("L") ? "#ef4444" : "#9ca3af";
+  };
+  return (
+    <div style={{ background: "#0a0e14", border: "1px solid #1f2937", borderRadius: 8, padding: 16 }}>
+      <div style={{ fontSize: 10, color: "#6b7280", letterSpacing: "0.08em", marginBottom: 4, fontWeight: 600 }}>{side}</div>
+      <div style={{ fontSize: 15, fontWeight: 700, color: "#fff", marginBottom: 12 }}>{abbr} <span style={{ fontSize: 11, color: "#6b7280", fontWeight: 500 }}>{name}</span></div>
+      {loading ? (
+        <div style={{ fontSize: 12, color: "#6b7280" }}>Loading form…</div>
+      ) : !form ? (
+        <div style={{ fontSize: 12, color: "#6b7280" }}>No form data</div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+          <FormStat label="Record" value={form.record || "—"} color="#e4e7eb" />
+          <FormStat label="Streak" value={form.streak || "—"} color={streakColor(form.streak)} />
+          <FormStat label="Last 10" value={form.lastTen || "—"} color="#e4e7eb" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FormStat({ label, value, color }) {
+  return (
+    <div style={{ background: "#0f1419", border: "1px solid #1a1f28", borderRadius: 6, padding: "8px 10px", textAlign: "center" }}>
+      <div style={{ fontSize: 9, color: "#6b7280", letterSpacing: "0.08em", fontWeight: 600, textTransform: "uppercase", marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: 16, fontWeight: 800, color, lineHeight: 1 }}>{value}</div>
     </div>
   );
 }
