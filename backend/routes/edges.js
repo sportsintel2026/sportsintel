@@ -1,8 +1,10 @@
 // Edges route — the main endpoint powering the analytics dashboard
 //
 // GET /api/edges/mlb
-//   Returns today's MLB games with model projections, sportsbook odds, and edges
-//   Caches results in memory for 15 minutes
+//   Returns today's MLB games with model projections, sportsbook odds, and edges.
+//   ROLLOVER: once all of today's games are final (or there are none), it serves
+//   TOMORROW's slate instead, so the page stays useful late at night.
+//   Caches results in memory for 15 minutes (keyed by the date actually served).
 const express = require("express");
 const router = express.Router();
 const {
@@ -21,6 +23,7 @@ const { recordPredictions } = require("../services/predictionTracker");
 // In-memory cache
 let edgesCache = null;
 let edgesCacheAt = 0;
+let edgesCacheDate = null; // which ET date the cached payload is for
 const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
 // Team name normalization
 function normalizeTeam(name) {
@@ -45,22 +48,47 @@ function matchOddsToGame(game, oddsEvents) {
   }
   return null;
 }
+
+// Decide which date to serve. If every one of today's games is final (or there
+// are no games today), roll over to tomorrow. Postponed/cancelled don't count
+// as "live/upcoming", so they don't block rollover.
+async function resolveSlateDate() {
+  const today = getEasternDate(0);
+  let todayGames = [];
+  try { todayGames = await getScheduleForDate(today); } catch (e) { todayGames = []; }
+
+  const playable = todayGames.filter(g => g.status !== "postponed" && g.status !== "cancelled");
+  const anyNotFinal = playable.some(g => g.status !== "final");
+
+  // If there are playable games today and at least one isn't final yet, stay on today.
+  if (playable.length > 0 && anyNotFinal) {
+    return { date: today, rolled: false };
+  }
+  // Otherwise (all final, or nothing playable today) → roll to tomorrow.
+  const tomorrow = getEasternDate(1);
+  return { date: tomorrow, rolled: true };
+}
+
 // ── Main endpoint ─────────────────────────────────────────────────────────────
 router.get("/mlb", async (req, res) => {
   try {
-    if (edgesCache && (Date.now() - edgesCacheAt) < CACHE_TTL_MS) {
-      console.log("[Edges] Returning cached results");
+    const { date: slateDate, rolled } = await resolveSlateDate();
+
+    // Cache is valid only if it's fresh AND for the same date we now want to serve.
+    if (edgesCache && edgesCacheDate === slateDate && (Date.now() - edgesCacheAt) < CACHE_TTL_MS) {
+      console.log(`[Edges] Returning cached results for ${slateDate}`);
       return res.json({ ...edgesCache, cached: true });
     }
-    const today = getEasternDate(0);
-    console.log(`[Edges] Computing edges for ${today}`);
-    const allGames = await getScheduleForDate(today);
+
+    console.log(`[Edges] Computing edges for ${slateDate}${rolled ? " (rolled over to next day)" : ""}`);
+    const allGames = await getScheduleForDate(slateDate);
     const games = allGames.filter(g => g.status !== "postponed" && g.status !== "cancelled");
-    console.log(`[Edges] Found ${games.length} MLB games`);
+    console.log(`[Edges] Found ${games.length} MLB games for ${slateDate}`);
     if (games.length === 0) {
-      const empty = { date: today, games: [], moneylineEdges: [], totalsEdges: [], hrPropEdges: [], computedAt: new Date().toISOString() };
+      const empty = { date: slateDate, rolledToNextDay: rolled, games: [], moneylineEdges: [], totalsEdges: [], hrPropEdges: [], computedAt: new Date().toISOString() };
       edgesCache = empty;
       edgesCacheAt = Date.now();
+      edgesCacheDate = slateDate;
       return res.json(empty);
     }
     let oddsEvents = [];
@@ -188,7 +216,8 @@ router.get("/mlb", async (req, res) => {
       console.error(e.stack);
     }
     const result = {
-      date: today,
+      date: slateDate,
+      rolledToNextDay: rolled,
       games: gameEdges.map(ge => {
         const sourceGame = gamesWithOdds.find(g => g.id === ge.game.id);
         return {
@@ -211,6 +240,7 @@ router.get("/mlb", async (req, res) => {
     };
     edgesCache = result;
     edgesCacheAt = Date.now();
+    edgesCacheDate = slateDate;
 
     // Snapshot predictions for performance tracking (fire-and-forget; deduped by
     // unique constraint so repeated computes during the day are no-ops).
@@ -226,6 +256,7 @@ router.get("/mlb", async (req, res) => {
 router.delete("/cache", (req, res) => {
   edgesCache = null;
   edgesCacheAt = 0;
+  edgesCacheDate = null;
   res.json({ cleared: true });
 });
 module.exports = router;
