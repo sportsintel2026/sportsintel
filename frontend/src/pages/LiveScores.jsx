@@ -111,11 +111,6 @@ export default function LiveScoresPage({ league = "mlb" }) {
           <p style={{ margin: "0 0 24px", fontSize: 13, color: "#9ca3af" }}>
             Live scores · <span style={{ color: "#ef4444", fontWeight: 600 }}>tap a game</span> for the box score & full analysis
           </p>
-          {data?.rolledToNextDay && (
-            <div style={{ background: "#1a1410", border: "1px solid #f5970022", borderLeft: "3px solid #f59700", borderRadius: 6, padding: "8px 12px", marginTop: -14, marginBottom: 20, fontSize: 12, color: "#fbbf24" }}>
-              Today's games are all final — showing the next slate of games.
-            </div>
-          )}
 
           {loading && <Loader />}
           {!loading && error && <ErrorState onRetry={() => load(true)} />}
