@@ -569,21 +569,48 @@ function PitcherMatchup({ awayPitcher, homePitcher, hasFullAccess, navigate }) {
 }
 
 function PitcherCard({ pitcher, label, hasFullAccess, navigate }) {
+  const [imgOk, setImgOk] = useState(true);
   if (!pitcher) {
     return (
       <div style={{ background: "#0a0e14", border: "1px solid #1f2937", borderRadius: 8, padding: 16, textAlign: "center" }}>
         <div style={{ fontSize: 10, color: "#6b7280", letterSpacing: "0.08em", marginBottom: 8, fontWeight: 600 }}>{label}</div>
+        <div style={{ width: 72, height: 72, borderRadius: "50%", background: "#0f1419", border: "1px solid #1f2937", margin: "8px auto", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28 }}>⚾</div>
         <div style={{ fontSize: 14, color: "#4b5563" }}>TBD</div>
       </div>
     );
   }
   const stats = pitcher.stats;
+  const photo = pitcher.id ? `https://a.espncdn.com/i/headshots/mlb/players/full/${pitcher.id}.png` : null;
+  const record = stats && (stats.wins != null || stats.losses != null)
+    ? `${stats.wins ?? 0}-${stats.losses ?? 0}` : null;
+
   return (
-    <div style={{ background: "#0a0e14", border: "1px solid #1f2937", borderRadius: 8, padding: 16 }}>
-      <div style={{ fontSize: 10, color: "#6b7280", letterSpacing: "0.08em", marginBottom: 8, fontWeight: 600 }}>{label}</div>
-      <div style={{ fontSize: 14, fontWeight: 700, color: "#fff", marginBottom: 12 }}>{pitcher.name}</div>
+    <div style={{ background: "#0a0e14", border: "1px solid #1f2937", borderRadius: 8, padding: 16, textAlign: "center" }}>
+      <div style={{ fontSize: 10, color: "#6b7280", letterSpacing: "0.08em", marginBottom: 10, fontWeight: 600 }}>{label}</div>
+
+      {/* headshot on top (ESPN game-card style) */}
+      <div style={{ width: 80, height: 80, margin: "0 auto 10px", borderRadius: "50%", overflow: "hidden", background: "#0f1419", border: "2px solid #1f2937", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        {photo && imgOk ? (
+          <img
+            src={photo}
+            alt={pitcher.name}
+            width={80}
+            height={80}
+            style={{ objectFit: "cover", objectPosition: "top center" }}
+            onError={() => setImgOk(false)}
+          />
+        ) : (
+          <span style={{ fontSize: 30 }}>⚾</span>
+        )}
+      </div>
+
+      <div style={{ fontSize: 15, fontWeight: 700, color: "#fff" }}>{pitcher.name}</div>
+      <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 12, marginTop: 2 }}>
+        {pitcher.hand ? `${pitcher.hand}HP` : ""}{pitcher.hand && record ? " · " : ""}{record ? `${record}` : ""}
+      </div>
+
       {stats && (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, fontSize: 12 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, fontSize: 12, textAlign: "left" }}>
           <StatBlock label="ERA" value={stats.era?.toFixed(2)} />
           <StatBlock label="WHIP" value={stats.whip?.toFixed(2)} />
           <StatBlock label="K/9" value={stats.strikeoutsPer9?.toFixed(1)} />
