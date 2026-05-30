@@ -828,7 +828,7 @@ function HRPropCard({ prop }) {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, flexWrap: "wrap" }}>
         <div>
           <div style={{ fontSize: 15, fontWeight: 700, color: "#fff" }}>{prop.player}</div>
-          <div style={{ fontSize: 11, color: "#9ca3af" }}>{prop.team} · vs {prop.opposingPitcher || "TBD"}</div>
+          <div style={{ fontSize: 11, color: "#9ca3af" }}>{prop.team} · facing {prop.opposingPitcher || "TBD"}</div>
         </div>
         <div style={{ textAlign: "right" }}>
           <div style={{ fontSize: 22, fontWeight: 800, color: positive ? "#22c55e" : "#ef4444" }}>
