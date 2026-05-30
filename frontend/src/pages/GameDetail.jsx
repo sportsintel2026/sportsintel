@@ -190,7 +190,7 @@ function LiveScoreHeader({ gameId, awayAbbr, homeAbbr, league = "mlb" }) {
   const accent = isLiveNow ? "#ef4444" : "#22c55e";
 
   return (
-    <div style={{ background: isLiveNow ? "linear-gradient(180deg,#1f0a0a 0%,#0f1419 100%)" : "linear-gradient(180deg,#0a1f15 0%,#0f1419 100%)", border: `1px solid ${accent}44`, borderLeft: `4px solid ${accent}`, borderRadius: 10, padding: "16px 20px", marginBottom: 18 }}>
+    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: "16px 20px", marginBottom: 18 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
         {isLiveNow && <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#ef4444", animation: "pulse 1.2s infinite" }} />}
         <span style={{ fontSize: 11, fontWeight: 800, color: accent, letterSpacing: "0.06em" }}>{isLiveNow ? "LIVE" : "FINAL"}</span>
