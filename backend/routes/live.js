@@ -69,16 +69,16 @@ router.get("/mlb", async (req, res) => {
       const state = await getLiveGameState(g.id);
       if (!state) continue;
 
-      // Our live win probabilities.
-      // computeLiveWinProb wants (state, homePitcherEra, awayPitcherEra) — the
-      // pitcher on the mound is the pitching side; the other side's slot is the
-      // pre-game starter ERA if known, else neutral (null → 1.0).
+      // Live total line from the book (for the over/under edge), if available.
+      const odds = matchOdds(g, oddsEvents);
+      const liveTotalLine = odds?.totals?.line ?? null;
+
+      // Our live probabilities for all three markets.
       const homeEra = state.pitchingSide === "home" ? state.currentPitcherEra : null;
       const awayEra = state.pitchingSide === "away" ? state.currentPitcherEra : null;
-      const wp = computeLiveWinProb(state, homeEra, awayEra);
+      const wp = computeLiveWinProb(state, homeEra, awayEra, liveTotalLine);
 
-      // Live moneyline (de-vigged) for the edge.
-      const odds = matchOdds(g, oddsEvents);
+      // ── Moneyline edge (de-vigged) ──
       let awayEdge = null, homeEdge = null, awayOdds = null, homeOdds = null;
       if (odds?.h2h?.away != null && odds?.h2h?.home != null) {
         awayOdds = odds.h2h.away; homeOdds = odds.h2h.home;
@@ -88,6 +88,24 @@ router.get("/mlb", async (req, res) => {
         if (fairHome != null) homeEdge = round3(wp.homeWinProb - fairHome);
       }
 
+      // ── Over/Under edge (de-vigged) ──
+      let overEdge = null, underEdge = null, overOdds = null, underOdds = null;
+      if (odds?.totals?.over != null && odds?.totals?.under != null && wp.overProb != null) {
+        overOdds = odds.totals.over; underOdds = odds.totals.under;
+        const fairOver = devigTwoWay(overOdds, underOdds);
+        const fairUnder = devigTwoWay(underOdds, overOdds);
+        if (fairOver != null) overEdge = round3(wp.overProb - fairOver);
+        if (fairUnder != null) underEdge = round3(wp.underProb - fairUnder);
+      }
+
+      // ── Run line edge (±1.5) ──
+      // Live run-line odds aren't on the main odds call (h2h/totals only), so we
+      // can't de-vig against a book price yet. We surface our model run-line
+      // PROBABILITY (home/away to cover -1.5); the edge vs book is left null until
+      // we add a run-line (spreads) odds fetch. Honest: prob shown, edge pending.
+      const homeRunLineProb = wp.homeRunLineProb;
+      const awayRunLineProb = wp.awayRunLineProb;
+
       games.push({
         gameId: g.id,
         away: g.away, home: g.home,
@@ -95,8 +113,15 @@ router.get("/mlb", async (req, res) => {
         inning: state.inning, half: state.half, outs: state.outs,
         baseState: state.baseState,
         awayScore: state.awayScore, homeScore: state.homeScore,
+        // moneyline
         awayWinProb: wp.awayWinProb, homeWinProb: wp.homeWinProb,
         awayOdds, homeOdds, awayEdge, homeEdge,
+        // totals
+        totalLine: liveTotalLine, projectedTotal: wp.projectedTotal,
+        overProb: wp.overProb, underProb: wp.underProb,
+        overOdds, underOdds, overEdge, underEdge,
+        // run line (probability only for now)
+        homeRunLineProb, awayRunLineProb,
         pitcherAdj: wp.pitcherAdj,
       });
     }
