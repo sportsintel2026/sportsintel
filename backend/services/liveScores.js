@@ -14,6 +14,8 @@ const SCOREBOARD = (league) =>
   `https://site.api.espn.com/apis/site/v2/sports/${PATHS[league]}/scoreboard`;
 const SUMMARY = (league, id) =>
   `https://site.api.espn.com/apis/site/v2/sports/${PATHS[league]}/summary?event=${id}`;
+const STANDINGS = (league) =>
+  `https://site.api.espn.com/apis/v2/sports/${PATHS[league]}/standings`;
 
 // tiny cache so the 30s frontend refresh doesn't hammer ESPN
 const cache = new Map(); // key -> { t, v }
@@ -208,4 +210,68 @@ async function getGameDetail(league, gameId) {
   return out;
 }
 
-module.exports = { getScores, getGameDetail, parseEvent, parseLineScore, parsePlayers };
+// ── Standings (streak + last 10 + record) ───────────────────────────────────
+// Returns a map keyed by ESPN team id: { record, streak, lastTen, streakType }.
+// Walks the nested league->children->standings->entries structure. Cached longer
+// (standings change slowly — once per completed game).
+const standingsCache = { t: 0, v: null };
+const STANDINGS_TTL = 5 * 60 * 1000; // 5 min
+
+function statByType(stats, type) {
+  const s = (stats || []).find((x) => x.type === type || x.name === type);
+  return s || null;
+}
+
+async function getStandings(league) {
+  if (!PATHS[league]) throw new Error("unknown league");
+  if (standingsCache.v && standingsCache.league === league && Date.now() - standingsCache.t < STANDINGS_TTL) {
+    return standingsCache.v;
+  }
+  const res = await fetch(STANDINGS(league));
+  if (!res.ok) throw new Error("espn standings " + res.status);
+  const json = await res.json();
+
+  // entries can live under json.children[].standings.entries (divisions/leagues)
+  // or directly under json.standings.entries. Collect them all.
+  const buckets = [];
+  if (json.standings && json.standings.entries) buckets.push(json.standings.entries);
+  for (const child of json.children || []) {
+    if (child.standings && child.standings.entries) buckets.push(child.standings.entries);
+    // some shapes nest one more level
+    for (const gc of child.children || []) {
+      if (gc.standings && gc.standings.entries) buckets.push(gc.standings.entries);
+    }
+  }
+
+  const map = {};
+  for (const entries of buckets) {
+    for (const e of entries) {
+      const team = e.team || {};
+      const id = String(team.id || "");
+      if (!id) continue;
+      const stats = e.stats || [];
+      const wins = statByType(stats, "wins");
+      const losses = statByType(stats, "losses");
+      const streak = statByType(stats, "streak");
+      const lastTen = statByType(stats, "lasttengames") || statByType(stats, "Last Ten Games");
+      const diff = statByType(stats, "pointdifferential");
+      map[id] = {
+        abbrev: team.abbreviation || null,
+        record: wins && losses ? `${wins.displayValue}-${losses.displayValue}` : null,
+        streak: streak ? streak.displayValue : null,        // e.g. "W3" / "L4"
+        streakValue: streak ? streak.value : null,           // +3 / -4
+        lastTen: lastTen ? lastTen.displayValue : null,      // e.g. "6-4"
+        runDiff: diff ? diff.displayValue : null,            // e.g. "+24"
+      };
+      // also key by abbreviation (uppercased) for easy frontend matching
+      if (team.abbreviation) map[String(team.abbreviation).toUpperCase()] = map[id];
+    }
+  }
+
+  standingsCache.t = Date.now();
+  standingsCache.league = league;
+  standingsCache.v = map;
+  return map;
+}
+
+module.exports = { getScores, getGameDetail, getStandings, parseEvent, parseLineScore, parsePlayers };
