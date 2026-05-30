@@ -7,6 +7,7 @@
 const { createClient } = require("@supabase/supabase-js");
 const { getEasternDate, getScheduleForDate } = require("./mlbStatsApi");
 const { fetchGamelog } = require("./nbaGamelog");
+const { getMLBMainOdds } = require("./oddsApi");
 
 function db() {
   return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
@@ -18,6 +19,158 @@ function etDate(iso) {
   try { return new Date(iso).toLocaleDateString("en-CA", { timeZone: "America/New_York" }); }
   catch { return null; }
 }
+
+// ── CLV (Closing Line Value) ────────────────────────────────────────────────
+// The closing line is the price right before a game starts — the market's
+// sharpest number. If our picks consistently got a BETTER price than the close,
+// that's the strongest evidence of real edge (sharper than win rate, shows up
+// fast). We capture the closing line the moment a game goes live (its pre-game
+// line has just closed), then compute CLV against the price we recorded at pick
+// time. Both prices are de-vigged first so we compare fair probabilities.
+
+// American odds -> implied probability (same formula as oddsApi).
+function americanToImpliedProb(a) {
+  if (a == null) return null;
+  if (a >= 100) return 100 / (a + 100);
+  return Math.abs(a) / (Math.abs(a) + 100);
+}
+
+// Given a pending pick row + the matching odds event, return the closing price
+// for the pick's side and the opposite side. Mirrors how recordPredictions read
+// odds, so pick-time and closing prices are apples-to-apples.
+function closingOddsForPick(pick, ev) {
+  if (!ev) return null;
+  if (pick.market === "moneyline") {
+    const away = ev.h2h?.away, home = ev.h2h?.home;
+    if (away == null || home == null) return null;
+    return pick.selection === "away"
+      ? { thisOdds: away, oppOdds: home }
+      : { thisOdds: home, oppOdds: away };
+  }
+  if (pick.market === "total") {
+    const over = ev.totals?.over, under = ev.totals?.under;
+    if (over == null || under == null) return null;
+    // Only meaningful if the closing line matches the line we bet.
+    if (ev.totals?.line != null && pick.line != null && ev.totals.line !== pick.line) {
+      // Line moved off our number — still record, CLV captures the price move.
+    }
+    return pick.selection === "over"
+      ? { thisOdds: over, oppOdds: under }
+      : { thisOdds: under, oppOdds: over };
+  }
+  return null; // props not tracked for CLV yet
+}
+
+// Capture closing lines for MLB ML/totals picks whose game has just started
+// (status "live") and that don't yet have a closing line. One odds fetch total.
+async function captureClosingLines() {
+  const supabase = db();
+
+  // Pending MLB ML/totals picks without a closing line yet.
+  const { data: pending, error } = await supabase
+    .from("model_predictions")
+    .select("*")
+    .eq("league", "mlb")
+    .in("market", ["moneyline", "total"])
+    .is("closing_odds", null)
+    .eq("result", "pending");
+
+  if (error) { console.error("[CLV] fetch error:", error.message); return 0; }
+  if (!pending || pending.length === 0) { console.log("[CLV] no picks awaiting closing line"); return 0; }
+
+  // Which games are these, and which have started? Use today's schedule for status.
+  const dates = [...new Set(pending.map(p => p.game_date))];
+  const startedGameIds = new Set();
+  for (const date of dates) {
+    try {
+      const schedule = await getScheduleForDate(date);
+      for (const g of schedule) {
+        // capture once the game is live OR final (pre-game line has closed)
+        if (g.status === "live" || g.status === "final") startedGameIds.add(String(g.id));
+      }
+    } catch (e) { console.error(`[CLV] schedule ${date} failed:`, e.message); }
+  }
+
+  const toCapture = pending.filter(p => startedGameIds.has(String(p.game_id)));
+  if (toCapture.length === 0) { console.log("[CLV] no started games to capture yet"); return 0; }
+
+  // One odds fetch for all of today's games (2 credits).
+  let oddsEvents = [];
+  try { oddsEvents = await getMLBMainOdds(); }
+  catch (e) { console.error("[CLV] odds fetch failed:", e.message); return 0; }
+
+  // Build game_id -> {away,home} full names from the schedule (reliable), so we
+  // can match each pick's game to an odds event by full team name rather than
+  // guessing from abbreviations (which is unreliable, e.g. "LAD" vs "Dodgers").
+  const gameNames = {};
+  for (const date of dates) {
+    try {
+      const schedule = await getScheduleForDate(date);
+      for (const g of schedule) gameNames[String(g.id)] = { away: g.away, home: g.home };
+    } catch (_) { /* already logged above */ }
+  }
+
+  let captured = 0;
+  for (const pick of toCapture) {
+    const names = gameNames[String(pick.game_id)];
+    const ev = matchPickToOddsEvent(names, oddsEvents);
+    const closing = closingOddsForPick(pick, ev);
+    if (!closing) continue;
+
+    // CLV = how much our SIDE's price improved from pick time to close.
+    // We compare the implied probability of our side's price at each moment.
+    // (Comparing the same side at both moments means the book's vig is present
+    // in both and largely cancels — so raw implied probs are fine and clean here.)
+    // A closing implied prob HIGHER than our pick implied prob means the price
+    // shortened in our favor after we bet → we beat the close → positive CLV.
+    const pickImplied = americanToImpliedProb(pick.odds);
+    const closeImplied = americanToImpliedProb(closing.thisOdds);
+    const clv = (pickImplied != null && closeImplied != null)
+      ? round4(closeImplied - pickImplied)
+      : null;
+
+    const { error: upErr } = await supabase
+      .from("model_predictions")
+      .update({
+        closing_odds: closing.thisOdds,
+        closing_opp_odds: closing.oppOdds,
+        clv,
+        beat_close: clv != null ? clv > 0 : null,
+        closing_captured_at: new Date().toISOString(),
+      })
+      .eq("id", pick.id);
+    if (!upErr) captured++;
+  }
+
+  console.log(`[CLV] captured closing lines for ${captured}/${toCapture.length} picks`);
+  return captured;
+}
+
+// Match a game (by full team names from the schedule) to an odds event.
+// Uses the same normalize-and-contains approach edges.js uses to match odds.
+function normalizeTeamName(name) {
+  if (!name) return "";
+  return name.toLowerCase()
+    .replace(/^(los angeles|new york|san francisco|san diego|st\.? louis|tampa bay|chicago|kansas city|washington|cleveland|cincinnati|colorado|arizona|atlanta|baltimore|boston|detroit|houston|miami|milwaukee|minnesota|oakland|philadelphia|pittsburgh|seattle|texas|toronto)\s+/i, "")
+    .trim();
+}
+function matchPickToOddsEvent(names, oddsEvents) {
+  if (!names) return null;
+  const awayN = normalizeTeamName(names.away);
+  const homeN = normalizeTeamName(names.home);
+  for (const ev of oddsEvents) {
+    const evAwayN = normalizeTeamName(ev.awayTeam);
+    const evHomeN = normalizeTeamName(ev.homeTeam);
+    if ((awayN === evAwayN && homeN === evHomeN) ||
+        ((awayN.includes(evAwayN) || evAwayN.includes(awayN)) &&
+         (homeN.includes(evHomeN) || evHomeN.includes(homeN)))) {
+      return ev;
+    }
+  }
+  return null;
+}
+
+function round4(n) { return Math.round(n * 10000) / 10000; }
 
 // ── RECORD (MLB) ────────────────────────────────────────────────────────────────
 // Snapshots every edge the model surfaced today. Only records games that are
@@ -272,4 +425,4 @@ function gradeOne(p, g) {
   return null;
 }
 
-module.exports = { recordPredictions, recordNbaPropPredictions, gradeFinishedGames, gradeNbaProp };
+module.exports = { recordPredictions, recordNbaPropPredictions, gradeFinishedGames, gradeNbaProp, captureClosingLines };
