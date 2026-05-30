@@ -52,11 +52,12 @@ export default function GameDetailPage() {
         .desktop-sidebar{display:block}
         @media (max-width: 768px) {
           .desktop-sidebar{display:none!important}
-          .main-content{margin-left:0!important}
+          .main-content{margin-left:0!important;max-width:100vw!important;overflow-x:hidden!important}
           .mobile-only{display:flex!important}
-          .gd-content{padding:16px 14px 60px!important}
+          .gd-content{padding:16px 14px 60px!important;max-width:100vw!important}
           h1{font-size:24px!important}
           .bvp-grid{grid-template-columns:1fr!important}
+          .two-col{grid-template-columns:1fr!important}
         }
       `}</style>
 
@@ -218,7 +219,7 @@ function TeamForm({ gameId, awayAbbr, homeAbbr, awayName, homeName, league = "ml
         </div>
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <div className="two-col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <FormCard abbr={awayAbbr} name={awayName} side="AWAY" form={a} loading={!standings} />
         <FormCard abbr={homeAbbr} name={homeName} side="HOME" form={h} loading={!standings} />
       </div>
@@ -697,7 +698,7 @@ function WinProbabilityCard({ awayAbbr, homeAbbr, awayProb, homeProb, awayOdds, 
   return (
     <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 20, marginBottom: 18 }}>
       <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 16 }}>💰 Moneyline · model vs market</div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <div className="two-col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <MLBox abbr={awayAbbr} prob={awayProb} odds={awayOdds} edge={awayEdge} side="Away" />
         <MLBox abbr={homeAbbr} prob={homeProb} odds={homeOdds} edge={homeEdge} side="Home" />
       </div>
@@ -748,7 +749,7 @@ function ContextCard({ game }) {
   return (
     <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 20, marginBottom: 18 }}>
       <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 16 }}>🏟️ Park factors</div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <div className="two-col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <FactorCard label="Runs" factor={game.parkRunFactor || 1} />
         <FactorCard label="HRs" factor={game.parkHRFactor || 1} />
       </div>
