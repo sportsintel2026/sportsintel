@@ -55,6 +55,38 @@ function effectiveERA(p) {
   return round2(0.6 * fip + 0.4 * era);
 }
 
+// ERA over the pitcher's recent starts (earned runs / innings × 9).
+// `recentStarts` is the array from getPitcherRecentStarts. Returns null if the
+// sample is too thin to mean anything (need ~10+ recent innings).
+function recentFormEra(recentStarts) {
+  if (!Array.isArray(recentStarts) || recentStarts.length === 0) return null;
+  let er = 0, ip = 0;
+  for (const s of recentStarts) {
+    er += s.er ?? 0;
+    ip += s.ip ?? 0;
+  }
+  if (ip < 10) return null; // too few innings — don't trust it
+  return round2((er / ip) * 9);
+}
+
+// Returns a COPY of the pitcher object with its `era` lightly nudged toward
+// recent form. We blend 75% season / 25% recent: recent pitching matters, but
+// 3 starts is a small, noisy sample, so it should adjust — not dominate. Because
+// effectiveERA() reads p.era, this flows into BOTH the moneyline and totals.
+// FIP components (k9/bb9/hr9) are left at season values (3-start rate stats are
+// far too noisy to touch). Clamps the recent blend so one disaster start can't
+// wreck the projection.
+function blendRecentForm(pitcher, recentStarts) {
+  if (!pitcher || pitcher.era == null) return pitcher;
+  const recentEra = recentFormEra(recentStarts);
+  if (recentEra == null) return pitcher;
+  // Clamp recent ERA to a sane band before blending (a 2-inning 9-ER nightmare
+  // shouldn't read as a 40 ERA pitcher going forward).
+  const clampedRecent = Math.max(1.0, Math.min(9.0, recentEra));
+  const blended = round2(0.75 * pitcher.era + 0.25 * clampedRecent);
+  return { ...pitcher, era: blended, _seasonEra: pitcher.era, _recentEra: recentEra };
+}
+
 
 // Given a team's vsLHP/vsRHP splits and the opposing starter's hand,
 // return a multiplier (~0.92–1.08) reflecting how well they hit that hand
@@ -147,10 +179,25 @@ function calculateTotalProjection(game, awayPitcher, homePitcher, awayTeamHit, h
 }
 
 // ── HR PROP MODEL ─────────────────────────────────────────────────────────────
-function calculateHRProbability(batterStats, opposingPitcherStats, game, weather) {
+// recent15 (last-15-day stats) is now an INPUT, not just display: a hitter on a
+// genuine power surge (or slump) gets nudged off their season HR rate. Kept
+// conservative — 15 days is a small sample — so it blends, never dominates.
+function calculateHRProbability(batterStats, opposingPitcherStats, game, weather, recent15) {
   if (!batterStats) return null;
-  const baseHRRate = batterStats.hrPerPA ?? LEAGUE_AVG.hrPerPA;
-  if (baseHRRate === 0) return null;
+  const seasonRate = batterStats.hrPerPA ?? LEAGUE_AVG.hrPerPA;
+  if (seasonRate === 0) return null;
+
+  // Blend recent form into the base rate. recent15 gives HR over recent AB; turn
+  // that into a per-PA-ish rate and require a real sample (≥25 AB) before trusting
+  // it. 70% season / 30% recent, then clamp the blended rate to ±60% of season so
+  // one hot/cold streak can't produce a silly projection.
+  let baseHRRate = seasonRate;
+  if (recent15 && recent15.atBats >= 25 && recent15.homeRuns != null) {
+    const recentRate = recent15.homeRuns / (recent15.atBats * 1.08); // approx PA from AB
+    const blended = 0.70 * seasonRate + 0.30 * recentRate;
+    baseHRRate = Math.max(seasonRate * 0.4, Math.min(seasonRate * 1.6, blended));
+  }
+
   const expectedPA = 4.1;
   const pitcherHR9 = opposingPitcherStats?.homeRunsPer9 ?? LEAGUE_AVG.homeRunsPer9;
   const pitcherFactor = pitcherHR9 / LEAGUE_AVG.homeRunsPer9;
@@ -278,10 +325,16 @@ async function calculateGameEdges(game, oddsForGame) {
   const awayHandMult = handednessMultiplier(awayHandSplits, homePitcherHand, awayTeamOps);
   const homeHandMult = handednessMultiplier(homeHandSplits, awayPitcherHand, homeTeamOps);
 
-  console.log(`[Edges] ${game.awayAbbr}@${game.homeAbbr} | lineup away=${awayLineup.source}(ops ${awayLineupOff?.ops ?? "n/a"}) home=${homeLineup.source}(ops ${homeLineupOff?.ops ?? "n/a"}) | handMult away=${awayHandMult.toFixed(3)} home=${homeHandMult.toFixed(3)} | pen away ERA=${awayBullpen?.era ?? "n/a"} home ERA=${homeBullpen?.era ?? "n/a"}`);
+  // Blend recent form (last 3 starts) lightly into each starter's ERA before
+  // projecting. Catches a pitcher who's clearly hot or slumping without letting
+  // a tiny sample dominate. Flows into both ML and totals via effectiveERA.
+  const awayPitcherForm = blendRecentForm(awayPitcher, awayPitcherRecent);
+  const homePitcherForm = blendRecentForm(homePitcher, homePitcherRecent);
 
-  const ml = calculateMoneylineProjection(game, awayPitcher, homePitcher, awayHit, homeHit, awayBullpen, homeBullpen, awayHandMult, homeHandMult);
-  const totals = calculateTotalProjection(game, awayPitcher, homePitcher, awayHit, homeHit, weather, awayBullpen, homeBullpen, awayHandMult, homeHandMult);
+  console.log(`[Edges] ${game.awayAbbr}@${game.homeAbbr} | lineup away=${awayLineup.source}(ops ${awayLineupOff?.ops ?? "n/a"}) home=${homeLineup.source}(ops ${homeLineupOff?.ops ?? "n/a"}) | recentForm away ${awayPitcher?.era ?? "n/a"}→${awayPitcherForm?.era ?? "n/a"} home ${homePitcher?.era ?? "n/a"}→${homePitcherForm?.era ?? "n/a"} | handMult away=${awayHandMult.toFixed(3)} home=${homeHandMult.toFixed(3)}`);
+
+  const ml = calculateMoneylineProjection(game, awayPitcherForm, homePitcherForm, awayHit, homeHit, awayBullpen, homeBullpen, awayHandMult, homeHandMult);
+  const totals = calculateTotalProjection(game, awayPitcherForm, homePitcherForm, awayHit, homeHit, weather, awayBullpen, homeBullpen, awayHandMult, homeHandMult);
 
   const odds = oddsForGame || { h2h: {}, totals: {} };
   const awayML = odds.h2h?.away;
@@ -397,7 +450,7 @@ async function calculateHRPropEdges(games, hrOddsByEvent) {
         opposingPitcherProbable ? getBatterVsPitcherHistory(batter.id, opposingPitcherProbable.id) : null,
         getBatterStatcast(batter.id),
       ]);
-      const hrProb = calculateHRProbability(batterStats, opposingPitcherStats, game, weather);
+      const hrProb = calculateHRProbability(batterStats, opposingPitcherStats, game, weather, recent15);
       if (hrProb == null) continue;
       const edge = calculateEdge(hrProb, propOdds.price);
       allHRProps.push({
