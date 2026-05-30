@@ -169,8 +169,29 @@ function TeamForm({ gameId, awayAbbr, homeAbbr, awayName, homeName, league = "ml
   }, [gameId, league]);
 
   if (failed) return null;          // quietly hide if standings unavailable
-  const a = standings ? standings[String(awayAbbr).toUpperCase()] : null;
-  const h = standings ? standings[String(homeAbbr).toUpperCase()] : null;
+
+  // MLB/ESPN use different abbreviations for some teams. Try the given abbrev
+  // and its known aliases so the standings lookup matches.
+  const ALIASES = {
+    AZ: ["ARI"], ARI: ["AZ"],
+    CHW: ["CWS"], CWS: ["CHW"],
+    WSH: ["WAS"], WAS: ["WSH"],
+    SD: ["SDP"], SDP: ["SD"],
+    SF: ["SFG"], SFG: ["SF"],
+    TB: ["TBR"], TBR: ["TB"],
+    KC: ["KCR"], KCR: ["KC"],
+  };
+  const lookup = (abbr) => {
+    if (!standings || !abbr) return null;
+    const up = String(abbr).toUpperCase();
+    if (standings[up]) return standings[up];
+    for (const alt of ALIASES[up] || []) {
+      if (standings[alt]) return standings[alt];
+    }
+    return null;
+  };
+  const a = lookup(awayAbbr);
+  const h = lookup(homeAbbr);
   if (standings && !a && !h && !series) return null; // nothing to show
 
   return (
