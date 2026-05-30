@@ -128,6 +128,7 @@ function GameDetail({ game, hrProps, hasFullAccess, navigate }) {
       {bestEdge && !isFinal && <BestEdgeCard edge={bestEdge} game={game} hasFullAccess={hasFullAccess} navigate={navigate} />}
       {game.weather && <WeatherCard weather={game.weather} />}
       <PitcherMatchup awayPitcher={awayP} homePitcher={homeP} hasFullAccess={hasFullAccess} navigate={navigate} />
+      <LineupBadge lineups={game.lineups} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} />
       <BatterVsPitcherSection gameId={game.id} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} hasFullAccess={hasFullAccess} navigate={navigate} />
       <WinProbabilityCard awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} awayProb={ml.awayWinProb} homeProb={ml.homeWinProb} awayOdds={ml.awayOdds} homeOdds={ml.homeOdds} awayEdge={ml.awayEdge} homeEdge={ml.homeEdge} hasFullAccess={hasFullAccess} navigate={navigate} />
       <TotalsCard totals={totals} hasFullAccess={hasFullAccess} navigate={navigate} />
@@ -612,6 +613,39 @@ function BestEdgeCard({ edge, game, hasFullAccess, navigate }) {
           </div>
           <ConfidenceBadge conf={edge.confidence} />
         </div>
+      </div>
+    </div>
+  );
+}
+
+// Small honesty badge: shows whether the model's offense input is based on a
+// CONFIRMED lineup (today's posted card), a PROJECTED lineup (last game's, used
+// as a proxy before today's posts), or season team stats (no lineup resolved).
+function LineupBadge({ lineups, awayAbbr, homeAbbr }) {
+  if (!lineups) return null;
+  const tag = (side, abbr) => {
+    const src = side?.source || "none";
+    if (src === "confirmed") return { text: `${abbr}: ✓ Confirmed lineup`, color: "#22c55e", bg: "#0a1f15", border: "#22c55e44" };
+    if (src === "recent") return { text: `${abbr}: Projected lineup`, color: "#9ca3af", bg: "#0a0e14", border: "#1f2937" };
+    return { text: `${abbr}: Season averages`, color: "#6b7280", bg: "#0a0e14", border: "#1f2937" };
+  };
+  const a = tag(lineups.away, awayAbbr);
+  const h = tag(lineups.home, homeAbbr);
+  const anyConfirmed = lineups.away?.source === "confirmed" || lineups.home?.source === "confirmed";
+  return (
+    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 16, marginBottom: 18 }}>
+      <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 12 }}>📋 Lineup status</div>
+      <div className="two-col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+        {[a, h].map((t, i) => (
+          <div key={i} style={{ background: t.bg, border: `1px solid ${t.border}`, borderRadius: 8, padding: "10px 12px", fontSize: 13, fontWeight: 700, color: t.color }}>
+            {t.text}
+          </div>
+        ))}
+      </div>
+      <div style={{ marginTop: 10, fontSize: 11, color: "#6b7280", lineHeight: 1.5 }}>
+        {anyConfirmed
+          ? "Model offense reflects today's posted lineup. Confirmed lineups usually post a few hours before first pitch."
+          : "Today's lineup isn't posted yet — model uses the most recent lineup (or season averages) until the official card drops, then it sharpens automatically."}
       </div>
     </div>
   );
