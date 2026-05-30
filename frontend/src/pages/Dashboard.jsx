@@ -174,11 +174,6 @@ function MLBDashboard({ edges, loading, picks, hasFullAccess, navigate, onRefres
           {gameCount} games · {edges.cached ? "Cached" : "Updated"} {new Date(edges.computedAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
         </span>
       </div>
-      {rolled && (
-        <div style={{ background: "#1a1410", border: "1px solid #f5970022", borderLeft: "3px solid #f59700", borderRadius: 6, padding: "8px 12px", marginBottom: 12, fontSize: 12, color: "#fbbf24" }}>
-          Today's games are all final — showing <strong>{weekday}'s</strong> slate. Early lines and pitchers can still change; edges sharpen as lineups post.
-        </div>
-      )}
       <p style={{ margin: "0 0 24px", fontSize: 13, color: "#9ca3af" }}>
         Model projections vs sportsbook lines · weather, batter vs pitcher history, recent form. <span style={{ color: "#ef4444", fontWeight: 600 }}>Click any game</span> for deep analysis.
       </p>
