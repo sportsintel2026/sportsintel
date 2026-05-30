@@ -211,6 +211,18 @@ async function getGameDetail(league, gameId) {
     };
   }
 
+  // home plate umpire (from the officials list in gameInfo). Name only — no
+  // tendency data (not reliably available without a paid feed).
+  let umpire = null;
+  const officials =
+    (summary.gameInfo && summary.gameInfo.officials) ||
+    (summary.boxscore && summary.boxscore.officials) ||
+    [];
+  const hp = officials.find(
+    (o) => o.position && /home plate/i.test(o.position.name || o.position.displayName || "")
+  );
+  if (hp && hp.displayName) umpire = hp.displayName;
+
   const out = {
     league,
     gameId: String(gameId),
@@ -218,6 +230,7 @@ async function getGameDetail(league, gameId) {
     bucket: bucketFor(status.state || "pre"),
     statusDetail: status.shortDetail || status.detail || "",
     series,
+    umpire,
     lineScore: parseLineScore(summary),
     players: parsePlayers(summary),
     generatedAt: new Date().toISOString(),
