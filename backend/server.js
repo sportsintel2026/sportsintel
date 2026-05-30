@@ -17,7 +17,7 @@ const nbaRoutes = require("./routes/nba");
 const scoresRoutes = require("./routes/scores");
 
 const { refreshDailyGames } = require("./services/sportsData");
-const { gradeFinishedGames } = require("./services/predictionTracker");
+const { gradeFinishedGames, captureClosingLines } = require("./services/predictionTracker");
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -78,6 +78,19 @@ cron.schedule("0 8 * * *", async () => {
     await refreshDailyGames();
   } catch (err) {
     console.error("[CRON] Daily refresh failed:", err.message);
+  }
+}, { timezone: "America/New_York" });
+
+// Capture CLOSING LINES every 30 min during game hours (noon–2am ET). Each run
+// snapshots the closing price for any pending MLB ML/totals pick whose game has
+// just started, then computes CLV. One odds fetch per run (~2 credits) covers
+// all of today's games, so this is cheap on the API budget.
+cron.schedule("*/30 12-23,0-1 * * *", async () => {
+  console.log("[CRON] Capturing closing lines (CLV)...");
+  try {
+    await captureClosingLines();
+  } catch (err) {
+    console.error("[CRON] Closing-line capture failed:", err.message);
   }
 }, { timezone: "America/New_York" });
 
