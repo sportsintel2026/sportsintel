@@ -34,6 +34,7 @@ export const edgesApi = {
 export const scoresApi = {
   getScores: (league) => apiFetch(`/api/scores/${league}`),
   getGameDetail: (league, gameId) => apiFetch(`/api/scores/${league}/${gameId}`),
+  getStandings: (league) => apiFetch(`/api/scores/${league}/standings`),
 };
 export const subscriptionApi = {
   getMyPlan: () => apiFetch("/api/subscriptions/me"),
