@@ -314,19 +314,19 @@ function TotalsRow({ edge, navigate }) {
 
 function HRPropRow({ edge }) {
   const bvpText = edge.bvp && edge.bvp.atBats > 0
-    ? `BvP: ${edge.bvp.hits}/${edge.bvp.atBats}${edge.bvp.hr > 0 ? `, ${edge.bvp.hr} HR` : ""}`
+    ? `Career vs starter: ${edge.bvp.hits}/${edge.bvp.atBats}${edge.bvp.hr > 0 ? `, ${edge.bvp.hr} HR` : ""}`
     : null;
   const recentText = edge.recent15
-    ? `L15: ${(edge.recent15.avg * 1000).toFixed(0).replace(/^0/, ".")}${edge.recent15.hr > 0 ? `, ${edge.recent15.hr} HR` : ""}`
+    ? `Last 15d: ${(edge.recent15.avg * 1000).toFixed(0).replace(/^0/, ".")}${edge.recent15.hr > 0 ? `, ${edge.recent15.hr} HR` : ""}`
     : null;
-  const detailLine = [bvpText, recentText].filter(Boolean).join(" · ");
+  const detailLine = [recentText, bvpText].filter(Boolean).join(" · ");
 
   return (
     <div className="edge-row hr-prop-row" style={{ display: "grid", gridTemplateColumns: "2.2fr 1fr 1fr 1fr 80px", gap: 10, padding: 10, background: "#0a0e14", borderRadius: 4, alignItems: "center" }}>
       <div style={{ minWidth: 0 }}>
         <div style={{ fontSize: 12, fontWeight: 600 }}>{edge.player}</div>
         <div style={{ fontSize: 10, color: "#6b7280", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-          {edge.team} · vs {edge.opposingPitcher || "TBD"}
+          {edge.team} · facing {edge.opposingPitcher || "TBD"}
         </div>
         {detailLine && (
           <div style={{ fontSize: 10, color: "#22c55e", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
