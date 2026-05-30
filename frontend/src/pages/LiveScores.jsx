@@ -260,16 +260,22 @@ export function BoxScore({ detail }) {
       {/* player stats per team */}
       {Object.keys(teams).map((teamAbbrev) => {
         const roster = teams[teamAbbrev];
-        const cols = wanted.filter((c) => roster[0] && roster[0].stats[c] !== undefined);
-        const showCols = cols.length ? cols : (roster[0]?.columns || []).slice(0, 4);
 
-        // split batters vs pitchers by position (SP/RP = pitcher)
+        // split batters vs pitchers by position (SP/RP/P = pitcher)
         const isPitcher = (p) => {
           const pos = String(p.position || "").toUpperCase();
           return pos === "SP" || pos === "RP" || pos === "P";
         };
         const batters = roster.filter((p) => !isPitcher(p));
         const pitchers = roster.filter(isPitcher);
+
+        // batter columns: prefer our compact set, fall back to whatever exists
+        const BAT = wanted.filter((c) => batters[0] && batters[0].stats[c] !== undefined);
+        const batCols = BAT.length ? BAT : (batters[0]?.columns || []).slice(0, 4);
+
+        // pitcher columns: standard pitching line, only those present
+        const PIT_WANT = detail.league === "mlb" ? ["IP", "H", "R", "ER", "BB", "K", "ERA"] : [];
+        const pitCols = PIT_WANT.filter((c) => pitchers[0] && pitchers[0].stats[c] !== undefined);
 
         // green highlight for productive batting lines (2+ H or 1+ RBI)
         const bigLine = (p) => {
@@ -278,48 +284,61 @@ export function BoxScore({ detail }) {
           return (Number.isFinite(h) && h >= 2) || (Number.isFinite(rbi) && rbi >= 1);
         };
 
-        const renderRows = (list) =>
-          list.map((p, i) => {
-            const hot = !isPitcher(p) && bigLine(p);
-            return (
-              <tr key={i} style={{ background: i % 2 ? "#0c1117" : "transparent", borderTop: "1px solid #1f2937" }}>
-                <td style={{ padding: "7px 10px", whiteSpace: "nowrap", color: "#e4e7eb", fontWeight: 600 }}>
-                  {p.shortName} {p.starter && <span style={{ color: "#22c55e", fontSize: 10 }}>•</span>} <span style={{ color: "#6b7280", fontSize: 11, fontWeight: 500 }}>{p.position}</span>
-                </td>
-                {showCols.map((c) => {
-                  const greenCol = hot && (c === "H" || c === "RBI") && p.stats[c] && parseInt(p.stats[c], 10) > 0;
-                  return <td key={c} style={{ ...cellNum, color: greenCol ? "#22c55e" : "#e4e7eb" }}>{p.stats[c] ?? ""}</td>;
-                })}
-              </tr>
-            );
-          });
+        const batterRows = batters.map((p, i) => {
+          const hot = bigLine(p);
+          return (
+            <tr key={`b${i}`} style={{ background: i % 2 ? "#0c1117" : "transparent", borderTop: "1px solid #1f2937" }}>
+              <td style={{ padding: "7px 10px", whiteSpace: "nowrap", color: "#e4e7eb", fontWeight: 600 }}>
+                {p.shortName} {p.starter && <span style={{ color: "#22c55e", fontSize: 10 }}>•</span>} <span style={{ color: "#6b7280", fontSize: 11, fontWeight: 500 }}>{p.position}</span>
+              </td>
+              {batCols.map((c) => {
+                const greenCol = hot && (c === "H" || c === "RBI") && p.stats[c] && parseInt(p.stats[c], 10) > 0;
+                return <td key={c} style={{ ...cellNum, color: greenCol ? "#22c55e" : "#e4e7eb" }}>{p.stats[c] ?? ""}</td>;
+              })}
+            </tr>
+          );
+        });
+
+        const pitcherRows = pitchers.map((p, i) => (
+          <tr key={`p${i}`} style={{ background: i % 2 ? "#0c1117" : "transparent", borderTop: "1px solid #1f2937" }}>
+            <td style={{ padding: "7px 10px", whiteSpace: "nowrap", color: "#e4e7eb", fontWeight: 600 }}>
+              {p.shortName} <span style={{ color: "#6b7280", fontSize: 11, fontWeight: 500 }}>{p.position}</span>
+            </td>
+            {pitCols.map((c) => <td key={c} style={cellNum}>{p.stats[c] ?? ""}</td>)}
+          </tr>
+        ));
 
         return (
           <div key={teamAbbrev} style={{ marginBottom: 16 }}>
             <div style={{ fontSize: 12, fontWeight: 800, color: "#fff", letterSpacing: 0.5, marginBottom: 8, paddingBottom: 6, borderBottom: "2px solid #2a3340" }}>{teamAbbrev}</div>
-            <div style={{ overflowX: "auto" }}>
+
+            {/* Batters */}
+            <div style={{ overflowX: "auto", marginBottom: pitchers.length ? 12 : 0 }}>
               <table style={{ borderCollapse: "collapse", fontSize: 14, width: "100%", minWidth: 320 }}>
                 <thead>
                   <tr style={{ background: "#0a0e14" }}>
-                    <th style={{ ...headCell, textAlign: "left" }}>Player</th>
-                    {showCols.map((c) => <th key={c} style={headCell}>{c}</th>)}
+                    <th style={{ ...headCell, textAlign: "left" }}>Batters</th>
+                    {batCols.map((c) => <th key={c} style={headCell}>{c}</th>)}
                   </tr>
                 </thead>
-                <tbody>
-                  {renderRows(batters)}
-                  {pitchers.length > 0 && (
-                    <>
-                      <tr>
-                        <td colSpan={showCols.length + 1} style={{ borderTop: "2px solid #2a3340", padding: "8px 10px 4px", fontSize: 10, fontWeight: 800, letterSpacing: "0.1em", color: "#6b7280", textTransform: "uppercase" }}>
-                          Pitchers
-                        </td>
-                      </tr>
-                      {renderRows(pitchers)}
-                    </>
-                  )}
-                </tbody>
+                <tbody>{batterRows}</tbody>
               </table>
             </div>
+
+            {/* Pitchers — their own columns (IP H R ER BB K ERA) */}
+            {pitchers.length > 0 && pitCols.length > 0 && (
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ borderCollapse: "collapse", fontSize: 14, width: "100%", minWidth: 320 }}>
+                  <thead>
+                    <tr style={{ background: "#0a0e14" }}>
+                      <th style={{ ...headCell, textAlign: "left", color: "#9ca3af" }}>Pitchers</th>
+                      {pitCols.map((c) => <th key={c} style={headCell}>{c}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>{pitcherRows}</tbody>
+                </table>
+              </div>
+            )}
           </div>
         );
       })}
