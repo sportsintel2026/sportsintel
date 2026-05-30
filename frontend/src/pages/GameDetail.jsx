@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-import { edgesApi, subscriptionApi, scoresApi } from "../lib/api";
+import { edgesApi, subscriptionApi, scoresApi, liveApi } from "../lib/api";
 import { BoxScore } from "./LiveScores";
 import Sidebar from "./Sidebar";
 
@@ -125,9 +125,10 @@ function GameDetail({ game, hrProps, hasFullAccess, navigate }) {
       <TeamForm gameId={game.id} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} awayName={game.away} homeName={game.home} league="mlb" />
       {isLive && <LiveWarningBanner />}
       {isFinal && <FinalBanner game={game} />}
-      {/* Betting cards grouped together so they're all visible without scrolling
-          past weather/pitchers/etc. */}
-      {bestEdge && !isFinal && !isLive && <BestEdgeCard edge={bestEdge} game={game} hasFullAccess={hasFullAccess} navigate={navigate} />}
+      {/* Betting cards: LIVE games get live-model edges; upcoming games get the
+          pre-game model edges. Final games get neither (game's over). */}
+      {isLive && <LiveEdgeCards gameId={game.id} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} />}
+      {!isLive && !isFinal && bestEdge && <BestEdgeCard edge={bestEdge} game={game} hasFullAccess={hasFullAccess} navigate={navigate} />}
       {!isLive && !isFinal && <WinProbabilityCard awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} awayProb={ml.awayWinProb} homeProb={ml.homeWinProb} awayOdds={ml.awayOdds} homeOdds={ml.homeOdds} awayEdge={ml.awayEdge} homeEdge={ml.homeEdge} hasFullAccess={hasFullAccess} navigate={navigate} />}
       {!isLive && !isFinal && <TotalsCard totals={totals} hasFullAccess={hasFullAccess} navigate={navigate} />}
       {/* Context / supporting detail below the betting cards */}
@@ -624,6 +625,86 @@ function BestEdgeCard({ edge, game, hasFullAccess, navigate }) {
 // Small honesty badge: shows whether the model's offense input is based on a
 // CONFIRMED lineup (today's posted card), a PROJECTED lineup (last game's, used
 // as a proxy before today's posts), or season team stats (no lineup resolved).
+// Live in-game edges (moneyline + over/under + run line) for a game in progress.
+// Fetches the live model and pulls out THIS game. Refreshes every 60s.
+function LiveEdgeCards({ gameId, awayAbbr, homeAbbr }) {
+  const [g, setG] = useState(null);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false, timer = null;
+    const pull = async () => {
+      try {
+        const d = await liveApi.getMLB();
+        const match = (d.games || []).find(x => String(x.gameId) === String(gameId));
+        if (!cancelled) { setG(match || null); setLoaded(true); }
+      } catch (_) { if (!cancelled) setLoaded(true); }
+      if (!cancelled) timer = setTimeout(pull, 60000);
+    };
+    pull();
+    return () => { cancelled = true; if (timer) clearTimeout(timer); };
+  }, [gameId]);
+
+  if (!loaded) return null;
+  if (!g) return null; // game not in the live feed (e.g., just ended) — show nothing
+
+  const row = (label, prob, odds, edge) => {
+    const edgePos = edge != null && edge > 0;
+    return (
+      <div style={{ background: "#0a0e14", border: "1px solid #1f2937", borderRadius: 8, padding: 14 }}>
+        <div style={{ fontSize: 13, fontWeight: 800, color: "#fff", marginBottom: 8 }}>
+          {label}{odds != null ? <span style={{ fontSize: 11, color: "#6b7280", fontWeight: 500 }}> · {odds > 0 ? `+${odds}` : odds}</span> : null}
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+          <span style={{ fontSize: 11, color: "#6b7280" }}>Our prob</span>
+          <span style={{ fontSize: 16, fontWeight: 800, color: "#22c55e" }}>{prob != null ? `${Math.round(prob * 100)}%` : "—"}</span>
+        </div>
+        {edge != null && (
+          <div style={{ display: "flex", justifyContent: "space-between" }}>
+            <span style={{ fontSize: 11, color: "#6b7280" }}>Edge</span>
+            <span style={{ fontSize: 15, fontWeight: 800, color: edgePos ? "#22c55e" : "#ef4444" }}>{edgePos ? "+" : ""}{(edge * 100).toFixed(1)}%</span>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 20, marginBottom: 18 }}>
+      <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 16 }}>🔴 Live edges · {g.half === "bottom" ? "Bot" : "Top"} {g.inning}, {g.outs} out</div>
+      <div style={{ background: "#13110a", border: "1px solid #3a2f10", borderRadius: 6, padding: "8px 12px", marginBottom: 14, fontSize: 11, color: "#d4b85a", lineHeight: 1.5 }}>
+        Experimental — from a live win-expectancy model. Updates every 60s. Treat as a signal, not a guarantee.
+      </div>
+
+      <div style={{ fontSize: 10, color: "#9ca3af", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 8 }}>💰 Moneyline</div>
+      <div className="two-col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
+        {row(awayAbbr, g.awayWinProb, g.awayOdds, g.awayEdge)}
+        {row(homeAbbr, g.homeWinProb, g.homeOdds, g.homeEdge)}
+      </div>
+
+      {g.totalLine != null && (
+        <>
+          <div style={{ fontSize: 10, color: "#9ca3af", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 8 }}>📊 Total {g.totalLine} · proj {g.projectedTotal}</div>
+          <div className="two-col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
+            {row(`Over ${g.totalLine}`, g.overProb, g.overOdds, g.overEdge)}
+            {row(`Under ${g.totalLine}`, g.underProb, g.underOdds, g.underEdge)}
+          </div>
+        </>
+      )}
+
+      {(g.homeRunLineProb != null || g.awayRunLineProb != null) && (
+        <>
+          <div style={{ fontSize: 10, color: "#9ca3af", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 8 }}>📐 Run line ±1.5 · model probability</div>
+          <div className="two-col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            {row(`${awayAbbr} -1.5`, g.awayRunLineProb, null, null)}
+            {row(`${homeAbbr} -1.5`, g.homeRunLineProb, null, null)}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function LineupBadge({ lineups, awayAbbr, homeAbbr }) {
   if (!lineups) return null;
   const tag = (side, abbr) => {
