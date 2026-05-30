@@ -454,7 +454,11 @@ function parseIntSafe(v) {
 async function getLiveGameState(gamePk) {
   if (!gamePk) return null;
   try {
-    const data = await mlbGet(`/game/${gamePk}/feed/live`);
+    // NOTE: the live feed lives on the v1.1 API, not v1. MLB_BASE is v1 (used for
+    // schedule/stats), so we build the v1.1 URL explicitly here.
+    const feedUrl = `https://statsapi.mlb.com/api/v1.1/game/${gamePk}/feed/live`;
+    const resp = await axios.get(feedUrl, { timeout: 10000 });
+    const data = resp.data;
     const ls = data.liveData?.linescore;
     const plays = data.liveData?.plays;
     const boxscore = data.liveData?.boxscore;
