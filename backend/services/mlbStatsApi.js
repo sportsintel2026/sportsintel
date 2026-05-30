@@ -447,6 +447,60 @@ function parseIntSafe(v) {
 }
 
 // ── Exports ───────────────────────────────────────────────────────────────────
+// ── LIVE game feed (for the in-game win-expectancy model) ────────────────────
+// Pulls /game/{gamePk}/feed/live and extracts the live state the live model
+// needs: inning, half, outs, base runners, score, and the pitcher CURRENTLY on
+// the mound for each side (with their season ERA already resolved).
+async function getLiveGameState(gamePk) {
+  if (!gamePk) return null;
+  try {
+    const data = await mlbGet(`/game/${gamePk}/feed/live`);
+    const ls = data.liveData?.linescore;
+    const plays = data.liveData?.plays;
+    const boxscore = data.liveData?.boxscore;
+    if (!ls || ls.currentInning == null) return null;
+
+    const half = (ls.inningHalf || ls.inningState || "").toLowerCase().startsWith("b") ? "bottom" : "top";
+    const outs = ls.outs ?? 0;
+    const offense = ls.offense || {};
+    let baseState = 0;
+    if (offense.first) baseState |= 1;
+    if (offense.second) baseState |= 2;
+    if (offense.third) baseState |= 4;
+
+    const homeScore = ls.teams?.home?.runs ?? 0;
+    const awayScore = ls.teams?.away?.runs ?? 0;
+
+    // Current pitcher: defense.pitcher is whoever is on the mound right now.
+    const currentPitcherId = ls.defense?.pitcher?.id ?? null;
+    // The pitching team is the side NOT batting.
+    const pitchingSide = half === "top" ? "home" : "away";
+
+    // Resolve current pitcher's season ERA (cheap, cached upstream by season call).
+    let currentPitcherEra = null;
+    if (currentPitcherId) {
+      const ps = await getPitcherSeasonStats(currentPitcherId).catch(() => null);
+      currentPitcherEra = ps?.era ?? null;
+    }
+
+    return {
+      gamePk: String(gamePk),
+      inning: ls.currentInning,
+      half,
+      outs,
+      baseState,
+      homeScore,
+      awayScore,
+      pitchingSide,
+      currentPitcherId,
+      currentPitcherEra,
+      abstractState: data.gameData?.status?.abstractGameState || null,
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
 module.exports = {
   getEasternDate, getScheduleForDate,
   getPitcherSeasonStats, getBatterSeasonStats,
@@ -455,5 +509,6 @@ module.exports = {
   getBatterVsPitcherHistory, getPitcherRecentStarts, getBatterRecentStats, getBatterStatcast,
   getProjectedLineup,
   getTeamLineup, getLineupOffense,
+  getLiveGameState,
   getTeamHandednessSplits, getTeamBullpenStats, getPitcherHand,
 };
