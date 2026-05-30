@@ -80,15 +80,18 @@ function PerfBody({ data }) {
   const excluded = data.filter?.excludedCount || 0;
   if (graded === 0) {
     return (
-      <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 40, textAlign: "center" }}>
-        <div style={{ fontSize: 40, marginBottom: 14 }}>⏳</div>
-        <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>Building the track record</div>
-        <p style={{ fontSize: 13, color: "#9ca3af", maxWidth: 420, margin: "0 auto", lineHeight: 1.7 }}>
-          The model is recording its predictions now. Once today's games finish, results start posting here.
-          {pending > 0 && ` ${pending} prediction${pending === 1 ? "" : "s"} currently tracking.`}
-        </p>
-        <div style={{ marginTop: 20, fontSize: 11, color: "#6b7280" }}>
-          A meaningful sample takes a few weeks. Every day adds data.
+      <div>
+        <ClvCard clv={data.clv} />
+        <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 40, textAlign: "center" }}>
+          <div style={{ fontSize: 40, marginBottom: 14 }}>⏳</div>
+          <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>Building the track record</div>
+          <p style={{ fontSize: 13, color: "#9ca3af", maxWidth: 420, margin: "0 auto", lineHeight: 1.7 }}>
+            The model is recording its predictions now. Once today's games finish, results start posting here.
+            {pending > 0 && ` ${pending} prediction${pending === 1 ? "" : "s"} currently tracking.`}
+          </p>
+          <div style={{ marginTop: 20, fontSize: 11, color: "#6b7280" }}>
+            A meaningful sample takes a few weeks. Every day adds data.
+          </div>
         </div>
       </div>
     );
@@ -108,6 +111,8 @@ function PerfBody({ data }) {
       </div>
       {/* Overall hero */}
       <OverallCard o={data.overall} />
+      {/* CLV — the sharp signal */}
+      <ClvCard clv={data.clv} />
       {/* By market */}
       <SectionTitle>By market</SectionTitle>
       <div className="perf-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 24 }}>
@@ -121,6 +126,43 @@ function PerfBody({ data }) {
         {["HIGH", "MEDIUM", "LOW", "NEUTRAL"]
           .filter(c => data.byConfidence?.[c])
           .map(c => <StatCard key={c} label={c} b={data.byConfidence[c]} accent={confColor(c)} />)}
+      </div>
+    </div>
+  );
+}
+function ClvCard({ clv }) {
+  // No CLV data yet (closing lines accumulate going forward only).
+  if (!clv || !clv.sample) {
+    return (
+      <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 12, padding: 20, marginBottom: 24 }}>
+        <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 10 }}>🎯 Closing line value (CLV)</div>
+        <p style={{ fontSize: 12.5, color: "#9ca3af", lineHeight: 1.7, margin: 0 }}>
+          CLV measures whether our picks got a better price than the market's closing line — the single strongest
+          indicator of a real edge. It's collecting now and will appear here once games with tracked picks have started.
+        </p>
+      </div>
+    );
+  }
+  const positive = clv.avgClvPct >= 0;
+  return (
+    <div style={{ background: "linear-gradient(180deg,#0f1419,#0a0e14)", border: "1px solid #1f2937", borderRadius: 12, padding: 24, marginBottom: 24 }}>
+      <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 16 }}>🎯 Closing line value (CLV)</div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 16 }}>
+        <Metric
+          label="Beat the close"
+          value={`${clv.beatClosePct}%`}
+          color={clv.beatClosePct >= 50 ? "#22c55e" : "#e4e7eb"}
+        />
+        <Metric
+          label="Avg CLV"
+          value={`${positive ? "+" : ""}${clv.avgClvPct}%`}
+          color={positive ? "#22c55e" : "#ef4444"}
+        />
+      </div>
+      <div style={{ marginTop: 14, fontSize: 11, color: "#6b7280", lineHeight: 1.6 }}>
+        Across {clv.sample} qualified pick{clv.sample === 1 ? "" : "s"} with a captured closing line. CLV is how much
+        better our price was than the market's close — consistently positive CLV is the best early sign of genuine edge,
+        even before win/loss results stabilize. Small samples are still noisy.
       </div>
     </div>
   );
