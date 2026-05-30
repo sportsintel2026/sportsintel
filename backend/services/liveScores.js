@@ -10,8 +10,9 @@ const PATHS = {
   nba: "basketball/nba",
 };
 
-const SCOREBOARD = (league) =>
-  `https://site.api.espn.com/apis/site/v2/sports/${PATHS[league]}/scoreboard`;
+const SCOREBOARD = (league, dateStr) =>
+  `https://site.api.espn.com/apis/site/v2/sports/${PATHS[league]}/scoreboard` +
+  (dateStr ? `?dates=${dateStr}` : ``);
 const SUMMARY = (league, id) =>
   `https://site.api.espn.com/apis/site/v2/sports/${PATHS[league]}/summary?event=${id}`;
 const STANDINGS = (league) =>
@@ -95,36 +96,60 @@ async function mlbBackendIdMap() {
   }
 }
 
-async function getScores(league) {
-  if (!PATHS[league]) throw new Error("unknown league");
-  const ck = `scores:${league}`;
-  const hit = cacheGet(ck);
-  if (hit) return hit;
-
-  const res = await fetch(SCOREBOARD(league));
+// Fetch + parse one scoreboard day (optionally for a specific YYYYMMDD date).
+async function fetchScoreboardDay(league, dateStr) {
+  const res = await fetch(SCOREBOARD(league, dateStr));
   if (!res.ok) throw new Error("espn scoreboard " + res.status);
   const json = await res.json();
-
   const games = (json.events || []).map((e) => {
     const g = parseEvent(e);
     g.league = league;
     return g;
   });
-
-  // NBA detail pages already use ESPN ids, so detailId = ESPN id.
-  // MLB detail pages use the backend's own id — map it in (or null if no match).
+  // attach detailId per league
   if (league === "nba") {
     for (const g of games) g.detailId = g.id;
   } else if (league === "mlb") {
     const idMap = await mlbBackendIdMap();
     for (const g of games) {
       const key = `${nick(g.away.name)}|${nick(g.home.name)}`;
-      g.detailId = idMap[key] || null; // null => frontend hides the button
+      g.detailId = idMap[key] || null;
     }
+  }
+  return games;
+}
+
+// ET date as YYYYMMDD (ESPN scoreboard's ?dates= format), offset in days.
+function espnDateStr(offsetDays = 0) {
+  const d = new Date();
+  d.setDate(d.getDate() + offsetDays);
+  // en-CA gives YYYY-MM-DD in ET; strip dashes
+  return d.toLocaleDateString("en-CA", { timeZone: "America/New_York" }).replace(/-/g, "");
+}
+
+async function getScores(league) {
+  if (!PATHS[league]) throw new Error("unknown league");
+  const ck = `scores:${league}`;
+  const hit = cacheGet(ck);
+  if (hit) return hit;
+
+  // Default scoreboard day.
+  let games = await fetchScoreboardDay(league);
+  let rolled = false;
+
+  // ROLLOVER: if every game is final (or there are none), show TOMORROW's slate
+  // so the page stays useful after the day's games finish. Mirrors the Edges page.
+  const anyNotFinal = games.some((g) => g.bucket !== "final");
+  if (games.length === 0 || !anyNotFinal) {
+    try {
+      const tomorrow = await fetchScoreboardDay(league, espnDateStr(1));
+      if (tomorrow.length > 0) { games = tomorrow; rolled = true; }
+    } catch (_) { /* keep today's (all-final) slate if tomorrow fetch fails */ }
   }
 
   const out = {
     league,
+    rolledToNextDay: rolled,
     live: games.filter((g) => g.bucket === "live"),
     upcoming: games.filter((g) => g.bucket === "upcoming"),
     final: games.filter((g) => g.bucket === "final"),
