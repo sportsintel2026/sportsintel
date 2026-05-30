@@ -5,6 +5,8 @@ const {
   getPitcherSeasonStats,
   getBatterSeasonStats,
   getTeamSeasonStats,
+  getTeamLineup,
+  getLineupOffense,
   getTeamPitchingStats,
   getTeamRoster,
   getBatterVsPitcherHistory,
@@ -240,14 +242,46 @@ async function calculateGameEdges(game, oddsForGame) {
     game.homeProbable ? getPitcherHand(game.homeProbable.id) : null,
   ]);
 
-  // Away offense faces the HOME starter's hand; home offense faces the AWAY starter's hand
-  const awayHandMult = handednessMultiplier(awayHandSplits, homePitcherHand, awayTeamHit?.ops);
-  const homeHandMult = handednessMultiplier(homeHandSplits, awayPitcherHand, homeTeamHit?.ops);
+  // Confirmed/projected lineups → lineup-based offense (who's ACTUALLY playing),
+  // replacing full-team OPS when we have a trustworthy lineup. Tier:
+  // confirmed (today's card) > recent (last game) > team season stats (fallback).
+  let awayLineup = { lineup: [], source: "none" };
+  let homeLineup = { lineup: [], source: "none" };
+  let awayLineupOff = null;
+  let homeLineupOff = null;
+  try {
+    [awayLineup, homeLineup] = await Promise.all([
+      getTeamLineup(game.awayId, game.id),
+      getTeamLineup(game.homeId, game.id),
+    ]);
+    [awayLineupOff, homeLineupOff] = await Promise.all([
+      getLineupOffense(awayLineup.lineup),
+      getLineupOffense(homeLineup.lineup),
+    ]);
+  } catch (_) { /* fall back to team stats below */ }
 
-  console.log(`[Edges] ${game.awayAbbr}@${game.homeAbbr} | handMult away=${awayHandMult.toFixed(3)}(vs ${homePitcherHand||"?"}) home=${homeHandMult.toFixed(3)}(vs ${awayPitcherHand||"?"}) | pen away ERA=${awayBullpen?.era ?? "n/a"} home ERA=${homeBullpen?.era ?? "n/a"}`);
+  // Overlay: if we have a lineup offense, use ITS ops as the offense input while
+  // keeping the team's season ops for the handedness baseline comparison. We do
+  // NOT touch runsPerGame (that stays team-level) — lineup ops drives the ML
+  // offense factor, which is where who's-playing matters most.
+  const awayTeamOps = awayTeamHit?.ops ?? null;
+  const homeTeamOps = homeTeamHit?.ops ?? null;
+  const awayHit = awayLineupOff
+    ? { ...awayTeamHit, ops: awayLineupOff.ops, _lineupSource: awayLineup.source }
+    : awayTeamHit;
+  const homeHit = homeLineupOff
+    ? { ...homeTeamHit, ops: homeLineupOff.ops, _lineupSource: homeLineup.source }
+    : homeTeamHit;
 
-  const ml = calculateMoneylineProjection(game, awayPitcher, homePitcher, awayTeamHit, homeTeamHit, awayBullpen, homeBullpen, awayHandMult, homeHandMult);
-  const totals = calculateTotalProjection(game, awayPitcher, homePitcher, awayTeamHit, homeTeamHit, weather, awayBullpen, homeBullpen, awayHandMult, homeHandMult);
+  // Away offense faces the HOME starter's hand; home offense faces the AWAY starter's hand.
+  // Handedness multiplier compares the team's split vs its TEAM-level ops baseline.
+  const awayHandMult = handednessMultiplier(awayHandSplits, homePitcherHand, awayTeamOps);
+  const homeHandMult = handednessMultiplier(homeHandSplits, awayPitcherHand, homeTeamOps);
+
+  console.log(`[Edges] ${game.awayAbbr}@${game.homeAbbr} | lineup away=${awayLineup.source}(ops ${awayLineupOff?.ops ?? "n/a"}) home=${homeLineup.source}(ops ${homeLineupOff?.ops ?? "n/a"}) | handMult away=${awayHandMult.toFixed(3)} home=${homeHandMult.toFixed(3)} | pen away ERA=${awayBullpen?.era ?? "n/a"} home ERA=${homeBullpen?.era ?? "n/a"}`);
+
+  const ml = calculateMoneylineProjection(game, awayPitcher, homePitcher, awayHit, homeHit, awayBullpen, homeBullpen, awayHandMult, homeHandMult);
+  const totals = calculateTotalProjection(game, awayPitcher, homePitcher, awayHit, homeHit, weather, awayBullpen, homeBullpen, awayHandMult, homeHandMult);
 
   const odds = oddsForGame || { h2h: {}, totals: {} };
   const awayML = odds.h2h?.away;
@@ -310,6 +344,10 @@ async function calculateGameEdges(game, oddsForGame) {
       homeMult: round3(homeHandMult),
       awayVsHand: homePitcherHand,
       homeVsHand: awayPitcherHand,
+    },
+    lineups: {
+      away: { source: awayLineup.source, ops: awayLineupOff?.ops ?? null, batters: awayLineupOff?.batters ?? 0 },
+      home: { source: homeLineup.source, ops: homeLineupOff?.ops ?? null, batters: homeLineupOff?.batters ?? 0 },
     },
     moneyline: {
       awayWinProb: ml.awayWinProb,
