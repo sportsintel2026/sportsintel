@@ -196,12 +196,25 @@ async function getGameDetail(league, gameId) {
   const header = (summary.header && summary.header.competitions && summary.header.competitions[0]) || {};
   const status = (header.status || {}).type || {};
 
+  // current series ("ATL leads series 1-0", 3-game set, etc.)
+  let series = null;
+  const ss = (summary.seasonseries || []).find((s) => s.type === "current") || (summary.seasonseries || [])[0];
+  if (ss) {
+    series = {
+      summary: ss.summary || null,          // "ATL leads series 1-0"
+      score: ss.seriesScore || null,         // "1-0"
+      totalGames: ss.totalCompetitions || null, // 3
+      completed: !!ss.completed,
+    };
+  }
+
   const out = {
     league,
     gameId: String(gameId),
     state: status.state || "pre",
     bucket: bucketFor(status.state || "pre"),
     statusDetail: status.shortDetail || status.detail || "",
+    series,
     lineScore: parseLineScore(summary),
     players: parsePlayers(summary),
     generatedAt: new Date().toISOString(),
