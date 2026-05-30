@@ -42,6 +42,19 @@ export default function LandingPage() {
     { name: "SportsIntel", price: "$7/mo", desc: "A real model + the data behind every number.", highlight: true },
   ];
 
+  // Sample cards for the blurred "look inside" preview — fake but realistic data,
+  // so nothing real leaks and it renders even when no games are live.
+  const PREVIEW_ML = [
+    { matchup: "DET @ CWS", team: "CWS ML", odds: "+110", model: "52%", edge: "+6.2%", conf: "HIGH" },
+    { matchup: "NYY @ ATH", team: "ATH ML", odds: "+128", model: "48%", edge: "+5.3%", conf: "MEDIUM" },
+    { matchup: "MIL @ HOU", team: "HOU ML", odds: "-105", model: "54%", edge: "+3.8%", conf: "MEDIUM" },
+  ];
+  const PREVIEW_TOTALS = [
+    { matchup: "ATL @ CIN", side: "Over 9.5", odds: "-110", proj: "10.9", edge: "+8.1%" },
+    { matchup: "MIN @ PIT", side: "Over 8.5", odds: "-118", proj: "9.4", edge: "+7.0%" },
+    { matchup: "LAA @ TB", side: "Over 7", odds: "-110", proj: "8.1", edge: "+5.7%" },
+  ];
+
   return (
     <div style={{ minHeight: "100vh", background: "#080810", color: "#e2e8f0", fontFamily: "'Inter',system-ui,sans-serif", fontSize: 14 }}>
       <style>{`
@@ -56,6 +69,8 @@ export default function LandingPage() {
         .card{background:#0a0a14;border:1px solid #1a1a2e;border-radius:12px;transition:all .2s}
         .card:hover{border-color:#252535;transform:translateY(-2px)}
         a{text-decoration:none}
+        .preview-blur{filter:blur(5px);-webkit-filter:blur(5px);user-select:none;pointer-events:none}
+        @media (max-width:680px){.preview-grid{grid-template-columns:1fr!important}}
       `}</style>
 
       {/* Nav */}
@@ -96,6 +111,77 @@ export default function LandingPage() {
           </div>
           <div style={{ fontSize: 11, color: "#475569", marginTop: 14 }}>No credit card required · Free account gets you started</div>
 
+        </div>
+
+        {/* ── A LOOK INSIDE — blurred product preview ──────────────────────────── */}
+        <div style={{ marginBottom: 56 }}>
+          <div style={{ marginBottom: 8, fontSize: 11, color: "#ef4444", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase" }}>A look inside</div>
+          <h2 style={{ fontSize: "clamp(20px,4vw,30px)", fontWeight: 800, color: "#fff", marginBottom: 8 }}>This is what you'll see every day</h2>
+          <p style={{ fontSize: 14, color: "#64748b", maxWidth: 560, marginBottom: 24, lineHeight: 1.8 }}>
+            Real edges, ranked by how far our model disagrees with the market. Here's a peek — sign up free to see today's live board.
+          </p>
+
+          <div style={{ position: "relative", border: "1px solid #1a1a2e", borderRadius: 16, overflow: "hidden", background: "#0a0a14" }}>
+            {/* The blurred mock board */}
+            <div className="preview-blur" aria-hidden="true" style={{ padding: 18 }}>
+              <div className="preview-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                {/* Moneyline column */}
+                <div>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                    <span style={{ fontSize: 11, fontWeight: 800, color: "#94a3b8", letterSpacing: "0.06em" }}>💰 TOP MONEYLINE EDGES</span>
+                    <span style={{ fontSize: 10, color: "#475569" }}>10 found</span>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {PREVIEW_ML.map((g, i) => (
+                      <div key={i} style={{ background: "#08081a", border: "1px solid #1a1a2e", borderRadius: 8, padding: "12px 14px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <div>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: "#fff" }}>{g.team}</div>
+                          <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>{g.matchup} · {g.odds} · {g.model} model</div>
+                        </div>
+                        <div style={{ fontSize: 16, fontWeight: 800, color: "#22c55e" }}>{g.edge}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                {/* Totals column */}
+                <div>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                    <span style={{ fontSize: 11, fontWeight: 800, color: "#94a3b8", letterSpacing: "0.06em" }}>📊 TOP TOTALS EDGES</span>
+                    <span style={{ fontSize: 10, color: "#475569" }}>10 found</span>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {PREVIEW_TOTALS.map((g, i) => (
+                      <div key={i} style={{ background: "#08081a", border: "1px solid #1a1a2e", borderRadius: 8, padding: "12px 14px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <div>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: "#fff" }}>{g.side}</div>
+                          <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>{g.matchup} · {g.odds} · proj {g.proj}</div>
+                        </div>
+                        <div style={{ fontSize: 16, fontWeight: 800, color: "#22c55e" }}>{g.edge}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              {/* analysis strip */}
+              <div style={{ marginTop: 14, background: "#08081a", border: "1px solid #1a1a2e", borderRadius: 8, padding: "12px 14px", display: "flex", gap: 18, flexWrap: "wrap" }}>
+                <div><div style={{ fontSize: 10, color: "#475569" }}>MODEL WIN %</div><div style={{ fontSize: 15, fontWeight: 800, color: "#e2e8f0" }}>54.2%</div></div>
+                <div><div style={{ fontSize: 10, color: "#475569" }}>MARKET IMPLIED</div><div style={{ fontSize: 15, fontWeight: 800, color: "#e2e8f0" }}>48.0%</div></div>
+                <div><div style={{ fontSize: 10, color: "#475569" }}>PROJECTED RUNS</div><div style={{ fontSize: 15, fontWeight: 800, color: "#e2e8f0" }}>9.4</div></div>
+                <div><div style={{ fontSize: 10, color: "#475569" }}>BEAT THE CLOSE</div><div style={{ fontSize: 15, fontWeight: 800, color: "#22c55e" }}>🎯 tracked</div></div>
+              </div>
+            </div>
+
+            {/* Frosted overlay + CTA */}
+            <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", padding: 24, background: "radial-gradient(circle at center, #08081070 0%, #080810b0 100%)" }}>
+              <div style={{ fontSize: 30, marginBottom: 10 }}>🔒</div>
+              <div style={{ fontSize: 17, fontWeight: 800, color: "#fff", marginBottom: 6 }}>Today's full board is one click away</div>
+              <div style={{ fontSize: 13, color: "#94a3b8", maxWidth: 360, marginBottom: 18, lineHeight: 1.7 }}>
+                Sign up free to see every edge, ranked and updated all day — plus the full breakdown behind each number.
+              </div>
+              <Link to="/signup" className="btn-red" style={{ fontSize: 14, padding: "12px 28px" }}>Sign up free to see today's edges →</Link>
+              <div style={{ fontSize: 11, color: "#475569", marginTop: 12 }}>No credit card required</div>
+            </div>
+          </div>
         </div>
 
         <div style={{ borderTop: "1px solid #0f0f1a", marginBottom: 56 }} />
