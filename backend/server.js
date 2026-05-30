@@ -15,6 +15,7 @@ const matchupsRoutes = require("./routes/matchups");
 const performanceRoutes = require("./routes/performance");
 const nbaRoutes = require("./routes/nba");
 const scoresRoutes = require("./routes/scores");
+const liveRoutes = require("./routes/live");
 
 const { refreshDailyGames } = require("./services/sportsData");
 const { gradeFinishedGames, captureClosingLines } = require("./services/predictionTracker");
@@ -53,6 +54,7 @@ app.use("/api/matchups", matchupsRoutes);
 app.use("/api/performance", performanceRoutes);
 app.use("/api/nba", nbaRoutes);
 app.use("/api/scores", scoresRoutes);
+app.use("/api/live", liveRoutes);
 
 // Health check
 app.get("/api/health", (req, res) => {
