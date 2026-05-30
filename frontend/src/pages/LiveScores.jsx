@@ -224,32 +224,35 @@ export function BoxScore({ detail }) {
   };
   const wanted = COLS[detail.league] || [];
 
-  const cellNum = { textAlign: "center", padding: "7px 10px", color: "#e4e7eb", fontSize: 14, fontWeight: 700, fontVariantNumeric: "tabular-nums" };
-  const headCell = { textAlign: "center", padding: "7px 10px", fontSize: 11, fontWeight: 800, color: "#9ca3af", letterSpacing: "0.05em" };
+  const cellNum = { textAlign: "center", padding: "8px 10px", color: "#cbd5e1", fontSize: 14, fontWeight: 400, fontVariantNumeric: "tabular-nums" };
+  const headCell = { textAlign: "center", padding: "8px 10px", fontSize: 12, fontWeight: 900, color: "#ffffff", letterSpacing: "0.06em", textTransform: "uppercase" };
 
   return (
     <div>
       {/* line score (innings / quarters) */}
       {ls.length > 0 && maxPeriods > 0 && (
         <div style={{ overflowX: "auto", marginBottom: 18 }}>
+          <div style={{ fontSize: 11, fontWeight: 900, color: "#9ca3af", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 6 }}>
+            {detail.league === "nba" ? "Quarters" : "Innings"}
+          </div>
           <table style={{ borderCollapse: "collapse", fontSize: 14, width: "100%", minWidth: 320 }}>
             <thead>
               <tr style={{ background: "#0a0e14" }}>
-                <th style={{ ...headCell, textAlign: "left" }}></th>
+                <th style={{ textAlign: "left", padding: "8px 10px", fontSize: 11, fontWeight: 900, color: "#fff", letterSpacing: "0.06em", textTransform: "uppercase" }}>Team</th>
                 {Array.from({ length: maxPeriods }).map((_, i) => (
-                  <th key={i} style={headCell}>{i + 1}</th>
+                  <th key={i} style={{ textAlign: "center", padding: "8px 10px", fontSize: 13, fontWeight: 900, color: "#fff" }}>{i + 1}</th>
                 ))}
-                <th style={{ ...headCell, color: "#fff", borderLeft: "1px solid #2a3340" }}>T</th>
+                <th style={{ textAlign: "center", padding: "8px 10px", fontSize: 13, fontWeight: 900, color: "#fff", borderLeft: "1px solid #3a4757" }}>T</th>
               </tr>
             </thead>
             <tbody>
               {ls.map((r, idx) => (
-                <tr key={idx} style={{ background: idx % 2 ? "#0c1117" : "transparent", borderTop: "1px solid #1f2937" }}>
-                  <td style={{ padding: "7px 10px", fontWeight: 800, color: "#fff", fontSize: 14 }}>{r.abbrev}</td>
+                <tr key={idx} style={{ borderTop: "1px solid #4b5563" }}>
+                  <td style={{ padding: "8px 10px", fontWeight: 800, color: "#fff", fontSize: 14 }}>{r.abbrev}</td>
                   {Array.from({ length: maxPeriods }).map((_, i) => (
-                    <td key={i} style={{ ...cellNum, color: "#cbd5e1", fontWeight: 600 }}>{r.periods[i] != null ? r.periods[i] : "·"}</td>
+                    <td key={i} style={{ textAlign: "center", padding: "8px 10px", color: "#cbd5e1", fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>{r.periods[i] != null ? r.periods[i] : "·"}</td>
                   ))}
-                  <td style={{ ...cellNum, color: "#fff", fontWeight: 800, fontSize: 16, borderLeft: "1px solid #2a3340" }}>{r.total != null ? r.total : ""}</td>
+                  <td style={{ textAlign: "center", padding: "8px 10px", color: "#fff", fontWeight: 800, fontSize: 16, borderLeft: "1px solid #3a4757", fontVariantNumeric: "tabular-nums" }}>{r.total != null ? r.total : ""}</td>
                 </tr>
               ))}
             </tbody>
@@ -287,20 +290,20 @@ export function BoxScore({ detail }) {
         const batterRows = batters.map((p, i) => {
           const hot = bigLine(p);
           return (
-            <tr key={`b${i}`} style={{ background: i % 2 ? "#0c1117" : "transparent", borderTop: "1px solid #1f2937" }}>
+            <tr key={`b${i}`} style={{ borderTop: "1px solid #4b5563" }}>
               <td style={{ padding: "7px 10px", whiteSpace: "nowrap", color: "#e4e7eb", fontWeight: 600 }}>
                 {p.shortName} {p.starter && <span style={{ color: "#22c55e", fontSize: 10 }}>•</span>} <span style={{ color: "#6b7280", fontSize: 11, fontWeight: 500 }}>{p.position}</span>
               </td>
               {batCols.map((c) => {
                 const greenCol = hot && (c === "H" || c === "RBI") && p.stats[c] && parseInt(p.stats[c], 10) > 0;
-                return <td key={c} style={{ ...cellNum, color: greenCol ? "#22c55e" : "#e4e7eb" }}>{p.stats[c] ?? ""}</td>;
+                return <td key={c} style={{ ...cellNum, color: greenCol ? "#22c55e" : "#cbd5e1", fontWeight: greenCol ? 700 : 400 }}>{p.stats[c] ?? ""}</td>;
               })}
             </tr>
           );
         });
 
         const pitcherRows = pitchers.map((p, i) => (
-          <tr key={`p${i}`} style={{ background: i % 2 ? "#0c1117" : "transparent", borderTop: "1px solid #1f2937" }}>
+          <tr key={`p${i}`} style={{ borderTop: "1px solid #4b5563" }}>
             <td style={{ padding: "7px 10px", whiteSpace: "nowrap", color: "#e4e7eb", fontWeight: 600 }}>
               {p.shortName} <span style={{ color: "#6b7280", fontSize: 11, fontWeight: 500 }}>{p.position}</span>
             </td>
