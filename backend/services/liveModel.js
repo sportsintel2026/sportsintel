@@ -149,6 +149,72 @@ function winProbFromState(state, pitcherAdj = { home: 1, away: 1 }) {
 
 function clamp(x, lo, hi) { return Math.max(lo, Math.min(hi, x)); }
 
+// All three live markets in one pass over the remaining-run distribution:
+//   - moneyline: P(home wins), P(away wins)
+//   - run line (±1.5): P(home wins by 2+), P(away wins by 2+)
+//   - totals: projected FINAL total (current runs + expected remaining), plus
+//     P(over) / P(under) for a given live total line.
+// Same validated win-expectancy engine as winProbFromState — just tallies more.
+function liveMarketProbs(state, pitcherAdj = { home: 1, away: 1 }, totalLine = null) {
+  const { homeScore, awayScore } = state;
+  const rem = expectedRemainingRuns(state);
+  const lamHome = Math.max(0.01, rem.home * clamp(pitcherAdj.away, 0.7, 1.3));
+  const lamAway = Math.max(0.01, rem.away * clamp(pitcherAdj.home, 0.7, 1.3));
+  const homeLead = homeScore - awayScore;
+  const currentTotal = homeScore + awayScore;
+
+  const MAX = 18;
+  let pHomeWin = 0, pAwayWin = 0, pTie = 0;
+  let pHomeBy2 = 0, pAwayBy2 = 0;
+  let pOver = 0, pUnder = 0, pPush = 0;
+
+  for (let h = 0; h <= MAX; h++) {
+    const ph = runsPmf(h, lamHome);
+    if (ph < 1e-9) continue;
+    for (let a = 0; a <= MAX; a++) {
+      const pa = runsPmf(a, lamAway);
+      if (pa < 1e-9) continue;
+      const p = ph * pa;
+      const finalDiff = homeLead + h - a;       // home - away at end
+      const finalTotal = currentTotal + h + a;  // total runs at end
+
+      // moneyline / run line
+      if (finalDiff > 0) { pHomeWin += p; if (finalDiff >= 2) pHomeBy2 += p; }
+      else if (finalDiff < 0) { pAwayWin += p; if (finalDiff <= -2) pAwayBy2 += p; }
+      else pTie += p;
+
+      // totals
+      if (totalLine != null) {
+        if (finalTotal > totalLine) pOver += p;
+        else if (finalTotal < totalLine) pUnder += p;
+        else pPush += p;
+      }
+    }
+  }
+
+  // Extra innings: ties resolve, ~52% home. Extra frames also add ~runs, but for
+  // a live total late in a tie game the effect is small; we nudge over slightly.
+  pHomeWin += pTie * 0.52;
+  pAwayWin += pTie * 0.48;
+  // Run line in extras: winning by 2+ in extra innings is rare (walk-off ends it);
+  // leave pHomeBy2/pAwayBy2 as-is (conservative).
+  if (totalLine != null) pOver += pPush * 0.5; // a push-state tie tends to add runs in extras
+
+  // Projected final total (point estimate) = current + expected remaining.
+  const projectedTotal = currentTotal + lamHome + lamAway;
+
+  return {
+    homeWinProb: round3(clamp(pHomeWin, 0.001, 0.999)),
+    awayWinProb: round3(clamp(pAwayWin, 0.001, 0.999)),
+    homeRunLineProb: round3(clamp(pHomeBy2, 0.001, 0.999)), // home -1.5
+    awayRunLineProb: round3(clamp(pAwayBy2, 0.001, 0.999)), // away -1.5
+    projectedTotal: round3(projectedTotal),
+    overProb: totalLine != null ? round3(clamp(pOver, 0.001, 0.999)) : null,
+    underProb: totalLine != null ? round3(clamp(pUnder, 0.001, 0.999)) : null,
+    totalLine,
+  };
+}
+
 // ── Parse MLB StatsAPI live linescore into our state shape ────────────────────
 // Expects the linescore object from /game/{pk}/linescore (or feed/live).
 function parseLiveState(linescore, homeScore, awayScore) {
@@ -190,15 +256,21 @@ function pitcherRunMultiplier(currentPitcherEra) {
 // Full live computation: state + current pitchers' ERAs → both win probs.
 // homePitcherEra/awayPitcherEra are the pitchers CURRENTLY on the mound for each
 // team (i.e. when away is batting, the home team's pitcher is throwing).
-function computeLiveWinProb(state, homePitcherEra, awayPitcherEra) {
+function computeLiveWinProb(state, homePitcherEra, awayPitcherEra, totalLine = null) {
   const pitcherAdj = {
     home: pitcherRunMultiplier(homePitcherEra), // home's pitcher limits away
     away: pitcherRunMultiplier(awayPitcherEra), // away's pitcher limits home
   };
-  const homeWin = winProbFromState(state, pitcherAdj);
+  const m = liveMarketProbs(state, pitcherAdj, totalLine);
   return {
-    homeWinProb: round3(homeWin),
-    awayWinProb: round3(1 - homeWin),
+    homeWinProb: m.homeWinProb,
+    awayWinProb: m.awayWinProb,
+    homeRunLineProb: m.homeRunLineProb, // home -1.5 (win by 2+)
+    awayRunLineProb: m.awayRunLineProb, // away -1.5
+    projectedTotal: m.projectedTotal,
+    overProb: m.overProb,
+    underProb: m.underProb,
+    totalLine: m.totalLine,
     state,
     pitcherAdj: { home: round3(pitcherAdj.home), away: round3(pitcherAdj.away) },
   };
@@ -211,6 +283,7 @@ module.exports = {
   expectedRunsThisHalf,
   expectedRemainingRuns,
   winProbFromState,
+  liveMarketProbs,
   parseLiveState,
   pitcherRunMultiplier,
   computeLiveWinProb,
