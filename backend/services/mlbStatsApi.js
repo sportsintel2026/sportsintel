@@ -280,7 +280,7 @@ async function getBatterStatcast(batterId, season) {
   } catch (e) { return null; }
 }
 
-// ── NEW: Team handedness splits (offense vs LHP / vs RHP) ─────────────────────
+// ── Team handedness splits (offense vs LHP / vs RHP) ─────────────────────────
 async function getTeamHandednessSplits(teamId, season) {
   if (!teamId) return null;
   const yr = season || new Date().getFullYear();
@@ -308,7 +308,7 @@ async function getTeamHandednessSplits(teamId, season) {
   } catch (e) { return null; }
 }
 
-// ── NEW: Team bullpen (reliever-only) stats ───────────────────────────────────
+// ── Team bullpen (reliever-only) stats ───────────────────────────────────────
 async function getTeamBullpenStats(teamId, season) {
   if (!teamId) return null;
   const yr = season || new Date().getFullYear();
@@ -335,7 +335,7 @@ async function getTeamBullpenStats(teamId, season) {
   } catch (e) { return null; }
 }
 
-// ── NEW: Pitcher throwing hand ("L" or "R") ──────────────────────────────────
+// ── Pitcher throwing hand ("L" or "R") ──────────────────────────────────────
 async function getPitcherHand(pitcherId) {
   if (!pitcherId) return null;
   try {
@@ -386,6 +386,59 @@ async function getProjectedLineup(teamId) {
   } catch (e) { return []; }
 }
 
+// ── Confirmed/projected lineup for a SPECIFIC game ───────────────────────────
+// Tier 1: confirmed lineup for THIS game (MLB populates boxscore.battingOrder
+//         ~hours before first pitch once the card is posted).
+// Tier 2: recent-game lineup (getProjectedLineup) as a proxy.
+// Returns { lineup:[{id,name,position}], source:"confirmed"|"recent"|"none" }.
+async function getTeamLineup(teamId, gamePk) {
+  if (!teamId) return { lineup: [], source: "none" };
+
+  // Tier 1 — confirmed lineup for this game.
+  if (gamePk) {
+    try {
+      const boxData = await mlbGet(`/game/${gamePk}/boxscore`);
+      const teams = boxData.teams || {};
+      let teamBox = null;
+      if (teams.away?.team?.id === teamId) teamBox = teams.away;
+      else if (teams.home?.team?.id === teamId) teamBox = teams.home;
+      if (teamBox?.battingOrder?.length > 0) {
+        const lineup = teamBox.battingOrder.slice(0, 9).map(pid => {
+          const player = teamBox.players?.[`ID${pid}`];
+          return { id: pid, name: player?.person?.fullName || "Unknown", position: player?.position?.abbreviation || "" };
+        }).filter(p => p.id);
+        if (lineup.length >= 8) return { lineup, source: "confirmed" }; // full card posted
+      }
+    } catch (e) { /* fall through to proxy */ }
+  }
+
+  // Tier 2 — recent-game lineup proxy.
+  try {
+    const lineup = await getProjectedLineup(teamId);
+    if (lineup && lineup.length >= 8) return { lineup, source: "recent" };
+  } catch (e) { /* fall through */ }
+
+  return { lineup: [], source: "none" };
+}
+
+// PURE-ish: given a lineup, compute its combined offensive profile from each
+// hitter's SEASON stats. Returns { ops, hrPerPA, batters } or null if too few
+// resolved. Averages are simple (could be PA-weighted later). Used to replace
+// full-team OPS with the OPS of who's ACTUALLY playing.
+async function getLineupOffense(lineup) {
+  if (!lineup || lineup.length < 8) return null;
+  const stats = await Promise.all(lineup.map(p => getBatterSeasonStats(p.id).catch(() => null)));
+  const valid = stats.filter(s => s && s.ops != null && s.plateAppearances >= 20);
+  if (valid.length < 6) return null; // not enough resolved hitters to trust it
+  const avgOps = valid.reduce((sum, s) => sum + s.ops, 0) / valid.length;
+  const avgHrPerPA = valid.reduce((sum, s) => sum + (s.hrPerPA || 0), 0) / valid.length;
+  return {
+    ops: Math.round(avgOps * 1000) / 1000,
+    hrPerPA: Math.round(avgHrPerPA * 10000) / 10000,
+    batters: valid.length,
+  };
+}
+
 // ── Utility ───────────────────────────────────────────────────────────────────
 function parseIntSafe(v) {
   if (v == null || v === "") return 0;
@@ -401,6 +454,6 @@ module.exports = {
   getParkHRFactor, getParkRunFactor,
   getBatterVsPitcherHistory, getPitcherRecentStarts, getBatterRecentStats, getBatterStatcast,
   getProjectedLineup,
-  // NEW
+  getTeamLineup, getLineupOffense,
   getTeamHandednessSplits, getTeamBullpenStats, getPitcherHand,
 };
