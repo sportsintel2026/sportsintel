@@ -50,12 +50,35 @@ router.get("/mlb", async (req, res) => {
       return res.json({ ...liveCache, cached: true });
     }
 
+    // Gather candidate games from today AND yesterday (covers the ET day boundary
+    // — a game that started late can roll past midnight into the next ET date).
     const today = getEasternDate(0);
-    const schedule = await getScheduleForDate(today);
-    const liveGames = schedule.filter(g => g.status === "live");
+    const yesterday = getEasternDate(-1);
+    let schedule = [];
+    try {
+      const [t, y] = await Promise.all([
+        getScheduleForDate(today).catch(() => []),
+        getScheduleForDate(yesterday).catch(() => []),
+      ]);
+      // dedupe by game id
+      const seen = new Set();
+      for (const g of [...t, ...y]) {
+        if (!seen.has(g.id)) { seen.add(g.id); schedule.push(g); }
+      }
+    } catch (e) { schedule = []; }
 
-    if (liveGames.length === 0) {
-      const empty = { date: today, games: [], computedAt: new Date().toISOString(), cached: false };
+    // Consider anything not clearly final/upcoming as a live candidate. We then
+    // confirm via the live feed (which has the authoritative abstract state).
+    const candidates = schedule.filter(g =>
+      g.status === "live" || g.status === "in_progress" ||
+      (g.status !== "final" && g.status !== "scheduled" &&
+       g.status !== "postponed" && g.status !== "cancelled")
+    );
+
+    const debug = { today, yesterday, scheduleCount: schedule.length, candidateCount: candidates.length };
+
+    if (candidates.length === 0) {
+      const empty = { date: today, games: [], debug, computedAt: new Date().toISOString(), cached: false };
       liveCache = empty; liveCacheAt = Date.now();
       return res.json(empty);
     }
@@ -65,9 +88,12 @@ router.get("/mlb", async (req, res) => {
     try { oddsEvents = await getMLBMainOdds(); } catch (e) { /* proceed without */ }
 
     const games = [];
-    for (const g of liveGames) {
+    let feedNull = 0, notLive = 0;
+    for (const g of candidates) {
       const state = await getLiveGameState(g.id);
-      if (!state) continue;
+      if (!state) { feedNull++; continue; }
+      // Confirm it's actually live via the feed's abstract state (most reliable).
+      if (state.abstractState && state.abstractState !== "Live") { notLive++; continue; }
 
       // Live total line from the book (for the over/under edge), if available.
       const odds = matchOdds(g, oddsEvents);
@@ -133,7 +159,7 @@ router.get("/mlb", async (req, res) => {
       return eb - ea;
     });
 
-    const result = { date: today, games, computedAt: new Date().toISOString(), cached: false };
+    const result = { date: today, games, debug: { ...debug, feedNull, notLive, processed: games.length }, computedAt: new Date().toISOString(), cached: false };
     liveCache = result; liveCacheAt = Date.now();
     res.json(result);
   } catch (err) {
