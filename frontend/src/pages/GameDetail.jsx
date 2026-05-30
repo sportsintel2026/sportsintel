@@ -580,7 +580,7 @@ function PitcherCard({ pitcher, label, hasFullAccess, navigate }) {
     );
   }
   const stats = pitcher.stats;
-  const photo = pitcher.id ? `https://a.espncdn.com/i/headshots/mlb/players/full/${pitcher.id}.png` : null;
+  const photo = pitcher.id ? `https://midfield.mlbstatic.com/v1/people/${pitcher.id}/spots/120` : null;
   const record = stats && (stats.wins != null || stats.losses != null)
     ? `${stats.wins ?? 0}-${stats.losses ?? 0}` : null;
 
