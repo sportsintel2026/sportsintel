@@ -196,12 +196,15 @@ async function getGameDetail(league, gameId) {
   const header = (summary.header && summary.header.competitions && summary.header.competitions[0]) || {};
   const status = (header.status || {}).type || {};
 
-  // current series ("ATL leads series 1-0", 3-game set, etc.)
+  // current series ("ATL leads series 1-0"). Only use the genuine CURRENT series —
+  // never preseason or a stale completed one (ESPN sometimes returns those).
   let series = null;
-  const ss = (summary.seasonseries || []).find((s) => s.type === "current") || (summary.seasonseries || [])[0];
-  if (ss) {
+  const ss = (summary.seasonseries || []).find(
+    (s) => s.type === "current" && String(s.type).toLowerCase() !== "preseason"
+  );
+  if (ss && ss.summary) {
     series = {
-      summary: ss.summary || null,          // "ATL leads series 1-0"
+      summary: ss.summary,                   // "ATL leads series 1-0"
       score: ss.seriesScore || null,         // "1-0"
       totalGames: ss.totalCompetitions || null, // 3
       completed: !!ss.completed,
