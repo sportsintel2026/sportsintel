@@ -142,6 +142,7 @@ function TeamForm({ gameId, awayAbbr, homeAbbr, awayName, homeName, league = "ml
   const [standings, setStandings] = useState(null);
   const [failed, setFailed] = useState(false);
   const [series, setSeries] = useState(null);
+  const [umpire, setUmpire] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -163,6 +164,7 @@ function TeamForm({ gameId, awayAbbr, homeAbbr, awayName, homeName, league = "ml
         if (!m) return;
         const detail = await scoresApi.getGameDetail(league, m.id);
         if (!cancelled && detail && detail.series && detail.series.summary) setSeries(detail.series);
+        if (!cancelled && detail && detail.umpire) setUmpire(detail.umpire);
       } catch (_) { /* no series → just don't show it */ }
     })();
     return () => { cancelled = true; };
@@ -192,7 +194,7 @@ function TeamForm({ gameId, awayAbbr, homeAbbr, awayName, homeName, league = "ml
   };
   const a = lookup(awayAbbr);
   const h = lookup(homeAbbr);
-  if (standings && !a && !h && !series) return null; // nothing to show
+  if (standings && !a && !h && !series && !umpire) return null; // nothing to show
 
   return (
     <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 20, marginBottom: 18 }}>
@@ -204,6 +206,15 @@ function TeamForm({ gameId, awayAbbr, homeAbbr, awayName, homeName, league = "ml
           <span style={{ fontSize: 14 }}>🆚</span>
           <span style={{ fontSize: 13, fontWeight: 700, color: "#e4e7eb" }}>{series.summary}</span>
           {series.totalGames ? <span style={{ fontSize: 11, color: "#6b7280" }}>· {series.totalGames}-game series</span> : null}
+        </div>
+      )}
+
+      {/* home plate umpire (name only) */}
+      {umpire && (
+        <div style={{ background: "#0a0e14", border: "1px solid #1f2937", borderRadius: 8, padding: "10px 14px", marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 14 }}>🧑‍⚖️</span>
+          <span style={{ fontSize: 12, color: "#9ca3af" }}>Home plate umpire:</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: "#e4e7eb" }}>{umpire}</span>
         </div>
       )}
 
