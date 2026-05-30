@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-import { edgesApi, subscriptionApi, scoresApi, liveApi } from "../lib/api";
+import { edgesApi, subscriptionApi, scoresApi } from "../lib/api";
 import { BoxScore } from "./LiveScores";
 import Sidebar from "./Sidebar";
 
@@ -85,7 +85,7 @@ export default function GameDetailPage() {
 
       <div className="main-content" style={{ marginLeft: 200 }}>
         <div className="gd-content" style={{ maxWidth: 1100, margin: "0 auto", padding: "20px 24px 80px" }}>
-          <Link to="/games" className="back-btn" style={{ color: "#6b7280", fontSize: 13, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6, marginBottom: 18 }}>
+          <Link to="/games" className="back-btn" style={{ color: "#6b7280", fontSize: 13, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
             ← Back to MLB Games
           </Link>
 
@@ -123,15 +123,11 @@ function GameDetail({ game, hrProps, hasFullAccess, navigate }) {
       <GameHeader game={game} isLive={isLive} isFinal={isFinal} />
       <LiveScoreHeader gameId={game.id} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} league="mlb" />
       <TeamForm gameId={game.id} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} awayName={game.away} homeName={game.home} league="mlb" />
-      {isLive && <LiveWarningBanner />}
-      {isFinal && <FinalBanner game={game} />}
-      {/* Betting cards: LIVE games get live-model edges; upcoming games get the
-          pre-game model edges. Final games get neither (game's over). */}
-      {isLive && <LiveEdgeCards gameId={game.id} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} />}
-      {!isLive && !isFinal && bestEdge && <BestEdgeCard edge={bestEdge} game={game} hasFullAccess={hasFullAccess} navigate={navigate} />}
-      {!isLive && !isFinal && <WinProbabilityCard awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} awayProb={ml.awayWinProb} homeProb={ml.homeWinProb} awayOdds={ml.awayOdds} homeOdds={ml.homeOdds} awayEdge={ml.awayEdge} homeEdge={ml.homeEdge} hasFullAccess={hasFullAccess} navigate={navigate} />}
-      {!isLive && !isFinal && <TotalsCard totals={totals} hasFullAccess={hasFullAccess} navigate={navigate} />}
-      {/* Context / supporting detail below the betting cards */}
+      {/* Betting sections — always shown, grouped together at the top. */}
+      {bestEdge && <BestEdgeCard edge={bestEdge} game={game} hasFullAccess={hasFullAccess} navigate={navigate} />}
+      <WinProbabilityCard awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} awayProb={ml.awayWinProb} homeProb={ml.homeWinProb} awayOdds={ml.awayOdds} homeOdds={ml.homeOdds} awayEdge={ml.awayEdge} homeEdge={ml.homeEdge} hasFullAccess={hasFullAccess} navigate={navigate} />
+      <TotalsCard totals={totals} hasFullAccess={hasFullAccess} navigate={navigate} />
+      {/* Supporting detail below. */}
       {game.weather && <WeatherCard weather={game.weather} />}
       <PitcherMatchup awayPitcher={awayP} homePitcher={homeP} hasFullAccess={hasFullAccess} navigate={navigate} />
       <LineupBadge lineups={game.lineups} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} />
@@ -203,7 +199,7 @@ function TeamForm({ gameId, awayAbbr, homeAbbr, awayName, homeName, league = "ml
   if (standings && !a && !h && !series && !umpire) return null; // nothing to show
 
   return (
-    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 20, marginBottom: 18 }}>
+    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 20, marginBottom: 10 }}>
       <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 16 }}>📈 Team form</div>
 
       {/* current series record */}
@@ -320,7 +316,7 @@ function LiveScoreHeader({ gameId, awayAbbr, homeAbbr, league = "mlb" }) {
   const accent = isLiveNow ? "#ef4444" : "#22c55e";
 
   return (
-    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: "16px 20px", marginBottom: 18 }}>
+    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: "16px 20px", marginBottom: 10 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
         {isLiveNow && <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#ef4444", animation: "pulse 1.2s infinite" }} />}
         <span style={{ fontSize: 11, fontWeight: 800, color: accent, letterSpacing: "0.06em" }}>{isLiveNow ? "LIVE" : "FINAL"}</span>
@@ -360,7 +356,7 @@ function ScoreRow({ abbr, name, score, alignRight }) {
 
 function LiveWarningBanner() {
   return (
-    <div style={{ background: "#1a1410", border: "1px solid #f5970033", borderLeft: "3px solid #f59700", borderRadius: 6, padding: "12px 16px", marginBottom: 18 }}>
+    <div style={{ background: "#1a1410", border: "1px solid #f5970033", borderLeft: "3px solid #f59700", borderRadius: 6, padding: "12px 16px", marginBottom: 10 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <span style={{ fontSize: 18 }}>⚠️</span>
         <div>
@@ -376,7 +372,7 @@ function LiveWarningBanner() {
 
 function FinalBanner({ game }) {
   return (
-    <div style={{ background: "#0a1f15", border: "1px solid #22c55e30", borderLeft: "3px solid #22c55e", borderRadius: 6, padding: "12px 16px", marginBottom: 18 }}>
+    <div style={{ background: "#0a1f15", border: "1px solid #22c55e30", borderLeft: "3px solid #22c55e", borderRadius: 6, padding: "12px 16px", marginBottom: 10 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <span style={{ fontSize: 18 }}>✅</span>
@@ -578,7 +574,7 @@ function WeatherCard({ weather }) {
   const borderColor = hitterFavored ? "#22c55e44" : pitcherFavored ? "#ef444444" : "#1f2937";
   const accentColor = hitterFavored ? "#22c55e" : pitcherFavored ? "#ef4444" : "#9ca3af";
   return (
-    <div style={{ background: "#0f1419", border: `1px solid ${borderColor}`, borderRadius: 10, padding: 20, marginBottom: 18 }}>
+    <div style={{ background: "#0f1419", border: `1px solid ${borderColor}`, borderRadius: 10, padding: 20, marginBottom: 10 }}>
       <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 14 }}>🌤️ Game conditions</div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12 }}>
         <WeatherStat icon="🌡️" label="Temperature" value={`${weather.tempF}°F`} color={weather.tempEffect === "hot" ? "#22c55e" : weather.tempEffect === "cold" ? "#ef4444" : "#e4e7eb"} subtitle={weather.tempEffect === "hot" ? "Warm air carries" : weather.tempEffect === "cold" ? "Cold air dense" : null} />
@@ -604,7 +600,7 @@ function BestEdgeCard({ edge, game, hasFullAccess, navigate }) {
   const positive = edge.edge > 0;
   const desc = edge.type === "ML" ? `${edge.team} Moneyline` : `${edge.side === "over" ? "Over" : "Under"} ${edge.line}`;
   return (
-    <div style={{ background: positive ? "linear-gradient(180deg,#0a1f15 0%,#0f1419 100%)" : "linear-gradient(180deg,#1f0a0a 0%,#0f1419 100%)", border: `1px solid ${positive ? "#22c55e44" : "#ef444444"}`, borderLeft: `4px solid ${positive ? "#22c55e" : "#ef4444"}`, borderRadius: 10, padding: "20px 24px", marginBottom: 18 }}>
+    <div style={{ background: positive ? "linear-gradient(180deg,#0a1f15 0%,#0f1419 100%)" : "linear-gradient(180deg,#1f0a0a 0%,#0f1419 100%)", border: `1px solid ${positive ? "#22c55e44" : "#ef444444"}`, borderLeft: `4px solid ${positive ? "#22c55e" : "#ef4444"}`, borderRadius: 10, padding: "20px 24px", marginBottom: 10 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
         <div>
           <div style={{ fontSize: 10, color: positive ? "#22c55e" : "#ef4444", letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 700, marginBottom: 6 }}>🎯 Biggest model edge</div>
@@ -625,86 +621,6 @@ function BestEdgeCard({ edge, game, hasFullAccess, navigate }) {
 // Small honesty badge: shows whether the model's offense input is based on a
 // CONFIRMED lineup (today's posted card), a PROJECTED lineup (last game's, used
 // as a proxy before today's posts), or season team stats (no lineup resolved).
-// Live in-game edges (moneyline + over/under + run line) for a game in progress.
-// Fetches the live model and pulls out THIS game. Refreshes every 60s.
-function LiveEdgeCards({ gameId, awayAbbr, homeAbbr }) {
-  const [g, setG] = useState(null);
-  const [loaded, setLoaded] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false, timer = null;
-    const pull = async () => {
-      try {
-        const d = await liveApi.getMLB();
-        const match = (d.games || []).find(x => String(x.gameId) === String(gameId));
-        if (!cancelled) { setG(match || null); setLoaded(true); }
-      } catch (_) { if (!cancelled) setLoaded(true); }
-      if (!cancelled) timer = setTimeout(pull, 60000);
-    };
-    pull();
-    return () => { cancelled = true; if (timer) clearTimeout(timer); };
-  }, [gameId]);
-
-  if (!loaded) return null;
-  if (!g) return null; // game not in the live feed (e.g., just ended) — show nothing
-
-  const row = (label, prob, odds, edge) => {
-    const edgePos = edge != null && edge > 0;
-    return (
-      <div style={{ background: "#0a0e14", border: "1px solid #1f2937", borderRadius: 8, padding: 14 }}>
-        <div style={{ fontSize: 13, fontWeight: 800, color: "#fff", marginBottom: 8 }}>
-          {label}{odds != null ? <span style={{ fontSize: 11, color: "#6b7280", fontWeight: 500 }}> · {odds > 0 ? `+${odds}` : odds}</span> : null}
-        </div>
-        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-          <span style={{ fontSize: 11, color: "#6b7280" }}>Our prob</span>
-          <span style={{ fontSize: 16, fontWeight: 800, color: "#22c55e" }}>{prob != null ? `${Math.round(prob * 100)}%` : "—"}</span>
-        </div>
-        {edge != null && (
-          <div style={{ display: "flex", justifyContent: "space-between" }}>
-            <span style={{ fontSize: 11, color: "#6b7280" }}>Edge</span>
-            <span style={{ fontSize: 15, fontWeight: 800, color: edgePos ? "#22c55e" : "#ef4444" }}>{edgePos ? "+" : ""}{(edge * 100).toFixed(1)}%</span>
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  return (
-    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 20, marginBottom: 18 }}>
-      <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 16 }}>🔴 Live edges · {g.half === "bottom" ? "Bot" : "Top"} {g.inning}, {g.outs} out</div>
-      <div style={{ background: "#13110a", border: "1px solid #3a2f10", borderRadius: 6, padding: "8px 12px", marginBottom: 14, fontSize: 11, color: "#d4b85a", lineHeight: 1.5 }}>
-        Experimental — from a live win-expectancy model. Updates every 60s. Treat as a signal, not a guarantee.
-      </div>
-
-      <div style={{ fontSize: 10, color: "#9ca3af", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 8 }}>💰 Moneyline</div>
-      <div className="two-col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
-        {row(awayAbbr, g.awayWinProb, g.awayOdds, g.awayEdge)}
-        {row(homeAbbr, g.homeWinProb, g.homeOdds, g.homeEdge)}
-      </div>
-
-      {g.totalLine != null && (
-        <>
-          <div style={{ fontSize: 10, color: "#9ca3af", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 8 }}>📊 Total {g.totalLine} · proj {g.projectedTotal}</div>
-          <div className="two-col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
-            {row(`Over ${g.totalLine}`, g.overProb, g.overOdds, g.overEdge)}
-            {row(`Under ${g.totalLine}`, g.underProb, g.underOdds, g.underEdge)}
-          </div>
-        </>
-      )}
-
-      {(g.homeRunLineProb != null || g.awayRunLineProb != null) && (
-        <>
-          <div style={{ fontSize: 10, color: "#9ca3af", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 8 }}>📐 Run line ±1.5 · model probability</div>
-          <div className="two-col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            {row(`${awayAbbr} -1.5`, g.awayRunLineProb, null, null)}
-            {row(`${homeAbbr} -1.5`, g.homeRunLineProb, null, null)}
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
 function LineupBadge({ lineups, awayAbbr, homeAbbr }) {
   if (!lineups) return null;
   const tag = (side, abbr) => {
@@ -717,7 +633,7 @@ function LineupBadge({ lineups, awayAbbr, homeAbbr }) {
   const h = tag(lineups.home, homeAbbr);
   const anyConfirmed = lineups.away?.source === "confirmed" || lineups.home?.source === "confirmed";
   return (
-    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 16, marginBottom: 18 }}>
+    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 16, marginBottom: 10 }}>
       <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 12 }}>📋 Lineup status</div>
       <div className="two-col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
         {[a, h].map((t, i) => (
@@ -737,7 +653,7 @@ function LineupBadge({ lineups, awayAbbr, homeAbbr }) {
 
 function PitcherMatchup({ awayPitcher, homePitcher, hasFullAccess, navigate }) {
   return (
-    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 20, marginBottom: 18 }}>
+    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 20, marginBottom: 10 }}>
       <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 16 }}>⚾ Starting pitcher matchup</div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
         <PitcherCard pitcher={awayPitcher} label="AWAY" hasFullAccess={hasFullAccess} navigate={navigate} />
@@ -814,7 +730,7 @@ function WinProbabilityCard({ awayAbbr, homeAbbr, awayProb, homeProb, awayOdds, 
   const awayPct = Math.round((awayProb ?? 0) * 100);
   const homePct = Math.round((homeProb ?? 0) * 100);
   return (
-    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 20, marginBottom: 18 }}>
+    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 20, marginBottom: 10 }}>
       <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 16 }}>💰 Moneyline · model vs market</div>
       <div className="two-col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <MLBox abbr={awayAbbr} prob={awayProb} odds={awayOdds} edge={awayEdge} side="Away" />
@@ -843,7 +759,7 @@ function MLBox({ abbr, prob, odds, edge, side }) {
 function TotalsCard({ totals }) {
   if (totals.line == null && totals.projected == null) return null;
   return (
-    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 20, marginBottom: 18 }}>
+    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 20, marginBottom: 10 }}>
       <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 16 }}>📊 Total runs</div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
         <BigStat label="Sportsbook" value={totals.line ?? "—"} color="#9ca3af" />
@@ -865,7 +781,7 @@ function BigStat({ label, value, color }) {
 
 function ContextCard({ game }) {
   return (
-    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 20, marginBottom: 18 }}>
+    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 20, marginBottom: 10 }}>
       <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 16 }}>🏟️ Park factors</div>
       <div className="two-col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <FactorCard label="Runs" factor={game.parkRunFactor || 1} />
@@ -888,7 +804,7 @@ function FactorCard({ label, factor }) {
 
 function HRPropsCard({ hrProps, hasFullAccess, navigate }) {
   return (
-    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 20, marginBottom: 18 }}>
+    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 20, marginBottom: 10 }}>
       <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 16 }}>💣 Home run props</div>
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {hrProps.slice(0, hasFullAccess ? 10 : 1).map((p, i) => (
