@@ -36,7 +36,7 @@ router.get("/mlb", async (req, res) => {
     const supabase = db();
     const { data, error } = await supabase
       .from("model_predictions")
-      .select("market, confidence, result, odds, edge, game_date")
+      .select("market, confidence, result, odds, edge, game_date, clv, beat_close, closing_odds")
       .eq("league", "mlb")
       .in("result", ["win", "loss"]); // graded, decisive only (skip pending/push)
     if (error) throw new Error(error.message);
@@ -72,6 +72,30 @@ router.get("/mlb", async (req, res) => {
       .select("id", { count: "exact", head: true })
       .eq("result", "pending");
 
+    // ── CLV summary ───────────────────────────────────────────────────────────
+    // CLV is captured at game start regardless of win/loss, so we compute it over
+    // ALL qualified MLB ML/totals picks that have a closing line (not just decided
+    // ones). Average CLV and % that beat the close are the sharp-signal metrics.
+    const { data: clvData } = await supabase
+      .from("model_predictions")
+      .select("confidence, clv, beat_close")
+      .eq("league", "mlb")
+      .in("market", ["moneyline", "total"])
+      .not("clv", "is", null);
+    const clvRows = (clvData || []).filter(isQualified);
+    let clvSummary = null;
+    if (clvRows.length > 0) {
+      const beat = clvRows.filter(r => r.beat_close === true).length;
+      const avgClv = clvRows.reduce((s, r) => s + (Number(r.clv) || 0), 0) / clvRows.length;
+      clvSummary = {
+        sample: clvRows.length,
+        beatClose: beat,
+        beatClosePct: Math.round((beat / clvRows.length) * 1000) / 10,
+        // express avg CLV as a percentage-point swing in fair win prob
+        avgClvPct: Math.round(avgClv * 10000) / 100,
+      };
+    }
+
     res.json({
       // Headline = qualified picks (what we stand behind).
       ...qualified,
@@ -81,6 +105,7 @@ router.get("/mlb", async (req, res) => {
         ...full,
         totalGraded: rows.length,
       },
+      clv: clvSummary,
       filter: {
         qualifyingTiers: QUALIFYING_TIERS,
         excludedCount: rows.length - qualifiedRows.length,
