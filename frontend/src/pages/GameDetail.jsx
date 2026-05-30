@@ -670,9 +670,6 @@ function LiveEdgeCards({ gameId, awayAbbr, homeAbbr }) {
   return (
     <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 20, marginBottom: 10 }}>
       <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 12 }}>🔴 Live edges · {g.half === "bottom" ? "Bot" : "Top"} {g.inning}, {g.outs} out</div>
-      <div style={{ background: "#13110a", border: "1px solid #3a2f10", borderRadius: 6, padding: "8px 12px", marginBottom: 14, fontSize: 11, color: "#d4b85a", lineHeight: 1.5 }}>
-        Experimental — live win-expectancy model (score, inning, outs, baserunners, current pitcher). Updates every 60s. Treat as a signal, not a guarantee.
-      </div>
 
       <div style={{ fontSize: 10, color: "#9ca3af", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 8 }}>💰 Moneyline</div>
       <div className="two-col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
