@@ -9,7 +9,8 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-import { subscriptionApi } from "../lib/api";
+import { subscriptionApi, scoresApi } from "../lib/api";
+import { BoxScore } from "./LiveScores";
 import Sidebar from "./Sidebar";
 
 const API_BASE = import.meta.env.VITE_API_URL || "https://sportsintel-production.up.railway.app";
@@ -63,9 +64,9 @@ export default function NBADetailPage() {
         .desktop-sidebar{display:block}
         @media (max-width: 768px) {
           .desktop-sidebar{display:none!important}
-          .main-content{margin-left:0!important}
+          .main-content{margin-left:0!important;max-width:100vw!important;overflow-x:hidden!important}
           .mobile-only{display:flex!important}
-          .gd-content{padding:16px 14px 60px!important}
+          .gd-content{padding:16px 14px 60px!important;max-width:100vw!important}
           h1{font-size:24px!important}
           .two-col{grid-template-columns:1fr!important}
         }
@@ -101,19 +102,21 @@ export default function NBADetailPage() {
 
           {loading && <Loader />}
           {!loading && error && <ErrorState />}
-          {!loading && !error && matchup && <Detail matchup={matchup} prediction={prediction} />}
+          {!loading && !error && matchup && <Detail matchup={matchup} prediction={prediction} gameId={gameId} />}
         </div>
       </div>
     </div>
   );
 }
 
-function Detail({ matchup, prediction }) {
+function Detail({ matchup, prediction, gameId }) {
   const m = matchup;
   const best = bestEdge(prediction);
   return (
     <div style={{ animation: "fadeIn .3s ease" }}>
       <Header m={m} />
+      <NbaLiveHeader gameId={gameId} />
+      <NbaTeamForm awayAbbr={m.away?.abbr} homeAbbr={m.home?.abbr} awayName={m.away?.displayName} homeName={m.home?.displayName} seriesSummary={m.series?.summary} />
       {best && <BestEdgeCard best={best} />}
       <TeamComparison m={m} />
       <WinProbCard m={m} prediction={prediction} />
@@ -125,6 +128,155 @@ function Detail({ matchup, prediction }) {
         Model v0.1 · ratings/pace from ESPN season data. Player figures are season averages.
         Injuries shown but not yet weighted into the line (v0.2).
       </div>
+    </div>
+  );
+}
+
+// Live/final scoreboard + box score. For NBA the detail gameId IS the ESPN id,
+// so we can fetch the box score directly (no scores-feed matching dance like MLB).
+function NbaLiveHeader({ gameId }) {
+  const [box, setBox] = useState(null);
+  const [scoreLine, setScoreLine] = useState(null); // {state, statusDetail, away, home} from scores feed
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    let timer = null;
+
+    const pull = async () => {
+      try {
+        // scores feed gives the live scoreboard line (score + status)
+        const scores = await scoresApi.getScores("nba");
+        const all = [...(scores.live || []), ...(scores.upcoming || []), ...(scores.final || [])];
+        const match = all.find(g => String(g.id) === String(gameId) || String(g.detailId) === String(gameId));
+        if (!cancelled) setScoreLine(match || null);
+
+        // box score (direct fetch — gameId is the ESPN id for NBA)
+        if (match && (match.bucket === "live" || match.bucket === "final")) {
+          const detail = await scoresApi.getGameDetail("nba", gameId);
+          if (!cancelled) setBox(detail);
+          if (match.bucket === "live" && !cancelled) timer = setTimeout(pull, 30000);
+        }
+      } catch (_) { /* leave empty; page still renders the rest */ }
+      finally { if (!cancelled) setLoading(false); }
+    };
+    pull();
+    return () => { cancelled = true; if (timer) clearTimeout(timer); };
+  }, [gameId]);
+
+  if (loading) return null;
+  if (!scoreLine) return null; // not in scores feed → show nothing (rest of page unchanged)
+
+  const isLive = scoreLine.bucket === "live";
+  const isFinal = scoreLine.bucket === "final";
+  const showScores = isLive || isFinal;
+
+  return (
+    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 12, padding: 20, marginBottom: 18 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: showScores ? 14 : 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {isLive && <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#ef4444", animation: "pulse 2s infinite" }} />}
+          <span style={{ fontSize: 12, fontWeight: 800, letterSpacing: "0.06em", color: isLive ? "#ef4444" : "#9ca3af", textTransform: "uppercase" }}>
+            {isLive ? "LIVE" : isFinal ? "FINAL" : "UPCOMING"}{scoreLine.statusDetail ? ` · ${scoreLine.statusDetail}` : ""}
+          </span>
+        </div>
+        {isLive && <span style={{ fontSize: 11, color: "#6b7280" }}>updates automatically</span>}
+      </div>
+
+      {showScores && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center", gap: 12, marginBottom: box ? 18 : 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            {scoreLine.away?.logo && <img src={scoreLine.away.logo} alt="" style={{ width: 30, height: 30 }} />}
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: "#fff" }}>{scoreLine.away?.abbrev}</div>
+              <div style={{ fontSize: 11, color: "#6b7280" }}>{scoreLine.away?.name}</div>
+            </div>
+          </div>
+          <div style={{ fontSize: 28, fontWeight: 800, color: "#fff", fontVariantNumeric: "tabular-nums" }}>
+            {scoreLine.away?.score ?? 0} <span style={{ color: "#4b5563", fontWeight: 400 }}>–</span> {scoreLine.home?.score ?? 0}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, justifyContent: "flex-end" }}>
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: 16, fontWeight: 800, color: "#fff" }}>{scoreLine.home?.abbrev}</div>
+              <div style={{ fontSize: 11, color: "#6b7280" }}>{scoreLine.home?.name}</div>
+            </div>
+            {scoreLine.home?.logo && <img src={scoreLine.home.logo} alt="" style={{ width: 30, height: 30 }} />}
+          </div>
+        </div>
+      )}
+
+      {box && <BoxScore detail={box} />}
+    </div>
+  );
+}
+
+// Team form: record / streak / last 10 for both teams, + playoff series line.
+// NBA abbreviations match ESPN standings directly (no AZ/ARI-style alias needed).
+function NbaTeamForm({ awayAbbr, homeAbbr, awayName, homeName, seriesSummary }) {
+  const [standings, setStandings] = useState(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    scoresApi.getStandings("nba")
+      .then(d => { if (!cancelled) setStandings(d); })
+      .catch(() => { if (!cancelled) setFailed(true); });
+    return () => { cancelled = true; };
+  }, []);
+
+  if (failed) return null;
+  const a = standings ? standings[String(awayAbbr).toUpperCase()] : null;
+  const h = standings ? standings[String(homeAbbr).toUpperCase()] : null;
+  if (standings && !a && !h && !seriesSummary) return null;
+
+  return (
+    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 20, marginBottom: 18 }}>
+      <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 16 }}>📈 Team form</div>
+
+      {seriesSummary && (
+        <div style={{ background: "#0a0e14", border: "1px solid #1f2937", borderRadius: 8, padding: "10px 14px", marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 14 }}>🏆</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: "#e4e7eb" }}>{seriesSummary}</span>
+        </div>
+      )}
+
+      <div className="two-col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <NbaFormCard abbr={awayAbbr} name={awayName} side="AWAY" form={a} loading={!standings} />
+        <NbaFormCard abbr={homeAbbr} name={homeName} side="HOME" form={h} loading={!standings} />
+      </div>
+    </div>
+  );
+}
+
+function NbaFormCard({ abbr, name, side, form, loading }) {
+  const streakColor = (s) => {
+    if (!s) return "#9ca3af";
+    return s.startsWith("W") ? "#22c55e" : s.startsWith("L") ? "#ef4444" : "#9ca3af";
+  };
+  return (
+    <div style={{ background: "#0a0e14", border: "1px solid #1f2937", borderRadius: 8, padding: 16 }}>
+      <div style={{ fontSize: 10, color: "#6b7280", letterSpacing: "0.08em", marginBottom: 4, fontWeight: 600 }}>{side}</div>
+      <div style={{ fontSize: 15, fontWeight: 700, color: "#fff", marginBottom: 12 }}>{abbr} <span style={{ fontSize: 11, color: "#6b7280", fontWeight: 500 }}>{name}</span></div>
+      {loading ? (
+        <div style={{ fontSize: 12, color: "#6b7280" }}>Loading form…</div>
+      ) : !form ? (
+        <div style={{ fontSize: 12, color: "#6b7280" }}>No form data</div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+          <NbaFormStat label="Record" value={form.record || "—"} color="#e4e7eb" />
+          <NbaFormStat label="Streak" value={form.streak || "—"} color={streakColor(form.streak)} />
+          <NbaFormStat label="Last 10" value={form.lastTen || "—"} color="#e4e7eb" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NbaFormStat({ label, value, color }) {
+  return (
+    <div style={{ background: "#0f1419", border: "1px solid #1a1f28", borderRadius: 6, padding: "8px 10px", textAlign: "center" }}>
+      <div style={{ fontSize: 9, color: "#6b7280", letterSpacing: "0.08em", fontWeight: 600, textTransform: "uppercase", marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: 16, fontWeight: 800, color, lineHeight: 1 }}>{value}</div>
     </div>
   );
 }
