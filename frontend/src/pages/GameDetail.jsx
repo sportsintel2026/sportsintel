@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-import { edgesApi, subscriptionApi } from "../lib/api";
+import { edgesApi, subscriptionApi, scoresApi } from "../lib/api";
+import { BoxScore } from "./LiveScores";
 import Sidebar from "./Sidebar";
 
 export default function GameDetailPage() {
@@ -83,8 +84,8 @@ export default function GameDetailPage() {
 
       <div className="main-content" style={{ marginLeft: 200 }}>
         <div className="gd-content" style={{ maxWidth: 1100, margin: "0 auto", padding: "20px 24px 80px" }}>
-          <Link to="/dashboard" className="back-btn" style={{ color: "#6b7280", fontSize: 13, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6, marginBottom: 18 }}>
-            ← Back to all edges
+          <Link to="/games" className="back-btn" style={{ color: "#6b7280", fontSize: 13, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6, marginBottom: 18 }}>
+            ← Back to MLB Games
           </Link>
 
           {loading && <Loader />}
@@ -119,6 +120,7 @@ function GameDetail({ game, hrProps, hasFullAccess, navigate }) {
   return (
     <div style={{ animation: "fadeIn .3s ease" }}>
       <GameHeader game={game} isLive={isLive} isFinal={isFinal} />
+      <LiveScoreHeader gameId={game.id} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} league="mlb" />
       {isLive && <LiveWarningBanner />}
       {isFinal && <FinalBanner game={game} />}
       {bestEdge && !isFinal && <BestEdgeCard edge={bestEdge} game={game} hasFullAccess={hasFullAccess} navigate={navigate} />}
@@ -129,6 +131,99 @@ function GameDetail({ game, hrProps, hasFullAccess, navigate }) {
       <TotalsCard totals={totals} hasFullAccess={hasFullAccess} navigate={navigate} />
       <ContextCard game={game} />
       {hrProps.length > 0 && <HRPropsCard hrProps={hrProps} hasFullAccess={hasFullAccess} navigate={navigate} />}
+    </div>
+  );
+}
+
+// Live/final scoreboard + box score, shown at the top of the detail page.
+// Finds this game in the scores feed by detailId (== backend gameId), then fetches
+// the box score by the matched game's ESPN id. Refreshes every 30s while live.
+// Renders nothing if the game isn't in the scores feed (page unchanged).
+function LiveScoreHeader({ gameId, awayAbbr, homeAbbr, league = "mlb" }) {
+  const [match, setMatch] = useState(null);   // game object from scores feed
+  const [box, setBox] = useState(null);       // box score detail
+  const [boxLoading, setBoxLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    let timer = null;
+    const pull = async () => {
+      try {
+        const data = await scoresApi.getScores(league);
+        const all = [...(data.live || []), ...(data.final || [])];
+        const m = all.find((g) => String(g.detailId) === String(gameId));
+        if (!cancelled) setMatch(m || null);
+      } catch (_) {
+        if (!cancelled) setMatch(null);
+      }
+    };
+    pull();
+    timer = setInterval(pull, 30000);
+    return () => { cancelled = true; if (timer) clearInterval(timer); };
+  }, [gameId, league]);
+
+  // Once we know the matched game's ESPN id, fetch its box score (and refresh while live).
+  useEffect(() => {
+    if (!match) { setBox(null); return; }
+    let cancelled = false;
+    let timer = null;
+    const pullBox = async () => {
+      try {
+        if (!box) setBoxLoading(true);
+        const d = await scoresApi.getGameDetail(league, match.id);
+        if (!cancelled) setBox(d);
+      } catch (_) {
+        /* keep scoreboard even if box fails */
+      }
+      if (!cancelled) setBoxLoading(false);
+    };
+    pullBox();
+    if (match.bucket === "live") timer = setInterval(pullBox, 30000);
+    return () => { cancelled = true; if (timer) clearInterval(timer); };
+  }, [match, league]);
+
+  if (!match) return null; // not in scores feed → show nothing (page unchanged)
+
+  const isLiveNow = match.bucket === "live";
+  const a = match.away || {};
+  const h = match.home || {};
+  const accent = isLiveNow ? "#ef4444" : "#22c55e";
+
+  return (
+    <div style={{ background: isLiveNow ? "linear-gradient(180deg,#1f0a0a 0%,#0f1419 100%)" : "linear-gradient(180deg,#0a1f15 0%,#0f1419 100%)", border: `1px solid ${accent}44`, borderLeft: `4px solid ${accent}`, borderRadius: 10, padding: "16px 20px", marginBottom: 18 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+        {isLiveNow && <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#ef4444", animation: "pulse 1.2s infinite" }} />}
+        <span style={{ fontSize: 11, fontWeight: 800, color: accent, letterSpacing: "0.06em" }}>{isLiveNow ? "LIVE" : "FINAL"}</span>
+        <span style={{ fontSize: 11, color: "#9ca3af" }}>· {match.statusDetail || ""}</span>
+        {isLiveNow && <span style={{ marginLeft: "auto", fontSize: 10, color: "#6b7280" }}>updates automatically</span>}
+      </div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+        <ScoreRow abbr={a.abbrev || awayAbbr} name={a.name} score={a.score} />
+        <div style={{ fontSize: 12, color: "#4b5563", fontWeight: 700 }}>@</div>
+        <ScoreRow abbr={h.abbrev || homeAbbr} name={h.name} score={h.score} alignRight />
+      </div>
+
+      {/* Box score (innings/quarters line + player stats) — same component as the games list */}
+      <div style={{ marginTop: 16, borderTop: "1px solid #1f2937", paddingTop: 14 }}>
+        {box ? <BoxScore detail={box} /> : boxLoading ? (
+          <div style={{ fontSize: 12, color: "#6b7280" }}>Loading box score…</div>
+        ) : (
+          <div style={{ fontSize: 12, color: "#6b7280" }}>Box score not available yet.</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ScoreRow({ abbr, name, score, alignRight }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, justifyContent: alignRight ? "flex-end" : "flex-start" }}>
+      {!alignRight && <span style={{ fontSize: 30, fontWeight: 800, color: "#fff", fontVariantNumeric: "tabular-nums", minWidth: 32, textAlign: "center" }}>{score != null ? score : "—"}</span>}
+      <div style={{ textAlign: alignRight ? "right" : "left" }}>
+        <div style={{ fontSize: 16, fontWeight: 700, color: "#e4e7eb" }}>{abbr}</div>
+        {name && <div style={{ fontSize: 11, color: "#6b7280" }}>{name}</div>}
+      </div>
+      {alignRight && <span style={{ fontSize: 30, fontWeight: 800, color: "#fff", fontVariantNumeric: "tabular-nums", minWidth: 32, textAlign: "center" }}>{score != null ? score : "—"}</span>}
     </div>
   );
 }
@@ -592,7 +687,7 @@ function ErrorState() {
     <div style={{ textAlign: "center", padding: 64, background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10 }}>
       <div style={{ fontSize: 32, marginBottom: 12 }}>⚠️</div>
       <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>Could not load this game</div>
-      <Link to="/dashboard" style={{ fontSize: 12, color: "#ef4444", textDecoration: "none", fontWeight: 700 }}>← Back to dashboard</Link>
+      <Link to="/games" style={{ fontSize: 12, color: "#ef4444", textDecoration: "none", fontWeight: 700 }}>← Back to MLB Games</Link>
     </div>
   );
 }
@@ -602,7 +697,7 @@ function NotFound({ gameId }) {
     <div style={{ textAlign: "center", padding: 64, background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10 }}>
       <div style={{ fontSize: 32, marginBottom: 12 }}>🔍</div>
       <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>Game not found</div>
-      <Link to="/dashboard" style={{ fontSize: 12, color: "#ef4444", textDecoration: "none", fontWeight: 700 }}>← Back to dashboard</Link>
+      <Link to="/games" style={{ fontSize: 12, color: "#ef4444", textDecoration: "none", fontWeight: 700 }}>← Back to MLB Games</Link>
     </div>
   );
 }
