@@ -152,17 +152,33 @@ function LeagueTabs({ league, setLeague, navigate }) {
 function MLBDashboard({ edges, loading, picks, hasFullAccess, navigate, onRefresh }) {
   if (loading) return <Loader />;
   if (!edges) return <ErrorState onRetry={onRefresh} />;
-  const date = new Date().toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
+  // Use the date the BACKEND actually served (it rolls over to tomorrow once all
+  // of today's games are final), not the browser's "now". Parse YYYY-MM-DD as a
+  // local date so the weekday is correct.
+  const rolled = !!edges.rolledToNextDay;
+  let weekday = "";
+  try {
+    const [y, mo, d] = String(edges.date).split("-").map(Number);
+    weekday = new Date(y, mo - 1, d).toLocaleDateString("en-US", { weekday: "long" });
+  } catch (_) {
+    weekday = new Date().toLocaleDateString("en-US", { weekday: "long" });
+  }
+  const heading = rolled ? "Next up" : "Today's edges";
   const gameCount = edges.games?.length || 0;
 
   return (
     <div style={{ animation: "fadeIn .3s ease" }}>
       <div style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 8 }}>
-        <h1 style={{ margin: 0, fontSize: 26, fontWeight: 700 }}>Today's edges · {date.split(",")[0]}</h1>
+        <h1 style={{ margin: 0, fontSize: 26, fontWeight: 700 }}>{heading} · {weekday}</h1>
         <span style={{ fontSize: 12, color: "#6b7280" }}>
           {gameCount} games · {edges.cached ? "Cached" : "Updated"} {new Date(edges.computedAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
         </span>
       </div>
+      {rolled && (
+        <div style={{ background: "#1a1410", border: "1px solid #f5970022", borderLeft: "3px solid #f59700", borderRadius: 6, padding: "8px 12px", marginBottom: 12, fontSize: 12, color: "#fbbf24" }}>
+          Today's games are all final — showing <strong>{weekday}'s</strong> slate. Early lines and pitchers can still change; edges sharpen as lineups post.
+        </div>
+      )}
       <p style={{ margin: "0 0 24px", fontSize: 13, color: "#9ca3af" }}>
         Model projections vs sportsbook lines · weather, batter vs pitcher history, recent form. <span style={{ color: "#ef4444", fontWeight: 600 }}>Click any game</span> for deep analysis.
       </p>
