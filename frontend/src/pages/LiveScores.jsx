@@ -262,6 +262,38 @@ export function BoxScore({ detail }) {
         const roster = teams[teamAbbrev];
         const cols = wanted.filter((c) => roster[0] && roster[0].stats[c] !== undefined);
         const showCols = cols.length ? cols : (roster[0]?.columns || []).slice(0, 4);
+
+        // split batters vs pitchers by position (SP/RP = pitcher)
+        const isPitcher = (p) => {
+          const pos = String(p.position || "").toUpperCase();
+          return pos === "SP" || pos === "RP" || pos === "P";
+        };
+        const batters = roster.filter((p) => !isPitcher(p));
+        const pitchers = roster.filter(isPitcher);
+
+        // green highlight for productive batting lines (2+ H or 1+ RBI)
+        const bigLine = (p) => {
+          const h = parseInt(p.stats.H, 10);
+          const rbi = parseInt(p.stats.RBI, 10);
+          return (Number.isFinite(h) && h >= 2) || (Number.isFinite(rbi) && rbi >= 1);
+        };
+
+        const renderRows = (list) =>
+          list.map((p, i) => {
+            const hot = !isPitcher(p) && bigLine(p);
+            return (
+              <tr key={i} style={{ background: i % 2 ? "#0c1117" : "transparent", borderTop: "1px solid #1f2937" }}>
+                <td style={{ padding: "7px 10px", whiteSpace: "nowrap", color: "#e4e7eb", fontWeight: 600 }}>
+                  {p.shortName} {p.starter && <span style={{ color: "#22c55e", fontSize: 10 }}>•</span>} <span style={{ color: "#6b7280", fontSize: 11, fontWeight: 500 }}>{p.position}</span>
+                </td>
+                {showCols.map((c) => {
+                  const greenCol = hot && (c === "H" || c === "RBI") && p.stats[c] && parseInt(p.stats[c], 10) > 0;
+                  return <td key={c} style={{ ...cellNum, color: greenCol ? "#22c55e" : "#e4e7eb" }}>{p.stats[c] ?? ""}</td>;
+                })}
+              </tr>
+            );
+          });
+
         return (
           <div key={teamAbbrev} style={{ marginBottom: 16 }}>
             <div style={{ fontSize: 12, fontWeight: 800, color: "#fff", letterSpacing: 0.5, marginBottom: 8, paddingBottom: 6, borderBottom: "2px solid #2a3340" }}>{teamAbbrev}</div>
@@ -274,14 +306,17 @@ export function BoxScore({ detail }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {roster.map((p, i) => (
-                    <tr key={i} style={{ background: i % 2 ? "#0c1117" : "transparent", borderTop: "1px solid #1f2937" }}>
-                      <td style={{ padding: "7px 10px", whiteSpace: "nowrap", color: "#e4e7eb", fontWeight: 600 }}>
-                        {p.shortName} {p.starter && <span style={{ color: "#22c55e", fontSize: 10 }}>•</span>} <span style={{ color: "#6b7280", fontSize: 11, fontWeight: 500 }}>{p.position}</span>
-                      </td>
-                      {showCols.map((c) => <td key={c} style={cellNum}>{p.stats[c] ?? ""}</td>)}
-                    </tr>
-                  ))}
+                  {renderRows(batters)}
+                  {pitchers.length > 0 && (
+                    <>
+                      <tr>
+                        <td colSpan={showCols.length + 1} style={{ borderTop: "2px solid #2a3340", padding: "8px 10px 4px", fontSize: 10, fontWeight: 800, letterSpacing: "0.1em", color: "#6b7280", textTransform: "uppercase" }}>
+                          Pitchers
+                        </td>
+                      </tr>
+                      {renderRows(pitchers)}
+                    </>
+                  )}
                 </tbody>
               </table>
             </div>
