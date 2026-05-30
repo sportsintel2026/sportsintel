@@ -1,7 +1,7 @@
 // LiveScores.jsx — shared live scores view for MLB and NBA.
 // Splits games into Live / Upcoming / Final with a blinking LIVE dot, refreshes
-// every 30s, and lets you tap a game to expand its box score (innings/quarters
-// line score + player stat lines). Driven by a `league` prop ("mlb" | "nba").
+// every 30s. Tapping a game opens its full matchup page (scoreboard + box score
+// + analysis all in one). Driven by a `league` prop ("mlb" | "nba").
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
@@ -109,7 +109,7 @@ export default function LiveScoresPage({ league = "mlb" }) {
             )}
           </div>
           <p style={{ margin: "0 0 24px", fontSize: 13, color: "#9ca3af" }}>
-            Live scores & box scores · <span style={{ color: "#ef4444", fontWeight: 600 }}>tap a game</span> for innings & player stats
+            Live scores · <span style={{ color: "#ef4444", fontWeight: 600 }}>tap a game</span> for the box score & full analysis
           </p>
 
           {loading && <Loader />}
@@ -155,27 +155,21 @@ function Section({ title, color, count, defaultOpen, liveDot, children }) {
   );
 }
 
+// Tapping a card now goes straight to the full matchup page (scoreboard + box
+// score + analysis in one). For games we can't map to a detail page (no
+// detailId), it stays a non-clickable info card.
 function GameCard({ g, league, meta }) {
   const navigate = useNavigate();
-  const [expanded, setExpanded] = useState(false);
-  const [detail, setDetail] = useState(null);
-  const [loadingDetail, setLoadingDetail] = useState(false);
   const isLive = g.bucket === "live";
   const isFinal = g.bucket === "final";
-
-  const toggle = async () => {
-    const next = !expanded;
-    setExpanded(next);
-    if (next && !detail && (isLive || isFinal)) {
-      setLoadingDetail(true);
-      try { setDetail(await scoresApi.getGameDetail(league, g.id)); }
-      catch (e) { /* leave detail null; card still shows score */ }
-      setLoadingDetail(false);
-    }
-  };
+  const target = g.detailId ? `/game/${league}/${g.detailId}` : null;
 
   return (
-    <div className="game-card" onClick={toggle} style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 14 }}>
+    <div
+      className="game-card"
+      onClick={() => { if (target) navigate(target); }}
+      style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 14, cursor: target ? "pointer" : "default" }}
+    >
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
         <div style={{ minWidth: 0, flex: 1 }}>
           <TeamLine t={g.away} showScore={isLive || isFinal} />
@@ -193,36 +187,9 @@ function GameCard({ g, league, meta }) {
           </div>
           {g.seriesSummary && <div style={{ fontSize: 10, color: "#6b7280", marginTop: 2 }}>{g.seriesSummary}</div>}
           {!isLive && !isFinal && g.venue && <div style={{ fontSize: 10, color: "#6b7280", marginTop: 2, maxWidth: 160, whiteSpace: "normal" }}>{g.venue}</div>}
+          {target && <div style={{ fontSize: 11, color: "#ef4444", fontWeight: 700, marginTop: 6 }}>View game →</div>}
         </div>
       </div>
-
-      {expanded && (
-        <div onClick={(e) => e.stopPropagation()} style={{ marginTop: 14, borderTop: "1px solid #1f2937", paddingTop: 14, cursor: "default" }}>
-          {(!isLive && !isFinal) ? (
-            <div style={{ fontSize: 12, color: "#6b7280" }}>
-              Box score appears once the game starts. {g.venue ? `Venue: ${g.venue}.` : ""}
-            </div>
-          ) : loadingDetail ? (
-            <div style={{ fontSize: 12, color: "#6b7280" }}>Loading box score…</div>
-          ) : detail ? (
-            <Detail detail={detail} meta={meta} />
-          ) : (
-            <div style={{ fontSize: 12, color: "#6b7280" }}>Box score not available yet.</div>
-          )}
-        </div>
-      )}
-
-      {/* Always-available link to the full matchup/analysis page (when we have its id) */}
-      {g.detailId && (
-        <div onClick={(e) => e.stopPropagation()} style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid #131820", display: "flex", justifyContent: "flex-end", cursor: "default" }}>
-          <button
-            onClick={() => navigate(`/game/${league}/${g.detailId}`)}
-            style={{ background: "none", border: "1px solid #1f2937", borderRadius: 6, color: "#ef4444", fontSize: 11, fontWeight: 700, padding: "6px 12px", cursor: "pointer", fontFamily: "inherit" }}
-          >
-            Full matchup & analysis →
-          </button>
-        </div>
-      )}
     </div>
   );
 }
@@ -239,18 +206,18 @@ function TeamLine({ t, showScore }) {
   );
 }
 
-function Detail({ detail, meta }) {
+// Box score (innings/quarters line score + player stat lines). Exported so the
+// full matchup page (GameDetail) can render the exact same component.
+export function BoxScore({ detail }) {
   const ls = detail.lineScore || [];
   const players = detail.players || [];
   const maxPeriods = Math.max(0, ...ls.map((r) => r.periods.length));
 
-  // group players by team, drop DNPs to keep it readable
   const teams = {};
   for (const p of players) {
     if (p.didNotPlay) continue;
     (teams[p.team] ||= []).push(p);
   }
-  // choose a compact set of stat columns to show
   const COLS = {
     nba: ["MIN", "PTS", "REB", "AST"],
     mlb: ["AB", "R", "H", "RBI"],
@@ -259,7 +226,6 @@ function Detail({ detail, meta }) {
 
   return (
     <div>
-      {/* line score */}
       {ls.length > 0 && maxPeriods > 0 && (
         <div style={{ overflowX: "auto", marginBottom: 14 }}>
           <table style={{ borderCollapse: "collapse", fontSize: 12, width: "100%" }}>
@@ -287,10 +253,8 @@ function Detail({ detail, meta }) {
         </div>
       )}
 
-      {/* player stats per team */}
       {Object.keys(teams).map((teamAbbrev) => {
         const roster = teams[teamAbbrev];
-        // figure out which of the wanted columns actually exist in the data
         const cols = wanted.filter((c) => roster[0] && roster[0].stats[c] !== undefined);
         const showCols = cols.length ? cols : (roster[0]?.columns || []).slice(0, 4);
         return (
