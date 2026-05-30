@@ -28,12 +28,6 @@ export default function Sidebar({ user, plan, signOut, navigate }) {
         label="Edges"
       />
       <NavLink
-        to="/live"
-        active={isActive("/live")}
-        icon="🔴"
-        label="Live edges"
-      />
-      <NavLink
         to="/performance"
         active={isActive("/performance")}
         icon="📈"
