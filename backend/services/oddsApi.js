@@ -71,6 +71,10 @@ function parseMainOddsEvent(ev) {
   const h2h = { away: null, home: null, awayBook: null, homeBook: null };
   const totals = { line: null, over: null, under: null, overBook: null, underBook: null };
 
+  // Collect every totals quote across books first, so we can pick the consensus
+  // line and then the best price AT that line (keeps over/under on the same number).
+  const totalsQuotes = []; // { line, over, overBook, under, underBook }
+
   for (const bm of ev.bookmakers || []) {
     if (!PREFERRED_BOOKS_MAIN.includes(bm.key)) continue;
     for (const m of bm.markets || []) {
@@ -85,15 +89,34 @@ function parseMainOddsEvent(ev) {
           h2h.home = homeOutcome.price;
           h2h.homeBook = bm.title;
         }
-      } else if (m.key === "totals") {
-        if (totals.line == null && m.outcomes?.length >= 2) {
-          totals.line = m.outcomes[0].point;
-          const over = m.outcomes.find(o => o.name === "Over");
-          const under = m.outcomes.find(o => o.name === "Under");
-          if (over) { totals.over = over.price; totals.overBook = bm.title; }
-          if (under) { totals.under = under.price; totals.underBook = bm.title; }
+      } else if (m.key === "totals" && m.outcomes?.length >= 2) {
+        const over = m.outcomes.find(o => o.name === "Over");
+        const under = m.outcomes.find(o => o.name === "Under");
+        if (over && under && over.point != null) {
+          totalsQuotes.push({
+            line: over.point,
+            over: over.price, overBook: bm.title,
+            under: under.price, underBook: bm.title,
+          });
         }
       }
+    }
+  }
+
+  // Pick the consensus (most common) totals line, then the best over & best under
+  // offered AT that line. This shops for price the way moneyline does, but keeps
+  // both sides anchored to one line (avoids comparing the model to mismatched lines).
+  if (totalsQuotes.length > 0) {
+    const lineCounts = {};
+    for (const q of totalsQuotes) lineCounts[q.line] = (lineCounts[q.line] || 0) + 1;
+    const consensusLine = Number(
+      Object.entries(lineCounts).sort((a, b) => b[1] - a[1])[0][0]
+    );
+    totals.line = consensusLine;
+    for (const q of totalsQuotes) {
+      if (q.line !== consensusLine) continue;
+      if (totals.over == null || q.over > totals.over) { totals.over = q.over; totals.overBook = q.overBook; }
+      if (totals.under == null || q.under > totals.under) { totals.under = q.under; totals.underBook = q.underBook; }
     }
   }
 
