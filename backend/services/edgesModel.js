@@ -319,6 +319,10 @@ async function calculateGameEdges(game, oddsForGame) {
       venue: game.venue,
       parkHRFactor: game.parkHRFactor,
       parkRunFactor: game.parkRunFactor,
+      lineups: {
+        away: { source: awayLineup.source, ops: awayLineupOff?.ops ?? null, batters: awayLineupOff?.batters ?? 0 },
+        home: { source: homeLineup.source, ops: homeLineupOff?.ops ?? null, batters: homeLineupOff?.batters ?? 0 },
+      },
     },
     pitchers: {
       away: game.awayProbable ? {
@@ -344,10 +348,6 @@ async function calculateGameEdges(game, oddsForGame) {
       homeMult: round3(homeHandMult),
       awayVsHand: homePitcherHand,
       homeVsHand: awayPitcherHand,
-    },
-    lineups: {
-      away: { source: awayLineup.source, ops: awayLineupOff?.ops ?? null, batters: awayLineupOff?.batters ?? 0 },
-      home: { source: homeLineup.source, ops: homeLineupOff?.ops ?? null, batters: homeLineupOff?.batters ?? 0 },
     },
     moneyline: {
       awayWinProb: ml.awayWinProb,
