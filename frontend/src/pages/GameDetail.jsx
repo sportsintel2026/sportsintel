@@ -121,7 +121,7 @@ function GameDetail({ game, hrProps, hasFullAccess, navigate }) {
     <div style={{ animation: "fadeIn .3s ease" }}>
       <GameHeader game={game} isLive={isLive} isFinal={isFinal} />
       <LiveScoreHeader gameId={game.id} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} league="mlb" />
-      <TeamForm awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} awayName={game.away} homeName={game.home} league="mlb" />
+      <TeamForm gameId={game.id} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} awayName={game.away} homeName={game.home} league="mlb" />
       {isLive && <LiveWarningBanner />}
       {isFinal && <FinalBanner game={game} />}
       {bestEdge && !isFinal && <BestEdgeCard edge={bestEdge} game={game} hasFullAccess={hasFullAccess} navigate={navigate} />}
@@ -138,9 +138,10 @@ function GameDetail({ game, hrProps, hasFullAccess, navigate }) {
 
 // Team form: current streak, last 10 games, record + run differential for both
 // teams. Pulled from the standings feed and matched by team abbreviation.
-function TeamForm({ awayAbbr, homeAbbr, awayName, homeName, league = "mlb" }) {
+function TeamForm({ gameId, awayAbbr, homeAbbr, awayName, homeName, league = "mlb" }) {
   const [standings, setStandings] = useState(null);
   const [failed, setFailed] = useState(false);
+  const [series, setSeries] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -150,14 +151,41 @@ function TeamForm({ awayAbbr, homeAbbr, awayName, homeName, league = "mlb" }) {
     return () => { cancelled = true; };
   }, [league]);
 
+  // Resolve this game in the scores feed (to get its ESPN id), then fetch its
+  // detail for the current series record ("ATL leads series 1-0").
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const scores = await scoresApi.getScores(league);
+        const all = [...(scores.live || []), ...(scores.upcoming || []), ...(scores.final || [])];
+        const m = all.find((g) => String(g.detailId) === String(gameId));
+        if (!m) return;
+        const detail = await scoresApi.getGameDetail(league, m.id);
+        if (!cancelled && detail && detail.series && detail.series.summary) setSeries(detail.series);
+      } catch (_) { /* no series → just don't show it */ }
+    })();
+    return () => { cancelled = true; };
+  }, [gameId, league]);
+
   if (failed) return null;          // quietly hide if standings unavailable
   const a = standings ? standings[String(awayAbbr).toUpperCase()] : null;
   const h = standings ? standings[String(homeAbbr).toUpperCase()] : null;
-  if (standings && !a && !h) return null; // no match → hide rather than show empty
+  if (standings && !a && !h && !series) return null; // nothing to show
 
   return (
     <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 20, marginBottom: 18 }}>
       <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 16 }}>📈 Team form</div>
+
+      {/* current series record */}
+      {series && series.summary && (
+        <div style={{ background: "#0a0e14", border: "1px solid #1f2937", borderRadius: 8, padding: "10px 14px", marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 14 }}>🆚</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: "#e4e7eb" }}>{series.summary}</span>
+          {series.totalGames ? <span style={{ fontSize: 11, color: "#6b7280" }}>· {series.totalGames}-game series</span> : null}
+        </div>
+      )}
+
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <FormCard abbr={awayAbbr} name={awayName} side="AWAY" form={a} loading={!standings} />
         <FormCard abbr={homeAbbr} name={homeName} side="HOME" form={h} loading={!standings} />
