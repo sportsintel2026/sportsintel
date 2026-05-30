@@ -30,6 +30,10 @@ export const edgesApi = {
   getMLB: () => apiFetch("/api/edges/mlb"),
   clearCache: () => apiFetch("/api/edges/cache", { method: "DELETE" }),
 };
+// Live in-game win probability + moneyline edge
+export const liveApi = {
+  getMLB: () => apiFetch("/api/live/mlb"),
+};
 // NEW — live scores (MLB + NBA): lists + per-game detail (innings/quarters + player stats)
 export const scoresApi = {
   getScores: (league) => apiFetch(`/api/scores/${league}`),
