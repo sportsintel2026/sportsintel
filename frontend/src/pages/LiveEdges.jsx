@@ -104,7 +104,7 @@ export default function LiveEdgesPage() {
 }
 
 function LiveGameCard({ g }) {
-  const bestEdge = Math.max(Math.abs(g.awayEdge ?? 0), Math.abs(g.homeEdge ?? 0));
+  const bestEdge = Math.max(Math.abs(g.awayEdge ?? 0), Math.abs(g.homeEdge ?? 0), Math.abs(g.overEdge ?? 0), Math.abs(g.underEdge ?? 0));
   const hasEdge = bestEdge >= 0.03; // 3%+ worth highlighting
   return (
     <div style={{ background: "#0f1419", border: `1px solid ${hasEdge ? "#22c55e44" : "#1f2937"}`, borderRadius: 12, padding: 18, animation: "fadeIn .3s ease" }}>
@@ -119,12 +119,40 @@ function LiveGameCard({ g }) {
         <span style={{ fontSize: 11, color: "#6b7280" }}>{g.awayAbbr} {g.awayScore} – {g.homeScore} {g.homeAbbr}</span>
       </div>
 
-      <div className="two-col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        <TeamLine side="AWAY" abbr={g.awayAbbr} score={g.awayScore} winProb={g.awayWinProb} odds={g.awayOdds} edge={g.awayEdge} />
-        <TeamLine side="HOME" abbr={g.homeAbbr} score={g.homeScore} winProb={g.homeWinProb} odds={g.homeOdds} edge={g.homeEdge} />
+      {/* MONEYLINE */}
+      <SectionLabel>💰 Moneyline</SectionLabel>
+      <div className="two-col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
+        <TeamLine side="AWAY" abbr={g.awayAbbr} winProb={g.awayWinProb} odds={g.awayOdds} edge={g.awayEdge} />
+        <TeamLine side="HOME" abbr={g.homeAbbr} winProb={g.homeWinProb} odds={g.homeOdds} edge={g.homeEdge} />
       </div>
+
+      {/* OVER / UNDER */}
+      {g.totalLine != null && (
+        <>
+          <SectionLabel>📊 Total {g.totalLine} · proj {g.projectedTotal}</SectionLabel>
+          <div className="two-col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
+            <TeamLine side="OVER" abbr={`O ${g.totalLine}`} winProb={g.overProb} odds={g.overOdds} edge={g.overEdge} />
+            <TeamLine side="UNDER" abbr={`U ${g.totalLine}`} winProb={g.underProb} odds={g.underOdds} edge={g.underEdge} />
+          </div>
+        </>
+      )}
+
+      {/* RUN LINE (probability only for now) */}
+      {(g.homeRunLineProb != null || g.awayRunLineProb != null) && (
+        <>
+          <SectionLabel>📐 Run line ±1.5 · model probability</SectionLabel>
+          <div className="two-col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <TeamLine side={`${g.awayAbbr} -1.5`} abbr={`${g.awayAbbr} -1.5`} winProb={g.awayRunLineProb} odds={null} edge={null} />
+            <TeamLine side={`${g.homeAbbr} -1.5`} abbr={`${g.homeAbbr} -1.5`} winProb={g.homeRunLineProb} odds={null} edge={null} />
+          </div>
+        </>
+      )}
     </div>
   );
+}
+
+function SectionLabel({ children }) {
+  return <div style={{ fontSize: 10, letterSpacing: "0.08em", color: "#9ca3af", fontWeight: 700, textTransform: "uppercase", marginBottom: 8 }}>{children}</div>;
 }
 
 function TeamLine({ side, abbr, score, winProb, odds, edge }) {
@@ -137,7 +165,7 @@ function TeamLine({ side, abbr, score, winProb, odds, edge }) {
         {abbr} {odds != null ? <span style={{ fontSize: 12, color: "#6b7280", fontWeight: 500 }}>· {odds > 0 ? `+${odds}` : odds}</span> : null}
       </div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
-        <span style={{ fontSize: 11, color: "#6b7280" }}>Our win %</span>
+        <span style={{ fontSize: 11, color: "#6b7280" }}>Our prob</span>
         <span style={{ fontSize: 18, fontWeight: 800, color: "#22c55e" }}>{winProb != null ? `${Math.round(winProb * 100)}%` : "—"}</span>
       </div>
       {showEdge && (
