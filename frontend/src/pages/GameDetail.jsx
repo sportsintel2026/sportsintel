@@ -689,10 +689,10 @@ function LiveEdgeCards({ gameId, awayAbbr, homeAbbr }) {
 
       {(g.homeRunLineProb != null || g.awayRunLineProb != null) && (
         <>
-          <div style={{ fontSize: 10, color: "#9ca3af", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 8 }}>📐 Run line ±1.5 · model probability</div>
+          <div style={{ fontSize: 10, color: "#9ca3af", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 8 }}>📐 Run line ±1.5</div>
           <div className="two-col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            {row(`${awayAbbr} -1.5`, g.awayRunLineProb, null, null)}
-            {row(`${homeAbbr} -1.5`, g.homeRunLineProb, null, null)}
+            {row(`${awayAbbr} ${fmtLine(g.rlLine != null ? -g.rlLine : 1.5)}`, g.awayRLCoverProb ?? g.awayRunLineProb, g.awayRLOdds, g.awayRLEdge)}
+            {row(`${homeAbbr} ${fmtLine(g.rlLine ?? -1.5)}`, g.homeRLCoverProb ?? g.homeRunLineProb, g.homeRLOdds, g.homeRLEdge)}
           </div>
         </>
       )}
@@ -934,6 +934,11 @@ function ConfidenceBadge({ conf }) {
 function formatOdds(american) {
   if (american == null) return "—";
   return american > 0 ? `+${american}` : `${american}`;
+}
+
+function fmtLine(n) {
+  if (n == null) return "";
+  return n > 0 ? `+${n}` : `${n}`;
 }
 
 const ctaBtnStyle = { background: "#ef4444", color: "#fff", border: "none", borderRadius: 6, padding: "8px 16px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" };
