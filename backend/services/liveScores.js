@@ -133,18 +133,25 @@ async function getScores(league) {
   const hit = cacheGet(ck);
   if (hit) return hit;
 
-  // Default scoreboard day.
+  // Default scoreboard day (ESPN decides which day this is).
   let games = await fetchScoreboardDay(league);
   let rolled = false;
 
-  // ROLLOVER: if every game is final (or there are none), show TOMORROW's slate
-  // so the page stays useful after the day's games finish. Mirrors the Edges page.
-  const anyNotFinal = games.some((g) => g.bucket !== "final");
-  if (games.length === 0 || !anyNotFinal) {
-    try {
-      const tomorrow = await fetchScoreboardDay(league, espnDateStr(1));
-      if (tomorrow.length > 0) { games = tomorrow; rolled = true; }
-    } catch (_) { /* keep today's (all-final) slate if tomorrow fetch fails */ }
+  // A day is "useful" if it has at least one game that isn't already final.
+  const hasPlayable = (arr) => Array.isArray(arr) && arr.length > 0 && arr.some((g) => g.bucket !== "final");
+
+  // ROLLOVER: if the default day has nothing playable (e.g. late at night ESPN
+  // still returns yesterday's finished slate), step forward ONE DAY AT A TIME
+  // starting from TODAY (ET) — so we land on today's real slate first and only
+  // advance to tomorrow if today is empty/all-final. This keeps the scores list
+  // on the same day the model/edges feed is using, so games link up correctly.
+  if (!hasPlayable(games)) {
+    for (let off = 0; off <= 3; off++) {
+      try {
+        const day = await fetchScoreboardDay(league, espnDateStr(off));
+        if (hasPlayable(day)) { games = day; rolled = off > 0; break; }
+      } catch (_) { /* try the next day */ }
+    }
   }
 
   const out = {
