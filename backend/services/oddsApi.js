@@ -53,7 +53,7 @@ async function getMLBMainOdds() {
   try {
     const data = await oddsGet("/sports/baseball_mlb/odds", {
       regions: "us",
-      markets: "h2h,totals",
+      markets: "h2h,totals,spreads",
       oddsFormat: "american",
       dateFormat: "iso",
     });
@@ -70,6 +70,9 @@ async function getMLBMainOdds() {
 function parseMainOddsEvent(ev) {
   const h2h = { away: null, home: null, awayBook: null, homeBook: null };
   const totals = { line: null, over: null, under: null, overBook: null, underBook: null };
+  // Run line (spreads). MLB run line is ~always ±1.5. We capture the best price
+  // for the away and home sides AT the 1.5 line (away point +/-1.5, home point -/+1.5).
+  const spreads = { awayLine: null, away: null, awayBook: null, homeLine: null, home: null, homeBook: null };
 
   // Collect every totals quote across books first, so we can pick the consensus
   // line and then the best price AT that line (keeps over/under on the same number).
@@ -99,6 +102,20 @@ function parseMainOddsEvent(ev) {
             under: under.price, underBook: bm.title,
           });
         }
+      } else if (m.key === "spreads" && m.outcomes?.length >= 2) {
+        // Run line: take the standard ±1.5 outcomes for each team, best price.
+        const awayOutcome = m.outcomes.find(o => o.name === ev.away_team && Math.abs(o.point) === 1.5);
+        const homeOutcome = m.outcomes.find(o => o.name === ev.home_team && Math.abs(o.point) === 1.5);
+        if (awayOutcome && (spreads.away == null || awayOutcome.price > spreads.away)) {
+          spreads.away = awayOutcome.price;
+          spreads.awayLine = awayOutcome.point;
+          spreads.awayBook = bm.title;
+        }
+        if (homeOutcome && (spreads.home == null || homeOutcome.price > spreads.home)) {
+          spreads.home = homeOutcome.price;
+          spreads.homeLine = homeOutcome.point;
+          spreads.homeBook = bm.title;
+        }
       }
     }
   }
@@ -127,6 +144,7 @@ function parseMainOddsEvent(ev) {
     awayTeam: ev.away_team,
     h2h,
     totals,
+    spreads,
   };
 }
 
