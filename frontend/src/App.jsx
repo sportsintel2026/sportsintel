@@ -15,7 +15,6 @@ import MyPicksPage from "./pages/MyPicks";
 import NBAPage from "./pages/NBA";
 import NBADetailPage from "./pages/NBADetail";
 import LiveScoresPage from "./pages/LiveScores";
-import LiveEdgesPage from "./pages/LiveEdges";
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth();
   if (loading) return <LoadingScreen />;
@@ -50,11 +49,6 @@ export default function App() {
           <Route path="/dashboard" element={
             <PrivateRoute>
               <DashboardPage />
-            </PrivateRoute>
-          } />
-          <Route path="/live" element={
-            <PrivateRoute>
-              <LiveEdgesPage />
             </PrivateRoute>
           } />
           <Route path="/games" element={
