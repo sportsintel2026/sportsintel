@@ -114,7 +114,7 @@ export default function LiveScoresPage({ league = "mlb" }) {
 
           {loading && <Loader />}
           {!loading && error && <ErrorState onRetry={() => load(true)} />}
-          {!loading && !error && total === 0 && <EmptyState icon={meta.icon} />}
+          {!loading && !error && total === 0 && <EmptyState icon={meta.icon} league={league} />}
           {!loading && !error && total > 0 && (
             <>
               {live.length > 0 && (
@@ -370,12 +370,44 @@ function ErrorState({ onRetry }) {
     </div>
   );
 }
-function EmptyState({ icon }) {
+function EmptyState({ icon, league }) {
+  const offSeason = getOffSeason(league);
+  if (offSeason) {
+    return (
+      <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 8, padding: 48, textAlign: "center" }}>
+        <div style={{ fontSize: 48, marginBottom: 16 }}>{icon}</div>
+        <div style={{ fontSize: 16, fontWeight: 700 }}>Off season</div>
+        <div style={{ fontSize: 13, color: "#9ca3af", marginTop: 6 }}>{offSeason}</div>
+      </div>
+    );
+  }
   return (
     <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 8, padding: 48, textAlign: "center" }}>
       <div style={{ fontSize: 48, marginBottom: 16 }}>{icon}</div>
-      <div style={{ fontSize: 16, fontWeight: 700 }}>No games scheduled</div>
+      <div style={{ fontSize: 16, fontWeight: 700 }}>No games scheduled today</div>
       <div style={{ fontSize: 13, color: "#9ca3af", marginTop: 6 }}>Check back when the next slate is posted.</div>
     </div>
   );
+}
+
+// Returns an off-season message if `league` is out of season right now, else null.
+// Season windows are approximate (regular season + postseason):
+//   MLB: late March → end of October   → off-season Nov 1 – ~Mar 20
+//   NBA: mid-October → mid/late June    → off-season ~Jun 25 – mid-Oct
+function getOffSeason(league) {
+  const now = new Date();
+  const m = now.getMonth(); // 0=Jan … 11=Dec
+  const d = now.getDate();
+  const lg = (league || "").toLowerCase();
+  if (lg === "mlb") {
+    // Off-season: Nov, Dec, Jan, Feb, and March before ~the 20th
+    const off = m === 10 || m === 11 || m === 0 || m === 1 || (m === 2 && d < 20);
+    return off ? "MLB returns in late March for Opening Day." : null;
+  }
+  if (lg === "nba") {
+    // Off-season: late June (after ~the 25th) through mid-October (before ~the 18th)
+    const off = (m === 5 && d > 25) || m === 6 || m === 7 || m === 8 || (m === 9 && d < 18);
+    return off ? "The NBA returns in October for the new season." : null;
+  }
+  return null;
 }
