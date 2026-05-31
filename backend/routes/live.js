@@ -125,12 +125,33 @@ router.get("/mlb", async (req, res) => {
       }
 
       // ── Run line edge (±1.5) ──
-      // Live run-line odds aren't on the main odds call (h2h/totals only), so we
-      // can't de-vig against a book price yet. We surface our model run-line
-      // PROBABILITY (home/away to cover -1.5); the edge vs book is left null until
-      // we add a run-line (spreads) odds fetch. Honest: prob shown, edge pending.
+      // Now that the odds call includes spreads, de-vig the book's run line and
+      // compare to our model cover probability. The two run-line sides (away ±1.5
+      // and home ∓1.5) form a two-way market we can de-vig against each other.
       const homeRunLineProb = wp.homeRunLineProb;
       const awayRunLineProb = wp.awayRunLineProb;
+      let homeRLEdge = null, awayRLEdge = null, homeRLOdds = null, awayRLOdds = null, rlLine = null;
+      let homeRLCoverProb = homeRunLineProb, awayRLCoverProb = awayRunLineProb;
+      if (odds?.spreads?.away != null && odds?.spreads?.home != null) {
+        awayRLOdds = odds.spreads.away; homeRLOdds = odds.spreads.home;
+        rlLine = odds.spreads.homeLine; // home's line, e.g. -1.5 or +1.5
+        const fairAwayRL = devigTwoWay(awayRLOdds, homeRLOdds);
+        const fairHomeRL = devigTwoWay(homeRLOdds, awayRLOdds);
+        const homeIsFav = (odds.spreads.homeLine ?? 0) < 0;
+        if (homeIsFav) {
+          // home -1.5 → our P(home win by 2+); away +1.5 → 1 - that
+          homeRLCoverProb = homeRunLineProb;
+          awayRLCoverProb = round3(1 - homeRunLineProb);
+          if (fairHomeRL != null) homeRLEdge = round3(homeRLCoverProb - fairHomeRL);
+          if (fairAwayRL != null) awayRLEdge = round3(awayRLCoverProb - fairAwayRL);
+        } else {
+          // away -1.5 → our P(away win by 2+); home +1.5 → 1 - that
+          awayRLCoverProb = awayRunLineProb;
+          homeRLCoverProb = round3(1 - awayRunLineProb);
+          if (fairAwayRL != null) awayRLEdge = round3(awayRLCoverProb - fairAwayRL);
+          if (fairHomeRL != null) homeRLEdge = round3(homeRLCoverProb - fairHomeRL);
+        }
+      }
 
       games.push({
         gameId: g.id,
@@ -146,8 +167,10 @@ router.get("/mlb", async (req, res) => {
         totalLine: liveTotalLine, projectedTotal: wp.projectedTotal,
         overProb: wp.overProb, underProb: wp.underProb,
         overOdds, underOdds, overEdge, underEdge,
-        // run line (probability only for now)
+        // run line (probability + edge vs de-vigged book line)
         homeRunLineProb, awayRunLineProb,
+        homeRLCoverProb, awayRLCoverProb,
+        homeRLOdds, awayRLOdds, homeRLEdge, awayRLEdge, rlLine,
         pitcherAdj: wp.pitcherAdj,
       });
     }
