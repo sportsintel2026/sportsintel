@@ -115,7 +115,7 @@ app.use((err, req, res, next) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 SportsIntel API running on port ${PORT}`);
+  console.log(`🚀 WizePicks API running on port ${PORT}`);
 });
 
 module.exports = app;
