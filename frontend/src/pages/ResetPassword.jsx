@@ -8,7 +8,22 @@ export default function ResetPasswordPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [ready, setReady] = useState(false);
   const navigate = useNavigate();
+
+  // Confirm there is an active recovery session before allowing a password change.
+  // When the user arrives from the email link, Supabase establishes a temporary
+  // session; we verify it exists so the update will succeed.
+  useEffect(() => {
+    let active = true;
+    supabase.auth.getSession().then(({ data }) => {
+      if (active) setReady(!!data?.session);
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "PASSWORD_RECOVERY" || session) setReady(true);
+    });
+    return () => { active = false; sub?.subscription?.unsubscribe?.(); };
+  }, []);
 
   const handleReset = async () => {
     if (!password || !confirm) return setError("Please fill in all fields");
@@ -44,12 +59,17 @@ export default function ResetPasswordPage() {
       <div style={{width:"100%",maxWidth:400}}>
         <div style={{textAlign:"center",marginBottom:36}}>
           <Link to="/" style={{textDecoration:"none"}}>
-            <span style={{fontFamily:"'Barlow Condensed'",fontSize:26,fontWeight:800,color:"#fff",letterSpacing:"0.1em"}}>SPORTSINTEL</span>
+            <span style={{fontFamily:"'Barlow Condensed'",fontSize:26,fontWeight:800,color:"#fff",letterSpacing:"0.1em"}}>WIZE<span style={{color:"#ef4444"}}>PICKS</span></span>
           </Link>
           <div style={{fontSize:22,fontWeight:800,color:"#fff",marginTop:24,marginBottom:8}}>Set New Password</div>
           <div style={{fontSize:14,color:"#64748b"}}>Enter your new password below</div>
         </div>
         <div style={{background:"#0d0d1a",border:"1px solid #1e2235",borderRadius:16,padding:32}}>
+          {!ready && (
+            <div style={{background:"#3b82f620",border:"1px solid #3b82f640",borderRadius:8,padding:"10px 14px",fontSize:13,color:"#93c5fd",marginBottom:16}}>
+              Verifying your reset link... If this doesn't clear, request a new link from the sign-in page.
+            </div>
+          )}
           <div style={{marginBottom:16}}>
             <label style={{display:"block",fontSize:12,fontWeight:600,color:"#64748b",marginBottom:6,textTransform:"uppercase"}}>New Password</label>
             <input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Min. 8 characters"
