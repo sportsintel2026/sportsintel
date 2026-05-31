@@ -7,9 +7,11 @@
 //
 // STAGE 1: moneyline only.
 //
-// Credit awareness: live odds are fetched ONCE per request (one getMLBMainOdds
-// call covers all games, ~2 credits) and the whole response is cached 60s, so a
-// page polling every 60s costs ~2 credits/min only while games are live.
+// Credit awareness: live odds come from getMLBLiveOdds() (one call covers all
+// games: h2h+totals+spreads = 3 credits) on a 5-MINUTE cache, so live odds cost
+// ~3 credits every 5 min (~36 credits/hr) ONLY while games are live. The route's
+// own response is cached 60s and the frontend polls every 60s; game STATE thus
+// updates each minute while the de-vig lines refresh every 5 min.
 
 const express = require("express");
 const router = express.Router();
@@ -18,7 +20,7 @@ const {
   getScheduleForDate,
   getLiveGameState,
 } = require("../services/mlbStatsApi");
-const { getMLBMainOdds, americanToImpliedProb } = require("../services/oddsApi");
+const { getMLBLiveOdds, americanToImpliedProb } = require("../services/oddsApi");
 const { devigTwoWay } = require("../services/edgesModel");
 const { computeLiveWinProb } = require("../services/liveModel");
 
@@ -85,7 +87,7 @@ router.get("/mlb", async (req, res) => {
 
     // One odds fetch covers all games (live odds included on this endpoint).
     let oddsEvents = [];
-    try { oddsEvents = await getMLBMainOdds(); } catch (e) { /* proceed without */ }
+    try { oddsEvents = await getMLBLiveOdds(); } catch (e) { /* proceed without */ }
 
     const games = [];
     let feedNull = 0, notLive = 0;
