@@ -79,45 +79,55 @@ const EDGES_MLB = (process.env.SELF_API_BASE || "https://sportsintel-production.
 
 const nick = (s) => String(s || "").trim().split(/\s+/).pop().toLowerCase();
 
-async function mlbBackendIdMap() {
+// Fetch the model's MLB edges feed once. Returns the parsed object
+// ({ date: "YYYY-MM-DD", games: [...] }) or null. Used for two things:
+//   1) the DATE the model is currently serving, so the scores list can align to
+//      the exact same day (this is the safety net against day-drift), and
+//   2) the id map that links each ESPN game to its backend game id.
+async function fetchEdgesMLB() {
   try {
     const res = await fetch(EDGES_MLB);
-    if (!res.ok) return {};
-    const data = await res.json();
-    const map = {};
-    for (const g of data.games || []) {
-      // key by "away|home" nicknames (last word of full team name) -> backend id
-      const key = `${nick(g.away)}|${nick(g.home)}`;
-      map[key] = String(g.id);
-    }
-    return map;
+    if (!res.ok) return null;
+    return await res.json();
   } catch (_) {
-    return {};
+    return null;
   }
 }
 
-// Fetch + parse one scoreboard day (optionally for a specific YYYYMMDD date).
-async function fetchScoreboardDay(league, dateStr) {
+// Build a "away|home" nickname -> backend game id map from the edges feed.
+function buildIdMap(edges) {
+  const map = {};
+  for (const g of (edges && edges.games) || []) {
+    map[`${nick(g.away)}|${nick(g.home)}`] = String(g.id);
+  }
+  return map;
+}
+
+// Fetch + parse one scoreboard day (optionally a specific YYYYMMDD). No detailId.
+async function fetchScoreboardRaw(league, dateStr) {
   const res = await fetch(SCOREBOARD(league, dateStr));
   if (!res.ok) throw new Error("espn scoreboard " + res.status);
   const json = await res.json();
-  const games = (json.events || []).map((e) => {
+  return (json.events || []).map((e) => {
     const g = parseEvent(e);
     g.league = league;
     return g;
   });
-  // attach detailId per league
-  if (league === "nba") {
+}
+
+// Attach detailId — the id the detail page resolves a game by. MLB links via the
+// model id map (by team nicknames); other leagues use ESPN's own id.
+function attachDetailIds(league, games, idMap) {
+  if (league === "mlb") {
+    for (const g of games) g.detailId = (idMap && idMap[`${nick(g.away.name)}|${nick(g.home.name)}`]) || null;
+  } else {
     for (const g of games) g.detailId = g.id;
-  } else if (league === "mlb") {
-    const idMap = await mlbBackendIdMap();
-    for (const g of games) {
-      const key = `${nick(g.away.name)}|${nick(g.home.name)}`;
-      g.detailId = idMap[key] || null;
-    }
   }
   return games;
 }
+
+// A day is "useful" if it has at least one game that isn't already final.
+const hasPlayable = (arr) => Array.isArray(arr) && arr.length > 0 && arr.some((g) => g.bucket !== "final");
 
 // ET date as YYYYMMDD (ESPN scoreboard's ?dates= format), offset in days.
 function espnDateStr(offsetDays = 0) {
@@ -133,24 +143,47 @@ async function getScores(league) {
   const hit = cacheGet(ck);
   if (hit) return hit;
 
-  // Default scoreboard day (ESPN decides which day this is).
-  let games = await fetchScoreboardDay(league);
+  let games = [];
   let rolled = false;
 
-  // A day is "useful" if it has at least one game that isn't already final.
-  const hasPlayable = (arr) => Array.isArray(arr) && arr.length > 0 && arr.some((g) => g.bucket !== "final");
+  if (league === "mlb") {
+    // SAFETY NET: align the scores list to the SAME day the model is serving, so
+    // the list and the model can never drift onto different days (the thing that
+    // silently breaks game links). Read the model's date + id map once.
+    const edges = await fetchEdgesMLB();
+    const idMap = buildIdMap(edges);
+    const modelDateStr = edges && edges.date ? String(edges.date).replace(/-/g, "") : null;
 
-  // ROLLOVER: if the default day has nothing playable (e.g. late at night ESPN
-  // still returns yesterday's finished slate), step forward ONE DAY AT A TIME
-  // starting from TODAY (ET) — so we land on today's real slate first and only
-  // advance to tomorrow if today is empty/all-final. This keeps the scores list
-  // on the same day the model/edges feed is using, so games link up correctly.
-  if (!hasPlayable(games)) {
-    for (let off = 0; off <= 3; off++) {
+    if (modelDateStr) {
       try {
-        const day = await fetchScoreboardDay(league, espnDateStr(off));
-        if (hasPlayable(day)) { games = day; rolled = off > 0; break; }
-      } catch (_) { /* try the next day */ }
+        games = attachDetailIds(league, await fetchScoreboardRaw(league, modelDateStr), idMap);
+      } catch (_) { games = []; }
+      rolled = modelDateStr !== espnDateStr(0);
+    }
+
+    // Fallback (no model date, or ESPN had nothing for that day): default day,
+    // then step forward from TODAY until we find a playable slate.
+    if (!games || games.length === 0) {
+      try { games = attachDetailIds(league, await fetchScoreboardRaw(league), idMap); } catch (_) { games = []; }
+      if (!hasPlayable(games)) {
+        for (let off = 0; off <= 3; off++) {
+          try {
+            const day = attachDetailIds(league, await fetchScoreboardRaw(league, espnDateStr(off)), idMap);
+            if (hasPlayable(day)) { games = day; rolled = off > 0; break; }
+          } catch (_) { /* try the next day */ }
+        }
+      }
+    }
+  } else {
+    // NBA (and any non-MLB): default day, then today-first rollover.
+    try { games = attachDetailIds(league, await fetchScoreboardRaw(league), null); } catch (_) { games = []; }
+    if (!hasPlayable(games)) {
+      for (let off = 0; off <= 3; off++) {
+        try {
+          const day = attachDetailIds(league, await fetchScoreboardRaw(league, espnDateStr(off)), null);
+          if (hasPlayable(day)) { games = day; rolled = off > 0; break; }
+        } catch (_) { /* try the next day */ }
+      }
     }
   }
 
