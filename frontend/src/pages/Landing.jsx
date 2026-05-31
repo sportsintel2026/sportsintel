@@ -39,7 +39,7 @@ export default function LandingPage() {
   const COMPETITORS = [
     { name: "Picks Sites", price: "$20–$100+/mo", desc: "Sell you picks. No data, no reasoning.", highlight: false },
     { name: "ESPN+", price: "$10.99/mo", desc: "Scores only. No model, no edges.", highlight: false },
-    { name: <>Edge<span style={{ color: "#1D9E75" }}> the </span>Lines</>, price: "$7/mo", desc: "A real model + the data behind every number.", highlight: true },
+    { name: "Edge the Lines", price: "$7/mo", desc: "A real model + the data behind every number.", highlight: true },
   ];
 
   // Sample cards for the blurred "look inside" preview — fake but realistic data,
@@ -302,7 +302,7 @@ export default function LandingPage() {
 
         {/* Responsible play note — also helps with payment processor trust */}
         <div style={{ background: "#0a0a14", border: "1px solid #1a1a2e", borderRadius: 12, padding: "16px 18px", marginBottom: 56, fontSize: 12, color: "#475569", lineHeight: 1.8 }}>
-          Edge<span style={{ color: "#1D9E75" }}> the </span>Lines provides <strong style={{ color: "#64748b" }}>sports data and statistical analysis for informational purposes only</strong>. We are not a sportsbook and do not accept wagers. There is no such thing as a guaranteed pick. Please bet responsibly and within your means. If gambling is a problem for you, call 1-800-GAMBLER.
+          Edge the Lines provides <strong style={{ color: "#64748b" }}>sports data and statistical analysis for informational purposes only</strong>. We are not a sportsbook and do not accept wagers. There is no such thing as a guaranteed pick. Please bet responsibly and within your means. If gambling is a problem for you, call 1-800-GAMBLER.
         </div>
 
         {/* Final CTA */}
@@ -329,7 +329,7 @@ export default function LandingPage() {
             <Link to="/login" style={{ fontSize: 12, color: "#334155" }}>Sign In</Link>
             <Link to="/signup" style={{ fontSize: 12, color: "#334155" }}>Sign Up</Link>
           </div>
-          <span style={{ fontSize: 11, color: "#1e2235" }}>© 2026 Edge<span style={{ color: "#1D9E75" }}> the </span>Lines</span>
+          <span style={{ fontSize: 11, color: "#1e2235" }}>© 2026 Edge the Lines</span>
         </div>
       </div>
     </div>
