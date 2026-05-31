@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-import { edgesApi, subscriptionApi, supabase } from "../lib/api";
+import { edgesApi, subscriptionApi } from "../lib/api";
 import Sidebar from "./Sidebar";
 
 const LEAGUES = [
@@ -19,7 +19,6 @@ export default function DashboardPage() {
   const [league, setLeague] = useState("mlb");
   const [edges, setEdges] = useState(null);
   const [edgesLoading, setEdgesLoading] = useState(true);
-  const [picks, setPicks] = useState([]);
   const [plan, setPlan] = useState({ tier: "free", isAdmin: false });
   const [drawerOpen, setDrawerOpen] = useState(false);
   const isAdmin = plan.isAdmin === true;
@@ -27,17 +26,6 @@ export default function DashboardPage() {
   const hasFullAccess = isAdmin || isPro;
 
   useEffect(() => { subscriptionApi.getMyPlan().then(setPlan).catch(() => {}); }, []);
-
-  useEffect(() => {
-    const loadPicks = async () => {
-      try {
-        const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
-        const { data } = await supabase.from("daily_picks").select("*").eq("date", today).maybeSingle();
-        if (data?.picks) setPicks(JSON.parse(data.picks));
-      } catch (e) {}
-    };
-    loadPicks();
-  }, []);
 
   const loadEdges = useCallback(async () => {
     if (league !== "mlb") { setEdges(null); setEdgesLoading(false); return; }
@@ -118,7 +106,7 @@ export default function DashboardPage() {
         <LeagueTabs league={league} setLeague={setLeague} navigate={navigate} />
         <div className="dashboard-content" style={{ maxWidth: 1200, margin: "0 auto", padding: "20px 24px 60px" }}>
           {league === "mlb" ? (
-            <MLBDashboard edges={edges} loading={edgesLoading} picks={picks} hasFullAccess={hasFullAccess} navigate={navigate} onRefresh={loadEdges} />
+            <MLBDashboard edges={edges} loading={edgesLoading} hasFullAccess={hasFullAccess} navigate={navigate} onRefresh={loadEdges} />
           ) : league === "nba" ? (
             <NBADashboard hasFullAccess={hasFullAccess} navigate={navigate} />
           ) : (
@@ -149,7 +137,7 @@ function LeagueTabs({ league, setLeague, navigate }) {
   );
 }
 
-function MLBDashboard({ edges, loading, picks, hasFullAccess, navigate, onRefresh }) {
+function MLBDashboard({ edges, loading, hasFullAccess, navigate, onRefresh }) {
   if (loading) return <Loader />;
   if (!edges) return <ErrorState onRetry={onRefresh} />;
   // Use the date the BACKEND actually served (it rolls over to tomorrow once all
@@ -177,7 +165,6 @@ function MLBDashboard({ edges, loading, picks, hasFullAccess, navigate, onRefres
       <p style={{ margin: "0 0 24px", fontSize: 13, color: "#9ca3af" }}>
         Model projections vs sportsbook lines · weather, batter vs pitcher history, recent form. <span style={{ color: "#ef4444", fontWeight: 600 }}>Click any game</span> for deep analysis.
       </p>
-      {picks.length > 0 && <EditorialBestBets picks={picks} hasFullAccess={hasFullAccess} navigate={navigate} />}
       <div className="edge-grid-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16, gridAutoRows: "1fr" }}>
         <EdgePanel title="Top moneyline edges" icon="💰" edges={edges.moneylineEdges || []} renderRow={(e) => <MoneylineRow edge={e} key={e.gameId + e.side} navigate={navigate} />} emptyText="No edges found in current slate" hasFullAccess={hasFullAccess} navigate={navigate} />
         <EdgePanel title="Top totals edges" icon="📊" edges={edges.totalsEdges || []} renderRow={(e) => <TotalsRow edge={e} key={e.gameId + e.side} navigate={navigate} />} emptyText="No edges found in current slate" hasFullAccess={hasFullAccess} navigate={navigate} />
@@ -194,38 +181,6 @@ function MLBDashboard({ edges, loading, picks, hasFullAccess, navigate, onRefres
         <button onClick={() => navigate("/games")} style={{ background: "#ef4444", color: "#fff", border: "none", borderRadius: 6, padding: "10px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}>
           View MLB Games →
         </button>
-      </div>
-    </div>
-  );
-}
-
-function EditorialBestBets({ picks, hasFullAccess, navigate }) {
-  return (
-    <div style={{ background: "linear-gradient(180deg,#1a1410 0%,#0f1419 100%)", border: "1px solid #ef444433", borderLeft: "3px solid #ef4444", borderRadius: 8, padding: "16px 20px", marginBottom: 20 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-        <span style={{ fontSize: 11, letterSpacing: 1, color: "#ef4444", fontWeight: 600 }}>🎯 TODAY'S BEST BETS · EDITORIAL</span>
-        <span style={{ fontSize: 11, color: "#6b7280" }}>{picks.length} pick{picks.length === 1 ? "" : "s"}</span>
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: `repeat(${Math.min(picks.length, 3)}, 1fr)`, gap: 12 }}>
-        {picks.map((p, i) => {
-          const locked = !hasFullAccess && i > 0;
-          return (
-            <div key={i} style={{ position: "relative", background: "#0f1419", borderRadius: 6, padding: 12, border: "1px solid #1f2937", overflow: "hidden" }}>
-              {locked && (
-                <div style={{ position: "absolute", inset: 0, backdropFilter: "blur(8px)", background: "#0a0e1499", zIndex: 2, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <button onClick={() => navigate("/pricing")} style={{ background: "#ef4444", color: "#fff", border: "none", borderRadius: 6, padding: "6px 14px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>🔒 Unlock — $7/mo</button>
-                </div>
-              )}
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                <ConfidenceBadge conf={p.confidence} />
-                <span style={{ fontSize: 11, color: "#6b7280" }}>{p.league}</span>
-              </div>
-              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 2 }}>{p.pick}</div>
-              <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 8 }}>{p.game} · {p.odds}</div>
-              <div style={{ fontSize: 11, color: "#9ca3af", lineHeight: 1.5 }}>{p.analysis}</div>
-            </div>
-          );
-        })}
       </div>
     </div>
   );
