@@ -25,8 +25,27 @@ const PORT = process.env.PORT || 4000;
 
 // ── Security ──────────────────────────────────────────────────────────────────
 app.use(helmet());
+// Allowed front-end origins. Includes the new WizePicks domain (with and without
+// www), the original Vercel domain (kept so it keeps working during the transition),
+// local dev, and an optional FRONTEND_URL env override. Requests with no origin
+// (server-to-server, health checks) are allowed through.
+const allowedOrigins = [
+  "https://wizepicks.com",
+  "https://www.wizepicks.com",
+  "https://sportsintel.vercel.app",
+  "http://localhost:5173",
+  "http://localhost:3000",
+];
+if (process.env.FRONTEND_URL && !allowedOrigins.includes(process.env.FRONTEND_URL)) {
+  allowedOrigins.push(process.env.FRONTEND_URL);
+}
 app.use(cors({
-  origin: process.env.FRONTEND_URL || "http://localhost:5173",
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error("Not allowed by CORS"));
+  },
   credentials: true,
 }));
 
