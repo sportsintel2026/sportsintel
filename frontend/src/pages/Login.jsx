@@ -10,7 +10,7 @@ function AuthLayout({ title, subtitle, children }) {
       <div style={{width:"100%",maxWidth:400}}>
         <div style={{textAlign:"center",marginBottom:36}}>
           <Link to="/" style={{textDecoration:"none"}}>
-            <span style={{fontFamily:"'Barlow Condensed'",fontSize:26,fontWeight:800,color:"#fff",letterSpacing:"0.1em"}}>SPORTSINTEL</span>
+            <span style={{fontFamily:"'Barlow Condensed'",fontSize:26,fontWeight:800,color:"#fff",letterSpacing:"0.1em"}}>WIZE<span style={{color:"#ef4444"}}>PICKS</span></span>
           </Link>
           <div style={{fontSize:22,fontWeight:800,color:"#fff",marginTop:24,marginBottom:8}}>{title}</div>
           <div style={{fontSize:14,color:"#64748b"}}>{subtitle}</div>
