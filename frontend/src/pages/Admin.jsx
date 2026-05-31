@@ -44,7 +44,6 @@ function fmtOdds(v) {
 export default function AdminPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [tab, setTab] = useState("daily"); // "daily" | "expert"
 
   useEffect(() => {
     if (user && user.email !== ADMIN_EMAIL) {
@@ -60,153 +59,17 @@ export default function AdminPage() {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
           <div>
             <div style={{ fontSize: 11, color: "#475569", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.08em" }}>Admin Panel</div>
-            <div style={{ fontSize: 22, fontWeight: 800, color: "#fff" }}>Picks Manager</div>
+            <div style={{ fontSize: 22, fontWeight: 800, color: "#fff" }}>Expert Picks Manager</div>
           </div>
           <a href="/dashboard" style={{ color: "#475569", textDecoration: "none", fontSize: 13 }}>← Dashboard</a>
         </div>
 
-        {/* Tabs */}
-        <div style={{ display: "flex", gap: 8, marginBottom: 24 }}>
-          <button onClick={() => setTab("daily")} style={tabBtn(tab === "daily")}>📊 Daily picks (dashboard)</button>
-          <button onClick={() => setTab("expert")} style={tabBtn(tab === "expert")}>🎯 Expert picks</button>
-        </div>
-
-        {tab === "daily" ? <DailyPicksManager /> : <ExpertPicksManager />}
+        <ExpertPicksManager />
       </div>
     </div>
   );
 }
 
-function tabBtn(active) {
-  return {
-    flex: 1,
-    background: active ? "#ef4444" : "#0a0a14",
-    color: active ? "#fff" : "#94a3b8",
-    border: `1px solid ${active ? "#ef4444" : "#1a1a2e"}`,
-    borderRadius: 10,
-    padding: "10px 14px",
-    fontSize: 13,
-    fontWeight: 700,
-    cursor: "pointer",
-    fontFamily: "inherit",
-  };
-}
-
-// ============================================================================
-// DAILY PICKS MANAGER — unchanged behavior; writes to daily_picks (dashboard).
-// ============================================================================
-function DailyPicksManager() {
-  const [picks, setPicks] = useState([
-    { league: "MLB", game: "", pick: "", odds: "", confidence: "HIGH", analysis: "" },
-    { league: "NBA", game: "", pick: "", odds: "", confidence: "HIGH", analysis: "" },
-    { league: "NFL", game: "", pick: "", odds: "", confidence: "MEDIUM", analysis: "" },
-  ]);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => { loadPicks(); }, []);
-
-  const loadPicks = async () => {
-    try {
-      const { data } = await supabase
-        .from("daily_picks")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .single();
-      if (data?.picks) setPicks(JSON.parse(data.picks));
-    } catch (e) {}
-    setLoading(false);
-  };
-
-  const savePicks = async () => {
-    setSaving(true);
-    try {
-      const today = new Date().toISOString().split("T")[0];
-      await supabase.from("daily_picks").upsert({
-        date: today,
-        picks: JSON.stringify(picks),
-        updated_at: new Date().toISOString(),
-      }, { onConflict: "date" });
-      setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
-    } catch (e) {
-      alert("Error saving picks: " + e.message);
-    }
-    setSaving(false);
-  };
-
-  const updatePick = (i, field, value) => {
-    const updated = [...picks];
-    updated[i] = { ...updated[i], [field]: value };
-    setPicks(updated);
-  };
-  const addPick = () => setPicks([...picks, { league: "MLB", game: "", pick: "", odds: "", confidence: "HIGH", analysis: "" }]);
-  const removePick = (i) => setPicks(picks.filter((_, j) => j !== i));
-
-  if (loading) return <div style={{ color: "#475569", fontSize: 13, padding: 20 }}>Loading...</div>;
-
-  return (
-    <div>
-      <div style={{ background: "#22c55e15", border: "1px solid #22c55e30", borderRadius: 12, padding: "12px 16px", marginBottom: 24, fontSize: 13, color: "#22c55e" }}>
-        ✓ These show in the "Today's Best Bets" box on your dashboard
-      </div>
-
-      <div style={{ display: "flex", flexDirection: "column", gap: 16, marginBottom: 24 }}>
-        {picks.map((p, i) => (
-          <div key={i} style={{ background: "#0a0a14", border: "1px solid #1a1a2e", borderRadius: 14, padding: 20 }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>Pick #{i + 1}</div>
-              <button onClick={() => removePick(i)} style={{ background: "none", border: "none", color: "#475569", cursor: "pointer", fontSize: 18, fontFamily: "inherit" }}>×</button>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
-              <div>
-                <Label>League</Label>
-                <select value={p.league} onChange={e => updatePick(i, "league", e.target.value)}>
-                  <option>MLB</option><option>NBA</option><option>NFL</option><option>NHL</option>
-                  <option>Soccer</option><option>MMA</option><option>Golf</option>
-                </select>
-              </div>
-              <div>
-                <Label>Confidence</Label>
-                <select value={p.confidence} onChange={e => updatePick(i, "confidence", e.target.value)}>
-                  <option>HIGH</option><option>MEDIUM</option><option>LOW</option>
-                </select>
-              </div>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
-              <div>
-                <Label>Game (e.g. Yankees vs Red Sox)</Label>
-                <input value={p.game} onChange={e => updatePick(i, "game", e.target.value)} placeholder="Team A vs Team B" />
-              </div>
-              <div>
-                <Label>Pick (e.g. Yankees -1.5)</Label>
-                <input value={p.pick} onChange={e => updatePick(i, "pick", e.target.value)} placeholder="Yankees -1.5" />
-              </div>
-            </div>
-            <div style={{ marginBottom: 12 }}>
-              <Label>Odds (e.g. -110)</Label>
-              <input value={p.odds} onChange={e => updatePick(i, "odds", e.target.value)} placeholder="-110" />
-            </div>
-            <div>
-              <Label>Analysis (why this pick?)</Label>
-              <textarea value={p.analysis} onChange={e => updatePick(i, "analysis", e.target.value)} placeholder="Explain why you like this pick..." rows={3} style={{ resize: "vertical" }} />
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div style={{ display: "flex", gap: 12, marginBottom: 32 }}>
-        <button onClick={addPick} style={ghostBtn}>+ Add Pick</button>
-        <button onClick={savePicks} disabled={saving}
-          style={{ background: saved ? "#22c55e" : "#ef4444", color: "#fff", border: "none", borderRadius: 10, padding: "10px 32px", fontSize: 14, fontWeight: 700, cursor: saving ? "wait" : "pointer", fontFamily: "inherit", flex: 1 }}>
-          {saving ? "Saving..." : (saved ? "✓ Saved!" : "Save & Publish Picks")}
-        </button>
-      </div>
-    </div>
-  );
-}
 
 // ============================================================================
 // EXPERT PICKS MANAGER — writes to expert_picks (the Expert picks page).
