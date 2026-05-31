@@ -140,7 +140,7 @@ function LeagueTabs({ league, setLeague, navigate }) {
             <button key={l.id} className="tab-btn" onClick={() => (l.path ? navigate(l.path) : setLeague(l.id))} style={{ background: "none", border: "none", padding: "14px 14px", fontSize: 13, fontWeight: active ? 700 : 500, color: active ? "#fff" : "#6b7280", borderBottom: `2px solid ${active ? "#ef4444" : "transparent"}`, marginBottom: -1, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 6 }}>
               <span>{l.icon}</span>
               <span>{l.label}</span>
-              {!l.live && <span style={{ fontSize: 9, color: "#4b5563", marginLeft: 2 }}>· Soon</span>}
+              {!l.live && <span style={{ fontSize: 9, color: "#4b5563", marginLeft: 2 }}>· Off</span>}
             </button>
           );
         })}
@@ -830,12 +830,19 @@ function nbaTime(dateStr) {
 }
 
 function ComingSoon({ league }) {
+  const RETURNS = {
+    nhl: "The NHL season runs October through June.",
+    nfl: "The NFL season returns in September.",
+    ncaafb: "College football returns in late August.",
+    ncaamb: "College basketball returns in November.",
+  };
+  const note = RETURNS[league?.id] || "This sport is currently off season.";
   return (
     <div style={{ textAlign: "center", padding: 80, background: "#0f1419", border: "1px solid #1f2937", borderRadius: 8 }}>
       <div style={{ fontSize: 48, marginBottom: 16 }}>{league?.icon}</div>
-      <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 8 }}>{league?.label} analytics — coming soon</h2>
+      <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 8 }}>{league?.label} — off season</h2>
       <p style={{ fontSize: 13, color: "#9ca3af", maxWidth: 440, margin: "0 auto", lineHeight: 1.7 }}>
-        We're focused on building the best MLB betting intelligence first. {league?.label} edges, projections, and props will roll out once MLB is proven.
+        {note}
       </p>
     </div>
   );
