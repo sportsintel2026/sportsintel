@@ -155,14 +155,15 @@ function Section({ title, color, count, defaultOpen, liveDot, children }) {
   );
 }
 
-// Tapping a card now goes straight to the full matchup page (scoreboard + box
-// score + analysis in one). For games we can't map to a detail page (no
-// detailId), it stays a non-clickable info card.
+// Tapping a card opens the full matchup page. We navigate by the backend model
+// id (detailId) when we have it, otherwise fall back to ESPN's own game id so
+// the card is always clickable — the detail page knows how to resolve either.
 function GameCard({ g, league, meta }) {
   const navigate = useNavigate();
   const isLive = g.bucket === "live";
   const isFinal = g.bucket === "final";
-  const target = g.detailId ? `/game/${league}/${g.detailId}` : null;
+  const rawId = g.detailId || g.id;
+  const target = rawId ? `/game/${league}/${rawId}` : null;
 
   return (
     <div
