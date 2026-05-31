@@ -158,10 +158,16 @@ export default function ExpertPicksPage() {
           <div style={{ marginBottom: 6 }}>
             <h1 style={{ margin: 0, fontSize: 26, fontWeight: 700 }}>🎯 Expert picks</h1>
           </div>
-          <p style={{ margin: "0 0 22px", fontSize: 13, color: "#9ca3af", lineHeight: 1.6 }}>
+          <p style={{ margin: "0 0 14px", fontSize: 13, color: "#9ca3af", lineHeight: 1.6 }}>
             Hand-picked parlays and straight bets across MLB, NBA, NFL, NHL & college.
             Every pick is tracked — wins <em>and</em> losses — so you see the real record.
           </p>
+
+          {/* Posting-time note */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "0 0 22px", fontSize: 12, color: "#6b7280" }}>
+            <span style={{ fontSize: 13 }}>🕒</span>
+            <span>New picks are posted <strong style={{ color: "#9ca3af" }}>2–3 hours before</strong> the first games of the day.</span>
+          </div>
 
           {/* Honest performance strip — only shows numbers once picks are graded */}
           <PerformanceStrip record={record} />
