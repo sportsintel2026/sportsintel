@@ -17,7 +17,7 @@ export default function Sidebar({ user, plan, signOut, navigate }) {
       >
         <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e", display: "inline-block", animation: "pulse 2s infinite" }} />
         <span style={{ fontSize: 16, fontWeight: 800, letterSpacing: "-0.01em", color: "#e4e7eb" }}>
-          Sports<span style={{ color: "#ef4444" }}>intel</span>
+          Wize<span style={{ color: "#ef4444" }}>Picks</span>
         </span>
       </div>
       {/* General — applies across all sports */}
