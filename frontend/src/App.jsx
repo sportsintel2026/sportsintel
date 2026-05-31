@@ -25,7 +25,7 @@ function LoadingScreen() {
     <div style={{minHeight:"100vh",background:"#080810",display:"flex",alignItems:"center",justifyContent:"center"}}>
       <div style={{textAlign:"center"}}>
         <div style={{width:40,height:40,border:"3px solid #1e2235",borderTopColor:"#ef4444",borderRadius:"50%",animation:"spin 0.8s linear infinite",margin:"0 auto 16px"}}/>
-        <div style={{color:"#475569",fontSize:14}}>Loading SportsIntel...</div>
+        <div style={{color:"#475569",fontSize:14}}>Loading WizePicks...</div>
       </div>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
