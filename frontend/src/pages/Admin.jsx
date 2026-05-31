@@ -76,18 +76,25 @@ function useSchedule(league) {
 }
 
 // Dropdown that quick-fills the matchup field from the day's scheduled games.
-// Renders nothing when there's no schedule for the sport (keeps the type-in box).
+// Always visible for MLB/NBA (with Loading / No-games states) so it can't
+// silently disappear; hidden only for sports that have no schedule feed.
 function GamePicker({ league, onPick }) {
   const sched = useSchedule(league);
-  if (!Array.isArray(sched) || sched.length === 0) return null;
+  if (!SCHEDULE_LEAGUES.has(league)) return null; // no feed for this sport → type-in only
+  const ready = Array.isArray(sched) && sched.length > 0;
+  const placeholder =
+    sched === null ? "Loading today's games…"
+    : (Array.isArray(sched) && sched.length === 0) ? "No games to load — type below"
+    : "⚡ Load today's game…";
   return (
     <select
       value=""
+      disabled={!ready}
       onChange={(e) => { if (e.target.value) onPick(e.target.value); }}
-      style={{ marginBottom: 8 }}
+      style={{ marginBottom: 8, opacity: ready ? 1 : 0.7 }}
     >
-      <option value="">⚡ Load today's game…</option>
-      {sched.map((o, i) => <option key={i} value={o.value}>{o.label}</option>)}
+      <option value="">{placeholder}</option>
+      {ready && sched.map((o, i) => <option key={i} value={o.value}>{o.label}</option>)}
     </select>
   );
 }
