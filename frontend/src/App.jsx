@@ -1,5 +1,7 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { useEffect } from "react";
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./hooks/useAuth";
+import { supabase } from "./lib/api";
 import LandingPage from "./pages/Landing";
 import { LoginPage } from "./pages/Login";
 import { SignupPage } from "./pages/Login";
@@ -15,11 +17,13 @@ import MyPicksPage from "./pages/MyPicks";
 import NBAPage from "./pages/NBA";
 import NBADetailPage from "./pages/NBADetail";
 import LiveScoresPage from "./pages/LiveScores";
+
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth();
   if (loading) return <LoadingScreen />;
   return user ? children : <Navigate to="/login" replace />;
 }
+
 function LoadingScreen() {
   return (
     <div style={{minHeight:"100vh",background:"#080810",display:"flex",alignItems:"center",justifyContent:"center"}}>
@@ -31,10 +35,35 @@ function LoadingScreen() {
     </div>
   );
 }
+
+// Listens for Supabase's password-recovery event (fired when a user clicks the
+// reset link in their email) and sends them to the /reset-password page so they
+// can set a new password. Without this, the recovery token lands on the homepage
+// and is ignored. Also handles the case where the token arrives in the URL hash
+// before the auth event fires.
+function RecoveryRedirect() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    // Case 1: the recovery token is already in the URL hash on first load.
+    if (typeof window !== "undefined" && window.location.hash.includes("type=recovery")) {
+      navigate("/reset-password", { replace: true });
+    }
+    // Case 2: Supabase fires the PASSWORD_RECOVERY event after processing the link.
+    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "PASSWORD_RECOVERY") {
+        navigate("/reset-password", { replace: true });
+      }
+    });
+    return () => sub?.subscription?.unsubscribe?.();
+  }, [navigate]);
+  return null;
+}
+
 export default function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
+        <RecoveryRedirect />
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<LoginPage />} />
