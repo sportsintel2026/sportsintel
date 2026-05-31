@@ -5,12 +5,17 @@ import { edgesApi, subscriptionApi, scoresApi, liveApi } from "../lib/api";
 import { BoxScore } from "./LiveScores";
 import Sidebar from "./Sidebar";
 
+// last word of a team name, lowercased — used to match an ESPN game to a model
+// game when the backend didn't attach a detailId (same idea the backend uses).
+const nick = (s) => String(s || "").trim().split(/\s+/).pop().toLowerCase();
+
 export default function GameDetailPage() {
   const { gameId } = useParams();
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
 
   const [allEdges, setAllEdges] = useState(null);
+  const [scoresGame, setScoresGame] = useState(null); // matched game from the scores feed
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [plan, setPlan] = useState({ tier: "free", isAdmin: false });
@@ -22,18 +27,48 @@ export default function GameDetailPage() {
 
   useEffect(() => { subscriptionApi.getMyPlan().then(setPlan).catch(() => {}); }, []);
 
+  // Load BOTH feeds: the model edges (for full analysis) and the scores feed
+  // (so we can resolve a game even when it has no model detailId yet).
   useEffect(() => {
+    let cancelled = false;
     setLoading(true);
     setError(null);
-    edgesApi.getMLB()
-      .then(data => { setAllEdges(data); setLoading(false); })
-      .catch(e => { console.error(e); setError("Could not load game data"); setLoading(false); });
+    (async () => {
+      try {
+        const [edges, scores] = await Promise.all([
+          edgesApi.getMLB().catch(() => null),
+          scoresApi.getScores("mlb").catch(() => null),
+        ]);
+        if (cancelled) return;
+        setAllEdges(edges);
+        const all = scores ? [...(scores.live || []), ...(scores.upcoming || []), ...(scores.final || [])] : [];
+        const sg = all.find(
+          (g) => String(g.detailId) === String(gameId) || String(g.id) === String(gameId)
+        ) || null;
+        setScoresGame(sg);
+        setLoading(false);
+      } catch (e) {
+        console.error(e);
+        if (!cancelled) { setError("Could not load game data"); setLoading(false); }
+      }
+    })();
+    return () => { cancelled = true; };
   }, [gameId]);
 
-  const game = allEdges?.games?.find(g => String(g.id) === String(gameId));
+  // Resolve the MODEL game: first by id, then (if we arrived via an ESPN id)
+  // by matching the scores game's team nicknames against the edges feed.
+  let game = allEdges?.games?.find((g) => String(g.id) === String(gameId));
+  if (!game && scoresGame && allEdges?.games) {
+    const key = `${nick(scoresGame.away?.name)}|${nick(scoresGame.home?.name)}`;
+    game = allEdges.games.find((g) => `${nick(g.away)}|${nick(g.home)}` === key);
+  }
+
   const gameHRProps = (allEdges?.hrPropEdges || []).filter(
     p => p.game === `${game?.awayAbbr} @ ${game?.homeAbbr}`
   );
+
+  // ESPN id for scores-based widgets (box score, team form series lookup).
+  const scoresId = scoresGame?.id || null;
 
   return (
     <div style={{ minHeight: "100vh", background: "#0a0e14", color: "#e4e7eb", fontFamily: "'Inter',system-ui,-apple-system,sans-serif" }}>
@@ -91,9 +126,15 @@ export default function GameDetailPage() {
 
           {loading && <Loader />}
           {error && <ErrorState />}
-          {!loading && !error && !game && <NotFound gameId={gameId} />}
+          {/* Neither feed knows this game → not found. */}
+          {!loading && !error && !game && !scoresGame && <NotFound gameId={gameId} />}
+          {/* Model has the game → full analysis (works for upcoming, live, or final). */}
           {!loading && !error && game && (
-            <GameDetail game={game} hrProps={gameHRProps} hasFullAccess={hasFullAccess} navigate={navigate} />
+            <GameDetail game={game} scoresId={scoresId} hrProps={gameHRProps} hasFullAccess={hasFullAccess} navigate={navigate} />
+          )}
+          {/* No model game yet, but it's in the scores feed → clean pre-game page. */}
+          {!loading && !error && !game && scoresGame && (
+            <PreGameDetail scoresGame={scoresGame} />
           )}
         </div>
       </div>
@@ -101,13 +142,57 @@ export default function GameDetailPage() {
   );
 }
 
-function GameDetail({ game, hrProps, hasFullAccess, navigate }) {
+// Pre-game page shown when the model hasn't posted this game yet, but it's on
+// the schedule. Matchup header + scheduled time/venue + team form, plus a note
+// that the full model breakdown posts closer to first pitch.
+function PreGameDetail({ scoresGame }) {
+  const a = scoresGame.away || {};
+  const h = scoresGame.home || {};
+  let when = "";
+  try {
+    when = scoresGame.startTime
+      ? new Date(scoresGame.startTime).toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
+      : (scoresGame.statusDetail || "");
+  } catch (_) { when = scoresGame.statusDetail || ""; }
+
+  return (
+    <div style={{ animation: "fadeIn .3s ease" }}>
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ fontSize: 11, color: "#6b7280", letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 600, marginBottom: 8 }}>
+          ⚾ MLB · {when}
+        </div>
+        <h1 style={{ margin: 0, fontSize: 32, fontWeight: 800, letterSpacing: "-0.02em", lineHeight: 1.1 }}>
+          <span style={{ color: "#e4e7eb" }}>{a.name || a.abbrev}</span>
+          <span style={{ color: "#4b5563", margin: "0 12px", fontWeight: 400 }}>@</span>
+          <span style={{ color: "#e4e7eb" }}>{h.name || h.abbrev}</span>
+        </h1>
+        {scoresGame.venue && <div style={{ marginTop: 8, fontSize: 13, color: "#6b7280" }}>📍 {scoresGame.venue}</div>}
+        {scoresGame.seriesSummary && <div style={{ marginTop: 4, fontSize: 12, color: "#9ca3af" }}>{scoresGame.seriesSummary}</div>}
+      </div>
+
+      <TeamForm gameId={scoresGame.id} awayAbbr={a.abbrev} homeAbbr={h.abbrev} awayName={a.name} homeName={h.name} league="mlb" />
+
+      <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderLeft: "3px solid #ef4444", borderRadius: 10, padding: "16px 20px", marginTop: 10 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: "#e4e7eb", marginBottom: 4 }}>🔍 Full model breakdown posts closer to first pitch</div>
+        <div style={{ fontSize: 12, color: "#9ca3af", lineHeight: 1.5 }}>
+          Model edges, projected total, starting-pitcher matchup, and batter-vs-pitcher history appear here once today's slate is finalized — usually a few hours before the game.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function GameDetail({ game, scoresId, hrProps, hasFullAccess, navigate }) {
   const ml = game.moneyline || {};
   const totals = game.totals || {};
   const awayP = game.pitchers?.away;
   const homeP = game.pitchers?.home;
   const isLive = game.status === "live";
   const isFinal = game.status === "final";
+
+  // Scores-feed widgets resolve their game by detailId OR id; prefer the ESPN id
+  // when we have it (covers games whose backend detailId is missing).
+  const scoresLookupId = scoresId || game.id;
 
   const candidates = [
     { type: "ML", side: "away", team: game.awayAbbr, prob: ml.awayWinProb, odds: ml.awayOdds, edge: ml.awayEdge, confidence: ml.awayConfidence },
@@ -121,8 +206,8 @@ function GameDetail({ game, hrProps, hasFullAccess, navigate }) {
   return (
     <div style={{ animation: "fadeIn .3s ease" }}>
       <GameHeader game={game} isLive={isLive} isFinal={isFinal} />
-      <LiveScoreHeader gameId={game.id} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} league="mlb" />
-      <TeamForm gameId={game.id} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} awayName={game.away} homeName={game.home} league="mlb" />
+      <LiveScoreHeader gameId={scoresLookupId} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} league="mlb" />
+      <TeamForm gameId={scoresLookupId} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} awayName={game.away} homeName={game.home} league="mlb" />
       {/* Betting sections, grouped at top.
           LIVE games → live-model edges (accurate in-game). Otherwise → pre-game model. */}
       {isLive && <LiveEdgeCards gameId={game.id} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} />}
@@ -164,7 +249,7 @@ function TeamForm({ gameId, awayAbbr, homeAbbr, awayName, homeName, league = "ml
       try {
         const scores = await scoresApi.getScores(league);
         const all = [...(scores.live || []), ...(scores.upcoming || []), ...(scores.final || [])];
-        const m = all.find((g) => String(g.detailId) === String(gameId));
+        const m = all.find((g) => String(g.detailId) === String(gameId) || String(g.id) === String(gameId));
         if (!m) return;
         const detail = await scoresApi.getGameDetail(league, m.id);
         if (!cancelled && detail && detail.series && detail.series.summary) setSeries(detail.series);
@@ -264,9 +349,9 @@ function FormStat({ label, value, color }) {
 }
 
 // Live/final scoreboard + box score, shown at the top of the detail page.
-// Finds this game in the scores feed by detailId (== backend gameId), then fetches
-// the box score by the matched game's ESPN id. Refreshes every 30s while live.
-// Renders nothing if the game isn't in the scores feed (page unchanged).
+// Finds this game in the scores feed by detailId OR id, then fetches the box
+// score by the matched game's ESPN id. Refreshes every 30s while live.
+// Renders nothing if the game isn't live/final in the scores feed (page unchanged).
 function LiveScoreHeader({ gameId, awayAbbr, homeAbbr, league = "mlb" }) {
   const [match, setMatch] = useState(null);   // game object from scores feed
   const [box, setBox] = useState(null);       // box score detail
@@ -279,7 +364,7 @@ function LiveScoreHeader({ gameId, awayAbbr, homeAbbr, league = "mlb" }) {
       try {
         const data = await scoresApi.getScores(league);
         const all = [...(data.live || []), ...(data.final || [])];
-        const m = all.find((g) => String(g.detailId) === String(gameId));
+        const m = all.find((g) => String(g.detailId) === String(gameId) || String(g.id) === String(gameId));
         if (!cancelled) setMatch(m || null);
       } catch (_) {
         if (!cancelled) setMatch(null);
@@ -310,7 +395,7 @@ function LiveScoreHeader({ gameId, awayAbbr, homeAbbr, league = "mlb" }) {
     return () => { cancelled = true; if (timer) clearInterval(timer); };
   }, [match, league]);
 
-  if (!match) return null; // not in scores feed → show nothing (page unchanged)
+  if (!match) return null; // not live/final in scores feed → show nothing (page unchanged)
 
   const isLiveNow = match.bucket === "live";
   const a = match.away || {};
@@ -971,4 +1056,3 @@ function NotFound({ gameId }) {
     </div>
   );
 }
-
