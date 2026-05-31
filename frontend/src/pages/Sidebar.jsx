@@ -34,10 +34,10 @@ export default function Sidebar({ user, plan, signOut, navigate }) {
         label="Performance"
       />
       <NavLink
-        to="/my-picks"
-        active={isActive("/my-picks")}
+        to="/expert-picks"
+        active={isActive("/expert-picks")}
         icon="🎯"
-        label="Free picks"
+        label="Expert picks"
       />
       {/* MLB section */}
       <div style={{ ...sectionLabelStyle, marginTop: 18 }}>MLB</div>
