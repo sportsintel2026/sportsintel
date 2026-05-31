@@ -14,16 +14,15 @@ import ResetPasswordPage from "./pages/ResetPassword";
 import AdminPage from "./pages/Admin";
 import SettingsPage from "./pages/Settings";
 import MyPicksPage from "./pages/MyPicks";
+import ExpertPicksPage from "./pages/ExpertPicks";
 import NBAPage from "./pages/NBA";
 import NBADetailPage from "./pages/NBADetail";
 import LiveScoresPage from "./pages/LiveScores";
-
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth();
   if (loading) return <LoadingScreen />;
   return user ? children : <Navigate to="/login" replace />;
 }
-
 function LoadingScreen() {
   return (
     <div style={{minHeight:"100vh",background:"#080810",display:"flex",alignItems:"center",justifyContent:"center"}}>
@@ -35,7 +34,6 @@ function LoadingScreen() {
     </div>
   );
 }
-
 // Listens for Supabase's password-recovery event (fired when a user clicks the
 // reset link in their email) and sends them to the /reset-password page so they
 // can set a new password. Without this, the recovery token lands on the homepage
@@ -58,7 +56,6 @@ function RecoveryRedirect() {
   }, [navigate]);
   return null;
 }
-
 export default function App() {
   return (
     <AuthProvider>
@@ -118,6 +115,11 @@ export default function App() {
           <Route path="/my-picks" element={
             <PrivateRoute>
               <MyPicksPage />
+            </PrivateRoute>
+          } />
+          <Route path="/expert-picks" element={
+            <PrivateRoute>
+              <ExpertPicksPage />
             </PrivateRoute>
           } />
           <Route path="*" element={<Navigate to="/" replace />} />
