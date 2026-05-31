@@ -13,11 +13,15 @@ export default function Sidebar({ user, plan, signOut, navigate }) {
       {/* Logo — clickable, goes to dashboard and closes drawer */}
       <div
         onClick={() => navigate("/dashboard")}
-        style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 24, padding: "4px 8px", cursor: "pointer" }}
+        style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 24, padding: "4px 8px", cursor: "pointer" }}
       >
-        <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e", display: "inline-block", animation: "pulse 2s infinite" }} />
+        <svg width="20" height="20" viewBox="0 0 30 30" aria-hidden="true" style={{ flexShrink: 0 }}>
+          <line x1="4" y1="21" x2="11" y2="21" stroke="#1D9E75" strokeWidth="3" strokeLinecap="round" />
+          <line x1="13" y1="15" x2="20" y2="15" stroke="#1D9E75" strokeWidth="3" strokeLinecap="round" />
+          <line x1="22" y1="9" x2="26" y2="9" stroke="#1D9E75" strokeWidth="3" strokeLinecap="round" />
+        </svg>
         <span style={{ fontSize: 16, fontWeight: 800, letterSpacing: "-0.01em", color: "#e4e7eb" }}>
-          Wize<span style={{ color: "#ef4444" }}>Picks</span>
+          Edge<span style={{ color: "#1D9E75" }}>the</span>Lines
         </span>
       </div>
       {/* General — applies across all sports */}
