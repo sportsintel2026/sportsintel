@@ -103,8 +103,16 @@ export default function AdminPage() {
   }, [user, navigate]);
 
   return (
-    <div style={{ minHeight: "100vh", background: "#080810", color: "#e2e8f0", fontFamily: "'Inter',system-ui,sans-serif", padding: 24 }}>
-      <style>{`*{box-sizing:border-box} input,textarea,select{background:#0a0a14;border:1px solid #1a1a2e;color:#e2e8f0;border-radius:8px;padding:10px 12px;font-family:inherit;font-size:13px;width:100%;outline:none} input:focus,textarea:focus,select:focus{border-color:#ef4444}`}</style>
+    <div className="admin-wrap" style={{ minHeight: "100vh", background: "#080810", color: "#e2e8f0", fontFamily: "'Inter',system-ui,sans-serif", padding: 24 }}>
+      <style>{`
+        *{box-sizing:border-box}
+        input,textarea,select{background:#0a0a14;border:1px solid #1a1a2e;color:#e2e8f0;border-radius:8px;padding:10px 12px;font-family:inherit;font-size:13px;width:100%;outline:none}
+        input:focus,textarea:focus,select:focus{border-color:#ef4444}
+        @media (max-width: 600px){
+          .admin-wrap{padding:14px!important}
+          .admin-3col{grid-template-columns:1fr!important}
+        }
+      `}</style>
 
       <div style={{ maxWidth: 760, margin: "0 auto" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
@@ -241,7 +249,7 @@ function StraightEditor({ item, index, update, remove }) {
         <div style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>Straight bet</div>
         <button onClick={() => remove(index)} style={xBtn}>×</button>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
+      <div className="admin-3col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
         <div>
           <Label>Sport</Label>
           <select value={item.sport} onChange={e => update(index, { sport: e.target.value })}>
@@ -268,7 +276,7 @@ function StraightEditor({ item, index, update, remove }) {
         <Label>Game / matchup</Label>
         <GamePicker league={item.sport} onPick={(v) => update(index, { game: v })} />
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 0.7fr", gap: 12 }}>
+      <div className="admin-3col" style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 0.7fr", gap: 12 }}>
         <div>
           <Label>Pick (e.g. Dodgers ML)</Label>
           <input value={item.pick} onChange={e => update(index, { pick: e.target.value })} placeholder="Dodgers ML" />
@@ -352,7 +360,7 @@ function LegEditor({ leg, index, li, updateLeg, removeLeg, canRemove }) {
         {canRemove && <button onClick={() => removeLeg(index, li)} style={xBtn}>×</button>}
       </div>
       <GamePicker league={leg.sport} onPick={(v) => updateLeg(index, li, { game: v })} />
-      <div style={{ display: "grid", gridTemplateColumns: "1.6fr 1.1fr 0.7fr", gap: 8 }}>
+      <div className="admin-3col" style={{ display: "grid", gridTemplateColumns: "1.6fr 1.1fr 0.7fr", gap: 8 }}>
         <input value={leg.pick} onChange={e => updateLeg(index, li, { pick: e.target.value })} placeholder="Dodgers ML" />
         <input value={leg.game} onChange={e => updateLeg(index, li, { game: e.target.value })} placeholder="LAD @ SF" />
         <input value={leg.odds} onChange={e => updateLeg(index, li, { odds: e.target.value })} placeholder="-135" />
