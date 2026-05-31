@@ -67,6 +67,35 @@ async function getMLBMainOdds() {
   }
 }
 
+// Live-game odds: SAME data shape as getMLBMainOdds, but a much shorter cache so
+// in-game lines stay fresh for the live-edge route. Pre-game uses the 30-min
+// cache above; only the live route should call this. 3-min cache keeps in-game
+// lines current while staying within the API credit budget (only fetched while
+// games are actually live, since the live route only calls it when it has live games).
+const LIVE_ODDS_TTL_MS = 5 * 60 * 1000; // 5 minutes
+async function getMLBLiveOdds() {
+  const cacheKey = "mlb_live_odds";
+  const cached = cache.get(cacheKey);
+  if (cached && (Date.now() - cached.fetchedAt) < LIVE_ODDS_TTL_MS) {
+    return cached.data;
+  }
+  try {
+    const data = await oddsGet("/sports/baseball_mlb/odds", {
+      regions: "us",
+      markets: "h2h,totals,spreads",
+      oddsFormat: "american",
+      dateFormat: "iso",
+    });
+    const games = (data || []).map(parseMainOddsEvent);
+    cache.set(cacheKey, { data: games, fetchedAt: Date.now() });
+    return games;
+  } catch (e) {
+    console.error("[OddsAPI] MLB live odds error:", e.message);
+    if (cached) return cached.data;
+    return [];
+  }
+}
+
 function parseMainOddsEvent(ev) {
   const h2h = { away: null, home: null, awayBook: null, homeBook: null };
   const totals = { line: null, over: null, under: null, overBook: null, underBook: null };
@@ -250,6 +279,7 @@ function getCacheStats() {
 
 module.exports = {
   getMLBMainOdds,
+  getMLBLiveOdds,
   getMLBHRPropsForEvent,
   getMLBHRPropsForAllEvents,
   americanToImpliedProb,
