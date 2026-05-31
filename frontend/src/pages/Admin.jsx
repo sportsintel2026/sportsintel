@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-import { supabase } from "../lib/api";
+import { supabase, scoresApi } from "../lib/api";
 
 const ADMIN_EMAIL = "r7002g@gmail.com";
 
@@ -39,6 +39,57 @@ function fmtOdds(v) {
   const n = Number(v);
   if (v === "" || v == null || Number.isNaN(n)) return "—";
   return n > 0 ? `+${n}` : `${n}`;
+}
+
+// ── Team/game picker ────────────────────────────────────────────────────────
+// Schedules come from the scores feed, which currently covers MLB and NBA.
+// Other sports fall back to typing the matchup in. Cached per league so we don't
+// refetch for every leg.
+const SCHEDULE_LEAGUES = new Set(["mlb", "nba"]);
+const scheduleCache = {}; // league -> [{ value, label }]
+
+function useSchedule(league) {
+  const [games, setGames] = useState(scheduleCache[league] || null);
+  useEffect(() => {
+    let cancelled = false;
+    if (!SCHEDULE_LEAGUES.has(league)) { setGames([]); return; }
+    if (scheduleCache[league]) { setGames(scheduleCache[league]); return; }
+    (async () => {
+      try {
+        const d = await scoresApi.getScores(league);
+        const all = [...(d.live || []), ...(d.upcoming || []), ...(d.final || [])];
+        const opts = all
+          .filter((g) => g.away && g.home && g.away.abbrev && g.home.abbrev)
+          .map((g) => {
+            const matchup = `${g.away.abbrev} @ ${g.home.abbrev}`;
+            return { value: matchup, label: g.statusDetail ? `${matchup} · ${g.statusDetail}` : matchup };
+          });
+        scheduleCache[league] = opts;
+        if (!cancelled) setGames(opts);
+      } catch (_) {
+        if (!cancelled) setGames([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [league]);
+  return games; // null = loading, [] = none, [...] = options
+}
+
+// Dropdown that quick-fills the matchup field from the day's scheduled games.
+// Renders nothing when there's no schedule for the sport (keeps the type-in box).
+function GamePicker({ league, onPick }) {
+  const sched = useSchedule(league);
+  if (!Array.isArray(sched) || sched.length === 0) return null;
+  return (
+    <select
+      value=""
+      onChange={(e) => { if (e.target.value) onPick(e.target.value); }}
+      style={{ marginBottom: 8 }}
+    >
+      <option value="">⚡ Load today's game…</option>
+      {sched.map((o, i) => <option key={i} value={o.value}>{o.label}</option>)}
+    </select>
+  );
 }
 
 export default function AdminPage() {
@@ -213,6 +264,10 @@ function StraightEditor({ item, index, update, remove }) {
           </select>
         </div>
       </div>
+      <div style={{ marginBottom: 8 }}>
+        <Label>Game / matchup</Label>
+        <GamePicker league={item.sport} onPick={(v) => update(index, { game: v })} />
+      </div>
       <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 0.7fr", gap: 12 }}>
         <div>
           <Label>Pick (e.g. Dodgers ML)</Label>
@@ -247,25 +302,7 @@ function ParlayEditor({ item, index, update, remove, updateLeg, addLeg, removeLe
       <Label>Legs</Label>
       <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
         {item.legs.map((leg, li) => (
-          <div key={li} style={{ background: "#080810", border: "1px solid #1a1a2e", borderRadius: 10, padding: 12 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-              <div style={{ width: 20, height: 20, borderRadius: "50%", background: "#ef444415", border: "1px solid #ef444440", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 800, color: "#ef4444" }}>{li + 1}</div>
-              <div style={{ width: 130 }}>
-                <select value={leg.sport} onChange={e => updateLeg(index, li, { sport: e.target.value })} style={{ padding: "7px 10px" }}>
-                  {SPORTS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
-                </select>
-              </div>
-              <div style={{ flex: 1 }} />
-              {item.legs.length > 1 && (
-                <button onClick={() => removeLeg(index, li)} style={xBtn}>×</button>
-              )}
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1.6fr 1.1fr 0.7fr", gap: 8 }}>
-              <input value={leg.pick} onChange={e => updateLeg(index, li, { pick: e.target.value })} placeholder="Dodgers ML" />
-              <input value={leg.game} onChange={e => updateLeg(index, li, { game: e.target.value })} placeholder="LAD @ SF" />
-              <input value={leg.odds} onChange={e => updateLeg(index, li, { odds: e.target.value })} placeholder="-135" />
-            </div>
-          </div>
+          <LegEditor key={li} leg={leg} index={index} li={li} updateLeg={updateLeg} removeLeg={removeLeg} canRemove={item.legs.length > 1} />
         ))}
       </div>
 
@@ -296,6 +333,29 @@ function ParlayEditor({ item, index, update, remove, updateLeg, addLeg, removeLe
       <div>
         <Label>Analysis (optional)</Label>
         <textarea value={item.analysis} onChange={e => update(index, { analysis: e.target.value })} placeholder="Why you like this parlay..." rows={2} style={{ resize: "vertical" }} />
+      </div>
+    </div>
+  );
+}
+
+function LegEditor({ leg, index, li, updateLeg, removeLeg, canRemove }) {
+  return (
+    <div style={{ background: "#080810", border: "1px solid #1a1a2e", borderRadius: 10, padding: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+        <div style={{ width: 20, height: 20, borderRadius: "50%", background: "#ef444415", border: "1px solid #ef444440", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 800, color: "#ef4444" }}>{li + 1}</div>
+        <div style={{ width: 130 }}>
+          <select value={leg.sport} onChange={e => updateLeg(index, li, { sport: e.target.value })} style={{ padding: "7px 10px" }}>
+            {SPORTS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+          </select>
+        </div>
+        <div style={{ flex: 1 }} />
+        {canRemove && <button onClick={() => removeLeg(index, li)} style={xBtn}>×</button>}
+      </div>
+      <GamePicker league={leg.sport} onPick={(v) => updateLeg(index, li, { game: v })} />
+      <div style={{ display: "grid", gridTemplateColumns: "1.6fr 1.1fr 0.7fr", gap: 8 }}>
+        <input value={leg.pick} onChange={e => updateLeg(index, li, { pick: e.target.value })} placeholder="Dodgers ML" />
+        <input value={leg.game} onChange={e => updateLeg(index, li, { game: e.target.value })} placeholder="LAD @ SF" />
+        <input value={leg.odds} onChange={e => updateLeg(index, li, { odds: e.target.value })} placeholder="-135" />
       </div>
     </div>
   );
