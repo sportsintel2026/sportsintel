@@ -4,29 +4,23 @@ import { useAuth } from "../hooks/useAuth";
 import { edgesApi, subscriptionApi, scoresApi, liveApi } from "../lib/api";
 import { BoxScore } from "./LiveScores";
 import Sidebar from "./Sidebar";
-
 // last word of a team name, lowercased — used to match an ESPN game to a model
 // game when the backend didn't attach a detailId (same idea the backend uses).
 const nick = (s) => String(s || "").trim().split(/\s+/).pop().toLowerCase();
-
 export default function GameDetailPage() {
   const { gameId } = useParams();
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
-
   const [allEdges, setAllEdges] = useState(null);
   const [scoresGame, setScoresGame] = useState(null); // matched game from the scores feed
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [plan, setPlan] = useState({ tier: "free", isAdmin: false });
   const [drawerOpen, setDrawerOpen] = useState(false);
-
   const isAdmin = plan.isAdmin === true;
   const isPro = plan.tier === "pro" || plan.tier === "elite";
   const hasFullAccess = isAdmin || isPro;
-
   useEffect(() => { subscriptionApi.getMyPlan().then(setPlan).catch(() => {}); }, []);
-
   // Load BOTH feeds: the model edges (for full analysis) and the scores feed
   // (so we can resolve a game even when it has no model detailId yet).
   useEffect(() => {
@@ -54,7 +48,6 @@ export default function GameDetailPage() {
     })();
     return () => { cancelled = true; };
   }, [gameId]);
-
   // Resolve the MODEL game: first by id, then (if we arrived via an ESPN id)
   // by matching the scores game's team nicknames against the edges feed.
   let game = allEdges?.games?.find((g) => String(g.id) === String(gameId));
@@ -62,14 +55,11 @@ export default function GameDetailPage() {
     const key = `${nick(scoresGame.away?.name)}|${nick(scoresGame.home?.name)}`;
     game = allEdges.games.find((g) => `${nick(g.away)}|${nick(g.home)}` === key);
   }
-
   const gameHRProps = (allEdges?.hrPropEdges || []).filter(
     p => p.game === `${game?.awayAbbr} @ ${game?.homeAbbr}`
   );
-
   // ESPN id for scores-based widgets (box score, team form series lookup).
   const scoresId = scoresGame?.id || null;
-
   return (
     <div style={{ minHeight: "100vh", background: "#0a0e14", color: "#e4e7eb", fontFamily: "'Inter',system-ui,-apple-system,sans-serif" }}>
       <style>{`
@@ -95,11 +85,9 @@ export default function GameDetailPage() {
           .two-col{grid-template-columns:1fr!important}
         }
       `}</style>
-
       <div className="desktop-sidebar">
         <Sidebar user={user} plan={plan} signOut={signOut} navigate={navigate} />
       </div>
-
       {drawerOpen && (
         <>
           <div onClick={() => setDrawerOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 49 }} />
@@ -108,7 +96,6 @@ export default function GameDetailPage() {
           </div>
         </>
       )}
-
       <div className="mobile-only" style={{ display: "none", position: "sticky", top: 0, zIndex: 40, background: "#0a0e14", borderBottom: "1px solid #1a1f28", padding: "10px 14px", alignItems: "center", justifyContent: "space-between" }}>
         <button onClick={() => setDrawerOpen(true)} style={{ background: "none", border: "none", color: "#e4e7eb", fontSize: 22, padding: 4, cursor: "pointer" }}>☰</button>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -117,13 +104,11 @@ export default function GameDetailPage() {
         </div>
         <div style={{ width: 30 }} />
       </div>
-
       <div className="main-content" style={{ marginLeft: 200 }}>
         <div className="gd-content" style={{ maxWidth: 1100, margin: "0 auto", padding: "20px 24px 80px" }}>
           <Link to="/games" className="back-btn" style={{ color: "#6b7280", fontSize: 13, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
             ← Back to MLB Games
           </Link>
-
           {loading && <Loader />}
           {error && <ErrorState />}
           {/* Neither feed knows this game → not found. */}
@@ -141,7 +126,6 @@ export default function GameDetailPage() {
     </div>
   );
 }
-
 // Pre-game page shown when the model hasn't posted this game yet, but it's on
 // the schedule. Matchup header + scheduled time/venue + team form, plus a note
 // that the full model breakdown posts closer to first pitch.
@@ -154,7 +138,6 @@ function PreGameDetail({ scoresGame }) {
       ? new Date(scoresGame.startTime).toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
       : (scoresGame.statusDetail || "");
   } catch (_) { when = scoresGame.statusDetail || ""; }
-
   return (
     <div style={{ animation: "fadeIn .3s ease" }}>
       <div style={{ marginBottom: 20 }}>
@@ -169,9 +152,7 @@ function PreGameDetail({ scoresGame }) {
         {scoresGame.venue && <div style={{ marginTop: 8, fontSize: 13, color: "#6b7280" }}>📍 {scoresGame.venue}</div>}
         {scoresGame.seriesSummary && <div style={{ marginTop: 4, fontSize: 12, color: "#9ca3af" }}>{scoresGame.seriesSummary}</div>}
       </div>
-
       <TeamForm gameId={scoresGame.id} awayAbbr={a.abbrev} homeAbbr={h.abbrev} awayName={a.name} homeName={h.name} league="mlb" />
-
       <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderLeft: "3px solid #ef4444", borderRadius: 10, padding: "16px 20px", marginTop: 10 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: "#e4e7eb", marginBottom: 4 }}>🔍 Full model breakdown posts closer to first pitch</div>
         <div style={{ fontSize: 12, color: "#9ca3af", lineHeight: 1.5 }}>
@@ -181,7 +162,6 @@ function PreGameDetail({ scoresGame }) {
     </div>
   );
 }
-
 function GameDetail({ game, scoresId, hrProps, hasFullAccess, navigate }) {
   const ml = game.moneyline || {};
   const totals = game.totals || {};
@@ -189,20 +169,16 @@ function GameDetail({ game, scoresId, hrProps, hasFullAccess, navigate }) {
   const homeP = game.pitchers?.home;
   const isLive = game.status === "live";
   const isFinal = game.status === "final";
-
   // Scores-feed widgets resolve their game by detailId OR id; prefer the ESPN id
   // when we have it (covers games whose backend detailId is missing).
   const scoresLookupId = scoresId || game.id;
-
   const candidates = [
     { type: "ML", side: "away", team: game.awayAbbr, prob: ml.awayWinProb, odds: ml.awayOdds, edge: ml.awayEdge, confidence: ml.awayConfidence },
     { type: "ML", side: "home", team: game.homeAbbr, prob: ml.homeWinProb, odds: ml.homeOdds, edge: ml.homeEdge, confidence: ml.homeConfidence },
     { type: "TOTAL", side: "over", line: totals.line, prob: totals.overProb, odds: totals.overOdds, edge: totals.overEdge, confidence: totals.overConfidence, projected: totals.projected },
     { type: "TOTAL", side: "under", line: totals.line, prob: totals.underProb, odds: totals.underOdds, edge: totals.underEdge, confidence: totals.underConfidence, projected: totals.projected },
   ].filter(c => c.edge != null);
-
   const bestEdge = candidates.length > 0 ? candidates.reduce((a, b) => (a.edge > b.edge ? a : b)) : null;
-
   return (
     <div style={{ animation: "fadeIn .3s ease" }}>
       <GameHeader game={game} isLive={isLive} isFinal={isFinal} />
@@ -224,7 +200,6 @@ function GameDetail({ game, scoresId, hrProps, hasFullAccess, navigate }) {
     </div>
   );
 }
-
 // Team form: current streak, last 10 games, record + run differential for both
 // teams. Pulled from the standings feed and matched by team abbreviation.
 function TeamForm({ gameId, awayAbbr, homeAbbr, awayName, homeName, league = "mlb" }) {
@@ -232,7 +207,6 @@ function TeamForm({ gameId, awayAbbr, homeAbbr, awayName, homeName, league = "ml
   const [failed, setFailed] = useState(false);
   const [series, setSeries] = useState(null);
   const [umpire, setUmpire] = useState(null);
-
   useEffect(() => {
     let cancelled = false;
     scoresApi.getStandings(league)
@@ -240,7 +214,6 @@ function TeamForm({ gameId, awayAbbr, homeAbbr, awayName, homeName, league = "ml
       .catch(() => { if (!cancelled) setFailed(true); });
     return () => { cancelled = true; };
   }, [league]);
-
   // Resolve this game in the scores feed (to get its ESPN id), then fetch its
   // detail for the current series record ("ATL leads series 1-0").
   useEffect(() => {
@@ -258,9 +231,7 @@ function TeamForm({ gameId, awayAbbr, homeAbbr, awayName, homeName, league = "ml
     })();
     return () => { cancelled = true; };
   }, [gameId, league]);
-
   if (failed) return null;          // quietly hide if standings unavailable
-
   // MLB/ESPN use different abbreviations for some teams. Try the given abbrev
   // and its known aliases so the standings lookup matches.
   const ALIASES = {
@@ -284,11 +255,9 @@ function TeamForm({ gameId, awayAbbr, homeAbbr, awayName, homeName, league = "ml
   const a = lookup(awayAbbr);
   const h = lookup(homeAbbr);
   if (standings && !a && !h && !series && !umpire) return null; // nothing to show
-
   return (
     <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 20, marginBottom: 10 }}>
       <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 16 }}>📈 Team form</div>
-
       {/* current series record */}
       {series && series.summary && (
         <div style={{ background: "#0a0e14", border: "1px solid #1f2937", borderRadius: 8, padding: "10px 14px", marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}>
@@ -297,7 +266,6 @@ function TeamForm({ gameId, awayAbbr, homeAbbr, awayName, homeName, league = "ml
           {series.totalGames ? <span style={{ fontSize: 11, color: "#6b7280" }}>· {series.totalGames}-game series</span> : null}
         </div>
       )}
-
       {/* home plate umpire (name only) */}
       {umpire && (
         <div style={{ background: "#0a0e14", border: "1px solid #1f2937", borderRadius: 8, padding: "10px 14px", marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}>
@@ -306,7 +274,6 @@ function TeamForm({ gameId, awayAbbr, homeAbbr, awayName, homeName, league = "ml
           <span style={{ fontSize: 13, fontWeight: 700, color: "#e4e7eb" }}>{umpire}</span>
         </div>
       )}
-
       <div className="two-col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <FormCard abbr={awayAbbr} name={awayName} side="AWAY" form={a} loading={!standings} />
         <FormCard abbr={homeAbbr} name={homeName} side="HOME" form={h} loading={!standings} />
@@ -314,7 +281,6 @@ function TeamForm({ gameId, awayAbbr, homeAbbr, awayName, homeName, league = "ml
     </div>
   );
 }
-
 function FormCard({ abbr, name, side, form, loading }) {
   const streakColor = (s) => {
     if (!s) return "#9ca3af";
@@ -338,7 +304,6 @@ function FormCard({ abbr, name, side, form, loading }) {
     </div>
   );
 }
-
 function FormStat({ label, value, color }) {
   return (
     <div style={{ background: "#0f1419", border: "1px solid #1a1f28", borderRadius: 6, padding: "8px 10px", textAlign: "center" }}>
@@ -347,7 +312,6 @@ function FormStat({ label, value, color }) {
     </div>
   );
 }
-
 // Live/final scoreboard + box score, shown at the top of the detail page.
 // Finds this game in the scores feed by detailId OR id, then fetches the box
 // score by the matched game's ESPN id. Refreshes every 30s while live.
@@ -356,7 +320,6 @@ function LiveScoreHeader({ gameId, awayAbbr, homeAbbr, league = "mlb" }) {
   const [match, setMatch] = useState(null);   // game object from scores feed
   const [box, setBox] = useState(null);       // box score detail
   const [boxLoading, setBoxLoading] = useState(false);
-
   useEffect(() => {
     let cancelled = false;
     let timer = null;
@@ -374,7 +337,6 @@ function LiveScoreHeader({ gameId, awayAbbr, homeAbbr, league = "mlb" }) {
     timer = setInterval(pull, 10000);
     return () => { cancelled = true; if (timer) clearInterval(timer); };
   }, [gameId, league]);
-
   // Once we know the matched game's ESPN id, fetch its box score (and refresh while live).
   useEffect(() => {
     if (!match) { setBox(null); return; }
@@ -394,14 +356,11 @@ function LiveScoreHeader({ gameId, awayAbbr, homeAbbr, league = "mlb" }) {
     if (match.bucket === "live") timer = setInterval(pullBox, 10000);
     return () => { cancelled = true; if (timer) clearInterval(timer); };
   }, [match, league]);
-
   if (!match) return null; // not live/final in scores feed → show nothing (page unchanged)
-
   const isLiveNow = match.bucket === "live";
   const a = match.away || {};
   const h = match.home || {};
   const accent = isLiveNow ? "#ef4444" : "#22c55e";
-
   return (
     <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: "16px 20px", marginBottom: 10 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
@@ -415,7 +374,6 @@ function LiveScoreHeader({ gameId, awayAbbr, homeAbbr, league = "mlb" }) {
         <div style={{ fontSize: 12, color: "#4b5563", fontWeight: 700 }}>@</div>
         <ScoreRow abbr={h.abbrev || homeAbbr} name={h.name} score={h.score} alignRight />
       </div>
-
       {/* Box score (innings/quarters line + player stats) — same component as the games list */}
       <div style={{ marginTop: 16, borderTop: "1px solid #1f2937", paddingTop: 14 }}>
         {box ? <BoxScore detail={box} /> : boxLoading ? (
@@ -427,7 +385,6 @@ function LiveScoreHeader({ gameId, awayAbbr, homeAbbr, league = "mlb" }) {
     </div>
   );
 }
-
 function ScoreRow({ abbr, name, score, alignRight }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, justifyContent: alignRight ? "flex-end" : "flex-start" }}>
@@ -440,7 +397,6 @@ function ScoreRow({ abbr, name, score, alignRight }) {
     </div>
   );
 }
-
 function LiveWarningBanner() {
   return (
     <div style={{ background: "#1a1410", border: "1px solid #f5970033", borderLeft: "3px solid #f59700", borderRadius: 6, padding: "12px 16px", marginBottom: 10 }}>
@@ -456,7 +412,6 @@ function LiveWarningBanner() {
     </div>
   );
 }
-
 function FinalBanner({ game }) {
   return (
     <div style={{ background: "#0a1f15", border: "1px solid #22c55e30", borderLeft: "3px solid #22c55e", borderRadius: 6, padding: "12px 16px", marginBottom: 10 }}>
@@ -477,12 +432,10 @@ function FinalBanner({ game }) {
     </div>
   );
 }
-
 function BatterVsPitcherSection({ gameId, awayAbbr, homeAbbr, hasFullAccess, navigate }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
-
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -494,7 +447,6 @@ function BatterVsPitcherSection({ gameId, awayAbbr, homeAbbr, hasFullAccess, nav
       .catch(() => { if (!cancelled) { setError(true); setLoading(false); } });
     return () => { cancelled = true; };
   }, [gameId]);
-
   return (
     <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 20, marginBottom: 18, position: "relative" }}>
       <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 6 }}>
@@ -503,20 +455,17 @@ function BatterVsPitcherSection({ gameId, awayAbbr, homeAbbr, hasFullAccess, nav
       <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 16 }}>
         Hitters with career at-bats against today's opposing starter
       </div>
-
       {loading && (
         <div style={{ textAlign: "center", padding: 32 }}>
           <div style={{ width: 26, height: 26, border: "3px solid #1f2937", borderTopColor: "#ef4444", borderRadius: "50%", animation: "spin .8s linear infinite", margin: "0 auto 12px" }} />
           <div style={{ fontSize: 12, color: "#6b7280" }}>Loading matchup history...</div>
         </div>
       )}
-
       {error && !loading && (
         <div style={{ textAlign: "center", padding: 24, fontSize: 12, color: "#6b7280" }}>
           Couldn't load matchup history right now.
         </div>
       )}
-
       {!loading && !error && data && (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, position: "relative" }} className="bvp-grid">
           <BvPTable
@@ -542,7 +491,6 @@ function BatterVsPitcherSection({ gameId, awayAbbr, homeAbbr, hasFullAccess, nav
     </div>
   );
 }
-
 function BvPTable({ teamAbbr, pitcherName, batters }) {
   if (!batters || batters.length === 0) {
     return (
@@ -556,7 +504,6 @@ function BvPTable({ teamAbbr, pitcherName, batters }) {
       </div>
     );
   }
-
   const totals = batters.reduce((a, b) => ({
     pa: a.pa + (b.plateAppearances || 0),
     h: a.h + (b.hits || 0),
@@ -564,7 +511,6 @@ function BvPTable({ teamAbbr, pitcherName, batters }) {
     ab: a.ab + (b.atBats || 0),
   }), { pa: 0, h: 0, hr: 0, ab: 0 });
   const teamAvg = totals.ab > 0 ? totals.h / totals.ab : null;
-
   return (
     <div style={{ background: "#0a0e14", border: "1px solid #1f2937", borderRadius: 8, overflow: "hidden" }}>
       <div style={{ padding: "10px 12px", borderBottom: "1px solid #1f2937", background: "#0f1419" }}>
@@ -613,14 +559,12 @@ function BvPTable({ teamAbbr, pitcherName, batters }) {
     </div>
   );
 }
-
 function bvpTh(align) {
   return { padding: "6px 8px", textAlign: align, fontWeight: 500, fontSize: 9, letterSpacing: "0.05em", textTransform: "uppercase" };
 }
 function bvpTd(align, color = "#e4e7eb") {
   return { padding: "6px 8px", textAlign: align, color, fontSize: 11, fontWeight: 600, fontVariantNumeric: "tabular-nums" };
 }
-
 function GameHeader({ game, isLive, isFinal }) {
   return (
     <div style={{ marginBottom: 24 }}>
@@ -643,7 +587,6 @@ function GameHeader({ game, isLive, isFinal }) {
     </div>
   );
 }
-
 function WeatherCard({ weather }) {
   if (weather.indoor) {
     return (
@@ -672,7 +615,6 @@ function WeatherCard({ weather }) {
     </div>
   );
 }
-
 function WeatherStat({ icon, label, value, color, subtitle }) {
   return (
     <div style={{ background: "#0a0e14", border: "1px solid #1f2937", borderRadius: 8, padding: 12 }}>
@@ -682,7 +624,6 @@ function WeatherStat({ icon, label, value, color, subtitle }) {
     </div>
   );
 }
-
 function BestEdgeCard({ edge, game, hasFullAccess, navigate }) {
   const positive = edge.edge > 0;
   const desc = edge.type === "ML" ? `${edge.team} Moneyline` : `${edge.side === "over" ? "Over" : "Under"} ${edge.line}`;
@@ -704,7 +645,6 @@ function BestEdgeCard({ edge, game, hasFullAccess, navigate }) {
     </div>
   );
 }
-
 // Small honesty badge: shows whether the model's offense input is based on a
 // CONFIRMED lineup (today's posted card), a PROJECTED lineup (last game's, used
 // as a proxy before today's posts), or season team stats (no lineup resolved).
@@ -713,7 +653,6 @@ function BestEdgeCard({ edge, game, hasFullAccess, navigate }) {
 function LiveEdgeCards({ gameId, awayAbbr, homeAbbr }) {
   const [g, setG] = useState(null);
   const [loaded, setLoaded] = useState(false);
-
   useEffect(() => {
     let cancelled = false, timer = null;
     const pull = async () => {
@@ -727,10 +666,8 @@ function LiveEdgeCards({ gameId, awayAbbr, homeAbbr }) {
     pull();
     return () => { cancelled = true; if (timer) clearTimeout(timer); };
   }, [gameId]);
-
   if (!loaded) return null;
   if (!g) return null; // not in the live feed yet — show nothing rather than stale data
-
   const row = (label, prob, odds, edge) => {
     const edgePos = edge != null && edge > 0;
     return (
@@ -751,17 +688,14 @@ function LiveEdgeCards({ gameId, awayAbbr, homeAbbr }) {
       </div>
     );
   };
-
   return (
     <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 20, marginBottom: 10 }}>
       <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 12 }}>🔴 Live edges · {g.half === "bottom" ? "Bot" : "Top"} {g.inning}, {g.outs} out</div>
-
       <div style={{ fontSize: 10, color: "#9ca3af", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 8 }}>💰 Moneyline</div>
       <div className="two-col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
         {row(awayAbbr, g.awayWinProb, g.awayOdds, g.awayEdge)}
         {row(homeAbbr, g.homeWinProb, g.homeOdds, g.homeEdge)}
       </div>
-
       {g.totalLine != null && (
         <>
           <div style={{ fontSize: 10, color: "#9ca3af", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 8 }}>📊 Total {g.totalLine} · proj {g.projectedTotal}</div>
@@ -771,7 +705,6 @@ function LiveEdgeCards({ gameId, awayAbbr, homeAbbr }) {
           </div>
         </>
       )}
-
       {(g.homeRunLineProb != null || g.awayRunLineProb != null) && (
         <>
           <div style={{ fontSize: 10, color: "#9ca3af", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 8 }}>📐 Run line ±1.5</div>
@@ -784,7 +717,6 @@ function LiveEdgeCards({ gameId, awayAbbr, homeAbbr }) {
     </div>
   );
 }
-
 function LineupBadge({ lineups, awayAbbr, homeAbbr }) {
   if (!lineups) return null;
   const tag = (side, abbr) => {
@@ -814,7 +746,6 @@ function LineupBadge({ lineups, awayAbbr, homeAbbr }) {
     </div>
   );
 }
-
 function PitcherMatchup({ awayPitcher, homePitcher, hasFullAccess, navigate }) {
   return (
     <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 20, marginBottom: 10 }}>
@@ -826,7 +757,6 @@ function PitcherMatchup({ awayPitcher, homePitcher, hasFullAccess, navigate }) {
     </div>
   );
 }
-
 function PitcherCard({ pitcher, label, hasFullAccess, navigate }) {
   const [imgOk, setImgOk] = useState(true);
   if (!pitcher) {
@@ -842,11 +772,9 @@ function PitcherCard({ pitcher, label, hasFullAccess, navigate }) {
   const photo = pitcher.id ? `https://midfield.mlbstatic.com/v1/people/${pitcher.id}/spots/120` : null;
   const record = stats && (stats.wins != null || stats.losses != null)
     ? `${stats.wins ?? 0}-${stats.losses ?? 0}` : null;
-
   return (
     <div style={{ background: "#0a0e14", border: "1px solid #1f2937", borderRadius: 8, padding: 16, textAlign: "center" }}>
       <div style={{ fontSize: 10, color: "#6b7280", letterSpacing: "0.08em", marginBottom: 10, fontWeight: 600 }}>{label}</div>
-
       {/* headshot on top (ESPN game-card style) */}
       <div style={{ width: 80, height: 80, margin: "0 auto 10px", borderRadius: "50%", overflow: "hidden", background: "#0f1419", border: "2px solid #1f2937", display: "flex", alignItems: "center", justifyContent: "center" }}>
         {photo && imgOk ? (
@@ -862,24 +790,28 @@ function PitcherCard({ pitcher, label, hasFullAccess, navigate }) {
           <span style={{ fontSize: 30 }}>⚾</span>
         )}
       </div>
-
       <div style={{ fontSize: 15, fontWeight: 700, color: "#fff" }}>{pitcher.name}</div>
       <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 12, marginTop: 2 }}>
         {pitcher.hand ? `${pitcher.hand}HP` : ""}{pitcher.hand && record ? " · " : ""}{record ? `${record}` : ""}
       </div>
-
       {stats && (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, fontSize: 12, textAlign: "left" }}>
-          <StatBlock label="ERA" value={stats.era?.toFixed(2)} />
-          <StatBlock label="WHIP" value={stats.whip?.toFixed(2)} />
-          <StatBlock label="K/9" value={stats.strikeoutsPer9?.toFixed(1)} />
-          <StatBlock label="HR/9" value={stats.homeRunsPer9?.toFixed(2)} />
-        </div>
+        <>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, fontSize: 12, textAlign: "left" }}>
+            <StatBlock label="ERA" value={stats.era?.toFixed(2)} />
+            <StatBlock label="WHIP" value={stats.whip?.toFixed(2)} />
+            <StatBlock label="K/9" value={stats.strikeoutsPer9?.toFixed(1)} />
+            <StatBlock label="HR/9" value={stats.homeRunsPer9?.toFixed(2)} />
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, fontSize: 12, textAlign: "left", marginTop: 8 }}>
+            <StatBlock label="IP" value={stats.inningsPitched != null ? stats.inningsPitched : "—"} />
+            <StatBlock label="H" value={stats.hits != null ? stats.hits : "—"} />
+            <StatBlock label="BB" value={stats.walks != null ? stats.walks : "—"} />
+          </div>
+        </>
       )}
     </div>
   );
 }
-
 function StatBlock({ label, value }) {
   return (
     <div style={{ background: "#0f1419", border: "1px solid #1a1f28", borderRadius: 6, padding: "6px 10px" }}>
@@ -888,7 +820,6 @@ function StatBlock({ label, value }) {
     </div>
   );
 }
-
 function WinProbabilityCard({ awayAbbr, homeAbbr, awayProb, homeProb, awayOdds, homeOdds, awayEdge, homeEdge }) {
   if (awayProb == null && homeProb == null) return null;
   const awayPct = Math.round((awayProb ?? 0) * 100);
@@ -903,7 +834,6 @@ function WinProbabilityCard({ awayAbbr, homeAbbr, awayProb, homeProb, awayOdds, 
     </div>
   );
 }
-
 function MLBox({ abbr, prob, odds, edge, side }) {
   const positive = edge != null && edge > 0;
   return (
@@ -919,7 +849,6 @@ function MLBox({ abbr, prob, odds, edge, side }) {
     </div>
   );
 }
-
 function TotalsCard({ totals }) {
   if (totals.line == null && totals.projected == null) return null;
   return (
@@ -933,7 +862,6 @@ function TotalsCard({ totals }) {
     </div>
   );
 }
-
 function BigStat({ label, value, color }) {
   return (
     <div style={{ background: "#0a0e14", border: "1px solid #1f2937", borderRadius: 8, padding: 14, textAlign: "center" }}>
@@ -942,7 +870,6 @@ function BigStat({ label, value, color }) {
     </div>
   );
 }
-
 function ContextCard({ game }) {
   return (
     <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 20, marginBottom: 10 }}>
@@ -954,7 +881,6 @@ function ContextCard({ game }) {
     </div>
   );
 }
-
 function FactorCard({ label, factor }) {
   const delta = (factor - 1) * 100;
   const color = delta > 5 ? "#22c55e" : delta < -5 ? "#ef4444" : "#9ca3af";
@@ -965,7 +891,6 @@ function FactorCard({ label, factor }) {
     </div>
   );
 }
-
 function HRPropsCard({ hrProps, hasFullAccess, navigate }) {
   return (
     <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 20, marginBottom: 10 }}>
@@ -984,7 +909,6 @@ function HRPropsCard({ hrProps, hasFullAccess, navigate }) {
     </div>
   );
 }
-
 function HRPropCard({ prop }) {
   const positive = prop.edge > 0;
   return (
@@ -1004,7 +928,6 @@ function HRPropCard({ prop }) {
     </div>
   );
 }
-
 function ConfidenceBadge({ conf }) {
   const colors = {
     HIGH: { bg: "#22c55e15", fg: "#22c55e", border: "#22c55e30" },
@@ -1015,19 +938,15 @@ function ConfidenceBadge({ conf }) {
   const c = colors[conf] || colors.NEUTRAL;
   return <span style={{ fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 4, background: c.bg, color: c.fg, border: `1px solid ${c.border}`, marginTop: 6, display: "inline-block" }}>{conf || "—"}</span>;
 }
-
 function formatOdds(american) {
   if (american == null) return "—";
   return american > 0 ? `+${american}` : `${american}`;
 }
-
 function fmtLine(n) {
   if (n == null) return "";
   return n > 0 ? `+${n}` : `${n}`;
 }
-
 const ctaBtnStyle = { background: "#ef4444", color: "#fff", border: "none", borderRadius: 6, padding: "8px 16px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" };
-
 function Loader() {
   return (
     <div style={{ textAlign: "center", padding: 80 }}>
@@ -1036,7 +955,6 @@ function Loader() {
     </div>
   );
 }
-
 function ErrorState() {
   return (
     <div style={{ textAlign: "center", padding: 64, background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10 }}>
@@ -1046,7 +964,6 @@ function ErrorState() {
     </div>
   );
 }
-
 function NotFound({ gameId }) {
   return (
     <div style={{ textAlign: "center", padding: 64, background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10 }}>
