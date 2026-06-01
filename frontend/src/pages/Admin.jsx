@@ -46,7 +46,7 @@ function fmtOdds(v) {
 // Other sports fall back to typing the matchup in. Cached per league so we don't
 // refetch for every leg.
 const SCHEDULE_LEAGUES = new Set(["mlb", "nba"]);
-const scheduleCache = {}; // league -> [{ value, label }]
+const scheduleCache = {}; // league -> [{ value, label, id, away, home }]
 
 function useSchedule(league) {
   const [games, setGames] = useState(scheduleCache[league] || null);
@@ -61,8 +61,15 @@ function useSchedule(league) {
         const opts = all
           .filter((g) => g.away && g.home && g.away.abbrev && g.home.abbrev)
           .map((g) => {
-            const matchup = `${g.away.abbrev} @ ${g.home.abbrev}`;
-            return { value: matchup, label: g.statusDetail ? `${matchup} · ${g.statusDetail}` : matchup };
+            const away = g.away.abbrev, home = g.home.abbrev;
+            const matchup = `${away} @ ${home}`;
+            return {
+              value: matchup,
+              label: g.statusDetail ? `${matchup} · ${g.statusDetail}` : matchup,
+              id: g.id != null ? String(g.id) : "",
+              away,
+              home,
+            };
           });
         scheduleCache[league] = opts;
         if (!cancelled) setGames(opts);
@@ -78,7 +85,11 @@ function useSchedule(league) {
 // Dropdown that quick-fills the matchup field from the day's scheduled games.
 // Always visible for MLB/NBA (with Loading / No-games states) so it can't
 // silently disappear; hidden only for sports that have no schedule feed.
-function GamePicker({ league, onPick }) {
+// onPick(value) → matchup string (existing behaviour, unchanged).
+// onGame(option) → optional: full game option { value, label, id, away, home }
+//   so callers that need it (straight bets, for auto-grading) can capture the
+//   game id + abbreviations. Callers that don't pass onGame are unaffected.
+function GamePicker({ league, onPick, onGame }) {
   const sched = useSchedule(league);
   if (!SCHEDULE_LEAGUES.has(league)) return null; // no feed for this sport → type-in only
   const ready = Array.isArray(sched) && sched.length > 0;
@@ -90,7 +101,14 @@ function GamePicker({ league, onPick }) {
     <select
       value=""
       disabled={!ready}
-      onChange={(e) => { if (e.target.value) onPick(e.target.value); }}
+      onChange={(e) => {
+        if (!e.target.value) return;
+        onPick(e.target.value);
+        if (onGame) {
+          const opt = (Array.isArray(sched) ? sched : []).find((o) => o.value === e.target.value);
+          if (opt) onGame(opt);
+        }
+      }}
       style={{ marginBottom: 8, opacity: ready ? 1 : 0.7 }}
     >
       <option value="">{placeholder}</option>
@@ -187,7 +205,7 @@ function ExpertPicksManager() {
     setItems(next);
   };
   const remove = (i) => setItems(items.filter((_, j) => j !== i));
-  const addStraight = () => setItems([...items, { type: "straight", sport: "mlb", pick: "", game: "", odds: "", confidence: "HIGH", analysis: "", result: "" }]);
+  const addStraight = () => setItems([...items, { type: "straight", sport: "mlb", pick: "", game: "", odds: "", confidence: "HIGH", analysis: "", result: "", market: "moneyline", selection: "", line: "", gameId: "", awayAbbr: "", homeAbbr: "" }]);
   const addParlay = () => setItems([...items, { type: "parlay", confidence: "HIGH", analysis: "", result: "", legs: [emptyLeg("mlb"), emptyLeg("nba")] }]);
 
   // leg helpers
@@ -244,12 +262,22 @@ function ExpertPicksManager() {
       <div style={{ background: "#0a0a14", border: "1px solid #1a1a2e", borderRadius: 12, padding: 16, fontSize: 12, color: "#475569", lineHeight: 1.6 }}>
         <strong style={{ color: "#e2e8f0" }}>Grading:</strong> after a game finishes, set each pick's <strong style={{ color: "#e2e8f0" }}>Result</strong> to Won / Lost / Push and Save.
         Your record and units on the Expert picks page update automatically — only graded picks count, so nothing is ever inflated.
+        <br /><br />
+        <strong style={{ color: "#1D9E75" }}>Auto-grade (MLB/NBA):</strong> on a straight bet, link a game from the dropdown and choose the bet type + side. Picks linked this way are set up to grade themselves automatically once that feature is switched on. Leaving them blank still works — you just grade those by hand. (Parlays are always graded by hand.)
       </div>
     </div>
   );
 }
 
 function StraightEditor({ item, index, update, remove }) {
+  const market = item.market || "moneyline";
+  const selectionOptions = market === "total"
+    ? [{ v: "over", label: "Over" }, { v: "under", label: "Under" }]
+    : [
+        { v: "away", label: item.awayAbbr ? `${item.awayAbbr} (away)` : "Away team" },
+        { v: "home", label: item.homeAbbr ? `${item.homeAbbr} (home)` : "Home team" },
+      ];
+  const linked = !!item.gameId && !!item.selection;
   return (
     <div style={{ background: "#0a0a14", border: "1px solid #1a1a2e", borderRadius: 14, padding: 20 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
@@ -279,17 +307,59 @@ function StraightEditor({ item, index, update, remove }) {
           </select>
         </div>
       </div>
-      <div style={{ marginBottom: 8 }}>
-        <Label>Game / matchup</Label>
-        <GamePicker league={item.sport} onPick={(v) => update(index, { game: v })} />
+
+      {/* Auto-grade link (MLB/NBA). Optional & additive — leave blank to grade by hand. */}
+      <div style={{ borderLeft: "3px solid #1D9E75", borderRadius: 0, background: "#080810", padding: "14px 16px", marginBottom: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.06em", background: "#0F6E5633", color: "#1D9E75", border: "1px solid #1D9E7555", borderRadius: 4, padding: "2px 8px" }}>AUTO-GRADE</span>
+          <span style={{ fontSize: 11, color: linked ? "#1D9E75" : "#64748b" }}>
+            {linked ? "✓ Linked — set up to grade itself (MLB/NBA)" : "Link a game + pick a side to set up auto-grading (MLB/NBA). Optional."}
+          </span>
+        </div>
+        <div className="admin-3col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 0.8fr", gap: 12, marginBottom: 10 }}>
+          <div>
+            <Label>Bet type</Label>
+            <select value={market} onChange={e => update(index, { market: e.target.value, selection: "" })}>
+              <option value="moneyline">Moneyline</option>
+              <option value="total">Total (O/U)</option>
+            </select>
+          </div>
+          <div>
+            <Label>Side</Label>
+            <select value={item.selection || ""} onChange={e => update(index, { selection: e.target.value })}>
+              <option value="">— pick side —</option>
+              {selectionOptions.map(o => <option key={o.v} value={o.v}>{o.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <Label>Line</Label>
+            <input
+              value={item.line ?? ""}
+              onChange={e => update(index, { line: e.target.value })}
+              placeholder={market === "total" ? "8.5" : "—"}
+              disabled={market !== "total"}
+              style={{ opacity: market === "total" ? 1 : 0.5 }}
+            />
+          </div>
+        </div>
+        <Label>Link game (loads today's MLB/NBA games)</Label>
+        <GamePicker
+          league={item.sport}
+          onPick={(v) => update(index, { game: v })}
+          onGame={(opt) => update(index, { gameId: opt.id, awayAbbr: opt.away, homeAbbr: opt.home, selection: "" })}
+        />
+        {item.gameId ? (
+          <div style={{ fontSize: 10, color: "#475569" }}>Linked: {item.awayAbbr} @ {item.homeAbbr} (id {item.gameId})</div>
+        ) : null}
       </div>
+
       <div className="admin-3col" style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 0.7fr", gap: 12 }}>
         <div>
-          <Label>Pick (e.g. Dodgers ML)</Label>
+          <Label>Pick label (shown on page)</Label>
           <input value={item.pick} onChange={e => update(index, { pick: e.target.value })} placeholder="Dodgers ML" />
         </div>
         <div>
-          <Label>Game / matchup</Label>
+          <Label>Game / matchup (text)</Label>
           <input value={item.game} onChange={e => update(index, { game: e.target.value })} placeholder="LAD @ SF" />
         </div>
         <div>
@@ -405,6 +475,12 @@ function normalizeForEdit(p) {
     confidence: p.confidence || "HIGH",
     analysis: p.analysis || "",
     result: p.result || "",
+    market: p.market || "moneyline",
+    selection: p.selection || "",
+    line: p.line != null ? String(p.line) : "",
+    gameId: p.gameId != null ? String(p.gameId) : "",
+    awayAbbr: p.awayAbbr || "",
+    homeAbbr: p.homeAbbr || "",
   };
 }
 
@@ -431,5 +507,11 @@ function serializeForSave(p) {
     confidence: p.confidence,
     analysis: p.analysis,
     result: p.result || null,
+    market: p.market || "moneyline",
+    selection: p.selection || null,
+    line: (p.line === "" || p.line == null) ? null : Number(p.line),
+    gameId: p.gameId || null,
+    awayAbbr: p.awayAbbr || null,
+    homeAbbr: p.homeAbbr || null,
   };
 }
