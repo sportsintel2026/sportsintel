@@ -12,7 +12,7 @@ const PICKS = [
 const COMPETITORS = [
   { name:"Picks Sites", price:"$20–$100+/mo", note:"Sell you picks. No guarantees." },
   { name:"ESPN+", price:"$10.99/mo", note:"Scores only. No deep stats." },
-  { name:"Edge the Lines", price:"$7/mo", highlight:true, note:"Everything you need to make your OWN picks." },
+  { name:"WizePicks", price:"$7/mo", highlight:true, note:"Everything you need to make your OWN picks." },
 ];
 
 export default function PricingPage() {
@@ -41,12 +41,8 @@ export default function PricingPage() {
         {/* Logo */}
         <div style={{textAlign:"center",marginBottom:36}}>
           <Link to="/" style={{textDecoration:"none",display:"inline-flex",alignItems:"center",gap:9}}>
-            <svg width="24" height="24" viewBox="0 0 30 30" aria-hidden="true">
-              <line x1="4" y1="21" x2="11" y2="21" stroke="#1D9E75" strokeWidth="3" strokeLinecap="round" />
-              <line x1="13" y1="15" x2="20" y2="15" stroke="#1D9E75" strokeWidth="3" strokeLinecap="round" />
-              <line x1="22" y1="9" x2="26" y2="9" stroke="#1D9E75" strokeWidth="3" strokeLinecap="round" />
-            </svg>
-            <span style={{fontFamily:"'Barlow Condensed'",fontSize:26,fontWeight:900,color:"#fff",letterSpacing:"0.1em"}}>EDGE<span style={{color:"#1D9E75"}}>THE</span>LINES</span>
+            <span style={{width:9,height:9,borderRadius:"50%",background:"#1D9E75",display:"inline-block"}}></span>
+            <span style={{fontFamily:"'Barlow Condensed'",fontSize:26,fontWeight:900,color:"#fff",letterSpacing:"0.1em"}}>WIZE<span style={{color:"#1D9E75"}}>PICKS</span></span>
           </Link>
         </div>
 
@@ -63,13 +59,13 @@ export default function PricingPage() {
             Other sites charge <strong style={{color:"#e2e8f0"}}>$20 to $100+ a month</strong> to sell you picks that aren't guaranteed. There's no such thing as a guaranteed pick in sports — but there <em style={{color:"#e2e8f0"}}>is</em> such a thing as being better informed than everyone else.
           </p>
           <p style={{fontSize:15,color:"#64748b",lineHeight:1.8,maxWidth:480,margin:"16px auto 0"}}>
-            For just <strong style={{color:"#ef4444"}}>$7/month</strong>, Edge the Lines gives you the <strong style={{color:"#e2e8f0"}}>exact same data the pros use</strong> — live scores, H2H records, player matchup stats, weather conditions, and betting lines — so you can make smarter picks yourself.
+            For just <strong style={{color:"#ef4444"}}>$7/month</strong>, WizePicks gives you the <strong style={{color:"#e2e8f0"}}>exact same data the pros use</strong> — live scores, H2H records, player matchup stats, weather conditions, and betting lines — so you can make smarter picks yourself.
           </p>
         </div>
 
         {/* Competitor comparison */}
         <div style={{marginBottom:28}}>
-          <div style={{fontSize:11,color:"#475569",fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:12,textAlign:"center"}}>Why Edge the Lines wins</div>
+          <div style={{fontSize:11,color:"#475569",fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:12,textAlign:"center"}}>Why WizePicks wins</div>
           <div style={{display:"flex",flexDirection:"column",gap:8}}>
             {COMPETITORS.map((c,i)=>(
               <div key={i} style={{background:c.highlight?"linear-gradient(135deg,#ef444418,#ef444408)":"#0d0d1a",border:`1px solid ${c.highlight?"#ef444450":"#1e2235"}`,borderRadius:12,padding:"14px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
@@ -157,7 +153,7 @@ export default function PricingPage() {
         {/* Bottom CTA */}
         <div style={{background:"linear-gradient(135deg,#ef444412,#ef444406)",border:"1px solid #ef444430",borderRadius:16,padding:"24px",textAlign:"center",marginBottom:24}}>
           <div style={{fontSize:16,fontWeight:800,color:"#fff",marginBottom:8}}>Ready to bet smarter?</div>
-          <div style={{fontSize:13,color:"#64748b",marginBottom:16,lineHeight:1.6}}>Join thousands of sports bettors who use Edge the Lines to make more informed picks every single day.</div>
+          <div style={{fontSize:13,color:"#64748b",marginBottom:16,lineHeight:1.6}}>Join thousands of sports bettors who use WizePicks to make more informed picks every single day.</div>
           <button onClick={handleSubscribe} disabled={loading}
             style={{background:"#ef4444",color:"#fff",border:"none",borderRadius:10,padding:"13px 40px",fontSize:15,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>
             Start Today — $7/mo →
