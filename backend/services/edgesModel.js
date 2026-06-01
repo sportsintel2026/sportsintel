@@ -1,8 +1,6 @@
-// Edges model v0.5 — research-grade MLB betting projections
+// Edges model v0.4 — research-grade MLB betting projections
 // + Weather, Batter vs Pitcher, Pitcher recent form
-// + v0.4: lineup handedness splits vs opposing starter, reliever-only bullpen quality
-// + v0.5: market blend (anchor model toward de-vigged line) + overreaction flag
-// + v0.5: thin-sample pitcher regression (don't trust a 0.2-IP ERA)
+// + NEW v0.4: lineup handedness splits vs opposing starter, reliever-only bullpen quality
 const {
   getPitcherSeasonStats,
   getBatterSeasonStats,
@@ -460,6 +458,9 @@ async function calculateGameEdges(game, oddsForGame) {
   const awayHandMult = handednessMultiplier(awayHandSplits, homePitcherHand, awayTeamOps);
   const homeHandMult = handednessMultiplier(homeHandSplits, awayPitcherHand, homeTeamOps);
 
+  // Blend recent form (last 3 starts) lightly into each starter's ERA before
+  // projecting. Catches a pitcher who's clearly hot or slumping without letting
+  // a tiny sample dominate. Flows into both ML and totals via effectiveERA.
   // First regress thin-sample starters toward league average (a 0.2-IP "13.50
   // ERA" must not be taken at face value), THEN nudge for recent form. Order
   // matters: regress the unreliable raw number first, then apply form on top.
