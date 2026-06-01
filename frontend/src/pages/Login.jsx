@@ -10,12 +10,8 @@ function AuthLayout({ title, subtitle, children }) {
       <div style={{width:"100%",maxWidth:400}}>
         <div style={{textAlign:"center",marginBottom:36}}>
           <Link to="/" style={{textDecoration:"none",display:"inline-flex",alignItems:"center",gap:9}}>
-            <svg width="24" height="24" viewBox="0 0 30 30" aria-hidden="true">
-              <line x1="4" y1="21" x2="11" y2="21" stroke="#1D9E75" strokeWidth="3" strokeLinecap="round" />
-              <line x1="13" y1="15" x2="20" y2="15" stroke="#1D9E75" strokeWidth="3" strokeLinecap="round" />
-              <line x1="22" y1="9" x2="26" y2="9" stroke="#1D9E75" strokeWidth="3" strokeLinecap="round" />
-            </svg>
-            <span style={{fontFamily:"'Barlow Condensed'",fontSize:26,fontWeight:800,color:"#fff",letterSpacing:"0.1em"}}>EDGE<span style={{color:"#1D9E75"}}>THE</span>LINES</span>
+            <span style={{width:9,height:9,borderRadius:"50%",background:"#1D9E75",display:"inline-block"}}></span>
+            <span style={{fontFamily:"'Barlow Condensed'",fontSize:26,fontWeight:800,color:"#fff",letterSpacing:"0.1em"}}>WIZE<span style={{color:"#1D9E75"}}>PICKS</span></span>
           </Link>
           <div style={{fontSize:22,fontWeight:800,color:"#fff",marginTop:24,marginBottom:8}}>{title}</div>
           <div style={{fontSize:14,color:"#64748b"}}>{subtitle}</div>
