@@ -225,14 +225,39 @@ function LiveBadge() {
   );
 }
 
+// Neutral "market may be overrating this side" tag. NOT a bet recommendation —
+// it surfaces the gap between the sharp market price and our model so the user
+// can apply their own read (e.g. fading a public/streak-inflated favorite).
+// Shows only when the backend attached an `inflation` flag to this edge.
+function InflationTag({ inflation }) {
+  if (!inflation || !inflation.inflated) return null;
+  const gapPct = inflation.gap != null ? Math.round(inflation.gap * 100) : null;
+  const title = inflation.note
+    || "Market rates this side higher than our model — possible public/streak inflation.";
+  return (
+    <span
+      title={title}
+      style={{
+        display: "inline-flex", alignItems: "center", gap: 3, fontSize: 9, fontWeight: 700,
+        padding: "2px 6px", borderRadius: 3, background: "#f5970015", color: "#fbbf24",
+        border: "1px solid #f5970040", letterSpacing: "0.04em", marginLeft: 6, cursor: "help",
+        whiteSpace: "nowrap",
+      }}
+    >
+      ⚠ MARKET HIGH{gapPct != null ? ` +${gapPct}%` : ""}
+    </span>
+  );
+}
+
 function MoneylineRow({ edge, navigate }) {
   const isLive = edge.status === "live";
   return (
     <div className="edge-row" onClick={() => navigate(`/game/mlb/${edge.gameId}`)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: 10, background: "#0a0e14", borderRadius: 4 }}>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 2, display: "flex", alignItems: "center" }}>
+        <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 2, display: "flex", alignItems: "center", flexWrap: "wrap", rowGap: 3 }}>
           {edge.teamAbbr} ML
           {isLive && <LiveBadge />}
+          <InflationTag inflation={edge.inflation} />
         </div>
         <div style={{ fontSize: 10, color: "#6b7280", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
           {edge.matchup} · {formatOdds(edge.odds)} {isLive && edge.inning ? `· ${edge.inning}` : edge.time && `· ${edge.time}`}
@@ -251,9 +276,10 @@ function TotalsRow({ edge, navigate }) {
   return (
     <div className="edge-row" onClick={() => navigate(`/game/mlb/${edge.gameId}`)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: 10, background: "#0a0e14", borderRadius: 4 }}>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 2, display: "flex", alignItems: "center" }}>
+        <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 2, display: "flex", alignItems: "center", flexWrap: "wrap", rowGap: 3 }}>
           {edge.side === "over" ? "Over" : "Under"} {edge.line}
           {isLive && <LiveBadge />}
+          <InflationTag inflation={edge.inflation} />
         </div>
         <div style={{ fontSize: 10, color: "#6b7280", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
           {edge.matchup} · {formatOdds(edge.odds)} {isLive && edge.inning ? `· ${edge.inning}` : ""}
