@@ -746,18 +746,72 @@ function LineupBadge({ lineups, awayAbbr, homeAbbr }) {
     </div>
   );
 }
+// Per-stat comparison metadata. lowerBetter=true → smaller value wins (ERA etc.);
+// false → bigger value wins (K/9, IP). Only the four RATE stats count toward the
+// verdict — raw H/BB/IP scale with innings, so a workhorse would unfairly "lose"
+// H/BB just for pitching more. We still color all seven for at-a-glance reading.
+const PITCHER_STAT_DEFS = [
+  { key: "era",  lowerBetter: true,  get: (s) => s?.era },
+  { key: "whip", lowerBetter: true,  get: (s) => s?.whip },
+  { key: "k9",   lowerBetter: false, get: (s) => s?.strikeoutsPer9 },
+  { key: "hr9",  lowerBetter: true,  get: (s) => s?.homeRunsPer9 },
+  { key: "ip",   lowerBetter: false, get: (s) => s?.inningsPitched },
+  { key: "h",    lowerBetter: true,  get: (s) => s?.hits },
+  { key: "bb",   lowerBetter: true,  get: (s) => s?.walks },
+];
+const VERDICT_KEYS = ["era", "whip", "k9", "hr9"];
+// Returns per-stat status maps for each side ("win"|"lose"|"tie"|null) plus the
+// rate-stat win counts used for the verdict line. null status = can't compare
+// (a side is missing that stat) → left neutral.
+function comparePitchers(awayStats, homeStats) {
+  const away = {}, home = {};
+  let awayWins = 0, homeWins = 0;
+  for (const def of PITCHER_STAT_DEFS) {
+    const av = def.get(awayStats);
+    const hv = def.get(homeStats);
+    if (av == null || hv == null) { away[def.key] = null; home[def.key] = null; continue; }
+    if (av === hv) { away[def.key] = "tie"; home[def.key] = "tie"; continue; }
+    const awayBetter = def.lowerBetter ? av < hv : av > hv;
+    away[def.key] = awayBetter ? "win" : "lose";
+    home[def.key] = awayBetter ? "lose" : "win";
+    if (VERDICT_KEYS.includes(def.key)) { if (awayBetter) awayWins++; else homeWins++; }
+  }
+  return { away, home, awayWins, homeWins };
+}
 function PitcherMatchup({ awayPitcher, homePitcher, hasFullAccess, navigate }) {
+  // Compare only when both starters have season stats; otherwise no coloring/verdict.
+  const cmp = (awayPitcher?.stats && homePitcher?.stats)
+    ? comparePitchers(awayPitcher.stats, homePitcher.stats)
+    : null;
+  const total = cmp ? cmp.awayWins + cmp.homeWins : 0;
+  let verdict = null;
+  if (cmp && total > 0) {
+    if (cmp.awayWins > cmp.homeWins) verdict = { text: `${awayPitcher.name} has the edge by the numbers`, detail: `${cmp.awayWins} of ${total} key categories`, color: "#22c55e" };
+    else if (cmp.homeWins > cmp.awayWins) verdict = { text: `${homePitcher.name} has the edge by the numbers`, detail: `${cmp.homeWins} of ${total} key categories`, color: "#22c55e" };
+    else verdict = { text: "Even matchup by the numbers", detail: `${cmp.awayWins} key categories each`, color: "#9ca3af" };
+  }
   return (
     <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 20, marginBottom: 10 }}>
       <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 16 }}>⚾ Starting pitcher matchup</div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-        <PitcherCard pitcher={awayPitcher} label="AWAY" hasFullAccess={hasFullAccess} navigate={navigate} />
-        <PitcherCard pitcher={homePitcher} label="HOME" hasFullAccess={hasFullAccess} navigate={navigate} />
+        <PitcherCard pitcher={awayPitcher} label="AWAY" compare={cmp?.away} hasFullAccess={hasFullAccess} navigate={navigate} />
+        <PitcherCard pitcher={homePitcher} label="HOME" compare={cmp?.home} hasFullAccess={hasFullAccess} navigate={navigate} />
       </div>
+      {verdict && (
+        <div style={{ marginTop: 14, background: "#0a0e14", border: "1px solid #1f2937", borderRadius: 8, padding: "10px 14px", textAlign: "center" }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: verdict.color }}>🎯 {verdict.text}</span>
+          <span style={{ fontSize: 11, color: "#6b7280", marginLeft: 6 }}>· {verdict.detail}</span>
+        </div>
+      )}
+      {verdict && (
+        <div style={{ marginTop: 6, fontSize: 10, color: "#4b5563", textAlign: "center", lineHeight: 1.5 }}>
+          Green = better, red = worse. Verdict is based on season ERA, WHIP, K/9 and HR/9 — a stat comparison, not the full model projection.
+        </div>
+      )}
     </div>
   );
 }
-function PitcherCard({ pitcher, label, hasFullAccess, navigate }) {
+function PitcherCard({ pitcher, label, compare, hasFullAccess, navigate }) {
   const [imgOk, setImgOk] = useState(true);
   if (!pitcher) {
     return (
@@ -797,26 +851,28 @@ function PitcherCard({ pitcher, label, hasFullAccess, navigate }) {
       {stats && (
         <>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, fontSize: 12, textAlign: "left" }}>
-            <StatBlock label="ERA" value={stats.era?.toFixed(2)} />
-            <StatBlock label="WHIP" value={stats.whip?.toFixed(2)} />
-            <StatBlock label="K/9" value={stats.strikeoutsPer9?.toFixed(1)} />
-            <StatBlock label="HR/9" value={stats.homeRunsPer9?.toFixed(2)} />
+            <StatBlock label="ERA" value={stats.era?.toFixed(2)} status={compare?.era} />
+            <StatBlock label="WHIP" value={stats.whip?.toFixed(2)} status={compare?.whip} />
+            <StatBlock label="K/9" value={stats.strikeoutsPer9?.toFixed(1)} status={compare?.k9} />
+            <StatBlock label="HR/9" value={stats.homeRunsPer9?.toFixed(2)} status={compare?.hr9} />
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, fontSize: 12, textAlign: "left", marginTop: 8 }}>
-            <StatBlock label="IP" value={stats.inningsPitched != null ? stats.inningsPitched : "—"} />
-            <StatBlock label="H" value={stats.hits != null ? stats.hits : "—"} />
-            <StatBlock label="BB" value={stats.walks != null ? stats.walks : "—"} />
+            <StatBlock label="IP" value={stats.inningsPitched != null ? stats.inningsPitched : "—"} status={compare?.ip} />
+            <StatBlock label="H" value={stats.hits != null ? stats.hits : "—"} status={compare?.h} />
+            <StatBlock label="BB" value={stats.walks != null ? stats.walks : "—"} status={compare?.bb} />
           </div>
         </>
       )}
     </div>
   );
 }
-function StatBlock({ label, value }) {
+function StatBlock({ label, value, status }) {
+  const valueColor = status === "win" ? "#22c55e" : status === "lose" ? "#ef4444" : "#e4e7eb";
+  const borderColor = status === "win" ? "#22c55e44" : status === "lose" ? "#ef444444" : "#1a1f28";
   return (
-    <div style={{ background: "#0f1419", border: "1px solid #1a1f28", borderRadius: 6, padding: "6px 10px" }}>
+    <div style={{ background: "#0f1419", border: `1px solid ${borderColor}`, borderRadius: 6, padding: "6px 10px" }}>
       <div style={{ fontSize: 9, color: "#6b7280", letterSpacing: "0.08em", fontWeight: 600, textTransform: "uppercase" }}>{label}</div>
-      <div style={{ fontSize: 14, fontWeight: 700, color: "#e4e7eb", marginTop: 2 }}>{value ?? "—"}</div>
+      <div style={{ fontSize: 14, fontWeight: 700, color: valueColor, marginTop: 2 }}>{value ?? "—"}</div>
     </div>
   );
 }
