@@ -67,8 +67,8 @@ export default function SettingsPage() {
       <div className="mobile-only" style={{ display: "none", position: "sticky", top: 0, zIndex: 40, background: "#0a0e14", borderBottom: "1px solid #1a1f28", padding: "10px 14px", alignItems: "center", justifyContent: "space-between" }}>
         <button onClick={() => setDrawerOpen(true)} style={{ background: "none", border: "none", color: "#e4e7eb", fontSize: 22, padding: 4, cursor: "pointer" }}>☰</button>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e", animation: "pulse 2s infinite" }} />
-          <span style={{ fontSize: 15, fontWeight: 800 }}>Sports<span style={{ color: "#ef4444" }}>intel</span></span>
+          <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#1D9E75", animation: "pulse 2s infinite" }} />
+          <span style={{ fontSize: 15, fontWeight: 800 }}>Wize<span style={{ color: "#1D9E75" }}>Picks</span></span>
         </div>
         <div style={{ width: 30 }} />
       </div>
@@ -115,7 +115,6 @@ export default function SettingsPage() {
           </Section>
 
           <Section title="Support">
-            <Row label="Help" value={<a href="mailto:support@sportsintel.app" style={linkStyle}>support@sportsintel.app</a>} />
             <Row label="Feedback" value="Use the thumbs-down button anywhere" />
           </Section>
 
