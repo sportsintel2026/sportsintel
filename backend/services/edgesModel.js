@@ -2,6 +2,7 @@
 // + Weather, Batter vs Pitcher, Pitcher recent form
 // + v0.4: lineup handedness splits vs opposing starter, reliever-only bullpen quality
 // + v0.5: market blend (anchor model toward de-vigged line) + overreaction flag
+// + v0.5: thin-sample pitcher regression (don't trust a 0.2-IP ERA)
 const {
   getPitcherSeasonStats,
   getBatterSeasonStats,
@@ -86,6 +87,54 @@ function blendRecentForm(pitcher, recentStarts) {
   const clampedRecent = Math.max(1.0, Math.min(9.0, recentEra));
   const blended = round2(0.75 * pitcher.era + 0.25 * clampedRecent);
   return { ...pitcher, era: blended, _seasonEra: pitcher.era, _recentEra: recentEra };
+}
+
+// ── THIN-SAMPLE REGRESSION ────────────────────────────────────────────────────
+// A pitcher's rate stats (ERA, WHIP, K9, BB9, HR9) are statistically meaningless
+// over a handful of innings. A call-up or spot starter with 0.2 IP and one run
+// allowed shows a 13.50 ERA / 13.50 HR9 — which the model would otherwise read as
+// "batting practice," wildly inflating the run total AND every opposing hitter's
+// HR prop at once (the exact KC @ CIN failure: model projected 11.22 vs a 9.5
+// market line because CIN's starter had pitched two-thirds of an inning).
+//
+// The fix is standard regression to the mean: until a pitcher has thrown enough
+// innings to stabilize, pull his rate stats toward league average, weighted by how
+// thin the sample is. At 0 IP he is 100% league average (we genuinely know nothing
+// about him); by FULL_TRUST_IP he is 100% his own numbers; in between it slides
+// linearly. Counting stats (wins, hits, etc.) are left untouched — only the rate
+// stats that feed the projection get regressed. This corrects the moneyline,
+// totals, and HR props at the SOURCE, before any of them are computed.
+const FULL_TRUST_IP = 30;        // at/above this many IP, use the pitcher's own rates as-is
+const LEAGUE_RATE = {            // league-average pitcher rates to regress toward
+  era: LEAGUE_AVG.era,           // 4.30
+  whip: 1.30,
+  strikeoutsPer9: 8.6,
+  walksPer9: 3.1,
+  homeRunsPer9: LEAGUE_AVG.homeRunsPer9, // 1.20
+};
+function regressThinSample(pitcher) {
+  if (!pitcher) return pitcher;
+  const ip = pitcher.inningsPitched ?? 0;
+  // Enough innings to trust the pitcher's own numbers — leave untouched.
+  if (ip >= FULL_TRUST_IP) return pitcher;
+  // Weight on the pitcher's OWN stats grows linearly from 0 (at 0 IP) to 1 (at
+  // FULL_TRUST_IP). The remainder is weight on league average.
+  const wSelf = Math.max(0, Math.min(1, ip / FULL_TRUST_IP));
+  const wLeague = 1 - wSelf;
+  const mix = (selfVal, leagueVal) => {
+    if (selfVal == null) return leagueVal; // no own number → use league
+    return round2(wSelf * selfVal + wLeague * leagueVal);
+  };
+  return {
+    ...pitcher,
+    era: mix(pitcher.era, LEAGUE_RATE.era),
+    whip: mix(pitcher.whip, LEAGUE_RATE.whip),
+    strikeoutsPer9: mix(pitcher.strikeoutsPer9, LEAGUE_RATE.strikeoutsPer9),
+    walksPer9: mix(pitcher.walksPer9, LEAGUE_RATE.walksPer9),
+    homeRunsPer9: mix(pitcher.homeRunsPer9, LEAGUE_RATE.homeRunsPer9),
+    _rawEra: pitcher.era,        // keep originals for debugging/display
+    _regressedFromIP: ip,
+  };
 }
 
 
@@ -411,11 +460,13 @@ async function calculateGameEdges(game, oddsForGame) {
   const awayHandMult = handednessMultiplier(awayHandSplits, homePitcherHand, awayTeamOps);
   const homeHandMult = handednessMultiplier(homeHandSplits, awayPitcherHand, homeTeamOps);
 
-  // Blend recent form (last 3 starts) lightly into each starter's ERA before
-  // projecting. Catches a pitcher who's clearly hot or slumping without letting
-  // a tiny sample dominate. Flows into both ML and totals via effectiveERA.
-  const awayPitcherForm = blendRecentForm(awayPitcher, awayPitcherRecent);
-  const homePitcherForm = blendRecentForm(homePitcher, homePitcherRecent);
+  // First regress thin-sample starters toward league average (a 0.2-IP "13.50
+  // ERA" must not be taken at face value), THEN nudge for recent form. Order
+  // matters: regress the unreliable raw number first, then apply form on top.
+  const awayPitcherReg = regressThinSample(awayPitcher);
+  const homePitcherReg = regressThinSample(homePitcher);
+  const awayPitcherForm = blendRecentForm(awayPitcherReg, awayPitcherRecent);
+  const homePitcherForm = blendRecentForm(homePitcherReg, homePitcherRecent);
 
   console.log(`[Edges] ${game.awayAbbr}@${game.homeAbbr} | lineup away=${awayLineup.source}(ops ${awayLineupOff?.ops ?? "n/a"}) home=${homeLineup.source}(ops ${homeLineupOff?.ops ?? "n/a"}) | recentForm away ${awayPitcher?.era ?? "n/a"}→${awayPitcherForm?.era ?? "n/a"} home ${homePitcher?.era ?? "n/a"}→${homePitcherForm?.era ?? "n/a"} | handMult away=${awayHandMult.toFixed(3)} home=${homeHandMult.toFixed(3)}`);
 
@@ -539,7 +590,7 @@ async function calculateHRPropEdges(games, hrOddsByEvent) {
       const onAwayTeam = batter.teamId === game.awayId;
       const opposingPitcherProbable = onAwayTeam ? game.homeProbable : game.awayProbable;
       const opposingPitcherStats = opposingPitcherProbable
-        ? await getPitcherSeasonStats(opposingPitcherProbable.id)
+        ? regressThinSample(await getPitcherSeasonStats(opposingPitcherProbable.id))
         : null;
       const [batterStats, recent15, bvp, statcast] = await Promise.all([
         getBatterSeasonStats(batter.id),
@@ -661,5 +712,6 @@ module.exports = {
   sanitizeEdge,
   blendedEdge,
   overreactionNote,
+  regressThinSample,
   LEAGUE_AVG,
 };
