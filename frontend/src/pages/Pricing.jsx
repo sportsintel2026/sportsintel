@@ -2,42 +2,35 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { subscriptionApi } from "../lib/api";
-
 const PICKS = [
   { league:"⚾ MLB", matchup:"Yankees vs Rays", pick:"Yankees -1.5", confidence:"HIGH" },
   { league:"🏀 NBA", matchup:"Knicks vs Cavaliers", pick:"Knicks ML", confidence:"HIGH" },
   { league:"🏈 NFL", matchup:"Chiefs vs Bills", pick:"Over 54.5", confidence:"MEDIUM" },
 ];
-
 const COMPETITORS = [
   { name:"Picks Sites", price:"$20–$100+/mo", note:"Sell you picks. No guarantees." },
   { name:"ESPN+", price:"$10.99/mo", note:"Scores only. No deep stats." },
   { name:"WizePicks", price:"$7/mo", highlight:true, note:"Everything you need to make your OWN picks." },
 ];
-
 export default function PricingPage() {
   const [loading, setLoading] = useState(false);
   const { user } = useAuth();
   const navigate = useNavigate();
-
   const handleSubscribe = async () => {
     if (!user) return navigate("/signup");
     setLoading(true);
     try {
-      const { url } = await subscriptionApi.checkout("pro_monthly");
+      const { url } = await subscriptionApi.checkout("elite_monthly");
       window.location.href = url;
     } catch (err) {
       alert("Something went wrong. Please try again.");
     }
     setLoading(false);
   };
-
   return (
     <div style={{minHeight:"100vh",background:"#080810",color:"#e2e8f0",fontFamily:"'Inter',system-ui,sans-serif",padding:"40px 24px"}}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Barlow+Condensed:wght@700;800;900&display=swap');*{box-sizing:border-box;margin:0;padding:0}`}</style>
-
       <div style={{maxWidth:560,margin:"0 auto"}}>
-
         {/* Logo */}
         <div style={{textAlign:"center",marginBottom:36}}>
           <Link to="/" style={{textDecoration:"none",display:"inline-flex",alignItems:"center",gap:9}}>
@@ -45,7 +38,6 @@ export default function PricingPage() {
             <span style={{fontFamily:"'Barlow Condensed'",fontSize:26,fontWeight:900,color:"#fff",letterSpacing:"0.1em"}}>WIZE<span style={{color:"#1D9E75"}}>PICKS</span></span>
           </Link>
         </div>
-
         {/* Hero pitch */}
         <div style={{textAlign:"center",marginBottom:36}}>
           <div style={{display:"inline-flex",alignItems:"center",gap:8,background:"#ef444420",border:"1px solid #ef444440",borderRadius:20,padding:"6px 16px",marginBottom:20,fontSize:12,color:"#ef4444",fontWeight:700,letterSpacing:"0.06em"}}>
@@ -62,7 +54,6 @@ export default function PricingPage() {
             For just <strong style={{color:"#ef4444"}}>$7/month</strong>, WizePicks gives you the <strong style={{color:"#e2e8f0"}}>exact same data the pros use</strong> — live scores, H2H records, player matchup stats, weather conditions, and betting lines — so you can make smarter picks yourself.
           </p>
         </div>
-
         {/* Competitor comparison */}
         <div style={{marginBottom:28}}>
           <div style={{fontSize:11,color:"#475569",fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:12,textAlign:"center"}}>Why WizePicks wins</div>
@@ -81,7 +72,6 @@ export default function PricingPage() {
             ))}
           </div>
         </div>
-
         {/* Main plan card */}
         <div style={{background:"linear-gradient(135deg,#0f0f1f,#0d0d1a)",border:"1px solid #ef444450",borderRadius:24,padding:"36px 28px",textAlign:"center",marginBottom:20,position:"relative"}}>
           <div style={{position:"absolute",top:-14,left:"50%",transform:"translateX(-50%)",background:"#ef4444",color:"#fff",fontSize:11,fontWeight:800,padding:"4px 20px",borderRadius:20,letterSpacing:"0.08em",whiteSpace:"nowrap"}}>
@@ -90,7 +80,6 @@ export default function PricingPage() {
           <h2 style={{fontFamily:"'Barlow Condensed'",fontSize:36,fontWeight:900,color:"#fff",marginBottom:4,marginTop:8,lineHeight:1}}>ALL-ACCESS MEMBERSHIP</h2>
           <div style={{fontFamily:"'Barlow Condensed'",fontSize:64,fontWeight:900,color:"#ef4444",lineHeight:1,marginBottom:2}}>$7.00</div>
           <div style={{color:"#475569",fontSize:13,marginBottom:24}}>per month · cancel anytime · no contracts</div>
-
           <div style={{textAlign:"left",marginBottom:28,background:"#080810",borderRadius:12,padding:"16px"}}>
             <div style={{fontSize:11,color:"#475569",fontWeight:700,letterSpacing:"0.08em",marginBottom:12,textTransform:"uppercase"}}>Everything included:</div>
             {[
@@ -114,14 +103,12 @@ export default function PricingPage() {
               </div>
             ))}
           </div>
-
           <button onClick={handleSubscribe} disabled={loading}
             style={{width:"100%",background:"linear-gradient(135deg,#ef4444,#dc2626)",color:"#fff",border:"none",borderRadius:12,padding:"18px",fontSize:18,fontWeight:800,cursor:loading?"wait":"pointer",fontFamily:"inherit",boxShadow:"0 8px 32px #ef444440",marginBottom:12}}>
             {loading?"Redirecting...":"Get All-Access for $7/mo →"}
           </button>
           <div style={{fontSize:12,color:"#334155"}}>Instant access · Cancel anytime · No hidden fees</div>
         </div>
-
         {/* Picks preview */}
         <div style={{background:"#0d0d1a",border:"1px solid #22c55e40",borderRadius:20,padding:"24px",marginBottom:20}}>
           <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
@@ -149,7 +136,6 @@ export default function PricingPage() {
             🔒 Subscribe to unlock today's full picks & analysis
           </div>
         </div>
-
         {/* Bottom CTA */}
         <div style={{background:"linear-gradient(135deg,#ef444412,#ef444406)",border:"1px solid #ef444430",borderRadius:16,padding:"24px",textAlign:"center",marginBottom:24}}>
           <div style={{fontSize:16,fontWeight:800,color:"#fff",marginBottom:8}}>Ready to bet smarter?</div>
@@ -159,11 +145,9 @@ export default function PricingPage() {
             Start Today — $7/mo →
           </button>
         </div>
-
         <div style={{textAlign:"center",fontSize:13,color:"#475569"}}>
           Just want free scores? <Link to="/signup" style={{color:"#ef4444",textDecoration:"none",fontWeight:600}}>Create free account →</Link>
         </div>
-
       </div>
     </div>
   );
