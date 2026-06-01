@@ -109,13 +109,20 @@ router.get("/mlb", async (req, res) => {
       }))
     );
     const gameEdges = allEdges.filter(Boolean);
-    // Helper: is this game live or upcoming (eligible for edge recommendations)
-    const isCompleted = (status) => status === "final";
+    // The pre-game model is only valid for games that HAVEN'T STARTED. Once a game
+    // is live, the sportsbook re-prices to live odds (and live totals), but our
+    // projection is still the full-game pre-game number — comparing the two
+    // produces wildly inflated, meaningless "edges". So edge recommendations are
+    // built ONLY from games whose status is "scheduled" (not started). We keep a
+    // strict allow-list rather than a block-list so live/in-progress/delayed/final
+    // can never slip into the rankings, whatever the exact status word is.
+    // (Live games still get accurate LIVE edges on their own detail page.)
+    const isPreGame = (status) => status === "scheduled";
     const moneylineEdges = [];
     for (const ge of gameEdges) {
       const sourceGame = gamesWithOdds.find(g => g.id === ge.game.id);
-      // Skip completed games from edge recommendations
-      if (isCompleted(sourceGame?.status)) continue;
+      // Only rank edges for not-yet-started games.
+      if (!isPreGame(sourceGame?.status)) continue;
       if (ge.moneyline.awayEdge != null) {
         moneylineEdges.push({
           gameId: ge.game.id,
@@ -155,7 +162,7 @@ router.get("/mlb", async (req, res) => {
     const totalsEdges = [];
     for (const ge of gameEdges) {
       const sourceGame = gamesWithOdds.find(g => g.id === ge.game.id);
-      if (isCompleted(sourceGame?.status)) continue;
+      if (!isPreGame(sourceGame?.status)) continue;
       if (ge.totals.line == null) continue;
       if (ge.totals.overEdge != null) {
         totalsEdges.push({
@@ -197,11 +204,11 @@ router.get("/mlb", async (req, res) => {
     totalsEdges.sort((a, b) => (b.edge ?? -1) - (a.edge ?? -1));
     let hrPropEdges = [];
     try {
-      // Take the first 5 UPCOMING/LIVE games WITH ODDS for HR props
-      // Skip completed games (sportsbooks remove HR props from finished games)
+      // Take the first 5 not-yet-started games WITH ODDS for HR props.
+      // Skip live/final games (sportsbooks pull or re-price HR props once underway).
       const eligibleGamesForHR = gamesWithOdds
         .filter(g => g._oddsEventId)
-        .filter(g => !isCompleted(g.status));
+        .filter(g => isPreGame(g.status));
       const topGamesForHR = eligibleGamesForHR.slice(0, 5);
       const eventIds = topGamesForHR.map(g => g._oddsEventId);
       console.log(`[Edges-HR] eligibleGames=${eligibleGamesForHR.length}, topGamesForHR=${topGamesForHR.length}, eventIds=${JSON.stringify(eventIds)}`);
