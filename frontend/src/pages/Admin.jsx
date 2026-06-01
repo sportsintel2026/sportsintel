@@ -205,7 +205,7 @@ function ExpertPicksManager() {
     setItems(next);
   };
   const remove = (i) => setItems(items.filter((_, j) => j !== i));
-  const addStraight = () => setItems([...items, { type: "straight", sport: "mlb", pick: "", game: "", odds: "", confidence: "HIGH", analysis: "", result: "", market: "moneyline", selection: "", line: "", gameId: "", awayAbbr: "", homeAbbr: "" }]);
+  const addStraight = () => setItems([...items, { type: "straight", sport: "mlb", pick: "", game: "", odds: "", confidence: "HIGH", analysis: "", result: "", market: "moneyline", selection: "", line: "", gameId: "", awayAbbr: "", homeAbbr: "", pickEdited: false, gameEdited: false }]);
   const addParlay = () => setItems([...items, { type: "parlay", confidence: "HIGH", analysis: "", result: "", legs: [emptyLeg("mlb"), emptyLeg("nba")] }]);
 
   // leg helpers
@@ -278,6 +278,32 @@ function StraightEditor({ item, index, update, remove }) {
         { v: "home", label: item.homeAbbr ? `${item.homeAbbr} (home)` : "Home team" },
       ];
   const linked = !!item.gameId && !!item.selection;
+
+  // Build the human-readable pick label from the structured fields.
+  const deriveLabel = (it) => {
+    const m = it.market || "moneyline";
+    if (m === "total") {
+      const s = it.selection === "over" ? "Over" : it.selection === "under" ? "Under" : "";
+      if (!s) return "";
+      return it.line ? `${s} ${it.line}` : s;
+    }
+    const abbr = it.selection === "away" ? it.awayAbbr : it.selection === "home" ? it.homeAbbr : "";
+    return abbr ? `${abbr} ML` : "";
+  };
+
+  // Apply a structured-field change, and auto-fill the Pick label / Game text
+  // from it — UNLESS the owner has already typed over those fields by hand.
+  const setStructured = (patch, matchup) => {
+    const merged = { ...item, ...patch };
+    const out = { ...patch };
+    if (!item.pickEdited) {
+      const lbl = deriveLabel(merged);
+      if (lbl) out.pick = lbl;
+    }
+    if (matchup != null && !item.gameEdited) out.game = matchup;
+    update(index, out);
+  };
+
   return (
     <div style={{ background: "#0a0a14", border: "1px solid #1a1a2e", borderRadius: 14, padding: 20 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
@@ -319,14 +345,14 @@ function StraightEditor({ item, index, update, remove }) {
         <div className="admin-3col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 0.8fr", gap: 12, marginBottom: 10 }}>
           <div>
             <Label>Bet type</Label>
-            <select value={market} onChange={e => update(index, { market: e.target.value, selection: "" })}>
+            <select value={market} onChange={e => setStructured({ market: e.target.value, selection: "" })}>
               <option value="moneyline">Moneyline</option>
               <option value="total">Total (O/U)</option>
             </select>
           </div>
           <div>
             <Label>Side</Label>
-            <select value={item.selection || ""} onChange={e => update(index, { selection: e.target.value })}>
+            <select value={item.selection || ""} onChange={e => setStructured({ selection: e.target.value })}>
               <option value="">— pick side —</option>
               {selectionOptions.map(o => <option key={o.v} value={o.v}>{o.label}</option>)}
             </select>
@@ -335,7 +361,7 @@ function StraightEditor({ item, index, update, remove }) {
             <Label>Line</Label>
             <input
               value={item.line ?? ""}
-              onChange={e => update(index, { line: e.target.value })}
+              onChange={e => setStructured({ line: e.target.value })}
               placeholder={market === "total" ? "8.5" : "—"}
               disabled={market !== "total"}
               style={{ opacity: market === "total" ? 1 : 0.5 }}
@@ -345,8 +371,8 @@ function StraightEditor({ item, index, update, remove }) {
         <Label>Link game (loads today's MLB/NBA games)</Label>
         <GamePicker
           league={item.sport}
-          onPick={(v) => update(index, { game: v })}
-          onGame={(opt) => update(index, { gameId: opt.id, awayAbbr: opt.away, homeAbbr: opt.home, selection: "" })}
+          onPick={() => {}}
+          onGame={(opt) => setStructured({ gameId: opt.id, awayAbbr: opt.away, homeAbbr: opt.home, selection: "" }, opt.value)}
         />
         {item.gameId ? (
           <div style={{ fontSize: 10, color: "#475569" }}>Linked: {item.awayAbbr} @ {item.homeAbbr} (id {item.gameId})</div>
@@ -355,12 +381,12 @@ function StraightEditor({ item, index, update, remove }) {
 
       <div className="admin-3col" style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 0.7fr", gap: 12 }}>
         <div>
-          <Label>Pick label (shown on page)</Label>
-          <input value={item.pick} onChange={e => update(index, { pick: e.target.value })} placeholder="Dodgers ML" />
+          <Label>Pick label (auto-fills · editable)</Label>
+          <input value={item.pick} onChange={e => update(index, { pick: e.target.value, pickEdited: true })} placeholder="Dodgers ML" />
         </div>
         <div>
-          <Label>Game / matchup (text)</Label>
-          <input value={item.game} onChange={e => update(index, { game: e.target.value })} placeholder="LAD @ SF" />
+          <Label>Game / matchup (auto-fills · editable)</Label>
+          <input value={item.game} onChange={e => update(index, { game: e.target.value, gameEdited: true })} placeholder="LAD @ SF" />
         </div>
         <div>
           <Label>Odds</Label>
@@ -481,6 +507,8 @@ function normalizeForEdit(p) {
     gameId: p.gameId != null ? String(p.gameId) : "",
     awayAbbr: p.awayAbbr || "",
     homeAbbr: p.homeAbbr || "",
+    pickEdited: true,
+    gameEdited: true,
   };
 }
 
