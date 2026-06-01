@@ -1,6 +1,7 @@
-// Edges model v0.4 — research-grade MLB betting projections
+// Edges model v0.5 — research-grade MLB betting projections
 // + Weather, Batter vs Pitcher, Pitcher recent form
-// + NEW v0.4: lineup handedness splits vs opposing starter, reliever-only bullpen quality
+// + v0.4: lineup handedness splits vs opposing starter, reliever-only bullpen quality
+// + v0.5: market blend (anchor model toward de-vigged line) + overreaction flag
 const {
   getPitcherSeasonStats,
   getBatterSeasonStats,
@@ -278,6 +279,69 @@ function sanitizeEdge(edge) {
   return edge;
 }
 
+// ── MARKET BLEND + OVERREACTION FLAG (v0.5) ───────────────────────────────────
+// The de-vigged closing line is the single sharpest predictor in sports betting —
+// sharper than almost any model. So instead of trusting our raw model number 100%,
+// we ANCHOR it partway toward the market's fair (de-vigged) probability. This does
+// two honest things at once:
+//   1. Accuracy: we borrow the market's wisdom, so our number is better calibrated.
+//   2. Discipline: a model number that wildly disagrees with a sharp price gets
+//      pulled back toward reality, so we can't manufacture a fake edge by being
+//      stubbornly far from the market. (Same inflated-edge problem, fixed at the
+//      math level rather than just capped after the fact.)
+//
+// The edge we then report is (blended model view) − (fair market) — i.e. how far
+// our blended opinion still sits from the market AFTER respecting it. If we fully
+// agreed with the market the edge would be ~0, which is correct: agreeing with a
+// sharp price is not an edge.
+//
+// SAFETY: this is core model math. It is behind an on/off switch + a single weight
+// knob. To revert to exact pre-blend behavior, set MARKET_BLEND_ENABLED = false
+// (or W_MODEL = 1.0) and redeploy — no old code to dig up.
+const MARKET_BLEND_ENABLED = true; // master switch — false = exact old behavior
+const W_MODEL = 0.70;              // 0.70 = 70% our model, 30% market. Higher = trust model more.
+
+// Blend our model probability toward the market's fair probability, then return the
+// edge vs that fair market number. Needs BOTH sides' odds for a real de-vig; if a
+// side is missing we fall back to the existing un-blended edge so nothing breaks.
+function blendedEdge(modelProb, thisOdds, otherOdds) {
+  if (modelProb == null) return null;
+  if (!MARKET_BLEND_ENABLED) {
+    return calculateEdgeDevig(modelProb, thisOdds, otherOdds); // old path
+  }
+  const fair = devigTwoWay(thisOdds, otherOdds);
+  if (fair == null) {
+    // No clean two-way market → can't blend meaningfully; keep old behavior.
+    return calculateEdgeDevig(modelProb, thisOdds, otherOdds);
+  }
+  const blended = W_MODEL * modelProb + (1 - W_MODEL) * fair;
+  return round3(blended - fair);
+}
+
+// "Market overreaction" flag — the owner's contrarian read as honest CONTEXT, not a
+// bet recommendation. When the market's fair probability for a side sits well ABOVE
+// our model's fundamentals (market thinks this side is more likely than we do by
+// >= INFLATION_THRESHOLD), the price is probably carrying public/streak hype the
+// fundamentals don't support — the classic "hot team over-bet by the public" spot.
+// We surface a neutral note; the user decides what to do with it. We NEVER tell
+// them to bet a side. We flag the side the MARKET is high on (the likely-inflated
+// favorite), so a fade-the-public reader knows where to look.
+const INFLATION_THRESHOLD = 0.08; // market fair prob exceeds model prob by 8%+
+function overreactionNote(modelProb, thisOdds, otherOdds) {
+  if (modelProb == null) return null;
+  const fair = devigTwoWay(thisOdds, otherOdds);
+  if (fair == null) return null;
+  const gap = fair - modelProb; // + => market rates this side higher than our model
+  if (gap >= INFLATION_THRESHOLD) {
+    return {
+      inflated: true,
+      gap: round3(gap),
+      note: "Market rates this side higher than our model — possible public/streak inflation.",
+    };
+  }
+  return null;
+}
+
 // ── ORCHESTRATION ─────────────────────────────────────────────────────────────
 const MAX_HR_GAMES = 5;
 async function calculateGameEdges(game, oddsForGame) {
@@ -365,10 +429,13 @@ async function calculateGameEdges(game, oddsForGame) {
   const overOdds = odds.totals?.over;
   const underOdds = odds.totals?.under;
 
-  // Every edge passes through sanitizeEdge() — an implausibly large edge is
-  // dropped (null) at the source so it can never surface on any list or page.
-  const awayEdge = sanitizeEdge(calculateEdgeDevig(ml.awayWinProb, awayML, homeML));
-  const homeEdge = sanitizeEdge(calculateEdgeDevig(ml.homeWinProb, homeML, awayML));
+  // Every edge is blended toward the de-vigged market line (v0.5) then passed
+  // through sanitizeEdge() so an implausible number can never surface.
+  const awayEdge = sanitizeEdge(blendedEdge(ml.awayWinProb, awayML, homeML));
+  const homeEdge = sanitizeEdge(blendedEdge(ml.homeWinProb, homeML, awayML));
+  // Neutral "market overreaction" context (the side the market is high on).
+  const awayInflation = overreactionNote(ml.awayWinProb, awayML, homeML);
+  const homeInflation = overreactionNote(ml.homeWinProb, homeML, awayML);
 
   let overProb = null;
   let underProb = null;
@@ -382,8 +449,10 @@ async function calculateGameEdges(game, oddsForGame) {
     overProb = sigmoid((totals.projectedTotal - totalLine) / TOTAL_SD);
     underProb = 1 - overProb;
   }
-  const overEdge = sanitizeEdge(calculateEdgeDevig(overProb, overOdds, underOdds));
-  const underEdge = sanitizeEdge(calculateEdgeDevig(underProb, underOdds, overOdds));
+  const overEdge = sanitizeEdge(blendedEdge(overProb, overOdds, underOdds));
+  const underEdge = sanitizeEdge(blendedEdge(underProb, underOdds, overOdds));
+  const overInflation = overreactionNote(overProb, overOdds, underOdds);
+  const underInflation = overreactionNote(underProb, underOdds, overOdds);
 
   return {
     game: {
@@ -435,6 +504,8 @@ async function calculateGameEdges(game, oddsForGame) {
       homeEdge,
       awayConfidence: rateConfidence(awayEdge),
       homeConfidence: rateConfidence(homeEdge),
+      awayInflation,
+      homeInflation,
     },
     totals: {
       projected: totals.projectedTotal,
@@ -448,6 +519,8 @@ async function calculateGameEdges(game, oddsForGame) {
       underEdge,
       overConfidence: rateConfidence(overEdge),
       underConfidence: rateConfidence(underEdge),
+      overInflation,
+      underInflation,
     },
   };
 }
@@ -586,5 +659,7 @@ module.exports = {
   devigTwoWay,
   effectiveERA,
   sanitizeEdge,
+  blendedEdge,
+  overreactionNote,
   LEAGUE_AVG,
 };
