@@ -39,7 +39,7 @@ export default function LandingPage() {
   const COMPETITORS = [
     { name: "Picks Sites", price: "$20–$100+/mo", desc: "Sell you picks. No data, no reasoning.", highlight: false },
     { name: "ESPN+", price: "$10.99/mo", desc: "Scores only. No model, no edges.", highlight: false },
-    { name: "Edge the Lines", price: "$7/mo", desc: "A real model + the data behind every number.", highlight: true },
+    { name: "WizePicks", price: "$7/mo", desc: "A real model + the data behind every number.", highlight: true },
   ];
 
   // Sample cards for the blurred "look inside" preview — fake but realistic data,
@@ -77,12 +77,8 @@ export default function LandingPage() {
       <nav style={{ padding: "0 20px", background: "#080810", borderBottom: "1px solid #0f0f1a", position: "sticky", top: 0, zIndex: 100 }}>
         <div style={{ maxWidth: 960, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between", height: 56 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <svg width="18" height="18" viewBox="0 0 30 30" aria-hidden="true" style={{ flexShrink: 0 }}>
-              <line x1="4" y1="21" x2="11" y2="21" stroke="#1D9E75" strokeWidth="3" strokeLinecap="round" />
-              <line x1="13" y1="15" x2="20" y2="15" stroke="#1D9E75" strokeWidth="3" strokeLinecap="round" />
-              <line x1="22" y1="9" x2="26" y2="9" stroke="#1D9E75" strokeWidth="3" strokeLinecap="round" />
-            </svg>
-            <span style={{ fontSize: 16, fontWeight: 800, color: "#fff", letterSpacing: "0.01em" }}>Edge<span style={{ color: "#1D9E75" }}>the</span>Lines</span>
+            <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#1D9E75", display: "inline-block", boxShadow: "0 0 6px #1D9E75", animation: "pulse 2s infinite" }} />
+            <span style={{ fontSize: 16, fontWeight: 800, color: "#fff", letterSpacing: "0.01em" }}>Wize<span style={{ color: "#1D9E75" }}>Picks</span></span>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <Link to="/pricing" style={{ fontSize: 13, color: "#64748b", padding: "6px 12px" }}>Pricing</Link>
@@ -104,7 +100,7 @@ export default function LandingPage() {
             <span style={{ color: "#ef4444" }}>every game.</span>
           </h1>
           <p style={{ fontSize: 16, color: "#94a3b8", maxWidth: 540, marginBottom: 14, lineHeight: 1.8 }}>
-            Edge the Lines runs a research-grade model that folds in <strong style={{ color: "#e2e8f0" }}>live conditions, matchup history, recent form, and situational factors</strong> — then compares it against real sportsbook lines to surface where the market is wrong.
+            WizePicks runs a research-grade model that folds in <strong style={{ color: "#e2e8f0" }}>live conditions, matchup history, recent form, and situational factors</strong> — then compares it against real sportsbook lines to surface where the market is wrong.
           </p>
           <p style={{ fontSize: 15, color: "#64748b", maxWidth: 520, marginBottom: 32, lineHeight: 1.8 }}>
             You don't buy picks here. You get the <strong style={{ color: "#e2e8f0" }}>same depth of data the pros use</strong> to make your own — for <strong style={{ color: "#ef4444" }}>$7/month</strong>.
@@ -282,7 +278,7 @@ export default function LandingPage() {
         <div style={{ marginBottom: 64 }}>
           <div style={{ marginBottom: 28 }}>
             <div style={{ fontSize: 11, color: "#ef4444", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8 }}>Compare</div>
-            <h2 style={{ fontSize: "clamp(20px,4vw,30px)", fontWeight: 800, color: "#fff" }}>Why Edge<span style={{ color: "#1D9E75" }}> the </span>Lines is different</h2>
+            <h2 style={{ fontSize: "clamp(20px,4vw,30px)", fontWeight: 800, color: "#fff" }}>Why <span style={{ color: "#1D9E75" }}>WizePicks</span> is different</h2>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {COMPETITORS.map((c, i) => (
@@ -302,7 +298,7 @@ export default function LandingPage() {
 
         {/* Responsible play note — also helps with payment processor trust */}
         <div style={{ background: "#0a0a14", border: "1px solid #1a1a2e", borderRadius: 12, padding: "16px 18px", marginBottom: 56, fontSize: 12, color: "#475569", lineHeight: 1.8 }}>
-          Edge the Lines provides <strong style={{ color: "#64748b" }}>sports data and statistical analysis for informational purposes only</strong>. We are not a sportsbook and do not accept wagers. There is no such thing as a guaranteed pick. Please bet responsibly and within your means. If gambling is a problem for you, call 1-800-GAMBLER.
+          WizePicks provides <strong style={{ color: "#64748b" }}>sports data and statistical analysis for informational purposes only</strong>. We are not a sportsbook and do not accept wagers. There is no such thing as a guaranteed pick. Please bet responsibly and within your means. If gambling is a problem for you, call 1-800-GAMBLER.
         </div>
 
         {/* Final CTA */}
@@ -323,13 +319,13 @@ export default function LandingPage() {
       {/* Footer */}
       <div style={{ borderTop: "1px solid #0f0f1a", padding: "20px 24px", textAlign: "center" }}>
         <div style={{ maxWidth: 960, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
-          <span style={{ fontSize: 13, fontWeight: 700, color: "#1e2235" }}>Edge<span style={{ color: "#1D9E75" }}> the </span>Lines</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: "#1e2235" }}>WizePicks</span>
           <div style={{ display: "flex", gap: 16 }}>
             <Link to="/pricing" style={{ fontSize: 12, color: "#334155" }}>Pricing</Link>
             <Link to="/login" style={{ fontSize: 12, color: "#334155" }}>Sign In</Link>
             <Link to="/signup" style={{ fontSize: 12, color: "#334155" }}>Sign Up</Link>
           </div>
-          <span style={{ fontSize: 11, color: "#1e2235" }}>© 2026 Edge the Lines</span>
+          <span style={{ fontSize: 11, color: "#1e2235" }}>© 2026 WizePicks</span>
         </div>
       </div>
     </div>
