@@ -109,10 +109,10 @@ function PerfBody({ data }) {
           {pending > 0 ? ` · ${pending} still pending` : ""}. Small samples are noisy — a few weeks of data is where this gets meaningful.
         </span>
       </div>
-      {/* Overall hero */}
-      <OverallCard o={data.overall} />
-      {/* CLV — the sharp signal */}
+      {/* CLV — led as the most reliable signal of edge */}
       <ClvCard clv={data.clv} />
+      {/* Overall record — ROI demoted + contextualized, shown below CLV */}
+      <OverallCard o={data.overall} />
       {/* By market */}
       <SectionTitle>By market</SectionTitle>
       <div className="perf-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 24 }}>
@@ -145,8 +145,9 @@ function ClvCard({ clv }) {
   }
   const positive = clv.avgClvPct >= 0;
   return (
-    <div style={{ background: "linear-gradient(180deg,#0f1419,#0a0e14)", border: "1px solid #1f2937", borderRadius: 12, padding: 24, marginBottom: 24 }}>
-      <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 16 }}>🎯 Closing line value (CLV)</div>
+    <div style={{ background: "linear-gradient(180deg,#0f1419,#0a0e14)", border: "1px solid #22c55e33", borderLeft: "3px solid #22c55e", borderRadius: 12, padding: 24, marginBottom: 24 }}>
+      <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 4 }}>🎯 Closing line value (CLV)</div>
+      <div style={{ fontSize: 12, color: "#22c55e", fontWeight: 600, marginBottom: 16 }}>Our most reliable early signal of edge</div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 16 }}>
         <Metric
           label="Beat the close"
@@ -170,16 +171,28 @@ function ClvCard({ clv }) {
 function OverallCard({ o }) {
   if (!o || o.total === 0) return null;
   const profit = o.units >= 0;
+  // When the win rate sits below the -110 break-even line yet ROI is still
+  // positive, it's because the model's winners skew toward plus-money underdogs
+  // (a +150 winner pays more than a -150 winner costs). Surface that so the
+  // pairing doesn't read as a contradiction to a sharp eye.
+  const belowBreakeven = o.winPct != null && o.winPct < 52.4;
+  const showUnderdogNote = belowBreakeven && profit;
   return (
     <div style={{ background: "linear-gradient(180deg,#0f1419,#0a0e14)", border: "1px solid #1f2937", borderRadius: 12, padding: 24, marginBottom: 24 }}>
       <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 16 }}>Overall record</div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16 }}>
         <Metric label="Record" value={`${o.wins}-${o.losses}`} />
         <Metric label="Win %" value={o.winPct != null ? `${o.winPct}%` : "—"} color={o.winPct >= 52.4 ? "#22c55e" : "#e4e7eb"} />
-        <Metric label="ROI" value={o.roi != null ? `${profit ? "+" : ""}${o.roi}%` : "—"} color={profit ? "#22c55e" : "#ef4444"} />
+        <div>
+          <div style={{ fontSize: 10, color: "#6b7280", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 600, marginBottom: 6 }}>ROI</div>
+          <div style={{ fontSize: 28, fontWeight: 800, color: profit ? "#22c55e" : "#ef4444", lineHeight: 1 }}>{o.roi != null ? `${profit ? "+" : ""}${o.roi}%` : "—"}</div>
+          <div style={{ fontSize: 9.5, color: "#a8915c", marginTop: 5, fontWeight: 600, letterSpacing: "0.02em" }}>early sample · expect regression</div>
+        </div>
       </div>
       <div style={{ marginTop: 14, fontSize: 11, color: "#6b7280", lineHeight: 1.6 }}>
-        Win % above ~52.4% is the break-even line for standard -110 odds. ROI assumes 1 unit per play.
+        Win % above ~52.4% is the break-even line for standard -110 odds. ROI assumes 1 unit per play
+        {showUnderdogNote ? " — it reads positive despite a sub-break-even win rate because the model's winners skew toward plus-money underdogs, which pay out more than they cost" : ""}.
+        {o.total != null ? ` Over ${o.total} play${o.total === 1 ? "" : "s"}, ROI is still volatile — closing-line value above is the steadier read on real edge.` : ""}
       </div>
     </div>
   );
