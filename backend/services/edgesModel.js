@@ -256,6 +256,28 @@ function rateConfidence(edge) {
   return "NEUTRAL";
 }
 
+// ── SANITY BACKSTOP ───────────────────────────────────────────────────────────
+// A legitimate pre-game edge is almost never larger than ~15% (a strong play is
+// 5-10%; the clean pre-game slate tops out around 12%). An edge beyond
+// SANE_EDGE_MAX is virtually ALWAYS a symptom of the model being compared against
+// the wrong number — e.g. a stale pre-game projection measured against a LIVE
+// in-game line for a game already underway, or a bad odds-to-game match — not a
+// real opportunity. Surfacing a wild +44% / +69% "edge" destroys trust, so we
+// DROP it at the source: every edge the model produces passes through here, and
+// anything implausible becomes null. Because all display paths already hide a
+// null edge (lists guard `edge != null`; game pages render an edge only when
+// present), a dropped edge cleanly disappears EVERYWHERE — every list, every game
+// page, and any future view — without each of them needing its own guard. This is
+// the last line of defense; the primary correctness gate is still showing
+// pre-game edges only for games that haven't started.
+const SANE_EDGE_MAX = 0.30;
+function sanitizeEdge(edge) {
+  if (edge == null) return null;
+  if (!Number.isFinite(edge)) return null;
+  if (Math.abs(edge) > SANE_EDGE_MAX) return null; // implausible → almost certainly a bad comparison
+  return edge;
+}
+
 // ── ORCHESTRATION ─────────────────────────────────────────────────────────────
 const MAX_HR_GAMES = 5;
 async function calculateGameEdges(game, oddsForGame) {
@@ -343,8 +365,10 @@ async function calculateGameEdges(game, oddsForGame) {
   const overOdds = odds.totals?.over;
   const underOdds = odds.totals?.under;
 
-  const awayEdge = calculateEdgeDevig(ml.awayWinProb, awayML, homeML);
-  const homeEdge = calculateEdgeDevig(ml.homeWinProb, homeML, awayML);
+  // Every edge passes through sanitizeEdge() — an implausibly large edge is
+  // dropped (null) at the source so it can never surface on any list or page.
+  const awayEdge = sanitizeEdge(calculateEdgeDevig(ml.awayWinProb, awayML, homeML));
+  const homeEdge = sanitizeEdge(calculateEdgeDevig(ml.homeWinProb, homeML, awayML));
 
   let overProb = null;
   let underProb = null;
@@ -358,8 +382,8 @@ async function calculateGameEdges(game, oddsForGame) {
     overProb = sigmoid((totals.projectedTotal - totalLine) / TOTAL_SD);
     underProb = 1 - overProb;
   }
-  const overEdge = calculateEdgeDevig(overProb, overOdds, underOdds);
-  const underEdge = calculateEdgeDevig(underProb, underOdds, overOdds);
+  const overEdge = sanitizeEdge(calculateEdgeDevig(overProb, overOdds, underOdds));
+  const underEdge = sanitizeEdge(calculateEdgeDevig(underProb, underOdds, overOdds));
 
   return {
     game: {
@@ -452,7 +476,7 @@ async function calculateHRPropEdges(games, hrOddsByEvent) {
       ]);
       const hrProb = calculateHRProbability(batterStats, opposingPitcherStats, game, weather, recent15);
       if (hrProb == null) continue;
-      const edge = calculateEdge(hrProb, propOdds.price);
+      const edge = sanitizeEdge(calculateEdge(hrProb, propOdds.price));
       allHRProps.push({
         gameId: game.id,
         player: propOdds.player,
@@ -561,5 +585,6 @@ module.exports = {
   calculateEdgeDevig,
   devigTwoWay,
   effectiveERA,
+  sanitizeEdge,
   LEAGUE_AVG,
 };
