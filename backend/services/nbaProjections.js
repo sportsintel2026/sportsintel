@@ -5,6 +5,12 @@
 // We project from a recency-weighted blend, then DOUBLE-GATE any edge behind
 // minutes stability + recent hit-rate agreement, so we surface FEW, defensible edges.
 // Everything is labelled experimental.
+//
+// v0.2: added THREES (3PT made). The projector reads each stat from the parsed
+// gamelog; most stats share their name with the gamelog field, but threes are
+// stored as `tpMade`, so GAMELOG_FIELD maps stat->gamelog field. Threes are
+// small, high-variance numbers, so they get their own (scale-appropriate)
+// edge threshold rather than reusing rebounds/assists.
 
 const CFG = {
   recentWindow: 7,        // games counted as "recent form" (newest-first)
@@ -13,7 +19,7 @@ const CFG = {
   minMinutes: 22,         // recent minutes floor; below this = low confidence
   minutesDriftMax: 8,     // recent vs season minutes drift cap (rotation change guard)
   hitAgree: 0.6,          // recent games must agree with the side >=60% of the time
-  threshold: { points: 3.0, rebounds: 1.6, assists: 1.6 }, // min edge to flag
+  threshold: { points: 3.0, rebounds: 1.6, assists: 1.6, threes: 1.0 }, // min edge to flag
   excludePreseason: true, // drop preseason / all-star / exhibition games (noisy, short minutes)
   // "Suspect line" guard: when the book's line sits far from the player's own
   // season norm, the book almost certainly knows something the model can't see
@@ -23,7 +29,15 @@ const CFG = {
   suspectHighRatio: 1.7,  // line above 170% of season avg -> suspect
 };
 
-const STAT_KEYS = ["points", "rebounds", "assists"];
+const STAT_KEYS = ["points", "rebounds", "assists", "threes"];
+
+// Stat name -> field in the parsed gamelog. Most match 1:1; threes live in tpMade.
+const GAMELOG_FIELD = {
+  points: "points",
+  rebounds: "rebounds",
+  assists: "assists",
+  threes: "tpMade",
+};
 
 const mean = a => (a.length ? a.reduce((s, x) => s + x, 0) / a.length : 0);
 const round = (n, d = 1) => Number(n.toFixed(d));
@@ -35,9 +49,10 @@ const isPreseason = st => /pre[\s.-]?season|all[\s.-]?star|exhibition/i.test(st 
 
 // Project one stat for one player from their parsed gamelog (newest-first).
 function projectStat(games, key, line, cfg = CFG) {
+  const field = GAMELOG_FIELD[key] || key; // threes -> tpMade, others 1:1
   const played = games
     .filter(g => g.minutes > 0 && !(cfg.excludePreseason && isPreseason(g.seasonType)))
-    .map(g => ({ minutes: g.minutes, val: g[key] }));
+    .map(g => ({ minutes: g.minutes, val: g[field] }));
   const n = played.length;
   if (n < cfg.minGames) return { stat: key, line, eligible: false, flagged: false, reason: `only ${n} games`, experimental: true };
   if (!(line > 0)) return { stat: key, line, eligible: false, flagged: false, reason: "no line", experimental: true };
@@ -61,7 +76,8 @@ function projectStat(games, key, line, cfg = CFG) {
     (line < cfg.suspectLowRatio * seasonMean || line > cfg.suspectHighRatio * seasonMean);
 
   // Passes the math/stability gates? (used for both real edges and held-suspects)
-  const wouldFlag = Math.abs(edge) >= cfg.threshold[key] && minutesStable && hitAgrees;
+  const threshold = cfg.threshold[key] != null ? cfg.threshold[key] : 1.6;
+  const wouldFlag = Math.abs(edge) >= threshold && minutesStable && hitAgrees;
   const flagged = wouldFlag && !suspect; // a suspect line is never a real edge
 
   return {
@@ -86,7 +102,7 @@ function classifyInjury(status) {
   return null;
 }
 
-// Project all three markets for a player given their lines {points:{line},rebounds:{line},assists:{line}}.
+// Project all markets for a player given their lines {points:{line},rebounds:{line},assists:{line},threes:{line}}.
 function projectPlayer(games, lines, cfg = CFG) {
   const out = {};
   for (const key of STAT_KEYS) {
@@ -97,7 +113,7 @@ function projectPlayer(games, lines, cfg = CFG) {
 }
 
 // Tie Stage 1 prop lines to gamelogs.
-// `players`: Stage 1 output [{ name, points:{line,over,under}, rebounds:{...}, assists:{...} }]
+// `players`: Stage 1 output [{ name, points:{line,over,under}, rebounds:{...}, assists:{...}, threes:{...} }]
 // `resolveAthleteId(name) -> id|null` and `getGamelog(id) -> parsed games[]` are injected,
 //   so the name->ESPN-id concern stays isolated (and verifiable on its own).
 // `injuryStatusById`: optional { athleteId -> status string } from the ESPN summary.
@@ -142,4 +158,4 @@ async function buildPropProjections(players, resolveAthleteId, getGamelog, cfg =
   return { experimental: true, generatedAt: new Date().toISOString(), players: results, edges, suspects };
 }
 
-module.exports = { projectStat, projectPlayer, buildPropProjections, classifyInjury, CFG, STAT_KEYS };
+module.exports = { projectStat, projectPlayer, buildPropProjections, classifyInjury, CFG, STAT_KEYS, GAMELOG_FIELD };
