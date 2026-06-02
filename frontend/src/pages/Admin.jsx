@@ -143,7 +143,7 @@ export default function AdminPage() {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
           <div>
             <div style={{ fontSize: 11, color: "#475569", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.08em" }}>Admin Panel</div>
-            <div style={{ fontSize: 22, fontWeight: 800, color: "#fff" }}>Expert Picks Manager</div>
+            <div style={{ fontSize: 22, fontWeight: 800, color: "#fff" }}>Best Bets Manager</div>
           </div>
           <a href="/dashboard" style={{ color: "#475569", textDecoration: "none", fontSize: 13 }}>← Dashboard</a>
         </div>
@@ -296,7 +296,11 @@ function StraightEditor({ item, index, update, remove }) {
   const setStructured = (patch, matchup) => {
     const merged = { ...item, ...patch };
     const out = { ...patch };
-    if (!item.pickEdited) {
+    // A total's label is fully defined by side + line, so always keep it in sync —
+    // otherwise an edited pick (pickEdited=true on load) freezes a bare "Over"/"Under"
+    // and the line number gets dropped. Moneyline still respects manual edits.
+    const isTotal = (merged.market || "moneyline") === "total";
+    if (!item.pickEdited || isTotal) {
       const lbl = deriveLabel(merged);
       if (lbl) out.pick = lbl;
     }
@@ -526,10 +530,19 @@ function serializeForSave(p) {
       legs,
     };
   }
+  // For totals, the label is fully described by side + line. Rebuild it at save time
+  // so the line number can never be dropped, no matter how the label was edited.
+  let pick = p.pick;
+  if ((p.market || "moneyline") === "total") {
+    const side = p.selection === "over" ? "Over" : p.selection === "under" ? "Under" : "";
+    const lineStr = (p.line === "" || p.line == null) ? "" : String(p.line);
+    const rebuilt = [side, lineStr].filter(Boolean).join(" ");
+    if (rebuilt) pick = rebuilt;
+  }
   return {
     type: "straight",
     sport: p.sport,
-    pick: p.pick,
+    pick: pick,
     game: p.game,
     odds: p.odds === "" ? null : Number(p.odds),
     confidence: p.confidence,
