@@ -24,6 +24,7 @@
 
 const { getUpcomingGamesWithContext } = require('./nbaDataSource');
 const { predictGame } = require('./nbaModel');
+const { computeInjuryHaircut } = require('./nbaInjuryImpact');
 
 const ODDS_BASE = 'https://api.the-odds-api.com/v4/sports/basketball_nba/odds';
 const ODDS_KEY = process.env.ODDS_API_KEY; // confirmed: matches your Railway variable
@@ -167,7 +168,26 @@ async function generateNbaPredictions(opts = {}) {
   for (const g of upcoming) {
     const lines = matchOdds(g, odds);
     if (!lines) continue; // no distinct line for this game → don't show it
-    predictions.push(predictGame(g, lines, { playoff: PLAYOFF_MODE }));
+    // v0.2 injury weighting: compute a conservative points haircut for each team's
+    // OUT players (real PPG, discounted + capped). Best-effort — any failure → 0,
+    // so a bad injury lookup can never break or distort a projection.
+    let awayInj = { haircut: 0, details: [] };
+    let homeInj = { haircut: 0, details: [] };
+    try {
+      [awayInj, homeInj] = await Promise.all([
+        computeInjuryHaircut(g.away && g.away.injuries, g.away && g.away.id),
+        computeInjuryHaircut(g.home && g.home.injuries, g.home && g.home.id),
+      ]);
+    } catch (_) { /* leave both at 0 — safe */ }
+    predictions.push(
+      predictGame(g, lines, {
+        playoff: PLAYOFF_MODE,
+        awayInjuryHaircut: awayInj.haircut,
+        homeInjuryHaircut: homeInj.haircut,
+        awayInjuryDetails: awayInj.details,
+        homeInjuryDetails: homeInj.details,
+      })
+    );
   }
   return predictions;
 }
