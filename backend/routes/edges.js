@@ -85,7 +85,7 @@ router.get("/mlb", async (req, res) => {
     const games = allGames.filter(g => g.status !== "postponed" && g.status !== "cancelled");
     console.log(`[Edges] Found ${games.length} MLB games for ${slateDate}`);
     if (games.length === 0) {
-      const empty = { date: slateDate, rolledToNextDay: rolled, games: [], moneylineEdges: [], totalsEdges: [], hrPropEdges: [], computedAt: new Date().toISOString() };
+      const empty = { date: slateDate, rolledToNextDay: rolled, games: [], moneylineEdges: [], totalsEdges: [], runLineEdges: [], hrPropEdges: [], computedAt: new Date().toISOString() };
       edgesCache = empty;
       edgesCacheAt = Date.now();
       edgesCacheDate = slateDate;
@@ -206,6 +206,49 @@ router.get("/mlb", async (req, res) => {
       }
     }
     totalsEdges.sort((a, b) => (b.edge ?? -1) - (a.edge ?? -1));
+    const runLineEdges = [];
+    for (const ge of gameEdges) {
+      const sourceGame = gamesWithOdds.find(g => g.id === ge.game.id);
+      if (!isPreGame(sourceGame?.status)) continue;
+      const rl = ge.runLine;
+      if (rl?.awayEdge != null) {
+        runLineEdges.push({
+          gameId: ge.game.id,
+          matchup: `${ge.game.awayAbbr} @ ${ge.game.homeAbbr}`,
+          fullMatchup: `${ge.game.away} @ ${ge.game.home}`,
+          side: "away",
+          team: ge.game.away,
+          teamAbbr: ge.game.awayAbbr,
+          modelProb: rl.awayCoverProb,
+          odds: rl.awayOdds,
+          line: rl.awayLine,
+          edge: rl.awayEdge,
+          confidence: rl.awayConfidence,
+          time: ge.game.time,
+          status: sourceGame?.status,
+          inning: sourceGame?.inning,
+        });
+      }
+      if (rl?.homeEdge != null) {
+        runLineEdges.push({
+          gameId: ge.game.id,
+          matchup: `${ge.game.awayAbbr} @ ${ge.game.homeAbbr}`,
+          fullMatchup: `${ge.game.away} @ ${ge.game.home}`,
+          side: "home",
+          team: ge.game.home,
+          teamAbbr: ge.game.homeAbbr,
+          modelProb: rl.homeCoverProb,
+          odds: rl.homeOdds,
+          line: rl.homeLine,
+          edge: rl.homeEdge,
+          confidence: rl.homeConfidence,
+          time: ge.game.time,
+          status: sourceGame?.status,
+          inning: sourceGame?.inning,
+        });
+      }
+    }
+    runLineEdges.sort((a, b) => (b.edge ?? -1) - (a.edge ?? -1));
     let hrPropEdges = [];
     try {
       // Take the first 5 not-yet-started games WITH ODDS for HR props.
@@ -235,6 +278,7 @@ router.get("/mlb", async (req, res) => {
           ...ge.game,
           moneyline: ge.moneyline,
           totals: ge.totals,
+          runLine: ge.runLine,
           pitchers: ge.pitchers,
           weather: ge.weather,
           status: sourceGame?.status,
@@ -245,6 +289,7 @@ router.get("/mlb", async (req, res) => {
       }),
       moneylineEdges: moneylineEdges.slice(0, 10),
       totalsEdges: totalsEdges.slice(0, 10),
+      runLineEdges: runLineEdges.slice(0, 10),
       hrPropEdges: hrPropEdges.slice(0, 25),
       computedAt: new Date().toISOString(),
       cached: false,
@@ -270,4 +315,103 @@ router.delete("/cache", (req, res) => {
   edgesCacheDate = null;
   res.json({ cleared: true });
 });
+// ── TEMP DIAGNOSTIC: blend-weight backtest (read-only) ──────────────────────
+// GET /api/edges/blenddiag
+// Pulls graded MLB picks (moneyline + total) that have a captured closing line,
+// buckets them by edge size, and simulates lower blend weights. Because the
+// reported edge = W_MODEL * (model - fairMarket), lowering W just scales every
+// edge down — it never flips a pick — so a lower weight only DROPS the smallest
+// edges. This shows whether those small-edge picks beat the close (keep the
+// weight) or not (lower it). REMOVE after we've read it.
+router.get("/blenddiag", async (req, res) => {
+  try {
+    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) {
+      return res.status(500).json({ error: "Supabase env not set" });
+    }
+    const { createClient } = require("@supabase/supabase-js");
+    const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+
+    const W_CURRENT = 0.70;     // live MLB blend weight
+    const LOW_FLOOR = 0.005;    // edge below this is not flagged at all (LOW tier floor)
+
+    const { data, error } = await sb
+      .from("model_predictions")
+      .select("edge, clv, beat_close, result, market, model_prob, odds, confidence, game_date, description")
+      .eq("league", "mlb")
+      .in("market", ["moneyline", "total"])
+      .not("result", "eq", "pending")
+      .not("clv", "is", null)
+      .gt("edge", 0)
+      .order("game_date", { ascending: true });
+
+    if (error) return res.status(500).json({ error: error.message });
+    const rows = (data || []).filter(r => r.edge != null && r.clv != null);
+
+    const r2 = (n) => (n == null ? null : Math.round(n * 100) / 100);
+    const summarize = (set) => {
+      const n = set.length;
+      if (n === 0) return { n: 0, wins: 0, losses: 0, pushes: 0, winPct: null, avgClvPct: null, beatCloseN: 0, beatClosePct: null };
+      let wins = 0, losses = 0, pushes = 0, beat = 0, clvSum = 0;
+      for (const r of set) {
+        if (r.result === "win") wins++;
+        else if (r.result === "loss") losses++;
+        else if (r.result === "push") pushes++;
+        if (r.beat_close === true) beat++;
+        clvSum += Number(r.clv) || 0;
+      }
+      const decided = wins + losses;
+      return {
+        n,
+        wins, losses, pushes,
+        winPct: decided ? r2((wins / decided) * 100) : null,
+        avgClvPct: r2((clvSum / n) * 100),
+        beatCloseN: beat,
+        beatClosePct: r2((beat / n) * 100),
+      };
+    };
+
+    // Edge buckets (match the confidence tiers).
+    const buckets = {
+      "HIGH (edge >= 5%)":        rows.filter(r => r.edge >= 0.05),
+      "MEDIUM (2.5% - 5%)":       rows.filter(r => r.edge >= 0.025 && r.edge < 0.05),
+      "LOW (0.5% - 2.5%)":        rows.filter(r => r.edge >= 0.005 && r.edge < 0.025),
+      "BELOW FLOOR (< 0.5%)":     rows.filter(r => r.edge < 0.005),
+    };
+    const byBucket = {};
+    for (const k of Object.keys(buckets)) byBucket[k] = summarize(buckets[k]);
+
+    // Weight simulation: at weight W, a pick is still flagged iff
+    // edge * (W / W_CURRENT) >= LOW_FLOOR  ->  edge >= LOW_FLOOR * W_CURRENT / W.
+    const weightSim = {};
+    for (const W of [0.70, 0.65, 0.60, 0.55, 0.50]) {
+      const keepThreshold = LOW_FLOOR * (W_CURRENT / W); // min ORIGINAL edge retained
+      const kept = rows.filter(r => r.edge >= keepThreshold);
+      const dropped = rows.filter(r => r.edge < keepThreshold);
+      weightSim[`W=${W.toFixed(2)} (${Math.round(W * 100)}/${Math.round((1 - W) * 100)})`] = {
+        keepEdgeThresholdPct: r2(keepThreshold * 100),
+        retained: summarize(kept),
+        dropped_vs_current: summarize(dropped),
+      };
+    }
+
+    const dates = rows.map(r => r.game_date).filter(Boolean).sort();
+    res.json({
+      note: "Read-only blend-weight backtest. Edge scales linearly with weight, so lower W only drops the smallest edges. Compare 'dropped' CLV: if negative, those picks hurt you and a lower weight is better; if positive, keep the weight.",
+      liveWeight: `${W_CURRENT} (70/30)`,
+      sampleSize: rows.length,
+      dateRange: dates.length ? { first: dates[0], last: dates[dates.length - 1] } : null,
+      overall: summarize(rows),
+      byMarket: {
+        moneyline: summarize(rows.filter(r => r.market === "moneyline")),
+        total: summarize(rows.filter(r => r.market === "total")),
+      },
+      byEdgeBucket: byBucket,
+      weightSimulation: weightSim,
+    });
+  } catch (err) {
+    console.error("[blenddiag] error:", err);
+    res.status(500).json({ error: "blenddiag failed", details: err.message });
+  }
+});
+
 module.exports = router;
