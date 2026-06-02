@@ -523,7 +523,20 @@ function bestEdge(prediction) {
   const { moneyline: ml, spread: sp, total: to } = prediction.predictions;
   const cands = [];
   if (ml?.value && ml.edge != null) cands.push({ edge: ml.edge, unit: "%", label: `${ml.pickTeam} Moneyline`, sub: ml.book?.home != null ? `book ${fmtOdds(ml.pickTeam === prediction.home ? ml.book.home : ml.book.away)}` : null });
-  if (sp?.value && sp.edge != null) cands.push({ edge: sp.edge, unit: " pts", label: `${sp.pickTeam} ${fmtSigned(sp.pickLine)}`, sub: "spread vs projection" });
+  if (sp?.value && sp.edge != null) {
+    // Surface the model's projected margin so the points edge reads at a glance:
+    // model has <fav> by X, the line asks Y → the gap is the edge on the pick.
+    const m = sp.projectedMargin ?? 0;
+    const favNick = String((m >= 0 ? prediction.home : prediction.away) || "").split(" ").pop();
+    const byPts = Math.abs(m).toFixed(1).replace(/\.0$/, "");
+    const lineMag = sp.line != null ? Math.abs(sp.line) : null;
+    cands.push({
+      edge: sp.edge,
+      unit: " pts",
+      label: `${sp.pickTeam} ${fmtSigned(sp.pickLine)}`,
+      sub: lineMag != null ? `model: ${favNick} by ${byPts} · line ${lineMag}` : `model: ${favNick} by ${byPts}`,
+    });
+  }
   if (to?.value && to.edge != null) cands.push({ edge: to.edge, unit: " pts", label: `${(to.pick || "").toUpperCase()} ${to.line}`, sub: `model projects ${to.projectedTotal}` });
   if (cands.length === 0) return null;
   return cands.reduce((a, b) => (Math.abs(a.edge) > Math.abs(b.edge) ? a : b));
