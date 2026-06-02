@@ -91,7 +91,7 @@ export default function DailyCardPage() {
       </div>
       <div className="main-content" style={{ marginLeft: 200 }}>
         <div className="dc-content" style={{ maxWidth: 560, margin: "0 auto", padding: "32px 24px 80px", animation: "fadeIn .3s ease" }}>
-          <h1 style={{ margin: "0 0 8px", fontSize: 28, fontWeight: 700, letterSpacing: "-0.01em" }}>🎲 Today's Card</h1>
+          <h1 style={{ margin: "0 0 8px", fontSize: 28, fontWeight: 700, letterSpacing: "-0.01em" }}>🎲 Quick Picks</h1>
           <p style={{ margin: "0 0 16px", fontSize: 13, color: "#9ca3af" }}>
             One model-built pick and parlay, locked once a day. Pulled only from the model's value edges — never random.
           </p>
@@ -121,7 +121,7 @@ function HowToUse({ open, onToggle }) {
         onClick={onToggle}
         style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", background: "#0f1419", border: "none", padding: "12px 16px", color: "#e4e7eb", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}
       >
-        <span>How to use Today's Card</span>
+        <span>How to use Quick Picks</span>
         <span style={{ color: "#6b7280", transform: open ? "rotate(180deg)" : "none", transition: "transform .15s" }}>▾</span>
       </button>
       {open && (
@@ -139,12 +139,37 @@ function HowToUse({ open, onToggle }) {
 }
 
 function CardBody({ card, record, navigate }) {
+  const storageKey = `wp_quickpick_reroll_${card.game_date}`;
+  const [used, setUsed] = useState(() => {
+    try { return localStorage.getItem(storageKey) === "1"; } catch { return false; }
+  });
+  const [alt, setAlt] = useState(() => {
+    try { const s = localStorage.getItem(`${storageKey}_pick`); return s ? JSON.parse(s) : null; } catch { return null; }
+  });
+  const [rerolling, setRerolling] = useState(false);
+
+  const doReroll = () => {
+    if (used || rerolling) return;
+    setRerolling(true);
+    fetch(`${API_BASE}/api/daily-card/alternate`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => {
+        if (d && d.pick) {
+          setAlt(d.pick);
+          setUsed(true);
+          try { localStorage.setItem(storageKey, "1"); localStorage.setItem(`${storageKey}_pick`, JSON.stringify(d.pick)); } catch {}
+        }
+        setRerolling(false);
+      })
+      .catch(() => setRerolling(false));
+  };
+
   if (card.notReady || (!card.single && !card.parlay)) {
     return (
       <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 12, padding: 28, textAlign: "center" }}>
         <div style={{ fontSize: 32, marginBottom: 10 }}>⏳</div>
-        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>Today's card isn't ready yet</div>
-        <div style={{ fontSize: 13, color: "#9ca3af", lineHeight: 1.5 }}>The model locks the card once the day's lines and value edges are in. Check back a little later — it usually posts once the slate firms up.</div>
+        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>Quick Picks aren't ready yet</div>
+        <div style={{ fontSize: 13, color: "#9ca3af", lineHeight: 1.5 }}>The model locks the picks once the day's lines and value edges are in. Check back a little later — they usually post once the slate firms up.</div>
       </div>
     );
   }
@@ -153,10 +178,53 @@ function CardBody({ card, record, navigate }) {
       {record && <RecordStrip record={record} />}
       {card.single && <SinglePick single={card.single} result={card.single_result} navigate={navigate} />}
       {card.parlay && <ParlayCard parlay={card.parlay} result={card.parlay_result} navigate={navigate} />}
+      {card.single && (
+        <>
+          {!used && (
+            <button onClick={doReroll} disabled={rerolling} style={{ width: "100%", marginTop: 12, background: "transparent", border: "1px solid #1D9E75", borderRadius: 10, padding: "11px", color: "#1D9E75", fontSize: 13, fontWeight: 800, cursor: rerolling ? "default" : "pointer", fontFamily: "inherit", opacity: rerolling ? 0.6 : 1 }}>
+              {rerolling ? "Finding another…" : "🎲 Show me another play (1 left today)"}
+            </button>
+          )}
+          {alt && <AltPick pick={alt} navigate={navigate} />}
+          {used && (
+            <div style={{ marginTop: 10, fontSize: 11, color: "#6b7280", textAlign: "center" }}>
+              That's your re-roll for today — fresh picks tomorrow.
+            </div>
+          )}
+        </>
+      )}
       <div style={{ marginTop: 16, fontSize: 11, color: "#6b7280", lineHeight: 1.6, textAlign: "center" }}>
         Every leg comes from the model's value edges — never random. Parlays multiply variance, so size them small. For entertainment; bet responsibly. 21+. 1-800-GAMBLER.
       </div>
     </>
+  );
+}
+
+// The personal re-roll result (Option A): a different value pick shown only to
+// this subscriber. Marked "not tracked" because it never enters the graded
+// shared record — that stays the official Pick of the Day.
+function AltPick({ pick, navigate }) {
+  const go = () => pick.gameId && navigate(`/game/mlb/${pick.gameId}`);
+  return (
+    <div onClick={go} style={{ background: "#0f1419", border: "1px dashed #3a4250", borderRadius: 12, padding: 18, marginTop: 12, cursor: pick.gameId ? "pointer" : "default" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+        <span style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 700, textTransform: "uppercase" }}>🎲 Your alternate pick</span>
+        <span style={{ fontSize: 9, color: "#6b7280", fontWeight: 700, border: "1px solid #1f2937", borderRadius: 5, padding: "2px 7px" }}>NOT TRACKED</span>
+      </div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
+        <div>
+          <div style={{ fontSize: 19, fontWeight: 800, color: "#fff" }}>{pick.description} <span style={{ color: "#9ca3af", fontWeight: 700 }}>{formatOdds(pick.odds)}</span></div>
+          <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>{pick.matchup}</div>
+        </div>
+        <div style={{ textAlign: "right" }}>
+          <div style={{ fontSize: 20, fontWeight: 800, color: "#22c55e" }}>{signedPct(pick.edge)}</div>
+          <div style={{ fontSize: 10, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.06em" }}>edge</div>
+        </div>
+      </div>
+      <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid #1a1f28", fontSize: 11, color: "#6b7280" }}>
+        Model: <span style={{ color: "#e4e7eb", fontWeight: 600 }}>{pct(pick.modelProb)}</span> · {pick.confidence} confidence · just for you, not part of the tracked record
+      </div>
+    </div>
   );
 }
 
@@ -253,7 +321,7 @@ function LockedState({ navigate, record }) {
   return (
     <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 12, padding: 28, textAlign: "center" }}>
       <div style={{ fontSize: 34, marginBottom: 12 }}>🎲</div>
-      <div style={{ fontSize: 18, fontWeight: 800, color: "#fff", marginBottom: 8 }}>Unlock Today's Card</div>
+      <div style={{ fontSize: 18, fontWeight: 800, color: "#fff", marginBottom: 8 }}>Unlock Quick Picks</div>
       <div style={{ fontSize: 13, color: "#9ca3af", lineHeight: 1.6, marginBottom: 18, maxWidth: 380, marginLeft: "auto", marginRight: "auto" }}>
         Every day the model locks one value pick and a small parlay — pulled only from its best edges, with the honest fair-vs-book math shown. Subscribers get it daily.
       </div>
@@ -277,14 +345,14 @@ function Loader() {
   return (
     <div style={{ textAlign: "center", padding: 60 }}>
       <div style={{ width: 36, height: 36, border: "3px solid #1e2235", borderTopColor: "#1D9E75", borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto 14px" }} />
-      <div style={{ color: "#6b7280", fontSize: 13 }}>Loading today's card...</div>
+      <div style={{ color: "#6b7280", fontSize: 13 }}>Loading quick picks...</div>
     </div>
   );
 }
 function ErrorState() {
   return (
     <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 12, padding: 28, textAlign: "center", color: "#9ca3af", fontSize: 13 }}>
-      Couldn't load today's card right now. Please try again in a moment.
+      Couldn't load quick picks right now. Please try again in a moment.
     </div>
   );
 }
