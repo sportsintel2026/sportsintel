@@ -173,10 +173,10 @@ function GameDetail({ game, scoresId, hrProps, hasFullAccess, navigate }) {
   // when we have it (covers games whose backend detailId is missing).
   const scoresLookupId = scoresId || game.id;
   const candidates = [
-    { type: "ML", side: "away", team: game.awayAbbr, prob: ml.awayWinProb, odds: ml.awayOdds, edge: ml.awayEdge, confidence: ml.awayConfidence },
-    { type: "ML", side: "home", team: game.homeAbbr, prob: ml.homeWinProb, odds: ml.homeOdds, edge: ml.homeEdge, confidence: ml.homeConfidence },
-    { type: "TOTAL", side: "over", line: totals.line, prob: totals.overProb, odds: totals.overOdds, edge: totals.overEdge, confidence: totals.overConfidence, projected: totals.projected },
-    { type: "TOTAL", side: "under", line: totals.line, prob: totals.underProb, odds: totals.underOdds, edge: totals.underEdge, confidence: totals.underConfidence, projected: totals.projected },
+    { type: "ML", side: "away", team: game.awayAbbr, prob: ml.awayWinProb, odds: ml.awayOdds, book: ml.awayBook, edge: ml.awayEdge, confidence: ml.awayConfidence },
+    { type: "ML", side: "home", team: game.homeAbbr, prob: ml.homeWinProb, odds: ml.homeOdds, book: ml.homeBook, edge: ml.homeEdge, confidence: ml.homeConfidence },
+    { type: "TOTAL", side: "over", line: totals.line, prob: totals.overProb, odds: totals.overOdds, book: totals.overBook, edge: totals.overEdge, confidence: totals.overConfidence, projected: totals.projected },
+    { type: "TOTAL", side: "under", line: totals.line, prob: totals.underProb, odds: totals.underOdds, book: totals.underBook, edge: totals.underEdge, confidence: totals.underConfidence, projected: totals.projected },
   ].filter(c => c.edge != null);
   const bestEdge = candidates.length > 0 ? candidates.reduce((a, b) => (a.edge > b.edge ? a : b)) : null;
   return (
@@ -188,7 +188,7 @@ function GameDetail({ game, scoresId, hrProps, hasFullAccess, navigate }) {
           LIVE games → live-model edges (accurate in-game). Otherwise → pre-game model. */}
       {isLive && <LiveEdgeCards gameId={game.id} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} />}
       {!isLive && bestEdge && <BestEdgeCard edge={bestEdge} game={game} hasFullAccess={hasFullAccess} navigate={navigate} />}
-      {!isLive && <WinProbabilityCard awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} awayProb={ml.awayWinProb} homeProb={ml.homeWinProb} awayOdds={ml.awayOdds} homeOdds={ml.homeOdds} awayEdge={ml.awayEdge} homeEdge={ml.homeEdge} hasFullAccess={hasFullAccess} navigate={navigate} />}
+      {!isLive && <WinProbabilityCard awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} awayProb={ml.awayWinProb} homeProb={ml.homeWinProb} awayOdds={ml.awayOdds} homeOdds={ml.homeOdds} awayBook={ml.awayBook} homeBook={ml.homeBook} awayEdge={ml.awayEdge} homeEdge={ml.homeEdge} hasFullAccess={hasFullAccess} navigate={navigate} />}
       {!isLive && <TotalsCard totals={totals} hasFullAccess={hasFullAccess} navigate={navigate} />}
       {/* Supporting detail below. */}
       {game.weather && <WeatherCard weather={game.weather} />}
@@ -633,7 +633,7 @@ function BestEdgeCard({ edge, game, hasFullAccess, navigate }) {
         <div>
           <div style={{ fontSize: 10, color: positive ? "#22c55e" : "#ef4444", letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 700, marginBottom: 6 }}>🎯 Biggest model edge</div>
           <div style={{ fontSize: 22, fontWeight: 700, color: "#fff" }}>{desc}</div>
-          <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 2 }}>{formatOdds(edge.odds)} {edge.type === "TOTAL" && edge.projected != null && `· proj ${edge.projected}`}</div>
+          <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 2 }}>{formatOdds(edge.odds)}{edge.book ? ` · best at ${edge.book}` : ""} {edge.type === "TOTAL" && edge.projected != null && `· proj ${edge.projected}`}</div>
         </div>
         <div style={{ textAlign: "right" }}>
           <div style={{ fontSize: 36, fontWeight: 800, color: positive ? "#22c55e" : "#ef4444", lineHeight: 1 }}>
@@ -876,7 +876,7 @@ function StatBlock({ label, value, status }) {
     </div>
   );
 }
-function WinProbabilityCard({ awayAbbr, homeAbbr, awayProb, homeProb, awayOdds, homeOdds, awayEdge, homeEdge }) {
+function WinProbabilityCard({ awayAbbr, homeAbbr, awayProb, homeProb, awayOdds, homeOdds, awayBook, homeBook, awayEdge, homeEdge }) {
   if (awayProb == null && homeProb == null) return null;
   const awayPct = Math.round((awayProb ?? 0) * 100);
   const homePct = Math.round((homeProb ?? 0) * 100);
@@ -884,18 +884,19 @@ function WinProbabilityCard({ awayAbbr, homeAbbr, awayProb, homeProb, awayOdds, 
     <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 20, marginBottom: 10 }}>
       <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 16 }}>💰 Moneyline · model vs market</div>
       <div className="two-col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        <MLBox abbr={awayAbbr} prob={awayProb} odds={awayOdds} edge={awayEdge} side="Away" />
-        <MLBox abbr={homeAbbr} prob={homeProb} odds={homeOdds} edge={homeEdge} side="Home" />
+        <MLBox abbr={awayAbbr} prob={awayProb} odds={awayOdds} book={awayBook} edge={awayEdge} side="Away" />
+        <MLBox abbr={homeAbbr} prob={homeProb} odds={homeOdds} book={homeBook} edge={homeEdge} side="Home" />
       </div>
     </div>
   );
 }
-function MLBox({ abbr, prob, odds, edge, side }) {
+function MLBox({ abbr, prob, odds, book, edge, side }) {
   const positive = edge != null && edge > 0;
   return (
     <div style={{ background: "#0a0e14", border: `1px solid ${positive ? "#22c55e30" : "#1f2937"}`, borderRadius: 8, padding: 14 }}>
       <div style={{ fontSize: 10, color: "#6b7280", letterSpacing: "0.08em", fontWeight: 600, marginBottom: 4 }}>{side.toUpperCase()}</div>
       <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>{abbr} ML · {formatOdds(odds)}</div>
+      {book && <div style={{ fontSize: 10, color: "#22c55e", fontWeight: 600, marginBottom: 6 }}>best at {book}</div>}
       <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 2 }}>Model: <span style={{ color: "#22c55e", fontWeight: 600 }}>{prob != null ? Math.round(prob * 100) : "—"}%</span></div>
       {edge != null && (
         <div style={{ marginTop: 10, fontSize: 18, fontWeight: 800, color: positive ? "#22c55e" : "#ef4444" }}>
