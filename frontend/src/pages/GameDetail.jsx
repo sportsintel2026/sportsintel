@@ -165,6 +165,7 @@ function PreGameDetail({ scoresGame }) {
 function GameDetail({ game, scoresId, hrProps, hasFullAccess, navigate }) {
   const ml = game.moneyline || {};
   const totals = game.totals || {};
+  const rl = game.runLine || {};
   const awayP = game.pitchers?.away;
   const homeP = game.pitchers?.home;
   const isLive = game.status === "live";
@@ -177,6 +178,8 @@ function GameDetail({ game, scoresId, hrProps, hasFullAccess, navigate }) {
     { type: "ML", side: "home", team: game.homeAbbr, prob: ml.homeWinProb, odds: ml.homeOdds, book: ml.homeBook, edge: ml.homeEdge, confidence: ml.homeConfidence },
     { type: "TOTAL", side: "over", line: totals.line, prob: totals.overProb, odds: totals.overOdds, book: totals.overBook, edge: totals.overEdge, confidence: totals.overConfidence, projected: totals.projected },
     { type: "TOTAL", side: "under", line: totals.line, prob: totals.underProb, odds: totals.underOdds, book: totals.underBook, edge: totals.underEdge, confidence: totals.underConfidence, projected: totals.projected },
+    { type: "RL", side: "away", team: game.awayAbbr, line: rl.awayLine, prob: rl.awayCoverProb, odds: rl.awayOdds, book: rl.awayBook, edge: rl.awayEdge, confidence: rl.awayConfidence },
+    { type: "RL", side: "home", team: game.homeAbbr, line: rl.homeLine, prob: rl.homeCoverProb, odds: rl.homeOdds, book: rl.homeBook, edge: rl.homeEdge, confidence: rl.homeConfidence },
   ].filter(c => c.edge != null);
   const bestEdge = candidates.length > 0 ? candidates.reduce((a, b) => (a.edge > b.edge ? a : b)) : null;
   return (
@@ -190,6 +193,7 @@ function GameDetail({ game, scoresId, hrProps, hasFullAccess, navigate }) {
       {!isLive && bestEdge && <BestEdgeCard edge={bestEdge} game={game} hasFullAccess={hasFullAccess} navigate={navigate} />}
       {!isLive && <WinProbabilityCard awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} awayProb={ml.awayWinProb} homeProb={ml.homeWinProb} awayOdds={ml.awayOdds} homeOdds={ml.homeOdds} awayBook={ml.awayBook} homeBook={ml.homeBook} awayEdge={ml.awayEdge} homeEdge={ml.homeEdge} hasFullAccess={hasFullAccess} navigate={navigate} />}
       {!isLive && <TotalsCard totals={totals} hasFullAccess={hasFullAccess} navigate={navigate} />}
+      {!isLive && <RunLineCard rl={rl} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} />}
       {/* Supporting detail below. */}
       {game.weather && <WeatherCard weather={game.weather} />}
       <PitcherMatchup awayPitcher={awayP} homePitcher={homeP} hasFullAccess={hasFullAccess} navigate={navigate} />
@@ -627,7 +631,9 @@ function WeatherStat({ icon, label, value, color, subtitle }) {
 }
 function BestEdgeCard({ edge, game, hasFullAccess, navigate }) {
   const positive = edge.edge > 0;
-  const desc = edge.type === "ML" ? `${edge.team} Moneyline` : `${edge.side === "over" ? "Over" : "Under"} ${edge.line}`;
+  const desc = edge.type === "ML" ? `${edge.team} Moneyline`
+    : edge.type === "RL" ? `${edge.team} ${edge.line > 0 ? "+" : ""}${edge.line}`
+    : `${edge.side === "over" ? "Over" : "Under"} ${edge.line}`;
   return (
     <div style={{ background: positive ? "linear-gradient(180deg,#0a1f15 0%,#0f1419 100%)" : "linear-gradient(180deg,#1f0a0a 0%,#0f1419 100%)", border: `1px solid ${positive ? "#22c55e44" : "#ef444444"}`, borderLeft: `4px solid ${positive ? "#22c55e" : "#ef4444"}`, borderRadius: 10, padding: "20px 24px", marginBottom: 10 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
@@ -942,6 +948,35 @@ function MLBox({ abbr, prob, odds, book, edge, side }) {
       <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>{abbr} ML · {formatOdds(odds)}</div>
       {book && <div style={{ fontSize: 10, color: "#22c55e", fontWeight: 600, marginBottom: 6 }}>best at {book}</div>}
       <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 2 }}>Model: <span style={{ color: "#22c55e", fontWeight: 600 }}>{prob != null ? Math.round(prob * 100) : "—"}%</span></div>
+      {edge != null && (
+        <div style={{ marginTop: 10, fontSize: 18, fontWeight: 800, color: positive ? "#22c55e" : "#ef4444" }}>
+          {positive ? "+" : ""}{(edge * 100).toFixed(1)}%
+        </div>
+      )}
+    </div>
+  );
+}
+function RunLineCard({ rl, awayAbbr, homeAbbr }) {
+  if (!rl || rl.awayEdge == null || rl.homeEdge == null) return null;
+  return (
+    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 20, marginBottom: 10 }}>
+      <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 16 }}>📐 Run line · ±1.5</div>
+      <div className="two-col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <RLBox abbr={awayAbbr} line={rl.awayLine} odds={rl.awayOdds} book={rl.awayBook} prob={rl.awayCoverProb} edge={rl.awayEdge} />
+        <RLBox abbr={homeAbbr} line={rl.homeLine} odds={rl.homeOdds} book={rl.homeBook} prob={rl.homeCoverProb} edge={rl.homeEdge} />
+      </div>
+      <div style={{ marginTop: 12, fontSize: 11, color: "#6b7280", lineHeight: 1.5 }}>Derived from the moneyline projection — the same lean expressed at a spread price, with more variance.</div>
+    </div>
+  );
+}
+function RLBox({ abbr, line, odds, book, prob, edge }) {
+  const positive = edge != null && edge > 0;
+  const fmtLine = line != null ? (line > 0 ? `+${line}` : `${line}`) : "";
+  return (
+    <div style={{ background: "#0a0e14", border: `1px solid ${positive ? "#22c55e30" : "#1f2937"}`, borderRadius: 8, padding: 14 }}>
+      <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>{abbr} {fmtLine} · {formatOdds(odds)}</div>
+      {book && <div style={{ fontSize: 10, color: "#22c55e", fontWeight: 600, marginBottom: 6 }}>best at {book}</div>}
+      <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 2 }}>Cover: <span style={{ color: "#22c55e", fontWeight: 600 }}>{prob != null ? Math.round(prob * 100) : "—"}%</span></div>
       {edge != null && (
         <div style={{ marginTop: 10, fontSize: 18, fontWeight: 800, color: positive ? "#22c55e" : "#ef4444" }}>
           {positive ? "+" : ""}{(edge * 100).toFixed(1)}%
