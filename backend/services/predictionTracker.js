@@ -209,6 +209,18 @@ async function recordPredictions(result) {
     });
   }
 
+  // Run line (±1.5)
+  for (const e of result.runLineEdges || []) {
+    if (statusById[e.gameId] === "final") continue;
+    rows.push({
+      game_id: e.gameId, game_date: gameDate, league: "mlb",
+      matchup: e.matchup, market: "run_line", selection: e.side,
+      description: `${e.teamAbbr} ${e.line > 0 ? "+" : ""}${e.line}`,
+      model_prob: e.modelProb, odds: e.odds, edge: e.edge,
+      confidence: e.confidence, line: e.line,
+    });
+  }
+
   // HR props
   for (const e of result.hrPropEdges || []) {
     if (statusById[e.gameId] === "final") continue;
@@ -469,6 +481,14 @@ function gradeOne(p, g) {
     const wentOver = total > p.line;
     const won = p.selection === "over" ? wentOver : !wentOver;
     return { result: won ? "win" : "loss", actual: total };
+  }
+
+  if (p.market === "run_line") {
+    if (p.line == null) return null;
+    const homeMargin = g.homeScore - g.awayScore;
+    const sideMargin = p.selection === "home" ? homeMargin : -homeMargin;
+    const covered = (sideMargin + p.line) > 0; // line is that side's ±1.5 (no push)
+    return { result: covered ? "win" : "loss", actual: homeMargin };
   }
 
   if (p.market === "hr_prop") {
