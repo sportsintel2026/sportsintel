@@ -1,16 +1,24 @@
 /**
- * services/nbaPropsDiag.js — TEMP diagnostic: does The Odds API return 3PT-made
- * (player_threes) prop lines for a given NBA game? One event call (~1 credit),
- * reports what markets come back and a sample of the threes data. Safe to delete
- * after we've confirmed. Reuses the SAME source/path as nbaProps.js.
+ * services/nbaPropsDiag.js — TEMP diagnostic: which 3PT-made market key (if any)
+ * does The Odds API accept for a given NBA game? Probes candidate keys ONE AT A
+ * TIME (a bad key 422s only its own call, not the batch), then reports which key
+ * returned data + a sample. Reuses the SAME source/path as nbaProps.js.
+ * ~1 credit per valid market that returns. Safe to delete after we confirm.
  */
 const { getNbaMatchup } = require('./nbaMatchup');
 
 const SPORT = 'basketball_nba';
 const BASE = `https://api.the-odds-api.com/v4/sports/${SPORT}`;
 const KEY = process.env.ODDS_API_KEY;
-// probe several plausible threes market keys at once so we learn the right name
-const PROBE_MARKETS = 'player_points,player_threes,player_three_pointers_made';
+
+// every plausible name The Odds API might use for "threes made", tried separately
+const CANDIDATE_KEYS = [
+  'player_threes',
+  'player_three_pointers_made',
+  'player_threes_made',
+  'player_three_points_made',
+  'player_3_pointers_made',
+];
 
 const norm = (s) => (s || '').toLowerCase().replace(/[^a-z]/g, '');
 const nickname = (name) => { const p = (name || '').trim().split(/\s+/); return norm(p[p.length - 1]); };
@@ -25,6 +33,24 @@ function matchEvent(events, homeName, awayName) {
   return events.find((e) => nickname(e.home_team) === hn && nickname(e.away_team) === an) || null;
 }
 
+async function probeKey(eventId, key) {
+  const url = `${BASE}/events/${eventId}/odds?regions=us&markets=${key}&oddsFormat=american&apiKey=${KEY}`;
+  const r = await fetch(url);
+  if (!r.ok) return { key, ok: false, status: r.status };
+  const j = await r.json();
+  let sample = [];
+  let count = 0;
+  for (const bm of j.bookmakers || []) {
+    for (const mk of bm.markets || []) {
+      if (mk.key === key) {
+        count += (mk.outcomes || []).length;
+        if (sample.length === 0) sample = (mk.outcomes || []).slice(0, 6).map((o) => ({ player: o.description, side: o.name, line: o.point, price: o.price }));
+      }
+    }
+  }
+  return { key, ok: true, outcomeCount: count, sample };
+}
+
 async function diagThrees(gameId) {
   if (!KEY) return { available: false, note: 'No odds API key configured.' };
   const m = await getNbaMatchup(gameId);
@@ -35,40 +61,27 @@ async function diagThrees(gameId) {
   if (!evRes.ok) return { available: false, note: 'odds events ' + evRes.status };
   const events = await evRes.json();
   const ev = matchEvent(events, homeName, awayName);
-  if (!ev) return { available: false, note: 'No matching Odds API event (props may not be posted yet).', home: homeName, away: awayName };
+  if (!ev) return { available: false, note: 'No matching Odds API event.', home: homeName, away: awayName };
 
-  const url = `${BASE}/events/${ev.id}/odds?regions=us&markets=${PROBE_MARKETS}&oddsFormat=american&apiKey=${KEY}`;
-  const r = await fetch(url);
-  if (!r.ok) return { available: false, note: 'odds event-odds ' + r.status, eventId: ev.id };
-  const eventOdds = await r.json();
+  // First confirm the event has ANY props at all by probing a KNOWN-good key.
+  const baseline = await probeKey(ev.id, 'player_points');
 
-  // report which markets each bookmaker returned, and a small threes sample
-  const bookmakers = (eventOdds.bookmakers || []).map((bm) => ({
-    book: bm.title || bm.key,
-    marketKeys: (bm.markets || []).map((mk) => mk.key),
-  }));
-  // collect any market that looks like threes, across books
-  let threesSample = [];
-  let threesKeyFound = null;
-  for (const bm of eventOdds.bookmakers || []) {
-    for (const mk of bm.markets || []) {
-      if (mk.key.includes('three') || mk.key === 'player_threes') {
-        threesKeyFound = mk.key;
-        threesSample = (mk.outcomes || []).slice(0, 6).map((o) => ({ player: o.description, side: o.name, line: o.point, price: o.price }));
-        break;
-      }
+  const results = [];
+  for (const key of CANDIDATE_KEYS) {
+    try {
+      results.push(await probeKey(ev.id, key));
+    } catch (e) {
+      results.push({ key, ok: false, error: String(e.message || e) });
     }
-    if (threesKeyFound) break;
   }
+  const working = results.find((r) => r.ok && r.outcomeCount > 0) || null;
 
   return {
-    note: 'TEMP threes diagnostic. threesKeyFound tells us the real market key; threesSample shows real lines.',
+    note: 'TEMP threes diagnostic v2 (one key at a time). working = the real 3PT market key, if any.',
     home: homeName, away: awayName, eventId: ev.id,
-    probedMarkets: PROBE_MARKETS,
-    bookmakers,
-    threesKeyFound,
-    threesSampleCount: threesSample.length,
-    threesSample,
+    pointsBaseline: { ok: baseline.ok, status: baseline.status, outcomeCount: baseline.outcomeCount },
+    candidateResults: results,
+    working,
   };
 }
 
