@@ -48,6 +48,16 @@ const PLAYOFF_TOTAL_FACTOR = 0.95;
 const NBA_BLEND_ENABLED = true;
 const NBA_W_MODEL = 0.55; // 55% model / 45% market — humble start for a young model
 
+// ── MARKET OVERREACTION FLAG (v0.2) ────────────────────────────────────────
+// Neutral CONTEXT, never a bet directive. When the de-vigged market rates a side
+// HIGHER than our model by >= this gap, the price may be carrying public/streak
+// hype the fundamentals don't support (the classic "public over-betting a side").
+// We surface a neutral note and let the user apply their own read. NBA starts a
+// touch wider than MLB's 8% because (a) the blend already shrinks gaps and (b) a
+// young model's smaller disagreements are more likely noise than signal — we only
+// want to flag a real, sizable gap. Tunable as we watch it over real games.
+const NBA_INFLATION_THRESHOLD = 0.09; // market fair prob exceeds model prob by 9%+
+
 // guardrails
 const PPG_MIN = 90;
 const PPG_MAX = 135;
@@ -157,6 +167,7 @@ function predictGame(ctx, lines, opts = {}) {
     value: false,
     fair: null,
     book: null,
+    inflation: null,
   };
   if (lines && lines.home.ml != null && lines.away.ml != null && fairHomeProb != null) {
     const edgeHome = homeWinProb - fairHomeProb;
@@ -169,6 +180,29 @@ function predictGame(ctx, lines, opts = {}) {
     ml.value = trustworthy && edge >= EDGE_ML;
     ml.pick = ml.value ? (pickHome ? 'home' : 'away') : null;
     ml.pickTeam = ml.value ? (pickHome ? h.displayName : a.displayName) : null;
+
+    // Market overreaction flag — compare the PRE-BLEND model fundamentals against
+    // the market fair prob. If the market rates a side >= threshold higher than the
+    // raw model, flag it as possible public/streak inflation on THAT side. Neutral
+    // context only; we never tell the user to bet it. Only surfaced on trustworthy
+    // data so a suspect projection can't trigger a misleading flag.
+    if (trustworthy) {
+      const fairAwayProb = 1 - fairHomeProb;
+      const modelAwayWinProb = 1 - modelHomeWinProb;
+      const homeGap = fairHomeProb - modelHomeWinProb; // + => market high on home
+      const awayGap = fairAwayProb - modelAwayWinProb;  // + => market high on away
+      if (homeGap >= NBA_INFLATION_THRESHOLD) {
+        ml.inflation = {
+          side: 'home', team: h.displayName, inflated: true, gap: r(homeGap * 100),
+          note: 'Market rates ' + h.displayName + ' higher than our model — possible public/streak inflation.',
+        };
+      } else if (awayGap >= NBA_INFLATION_THRESHOLD) {
+        ml.inflation = {
+          side: 'away', team: a.displayName, inflated: true, gap: r(awayGap * 100),
+          note: 'Market rates ' + a.displayName + ' higher than our model — possible public/streak inflation.',
+        };
+      }
+    }
   }
 
   /* ---- spread (book "line" = home spread point) ---- */
