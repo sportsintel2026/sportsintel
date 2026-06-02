@@ -96,6 +96,30 @@ router.get("/mlb", async (req, res) => {
       };
     }
 
+    // ── HR-prop accuracy ──────────────────────────────────────────────────────
+    // HR props are plus-money longshots, so they're shown separately and NOT gated
+    // to the qualified tiers. Hit rate = how often the picked player actually homered.
+    const hrRows = rows.filter(r => r.market === "hr_prop");
+    let hrProps = null;
+    if (hrRows.length > 0) {
+      let wins = 0, units = 0, oddsSum = 0, oddsN = 0;
+      for (const r of hrRows) {
+        const won = r.result === "win";
+        if (won) wins++;
+        units += won ? unitProfit(r.odds) : -1;
+        if (r.odds != null) { oddsSum += Number(r.odds); oddsN++; }
+      }
+      const n = hrRows.length;
+      hrProps = {
+        picks: n,
+        hits: wins,
+        misses: n - wins,
+        hitRatePct: Math.round((wins / n) * 1000) / 10,
+        roi: Math.round((units / n) * 1000) / 10,
+        avgOdds: oddsN ? Math.round(oddsSum / oddsN) : null,
+      };
+    }
+
     res.json({
       // Headline = qualified picks (what we stand behind).
       ...qualified,
@@ -106,6 +130,7 @@ router.get("/mlb", async (req, res) => {
         totalGraded: rows.length,
       },
       clv: clvSummary,
+      hrProps,
       filter: {
         qualifyingTiers: QUALIFYING_TIERS,
         excludedCount: rows.length - qualifiedRows.length,
