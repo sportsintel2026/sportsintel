@@ -506,6 +506,25 @@ async function calculateGameEdges(game, oddsForGame) {
   const overInflation = overreactionNote(overProb, overOdds, underOdds);
   const underInflation = overreactionNote(underProb, underOdds, overOdds);
 
+  // Run line (±1.5). Derive an expected run margin from the win prob, then the
+  // probability each side covers. This is the moneyline opinion expressed at a
+  // spread price (same lean, more variance) — blended toward the market like ML.
+  const MARGIN_SD = 3.0; // approx SD of an MLB game's run margin
+  const homeRLLine = odds.spreads?.homeLine ?? null;
+  const awayRLLine = odds.spreads?.awayLine ?? null;
+  const homeRLOdds = odds.spreads?.home ?? null;
+  const awayRLOdds = odds.spreads?.away ?? null;
+  let homeCoverProb = null, awayCoverProb = null, homeRLEdge = null, awayRLEdge = null;
+  if (homeRLLine != null && awayRLLine != null && homeRLOdds != null && awayRLOdds != null) {
+    const muHome = MARGIN_SD * invNorm(ml.homeWinProb); // expected home run margin
+    const hCover = normalCDF((muHome + homeRLLine) / MARGIN_SD);
+    const aCover = 1 - hCover;
+    homeCoverProb = round3(hCover);
+    awayCoverProb = round3(aCover);
+    homeRLEdge = sanitizeEdge(blendedEdge(hCover, homeRLOdds, awayRLOdds));
+    awayRLEdge = sanitizeEdge(blendedEdge(aCover, awayRLOdds, homeRLOdds));
+  }
+
   return {
     game: {
       id: game.id,
@@ -577,6 +596,20 @@ async function calculateGameEdges(game, oddsForGame) {
       underConfidence: rateConfidence(underEdge),
       overInflation,
       underInflation,
+    },
+    runLine: {
+      awayLine: awayRLLine,
+      homeLine: homeRLLine,
+      awayOdds: awayRLOdds,
+      homeOdds: homeRLOdds,
+      awayBook: odds.spreads?.awayBook ?? null,
+      homeBook: odds.spreads?.homeBook ?? null,
+      awayCoverProb,
+      homeCoverProb,
+      awayEdge: awayRLEdge,
+      homeEdge: homeRLEdge,
+      awayConfidence: awayRLEdge != null ? rateConfidence(awayRLEdge) : null,
+      homeConfidence: homeRLEdge != null ? rateConfidence(homeRLEdge) : null,
     },
   };
 }
@@ -703,6 +736,33 @@ async function findPlayerByName(playerName, teamIds) {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function sigmoid(x) { return 1 / (1 + Math.exp(-x)); }
+// Standard normal CDF (Zelen & Severo approximation, ~7.5e-8 accuracy).
+function normalCDF(x) {
+  const t = 1 / (1 + 0.2316419 * Math.abs(x));
+  const d = 0.3989422804014327 * Math.exp(-x * x / 2);
+  const p = d * t * (0.319381530 + t * (-0.356563782 + t * (1.781477937 + t * (-1.821255978 + t * 1.330274429))));
+  return x >= 0 ? 1 - p : p;
+}
+// Inverse normal CDF (Acklam's algorithm, ~1e-9 accuracy). Input clamped to (0,1).
+function invNorm(p) {
+  p = Math.min(Math.max(p, 1e-6), 1 - 1e-6);
+  const a = [-39.6968302866538, 220.946098424521, -275.928510446969, 138.357751867269, -30.6647980661472, 2.50662827745924];
+  const b = [-54.4760987982241, 161.585836858041, -155.698979859887, 66.8013118877197, -13.2806815528857];
+  const c = [-0.00778489400243029, -0.322396458041136, -2.40075827716184, -2.54973253934373, 4.37466414146497, 2.93816398269878];
+  const d = [0.00778469570904146, 0.32246712907004, 2.445134137143, 3.75440866190742];
+  const plow = 0.02425, phigh = 1 - 0.02425;
+  let q, r;
+  if (p < plow) {
+    q = Math.sqrt(-2 * Math.log(p));
+    return (((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) / ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1);
+  } else if (p <= phigh) {
+    q = p - 0.5; r = q * q;
+    return (((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) * q / (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1);
+  } else {
+    q = Math.sqrt(-2 * Math.log(1 - p));
+    return -(((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) / ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1);
+  }
+}
 function round2(n) { return Math.round(n * 100) / 100; }
 function round3(n) { return Math.round(n * 1000) / 1000; }
 
