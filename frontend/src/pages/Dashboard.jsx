@@ -714,7 +714,7 @@ function NBAAllPropsTable({ rows, hasFullAccess, navigate }) {
             Each stat shows our <strong style={{ color: "#e4e7eb" }}>projection</strong> and how far it sits from the book's <strong style={{ color: "#e4e7eb" }}>line</strong>:
             {" "}<span style={{ color: "#22c55e", fontWeight: 700 }}>▲ over</span> /{" "}
             <span style={{ color: "#ef4444", fontWeight: 700 }}>▼ under</span>, with the gap (e.g. <span style={{ color: "#22c55e", fontWeight: 700 }}>▲ 2.5</span> = we project 2.5 above the line).
-            {" "}A <strong style={{ color: "#e4e7eb" }}>highlighted pill</strong> = flagged edge · <span style={{ color: "#fbbf24" }}>⚠</span> = line looks off (likely news).
+            {" "}A <strong style={{ color: "#e4e7eb" }}>highlighted pill</strong> = flagged edge · <span style={{ display: "inline-block", width: 7, height: 7, borderRadius: "50%", background: "#f59700", verticalAlign: "middle" }} /> = line looks off (likely news).
           </div>
           <div className="games-table-wrap" style={{ overflowX: "auto" }}>
             <table className="games-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
@@ -773,7 +773,7 @@ function StatCell({ m }) {
   return (
     <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-end", gap: 2, lineHeight: 1.15 }}>
       <span style={{ fontSize: 16, fontWeight: m.flagged ? 800 : 600, color: m.flagged ? color : "#e4e7eb", fontVariantNumeric: "tabular-nums" }}>
-        {m.projection}{m.suspect ? <span style={{ color: "#fbbf24" }}> ⚠</span> : null}
+        {m.projection}{m.suspect ? <span style={{ display: "inline-block", width: 7, height: 7, borderRadius: "50%", background: "#f59700", marginLeft: 5, verticalAlign: "middle" }} /> : null}
       </span>
       <span style={{ fontSize: 10, color: "#5b6472", fontVariantNumeric: "tabular-nums" }}>vs {m.line}</span>
       {m.flagged ? (
