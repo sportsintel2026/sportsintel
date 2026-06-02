@@ -5,7 +5,7 @@
 // gradeFinishedGames()  → cron: grades pending MLB (team scores) and NBA (player gamelog).
 
 const { createClient } = require("@supabase/supabase-js");
-const { getEasternDate, getScheduleForDate } = require("./mlbStatsApi");
+const { getEasternDate, getScheduleForDate, getGameHRHitters, normPlayerName } = require("./mlbStatsApi");
 const { fetchGamelog } = require("./nbaGamelog");
 const { getMLBMainOdds } = require("./oddsApi");
 
@@ -309,10 +309,26 @@ async function gradeFinishedGames() {
     .eq("result", "pending");
 
   if (error) { console.error("[Tracker] grade fetch error:", error.message); return; }
-  if (!pending || pending.length === 0) { console.log("[Tracker] No pending predictions to grade"); return; }
+  const pendingRows = pending || [];
 
-  const nbaPending = pending.filter(p => p.league === "nba");
-  const mlbPending = pending.filter(p => p.league !== "nba");
+  const nbaPending = pendingRows.filter(p => p.league === "nba");
+  const mlbPending = pendingRows.filter(p => p.league !== "nba");
+
+  // Backfill: HR props were previously stamped "push" (no-action) because grading
+  // couldn't read per-player HRs. Now that it can, re-grade recent ones. They flip
+  // to win/loss and leave this set, so after the first pass it self-empties.
+  const backfillCutoff = new Date(Date.now() - 30 * 864e5).toISOString().slice(0, 10);
+  const { data: hrPush } = await supabase
+    .from("model_predictions")
+    .select("*")
+    .eq("league", "mlb")
+    .eq("market", "hr_prop")
+    .eq("result", "push")
+    .gte("game_date", backfillCutoff);
+  if (hrPush && hrPush.length) {
+    mlbPending.push(...hrPush);
+    console.log(`[Tracker] Re-grading ${hrPush.length} previously no-actioned HR props`);
+  }
 
   let graded = 0;
   graded += await gradeMlb(supabase, mlbPending);
@@ -322,7 +338,29 @@ async function gradeFinishedGames() {
   return graded;
 }
 
-// MLB grading — unchanged logic, scoped to MLB rows.
+// Resolve a pick's player name against the game's HR map. Exact normalized match
+// first; then a UNIQUE last-name + first-initial fallback (handles "Jr."/accents)
+// without risking same-last-name collisions. found:false => leave ungraded.
+function resolveHR(hrMap, playerName) {
+  const target = normPlayerName(playerName);
+  if (!target) return { found: false, hr: null };
+  if (hrMap.has(target)) return { found: true, hr: hrMap.get(target) };
+  const parts = target.split(" ");
+  if (parts.length >= 2) {
+    const firstInitial = parts[0][0];
+    const last = parts[parts.length - 1];
+    const matches = [];
+    for (const [name, hr] of hrMap.entries()) {
+      const np = name.split(" ");
+      if (np.length >= 2 && np[np.length - 1] === last && np[0][0] === firstInitial) matches.push(hr);
+    }
+    if (matches.length === 1) return { found: true, hr: matches[0] };
+  }
+  return { found: false, hr: null };
+}
+
+// MLB grading — moneyline/totals from the schedule score; HR props from the
+// official boxscore (one fetch per game, cached for this run).
 async function gradeMlb(supabase, pending) {
   if (!pending.length) return 0;
 
@@ -330,6 +368,8 @@ async function gradeMlb(supabase, pending) {
   for (const p of pending) (byDate[p.game_date] ||= []).push(p);
 
   let graded = 0;
+  const hrCache = new Map(); // game_id -> { ok, hr }
+
   for (const [date, preds] of Object.entries(byDate)) {
     let schedule;
     try { schedule = await getScheduleForDate(date); }
@@ -343,7 +383,20 @@ async function gradeMlb(supabase, pending) {
       if (!g || g.status !== "final") continue;
       if (g.awayScore == null || g.homeScore == null) continue;
 
-      const outcome = gradeOne(p, g);
+      let outcome;
+      if (p.market === "hr_prop") {
+        // Box score holds per-player HRs. Fetch once per game, cache for this run.
+        if (!hrCache.has(p.game_id)) {
+          hrCache.set(p.game_id, await getGameHRHitters(p.game_id));
+        }
+        const box = hrCache.get(p.game_id);
+        if (!box || !box.ok) continue;                 // couldn't read → leave pending, retry later
+        const { found, hr } = resolveHR(box.hr, p.selection);
+        if (!found) continue;                          // player not located → never false-loss
+        outcome = { result: hr >= 1 ? "win" : "loss", actual: hr };
+      } else {
+        outcome = gradeOne(p, g);
+      }
       if (!outcome) continue;
 
       const { error: upErr } = await supabase
@@ -419,7 +472,7 @@ function gradeOne(p, g) {
   }
 
   if (p.market === "hr_prop") {
-    return { result: "push", actual: null }; // no-action until boxscore parsing
+    return null; // graded separately in gradeMlb via the boxscore (needs per-player HRs)
   }
 
   return null;
