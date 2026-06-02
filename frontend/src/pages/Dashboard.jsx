@@ -154,6 +154,23 @@ function MLBDashboard({ edges, loading, hasFullAccess, navigate, onRefresh }) {
   const heading = rolled ? "Next up" : "Today's edges";
   const gameCount = edges.games?.length || 0;
 
+  // Detect the "all of today's games are already in progress / finished" case.
+  // When that happens the PRE-GAME edge lists are empty (correctly) because the
+  // model's pre-game edges only apply before first pitch — the live edges have
+  // moved onto each game's page. Without a note, the empty panels read like the
+  // product is broken, so we show a friendly signpost pointing to the live games.
+  const games = edges.games || [];
+  const liveCount = games.filter((g) => g.status === "live").length;
+  const scheduledCount = games.filter((g) => g.status === "scheduled" || (g.status !== "live" && g.status !== "final")).length;
+  const pregameEdgeCount =
+    (edges.moneylineEdges?.length || 0) +
+    (edges.totalsEdges?.length || 0) +
+    (edges.hrPropEdges?.length || 0);
+  // Only show when: there ARE games, at least one is live, none are still
+  // waiting to start, and there are no pre-game edges left to show.
+  const allGamesUnderway =
+    gameCount > 0 && liveCount > 0 && scheduledCount === 0 && pregameEdgeCount === 0;
+
   return (
     <div style={{ animation: "fadeIn .3s ease" }}>
       <div style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 8 }}>
@@ -165,6 +182,25 @@ function MLBDashboard({ edges, loading, hasFullAccess, navigate, onRefresh }) {
       <p style={{ margin: "0 0 24px", fontSize: 13, color: "#9ca3af" }}>
         Model projections vs sportsbook lines · weather, batter vs pitcher history, recent form. <span style={{ color: "#ef4444", fontWeight: 600 }}>Click any game</span> for deep analysis.
       </p>
+
+      {allGamesUnderway && (
+        <div style={{ background: "linear-gradient(180deg,#1a1410 0%,#0f1419 100%)", border: "1px solid #ef444433", borderLeft: "3px solid #ef4444", borderRadius: 10, padding: "16px 20px", marginBottom: 16, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <span style={{ width: 9, height: 9, borderRadius: "50%", background: "#ef4444", animation: "pulse 1.2s infinite", flexShrink: 0 }} />
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#e4e7eb", marginBottom: 2 }}>
+                All of today's games are now in progress
+              </div>
+              <div style={{ fontSize: 12, color: "#9ca3af", lineHeight: 1.5 }}>
+                Pre-game edges have closed — live in-game edges are now on each game's page. Tap a live game to see them.
+              </div>
+            </div>
+          </div>
+          <button onClick={() => navigate("/games")} style={{ background: "#ef4444", color: "#fff", border: "none", borderRadius: 6, padding: "10px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}>
+            View live games →
+          </button>
+        </div>
+      )}
       <div className="edge-grid-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16, gridAutoRows: "1fr" }}>
         <EdgePanel title="Top moneyline edges" icon="💰" edges={edges.moneylineEdges || []} renderRow={(e) => <MoneylineRow edge={e} key={e.gameId + e.side} navigate={navigate} />} emptyText="No edges found in current slate" hasFullAccess={hasFullAccess} navigate={navigate} />
         <EdgePanel title="Top totals edges" icon="📊" edges={edges.totalsEdges || []} renderRow={(e) => <TotalsRow edge={e} key={e.gameId + e.side} navigate={navigate} />} emptyText="No edges found in current slate" hasFullAccess={hasFullAccess} navigate={navigate} />
