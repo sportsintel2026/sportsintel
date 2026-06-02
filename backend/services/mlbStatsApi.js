@@ -505,8 +505,55 @@ async function getLiveGameState(gamePk) {
   }
 }
 
+// Normalize a player name for matching: strip accents, lowercase, drop
+// punctuation (Jr., periods), collapse spaces. "José Ramírez Jr." -> "jose ramirez jr".
+function normPlayerName(s) {
+  return String(s || "")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// Per-game home runs by player, from the official boxscore.
+//   GET /game/{gamePk}/boxscore -> teams.{home,away}.players["ID#"].stats.batting.homeRuns
+// Returns { ok, hr } where hr is a Map(normalizedName -> HR count for the game).
+// FAILS SAFE: ok:false whenever we can't confidently read batting data, so the
+// caller leaves a pick UNGRADED rather than ever recording a false loss.
+async function getGameHRHitters(gamePk) {
+  try {
+    const data = await mlbGet(`/game/${gamePk}/boxscore`);
+    const teams = data && data.teams;
+    if (!teams || !teams.home || !teams.away) return { ok: false, hr: null };
+    const hr = new Map();
+    let battingObjectsSeen = 0;
+    for (const side of ["home", "away"]) {
+      const players = teams[side] && teams[side].players;
+      if (!players) continue;
+      for (const key of Object.keys(players)) {
+        const pl = players[key];
+        const name = pl && pl.person && pl.person.fullName;
+        const batting = pl && pl.stats && pl.stats.batting;
+        if (!name) continue;
+        if (batting && typeof batting === "object") {
+          battingObjectsSeen++;
+          hr.set(normPlayerName(name), parseIntSafe(batting.homeRuns) || 0);
+        }
+      }
+    }
+    // If NO player had a batting stats object, the shape is wrong/unavailable —
+    // don't grade anything off it (guards against a silent field-path change).
+    if (battingObjectsSeen === 0) return { ok: false, hr: null };
+    return { ok: true, hr };
+  } catch (e) {
+    return { ok: false, hr: null };
+  }
+}
+
 module.exports = {
   getEasternDate, getScheduleForDate,
+  getGameHRHitters, normPlayerName,
   getPitcherSeasonStats, getBatterSeasonStats,
   getTeamSeasonStats, getTeamPitchingStats, getTeamRoster, getLinescore,
   getParkHRFactor, getParkRunFactor,
