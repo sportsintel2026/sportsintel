@@ -6,6 +6,7 @@
  * GET /api/nba/matchup/:gameId              -> rich single-game matchup detail
  * GET /api/nba/props/:gameId                -> player prop LINES (points/reb/ast)
  * GET /api/nba/props/:gameId/projections    -> Stage 2 projections + edges (experimental)
+ * GET /api/nba/diag                         -> TEMP data diagnostic (raw ESPN fields)
  *
  * Mount in your main backend file next to your other routes:
  *   app.use('/api/nba', require('./routes/nba'));
@@ -17,7 +18,6 @@ const { generateNbaPredictions } = require('../services/nbaService');
 const { getNbaMatchup } = require('../services/nbaMatchup');
 const { getNbaProps } = require('../services/nbaProps');
 const { getNbaPropProjections, getIdDebug } = require('../services/nbaProjectionService');
-
 router.get('/predictions', async (req, res) => {
   try {
     const opts = req.query.date ? { dateStr: req.query.date } : {};
@@ -28,7 +28,6 @@ router.get('/predictions', async (req, res) => {
     res.status(500).json({ error: 'Failed to generate NBA predictions' });
   }
 });
-
 // Rich single-game matchup: team stats, player leaders, injuries, series, line
 router.get('/matchup/:gameId', async (req, res) => {
   try {
@@ -39,7 +38,6 @@ router.get('/matchup/:gameId', async (req, res) => {
     res.status(502).json({ error: 'Failed to load NBA matchup' });
   }
 });
-
 // Player prop LINES for a game (Stage 1 — lines only, no projections)
 router.get('/props/:gameId', async (req, res) => {
   try {
@@ -50,7 +48,6 @@ router.get('/props/:gameId', async (req, res) => {
     res.status(502).json({ error: 'Failed to load NBA props' });
   }
 });
-
 // Player prop PROJECTIONS + edges (Stage 2 — experimental, informational only)
 router.get('/props/:gameId/projections', async (req, res) => {
   try {
@@ -61,7 +58,6 @@ router.get('/props/:gameId/projections', async (req, res) => {
     res.status(502).json({ error: 'Failed to build NBA prop projections' });
   }
 });
-
 // TEMP diagnostic — where does ESPN keep player ids for this game? (safe to remove later)
 router.get('/props/:gameId/idcheck', async (req, res) => {
   try {
@@ -71,5 +67,80 @@ router.get('/props/:gameId/idcheck', async (req, res) => {
     res.status(502).json({ error: 'idcheck failed' });
   }
 });
+// TEMP data diagnostic — dumps the RAW ESPN scoreboard + standings stat fields so
+// we can see exactly where points-per-game / points-allowed-per-game live versus
+// where nbaDataSource.js currently looks. Read-only; touches nothing else. Safe to
+// remove once the NBA data layer is fixed.
+router.get('/diag', async (req, res) => {
+  const BASE = 'https://site.api.espn.com/apis/site/v2/sports/basketball/nba';
+  const STANDINGS_URL = 'https://site.api.espn.com/apis/v2/sports/basketball/nba/standings';
+  const espnGet = async (url) => {
+    const r = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+        Accept: 'application/json',
+      },
+    });
+    if (!r.ok) throw new Error(`ESPN ${r.status} for ${url}`);
+    return r.json();
+  };
+  try {
+    const dateStr = req.query.date;
+    const sbUrl = dateStr
+      ? `${BASE}/scoreboard?dates=${String(dateStr).replace(/-/g, '')}`
+      : `${BASE}/scoreboard`;
+    const [sb, st] = await Promise.all([
+      espnGet(sbUrl),
+      espnGet(STANDINGS_URL).catch((e) => ({ _error: e.message })),
+    ]);
 
+    // SCOREBOARD: dump the first game's competitors + their raw statistics arrays
+    const ev = (sb.events || [])[0] || {};
+    const comp = (ev.competitions && ev.competitions[0]) || {};
+    const scoreboardSample = {
+      eventName: ev.name || null,
+      state: (comp.status || ev.status || {}).type?.state || null,
+      competitors: (comp.competitors || []).map((c) => ({
+        team: c.team?.displayName || c.team?.abbreviation || null,
+        teamId: c.team?.id || null,
+        homeAway: c.homeAway,
+        rawStatistics: (c.statistics || []).map((s) => ({
+          name: s.name, abbreviation: s.abbreviation, value: s.value, displayValue: s.displayValue,
+        })),
+        rawRecords: (c.records || []).map((r) => ({ type: r.type, name: r.name, summary: r.summary })),
+      })),
+    };
+
+    // STANDINGS: dump the first team entry's raw stat fields
+    let standingsSample = null;
+    if (st && !st._error) {
+      const children = st.children || (st.standings ? [st] : []);
+      const firstChild = children[0];
+      const firstEntry = (firstChild?.standings?.entries || firstChild?.entries || [])[0];
+      if (firstEntry) {
+        standingsSample = {
+          team: firstEntry.team?.displayName || null,
+          teamId: firstEntry.team?.id || null,
+          rawStats: (firstEntry.stats || []).map((s) => ({
+            name: s.name, abbreviation: s.abbreviation, displayName: s.displayName, value: s.value, displayValue: s.displayValue,
+          })),
+        };
+      } else {
+        standingsSample = { _note: 'No entries in expected standings shape', topLevelKeys: Object.keys(st) };
+      }
+    } else {
+      standingsSample = { _error: st?._error || 'standings fetch failed' };
+    }
+
+    res.json({
+      note: 'TEMP diagnostic. rawStatistics/rawStats show the EXACT field names ESPN uses.',
+      gameCount: (sb.events || []).length,
+      scoreboardSample,
+      standingsSample,
+    });
+  } catch (err) {
+    console.error('[nba route] diag failed:', err);
+    res.status(502).json({ error: err.message });
+  }
+});
 module.exports = router;
