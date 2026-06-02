@@ -622,7 +622,7 @@ function NBAPropsSection({ games, hasFullAccess, navigate }) {
         allEdges.sort((a, b) => Math.abs(b.edge) - Math.abs(a.edge));
         allSuspects.sort((a, b) => Math.abs(b.edge) - Math.abs(a.edge));
         // biggest projection-vs-line gap (any market) first
-        const gap = (row) => Math.max(...["points", "rebounds", "assists"].map((k) => Math.abs(row.markets[k]?.edge ?? 0)));
+        const gap = (row) => Math.max(...["points", "rebounds", "assists", "threes"].map((k) => Math.abs(row.markets[k]?.edge ?? 0)));
         allRows.sort((a, b) => gap(b) - gap(a));
         if (!cancelled) { setEdges(allEdges); setSuspects(allSuspects); setRows(allRows); }
       } catch (e) {
@@ -637,7 +637,7 @@ function NBAPropsSection({ games, hasFullAccess, navigate }) {
     <div style={{ marginBottom: 16 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4, flexWrap: "wrap", gap: 8 }}>
         <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>🎯 Player props</h2>
-        <span style={{ fontSize: 11, color: "#6b7280" }}>points · rebounds · assists</span>
+        <span style={{ fontSize: 11, color: "#6b7280" }}>points · rebounds · assists · 3PT</span>
       </div>
       <p style={{ margin: "0 0 12px", fontSize: 12, color: "#9ca3af" }}>
         Model projection vs the book line. Out / injured players are removed automatically;
@@ -725,11 +725,12 @@ function NBAAllPropsTable({ rows, hasFullAccess, navigate }) {
                   <th style={th("right")}>Points</th>
                   <th style={th("right")}>Rebounds</th>
                   <th style={th("right")}>Assists</th>
+                  <th style={th("right")}>3PT Made</th>
                 </tr>
               </thead>
               <tbody>
                 {visible.map((r, i) => (
-                  <tr key={r.gameId + r.name + i} className="game-row" onClick={() => navigate(`/game/nba/${r.gameId}`)} style={{ borderBottom: "1px solid #131820" }}>
+                  <tr key={r.gameId + r.name + i} className="game-row" onClick={() => navigate(`/game/nba/${r.gameId}`)} style={{ borderBottom: "1px solid #131820", background: i % 2 === 1 ? "#0c1117" : "transparent", cursor: "pointer" }}>
                     <td style={td()}>
                       <div style={{ fontWeight: 600 }}>{r.name}</div>
                       <div style={{ fontSize: 10, color: "#6b7280" }}>
@@ -739,6 +740,7 @@ function NBAAllPropsTable({ rows, hasFullAccess, navigate }) {
                     <td style={td("right")}><StatCell m={r.markets.points} /></td>
                     <td style={td("right")}><StatCell m={r.markets.rebounds} /></td>
                     <td style={td("right")}><StatCell m={r.markets.assists} /></td>
+                    <td style={td("right")}><StatCell m={r.markets.threes} /></td>
                   </tr>
                 ))}
               </tbody>
