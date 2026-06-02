@@ -8,8 +8,16 @@
  * return single-game box scores from ESPN instead of season averages, which
  * produced bogus projections — so they're excluded here.
  *
- * NO database writes — serving only. Recording into your performance tracker
- * is a separate drop once we match your tracker's schema exactly.
+ * v0.1.3: serve ONLY games that have their OWN posted odds. Books line just the
+ * next game of a series, so in a playoff series the same two teams appear on the
+ * schedule several times but only ONE has a real line. Previously the single
+ * available line was matched (by team name) onto EVERY future same-matchup game,
+ * which (a) duplicated the slate and (b) generated a FAKE value pick whenever the
+ * home/away flipped (model compared a flipped projection against the wrong game's
+ * odds). Serving only games with their own line fixes both at the source and
+ * mirrors reality: we show the next game we actually have a price for.
+ *
+ * NO database writes — serving only.
  *
  * Requires Node 18+ (global fetch).
  * -------------------------------------------------------------------------- */
@@ -82,18 +90,37 @@ function extractLines(event) {
   return out;
 }
 
+// Match a game to its OWN odds event. We require BOTH the team match AND that the
+// event's commence time is close to this game's tip — so a single series line can't
+// attach itself to a later same-matchup game. Returns null when there's no distinct
+// line for THIS game (e.g. a future game books haven't posted yet).
 function matchOdds(ctx, oddsEvents) {
   const h = norm(ctx.home && ctx.home.displayName);
   const a = norm(ctx.away && ctx.away.displayName);
+  const gameTime = ctx.date ? new Date(ctx.date).getTime() : null;
+  // Allow up to ~18h between our game time and the book's commence time to count
+  // as the same game (covers tip-time/timezone slop) — but NOT days apart, which
+  // is what let one series line bleed onto every future game.
+  const MAX_SKEW_MS = 18 * 60 * 60 * 1000;
   for (const ev of oddsEvents) {
     const eh = norm(ev.home_team);
     const ea = norm(ev.away_team);
-    if ((eh === h && ea === a) || (eh === a && ea === h)) return extractLines(ev);
+    const teamsMatch = (eh === h && ea === a) || (eh === a && ea === h);
+    if (!teamsMatch) continue;
+    // If we can compare times, require them to be close. If either time is missing,
+    // fall back to a team-only match (best effort) — but only when we have no
+    // better signal.
+    const evTime = ev.commence_time ? new Date(ev.commence_time).getTime() : null;
+    if (gameTime != null && evTime != null) {
+      if (Math.abs(evTime - gameTime) <= MAX_SKEW_MS) return extractLines(ev);
+    } else {
+      return extractLines(ev);
+    }
   }
   return null;
 }
 
-const LOOKAHEAD_DAYS = 7; // show upcoming games up to a week out, not just today
+const LOOKAHEAD_DAYS = 7; // scan up to a week out so we find the next lined game
 
 // list of YYYY-MM-DD strings from `fromStr` (or today) through +days
 function datesAhead(fromStr, days) {
@@ -109,7 +136,7 @@ function datesAhead(fromStr, days) {
 
 /**
  * @param {Object} [opts] - { dateStr?: 'YYYY-MM-DD' } — if given, scans just that day
- * @returns {Promise<Array>} predictions for upcoming games (today + next several days)
+ * @returns {Promise<Array>} predictions for upcoming games that have their OWN line
  */
 async function generateNbaPredictions(opts = {}) {
   const days = opts.dateStr ? 0 : LOOKAHEAD_DAYS;
@@ -132,7 +159,17 @@ async function generateNbaPredictions(opts = {}) {
   }
   upcoming.sort((a, b) => new Date(a.date) - new Date(b.date)); // soonest first
 
-  return upcoming.map((g) => predictGame(g, matchOdds(g, odds), { playoff: PLAYOFF_MODE }));
+  // Attach each game's OWN odds (time-aware match), then KEEP ONLY games that have
+  // a real, distinct line. This is the core v0.1.3 fix: books post just the next
+  // game of a series, so only that game should appear — no duplicated future
+  // games, and no fake edge from a flipped matchup borrowing the wrong line.
+  const predictions = [];
+  for (const g of upcoming) {
+    const lines = matchOdds(g, odds);
+    if (!lines) continue; // no distinct line for this game → don't show it
+    predictions.push(predictGame(g, lines, { playoff: PLAYOFF_MODE }));
+  }
+  return predictions;
 }
 
 module.exports = { generateNbaPredictions, fetchNbaOdds };
