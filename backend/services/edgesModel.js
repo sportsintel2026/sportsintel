@@ -518,8 +518,8 @@ async function calculateGameEdges(game, oddsForGame) {
       parkHRFactor: game.parkHRFactor,
       parkRunFactor: game.parkRunFactor,
       lineups: {
-        away: { source: awayLineup.source, ops: awayLineupOff?.ops ?? null, batters: awayLineupOff?.batters ?? 0 },
-        home: { source: homeLineup.source, ops: homeLineupOff?.ops ?? null, batters: homeLineupOff?.batters ?? 0 },
+        away: { source: awayLineup.source, ops: awayLineupOff?.ops ?? null, batters: awayLineupOff?.batters ?? 0, order: (awayLineup.lineup || []).map(p => ({ name: p.name, pos: p.position })) },
+        home: { source: homeLineup.source, ops: homeLineupOff?.ops ?? null, batters: homeLineupOff?.batters ?? 0, order: (homeLineup.lineup || []).map(p => ({ name: p.name, pos: p.position })) },
       },
     },
     pitchers: {
