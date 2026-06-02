@@ -19,6 +19,7 @@ import NBAPage from "./pages/NBA";
 import NBADetailPage from "./pages/NBADetail";
 import LiveScoresPage from "./pages/LiveScores";
 import GuidePage from "./pages/Guide";
+import DailyCardPage from "./pages/DailyCard";
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth();
   if (loading) return <LoadingScreen />;
@@ -126,6 +127,11 @@ export default function App() {
           <Route path="/guide" element={
             <PrivateRoute>
               <GuidePage />
+            </PrivateRoute>
+          } />
+          <Route path="/daily-card" element={
+            <PrivateRoute>
+              <DailyCardPage />
             </PrivateRoute>
           } />
           <Route path="*" element={<Navigate to="/" replace />} />
