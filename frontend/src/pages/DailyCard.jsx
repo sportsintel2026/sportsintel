@@ -34,6 +34,7 @@ export default function DailyCardPage() {
   const [record, setRecord] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [howOpen, setHowOpen] = useState(false);
 
   const isAdmin = plan.isAdmin === true;
   const isPro = plan.tier === "pro" || plan.tier === "elite";
@@ -91,9 +92,10 @@ export default function DailyCardPage() {
       <div className="main-content" style={{ marginLeft: 200 }}>
         <div className="dc-content" style={{ maxWidth: 560, margin: "0 auto", padding: "32px 24px 80px", animation: "fadeIn .3s ease" }}>
           <h1 style={{ margin: "0 0 8px", fontSize: 28, fontWeight: 700, letterSpacing: "-0.01em" }}>🎲 Today's Card</h1>
-          <p style={{ margin: "0 0 24px", fontSize: 13, color: "#9ca3af" }}>
+          <p style={{ margin: "0 0 16px", fontSize: 13, color: "#9ca3af" }}>
             One model-built pick and parlay, locked once a day. Pulled only from the model's value edges — never random.
           </p>
+          <HowToUse open={howOpen} onToggle={() => setHowOpen(o => !o)} />
           {loading && <Loader />}
           {error && !loading && <ErrorState />}
           {!loading && !error && !hasFullAccess && <LockedState navigate={navigate} record={record} />}
@@ -102,6 +104,36 @@ export default function DailyCardPage() {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function HowToUse({ open, onToggle }) {
+  const row = (label, text) => (
+    <div style={{ marginBottom: 10 }}>
+      <span style={{ color: "#1D9E75", fontWeight: 700 }}>{label}</span>
+      <span style={{ color: "#9ca3af" }}> — {text}</span>
+    </div>
+  );
+  return (
+    <div style={{ border: "1px solid #1f2937", borderRadius: 10, marginBottom: 20, overflow: "hidden" }}>
+      <button
+        onClick={onToggle}
+        style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", background: "#0f1419", border: "none", padding: "12px 16px", color: "#e4e7eb", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}
+      >
+        <span>How to use Today's Card</span>
+        <span style={{ color: "#6b7280", transform: open ? "rotate(180deg)" : "none", transition: "transform .15s" }}>▾</span>
+      </button>
+      {open && (
+        <div style={{ padding: "14px 16px", background: "#0a0e14", borderTop: "1px solid #1f2937", fontSize: 12.5, lineHeight: 1.5 }}>
+          {row("What it is", "one value pick and one small parlay, chosen by the model from today's best edges and locked once a day. It refreshes tomorrow — there's no re-rolling.")}
+          {row("The single", "the model's highest-conviction value play of the day. The cleanest starting point if you only want one bet.")}
+          {row("The parlay", "a few value legs combined. \"Pays\" is the book's payout; \"fair value\" is what the model thinks it's truly worth. When the payout beats fair value, there's a model edge — but parlays still win less than half the time, so keep stakes small.")}
+          {row("How to use it", "tap any pick to open the full game breakdown and see the reasoning, then shop for the best price at your book. Treat it as a study tool and a starting point — not a guarantee.")}
+          {row("Track record", "the strip up top shows how the picks have actually done (W-L and ROI). The single is the number to judge it by; the parlay is high-variance by nature.")}
+          <div style={{ marginTop: 4, color: "#6b7280", fontSize: 11 }}>For entertainment. Bet responsibly. 21+. 1-800-GAMBLER.</div>
+        </div>
+      )}
     </div>
   );
 }
