@@ -37,7 +37,7 @@ export default function Sidebar({ user, plan, signOut, navigate }) {
         to="/expert-picks"
         active={isActive("/expert-picks")}
         icon="🎯"
-        label="Expert picks"
+        label="Best Bets"
       />
       {/* MLB section */}
       <div style={{ ...sectionLabelStyle, marginTop: 18 }}>MLB</div>
