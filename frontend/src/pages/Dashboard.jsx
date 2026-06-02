@@ -538,6 +538,7 @@ function NBADashboard({ hasFullAccess, navigate }) {
         odds: pickHome ? ml.book?.home : ml.book?.away,
         edgePct: ml.edge,
         modelPct: Math.round(pickHome ? ml.homeWinProb : ml.awayWinProb),
+        inflation: ml.inflation || null,
       });
     }
     const to = g.predictions?.total;
@@ -806,7 +807,10 @@ function NBAMoneylineRow({ edge, navigate }) {
   return (
     <div className="edge-row" onClick={() => navigate(`/game/nba/${edge.gameId}`)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: 10, background: "#0a0e14", borderRadius: 4 }}>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 2 }}>{edge.teamAbbr} ML</div>
+        <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 2, display: "flex", alignItems: "center", flexWrap: "wrap", rowGap: 3 }}>
+          {edge.teamAbbr} ML
+          <InflationTag inflation={edge.inflation} />
+        </div>
         <div style={{ fontSize: 10, color: "#6b7280", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
           {edge.matchup} · {formatOdds(edge.odds)}{edge.time ? ` · ${edge.time}` : ""}
         </div>
