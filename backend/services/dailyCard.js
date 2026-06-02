@@ -147,4 +147,43 @@ async function gradeDailyCard() {
   return graded;
 }
 
-module.exports = { getOrGenerateDailyCard, gradeDailyCard };
+// Aggregates the card's settled history into single + parlay records (W-L,
+// ROI per 1u stake) plus a recent history list. Parlay is tracked by ROI with a
+// high-variance framing — a parlay loses most days even when it's priced right.
+async function getDailyCardRecord() {
+  const supabase = db();
+  const { data: cards } = await supabase
+    .from("daily_card").select("*").order("game_date", { ascending: false });
+  const rows = cards || [];
+
+  const single = { wins: 0, losses: 0, profit: 0, settled: 0 };
+  const parlay = { wins: 0, losses: 0, profit: 0, settled: 0 };
+  const history = [];
+
+  for (const c of rows) {
+    if (c.single && (c.single_result === "win" || c.single_result === "loss")) {
+      single.settled++;
+      if (c.single_result === "win") { single.wins++; single.profit += toDecimal(c.single.odds) - 1; }
+      else { single.losses++; single.profit -= 1; }
+    }
+    if (c.parlay && (c.parlay_result === "win" || c.parlay_result === "loss")) {
+      parlay.settled++;
+      if (c.parlay_result === "win") { parlay.wins++; parlay.profit += toDecimal(c.parlay.bookOdds) - 1; }
+      else { parlay.losses++; parlay.profit -= 1; }
+    }
+    history.push({
+      date: c.game_date,
+      single: c.single ? { description: c.single.description, matchup: c.single.matchup, odds: c.single.odds, result: c.single_result } : null,
+      parlay: c.parlay ? { legs: (c.parlay.legs || []).length, bookOdds: c.parlay.bookOdds, result: c.parlay_result } : null,
+    });
+  }
+
+  const roi = (g) => (g.settled > 0 ? round4(g.profit / g.settled) : null);
+  return {
+    single: { wins: single.wins, losses: single.losses, settled: single.settled, roi: roi(single) },
+    parlay: { wins: parlay.wins, losses: parlay.losses, settled: parlay.settled, roi: roi(parlay) },
+    history: history.slice(0, 30),
+  };
+}
+
+module.exports = { getOrGenerateDailyCard, gradeDailyCard, getDailyCardRecord };
