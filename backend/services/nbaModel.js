@@ -294,4 +294,9 @@ function predictGame(ctx, lines, opts = {}) {
   };
 }
 
-module.exports = { predictGame, EDGE_ML, EDGE_SPREAD, EDGE_TOTAL };
+module.exports = {
+  predictGame,
+  EDGE_ML, EDGE_SPREAD, EDGE_TOTAL,
+  // exported for the self-test (guardrail verification)
+  NBA_W_MODEL, NBA_INFLATION_THRESHOLD, NBA_BLEND_ENABLED,
+};
