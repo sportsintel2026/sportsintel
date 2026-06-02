@@ -1,13 +1,13 @@
 /**
  * services/nbaProps.js — SportsIntel NBA player prop LINES (Stage 1)
  * --------------------------------------------------------------------------
- * Pulls real book lines for player props (points / rebounds / assists) for a
- * single game from The Odds API's event-odds endpoint, and normalizes them
- * per player. This is the DATA layer only — no projections or edges yet
- * (that's Stage 2, once we've verified this payload against real data).
+ * Pulls real book lines for player props (points / rebounds / assists / threes)
+ * for a single game from The Odds API's event-odds endpoint, normalized per
+ * player. DATA layer only — projections/edges are Stage 2.
  *
- * Cost: player props are queried per-event. points+rebounds+assists x us region
- * = 3 credits per game, charged only when this endpoint is actually called.
+ * v0.2: added threes (player_threes — confirmed the real Odds API market key
+ * via diagnostic). Cost: points+rebounds+assists+threes x us = 4 credits per
+ * game, charged only when this endpoint is actually called.
  *
  * Note: books usually post props close to tip (day-before / day-of), so this
  * can legitimately come back empty for a game that's still days away.
@@ -21,12 +21,13 @@ const { getNbaMatchup } = require('./nbaMatchup');
 const SPORT = 'basketball_nba';
 const BASE = `https://api.the-odds-api.com/v4/sports/${SPORT}`;
 const KEY = process.env.ODDS_API_KEY; // same Railway variable used elsewhere
-const MARKETS = 'player_points,player_rebounds,player_assists';
+const MARKETS = 'player_points,player_rebounds,player_assists,player_threes';
 
 const STAT_KEY = {
   player_points: 'points',
   player_rebounds: 'rebounds',
   player_assists: 'assists',
+  player_threes: 'threes',
 };
 
 // small cache so repeated views don't re-bill credits
@@ -84,7 +85,7 @@ function matchEvent(events, homeName, awayName) {
   return events.find((e) => nickname(e.home_team) === hn && nickname(e.away_team) === an) || null;
 }
 
-// flatten bookmakers -> per-player {points,rebounds,assists}: {line,over,under}
+// flatten bookmakers -> per-player {points,rebounds,assists,threes}: {line,over,under}
 function normalizeProps(eventOdds) {
   const players = {};
   let bookmaker = null;
