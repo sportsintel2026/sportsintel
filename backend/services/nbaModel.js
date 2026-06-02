@@ -112,8 +112,13 @@ function predictGame(ctx, lines, opts = {}) {
   const pf = opts.playoff ? PLAYOFF_TOTAL_FACTOR : 1;
   const baseHome = expectedPoints(h.ppg, a.papg) * pf;
   const baseAway = expectedPoints(a.ppg, h.papg) * pf;
-  const expHome = baseHome + hca / 2;
-  const expAway = baseAway - hca / 2;
+  // v0.2 injury weighting: subtract each team's conservative injury haircut (points
+  // lost to OUT players, already discounted + capped upstream in nbaInjuryImpact).
+  // Flows into margin, win prob, AND total since all derive from expHome/expAway.
+  const homeHaircut = Math.max(0, Number(opts.homeInjuryHaircut) || 0);
+  const awayHaircut = Math.max(0, Number(opts.awayInjuryHaircut) || 0);
+  const expHome = baseHome + hca / 2 - homeHaircut;
+  const expAway = baseAway - hca / 2 - awayHaircut;
   const projTotal = expHome + expAway;
   const projMargin = expHome - expAway; // + = home favored
   const modelHomeWinProb = normalCDF(projMargin / SIGMA);
@@ -264,6 +269,12 @@ function predictGame(ctx, lines, opts = {}) {
     ratingsLoaded,
     dataNote,
     expected: { home: r(expHome), away: r(expAway) },
+    injuryAdjustment: {
+      home: r(homeHaircut),
+      away: r(awayHaircut),
+      homeDetails: opts.homeInjuryDetails || [],
+      awayDetails: opts.awayInjuryDetails || [],
+    },
     predictions: { moneyline: ml, spread, total },
     factors: {
       homeNetRtg: h.netRtg,
@@ -276,10 +287,10 @@ function predictGame(ctx, lines, opts = {}) {
       homeInjuries: h.injuries,
       awayInjuries: a.injuries,
     },
-    modelVersion: 'nba-v0.2.0',
+    modelVersion: 'nba-v0.2.1',
     note: opts.playoff
-      ? 'Playoff scoring adjustment applied; model blended toward the market line (55/45). Injuries shown but not yet weighted (v0.2).'
-      : 'Ratings/pace computed from ESPN; model blended toward the market line (55/45). Injuries shown but not yet weighted (v0.2).',
+      ? 'Playoff scoring adjustment applied; model blended toward the market line (55/45); OUT injuries weighted (conservative). Day-to-day shown but not weighted.'
+      : 'Ratings/pace computed from ESPN; model blended toward the market line (55/45); OUT injuries weighted (conservative). Day-to-day shown but not weighted.',
   };
 }
 
