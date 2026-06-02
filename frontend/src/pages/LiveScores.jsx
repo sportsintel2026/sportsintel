@@ -214,6 +214,26 @@ export function BoxScore({ detail }) {
   const players = detail.players || [];
   const maxPeriods = Math.max(0, ...ls.map((r) => r.periods.length));
 
+  // Convention: away team on TOP, home on BOTTOM. The feed sometimes delivers
+  // these home-first, so we order them ourselves using the away team's abbrev
+  // when we can resolve it from the detail payload. If we CAN'T identify the
+  // away team (unknown data shape), we leave the original order untouched —
+  // worst case is "no change", never a wrong sort.
+  const awayAbbrev = (
+    detail.away?.abbrev ||
+    detail.away?.abbreviation ||
+    detail.awayAbbrev ||
+    detail.awayTeam?.abbrev ||
+    null
+  );
+  const orderedLs = awayAbbrev
+    ? [...ls].sort((a, b) => {
+        const aAway = a.abbrev === awayAbbrev ? 0 : 1;
+        const bAway = b.abbrev === awayAbbrev ? 0 : 1;
+        return aAway - bAway;
+      })
+    : ls;
+
   const teams = {};
   for (const p of players) {
     if (p.didNotPlay) continue;
@@ -247,7 +267,7 @@ export function BoxScore({ detail }) {
               </tr>
             </thead>
             <tbody>
-              {ls.map((r, idx) => (
+              {orderedLs.map((r, idx) => (
                 <tr key={idx} style={{ borderTop: "1px solid #4b5563" }}>
                   <td style={{ padding: "8px 10px", fontWeight: 800, color: "#fff", fontSize: 14 }}>{r.abbrev}</td>
                   {Array.from({ length: maxPeriods }).map((_, i) => (
