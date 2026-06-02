@@ -12,7 +12,7 @@ const CACHE_TTL_MS = 30 * 60 * 1000;
 
 // Sportsbooks we accept odds from
 // Main markets (h2h, totals) — major US books
-const PREFERRED_BOOKS_MAIN = ["draftkings", "fanduel", "betmgm", "caesars", "pointsbetus"];
+const PREFERRED_BOOKS_MAIN = ["draftkings", "fanduel", "betmgm", "caesars", "espnbet", "fanatics", "betrivers", "hardrockbet"];
 // HR props — broader list because major books often don't post HR props
 const PREFERRED_BOOKS_HR = [
   "draftkings", "fanduel", "betmgm", "caesars",
