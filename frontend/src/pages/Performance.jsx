@@ -261,7 +261,7 @@ function SectionTitle({ children }) {
   return <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#6b7280", fontWeight: 700, textTransform: "uppercase", marginBottom: 12 }}>{children}</div>;
 }
 function marketLabel(m) {
-  return m === "moneyline" ? "Moneyline" : m === "total" ? "Totals" : m === "hr_prop" ? "HR Props" : m;
+  return m === "moneyline" ? "Moneyline" : m === "total" ? "Totals" : m === "run_line" ? "Run line" : m === "hr_prop" ? "HR Props" : m;
 }
 function confColor(c) {
   return c === "HIGH" ? "#22c55e" : c === "MEDIUM" ? "#f59e0b" : "#9ca3af";
