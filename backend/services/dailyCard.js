@@ -186,4 +186,39 @@ async function getDailyCardRecord() {
   };
 }
 
-module.exports = { getOrGenerateDailyCard, gradeDailyCard, getDailyCardRecord };
+// Personal re-roll (Option A): returns ONE alternate value pick that is NOT the
+// official single — for a subscriber who wants "show me another play." Read-only:
+// it never writes, locks, or grades anything, so the shared/tracked card is
+// untouched. Picks randomly from the day's top value edges (excluding the
+// official one) so it's varied but still genuinely value-backed — never random.
+async function getAlternatePick() {
+  const supabase = db();
+  const date = getEasternDate(0);
+
+  const { data: existing } = await supabase
+    .from("daily_card").select("single").eq("game_date", date).maybeSingle();
+  const officialId = existing?.single?.predictionId || null;
+
+  const { data: preds } = await supabase
+    .from("model_predictions")
+    .select("id, game_id, matchup, market, selection, description, model_prob, odds, edge, confidence, line")
+    .eq("league", "mlb")
+    .eq("game_date", date)
+    .eq("result", "pending")
+    .in("market", CARD_MARKETS)
+    .gt("edge", 0)
+    .order("edge", { ascending: false });
+
+  const rows = (preds || []).filter(p =>
+    QUALIFY.includes((p.confidence || "").toUpperCase()) &&
+    p.odds != null && p.model_prob != null && p.id !== officialId);
+
+  if (rows.length === 0) return { pick: null };
+
+  // Random among the top value picks for variety, still a real edge.
+  const pool = rows.slice(0, 8);
+  const pick = pool[Math.floor(Math.random() * pool.length)];
+  return { pick: legFrom(pick) };
+}
+
+module.exports = { getOrGenerateDailyCard, gradeDailyCard, getDailyCardRecord, getAlternatePick };
