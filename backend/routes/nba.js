@@ -18,6 +18,7 @@ const { generateNbaPredictions } = require('../services/nbaService');
 const { getNbaMatchup } = require('../services/nbaMatchup');
 const { getNbaProps } = require('../services/nbaProps');
 const { getNbaPropProjections, getIdDebug } = require('../services/nbaProjectionService');
+const { getUpcomingGamesWithContext } = require('../services/nbaDataSource');
 router.get('/predictions', async (req, res) => {
   try {
     const opts = req.query.date ? { dateStr: req.query.date } : {};
@@ -140,6 +141,32 @@ router.get('/diag', async (req, res) => {
     });
   } catch (err) {
     console.error('[nba route] diag failed:', err);
+    res.status(502).json({ error: err.message });
+  }
+});
+// TEMP diagnostic #2 — runs the REAL data source and shows the built per-team
+// context for each upcoming game (ppg, papg, pace, etc.). This is what the model
+// actually receives. If ppg/papg are null here, the data layer is the bug; if
+// they're populated and varied, the bug is downstream. Read-only. Safe to remove.
+router.get('/diag2', async (req, res) => {
+  try {
+    const dateStr = req.query.date;
+    const ctx = await getUpcomingGamesWithContext(dateStr ? { dateStr, includePending: true } : { includePending: true });
+    const summary = (ctx || []).map((g) => ({
+      gameId: g.gameId,
+      date: g.date,
+      state: g.state,
+      pending: g.pending,
+      home: g.home ? { name: g.home.displayName, id: g.home.id, ppg: g.home.ppg, papg: g.home.papg, pace: g.home.pace, netRtg: g.home.netRtg } : null,
+      away: g.away ? { name: g.away.displayName, id: g.away.id, ppg: g.away.ppg, papg: g.away.papg, pace: g.away.pace, netRtg: g.away.netRtg } : null,
+    }));
+    res.json({
+      note: 'TEMP diagnostic #2. Shows the REAL context the model receives per game. Null ppg/papg = data-layer bug.',
+      gameCount: summary.length,
+      games: summary,
+    });
+  } catch (err) {
+    console.error('[nba route] diag2 failed:', err);
     res.status(502).json({ error: err.message });
   }
 });
