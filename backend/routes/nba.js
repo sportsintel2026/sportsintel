@@ -17,7 +17,6 @@ const { generateNbaPredictions } = require('../services/nbaService');
 const { getNbaMatchup } = require('../services/nbaMatchup');
 const { getNbaProps } = require('../services/nbaProps');
 const { getNbaPropProjections, getIdDebug } = require('../services/nbaProjectionService');
-const { diagThrees } = require('../services/nbaPropsDiag');
 router.get('/predictions', async (req, res) => {
   try {
     const opts = req.query.date ? { dateStr: req.query.date } : {};
@@ -105,16 +104,6 @@ router.get('/livediag/:gameId', async (req, res) => {
     });
   } catch (err) {
     console.error('[nba route] livediag failed:', err);
-    res.status(502).json({ error: err.message });
-  }
-});
-// TEMP diagnostic — does The Odds API return 3PT-made prop lines for this game?
-// One event call (~1 credit). Tells us the real market key + a sample. Remove later.
-router.get('/propsdiag/:gameId', async (req, res) => {
-  try {
-    res.json(await diagThrees(req.params.gameId));
-  } catch (err) {
-    console.error('[nba route] propsdiag failed:', err);
     res.status(502).json({ error: err.message });
   }
 });
