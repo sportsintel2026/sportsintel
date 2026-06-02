@@ -17,10 +17,12 @@ const nbaRoutes = require("./routes/nba");
 const scoresRoutes = require("./routes/scores");
 const liveRoutes = require("./routes/live");
 const expertGradeRoutes = require("./routes/expertGrade");
+const dailyCardRoutes = require("./routes/dailyCard");
 
 const { refreshDailyGames } = require("./services/sportsData");
 const { gradeFinishedGames, captureClosingLines } = require("./services/predictionTracker");
 const { gradeExpertPicks } = require("./services/expertPicksGrader");
+const { gradeDailyCard } = require("./services/dailyCard");
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -77,6 +79,7 @@ app.use("/api/nba", nbaRoutes);
 app.use("/api/scores", scoresRoutes);
 app.use("/api/live", liveRoutes);
 app.use("/api/expert-grade", expertGradeRoutes);
+app.use("/api/daily-card", dailyCardRoutes);
 
 // Health check
 app.get("/api/health", (req, res) => {
@@ -124,6 +127,7 @@ cron.schedule("0 * * * *", async () => {
   try {
     await gradeFinishedGames();
     await gradeExpertPicks({ dryRun: false });
+    await gradeDailyCard();
     console.log("[CRON] Expert picks graded.");
   } catch (err) {
     console.error("[CRON] Grading failed:", err.message);
