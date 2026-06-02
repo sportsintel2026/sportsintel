@@ -20,6 +20,7 @@ const expertGradeRoutes = require("./routes/expertGrade");
 
 const { refreshDailyGames } = require("./services/sportsData");
 const { gradeFinishedGames, captureClosingLines } = require("./services/predictionTracker");
+const { gradeExpertPicks } = require("./services/expertPicksGrader");
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -122,6 +123,8 @@ cron.schedule("0 * * * *", async () => {
   console.log("[CRON] Grading finished-game predictions...");
   try {
     await gradeFinishedGames();
+    await gradeExpertPicks({ dryRun: false });
+    console.log("[CRON] Expert picks graded.");
   } catch (err) {
     console.error("[CRON] Grading failed:", err.message);
   }
