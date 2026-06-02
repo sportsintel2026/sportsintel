@@ -1,5 +1,5 @@
 /**
- * nbaModel.js — SportsIntel NBA model v0.1.1 (team markets: ML / spread / total)
+ * nbaModel.js — SportsIntel NBA model v0.1 (team markets: ML / spread / total)
  * --------------------------------------------------------------------------
  * Pure, dependency-free. Takes one game context from nbaDataSource + matched
  * book lines, returns predictions + edges.
@@ -10,6 +10,13 @@
  *    >92% win is almost always bad data, so picks are suppressed and the game
  *    is flagged dataQuality:'suspect' rather than published as a huge "edge".
  *  - dataQuality + ratingsLoaded fields make the data state explicit.
+ *
+ * v0.2 (in progress) — porting MLB's discipline, tuned for basketball:
+ *  - MARKET BLEND: anchor the model's win prob toward the de-vigged line so a
+ *    young model can't manufacture a fake edge by disagreeing wildly with a sharp
+ *    price. NBA starts MORE humble than MLB (55% model / 45% market vs MLB’s
+ *    70/30) because this model is less proven; dial toward the model as it earns
+ *    trust over a real sample of games.
  *
  * Method: expected points = team offense vs opponent defense vs league avg;
  * home court ~2.5 pts (0 at neutral site); win prob from margin (SD ~12).
@@ -27,6 +34,19 @@ const EDGE_TOTAL = 7.0;
 // Playoff games score lower than the regular season (tighter defense, slower,
 // more deliberate). Deflate projected scoring so totals aren't systematically high.
 const PLAYOFF_TOTAL_FACTOR = 0.95;
+
+// ── MARKET BLEND (v0.2) ────────────────────────────────────────────────────
+// The de-vigged line is the single sharpest predictor in sports betting. We
+// anchor the model's win probability partway toward the market's fair prob, so
+// (1) the number is better calibrated and (2) a young model can't fabricate an
+// edge by sitting stubbornly far from a sharp price. The reported edge is then
+// (blended view − fair market): agreeing with the market is correctly ~0 edge.
+//
+// NBA is intentionally MORE humble than MLB (which uses 0.70). This model is
+// v0.1-grade, so we lean harder on the market until it proves itself. To revert
+// to pure-model behavior, set NBA_BLEND_ENABLED = false (or NBA_W_MODEL = 1.0).
+const NBA_BLEND_ENABLED = true;
+const NBA_W_MODEL = 0.55; // 55% model / 45% market — humble start for a young model
 
 // guardrails
 const PPG_MIN = 90;
@@ -86,8 +106,7 @@ function predictGame(ctx, lines, opts = {}) {
   const expAway = baseAway - hca / 2;
   const projTotal = expHome + expAway;
   const projMargin = expHome - expAway; // + = home favored
-  const homeWinProb = normalCDF(projMargin / SIGMA);
-  const awayWinProb = 1 - homeWinProb;
+  const modelHomeWinProb = normalCDF(projMargin / SIGMA);
 
   // ── data-quality gate ──────────────────────────────────────────────────────
   const ratingsLoaded = h.papg != null && a.papg != null;
@@ -98,8 +117,8 @@ function predictGame(ctx, lines, opts = {}) {
     dataNote = 'Team scoring data missing or out of range — no pick issued.';
   } else if (
     Math.abs(projMargin) > MAX_TRUSTED_MARGIN ||
-    homeWinProb > MAX_TRUSTED_WINPROB ||
-    homeWinProb < 1 - MAX_TRUSTED_WINPROB
+    modelHomeWinProb > MAX_TRUSTED_WINPROB ||
+    modelHomeWinProb < 1 - MAX_TRUSTED_WINPROB
   ) {
     dataQuality = 'suspect';
     dataNote =
@@ -110,10 +129,28 @@ function predictGame(ctx, lines, opts = {}) {
   }
   const trustworthy = dataQuality === 'ok' || dataQuality === 'offense-only';
 
+  // ── MARKET BLEND ───────────────────────────────────────────────────────────
+  // When we have both moneyline prices, de-vig to the market's fair home prob and
+  // blend the model toward it. The blended prob is what we compare to the market,
+  // so the edge reflects how far our (market-respecting) view still sits from the
+  // line. Without both prices we can't de-vig → fall back to the raw model prob.
+  let fairHomeProb = null;
+  if (lines && lines.home.ml != null && lines.away.ml != null) {
+    const ih = amToProb(lines.home.ml);
+    const ia = amToProb(lines.away.ml);
+    if (ih != null && ia != null && ih + ia > 0) fairHomeProb = ih / (ih + ia);
+  }
+  let homeWinProb = modelHomeWinProb;
+  if (NBA_BLEND_ENABLED && fairHomeProb != null) {
+    homeWinProb = NBA_W_MODEL * modelHomeWinProb + (1 - NBA_W_MODEL) * fairHomeProb;
+  }
+  const awayWinProb = 1 - homeWinProb;
+
   /* ---- moneyline ---- */
   const ml = {
     homeWinProb: r(homeWinProb * 100),
     awayWinProb: r(awayWinProb * 100),
+    modelHomeWinProb: r(modelHomeWinProb * 100), // pre-blend, for transparency
     pick: null,
     pickTeam: null,
     edge: null,
@@ -121,15 +158,12 @@ function predictGame(ctx, lines, opts = {}) {
     fair: null,
     book: null,
   };
-  if (lines && lines.home.ml != null && lines.away.ml != null) {
-    const ih = amToProb(lines.home.ml);
-    const ia = amToProb(lines.away.ml);
-    const fairHome = ih / (ih + ia);
-    const edgeHome = homeWinProb - fairHome;
-    const edgeAway = awayWinProb - (1 - fairHome);
+  if (lines && lines.home.ml != null && lines.away.ml != null && fairHomeProb != null) {
+    const edgeHome = homeWinProb - fairHomeProb;
+    const edgeAway = awayWinProb - (1 - fairHomeProb);
     const pickHome = edgeHome >= edgeAway;
     const edge = pickHome ? edgeHome : edgeAway;
-    ml.fair = { home: r(fairHome * 100), away: r((1 - fairHome) * 100) };
+    ml.fair = { home: r(fairHomeProb * 100), away: r((1 - fairHomeProb) * 100) };
     ml.book = { home: lines.home.ml, away: lines.away.ml };
     ml.edge = r(edge * 100);
     ml.value = trustworthy && edge >= EDGE_ML;
@@ -208,10 +242,10 @@ function predictGame(ctx, lines, opts = {}) {
       homeInjuries: h.injuries,
       awayInjuries: a.injuries,
     },
-    modelVersion: 'nba-v0.1.2',
+    modelVersion: 'nba-v0.2.0',
     note: opts.playoff
-      ? 'Playoff scoring adjustment applied; totals flagged only on large gaps. Injuries shown but not yet weighted (v0.2).'
-      : 'Ratings/pace computed from ESPN; injuries shown but not yet weighted into the line (v0.2).',
+      ? 'Playoff scoring adjustment applied; model blended toward the market line (55/45). Injuries shown but not yet weighted (v0.2).'
+      : 'Ratings/pace computed from ESPN; model blended toward the market line (55/45). Injuries shown but not yet weighted (v0.2).',
   };
 }
 
