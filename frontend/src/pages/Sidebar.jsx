@@ -28,6 +28,12 @@ export default function Sidebar({ user, plan, signOut, navigate }) {
         label="Edges"
       />
       <NavLink
+        to="/daily-card"
+        active={isActive("/daily-card")}
+        icon="🎲"
+        label="Today's Card"
+      />
+      <NavLink
         to="/performance"
         active={isActive("/performance")}
         icon="📈"
