@@ -516,7 +516,14 @@ async function calculateGameEdges(game, oddsForGame) {
   const awayRLOdds = odds.spreads?.away ?? null;
   let homeCoverProb = null, awayCoverProb = null, homeRLEdge = null, awayRLEdge = null;
   if (homeRLLine != null && awayRLLine != null && homeRLOdds != null && awayRLOdds != null) {
-    const muHome = MARGIN_SD * invNorm(ml.homeWinProb); // expected home run margin
+    // Derive the margin from the market-BLENDED win prob — the same humility the
+    // moneyline edge gets. Using the raw win prob lets an overconfident model
+    // inflate the run line into implausible cover %s and edges.
+    const fairHomeWin = devigTwoWay(homeML, awayML);
+    const blendedHomeWin = (MARKET_BLEND_ENABLED && fairHomeWin != null)
+      ? (W_MODEL * ml.homeWinProb + (1 - W_MODEL) * fairHomeWin)
+      : ml.homeWinProb;
+    const muHome = MARGIN_SD * invNorm(blendedHomeWin); // expected home run margin
     const hCover = normalCDF((muHome + homeRLLine) / MARGIN_SD);
     const aCover = 1 - hCover;
     homeCoverProb = round3(hCover);
