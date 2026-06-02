@@ -711,11 +711,10 @@ function NBAAllPropsTable({ rows, hasFullAccess, navigate }) {
       {open && (
         <>
           <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 12, lineHeight: 1.6 }}>
-            Each stat shows our <strong style={{ color: "#e4e7eb" }}>projection</strong> vs the book's <strong style={{ color: "#e4e7eb" }}>line</strong>, and which side we lean:
-            {" "}<span style={{ color: "#22c55e", fontWeight: 700 }}>OVER</span> /{" "}
-            <span style={{ color: "#ef4444", fontWeight: 700 }}>UNDER</span>.
-            {" "}The number is how far our projection sits from the line (e.g. <span style={{ color: "#22c55e", fontWeight: 700 }}>OVER by 2.5</span> = we project 2.5 more than the line).
-            {" "}<strong style={{ color: "#e4e7eb" }}>Bold</strong> = flagged edge · <span style={{ color: "#fbbf24" }}>⚠</span> = line looks off (likely news).
+            Each stat shows our <strong style={{ color: "#e4e7eb" }}>projection</strong> and how far it sits from the book's <strong style={{ color: "#e4e7eb" }}>line</strong>:
+            {" "}<span style={{ color: "#22c55e", fontWeight: 700 }}>▲ over</span> /{" "}
+            <span style={{ color: "#ef4444", fontWeight: 700 }}>▼ under</span>, with the gap (e.g. <span style={{ color: "#22c55e", fontWeight: 700 }}>▲ 2.5</span> = we project 2.5 above the line).
+            {" "}A <strong style={{ color: "#e4e7eb" }}>highlighted pill</strong> = flagged edge · <span style={{ color: "#fbbf24" }}>⚠</span> = line looks off (likely news).
           </div>
           <div className="games-table-wrap" style={{ overflowX: "auto" }}>
             <table className="games-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
@@ -730,17 +729,17 @@ function NBAAllPropsTable({ rows, hasFullAccess, navigate }) {
               </thead>
               <tbody>
                 {visible.map((r, i) => (
-                  <tr key={r.gameId + r.name + i} className="game-row" onClick={() => navigate(`/game/nba/${r.gameId}`)} style={{ borderBottom: "1px solid #131820", background: i % 2 === 1 ? "#0c1117" : "transparent", cursor: "pointer" }}>
-                    <td style={td()}>
-                      <div style={{ fontWeight: 600 }}>{r.name}</div>
-                      <div style={{ fontSize: 10, color: "#6b7280" }}>
+                  <tr key={r.gameId + r.name + i} className="game-row" onClick={() => navigate(`/game/nba/${r.gameId}`)} style={{ borderBottom: "1px solid #1a212c", background: i % 2 === 1 ? "#0b1118" : "transparent", cursor: "pointer" }}>
+                    <td style={{ ...td(), padding: "13px 8px" }}>
+                      <div style={{ fontWeight: 600, fontSize: 13 }}>{r.name}</div>
+                      <div style={{ fontSize: 10, color: "#5b6472", marginTop: 1 }}>
                         {r.matchup}{r.injuryStatus ? ` · ${r.injuryStatus}` : ""}
                       </div>
                     </td>
-                    <td style={td("right")}><StatCell m={r.markets.points} /></td>
-                    <td style={td("right")}><StatCell m={r.markets.rebounds} /></td>
-                    <td style={td("right")}><StatCell m={r.markets.assists} /></td>
-                    <td style={td("right")}><StatCell m={r.markets.threes} /></td>
+                    <td style={{ ...td("right"), padding: "13px 8px" }}><StatCell m={r.markets.points} /></td>
+                    <td style={{ ...td("right"), padding: "13px 8px" }}><StatCell m={r.markets.rebounds} /></td>
+                    <td style={{ ...td("right"), padding: "13px 8px" }}><StatCell m={r.markets.assists} /></td>
+                    <td style={{ ...td("right"), padding: "13px 8px" }}><StatCell m={r.markets.threes} /></td>
                   </tr>
                 ))}
               </tbody>
@@ -759,23 +758,33 @@ function NBAAllPropsTable({ rows, hasFullAccess, navigate }) {
   );
 }
 
-// One stat cell: projection, the book line, and a clear OVER/UNDER lean pill.
+// One stat cell: projection prominent, line muted, a LIGHT lean indicator.
+// Baseline cells stay calm (arrow + gap, no heavy pill) so the eye isn't flooded;
+// only a FLAGGED edge gets the strong treatment (bold color + subtle pill) so the
+// rare real edges actually stand out instead of 64 identical loud pills.
 function StatCell({ m }) {
   if (!m || !m.eligible || m.line == null || m.projection == null) {
-    return <span style={{ color: "#4b5563", fontSize: 12 }}>—</span>;
+    return <span style={{ color: "#374151", fontSize: 13 }}>—</span>;
   }
   const isOver = m.side === "OVER";
   const color = isOver ? "#22c55e" : "#ef4444";
   const gap = Math.abs(m.edge).toFixed(1);
+  const arrow = isOver ? "▲" : "▼";
   return (
-    <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-end", gap: 3, lineHeight: 1.2 }}>
-      <span style={{ fontSize: 15, fontWeight: m.flagged ? 800 : 600, color: m.flagged ? color : "#e4e7eb", fontVariantNumeric: "tabular-nums" }}>
+    <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-end", gap: 2, lineHeight: 1.15 }}>
+      <span style={{ fontSize: 16, fontWeight: m.flagged ? 800 : 600, color: m.flagged ? color : "#e4e7eb", fontVariantNumeric: "tabular-nums" }}>
         {m.projection}{m.suspect ? <span style={{ color: "#fbbf24" }}> ⚠</span> : null}
       </span>
-      <span style={{ fontSize: 10, color: "#6b7280", fontVariantNumeric: "tabular-nums" }}>line {m.line}</span>
-      <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.4, color, background: `${color}15`, border: `1px solid ${color}33`, borderRadius: 4, padding: "2px 6px" }}>
-        {m.side} by {gap}
-      </span>
+      <span style={{ fontSize: 10, color: "#5b6472", fontVariantNumeric: "tabular-nums" }}>vs {m.line}</span>
+      {m.flagged ? (
+        <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.4, color, background: `${color}1a`, border: `1px solid ${color}40`, borderRadius: 4, padding: "2px 6px", marginTop: 1 }}>
+          {arrow} {m.side} {gap}
+        </span>
+      ) : (
+        <span style={{ fontSize: 10, fontWeight: 600, color, fontVariantNumeric: "tabular-nums", opacity: 0.85 }}>
+          {arrow} {gap}
+        </span>
+      )}
     </div>
   );
 }
