@@ -39,6 +39,12 @@ export default function Sidebar({ user, plan, signOut, navigate }) {
         icon="🎯"
         label="Best Bets"
       />
+      <NavLink
+        to="/guide"
+        active={isActive("/guide")}
+        icon="📖"
+        label="How It Works"
+      />
       {/* MLB section */}
       <div style={{ ...sectionLabelStyle, marginTop: 18 }}>MLB</div>
       <NavLink
