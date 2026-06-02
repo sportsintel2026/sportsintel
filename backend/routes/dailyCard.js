@@ -1,7 +1,17 @@
 // routes/dailyCard.js — GET /api/daily-card → today's locked card.
 const express = require("express");
 const router = express.Router();
-const { getOrGenerateDailyCard, getDailyCardRecord } = require("../services/dailyCard");
+const { getOrGenerateDailyCard, getDailyCardRecord, getAlternatePick } = require("../services/dailyCard");
+
+router.get("/alternate", async (req, res) => {
+  try {
+    const alt = await getAlternatePick();
+    res.json(alt);
+  } catch (err) {
+    console.error("[DailyCard] alternate error:", err);
+    res.status(500).json({ error: "Failed to load alternate", details: err.message });
+  }
+});
 
 router.get("/record", async (req, res) => {
   try {
