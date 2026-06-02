@@ -63,7 +63,7 @@ export default function PerformancePage() {
         <div className="perf-content" style={{ maxWidth: 900, margin: "0 auto", padding: "32px 24px 80px", animation: "fadeIn .3s ease" }}>
           <h1 style={{ margin: "0 0 8px", fontSize: 28, fontWeight: 700, letterSpacing: "-0.01em" }}>📈 Model Performance</h1>
           <p style={{ margin: "0 0 28px", fontSize: 13, color: "#9ca3af" }}>
-            How the model's edges have actually performed · MLB moneyline & totals
+            How the model's edges have actually performed · MLB moneyline, totals & HR props
           </p>
           {loading && <Loader />}
           {error && !loading && <ErrorState />}
@@ -120,6 +120,9 @@ function PerfBody({ data }) {
           <StatCard key={market} label={marketLabel(market)} b={b} />
         ))}
       </div>
+      {/* HR prop accuracy — its own section (longshots; shown across all HR picks) */}
+      <SectionTitle>🔥 Home run props</SectionTitle>
+      <HrPropCard hr={data.hrProps} />
       {/* By confidence */}
       <SectionTitle>By confidence tier</SectionTitle>
       <div className="perf-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
@@ -214,6 +217,34 @@ function StatCard({ label, b, accent }) {
       <div style={{ display: "flex", justifyContent: "space-between" }}>
         <span style={{ fontSize: 11, color: "#6b7280" }}>ROI</span>
         <span style={{ fontSize: 13, fontWeight: 600, color: profit ? "#22c55e" : "#ef4444" }}>{b.roi != null ? `${profit ? "+" : ""}${b.roi}%` : "—"}</span>
+      </div>
+    </div>
+  );
+}
+function HrPropCard({ hr }) {
+  if (!hr || !hr.picks) {
+    return (
+      <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 20, marginBottom: 24, fontSize: 13, color: "#9ca3af", lineHeight: 1.6 }}>
+        Tracking the model's home-run prop picks. Hit rate and ROI post here once HR picks have been graded from final box scores.
+      </div>
+    );
+  }
+  const profit = hr.roi >= 0;
+  const fmtOdds = hr.avgOdds == null ? "—" : (hr.avgOdds > 0 ? `+${hr.avgOdds}` : `${hr.avgOdds}`);
+  return (
+    <div style={{ background: "linear-gradient(180deg,#1a1410,#0f1419)", border: "1px solid #f5970033", borderLeft: "3px solid #f59700", borderRadius: 12, padding: 24, marginBottom: 24 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16 }}>
+        <Metric label="Hit rate" value={`${hr.hitRatePct}%`} color="#fbbf24" />
+        <Metric label="Hit / Missed" value={`${hr.hits}-${hr.misses}`} />
+        <div>
+          <div style={{ fontSize: 10, color: "#6b7280", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 600, marginBottom: 6 }}>ROI</div>
+          <div style={{ fontSize: 28, fontWeight: 800, color: profit ? "#22c55e" : "#ef4444", lineHeight: 1 }}>{`${profit ? "+" : ""}${hr.roi}%`}</div>
+          <div style={{ fontSize: 9.5, color: "#a8915c", marginTop: 5, fontWeight: 600 }}>avg odds {fmtOdds}</div>
+        </div>
+      </div>
+      <div style={{ marginTop: 14, fontSize: 11, color: "#6b7280", lineHeight: 1.6 }}>
+        Across {hr.picks} graded HR pick{hr.picks === 1 ? "" : "s"}. Home-run props are longshots, so a low hit rate is normal and expected —
+        at plus-money odds, hitting even a fraction of them can be profitable. ROI is the truer measure here than hit rate. Small samples are noisy.
       </div>
     </div>
   );
