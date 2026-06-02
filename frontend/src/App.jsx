@@ -18,6 +18,7 @@ import ExpertPicksPage from "./pages/ExpertPicks";
 import NBAPage from "./pages/NBA";
 import NBADetailPage from "./pages/NBADetail";
 import LiveScoresPage from "./pages/LiveScores";
+import GuidePage from "./pages/Guide";
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth();
   if (loading) return <LoadingScreen />;
@@ -120,6 +121,11 @@ export default function App() {
           <Route path="/expert-picks" element={
             <PrivateRoute>
               <ExpertPicksPage />
+            </PrivateRoute>
+          } />
+          <Route path="/guide" element={
+            <PrivateRoute>
+              <GuidePage />
             </PrivateRoute>
           } />
           <Route path="*" element={<Navigate to="/" replace />} />
