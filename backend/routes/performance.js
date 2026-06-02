@@ -42,8 +42,14 @@ router.get("/mlb", async (req, res) => {
     if (error) throw new Error(error.message);
     const rows = data || [];
 
+    // HR props are plus-money longshots — a win/loss record is meaningless for them
+    // (a 12% hit rate can still be profitable). They distort the headline, so the
+    // core record (overall, by market, by confidence) is moneyline + totals only.
+    // HR props live exclusively in their own section below (hrProps), measured by ROI.
+    const coreRows = rows.filter(r => r.market !== "hr_prop");
+
     // Qualified set drives the headline; full set kept for transparency.
-    const qualifiedRows = rows.filter(isQualified);
+    const qualifiedRows = coreRows.filter(isQualified);
 
     const build = (set) => {
       const buckets = { overall: blank(), byMarket: {}, byConfidence: {} };
@@ -64,13 +70,14 @@ router.get("/mlb", async (req, res) => {
     };
 
     const qualified = build(qualifiedRows);
-    const full = build(rows);
+    const full = build(coreRows);
 
-    // also count pending
+    // also count pending (core markets only — matches the headline record)
     const { count: pendingCount } = await supabase
       .from("model_predictions")
       .select("id", { count: "exact", head: true })
-      .eq("result", "pending");
+      .eq("result", "pending")
+      .in("market", ["moneyline", "total"]);
 
     // ── CLV summary ───────────────────────────────────────────────────────────
     // CLV is captured at game start regardless of win/loss, so we compute it over
