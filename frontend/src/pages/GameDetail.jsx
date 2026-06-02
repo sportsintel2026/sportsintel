@@ -194,6 +194,7 @@ function GameDetail({ game, scoresId, hrProps, hasFullAccess, navigate }) {
       {game.weather && <WeatherCard weather={game.weather} />}
       <PitcherMatchup awayPitcher={awayP} homePitcher={homeP} hasFullAccess={hasFullAccess} navigate={navigate} />
       <LineupBadge lineups={game.lineups} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} />
+      <BattingOrderCard lineups={game.lineups} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} />
       <BatterVsPitcherSection gameId={game.id} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} hasFullAccess={hasFullAccess} navigate={navigate} />
       <ContextCard game={game} />
       {hrProps.length > 0 && <HRPropsCard hrProps={hrProps} hasFullAccess={hasFullAccess} navigate={navigate} />}
@@ -742,6 +743,49 @@ function LineupBadge({ lineups, awayAbbr, homeAbbr }) {
         {anyConfirmed
           ? "Model offense reflects today's posted lineup. Confirmed lineups usually post a few hours before first pitch."
           : "Today's lineup isn't posted yet — model uses the most recent lineup (or season averages) until the official card drops, then it sharpens automatically."}
+      </div>
+    </div>
+  );
+}
+// Shows each team's batting order 1-9 (name + position). Order numbers are green
+// when today's card is confirmed, gray when it's the last-game projection.
+function BattingOrderCard({ lineups, awayAbbr, homeAbbr }) {
+  if (!lineups) return null;
+  const aOrder = lineups.away?.order || [];
+  const hOrder = lineups.home?.order || [];
+  if (aOrder.length === 0 && hOrder.length === 0) return null;
+  const chip = (src) => {
+    if (src === "confirmed") return { label: "CONFIRMED", color: "#22c55e", bg: "rgba(34,197,94,0.12)", border: "#22c55e44" };
+    if (src === "recent") return { label: "PROJECTED · LAST GAME", color: "#9ca3af", bg: "#0a0e14", border: "#1f2937" };
+    return { label: "SEASON AVG", color: "#6b7280", bg: "#0a0e14", border: "#1f2937" };
+  };
+  const col = (abbr, order, src) => {
+    const c = chip(src);
+    const accent = src === "confirmed" ? "#22c55e" : "#9ca3af";
+    return (
+      <div>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8, paddingBottom: 6, borderBottom: "1px solid #1f2937" }}>
+          <span style={{ fontSize: 13, fontWeight: 800, color: "#fff" }}>{abbr}</span>
+          <span style={{ fontSize: 9, fontWeight: 700, color: c.color, background: c.bg, border: `1px solid ${c.border}`, borderRadius: 4, padding: "1px 5px" }}>{c.label}</span>
+        </div>
+        {order.length === 0
+          ? <div style={{ fontSize: 12, color: "#6b7280", padding: "6px 0" }}>Not posted yet</div>
+          : order.map((p, i) => (
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: 9, padding: "5px 0", borderBottom: i < order.length - 1 ? "1px solid #14181f" : "none" }}>
+              <span style={{ flexShrink: 0, width: 18, height: 18, borderRadius: "50%", background: `${accent}1f`, color: accent, fontSize: 10, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center" }}>{i + 1}</span>
+              <span style={{ flex: 1, fontSize: 12.5, color: "#e4e7eb", fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</span>
+              <span style={{ fontSize: 10, color: "#6b7280", fontWeight: 700 }}>{p.pos}</span>
+            </div>
+          ))}
+      </div>
+    );
+  };
+  return (
+    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 16, marginBottom: 10 }}>
+      <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 12 }}>Batting order</div>
+      <div className="two-col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+        {col(awayAbbr, aOrder, lineups.away?.source)}
+        {col(homeAbbr, hOrder, lineups.home?.source)}
       </div>
     </div>
   );
