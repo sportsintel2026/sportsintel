@@ -110,7 +110,7 @@ export default function DashboardPage() {
           ) : league === "nba" ? (
             <NBADashboard hasFullAccess={hasFullAccess} navigate={navigate} />
           ) : (
-            <ComingSoon league={LEAGUES.find(l => l.id === league)} />
+            <ComingSoon league={LEAGUES.find(l => l.id === league)} navigate={navigate} />
           )}
         </div>
       </div>
@@ -128,7 +128,7 @@ function LeagueTabs({ league, setLeague, navigate }) {
             <button key={l.id} className="tab-btn" onClick={() => (l.path ? navigate(l.path) : setLeague(l.id))} style={{ background: "none", border: "none", padding: "14px 14px", fontSize: 13, fontWeight: active ? 700 : 500, color: active ? "#fff" : "#6b7280", borderBottom: `2px solid ${active ? "#ef4444" : "transparent"}`, marginBottom: -1, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 6 }}>
               <span>{l.icon}</span>
               <span>{l.label}</span>
-              {!l.live && <span style={{ fontSize: 9, color: "#4b5563", marginLeft: 2 }}>· Off</span>}
+              {!l.live && <span style={{ fontSize: 9, color: "#4b5563", marginLeft: 2 }}>· Soon</span>}
             </button>
           );
         })}
@@ -861,21 +861,23 @@ function nbaTime(dateStr) {
   } catch { return ""; }
 }
 
-function ComingSoon({ league }) {
-  const RETURNS = {
-    nhl: "The NHL season runs October through June.",
-    nfl: "The NFL season returns in September.",
-    ncaafb: "College football returns in late August.",
-    ncaamb: "College basketball returns in November.",
-  };
-  const note = RETURNS[league?.id] || "This sport is currently off season.";
+function ComingSoon({ league, navigate }) {
+  const GAMES_PATH = { nhl: "/nhl-games", nfl: "/nfl-games", ncaafb: "/cfb-games" };
+  const path = GAMES_PATH[league?.id];
   return (
     <div style={{ textAlign: "center", padding: 80, background: "#0f1419", border: "1px solid #1f2937", borderRadius: 8 }}>
       <div style={{ fontSize: 48, marginBottom: 16 }}>{league?.icon}</div>
-      <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 8 }}>{league?.label} — off season</h2>
-      <p style={{ fontSize: 13, color: "#9ca3af", maxWidth: 440, margin: "0 auto", lineHeight: 1.7 }}>
-        {note}
+      <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 8 }}>{league?.label} edges — coming soon</h2>
+      <p style={{ fontSize: 13, color: "#9ca3af", maxWidth: 460, margin: "0 auto 20px", lineHeight: 1.7 }}>
+        {path
+          ? `We're not publishing ${league?.label} model edges yet — they arrive once the model is built and validated. Live scores and the full schedule are available now.`
+          : `We're not publishing ${league?.label} edges yet. Check back in season.`}
       </p>
+      {path && (
+        <button onClick={() => navigate(path)} style={{ background: "#ef4444", color: "#fff", border: "none", borderRadius: 6, padding: "10px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}>
+          View {league?.label} schedule →
+        </button>
+      )}
     </div>
   );
 }
