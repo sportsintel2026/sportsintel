@@ -99,6 +99,11 @@ export default function App() {
               <LiveScoresPage league="cfb" />
             </PrivateRoute>
           } />
+          <Route path="/nhl-games" element={
+            <PrivateRoute>
+              <LiveScoresPage league="nhl" />
+            </PrivateRoute>
+          } />
           <Route path="/nba" element={
             <PrivateRoute>
               <NBAPage />
