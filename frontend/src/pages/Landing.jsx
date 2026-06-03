@@ -2,8 +2,20 @@ import { Link } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/api";
 
+// Launch gate for the Quick Picks teaser. Flip to true to show it publicly —
+// do that once a calibrated card and a real tracked record are worth advertising.
+const SHOW_QUICKPICKS_TEASER = false;
+const API_BASE = import.meta.env.VITE_API_URL || "https://sportsintel-production.up.railway.app";
+
 export default function LandingPage() {
   const [picks, setPicks] = useState([]);
+  const [qpRecord, setQpRecord] = useState(null);
+
+  useEffect(() => {
+    if (!SHOW_QUICKPICKS_TEASER) return;
+    fetch(`${API_BASE}/api/daily-card/record?scope=mix`)
+      .then(r => (r.ok ? r.json() : null)).then(setQpRecord).catch(() => {});
+  }, []);
 
   useEffect(() => {
     const loadPicks = async () => {
@@ -183,6 +195,44 @@ export default function LandingPage() {
             </div>
           </div>
         </div>
+
+        {SHOW_QUICKPICKS_TEASER && (
+          <>
+            <div style={{ borderTop: "1px solid #0f0f1a", marginBottom: 56 }} />
+            <div style={{ marginBottom: 56 }}>
+              <div style={{ marginBottom: 8, fontSize: 11, color: "#1D9E75", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase" }}>New · Subscriber feature</div>
+              <h2 style={{ fontSize: "clamp(20px,4vw,30px)", fontWeight: 800, color: "#fff", marginBottom: 8 }}>🎲 Quick Picks — the model's best play, every day</h2>
+              <p style={{ fontSize: 14, color: "#64748b", maxWidth: 560, marginBottom: 24, lineHeight: 1.8 }}>
+                One value pick and a small parlay, locked once a day and pulled only from the model's edges — never random. Choose a sport or mix them. Every play shows the honest fair-vs-book math, and the record is tracked in the open.
+              </p>
+              <div style={{ background: "#0a0a14", border: "1px solid #1a1a2e", borderRadius: 16, padding: 24, display: "flex", gap: 24, flexWrap: "wrap", alignItems: "center", justifyContent: "space-between" }}>
+                <div style={{ flex: "1 1 280px" }}>
+                  {qpRecord?.single?.settled >= 5 ? (
+                    <>
+                      <div style={{ fontSize: 11, color: "#475569", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 6 }}>Pick of the day · tracked record</div>
+                      <div style={{ fontSize: 26, fontWeight: 900, color: "#fff" }}>
+                        {qpRecord.single.wins}-{qpRecord.single.losses}
+                        {qpRecord.single.roi != null && (
+                          <span style={{ fontSize: 18, fontWeight: 800, color: qpRecord.single.roi >= 0 ? "#22c55e" : "#ef4444", marginLeft: 10 }}>
+                            {qpRecord.single.roi >= 0 ? "+" : ""}{(qpRecord.single.roi * 100).toFixed(1)}% ROI
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: 11, color: "#475569", marginTop: 6 }}>Graded automatically — wins and losses both shown.</div>
+                    </>
+                  ) : (
+                    <>
+                      <div style={{ fontSize: 16, fontWeight: 800, color: "#fff", marginBottom: 6 }}>A daily pick you can actually check</div>
+                      <div style={{ fontSize: 13, color: "#94a3b8", lineHeight: 1.7, maxWidth: 380 }}>Each day's pick is graded automatically, so the track record builds in the open — wins and losses both. Subscribe to follow it daily.</div>
+                    </>
+                  )}
+                </div>
+                <Link to="/signup" className="btn-red" style={{ fontSize: 14, padding: "13px 28px", whiteSpace: "nowrap" }}>Subscribe to unlock →</Link>
+              </div>
+              <div style={{ fontSize: 11, color: "#475569", marginTop: 12 }}>Model-built, not guaranteed. For entertainment. 21+. Bet responsibly.</div>
+            </div>
+          </>
+        )}
 
         <div style={{ borderTop: "1px solid #0f0f1a", marginBottom: 56 }} />
 
