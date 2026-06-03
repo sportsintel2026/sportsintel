@@ -869,7 +869,7 @@ function ComingSoon({ league, navigate }) {
       <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 8 }}>{league?.label} edges — coming soon</h2>
       <p style={{ fontSize: 13, color: "#9ca3af", maxWidth: 460, margin: "0 auto 20px", lineHeight: 1.7 }}>
         {path
-          ? `We're not publishing ${league?.label} model edges yet — they arrive once the model is built and validated. Live scores and the full schedule are available now.`
+          ? `We're not publishing ${league?.label} model edges yet. Live scores and the full schedule are available now.`
           : `We're not publishing ${league?.label} edges yet. Check back in season.`}
       </p>
       {path && (
