@@ -204,7 +204,7 @@ function CardBody({ card, record, navigate }) {
 // this subscriber. Marked "not tracked" because it never enters the graded
 // shared record — that stays the official Pick of the Day.
 function AltPick({ pick, navigate }) {
-  const go = () => pick.gameId && navigate(`/game/mlb/${pick.gameId}`);
+  const go = () => pick.gameId && navigate(`/game/${pick.league || "mlb"}/${pick.gameId}`);
   return (
     <div onClick={go} style={{ background: "#0f1419", border: "1px dashed #3a4250", borderRadius: 12, padding: 18, marginTop: 12, cursor: pick.gameId ? "pointer" : "default" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
@@ -229,7 +229,7 @@ function AltPick({ pick, navigate }) {
 }
 
 function SinglePick({ single, result, navigate }) {
-  const go = () => single.gameId && navigate(`/game/mlb/${single.gameId}`);
+  const go = () => single.gameId && navigate(`/game/${single.league || "mlb"}/${single.gameId}`);
   return (
     <div onClick={go} style={{ background: "#0f1419", border: "1px solid #22c55e30", borderRadius: 12, padding: 18, marginBottom: 12, cursor: single.gameId ? "pointer" : "default" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
@@ -261,7 +261,7 @@ function ParlayCard({ parlay, result, navigate }) {
         <ResultBadge result={result} />
       </div>
       {(parlay.legs || []).map((leg, i) => (
-        <div key={i} onClick={() => leg.gameId && navigate(`/game/mlb/${leg.gameId}`)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: i < parlay.legs.length - 1 ? "1px solid #1a1f28" : "none", cursor: leg.gameId ? "pointer" : "default" }}>
+        <div key={i} onClick={() => leg.gameId && navigate(`/game/${leg.league || "mlb"}/${leg.gameId}`)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: i < parlay.legs.length - 1 ? "1px solid #1a1f28" : "none", cursor: leg.gameId ? "pointer" : "default" }}>
           <div>
             <div style={{ fontSize: 14, fontWeight: 700, color: "#fff" }}>{leg.description} <span style={{ color: "#9ca3af", fontWeight: 600 }}>{formatOdds(leg.odds)}</span></div>
             <div style={{ fontSize: 11, color: "#6b7280", marginTop: 1 }}>{leg.matchup}</div>
