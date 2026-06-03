@@ -2,8 +2,8 @@ import { Link } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/api";
 
-// Launch gate for the Quick Picks teaser. Flip to true to show it on the homepage.
-const SHOW_QUICKPICKS_TEASER = false;
+// Launch gate for the Quick Picks teaser. Flip to false to hide it from the homepage.
+const SHOW_QUICKPICKS_TEASER = true;
 
 export default function LandingPage() {
   const [picks, setPicks] = useState([]);
@@ -192,16 +192,16 @@ export default function LandingPage() {
             <div style={{ borderTop: "1px solid #0f0f1a", marginBottom: 56 }} />
             <div style={{ marginBottom: 56 }}>
               <div style={{ marginBottom: 8, fontSize: 11, color: "#1D9E75", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase" }}>New · Subscriber feature</div>
-              <h2 style={{ fontSize: "clamp(20px,4vw,30px)", fontWeight: 800, color: "#fff", marginBottom: 8 }}>🎲 Quick Picks — the model's best play, every day</h2>
+              <h2 style={{ fontSize: "clamp(20px,4vw,30px)", fontWeight: 800, color: "#fff", marginBottom: 8 }}>🎲 Quick Picks — straight bets & parlays, built for you</h2>
               <p style={{ fontSize: 14, color: "#64748b", maxWidth: 560, marginBottom: 24, lineHeight: 1.8 }}>
-                One value pick and a small parlay, locked once a day and pulled only from the model's edges — never random. Choose a sport or mix them. Every play shows the honest fair-vs-book math, and the record is tracked in the open.
+                Members get more than the board. Our Quick Picks feature generates a ready-to-play straight bet <em>and</em> a parlay every day — built automatically from the model's best edges across MLB and NBA. No digging required.
               </p>
               <div style={{ background: "#0a0a14", border: "1px solid #1a1a2e", borderRadius: 16, padding: 24, display: "flex", gap: 24, flexWrap: "wrap", alignItems: "center", justifyContent: "space-between" }}>
                 <div style={{ flex: "1 1 300px" }}>
-                  <div style={{ fontSize: 16, fontWeight: 800, color: "#fff", marginBottom: 6 }}>A sharp daily play, without the homework</div>
-                  <div style={{ fontSize: 13, color: "#94a3b8", lineHeight: 1.7, maxWidth: 400 }}>The model does the work and hands you its best edge of the day — one pick and one small parlay, MLB, NBA, or a mix. Subscribers get it daily.</div>
+                  <div style={{ fontSize: 16, fontWeight: 800, color: "#fff", marginBottom: 6 }}>Straight bets and parlays, done for you</div>
+                  <div style={{ fontSize: 13, color: "#94a3b8", lineHeight: 1.7, maxWidth: 400 }}>Subscribe and the model hands you a daily single pick and a small parlay, pulled from its top value edges. Pick a sport or mix them — the fastest way to get a model-backed play. Members only.</div>
                 </div>
-                <Link to="/signup" className="btn-red" style={{ fontSize: 14, padding: "13px 28px", whiteSpace: "nowrap" }}>Get Quick Picks →</Link>
+                <Link to="/signup" className="btn-red" style={{ fontSize: 14, padding: "13px 28px", whiteSpace: "nowrap" }}>Sign up to unlock →</Link>
               </div>
               <div style={{ fontSize: 11, color: "#475569", marginTop: 12 }}>Model-built, not guaranteed. For entertainment. 21+. Bet responsibly.</div>
             </div>
