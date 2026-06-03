@@ -7,6 +7,7 @@
 const { createClient } = require("@supabase/supabase-js");
 const { getEasternDate, getScheduleForDate, getGameHRHitters, normPlayerName } = require("./mlbStatsApi");
 const { fetchGamelog } = require("./nbaGamelog");
+const { fetchScoreboard } = require("./nbaDataSource");
 const { getMLBMainOdds } = require("./oddsApi");
 
 function db() {
@@ -547,11 +548,39 @@ async function gradeMlb(supabase, pending) {
 // NBA prop grading — pull each player's gamelog once, read the stat for the game.
 async function gradeNba(supabase, pending) {
   if (!pending.length) return 0;
-
-  const logCache = {}; // athleteId -> parsed games (one fetch per athlete per run)
   let graded = 0;
 
-  for (const p of pending) {
+  const TEAM = new Set(["moneyline", "spread", "total"]);
+  const teamRows = pending.filter(p => TEAM.has(p.market));
+  const propRows = pending.filter(p => !TEAM.has(p.market));
+
+  // ── Team markets: grade from final scores (ESPN scoreboard) ──────────────────
+  if (teamRows.length) {
+    const sbCache = {}; // date -> games (one scoreboard fetch per date per run)
+    for (const p of teamRows) {
+      let games = sbCache[p.game_date];
+      if (!games) {
+        try { games = await fetchScoreboard(p.game_date); sbCache[p.game_date] = games; }
+        catch (e) { continue; } // try again next run
+      }
+      const g = (games || []).find(x => String(x.gameId) === String(p.game_id));
+      if (!g || g.state !== "post") continue; // not final yet → stay pending
+      const hs = g.home?.score, as = g.away?.score;
+      if (hs == null || as == null) continue;
+
+      const outcome = gradeNbaTeam(p, hs, as);
+      if (!outcome) continue;
+      const { error: upErr } = await supabase
+        .from("model_predictions")
+        .update({ result: outcome.result, actual_value: outcome.actual, graded_at: new Date().toISOString() })
+        .eq("id", p.id);
+      if (!upErr) graded++;
+    }
+  }
+
+  // ── Player props: grade from each player's gamelog (existing path) ───────────
+  const logCache = {}; // athleteId -> parsed games (one fetch per athlete per run)
+  for (const p of propRows) {
     const [athleteId, side] = String(p.selection || "").split(":");
     if (!athleteId || !side) continue;
 
@@ -574,6 +603,34 @@ async function gradeNba(supabase, pending) {
     if (!upErr) graded++;
   }
   return graded;
+}
+
+// Grades an NBA team-market pick (moneyline / spread / total) from final scores.
+// Mirrors the MLB logic; half-point lines never push, whole-number lines can.
+function gradeNbaTeam(p, homeScore, awayScore) {
+  const margin = homeScore - awayScore; // + = home won
+  const total = homeScore + awayScore;
+  if (p.market === "moneyline") {
+    if (margin === 0) return { result: "push", actual: margin };
+    const homeWon = margin > 0;
+    const win = p.selection === "home" ? homeWon : !homeWon;
+    return { result: win ? "win" : "loss", actual: margin };
+  }
+  if (p.market === "spread") {
+    if (p.line == null) return null;
+    const sideMargin = p.selection === "home" ? margin : -margin;
+    const cover = sideMargin + p.line; // line is that side's signed spread
+    if (cover === 0) return { result: "push", actual: margin };
+    return { result: cover > 0 ? "win" : "loss", actual: margin };
+  }
+  if (p.market === "total") {
+    if (p.line == null) return null;
+    if (total === p.line) return { result: "push", actual: total };
+    const over = total > p.line;
+    const win = p.selection === "over" ? over : !over;
+    return { result: win ? "win" : "loss", actual: total };
+  }
+  return null;
 }
 
 // PURE: grade one NBA prop row against the player's finished game line.
