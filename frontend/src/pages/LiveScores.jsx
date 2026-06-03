@@ -12,6 +12,7 @@ import Sidebar from "./Sidebar";
 const LEAGUE_META = {
   mlb: { icon: "⚾", title: "MLB Games", periodLabel: "Inn" },
   nba: { icon: "🏀", title: "NBA Games", periodLabel: "Qtr" },
+  nfl: { icon: "🏈", title: "NFL Games", periodLabel: "Qtr" },
 };
 
 export default function LiveScoresPage({ league = "mlb" }) {
@@ -163,7 +164,10 @@ function GameCard({ g, league, meta }) {
   const isLive = g.bucket === "live";
   const isFinal = g.bucket === "final";
   const rawId = g.detailId || g.id;
-  const target = rawId ? `/game/${league}/${rawId}` : null;
+  // Detail pages exist for MLB/NBA; NFL detail arrives with the model step, so
+  // don't make NFL cards navigate to a route that isn't wired yet.
+  const HAS_DETAIL = { mlb: true, nba: true };
+  const target = rawId && HAS_DETAIL[league] ? `/game/${league}/${rawId}` : null;
 
   return (
     <div
@@ -429,6 +433,11 @@ function getOffSeason(league) {
     // Off-season: late June (after ~the 25th) through mid-October (before ~the 18th)
     const off = (m === 5 && d > 25) || m === 6 || m === 7 || m === 8 || (m === 9 && d < 18);
     return off ? "The NBA returns in October for the new season." : null;
+  }
+  if (lg === "nfl") {
+    // Season: early Sept → early Feb (Super Bowl). Off-season ~mid-Feb through August.
+    const off = (m === 1 && d > 12) || (m >= 2 && m <= 7) || (m === 8 && d < 4);
+    return off ? "The NFL returns in September for the new season." : null;
   }
   return null;
 }
