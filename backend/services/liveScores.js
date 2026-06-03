@@ -10,6 +10,7 @@ const PATHS = {
   nba: "basketball/nba",
   nfl: "football/nfl",
   cfb: "football/college-football",
+  nhl: "hockey/nhl",
 };
 
 const SCOREBOARD = (league, dateStr) => {
