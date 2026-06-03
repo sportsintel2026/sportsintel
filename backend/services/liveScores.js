@@ -8,6 +8,7 @@
 const PATHS = {
   mlb: "baseball/mlb",
   nba: "basketball/nba",
+  nfl: "football/nfl",
 };
 
 const SCOREBOARD = (league, dateStr) =>
@@ -175,10 +176,12 @@ async function getScores(league) {
       }
     }
   } else {
-    // NBA (and any non-MLB): default day, then today-first rollover.
+    // NBA / NFL (and any non-MLB): default day, then today-first rollover.
+    // NFL plays weekly (Thu/Sun/Mon), so scan a full week ahead; NBA is daily.
+    const maxOff = league === "nfl" ? 7 : 3;
     try { games = attachDetailIds(league, await fetchScoreboardRaw(league), null); } catch (_) { games = []; }
     if (!hasPlayable(games)) {
-      for (let off = 0; off <= 3; off++) {
+      for (let off = 0; off <= maxOff; off++) {
         try {
           const day = attachDetailIds(league, await fetchScoreboardRaw(league, espnDateStr(off)), null);
           if (hasPlayable(day)) { games = day; rolled = off > 0; break; }
