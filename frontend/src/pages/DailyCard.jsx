@@ -190,6 +190,16 @@ function CardBody({ card, record, navigate }) {
       .catch(() => setRerolling(false));
   };
 
+  if (card.allStarted) {
+    return (
+      <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 12, padding: 28, textAlign: "center" }}>
+        <div style={{ fontSize: 32, marginBottom: 10 }}>🏟️</div>
+        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>Today's games have all started</div>
+        <div style={{ fontSize: 13, color: "#9ca3af", lineHeight: 1.5 }}>Quick Picks only locks a play while a game's line is still open — once first pitch is thrown, the price isn't one you could actually bet. The board's done for today; fresh picks post tomorrow when the next slate's lines open.</div>
+      </div>
+    );
+  }
+
   if (card.notReady || (!card.single && !card.parlay)) {
     return (
       <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 12, padding: 28, textAlign: "center" }}>
