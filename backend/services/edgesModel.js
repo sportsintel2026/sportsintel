@@ -391,6 +391,91 @@ function overreactionNote(modelProb, thisOdds, otherOdds) {
 
 // ── ORCHESTRATION ─────────────────────────────────────────────────────────────
 const MAX_HR_GAMES = 5;
+// ── CONVICTION (v0.6) ─────────────────────────────────────────────────────────
+// Conviction is ORTHOGONAL to edge. Edge = how much value vs the line; conviction
+// = how much we trust the projection behind it, 0–100, from three signals the
+// model already computes:
+//   • stability    — are the starters past the sample where their stats mean
+//                    something (regressThinSample's ip/FULL_TRUST_IP), or mostly
+//                    league-average guesswork?
+//   • completeness — how many real inputs fed the projection vs league-average
+//                    placeholders (confirmed starters, lineup, bullpen, weather…)?
+//   • agreement    — do the independent factors point the SAME way as the pick,
+//                    or does the edge rest on one factor while the others disagree?
+// Conviction NEVER changes the edge, the pick, or grading — pure annotation, so a
+// user can tell "modest edge, high conviction" from "juicy edge, thin data." It is
+// deliberately falsifiable: persisted so we can later check whether high-conviction
+// picks actually beat the close more than low ones.
+const CONVICTION_WEIGHTS = { stability: 0.40, completeness: 0.35, agreement: 0.25 };
+const clampScore = (x) => Math.max(0, Math.min(100, x));
+
+// Shared game-level inputs: stability + completeness (same for every side).
+function convictionBase(ctx) {
+  // stability: average of each starter's own-sample weight (ip / FULL_TRUST_IP).
+  const ipWeight = (p) => {
+    if (!p || p.inningsPitched == null) return 0; // TBD / unknown starter → no trust
+    return Math.max(0, Math.min(1, p.inningsPitched / FULL_TRUST_IP));
+  };
+  const stability = clampScore(((ipWeight(ctx.awayPitcher) + ipWeight(ctx.homePitcher)) / 2) * 100);
+
+  // completeness: 100 minus a dock for every input running on a placeholder.
+  let completeness = 100;
+  if (!ctx.awayPitcher) completeness -= 20;
+  if (!ctx.homePitcher) completeness -= 20;
+  const lineupDock = (src) => (src === "confirmed" ? 0 : src === "recent" ? 4 : 8);
+  completeness -= lineupDock(ctx.awayLineupSource);
+  completeness -= lineupDock(ctx.homeLineupSource);
+  if (!ctx.awayBullpen?.era) completeness -= 6;
+  if (!ctx.homeBullpen?.era) completeness -= 6;
+  if (!ctx.weather) completeness -= 5;
+  if (!ctx.awayHandSplits) completeness -= 3;
+  if (!ctx.homeHandSplits) completeness -= 3;
+  if (!ctx.awayHit?.ops) completeness -= 5;
+  if (!ctx.homeHit?.ops) completeness -= 5;
+
+  return { stability: Math.round(stability), completeness: Math.round(clampScore(completeness)) };
+}
+
+// Agreement for a TOTAL pick: of the signed adjustments moving the projection off
+// its base, how many push the SAME way as our side (over = up, under = down)?
+// All aligned → high; an edge that exists despite most factors disagreeing → low.
+function totalAgreement(breakdown, side /* "over" | "under" */) {
+  if (!breakdown) return 50;
+  const adjs = [breakdown.pitcherAdj, breakdown.parkAdj, breakdown.weatherAdj, breakdown.bullpenAdj];
+  const want = side === "over" ? 1 : -1;
+  const moving = adjs.filter((a) => Math.abs(a) > 0.05); // ignore ~zero factors
+  if (moving.length === 0) return 45; // nothing pushing the total → weak read
+  const aligned = moving.filter((a) => Math.sign(a) === want).length;
+  return clampScore(30 + (aligned / moving.length) * 70);
+}
+
+// Agreement for a MONEYLINE / run-line pick: how decisive is our side's win-prob
+// lean (distance from a coin flip), plus a small bonus when the matchup reads as
+// pitching-driven (a coherent reason to back a side rather than chase offense).
+function leanAgreement(ml, breakdown, side /* "away" | "home" */) {
+  const winProb = side === "away" ? ml.awayWinProb : ml.homeWinProb;
+  if (winProb == null) return 50;
+  const lean = Math.min(1, Math.abs(winProb - 0.5) / 0.25); // .25 over a coin flip = full
+  let score = 40 + lean * 50;
+  if (breakdown && breakdown.pitcherAdj < -0.15) score += 5; // pitching-driven matchup
+  return clampScore(score);
+}
+
+function convictionTier(score) {
+  if (score >= 72) return "HIGH";
+  if (score >= 50) return "MEDIUM";
+  return "LOW";
+}
+
+function finalizeConviction(base, agreement) {
+  const score = Math.round(
+    CONVICTION_WEIGHTS.stability * base.stability +
+    CONVICTION_WEIGHTS.completeness * base.completeness +
+    CONVICTION_WEIGHTS.agreement * agreement
+  );
+  return { score, tier: convictionTier(score) };
+}
+
 async function calculateGameEdges(game, oddsForGame) {
   const [
     awayPitcher,
@@ -532,6 +617,19 @@ async function calculateGameEdges(game, oddsForGame) {
     awayRLEdge = sanitizeEdge(blendedEdge(aCover, awayRLOdds, homeRLOdds));
   }
 
+  // ── Conviction (v0.6): trust in the projection, ORTHOGONAL to edge size. ──────
+  // Shared stability+completeness from the inputs that actually fed this game,
+  // then a per-side factor-agreement term. Never alters edge, pick, or grading.
+  const convBase = convictionBase({
+    awayPitcher, homePitcher,
+    awayLineupSource: awayLineup.source, homeLineupSource: homeLineup.source,
+    awayBullpen, homeBullpen, weather, awayHandSplits, homeHandSplits, awayHit, homeHit,
+  });
+  const cvAwayML = finalizeConviction(convBase, leanAgreement(ml, totals.breakdown, "away"));
+  const cvHomeML = finalizeConviction(convBase, leanAgreement(ml, totals.breakdown, "home"));
+  const cvOver = finalizeConviction(convBase, totalAgreement(totals.breakdown, "over"));
+  const cvUnder = finalizeConviction(convBase, totalAgreement(totals.breakdown, "under"));
+
   return {
     game: {
       id: game.id,
@@ -573,6 +671,7 @@ async function calculateGameEdges(game, oddsForGame) {
       awayVsHand: homePitcherHand,
       homeVsHand: awayPitcherHand,
     },
+    convictionInputs: { stability: convBase.stability, completeness: convBase.completeness },
     moneyline: {
       awayWinProb: ml.awayWinProb,
       homeWinProb: ml.homeWinProb,
@@ -584,6 +683,10 @@ async function calculateGameEdges(game, oddsForGame) {
       homeEdge,
       awayConfidence: rateConfidence(awayEdge),
       homeConfidence: rateConfidence(homeEdge),
+      awayConviction: cvAwayML.tier,
+      homeConviction: cvHomeML.tier,
+      awayConvictionScore: cvAwayML.score,
+      homeConvictionScore: cvHomeML.score,
       awayInflation,
       homeInflation,
     },
@@ -601,6 +704,10 @@ async function calculateGameEdges(game, oddsForGame) {
       underEdge,
       overConfidence: rateConfidence(overEdge),
       underConfidence: rateConfidence(underEdge),
+      overConviction: cvOver.tier,
+      underConviction: cvUnder.tier,
+      overConvictionScore: cvOver.score,
+      underConvictionScore: cvUnder.score,
       overInflation,
       underInflation,
     },
@@ -617,6 +724,10 @@ async function calculateGameEdges(game, oddsForGame) {
       homeEdge: homeRLEdge,
       awayConfidence: awayRLEdge != null ? rateConfidence(awayRLEdge) : null,
       homeConfidence: homeRLEdge != null ? rateConfidence(homeRLEdge) : null,
+      awayConviction: awayRLEdge != null ? cvAwayML.tier : null,
+      homeConviction: homeRLEdge != null ? cvHomeML.tier : null,
+      awayConvictionScore: awayRLEdge != null ? cvAwayML.score : null,
+      homeConvictionScore: homeRLEdge != null ? cvHomeML.score : null,
     },
   };
 }
