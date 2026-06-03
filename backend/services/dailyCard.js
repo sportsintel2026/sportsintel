@@ -3,7 +3,7 @@
 // value edges in model_predictions. Touches no edge math — it only reads picks
 // the model already produced, packages them, and stores one card per day.
 const { createClient } = require("@supabase/supabase-js");
-const { getEasternDate } = require("./mlbStatsApi");
+const { getEasternDate, getScheduleForDate } = require("./mlbStatsApi");
 
 function db() {
   return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
@@ -17,6 +17,37 @@ const CARD_MARKETS = ["moneyline", "total"]; // low-variance core only — run_l
 const SCOPES = { mix: ["mlb", "nba"], mlb: ["mlb"], nba: ["nba"] };
 function normScope(s) { return SCOPES[s] ? s : "mix"; }
 function leaguesFor(scope) { return SCOPES[normScope(scope)]; }
+
+// Returns the set of MLB game_ids that have NOT started yet (true pre-game), by
+// status + start time from the live schedule. A daily card must only ever draw
+// from games whose line hasn't closed — a pick on an already-live game reflects
+// in-play odds, not a number a subscriber could actually still bet (this is what
+// surfaced the in-game +4500 garbage). NBA status isn't sourced here yet, so NBA
+// rows pass through unchanged (follow-up: wire an NBA schedule/status feed).
+async function preGameMlbIds(date) {
+  try {
+    const schedule = await getScheduleForDate(date);
+    const now = Date.now();
+    const ids = new Set();
+    for (const g of schedule) {
+      const notStarted = g.status === "scheduled"
+        && g.startTimeUTC && new Date(g.startTimeUTC).getTime() > now;
+      if (notStarted) ids.add(String(g.id));
+    }
+    return ids;
+  } catch (e) {
+    console.error("[DailyCard] schedule fetch failed:", e.message);
+    return null; // null = couldn't determine → caller leaves rows untouched (never hide real picks on an error)
+  }
+}
+
+// Keep only picks whose game is still pre-game. MLB is gated by the schedule;
+// NBA passes through (no status source yet). On a schedule error (mlbSet null)
+// nothing is stripped.
+function keepPreGame(rows, mlbSet) {
+  if (!mlbSet) return rows;
+  return rows.filter(p => p.league !== "mlb" || mlbSet.has(String(p.game_id)));
+}
 
 // American <-> decimal helpers.
 function toDecimal(a) {
@@ -68,14 +99,20 @@ async function getOrGenerateDailyCard(scope = "mix") {
     .gt("edge", 0)
     .order("edge", { ascending: false });
 
-  const rows = (preds || []).filter(p =>
+  const qualified = (preds || []).filter(p =>
     QUALIFY.includes((p.confidence || "").toUpperCase()) && p.odds != null && p.model_prob != null);
 
-  // Not enough data yet (edges haven't computed today) — return an unsaved
-  // "not ready" shell so the UI can show a friendly waiting state. We only
-  // LOCK (save) a card once there's something real to lock.
+  // Drop any pick whose game has already started — the card must only ever lock
+  // pre-game prices a subscriber could still actually bet.
+  const mlbSet = await preGameMlbIds(date);
+  const rows = keepPreGame(qualified, mlbSet);
+
+  // No pre-game picks left. Distinguish "edges haven't computed yet" (notReady)
+  // from "every game today has already started" (allStarted) so the UI can tell
+  // subscribers which it is. Neither state locks a card.
   if (rows.length === 0) {
-    return { game_date: date, scope, single: null, parlay: null, single_result: "pending", parlay_result: "pending", notReady: true };
+    const allStarted = qualified.length > 0; // we HAD qualified picks; they've all started
+    return { game_date: date, scope, single: null, parlay: null, single_result: "pending", parlay_result: "pending", notReady: !allStarted, allStarted };
   }
 
   // Single = best value pick.
@@ -221,11 +258,15 @@ async function getAlternatePick(scope = "mix") {
     .gt("edge", 0)
     .order("edge", { ascending: false });
 
-  const rows = (preds || []).filter(p =>
+  const qualified = (preds || []).filter(p =>
     QUALIFY.includes((p.confidence || "").toUpperCase()) &&
     p.odds != null && p.model_prob != null && p.id !== officialId);
 
-  if (rows.length === 0) return { pick: null };
+  // Only ever offer an alternate on a game that hasn't started.
+  const mlbSet = await preGameMlbIds(date);
+  const rows = keepPreGame(qualified, mlbSet);
+
+  if (rows.length === 0) return { pick: null, allStarted: qualified.length > 0 };
 
   // Random among the top value picks for variety, still a real edge.
   const pool = rows.slice(0, 8);
