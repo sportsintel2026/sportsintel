@@ -14,6 +14,7 @@ const LEAGUE_META = {
   nba: { icon: "🏀", title: "NBA Games", periodLabel: "Qtr" },
   nfl: { icon: "🏈", title: "NFL Games", periodLabel: "Qtr" },
   cfb: { icon: "🏟️", title: "College Football", periodLabel: "Qtr" },
+  nhl: { icon: "🏒", title: "NHL Games", periodLabel: "Per" },
 };
 
 export default function LiveScoresPage({ league = "mlb" }) {
@@ -444,6 +445,11 @@ function getOffSeason(league) {
     // Season: late Aug → mid-Jan (CFP championship). Off-season ~late Jan through late Aug.
     const off = (m === 0 && d > 22) || (m >= 1 && m <= 6) || (m === 7 && d < 23);
     return off ? "College football returns in late August." : null;
+  }
+  if (lg === "nhl") {
+    // Season: Oct → mid-June (Stanley Cup Final). Off-season ~late June through early Oct.
+    const off = (m === 5 && d > 26) || m === 6 || m === 7 || (m === 8 && d < 4);
+    return off ? "The NHL returns in October for the new season." : null;
   }
   return null;
 }
