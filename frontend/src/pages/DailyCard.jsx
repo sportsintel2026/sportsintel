@@ -165,51 +165,56 @@ function HowToUse({ open, onToggle }) {
 }
 
 function CardBody({ card, record, navigate }) {
-  const storageKey = `wp_quickpick_reroll_${card.scope || "mix"}_${card.game_date}`;
+  const storageKey = `wp_quickpick_spin_${card.scope || "mix"}_${card.game_date}`;
+  // The free spin is once a day. We persist whether it's been used + the bonus
+  // play it landed on, so a reload shows the bonus statically (no re-spin).
   const [used, setUsed] = useState(() => {
     try { return localStorage.getItem(storageKey) === "1"; } catch { return false; }
   });
-  const [alt, setAlt] = useState(() => {
-    try { const s = localStorage.getItem(`${storageKey}_pick`); return s ? JSON.parse(s) : null; } catch { return null; }
+  const [bonus, setBonus] = useState(() => {
+    try { const s = localStorage.getItem(`${storageKey}_play`); return s ? JSON.parse(s) : null; } catch { return null; }
   });
-  const [rerolling, setRerolling] = useState(false);
+  const [fetching, setFetching] = useState(false); // waiting on the bonus play
+  const [spinning, setSpinning] = useState(false);  // reels in motion
+  const [pending, setPending] = useState(null);     // bonus play being spun toward
+  const [spinDone, setSpinDone] = useState(0);       // reels that have pinned
+  const [spinMsg, setSpinMsg] = useState("");
 
-  // One-time slot reveal of the Pick of the Day, per scope per day. On any
-  // storage error we default to "already revealed" so the pick is never hidden
-  // behind an animation that can't complete.
-  const revealKey = `wp_quickpick_revealed_${card.scope || "mix"}_${card.game_date}`;
-  const [revealed, setRevealed] = useState(() => {
-    try { return localStorage.getItem(revealKey) === "1"; } catch { return true; }
-  });
-  const markRevealed = () => { try { localStorage.setItem(revealKey, "1"); } catch {} setRevealed(true); };
-  const [revealDone, setRevealDone] = useState(0);
-  const markReveal = () => setRevealDone(n => n + 1);
+  // When every reel of the bonus play has pinned, reveal it.
   useEffect(() => {
-    if (revealed) return;
-    const targets = (card.single ? 1 : 0) + (card.parlay ? 1 : 0);
-    if (targets > 0 && revealDone >= targets) markRevealed();
-  }, [revealDone, revealed]); // card is stable for this mount
-  const [spinning, setSpinning] = useState(false); // alternate-pick reel in motion
-  const [pendingAlt, setPendingAlt] = useState(null);
-  const [altMsg, setAltMsg] = useState("");
+    if (!spinning || !pending) return;
+    const targets = (pending.single ? 1 : 0) + (pending.parlay ? 1 : 0);
+    if (targets > 0 && spinDone >= targets) { setSpinning(false); setBonus(pending); }
+  }, [spinDone, spinning, pending]);
+  // Safety net: never leave the user stuck on spinning reels.
+  useEffect(() => {
+    if (!spinning) return;
+    const t = setTimeout(() => { setSpinning(false); if (pending) setBonus(pending); }, 8500);
+    return () => clearTimeout(t);
+  }, [spinning, pending]);
 
-  const doReroll = () => {
-    if (used || rerolling || spinning) return;
-    setRerolling(true); setAltMsg("");
-    fetch(`${API_BASE}/api/daily-card/alternate?scope=${card.scope || "mix"}`)
+  const markSpin = () => setSpinDone(n => n + 1);
+
+  const doSpin = () => {
+    if (used || fetching || spinning) return;
+    setFetching(true); setSpinMsg("");
+    fetch(`${API_BASE}/api/daily-card/alternate-play?scope=${card.scope || "mix"}`)
       .then(r => (r.ok ? r.json() : null))
       .then(d => {
-        setRerolling(false);
-        if (d && d.pick) {
+        setFetching(false);
+        if (d && (d.single || d.parlay)) {
           setUsed(true);
-          try { localStorage.setItem(storageKey, "1"); localStorage.setItem(`${storageKey}_pick`, JSON.stringify(d.pick)); } catch {}
-          setPendingAlt(d.pick);
-          setSpinning(true); // play the reel; AltPick reveals when it pins
+          try { localStorage.setItem(storageKey, "1"); localStorage.setItem(`${storageKey}_play`, JSON.stringify(d)); } catch {}
+          setSpinDone(0);
+          setPending(d);
+          setSpinning(true); // reels play; bonus reveals when they pin
         } else if (d && d.allStarted) {
-          setAltMsg("Every game's already started — that's the board for today.");
+          setSpinMsg("Every game's already started — no bonus play left today.");
+        } else {
+          setSpinMsg("Couldn't find a bonus play right now — try again in a bit.");
         }
       })
-      .catch(() => setRerolling(false));
+      .catch(() => { setFetching(false); setSpinMsg("Couldn't load a bonus play — try again in a bit."); });
   };
 
   if (card.allStarted) {
@@ -234,40 +239,41 @@ function CardBody({ card, record, navigate }) {
   return (
     <>
       {record && <RecordStrip record={record} />}
-      {revealed ? (
-        <>
-          {card.single && <SinglePick single={card.single} result={card.single_result} navigate={navigate} />}
-          {card.parlay && <ParlayCard parlay={card.parlay} result={card.parlay_result} navigate={navigate} />}
-        </>
-      ) : (
-        <>
-          {card.single && <Reel title="★ Pick of the day" finalLabel={`${card.single.description} ${formatOdds(card.single.odds)}`} accent="#1D9E75" onDone={markReveal} />}
-          {card.parlay && <ParlayReel parlay={card.parlay} onDone={markReveal} />}
-        </>
+      {card.single && <SinglePick single={card.single} result={card.single_result} navigate={navigate} />}
+      {card.parlay && <ParlayCard parlay={card.parlay} result={card.parlay_result} navigate={navigate} />}
+
+      {/* The one free spin: pull it to spin a fresh bonus single + parlay. */}
+      {!used && !spinning && (
+        <button onClick={doSpin} disabled={fetching} style={{ width: "100%", marginTop: 12, background: "transparent", border: "1px solid #1D9E75", borderRadius: 10, padding: "12px", color: "#1D9E75", fontSize: 14, fontWeight: 800, cursor: fetching ? "default" : "pointer", fontFamily: "inherit", opacity: fetching ? 0.6 : 1 }}>
+          {fetching ? "Loading your spin…" : "🎰 Pull your free spin (1 today)"}
+        </button>
       )}
-      {card.single && revealed && (
-        <>
-          {!used && (
-            <button onClick={doReroll} disabled={rerolling || spinning} style={{ width: "100%", marginTop: 12, background: "transparent", border: "1px solid #1D9E75", borderRadius: 10, padding: "11px", color: "#1D9E75", fontSize: 13, fontWeight: 800, cursor: (rerolling || spinning) ? "default" : "pointer", fontFamily: "inherit", opacity: (rerolling || spinning) ? 0.6 : 1 }}>
-              {rerolling ? "Spinning up a play…" : "🎰 Spin for another play (1 left today)"}
-            </button>
-          )}
-          {spinning && pendingAlt && (
-            <Reel title="🎰 Your alternate pick" finalLabel={`${pendingAlt.description} ${formatOdds(pendingAlt.odds)}`} accent="#3a4250" onDone={() => { setSpinning(false); setAlt(pendingAlt); }} />
-          )}
-          {alt && !spinning && <AltPick pick={alt} navigate={navigate} />}
-          {altMsg && (
-            <div style={{ marginTop: 10, fontSize: 11, color: "#6b7280", textAlign: "center" }}>{altMsg}</div>
-          )}
-          {used && !spinning && (
-            <div style={{ marginTop: 10, fontSize: 11, color: "#6b7280", textAlign: "center" }}>
-              That's your spin for today — fresh picks tomorrow.
-            </div>
-          )}
-        </>
+
+      {spinning && pending && (
+        <div style={{ marginTop: 12 }}>
+          {pending.single && <Reel title="🎰 Bonus pick" finalLabel={`${pending.single.description} ${formatOdds(pending.single.odds)}`} accent="#3a4250" onDone={markSpin} />}
+          {pending.parlay && <ParlayReel parlay={pending.parlay} onDone={markSpin} />}
+        </div>
       )}
+
+      {bonus && !spinning && (
+        <div style={{ marginTop: 12 }}>
+          {bonus.single && <AltPick pick={bonus.single} navigate={navigate} />}
+          {bonus.parlay && <BonusParlay parlay={bonus.parlay} navigate={navigate} />}
+        </div>
+      )}
+
+      {spinMsg && (
+        <div style={{ marginTop: 10, fontSize: 11, color: "#6b7280", textAlign: "center" }}>{spinMsg}</div>
+      )}
+      {used && !spinning && (
+        <div style={{ marginTop: 10, fontSize: 11, color: "#6b7280", textAlign: "center" }}>
+          That's your free spin for today — fresh picks tomorrow.
+        </div>
+      )}
+
       <div style={{ marginTop: 16, fontSize: 11, color: "#6b7280", lineHeight: 1.6, textAlign: "center" }}>
-        The reel's just the reveal — every pick is the model's value edge, locked in. Never random. Parlays multiply variance, so size them small. For entertainment; bet responsibly. 21+. 1-800-GAMBLER.
+        The tracked Pick of the Day and parlay are above. Your free spin is a bonus play — a different single and parlay, just for you, never part of the tracked record. Every leg is a model value edge — never random. Parlays multiply variance, so size them small. For entertainment; bet responsibly. 21+. 1-800-GAMBLER.
       </div>
     </>
   );
@@ -296,31 +302,52 @@ function reelDecoys(n = 14) {
 // (parlay) reveals so the legs lock in one after another, slot-machine style.
 function ReelStrip({ finalLabel, delay = 0, onDone }) {
   const ROW_H = 52;
-  const [decoys] = useState(() => reelDecoys(14)); // frozen so it doesn't reshuffle
-  const rows = [...decoys, finalLabel];
-  const target = -(rows.length - 1) * ROW_H;
+  const LEAD = 46, TRAIL = 4;            // long lead so it can blur-spin a while
+  const SPIN_MS = 3000, LAND_MS = 1700;  // ~4.7s of motion, well over the 4s floor
+  const [leadDecoys] = useState(() => reelDecoys(LEAD));   // frozen so they don't reshuffle
+  const [trailDecoys] = useState(() => reelDecoys(TRAIL)); // sit just past the win row to cover the bounce
+  const rows = [...leadDecoys, finalLabel, ...trailDecoys];
+  const finalIdx = LEAD;                 // index of the real pick (the win line)
+  const target = -finalIdx * ROW_H;
+  const mid = -(finalIdx - 6) * ROW_H;   // end of the fast phase, 6 rows shy of the win
   const [y, setY] = useState(0);
+  const [trans, setTrans] = useState("none");
+  const [phase, setPhase] = useState("idle"); // idle → spin → land → done
+
   useEffect(() => {
-    const t = setTimeout(() => setY(target), 60 + delay);
-    return () => clearTimeout(t);
-  }, [target, delay]);
+    const start = 60 + delay;
+    const t1 = setTimeout(() => { setPhase("spin"); setTrans(`transform ${SPIN_MS}ms linear`); setY(mid); }, start);
+    // back-ease overshoots just past the win line then settles — the slot "snap".
+    const t2 = setTimeout(() => { setPhase("land"); setTrans(`transform ${LAND_MS}ms cubic-bezier(0.18,1.4,0.4,1)`); setY(target); }, start + SPIN_MS);
+    const t3 = setTimeout(() => { setPhase("done"); onDone && onDone(); }, start + SPIN_MS + LAND_MS + 40);
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+  }, []); // run once per mount
+
+  const motionBlur = phase === "spin";
+  const landed = phase === "done";
   return (
-    <div style={{ position: "relative", height: ROW_H, overflow: "hidden", borderRadius: 8, background: "#0a0e14", border: "1px solid #1a1f28", marginBottom: 6 }}>
-      <div
-        onTransitionEnd={() => onDone && onDone()}
-        style={{ transform: `translateY(${y}px)`, transition: "transform 2.1s cubic-bezier(0.1,0.75,0.2,1)" }}
-      >
+    <div style={{ position: "relative", height: ROW_H, overflow: "hidden", borderRadius: 8, background: "#07090d",
+      border: landed ? "1px solid #f5c51899" : "1px solid #1a1f28",
+      boxShadow: landed ? "0 0 16px #f5c51840, inset 0 0 18px #000000aa" : "inset 0 0 18px #000000aa",
+      transition: "border-color .45s, box-shadow .45s", marginBottom: 6 }}>
+      <div style={{ transform: `translateY(${y}px)`, transition: trans, filter: motionBlur ? "blur(1.2px)" : "none", willChange: "transform" }}>
         {rows.map((label, i) => {
-          const isFinal = i === rows.length - 1;
+          const isFinal = i === finalIdx;
           return (
-            <div key={i} style={{ height: ROW_H, display: "flex", alignItems: "center", justifyContent: "center", fontSize: isFinal ? 18 : 15, fontWeight: 800, color: isFinal ? "#fff" : "#3a4250", filter: isFinal ? "none" : "blur(0.5px)" }}>
+            <div key={i} style={{ height: ROW_H, display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: isFinal ? 18 : 15, fontWeight: 800,
+              color: isFinal ? "#fff" : "#3a4250",
+              textShadow: isFinal && landed ? "0 0 11px #f5c518aa" : "none",
+              transition: "text-shadow .45s" }}>
               {label}
             </div>
           );
         })}
       </div>
-      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 12, background: "linear-gradient(#0a0e14,transparent)", pointerEvents: "none" }} />
-      <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 12, background: "linear-gradient(transparent,#0a0e14)", pointerEvents: "none" }} />
+      {/* center win-line glint */}
+      <div style={{ position: "absolute", top: "50%", left: 8, right: 8, height: 1, transform: "translateY(-50%)", background: landed ? "#f5c51855" : "#ffffff10", transition: "background .45s", pointerEvents: "none" }} />
+      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 13, background: "linear-gradient(#07090d,transparent)", pointerEvents: "none" }} />
+      <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 13, background: "linear-gradient(transparent,#07090d)", pointerEvents: "none" }} />
     </div>
   );
 }
@@ -352,7 +379,7 @@ function ParlayReel({ parlay, onDone }) {
         <span style={{ fontSize: 9, color: "#6b7280", fontWeight: 700, letterSpacing: "0.08em" }}>{allDone ? "LOCKED IN" : "SCANNING EDGES…"}</span>
       </div>
       {legs.map((l, i) => (
-        <ReelStrip key={i} finalLabel={`${l.description} ${formatOdds(l.odds)}`} delay={i * 500} onDone={() => setDone(d => d + 1)} />
+        <ReelStrip key={i} finalLabel={`${l.description} ${formatOdds(l.odds)}`} delay={i * 400} onDone={() => setDone(d => d + 1)} />
       ))}
     </div>
   );
@@ -439,6 +466,44 @@ function ParlayCard({ parlay, result, navigate }) {
       </div>
       <div style={{ marginTop: 10, fontSize: 11, color: "#6b7280", lineHeight: 1.5 }}>
         "Pays" is the book's payout; "fair value" is what the model thinks it's truly worth. When the payout beats fair value, the parlay carries a model edge — but it still wins less than half the time. High variance by nature.
+      </div>
+    </div>
+  );
+}
+
+// The free-spin bonus parlay: same layout as the tracked parlay but clearly
+// marked NOT TRACKED — it never enters the graded record.
+function BonusParlay({ parlay, navigate }) {
+  return (
+    <div style={{ background: "#0f1419", border: "1px dashed #3a4250", borderRadius: 12, padding: 18, marginTop: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+        <span style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 700, textTransform: "uppercase" }}>🎰 Bonus parlay · {(parlay.legs || []).length} legs</span>
+        <span style={{ fontSize: 9, color: "#6b7280", fontWeight: 700, border: "1px solid #1f2937", borderRadius: 5, padding: "2px 7px" }}>NOT TRACKED</span>
+      </div>
+      {(parlay.legs || []).map((leg, i) => (
+        <div key={i} onClick={() => leg.gameId && navigate(`/game/${leg.league || "mlb"}/${leg.gameId}`)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: i < parlay.legs.length - 1 ? "1px solid #1a1f28" : "none", cursor: leg.gameId ? "pointer" : "default" }}>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#fff" }}>{leg.description} <span style={{ color: "#9ca3af", fontWeight: 600 }}>{formatOdds(leg.odds)}</span></div>
+            <div style={{ fontSize: 11, color: "#6b7280", marginTop: 1 }}>{leg.matchup}</div>
+          </div>
+          <span style={{ fontSize: 11, color: "#22c55e", fontWeight: 700 }}>{signedPct(leg.edge)}</span>
+        </div>
+      ))}
+      <div style={{ background: parlay.edge > 0 ? "#0a1f15" : "#0a0e14", border: `1px solid ${parlay.edge > 0 ? "#22c55e30" : "#1f2937"}`, borderRadius: 10, padding: 14, marginTop: 14 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+          <span style={{ fontSize: 11, color: "#9ca3af", fontWeight: 600 }}>PARLAY PAYS</span>
+          <span style={{ fontSize: 24, fontWeight: 800, color: parlay.edge > 0 ? "#22c55e" : "#e4e7eb" }}>{formatOdds(parlay.bookOdds)}</span>
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span style={{ fontSize: 11, color: "#6b7280" }}>Model fair value</span>
+          <span style={{ fontSize: 12, color: "#e4e7eb", fontWeight: 700 }}>
+            {formatOdds(parlay.fairOdds)}
+            <span style={{ color: parlay.edge > 0 ? "#22c55e" : "#9ca3af", fontWeight: 600 }}> · {parlay.edge > 0 ? `+EV ${signedPct(parlay.edge)}` : "no value vs the book"}</span>
+          </span>
+        </div>
+      </div>
+      <div style={{ marginTop: 10, fontSize: 11, color: "#6b7280", lineHeight: 1.5 }}>
+        Just for you — not part of the tracked record. Parlays are high variance by nature, so size them small.
       </div>
     </div>
   );
