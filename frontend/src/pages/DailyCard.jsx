@@ -181,7 +181,14 @@ function CardBody({ card, record, navigate }) {
   const [revealed, setRevealed] = useState(() => {
     try { return localStorage.getItem(revealKey) === "1"; } catch { return true; }
   });
-  const revealSingle = () => { try { localStorage.setItem(revealKey, "1"); } catch {} setRevealed(true); };
+  const markRevealed = () => { try { localStorage.setItem(revealKey, "1"); } catch {} setRevealed(true); };
+  const [revealDone, setRevealDone] = useState(0);
+  const markReveal = () => setRevealDone(n => n + 1);
+  useEffect(() => {
+    if (revealed) return;
+    const targets = (card.single ? 1 : 0) + (card.parlay ? 1 : 0);
+    if (targets > 0 && revealDone >= targets) markRevealed();
+  }, [revealDone, revealed]); // card is stable for this mount
   const [spinning, setSpinning] = useState(false); // alternate-pick reel in motion
   const [pendingAlt, setPendingAlt] = useState(null);
   const [altMsg, setAltMsg] = useState("");
@@ -227,11 +234,17 @@ function CardBody({ card, record, navigate }) {
   return (
     <>
       {record && <RecordStrip record={record} />}
-      {card.single && (revealed
-        ? <SinglePick single={card.single} result={card.single_result} navigate={navigate} />
-        : <Reel title="★ Pick of the day" finalLabel={`${card.single.description} ${formatOdds(card.single.odds)}`} accent="#1D9E75" onDone={revealSingle} />
+      {revealed ? (
+        <>
+          {card.single && <SinglePick single={card.single} result={card.single_result} navigate={navigate} />}
+          {card.parlay && <ParlayCard parlay={card.parlay} result={card.parlay_result} navigate={navigate} />}
+        </>
+      ) : (
+        <>
+          {card.single && <Reel title="★ Pick of the day" finalLabel={`${card.single.description} ${formatOdds(card.single.odds)}`} accent="#1D9E75" onDone={markReveal} />}
+          {card.parlay && <ParlayReel parlay={card.parlay} onDone={markReveal} />}
+        </>
       )}
-      {card.parlay && <ParlayCard parlay={card.parlay} result={card.parlay_result} navigate={navigate} />}
       {card.single && revealed && (
         <>
           {!used && (
@@ -264,9 +277,9 @@ function CardBody({ card, record, navigate }) {
 // this subscriber. Marked "not tracked" because it never enters the graded
 // shared record — that stays the official Pick of the Day.
 // ── Slot-reel reveal ──────────────────────────────────────────────────────────
-// Theater only: the strip blurs through decoy rows, decelerates, and PINS onto
+// Theater only: each strip blurs through decoy rows, decelerates, and PINS onto
 // the pick the model already chose. The landing row is always the real pick —
-// nothing here is random or selected by the spin. onDone fires when it lands.
+// nothing here is random or selected by the spin.
 const REEL_ABBRS = ["LAD", "NYY", "HOU", "ATL", "SD", "BOS", "PHI", "SEA", "TB", "CHC", "MIL", "TEX", "BAL", "ARI", "NYM", "SF", "MIN", "CLE"];
 const REEL_MKTS = ["ML", "Over", "Under", "ML", "Over"];
 function reelDecoys(n = 14) {
@@ -279,40 +292,68 @@ function reelDecoys(n = 14) {
   return out;
 }
 
-function Reel({ title, finalLabel, accent = "#1D9E75", onDone }) {
-  const ROW_H = 54;
-  const [decoys] = useState(() => reelDecoys(14)); // frozen so it doesn't reshuffle on re-render
+// One spinning strip that pins onto finalLabel. `delay` staggers multi-strip
+// (parlay) reveals so the legs lock in one after another, slot-machine style.
+function ReelStrip({ finalLabel, delay = 0, onDone }) {
+  const ROW_H = 52;
+  const [decoys] = useState(() => reelDecoys(14)); // frozen so it doesn't reshuffle
   const rows = [...decoys, finalLabel];
   const target = -(rows.length - 1) * ROW_H;
   const [y, setY] = useState(0);
-  const [landed, setLanded] = useState(false);
   useEffect(() => {
-    const t = setTimeout(() => setY(target), 60); // kick the transition on the next frame
+    const t = setTimeout(() => setY(target), 60 + delay);
     return () => clearTimeout(t);
-  }, [target]);
+  }, [target, delay]);
+  return (
+    <div style={{ position: "relative", height: ROW_H, overflow: "hidden", borderRadius: 8, background: "#0a0e14", border: "1px solid #1a1f28", marginBottom: 6 }}>
+      <div
+        onTransitionEnd={() => onDone && onDone()}
+        style={{ transform: `translateY(${y}px)`, transition: "transform 2.1s cubic-bezier(0.1,0.75,0.2,1)" }}
+      >
+        {rows.map((label, i) => {
+          const isFinal = i === rows.length - 1;
+          return (
+            <div key={i} style={{ height: ROW_H, display: "flex", alignItems: "center", justifyContent: "center", fontSize: isFinal ? 18 : 15, fontWeight: 800, color: isFinal ? "#fff" : "#3a4250", filter: isFinal ? "none" : "blur(0.5px)" }}>
+              {label}
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 12, background: "linear-gradient(#0a0e14,transparent)", pointerEvents: "none" }} />
+      <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 12, background: "linear-gradient(transparent,#0a0e14)", pointerEvents: "none" }} />
+    </div>
+  );
+}
+
+// Single-pick reel (Pick of the Day / alternate): card chrome + one strip.
+function Reel({ title, finalLabel, accent = "#1D9E75", onDone }) {
+  const [landed, setLanded] = useState(false);
   return (
     <div style={{ background: "#0f1419", border: `1px solid ${accent}30`, borderRadius: 12, padding: 18, marginBottom: 12 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
         <span style={{ fontSize: 11, letterSpacing: "0.1em", color: accent, fontWeight: 700, textTransform: "uppercase" }}>{title}</span>
         <span style={{ fontSize: 9, color: "#6b7280", fontWeight: 700, letterSpacing: "0.08em" }}>{landed ? "LOCKED IN" : "SCANNING EDGES…"}</span>
       </div>
-      <div style={{ position: "relative", height: ROW_H, overflow: "hidden", borderRadius: 8, background: "#0a0e14", border: "1px solid #1a1f28" }}>
-        <div
-          onTransitionEnd={() => { setLanded(true); onDone && onDone(); }}
-          style={{ transform: `translateY(${y}px)`, transition: "transform 2.1s cubic-bezier(0.1,0.75,0.2,1)" }}
-        >
-          {rows.map((label, i) => {
-            const isFinal = i === rows.length - 1;
-            return (
-              <div key={i} style={{ height: ROW_H, display: "flex", alignItems: "center", justifyContent: "center", fontSize: isFinal ? 19 : 16, fontWeight: 800, color: isFinal ? "#fff" : "#3a4250", filter: isFinal ? "none" : "blur(0.5px)" }}>
-                {label}
-              </div>
-            );
-          })}
-        </div>
-        <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 14, background: "linear-gradient(#0a0e14,transparent)", pointerEvents: "none" }} />
-        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 14, background: "linear-gradient(transparent,#0a0e14)", pointerEvents: "none" }} />
+      <ReelStrip finalLabel={finalLabel} onDone={() => { setLanded(true); onDone && onDone(); }} />
+    </div>
+  );
+}
+
+// Parlay reel: one strip per leg, staggered so the legs pin one after another.
+function ParlayReel({ parlay, onDone }) {
+  const legs = parlay.legs || [];
+  const [done, setDone] = useState(0);
+  const allDone = legs.length > 0 && done >= legs.length;
+  useEffect(() => { if (allDone) onDone && onDone(); }, [allDone]);
+  return (
+    <div style={{ background: "#0f1419", border: "1px solid #ef444430", borderRadius: 12, padding: 18, marginBottom: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+        <span style={{ fontSize: 11, letterSpacing: "0.1em", color: "#ef4444", fontWeight: 700, textTransform: "uppercase" }}>🎰 Model parlay · {legs.length} legs</span>
+        <span style={{ fontSize: 9, color: "#6b7280", fontWeight: 700, letterSpacing: "0.08em" }}>{allDone ? "LOCKED IN" : "SCANNING EDGES…"}</span>
       </div>
+      {legs.map((l, i) => (
+        <ReelStrip key={i} finalLabel={`${l.description} ${formatOdds(l.odds)}`} delay={i * 500} onDone={() => setDone(d => d + 1)} />
+      ))}
     </div>
   );
 }
