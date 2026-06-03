@@ -49,6 +49,16 @@ function keepPreGame(rows, mlbSet) {
   return rows.filter(p => p.league !== "mlb" || mlbSet.has(String(p.game_id)));
 }
 
+// Defensive odds sanity (same bands as the line-shopping guard). The card must
+// NEVER lock an implausible price — an in-play / stale / errored quote like a
+// +4500 moneyline is not a number a subscriber could bet. Belt-and-suspenders:
+// even if such a row exists in model_predictions, the card refuses to serve it.
+function plausibleCardOdds(p) {
+  if (p.odds == null) return false;
+  if (p.market === "total") return p.odds < 300 && p.odds > -400;
+  return p.odds < 600 && p.odds > -600; // moneyline / run_line
+}
+
 // American <-> decimal helpers.
 function toDecimal(a) {
   if (a == null) return null;
@@ -100,7 +110,7 @@ async function getOrGenerateDailyCard(scope = "mix") {
     .order("edge", { ascending: false });
 
   const qualified = (preds || []).filter(p =>
-    QUALIFY.includes((p.confidence || "").toUpperCase()) && p.odds != null && p.model_prob != null);
+    QUALIFY.includes((p.confidence || "").toUpperCase()) && p.odds != null && p.model_prob != null && plausibleCardOdds(p));
 
   // Drop any pick whose game has already started — the card must only ever lock
   // pre-game prices a subscriber could still actually bet.
@@ -260,7 +270,7 @@ async function getAlternatePick(scope = "mix") {
 
   const qualified = (preds || []).filter(p =>
     QUALIFY.includes((p.confidence || "").toUpperCase()) &&
-    p.odds != null && p.model_prob != null && p.id !== officialId);
+    p.odds != null && p.model_prob != null && p.id !== officialId && plausibleCardOdds(p));
 
   // Only ever offer an alternate on a game that hasn't started.
   const mlbSet = await preGameMlbIds(date);
