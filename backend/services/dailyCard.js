@@ -284,4 +284,70 @@ async function getAlternatePick(scope = "mix") {
   return { pick: legFrom(pick) };
 }
 
-module.exports = { getOrGenerateDailyCard, gradeDailyCard, getDailyCardRecord, getAlternatePick };
+// The free-spin BONUS play: a fresh single AND a fresh parlay, both different
+// from the tracked card (excludes the official single + every official parlay
+// leg). Same value-edge + pre-game + odds-sanity rules as the real card, and it
+// never writes/locks/grades — purely a personal, untracked bonus. Mirrors the
+// tracked parlay's odds math exactly.
+async function getAlternatePlay(scope = "mix") {
+  scope = normScope(scope);
+  const leagues = leaguesFor(scope);
+  const supabase = db();
+  const date = getEasternDate(0);
+
+  const { data: existing } = await supabase
+    .from("daily_card").select("single,parlay").eq("game_date", date).eq("scope", scope).maybeSingle();
+  const officialIds = new Set();
+  if (existing?.single?.predictionId) officialIds.add(existing.single.predictionId);
+  for (const l of existing?.parlay?.legs || []) if (l.predictionId) officialIds.add(l.predictionId);
+
+  const { data: preds } = await supabase
+    .from("model_predictions")
+    .select("id, league, game_id, matchup, market, selection, description, model_prob, odds, edge, confidence, line")
+    .in("league", leagues)
+    .eq("game_date", date)
+    .eq("result", "pending")
+    .in("market", CARD_MARKETS)
+    .gt("edge", 0)
+    .order("edge", { ascending: false });
+
+  const qualified = (preds || []).filter(p =>
+    QUALIFY.includes((p.confidence || "").toUpperCase()) &&
+    p.odds != null && p.model_prob != null && plausibleCardOdds(p) && !officialIds.has(p.id));
+
+  // Bonus play only on games that haven't started.
+  const mlbSet = await preGameMlbIds(date);
+  const rows = keepPreGame(qualified, mlbSet);
+  if (rows.length === 0) return { single: null, parlay: null, allStarted: qualified.length > 0 };
+
+  // Bonus single: random among the top value picks for variety, still a real edge.
+  const pool = rows.slice(0, 8);
+  const single = legFrom(pool[Math.floor(Math.random() * pool.length)]);
+
+  // Bonus parlay: best value picks from DISTINCT games (2-3 legs), same math as the tracked parlay.
+  const legs = [];
+  const usedGames = new Set();
+  for (const p of rows) {
+    if (usedGames.has(p.game_id)) continue;
+    usedGames.add(p.game_id);
+    legs.push(legFrom(p));
+    if (legs.length >= 3) break;
+  }
+  let parlay = null;
+  if (legs.length >= 2) {
+    const used = legs.slice(0, legs.length >= 3 ? 3 : 2);
+    const bookDec = used.reduce((a, l) => a * toDecimal(l.odds), 1);
+    const combinedModelProb = used.reduce((a, l) => a * l.modelProb, 1);
+    const bookImplied = 1 / bookDec;
+    parlay = {
+      legs: used,
+      bookOdds: toAmerican(bookDec),
+      fairOdds: toAmerican(1 / combinedModelProb),
+      modelProb: round4(combinedModelProb),
+      edge: round4(combinedModelProb - bookImplied),
+    };
+  }
+  return { single, parlay, allStarted: false };
+}
+
+module.exports = { getOrGenerateDailyCard, gradeDailyCard, getDailyCardRecord, getAlternatePick, getAlternatePlay };
