@@ -225,6 +225,11 @@ export function BoxScore({ detail }) {
   // when we can resolve it from the detail payload. If we CAN'T identify the
   // away team (unknown data shape), we leave the original order untouched —
   // worst case is "no change", never a wrong sort.
+  // Convention: away team on TOP, home on BOTTOM. Every line-score row carries
+  // the feed's own homeAway flag, so order by that directly — reliable no matter
+  // what shape the detail payload is. (Fallbacks: if a feed omits homeAway, match
+  // the away abbrev; if even that's unknown, leave the order untouched — worst
+  // case is "no change", never a wrong sort.)
   const awayAbbrev = (
     detail.away?.abbrev ||
     detail.away?.abbreviation ||
@@ -232,13 +237,12 @@ export function BoxScore({ detail }) {
     detail.awayTeam?.abbrev ||
     null
   );
-  const orderedLs = awayAbbrev
-    ? [...ls].sort((a, b) => {
-        const aAway = a.abbrev === awayAbbrev ? 0 : 1;
-        const bAway = b.abbrev === awayAbbrev ? 0 : 1;
-        return aAway - bAway;
-      })
-    : ls;
+  const hasHomeAway = ls.some((r) => r.homeAway === "away" || r.homeAway === "home");
+  const orderedLs = hasHomeAway
+    ? [...ls].sort((a, b) => (a.homeAway === "away" ? 0 : 1) - (b.homeAway === "away" ? 0 : 1))
+    : awayAbbrev
+      ? [...ls].sort((a, b) => (a.abbrev === awayAbbrev ? 0 : 1) - (b.abbrev === awayAbbrev ? 0 : 1))
+      : ls;
 
   const teams = {};
   for (const p of players) {
