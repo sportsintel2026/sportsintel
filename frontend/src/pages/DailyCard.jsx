@@ -35,6 +35,7 @@ export default function DailyCardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [howOpen, setHowOpen] = useState(false);
+  const [scope, setScope] = useState("mix");
 
   const isAdmin = plan.isAdmin === true;
   const isPro = plan.tier === "pro" || plan.tier === "elite";
@@ -44,12 +45,12 @@ export default function DailyCardPage() {
   useEffect(() => {
     setLoading(true); setError(false);
     Promise.all([
-      fetch(`${API_BASE}/api/daily-card`).then(r => { if (!r.ok) throw new Error("bad"); return r.json(); }),
-      fetch(`${API_BASE}/api/daily-card/record`).then(r => r.ok ? r.json() : null).catch(() => null),
+      fetch(`${API_BASE}/api/daily-card?scope=${scope}`).then(r => { if (!r.ok) throw new Error("bad"); return r.json(); }),
+      fetch(`${API_BASE}/api/daily-card/record?scope=${scope}`).then(r => r.ok ? r.json() : null).catch(() => null),
     ])
       .then(([c, rec]) => { setCard(c); setRecord(rec); setLoading(false); })
       .catch(() => { setError(true); setLoading(false); });
-  }, []);
+  }, [scope]);
 
   return (
     <div style={{ minHeight: "100vh", background: "#0a0e14", color: "#e4e7eb", fontFamily: "'Inter',system-ui,-apple-system,sans-serif" }}>
@@ -96,6 +97,7 @@ export default function DailyCardPage() {
             One model-built pick and parlay, locked once a day. Pulled only from the model's value edges — never random.
           </p>
           <HowToUse open={howOpen} onToggle={() => setHowOpen(o => !o)} />
+          <ScopeTabs scope={scope} onChange={setScope} />
           {loading && <Loader />}
           {error && !loading && <ErrorState />}
           {!loading && !error && !hasFullAccess && <LockedState navigate={navigate} record={record} />}
@@ -104,6 +106,30 @@ export default function DailyCardPage() {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function ScopeTabs({ scope, onChange }) {
+  const tabs = [
+    { id: "mix", label: "🎲 Mix" },
+    { id: "mlb", label: "⚾ MLB" },
+    { id: "nba", label: "🏀 NBA" },
+  ];
+  return (
+    <div style={{ display: "flex", gap: 6, marginBottom: 16, background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 4 }}>
+      {tabs.map(t => {
+        const active = scope === t.id;
+        return (
+          <button
+            key={t.id}
+            onClick={() => onChange(t.id)}
+            style={{ flex: 1, background: active ? "#1D9E75" : "transparent", border: "none", borderRadius: 7, padding: "8px 6px", color: active ? "#04342C" : "#9ca3af", fontSize: 12.5, fontWeight: 800, cursor: "pointer", fontFamily: "inherit", transition: "background .12s" }}
+          >
+            {t.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -139,7 +165,7 @@ function HowToUse({ open, onToggle }) {
 }
 
 function CardBody({ card, record, navigate }) {
-  const storageKey = `wp_quickpick_reroll_${card.game_date}`;
+  const storageKey = `wp_quickpick_reroll_${card.scope || "mix"}_${card.game_date}`;
   const [used, setUsed] = useState(() => {
     try { return localStorage.getItem(storageKey) === "1"; } catch { return false; }
   });
@@ -151,7 +177,7 @@ function CardBody({ card, record, navigate }) {
   const doReroll = () => {
     if (used || rerolling) return;
     setRerolling(true);
-    fetch(`${API_BASE}/api/daily-card/alternate`)
+    fetch(`${API_BASE}/api/daily-card/alternate?scope=${card.scope || "mix"}`)
       .then(r => (r.ok ? r.json() : null))
       .then(d => {
         if (d && d.pick) {
