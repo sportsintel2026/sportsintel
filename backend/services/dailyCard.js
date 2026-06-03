@@ -10,7 +10,7 @@ function db() {
 }
 
 const QUALIFY = ["HIGH", "MEDIUM"];
-const CARD_MARKETS = ["moneyline", "total", "run_line"]; // no longshot HR props on the card
+const CARD_MARKETS = ["moneyline", "total", "run_line", "spread"]; // run_line=MLB, spread=NBA; no longshot props
 
 // American <-> decimal helpers.
 function toDecimal(a) {
@@ -26,6 +26,7 @@ function round4(n) { return Math.round(n * 10000) / 10000; }
 function legFrom(p) {
   return {
     predictionId: p.id,
+    league: p.league,
     gameId: p.game_id,
     matchup: p.matchup,
     market: p.market,
@@ -51,8 +52,8 @@ async function getOrGenerateDailyCard() {
   // Today's qualified, positive-edge, not-yet-started picks, best edge first.
   const { data: preds } = await supabase
     .from("model_predictions")
-    .select("id, game_id, matchup, market, selection, description, model_prob, odds, edge, confidence, line")
-    .eq("league", "mlb")
+    .select("id, league, game_id, matchup, market, selection, description, model_prob, odds, edge, confidence, line")
+    .in("league", ["mlb", "nba"])
     .eq("game_date", date)
     .eq("result", "pending")
     .in("market", CARD_MARKETS)
@@ -201,8 +202,8 @@ async function getAlternatePick() {
 
   const { data: preds } = await supabase
     .from("model_predictions")
-    .select("id, game_id, matchup, market, selection, description, model_prob, odds, edge, confidence, line")
-    .eq("league", "mlb")
+    .select("id, league, game_id, matchup, market, selection, description, model_prob, odds, edge, confidence, line")
+    .in("league", ["mlb", "nba"])
     .eq("game_date", date)
     .eq("result", "pending")
     .in("market", CARD_MARKETS)
