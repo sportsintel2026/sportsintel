@@ -25,9 +25,12 @@ function etDate(iso) {
 // The closing line is the price right before a game starts — the market's
 // sharpest number. If our picks consistently got a BETTER price than the close,
 // that's the strongest evidence of real edge (sharper than win rate, shows up
-// fast). We capture the closing line the moment a game goes live (its pre-game
-// line has just closed), then compute CLV against the price we recorded at pick
-// time. Both prices are de-vigged first so we compare fair probabilities.
+// fast). We capture the closing line in the final window BEFORE first pitch (the
+// last pre-game price the market shows), then compute CLV against the price we
+// recorded at pick time. We deliberately do NOT wait for the game to go live —
+// reading after first pitch grabs an in-play price, not the close. Prices are
+// compared raw (not de-vigged): since we compare our same side at both moments,
+// the book's vig is present in both and largely cancels.
 
 // American odds -> implied probability (same formula as oddsApi).
 function americanToImpliedProb(a) {
@@ -62,8 +65,12 @@ function closingOddsForPick(pick, ev) {
   return null; // props not tracked for CLV yet
 }
 
-// Capture closing lines for MLB ML/totals picks whose game has just started
-// (status "live") and that don't yet have a closing line. One odds fetch total.
+// Capture closing lines for MLB ML/totals picks whose game is about to start
+// (within the pre-game window, not yet underway) and that don't yet have a
+// closing line. Reading just before first pitch gives the true closing price;
+// reading after the game is live would capture a contaminated in-play line.
+// One odds fetch total. If we miss a game's pre-game window, it simply gets no
+// CLV — an honest gap is better than a fake closing line.
 async function captureClosingLines() {
   const supabase = db();
 
@@ -79,37 +86,38 @@ async function captureClosingLines() {
   if (error) { console.error("[CLV] fetch error:", error.message); return 0; }
   if (!pending || pending.length === 0) { console.log("[CLV] no picks awaiting closing line"); return 0; }
 
-  // Which games are these, and which have started? Use today's schedule for status.
+  // Which games are in their pre-game closing window? A game qualifies when it
+  // has NOT started yet (status "scheduled") and first pitch is within the next
+  // ~35 minutes. The grading cron runs every 30 min, so a 35-min window
+  // guarantees at least one tick lands just before first pitch — capturing the
+  // genuine closing line. Games already live/final are intentionally excluded:
+  // their book price now reflects in-play action, not the close.
   const dates = [...new Set(pending.map(p => p.game_date))];
-  const startedGameIds = new Set();
+  const CLOSING_WINDOW_MS = 35 * 60 * 1000;
+  const now = Date.now();
+  const closingWindowGameIds = new Set();
+  const gameNames = {};
   for (const date of dates) {
     try {
       const schedule = await getScheduleForDate(date);
       for (const g of schedule) {
-        // capture once the game is live OR final (pre-game line has closed)
-        if (g.status === "live" || g.status === "final") startedGameIds.add(String(g.id));
+        gameNames[String(g.id)] = { away: g.away, home: g.home };
+        if (g.status !== "scheduled" || !g.startTimeUTC) continue;
+        const msToStart = new Date(g.startTimeUTC).getTime() - now;
+        if (msToStart > 0 && msToStart <= CLOSING_WINDOW_MS) {
+          closingWindowGameIds.add(String(g.id));
+        }
       }
     } catch (e) { console.error(`[CLV] schedule ${date} failed:`, e.message); }
   }
 
-  const toCapture = pending.filter(p => startedGameIds.has(String(p.game_id)));
-  if (toCapture.length === 0) { console.log("[CLV] no started games to capture yet"); return 0; }
+  const toCapture = pending.filter(p => closingWindowGameIds.has(String(p.game_id)));
+  if (toCapture.length === 0) { console.log("[CLV] no games in pre-game closing window"); return 0; }
 
   // One odds fetch for all of today's games (2 credits).
   let oddsEvents = [];
   try { oddsEvents = await getMLBMainOdds(); }
   catch (e) { console.error("[CLV] odds fetch failed:", e.message); return 0; }
-
-  // Build game_id -> {away,home} full names from the schedule (reliable), so we
-  // can match each pick's game to an odds event by full team name rather than
-  // guessing from abbreviations (which is unreliable, e.g. "LAD" vs "Dodgers").
-  const gameNames = {};
-  for (const date of dates) {
-    try {
-      const schedule = await getScheduleForDate(date);
-      for (const g of schedule) gameNames[String(g.id)] = { away: g.away, home: g.home };
-    } catch (_) { /* already logged above */ }
-  }
 
   let captured = 0;
   for (const pick of toCapture) {
