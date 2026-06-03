@@ -70,6 +70,8 @@ function parseGame(g, date) {
     status,
     inning: g.linescore?.currentInning ? `${g.linescore.inningState || ""} ${g.linescore.currentInning}`.trim() : null,
     time: new Date(g.gameDate).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" }) + " ET",
+    startTimeUTC: g.gameDate || null, // raw ISO start; used to capture the pre-game closing line
+
     venue, city: g.venue?.location?.city || "",
     awayProbable: away?.probablePitcher ? { id: away.probablePitcher.id, name: away.probablePitcher.fullName } : null,
     homeProbable: home?.probablePitcher ? { id: home.probablePitcher.id, name: home.probablePitcher.fullName } : null,
