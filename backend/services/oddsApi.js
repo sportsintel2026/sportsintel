@@ -96,6 +96,22 @@ async function getMLBLiveOdds() {
   }
 }
 
+// ── Odds sanity guard ─────────────────────────────────────────────────────────
+// Best-price line shopping keeps the HIGHEST price across books. That means a
+// single stale, suspended, or errored book quote (e.g. a +3300 MLB moneyline or
+// a +640 total) would win "best price" and get recorded as our pick — poisoning
+// edge, ROI, and CLV all at once. These bands are deliberately wide: they pass
+// every real MLB price and only reject clearly-broken outliers. A rejected quote
+// is simply skipped, so the best price from the remaining good books still wins.
+function plausibleMlOdds(price) {
+  // Real MLB moneylines / run lines never reach these extremes.
+  return price != null && price < 600 && price > -600;
+}
+function plausibleTotalOdds(price) {
+  // Real MLB total prices sit near even money; reject anything wild.
+  return price != null && price < 300 && price > -400;
+}
+
 function parseMainOddsEvent(ev) {
   const h2h = { away: null, home: null, awayBook: null, homeBook: null };
   const totals = { line: null, over: null, under: null, overBook: null, underBook: null };
@@ -113,18 +129,19 @@ function parseMainOddsEvent(ev) {
       if (m.key === "h2h") {
         const awayOutcome = m.outcomes?.find(o => o.name === ev.away_team);
         const homeOutcome = m.outcomes?.find(o => o.name === ev.home_team);
-        if (awayOutcome && (h2h.away == null || awayOutcome.price > h2h.away)) {
+        if (awayOutcome && plausibleMlOdds(awayOutcome.price) && (h2h.away == null || awayOutcome.price > h2h.away)) {
           h2h.away = awayOutcome.price;
           h2h.awayBook = bm.title;
         }
-        if (homeOutcome && (h2h.home == null || homeOutcome.price > h2h.home)) {
+        if (homeOutcome && plausibleMlOdds(homeOutcome.price) && (h2h.home == null || homeOutcome.price > h2h.home)) {
           h2h.home = homeOutcome.price;
           h2h.homeBook = bm.title;
         }
       } else if (m.key === "totals" && m.outcomes?.length >= 2) {
         const over = m.outcomes.find(o => o.name === "Over");
         const under = m.outcomes.find(o => o.name === "Under");
-        if (over && under && over.point != null) {
+        if (over && under && over.point != null
+            && plausibleTotalOdds(over.price) && plausibleTotalOdds(under.price)) {
           totalsQuotes.push({
             line: over.point,
             over: over.price, overBook: bm.title,
@@ -135,12 +152,12 @@ function parseMainOddsEvent(ev) {
         // Run line: take the standard ±1.5 outcomes for each team, best price.
         const awayOutcome = m.outcomes.find(o => o.name === ev.away_team && Math.abs(o.point) === 1.5);
         const homeOutcome = m.outcomes.find(o => o.name === ev.home_team && Math.abs(o.point) === 1.5);
-        if (awayOutcome && (spreads.away == null || awayOutcome.price > spreads.away)) {
+        if (awayOutcome && plausibleMlOdds(awayOutcome.price) && (spreads.away == null || awayOutcome.price > spreads.away)) {
           spreads.away = awayOutcome.price;
           spreads.awayLine = awayOutcome.point;
           spreads.awayBook = bm.title;
         }
-        if (homeOutcome && (spreads.home == null || homeOutcome.price > spreads.home)) {
+        if (homeOutcome && plausibleMlOdds(homeOutcome.price) && (spreads.home == null || homeOutcome.price > spreads.home)) {
           spreads.home = homeOutcome.price;
           spreads.homeLine = homeOutcome.point;
           spreads.homeBook = bm.title;
