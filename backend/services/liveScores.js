@@ -9,11 +9,17 @@ const PATHS = {
   mlb: "baseball/mlb",
   nba: "basketball/nba",
   nfl: "football/nfl",
+  cfb: "football/college-football",
 };
 
-const SCOREBOARD = (league, dateStr) =>
-  `https://site.api.espn.com/apis/site/v2/sports/${PATHS[league]}/scoreboard` +
-  (dateStr ? `?dates=${dateStr}` : ``);
+const SCOREBOARD = (league, dateStr) => {
+  const params = [];
+  if (dateStr) params.push(`dates=${dateStr}`);
+  // College football returns every division unless filtered to FBS (group 80).
+  if (league === "cfb") { params.push("groups=80"); params.push("limit=300"); }
+  const qs = params.length ? `?${params.join("&")}` : ``;
+  return `https://site.api.espn.com/apis/site/v2/sports/${PATHS[league]}/scoreboard${qs}`;
+};
 const SUMMARY = (league, id) =>
   `https://site.api.espn.com/apis/site/v2/sports/${PATHS[league]}/summary?event=${id}`;
 const STANDINGS = (league) =>
@@ -178,7 +184,7 @@ async function getScores(league) {
   } else {
     // NBA / NFL (and any non-MLB): default day, then today-first rollover.
     // NFL plays weekly (Thu/Sun/Mon), so scan a full week ahead; NBA is daily.
-    const maxOff = league === "nfl" ? 7 : 3;
+    const maxOff = (league === "nfl" || league === "cfb") ? 7 : 3;
     try { games = attachDetailIds(league, await fetchScoreboardRaw(league), null); } catch (_) { games = []; }
     if (!hasPlayable(games)) {
       for (let off = 0; off <= maxOff; off++) {
