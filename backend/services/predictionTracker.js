@@ -202,7 +202,7 @@ async function recordPredictions(result) {
       matchup: e.matchup, market: "moneyline", selection: e.side,
       description: `${e.teamAbbr} ML`,
       model_prob: e.modelProb, odds: e.odds, edge: e.edge,
-      confidence: e.confidence, line: null,
+      confidence: e.confidence, conviction: e.conviction ?? null, conviction_score: e.convictionScore ?? null, line: null,
     });
   }
 
@@ -214,7 +214,7 @@ async function recordPredictions(result) {
       matchup: e.matchup, market: "total", selection: e.side,
       description: `${e.side === "over" ? "Over" : "Under"} ${e.line}`,
       model_prob: e.modelProb, odds: e.odds, edge: e.edge,
-      confidence: e.confidence, line: e.line,
+      confidence: e.confidence, conviction: e.conviction ?? null, conviction_score: e.convictionScore ?? null, line: e.line,
     });
   }
 
@@ -226,7 +226,7 @@ async function recordPredictions(result) {
       matchup: e.matchup, market: "run_line", selection: e.side,
       description: `${e.teamAbbr} ${e.line > 0 ? "+" : ""}${e.line}`,
       model_prob: e.modelProb, odds: e.odds, edge: e.edge,
-      confidence: e.confidence, line: e.line,
+      confidence: e.confidence, conviction: e.conviction ?? null, conviction_score: e.convictionScore ?? null, line: e.line,
     });
   }
 
