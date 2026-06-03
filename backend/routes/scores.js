@@ -9,7 +9,7 @@ const express = require("express");
 const router = express.Router();
 const { getScores, getGameDetail, getStandings } = require("../services/liveScores");
 
-const ALLOWED = new Set(["mlb", "nba"]);
+const ALLOWED = new Set(["mlb", "nba", "nfl"]);
 
 router.get("/:league", async (req, res) => {
   const league = String(req.params.league || "").toLowerCase();
