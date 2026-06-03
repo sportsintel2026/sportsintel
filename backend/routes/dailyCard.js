@@ -2,7 +2,7 @@
 // Optional ?scope=mix|mlb|nba selects which sport(s) the card draws from.
 const express = require("express");
 const router = express.Router();
-const { getOrGenerateDailyCard, getDailyCardRecord, getAlternatePick } = require("../services/dailyCard");
+const { getOrGenerateDailyCard, getDailyCardRecord, getAlternatePick, getAlternatePlay } = require("../services/dailyCard");
 
 router.get("/alternate", async (req, res) => {
   try {
@@ -11,6 +11,18 @@ router.get("/alternate", async (req, res) => {
   } catch (err) {
     console.error("[DailyCard] alternate error:", err);
     res.status(500).json({ error: "Failed to load alternate", details: err.message });
+  }
+});
+
+// The free-spin bonus play: a fresh single + a fresh parlay, both different from
+// the tracked card. Untracked — never written, locked, or graded.
+router.get("/alternate-play", async (req, res) => {
+  try {
+    const play = await getAlternatePlay(req.query.scope);
+    res.json(play);
+  } catch (err) {
+    console.error("[DailyCard] alternate-play error:", err);
+    res.status(500).json({ error: "Failed to load alternate play", details: err.message });
   }
 });
 
