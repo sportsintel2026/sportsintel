@@ -371,38 +371,55 @@ function TeamTag({ team, align }) {
 
 function WinProbCard({ m, prediction }) {
   const ml = prediction?.predictions?.moneyline;
-  const pred = m.predictor;
   const haveModel = ml?.homeWinProb != null;
-  const havePredictor = pred?.homePct != null;
-  if (!haveModel && !havePredictor && !m.odds) return null;
+  // Book's no-vig implied probability — the market's true read once the
+  // sportsbook's margin is stripped out. This is the honest yardstick for an
+  // edge (our model vs the price you'd actually bet), not another forecaster.
+  const fair = noVigPair(m.odds?.awayML, m.odds?.homeML);
+  const haveBook = fair != null;
+  if (!haveModel && !haveBook && !m.odds) return null;
   return (
     <div style={card()}>
-      <SectionLabel>💰 Win probability · model vs ESPN vs book</SectionLabel>
+      <SectionLabel>💰 Win probability · model vs market</SectionLabel>
       <div className="two-col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <ProbBox
           side="Away" abbr={m.away?.abbr}
           model={haveModel ? ml.awayWinProb : null}
-          espn={havePredictor ? pred.awayPct : null}
+          book={fair ? fair.away : null}
           ml={m.odds?.awayML}
         />
         <ProbBox
           side="Home" abbr={m.home?.abbr}
           model={haveModel ? ml.homeWinProb : null}
-          espn={havePredictor ? pred.homePct : null}
+          book={fair ? fair.home : null}
           ml={m.odds?.homeML}
         />
+      </div>
+      <div style={{ marginTop: 12, fontSize: 11, color: "#6b7280", lineHeight: 1.5 }}>
+        "Book" is the sportsbook's implied probability with its margin removed (no-vig) — the market's true read. An edge is our model disagreeing with that, not with another forecaster.
       </div>
     </div>
   );
 }
 
-function ProbBox({ side, abbr, model, espn, ml }) {
+// No-vig implied win probabilities (%) from the two American moneyline prices.
+// Strips the book's margin so model-vs-book is apples to apples.
+function noVigPair(awayML, homeML) {
+  const imp = (o) => (o == null ? null : o > 0 ? 100 / (o + 100) : -o / (-o + 100));
+  const a = imp(awayML), h = imp(homeML);
+  if (a == null || h == null) return null;
+  const s = a + h;
+  if (!(s > 0)) return null;
+  return { away: (a / s) * 100, home: (h / s) * 100 };
+}
+
+function ProbBox({ side, abbr, model, book, ml }) {
   return (
     <div style={{ background: "#0a0e14", border: "1px solid #1f2937", borderRadius: 8, padding: 14 }}>
       <div style={{ fontSize: 10, color: "#6b7280", letterSpacing: "0.08em", fontWeight: 600, marginBottom: 4 }}>{side.toUpperCase()}</div>
       <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 12 }}>{abbr}{ml != null ? ` · ${fmtOdds(ml)}` : ""}</div>
       <Line label="Our model" value={model != null ? `${Math.round(model)}%` : "—"} accent="#22c55e" />
-      <Line label="ESPN" value={espn != null ? `${Math.round(espn)}%` : "—"} accent="#9ca3af" />
+      <Line label="Book (no-vig)" value={book != null ? `${Math.round(book)}%` : "—"} accent="#9ca3af" />
     </div>
   );
 }
