@@ -4,6 +4,7 @@
 // the model already produced, packages them, and stores one card per day.
 const { createClient } = require("@supabase/supabase-js");
 const { getEasternDate, getScheduleForDate } = require("./mlbStatsApi");
+const { fetchScoreboard } = require("./nbaDataSource");
 
 function db() {
   return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
@@ -22,8 +23,8 @@ function leaguesFor(scope) { return SCOPES[normScope(scope)]; }
 // status + start time from the live schedule. A daily card must only ever draw
 // from games whose line hasn't closed — a pick on an already-live game reflects
 // in-play odds, not a number a subscriber could actually still bet (this is what
-// surfaced the in-game +4500 garbage). NBA status isn't sourced here yet, so NBA
-// rows pass through unchanged (follow-up: wire an NBA schedule/status feed).
+// surfaced the in-game +4500 garbage). NBA gets the same treatment via
+// preGameNbaIds below, sourced from the ESPN scoreboard.
 async function preGameMlbIds(date) {
   try {
     const schedule = await getScheduleForDate(date);
@@ -41,12 +42,34 @@ async function preGameMlbIds(date) {
   }
 }
 
-// Keep only picks whose game is still pre-game. MLB is gated by the schedule;
-// NBA passes through (no status source yet). On a schedule error (mlbSet null)
-// nothing is stripped.
-function keepPreGame(rows, mlbSet) {
-  if (!mlbSet) return rows;
-  return rows.filter(p => p.league !== "mlb" || mlbSet.has(String(p.game_id)));
+// NBA pre-game ids from the ESPN scoreboard: state 'pre' and tip-off still in
+// the future. Mirrors preGameMlbIds. On error returns null → caller fails open.
+async function preGameNbaIds(date) {
+  try {
+    const games = await fetchScoreboard(date);
+    const now = Date.now();
+    const ids = new Set();
+    for (const g of games) {
+      const notStarted = g.state === "pre" && g.date && new Date(g.date).getTime() > now;
+      if (notStarted) ids.add(String(g.gameId));
+    }
+    return ids;
+  } catch (e) {
+    console.error("[DailyCard] NBA scoreboard fetch failed:", e.message);
+    return null; // null = couldn't determine → caller leaves NBA rows untouched
+  }
+}
+
+// Keep only picks whose game is still pre-game. MLB is gated by the live
+// schedule, NBA by the ESPN scoreboard. If a league's set is null (a fetch
+// error), that league passes through untouched — we never hide real picks on a
+// data error.
+function keepPreGame(rows, mlbSet, nbaSet) {
+  return rows.filter(p => {
+    if (p.league === "mlb") return mlbSet ? mlbSet.has(String(p.game_id)) : true;
+    if (p.league === "nba") return nbaSet ? nbaSet.has(String(p.game_id)) : true;
+    return true; // any other league: unfiltered
+  });
 }
 
 // Defensive odds sanity (same bands as the line-shopping guard). The card must
@@ -114,8 +137,8 @@ async function getOrGenerateDailyCard(scope = "mix") {
 
   // Drop any pick whose game has already started — the card must only ever lock
   // pre-game prices a subscriber could still actually bet.
-  const mlbSet = await preGameMlbIds(date);
-  const rows = keepPreGame(qualified, mlbSet);
+  const [mlbSet, nbaSet] = await Promise.all([preGameMlbIds(date), preGameNbaIds(date)]);
+  const rows = keepPreGame(qualified, mlbSet, nbaSet);
 
   // No pre-game picks left. Distinguish "edges haven't computed yet" (notReady)
   // from "every game today has already started" (allStarted) so the UI can tell
@@ -273,8 +296,8 @@ async function getAlternatePick(scope = "mix") {
     p.odds != null && p.model_prob != null && p.id !== officialId && plausibleCardOdds(p));
 
   // Only ever offer an alternate on a game that hasn't started.
-  const mlbSet = await preGameMlbIds(date);
-  const rows = keepPreGame(qualified, mlbSet);
+  const [mlbSet, nbaSet] = await Promise.all([preGameMlbIds(date), preGameNbaIds(date)]);
+  const rows = keepPreGame(qualified, mlbSet, nbaSet);
 
   if (rows.length === 0) return { pick: null, allStarted: qualified.length > 0 };
 
@@ -316,8 +339,8 @@ async function getAlternatePlay(scope = "mix") {
     p.odds != null && p.model_prob != null && plausibleCardOdds(p) && !officialIds.has(p.id));
 
   // Bonus play only on games that haven't started.
-  const mlbSet = await preGameMlbIds(date);
-  const rows = keepPreGame(qualified, mlbSet);
+  const [mlbSet, nbaSet] = await Promise.all([preGameMlbIds(date), preGameNbaIds(date)]);
+  const rows = keepPreGame(qualified, mlbSet, nbaSet);
   if (rows.length === 0) return { single: null, parlay: null, allStarted: qualified.length > 0 };
 
   // Bonus single: random among the top value picks for variety, still a real edge.
