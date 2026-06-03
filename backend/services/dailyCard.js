@@ -10,7 +10,7 @@ function db() {
 }
 
 const QUALIFY = ["HIGH", "MEDIUM"];
-const CARD_MARKETS = ["moneyline", "total", "run_line", "spread"]; // run_line=MLB, spread=NBA; no longshot props
+const CARD_MARKETS = ["moneyline", "total"]; // low-variance core only — run_line/spread (margin bets) excluded from the daily card
 
 // Scope = which sport(s) a card draws from. Each scope is its own locked, tracked
 // daily card so subscribers can pick Mix / MLB / NBA from the dropdown.
