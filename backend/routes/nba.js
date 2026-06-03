@@ -17,10 +17,13 @@ const { generateNbaPredictions } = require('../services/nbaService');
 const { getNbaMatchup } = require('../services/nbaMatchup');
 const { getNbaProps } = require('../services/nbaProps');
 const { getNbaPropProjections, getIdDebug } = require('../services/nbaProjectionService');
+const { recordNbaTeamPredictions } = require('../services/predictionTracker');
 router.get('/predictions', async (req, res) => {
   try {
     const opts = req.query.date ? { dateStr: req.query.date } : {};
     const predictions = await generateNbaPredictions(opts);
+    // Snapshot today's pre-game team edges so Quick Picks can use them (fire-and-forget).
+    if (!req.query.date) recordNbaTeamPredictions(predictions).catch(() => {});
     res.json({ league: 'NBA', count: predictions.length, predictions });
   } catch (err) {
     console.error('[nba route] failed:', err);
