@@ -309,6 +309,129 @@ async function recordNbaPropPredictions(proj, gameIso) {
   }
 }
 
+// ── RECORD (NBA team markets: ML / spread / total) ──────────────────────────────
+// Snapshots PRE-GAME NBA team-market edges so Quick Picks can use them. The NBA
+// model emits its spread/total edges in POINTS (not probabilities), so here we
+// convert all three markets to the same currency as everything else — a
+// probability edge vs the de-vigged market (same method as the MLB run line):
+//   margin/total -> cover/over probability via a normal model, de-vig the two
+//   prices to a fair prob, then edge = model prob - fair prob.
+// `predictions` is the array from generateNbaPredictions. Pre-game only.
+const NBA_MARGIN_SD = 12; // matches the NBA model's margin SD
+const NBA_TOTAL_SD = 15;  // NBA game totals swing more than margins (tunable)
+function nbaNormalCDF(x) {
+  const t = 1 / (1 + 0.2316419 * Math.abs(x));
+  const d = 0.3989422804014327 * Math.exp(-x * x / 2);
+  const p = d * t * (0.319381530 + t * (-0.356563782 + t * (1.781477937 + t * (-1.821255978 + t * 1.330274429))));
+  return x >= 0 ? 1 - p : p;
+}
+function round3(n) { return n == null ? null : Math.round(n * 1000) / 1000; }
+function amProb(a) { if (a == null || !isFinite(a)) return null; return a < 0 ? -a / (-a + 100) : 100 / (a + 100); }
+function devig(thisOdds, otherOdds) {
+  const a = amProb(thisOdds), b = amProb(otherOdds);
+  if (a == null || b == null || a + b <= 0) return null;
+  return a / (a + b);
+}
+function nbaConfidence(edge) {
+  if (edge >= 0.05) return "HIGH";
+  if (edge >= 0.025) return "MEDIUM";
+  if (edge >= 0.005) return "LOW";
+  return "LOW";
+}
+const NBA_W = 0.55; // match the NBA model's 55/45 blend
+
+async function recordNbaTeamPredictions(predictions) {
+  if (!Array.isArray(predictions) || predictions.length === 0) return;
+  const supabase = db();
+  const gameDate = getEasternDate(0);
+  const rows = [];
+
+  for (const p of predictions) {
+    // Pre-game only, and only trustworthy data (the model flags suspect inputs).
+    if (p.state !== "pre") continue;
+    if (p.dataQuality && !(p.dataQuality === "ok" || p.dataQuality === "offense-only")) continue;
+    const pr = p.predictions || {};
+    const gid = String(p.gameId);
+
+    // Moneyline (already a probability edge from the model)
+    const ml = pr.moneyline;
+    if (ml && ml.book && ml.book.home != null && ml.book.away != null && ml.fair) {
+      const fairHome = devig(ml.book.home, ml.book.away);
+      if (fairHome != null) {
+        const blendHome = NBA_W * (ml.homeWinProb / 100) + (1 - NBA_W) * fairHome;
+        const eHome = blendHome - fairHome;
+        const eAway = (1 - blendHome) - (1 - fairHome);
+        const home = eHome >= eAway;
+        const edge = Math.max(eHome, eAway);
+        if (edge > 0) rows.push({
+          game_id: gid, game_date: gameDate, league: "nba", matchup: p.matchup,
+          market: "moneyline", selection: home ? "home" : "away",
+          description: `${home ? p.home : p.away} ML`,
+          model_prob: round3(home ? blendHome : 1 - blendHome),
+          odds: home ? ml.book.home : ml.book.away,
+          edge: round3(edge), confidence: nbaConfidence(edge), line: null,
+        });
+      }
+    }
+
+    // Spread (convert projected margin -> cover probability)
+    const sp = pr.spread;
+    if (sp && sp.line != null && sp.book && sp.book.homePrice != null && sp.book.awayPrice != null && sp.projectedMargin != null) {
+      const fairHome = devig(sp.book.homePrice, sp.book.awayPrice);
+      if (fairHome != null) {
+        const homeCover = nbaNormalCDF((sp.projectedMargin + sp.line) / NBA_MARGIN_SD);
+        const blendHome = NBA_W * homeCover + (1 - NBA_W) * fairHome;
+        const eHome = blendHome - fairHome;
+        const eAway = (1 - blendHome) - (1 - fairHome);
+        const home = eHome >= eAway;
+        const edge = Math.max(eHome, eAway);
+        const line = home ? sp.line : -sp.line;
+        if (edge > 0) rows.push({
+          game_id: gid, game_date: gameDate, league: "nba", matchup: p.matchup,
+          market: "spread", selection: home ? "home" : "away",
+          description: `${home ? p.home : p.away} ${line > 0 ? "+" : ""}${line}`,
+          model_prob: round3(home ? blendHome : 1 - blendHome),
+          odds: home ? sp.book.homePrice : sp.book.awayPrice,
+          edge: round3(edge), confidence: nbaConfidence(edge), line,
+        });
+      }
+    }
+
+    // Total (convert projected total -> over probability)
+    const tot = pr.total;
+    if (tot && tot.line != null && tot.book && tot.book.over != null && tot.book.under != null && tot.projectedTotal != null) {
+      const fairOver = devig(tot.book.over, tot.book.under);
+      if (fairOver != null) {
+        const overP = nbaNormalCDF((tot.projectedTotal - tot.line) / NBA_TOTAL_SD);
+        const blendOver = NBA_W * overP + (1 - NBA_W) * fairOver;
+        const eOver = blendOver - fairOver;
+        const eUnder = (1 - blendOver) - (1 - fairOver);
+        const over = eOver >= eUnder;
+        const edge = Math.max(eOver, eUnder);
+        if (edge > 0) rows.push({
+          game_id: gid, game_date: gameDate, league: "nba", matchup: p.matchup,
+          market: "total", selection: over ? "over" : "under",
+          description: `${over ? "Over" : "Under"} ${tot.line}`,
+          model_prob: round3(over ? blendOver : 1 - blendOver),
+          odds: over ? tot.book.over : tot.book.under,
+          edge: round3(edge), confidence: nbaConfidence(edge), line: tot.line,
+        });
+      }
+    }
+  }
+
+  if (rows.length === 0) return;
+  try {
+    const { error } = await supabase
+      .from("model_predictions")
+      .upsert(rows, { onConflict: "game_id,market,selection,game_date", ignoreDuplicates: true });
+    if (error) console.error("[Tracker] nba team record error:", error.message);
+    else console.log(`[Tracker] Snapshotted ${rows.length} NBA team picks for ${gameDate} (dups ignored)`);
+  } catch (e) {
+    console.error("[Tracker] nba team record exception:", e.message);
+  }
+}
+
 // ── GRADE ─────────────────────────────────────────────────────────────────────
 // Finds pending predictions for finished games and marks them. MLB is graded
 // from team scores via the schedule; NBA props from each player's gamelog.
@@ -498,4 +621,4 @@ function gradeOne(p, g) {
   return null;
 }
 
-module.exports = { recordPredictions, recordNbaPropPredictions, gradeFinishedGames, gradeNbaProp, captureClosingLines };
+module.exports = { recordPredictions, recordNbaPropPredictions, recordNbaTeamPredictions, gradeFinishedGames, gradeNbaProp, captureClosingLines };
