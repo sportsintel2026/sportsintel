@@ -128,7 +128,6 @@ function LeagueTabs({ league, setLeague, navigate }) {
             <button key={l.id} className="tab-btn" onClick={() => (l.path ? navigate(l.path) : setLeague(l.id))} style={{ background: "none", border: "none", padding: "14px 14px", fontSize: 13, fontWeight: active ? 700 : 500, color: active ? "#fff" : "#6b7280", borderBottom: `2px solid ${active ? "#ef4444" : "transparent"}`, marginBottom: -1, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 6 }}>
               <span>{l.icon}</span>
               <span>{l.label}</span>
-              {!l.live && <span style={{ fontSize: 9, color: "#4b5563", marginLeft: 2 }}>· Soon</span>}
             </button>
           );
         })}
