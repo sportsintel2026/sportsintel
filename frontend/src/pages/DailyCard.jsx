@@ -174,18 +174,33 @@ function CardBody({ card, record, navigate }) {
   });
   const [rerolling, setRerolling] = useState(false);
 
+  // One-time slot reveal of the Pick of the Day, per scope per day. On any
+  // storage error we default to "already revealed" so the pick is never hidden
+  // behind an animation that can't complete.
+  const revealKey = `wp_quickpick_revealed_${card.scope || "mix"}_${card.game_date}`;
+  const [revealed, setRevealed] = useState(() => {
+    try { return localStorage.getItem(revealKey) === "1"; } catch { return true; }
+  });
+  const revealSingle = () => { try { localStorage.setItem(revealKey, "1"); } catch {} setRevealed(true); };
+  const [spinning, setSpinning] = useState(false); // alternate-pick reel in motion
+  const [pendingAlt, setPendingAlt] = useState(null);
+  const [altMsg, setAltMsg] = useState("");
+
   const doReroll = () => {
-    if (used || rerolling) return;
-    setRerolling(true);
+    if (used || rerolling || spinning) return;
+    setRerolling(true); setAltMsg("");
     fetch(`${API_BASE}/api/daily-card/alternate?scope=${card.scope || "mix"}`)
       .then(r => (r.ok ? r.json() : null))
       .then(d => {
+        setRerolling(false);
         if (d && d.pick) {
-          setAlt(d.pick);
           setUsed(true);
           try { localStorage.setItem(storageKey, "1"); localStorage.setItem(`${storageKey}_pick`, JSON.stringify(d.pick)); } catch {}
+          setPendingAlt(d.pick);
+          setSpinning(true); // play the reel; AltPick reveals when it pins
+        } else if (d && d.allStarted) {
+          setAltMsg("Every game's already started — that's the board for today.");
         }
-        setRerolling(false);
       })
       .catch(() => setRerolling(false));
   };
@@ -212,25 +227,34 @@ function CardBody({ card, record, navigate }) {
   return (
     <>
       {record && <RecordStrip record={record} />}
-      {card.single && <SinglePick single={card.single} result={card.single_result} navigate={navigate} />}
+      {card.single && (revealed
+        ? <SinglePick single={card.single} result={card.single_result} navigate={navigate} />
+        : <Reel title="★ Pick of the day" finalLabel={`${card.single.description} ${formatOdds(card.single.odds)}`} accent="#1D9E75" onDone={revealSingle} />
+      )}
       {card.parlay && <ParlayCard parlay={card.parlay} result={card.parlay_result} navigate={navigate} />}
-      {card.single && (
+      {card.single && revealed && (
         <>
           {!used && (
-            <button onClick={doReroll} disabled={rerolling} style={{ width: "100%", marginTop: 12, background: "transparent", border: "1px solid #1D9E75", borderRadius: 10, padding: "11px", color: "#1D9E75", fontSize: 13, fontWeight: 800, cursor: rerolling ? "default" : "pointer", fontFamily: "inherit", opacity: rerolling ? 0.6 : 1 }}>
-              {rerolling ? "Finding another…" : "🎲 Show me another play (1 left today)"}
+            <button onClick={doReroll} disabled={rerolling || spinning} style={{ width: "100%", marginTop: 12, background: "transparent", border: "1px solid #1D9E75", borderRadius: 10, padding: "11px", color: "#1D9E75", fontSize: 13, fontWeight: 800, cursor: (rerolling || spinning) ? "default" : "pointer", fontFamily: "inherit", opacity: (rerolling || spinning) ? 0.6 : 1 }}>
+              {rerolling ? "Spinning up a play…" : "🎰 Spin for another play (1 left today)"}
             </button>
           )}
-          {alt && <AltPick pick={alt} navigate={navigate} />}
-          {used && (
+          {spinning && pendingAlt && (
+            <Reel title="🎰 Your alternate pick" finalLabel={`${pendingAlt.description} ${formatOdds(pendingAlt.odds)}`} accent="#3a4250" onDone={() => { setSpinning(false); setAlt(pendingAlt); }} />
+          )}
+          {alt && !spinning && <AltPick pick={alt} navigate={navigate} />}
+          {altMsg && (
+            <div style={{ marginTop: 10, fontSize: 11, color: "#6b7280", textAlign: "center" }}>{altMsg}</div>
+          )}
+          {used && !spinning && (
             <div style={{ marginTop: 10, fontSize: 11, color: "#6b7280", textAlign: "center" }}>
-              That's your re-roll for today — fresh picks tomorrow.
+              That's your spin for today — fresh picks tomorrow.
             </div>
           )}
         </>
       )}
       <div style={{ marginTop: 16, fontSize: 11, color: "#6b7280", lineHeight: 1.6, textAlign: "center" }}>
-        Every leg comes from the model's value edges — never random. Parlays multiply variance, so size them small. For entertainment; bet responsibly. 21+. 1-800-GAMBLER.
+        The reel's just the reveal — every pick is the model's value edge, locked in. Never random. Parlays multiply variance, so size them small. For entertainment; bet responsibly. 21+. 1-800-GAMBLER.
       </div>
     </>
   );
@@ -239,6 +263,60 @@ function CardBody({ card, record, navigate }) {
 // The personal re-roll result (Option A): a different value pick shown only to
 // this subscriber. Marked "not tracked" because it never enters the graded
 // shared record — that stays the official Pick of the Day.
+// ── Slot-reel reveal ──────────────────────────────────────────────────────────
+// Theater only: the strip blurs through decoy rows, decelerates, and PINS onto
+// the pick the model already chose. The landing row is always the real pick —
+// nothing here is random or selected by the spin. onDone fires when it lands.
+const REEL_ABBRS = ["LAD", "NYY", "HOU", "ATL", "SD", "BOS", "PHI", "SEA", "TB", "CHC", "MIL", "TEX", "BAL", "ARI", "NYM", "SF", "MIN", "CLE"];
+const REEL_MKTS = ["ML", "Over", "Under", "ML", "Over"];
+function reelDecoys(n = 14) {
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const a = REEL_ABBRS[Math.floor(Math.random() * REEL_ABBRS.length)];
+    const m = REEL_MKTS[Math.floor(Math.random() * REEL_MKTS.length)];
+    out.push(`${a} ${m}`);
+  }
+  return out;
+}
+
+function Reel({ title, finalLabel, accent = "#1D9E75", onDone }) {
+  const ROW_H = 54;
+  const [decoys] = useState(() => reelDecoys(14)); // frozen so it doesn't reshuffle on re-render
+  const rows = [...decoys, finalLabel];
+  const target = -(rows.length - 1) * ROW_H;
+  const [y, setY] = useState(0);
+  const [landed, setLanded] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setY(target), 60); // kick the transition on the next frame
+    return () => clearTimeout(t);
+  }, [target]);
+  return (
+    <div style={{ background: "#0f1419", border: `1px solid ${accent}30`, borderRadius: 12, padding: 18, marginBottom: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+        <span style={{ fontSize: 11, letterSpacing: "0.1em", color: accent, fontWeight: 700, textTransform: "uppercase" }}>{title}</span>
+        <span style={{ fontSize: 9, color: "#6b7280", fontWeight: 700, letterSpacing: "0.08em" }}>{landed ? "LOCKED IN" : "SCANNING EDGES…"}</span>
+      </div>
+      <div style={{ position: "relative", height: ROW_H, overflow: "hidden", borderRadius: 8, background: "#0a0e14", border: "1px solid #1a1f28" }}>
+        <div
+          onTransitionEnd={() => { setLanded(true); onDone && onDone(); }}
+          style={{ transform: `translateY(${y}px)`, transition: "transform 2.1s cubic-bezier(0.1,0.75,0.2,1)" }}
+        >
+          {rows.map((label, i) => {
+            const isFinal = i === rows.length - 1;
+            return (
+              <div key={i} style={{ height: ROW_H, display: "flex", alignItems: "center", justifyContent: "center", fontSize: isFinal ? 19 : 16, fontWeight: 800, color: isFinal ? "#fff" : "#3a4250", filter: isFinal ? "none" : "blur(0.5px)" }}>
+                {label}
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 14, background: "linear-gradient(#0a0e14,transparent)", pointerEvents: "none" }} />
+        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 14, background: "linear-gradient(transparent,#0a0e14)", pointerEvents: "none" }} />
+      </div>
+    </div>
+  );
+}
+
 function AltPick({ pick, navigate }) {
   const go = () => pick.gameId && navigate(`/game/${pick.league || "mlb"}/${pick.gameId}`);
   return (
