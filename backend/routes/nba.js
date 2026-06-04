@@ -91,6 +91,32 @@ router.get('/livediag/:gameId', async (req, res) => {
     }));
     // situation (possession / last play) sometimes lives at the top level
     const situation = j.situation || comp.situation || null;
+    // Peek at the betting + win-prob blocks so we can see what's actually
+    // available LIVE before building the model. Sample shapes only, not full dumps.
+    const odds = Array.isArray(j.odds) ? j.odds : (j.odds ? [j.odds] : []);
+    const oddsSample = odds.slice(0, 2).map((o) => ({
+      provider: o.provider && o.provider.name,
+      details: o.details,
+      overUnder: o.overUnder,
+      spread: o.spread,
+      homeML: o.homeTeamOdds && (o.homeTeamOdds.moneyLine ?? o.homeTeamOdds.current?.moneyLine),
+      awayML: o.awayTeamOdds && (o.awayTeamOdds.moneyLine ?? o.awayTeamOdds.current?.moneyLine),
+      keys: Object.keys(o),
+    }));
+    const pickcenter = Array.isArray(j.pickcenter) ? j.pickcenter : [];
+    const pickcenterSample = pickcenter.slice(0, 2).map((p) => ({
+      provider: p.provider && p.provider.name,
+      details: p.details,
+      overUnder: p.overUnder,
+      spread: p.spread,
+      homeML: p.homeTeamOdds && (p.homeTeamOdds.moneyLine ?? p.homeTeamOdds.current?.moneyLine),
+      awayML: p.awayTeamOdds && (p.awayTeamOdds.moneyLine ?? p.awayTeamOdds.current?.moneyLine),
+      keys: Object.keys(p),
+    }));
+    const wp = j.winprobability;
+    const wpInfo = Array.isArray(wp)
+      ? { count: wp.length, lastTick: wp[wp.length - 1] || null, keys: wp[0] ? Object.keys(wp[0]) : null }
+      : (wp ? { shape: 'object', keys: Object.keys(wp) } : null);
     res.json({
       note: 'TEMP live diagnostic. Shows ESPN in-game state fields available for the live win-prob model.',
       gameId: String(req.params.gameId),
@@ -102,6 +128,11 @@ router.get('/livediag/:gameId', async (req, res) => {
       competitors,
       situationKeys: situation ? Object.keys(situation) : null,
       situationSample: situation || null,
+      oddsCount: odds.length,
+      oddsSample,                                       // live betting line(s), if present
+      pickcenterCount: pickcenter.length,
+      pickcenterSample,
+      winprobability: wpInfo,                            // ESPN's own live win-prob block
       topLevelKeys: Object.keys(j),
       headerStatusKeys: Object.keys(status),
     });
