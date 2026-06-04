@@ -15,6 +15,8 @@ const {
   getTeamRoster,
   getBatterSeasonStats,
   getTeamHittingAsOf,
+  getPitcherEraAsOf,
+  getTeamPitchingAsOf,
 } = require("../services/mlbStatsApi");
 
 const MLB_BASE = "https://statsapi.mlb.com/api/v1";
@@ -165,56 +167,98 @@ router.get("/mlb/:gameId", async (req, res) => {
   }
 });
 
-// TEMP backtest diagnostic — STEP 1 of the season-weight test. READ-ONLY.
-// For a PAST date's finished games, fetches each team's hitting OPS AS OF the day
-// BEFORE the game (point-in-time, no lookahead) and shows it next to who actually
-// won. Computes NO projection or weighting yet — its only job is to confirm the
-// point-in-time data is clean (OPS look sane and reflect only games BEFORE the
-// date) before we build any A/B comparison on top of it. Remove after the build.
-// Usage: GET /api/matchups/backtest/2026-05-15
+// TEMP backtest diagnostic — STEP 2: A/B test of the OFFENSE weight. READ-ONLY.
+// Re-runs the moneyline win-prob model on PAST finished games using point-in-time
+// stats (no lookahead) under two weightings and compares prediction accuracy:
+//   Arm A (current):       offense^0.40 · pitcher^0.40 · bullpen^0.20
+//   Arm B (offense-heavy): offense^0.55 · pitcher^0.30 · bullpen^0.15
+// Only the offense exponent differs; pitcher/bullpen inputs are identical across
+// arms, so the comparison isolates "does weighting season hitting more improve
+// predictions?" Metric = log-loss (lower = better) + favorite accuracy. Each game
+// also returns its raw point-in-time inputs so the data can be sanity-checked.
+// NOTE: a real verdict needs ~150+ games — run several dates and aggregate.
+// Usage: GET /api/matchups/backtest/2026-05-28  (optional ?days=3, max 3)
+const BT_LG = { era: 4.30, ops: 0.720 };
+const BT_HOME_BOOST = 1.04;
+const BT_ARM_A = { O: 0.40, P: 0.40, B: 0.20 };
+const BT_ARM_B = { O: 0.55, P: 0.30, B: 0.15 };
+function btHomeWinProb(g, w) {
+  const pf = (era) => (era ? BT_LG.era / Math.max(era, 1.5) : 1.0);
+  const of = (ops) => (ops ? ops / BT_LG.ops : 1.0);
+  const bf = (era) => (era ? BT_LG.era / Math.max(era, 2.5) : 1.0);
+  const aStr = Math.pow(pf(g.awayEra), w.P) * Math.pow(of(g.awayOps), w.O) * Math.pow(bf(g.awayPen), w.B);
+  const hStr = Math.pow(pf(g.homeEra), w.P) * Math.pow(of(g.homeOps), w.O) * Math.pow(bf(g.homePen), w.B);
+  const adjH = hStr * BT_HOME_BOOST;
+  return adjH / (adjH + aStr);
+}
+function btLogLoss(p, homeWon) {
+  const q = Math.max(1e-6, Math.min(1 - 1e-6, p));
+  return homeWon ? -Math.log(q) : -Math.log(1 - q);
+}
 router.get("/backtest/:date", async (req, res) => {
-  const date = req.params.date; // YYYY-MM-DD
+  const date = req.params.date;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ error: "date must be YYYY-MM-DD" });
+  const days = Math.max(1, Math.min(3, parseInt(req.query.days, 10) || 1));
   try {
-    const games = await getScheduleForDate(date);
-    const finished = (games || []).filter((g) => g.homeScore != null && g.awayScore != null);
-    // As-of = the day BEFORE the game date, so stats exclude the game itself.
-    const d = new Date(date + "T12:00:00Z");
-    d.setUTCDate(d.getUTCDate() - 1);
-    const asOf = d.toISOString().split("T")[0];
-    const out = [];
-    for (const g of finished) {
-      const [awayHit, homeHit] = await Promise.all([
-        getTeamHittingAsOf(g.awayId, asOf).catch(() => null),
-        getTeamHittingAsOf(g.homeId, asOf).catch(() => null),
-      ]);
-      const winner = g.homeScore > g.awayScore ? "home" : g.awayScore > g.homeScore ? "away" : "tie";
-      out.push({
-        matchup: `${g.awayAbbr} @ ${g.homeAbbr}`,
-        finalScore: `${g.awayScore}-${g.homeScore}`,
-        winner,
-        awayOPS_asOf: awayHit?.ops ?? null,
-        homeOPS_asOf: homeHit?.ops ?? null,
-        awayGames_asOf: awayHit?.games ?? null,
-        homeGames_asOf: homeHit?.games ?? null,
-        // Sanity flag: did the team with the better as-of OPS win? (raw, no model)
-        betterOpsWon:
-          awayHit?.ops != null && homeHit?.ops != null
-            ? ((awayHit.ops > homeHit.ops ? "away" : "home") === winner)
-            : null,
-      });
+    const dates = [];
+    for (let i = 0; i < days; i++) {
+      const d = new Date(date + "T12:00:00Z");
+      d.setUTCDate(d.getUTCDate() - i);
+      dates.push(d.toISOString().split("T")[0]);
     }
-    const withOps = out.filter((r) => r.betterOpsWon != null);
-    const betterOpsRecord = withOps.length
-      ? `${withOps.filter((r) => r.betterOpsWon).length}-${withOps.filter((r) => !r.betterOpsWon).length}`
-      : "n/a";
+    const games = [];
+    const acc = { A: { ll: 0, correct: 0, n: 0 }, B: { ll: 0, correct: 0, n: 0 } };
+    for (const gd of dates) {
+      const sched = await getScheduleForDate(gd);
+      const finished = (sched || []).filter((x) => x.homeScore != null && x.awayScore != null && x.homeScore !== x.awayScore);
+      const ad = new Date(gd + "T12:00:00Z");
+      ad.setUTCDate(ad.getUTCDate() - 1);
+      const asOf = ad.toISOString().split("T")[0];
+      for (const x of finished) {
+        const [awayHit, homeHit, awayP, homeP, awayPen, homePen] = await Promise.all([
+          getTeamHittingAsOf(x.awayId, asOf).catch(() => null),
+          getTeamHittingAsOf(x.homeId, asOf).catch(() => null),
+          x.awayProbable?.id ? getPitcherEraAsOf(x.awayProbable.id, asOf).catch(() => null) : null,
+          x.homeProbable?.id ? getPitcherEraAsOf(x.homeProbable.id, asOf).catch(() => null) : null,
+          getTeamPitchingAsOf(x.awayId, asOf).catch(() => null),
+          getTeamPitchingAsOf(x.homeId, asOf).catch(() => null),
+        ]);
+        const inputs = {
+          awayOps: awayHit?.ops ?? null, homeOps: homeHit?.ops ?? null,
+          awayEra: awayP?.era ?? null, homeEra: homeP?.era ?? null,
+          awayPen: awayPen?.era ?? null, homePen: homePen?.era ?? null,
+        };
+        const homeWon = x.homeScore > x.awayScore;
+        // Require the core inputs (both OPS, both starter ERAs) to count the game.
+        const usable = inputs.awayOps != null && inputs.homeOps != null && inputs.awayEra != null && inputs.homeEra != null;
+        let pA = null, pB = null;
+        if (usable) {
+          pA = btHomeWinProb(inputs, BT_ARM_A);
+          pB = btHomeWinProb(inputs, BT_ARM_B);
+          acc.A.ll += btLogLoss(pA, homeWon); acc.A.n++; if ((pA > 0.5) === homeWon) acc.A.correct++;
+          acc.B.ll += btLogLoss(pB, homeWon); acc.B.n++; if ((pB > 0.5) === homeWon) acc.B.correct++;
+        }
+        games.push({
+          date: gd, matchup: `${x.awayAbbr} @ ${x.homeAbbr}`, final: `${x.awayScore}-${x.homeScore}`,
+          winner: homeWon ? "home" : "away", usable, ...inputs,
+          probHome_A: pA != null ? +pA.toFixed(3) : null,
+          probHome_B: pB != null ? +pB.toFixed(3) : null,
+        });
+      }
+    }
+    const summarize = (a) => (a.n ? { games: a.n, logLoss: +(a.ll / a.n).toFixed(4), accuracy: +((a.correct / a.n) * 100).toFixed(1) } : { games: 0 });
+    const A = summarize(acc.A), B = summarize(acc.B);
+    let verdict = "inconclusive — need more games";
+    if (A.games >= 1 && B.games >= 1) {
+      if (B.logLoss < A.logLoss) verdict = `Arm B (offense-heavy) predicted better here (lower log-loss). NOT yet conclusive at ${B.games} games.`;
+      else if (A.logLoss < B.logLoss) verdict = `Arm A (current) predicted better here (lower log-loss). NOT yet conclusive at ${A.games} games.`;
+      else verdict = "tie";
+    }
     res.json({
-      note: "TEMP backtest STEP 1 — point-in-time data check (NO projection/weighting yet). Verify the as-of OPS look like real season-to-date numbers and that awayGames_asOf reflects games BEFORE this date.",
-      date,
-      asOf,
-      finishedGames: out.length,
-      rawBetterOpsTeamRecord: betterOpsRecord,
-      games: out,
+      note: "TEMP backtest STEP 2 — A/B offense weight. Lower logLoss = more accurate. One run is NOT a verdict; aggregate ~150+ games across several dates. Verify the raw per-game inputs look like real point-in-time numbers.",
+      datesCovered: dates, armA: "offense^0.40 (current)", armB: "offense^0.55",
+      resultA: A, resultB: B, verdict,
+      games,
     });
   } catch (err) {
     console.error("[matchups backtest] failed:", err.message);
