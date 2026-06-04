@@ -13,6 +13,7 @@ const {
   getEasternDate,
   getScheduleForDate,
   getTeamRoster,
+  getBatterSeasonStats,
 } = require("../services/mlbStatsApi");
 
 const MLB_BASE = "https://statsapi.mlb.com/api/v1";
@@ -98,7 +99,10 @@ async function rosterVsPitcher(teamId, pitcherId) {
       batch.map(async (b) => {
         const bvp = await batterVsPitcher(b.id, pitcherId);
         if (!bvp) return null;
-        return { batterName: b.name, position: b.position, ...bvp };
+        // Season line for context (the BvP sample is tiny). Only fetched for
+        // batters who actually have history vs this pitcher. MLB free API.
+        const season = await getBatterSeasonStats(b.id).catch(() => null);
+        return { batterName: b.name, position: b.position, ...bvp, season };
       })
     );
     for (const r of settled) if (r) results.push(r);
