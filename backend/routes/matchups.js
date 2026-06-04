@@ -179,21 +179,24 @@ router.get("/mlb/:gameId", async (req, res) => {
 // NOTE: a real verdict needs ~150+ games — run several dates and aggregate.
 // Usage: GET /api/matchups/backtest/2026-05-28  (optional ?days=3, max 3)
 const BT_LG = { era: 4.30, ops: 0.720 };
-const BT_HOME_BOOST = 1.04;
-const BT_ARM_A = { O: 0.40, P: 0.40, B: 0.20 };
-const BT_ARM_B = { O: 0.55, P: 0.30, B: 0.15 };
-function btHomeWinProb(g, w) {
+const BT_WEIGHTS = { O: 0.40, P: 0.40, B: 0.20 }; // current weights (offense test settled: tied)
+const BT_BOOSTS = [1.04, 1.10, 1.15];             // home-field boost candidates (current = 1.04)
+function btHomeWinProb(g, w, homeBoost) {
   const pf = (era) => (era ? BT_LG.era / Math.max(era, 1.5) : 1.0);
   const of = (ops) => (ops ? ops / BT_LG.ops : 1.0);
   const bf = (era) => (era ? BT_LG.era / Math.max(era, 2.5) : 1.0);
   const aStr = Math.pow(pf(g.awayEra), w.P) * Math.pow(of(g.awayOps), w.O) * Math.pow(bf(g.awayPen), w.B);
   const hStr = Math.pow(pf(g.homeEra), w.P) * Math.pow(of(g.homeOps), w.O) * Math.pow(bf(g.homePen), w.B);
-  const adjH = hStr * BT_HOME_BOOST;
+  const adjH = hStr * homeBoost;
   return adjH / (adjH + aStr);
 }
 function btLogLoss(p, homeWon) {
   const q = Math.max(1e-6, Math.min(1 - 1e-6, p));
   return homeWon ? -Math.log(q) : -Math.log(1 - q);
+}
+function newCalib() {
+  const e = [0, 0.4, 0.45, 0.5, 0.55, 0.6, 1.01];
+  return e.slice(0, -1).map((lo, i) => ({ lo, hi: e[i + 1], n: 0, predSum: 0, homeWins: 0 }));
 }
 router.get("/backtest/:date", async (req, res) => {
   const date = req.params.date;
@@ -207,11 +210,8 @@ router.get("/backtest/:date", async (req, res) => {
       dates.push(d.toISOString().split("T")[0]);
     }
     const games = [];
-    const acc = { A: { ll: 0, correct: 0, n: 0 }, B: { ll: 0, correct: 0, n: 0 } };
-    // Calibration buckets for the CURRENT model (arm A): predicted home-win prob
-    // vs how often the home team actually won. Reveals over/under-confidence.
-    const calEdges = [0, 0.4, 0.45, 0.5, 0.55, 0.6, 1.01];
-    const calib = calEdges.slice(0, -1).map((lo, i) => ({ lo, hi: calEdges[i + 1], n: 0, predSum: 0, homeWins: 0 }));
+    // One accumulator per HOME_BOOST candidate: log-loss, accuracy, calibration.
+    const arms = BT_BOOSTS.map((hb) => ({ hb, ll: 0, correct: 0, n: 0, calib: newCalib() }));
     for (const gd of dates) {
       const sched = await getScheduleForDate(gd);
       const finished = (sched || []).filter((x) => x.homeScore != null && x.awayScore != null && x.homeScore !== x.awayScore);
@@ -233,44 +233,49 @@ router.get("/backtest/:date", async (req, res) => {
           awayPen: awayPen?.era ?? null, homePen: homePen?.era ?? null,
         };
         const homeWon = x.homeScore > x.awayScore;
-        // Require the core inputs (both OPS, both starter ERAs) to count the game.
         const usable = inputs.awayOps != null && inputs.homeOps != null && inputs.awayEra != null && inputs.homeEra != null;
-        let pA = null, pB = null;
+        let pCurrent = null;
         if (usable) {
-          pA = btHomeWinProb(inputs, BT_ARM_A);
-          pB = btHomeWinProb(inputs, BT_ARM_B);
-          acc.A.ll += btLogLoss(pA, homeWon); acc.A.n++; if ((pA > 0.5) === homeWon) acc.A.correct++;
-          acc.B.ll += btLogLoss(pB, homeWon); acc.B.n++; if ((pB > 0.5) === homeWon) acc.B.correct++;
-          const cb = calib.find((b) => pA >= b.lo && pA < b.hi);
-          if (cb) { cb.n++; cb.predSum += pA; cb.homeWins += homeWon ? 1 : 0; }
+          for (const arm of arms) {
+            const p = btHomeWinProb(inputs, BT_WEIGHTS, arm.hb);
+            arm.ll += btLogLoss(p, homeWon); arm.n++; if ((p > 0.5) === homeWon) arm.correct++;
+            const cb = arm.calib.find((b) => p >= b.lo && p < b.hi);
+            if (cb) { cb.n++; cb.predSum += p; cb.homeWins += homeWon ? 1 : 0; }
+            if (arm.hb === 1.04) pCurrent = p;
+          }
         }
         games.push({
           date: gd, matchup: `${x.awayAbbr} @ ${x.homeAbbr}`, final: `${x.awayScore}-${x.homeScore}`,
           winner: homeWon ? "home" : "away", usable, ...inputs,
-          probHome_A: pA != null ? +pA.toFixed(3) : null,
-          probHome_B: pB != null ? +pB.toFixed(3) : null,
+          probHome_current: pCurrent != null ? +pCurrent.toFixed(3) : null,
         });
       }
     }
-    const summarize = (a) => (a.n ? { games: a.n, logLoss: +(a.ll / a.n).toFixed(4), accuracy: +((a.correct / a.n) * 100).toFixed(1) } : { games: 0 });
-    const A = summarize(acc.A), B = summarize(acc.B);
-    let verdict = "inconclusive — need more games";
-    if (A.games >= 1 && B.games >= 1) {
-      if (B.logLoss < A.logLoss) verdict = `Arm B (offense-heavy) predicted better here (lower log-loss). NOT yet conclusive at ${B.games} games.`;
-      else if (A.logLoss < B.logLoss) verdict = `Arm A (current) predicted better here (lower log-loss). NOT yet conclusive at ${A.games} games.`;
-      else verdict = "tie";
-    }
+    const fmtCalib = (calib) => calib.filter((b) => b.n > 0).map((b) => ({
+      bucket: `${b.lo.toFixed(2)}-${(b.hi > 1 ? 1 : b.hi).toFixed(2)}`,
+      n: b.n,
+      predictedHome: +((b.predSum / b.n) * 100).toFixed(0),
+      actualHomeWin: +((b.homeWins / b.n) * 100).toFixed(0),
+    }));
+    const results = arms.map((a) => {
+      const predSum = a.calib.reduce((s, b) => s + b.predSum, 0);
+      const winSum = a.calib.reduce((s, b) => s + b.homeWins, 0);
+      return {
+        homeBoost: a.hb,
+        label: a.hb === 1.04 ? "current" : "candidate",
+        games: a.n,
+        logLoss: a.n ? +(a.ll / a.n).toFixed(4) : null,
+        accuracy: a.n ? +((a.correct / a.n) * 100).toFixed(1) : null,
+        overallPredictedHome: a.n ? +((predSum / a.n) * 100).toFixed(1) : null,
+        overallActualHome: a.n ? +((winSum / a.n) * 100).toFixed(1) : null,
+        calibration: fmtCalib(a.calib),
+      };
+    });
     res.json({
-      note: "TEMP backtest STEP 2 — A/B offense weight. Lower logLoss = more accurate. One run is NOT a verdict; aggregate ~150+ games across several dates. Verify the raw per-game inputs look like real point-in-time numbers.",
-      datesCovered: dates, armA: "offense^0.40 (current)", armB: "offense^0.55",
-      resultA: A, resultB: B, verdict,
-      calibration: calib.filter((b) => b.n > 0).map((b) => ({
-        bucket: `${b.lo.toFixed(2)}-${(b.hi > 1 ? 1 : b.hi).toFixed(2)}`,
-        n: b.n,
-        predictedHome: +((b.predSum / b.n) * 100).toFixed(0),
-        actualHomeWin: +((b.homeWins / b.n) * 100).toFixed(0),
-      })),
-      calibrationNote: "predictedHome = model's avg home-win %; actualHomeWin = how often home actually won. Big gaps = mis-calibration. Watch the 0.60+ bucket: if actual >> predicted across a big sample, the model is too timid when confident.",
+      note: "TEMP backtest — HOME_BOOST A/B. Tests 1.04 (current) vs 1.10 vs 1.15. Best boost should (1) make overallPredictedHome ≈ overallActualHome, and (2) have the LOWEST logLoss. One run is NOT a verdict; aggregate ~250+ games. Raw point-in-time inputs (no thin-sample regression), so noisier than the live model.",
+      datesCovered: dates,
+      weightsUsed: BT_WEIGHTS,
+      results,
       games,
     });
   } catch (err) {
