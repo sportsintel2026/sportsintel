@@ -172,6 +172,35 @@ async function getTeamHittingAsOf(teamId, endDate, season) {
     };
   } catch (e) { return null; }
 }
+// POINT-IN-TIME starter ERA — season-to-date through endDate (no lookahead).
+async function getPitcherEraAsOf(pitcherId, endDate, season) {
+  if (!pitcherId || !endDate) return null;
+  const yr = season || parseInt(String(endDate).slice(0, 4), 10) || new Date().getFullYear();
+  try {
+    const data = await mlbGet(`/people/${pitcherId}/stats`, {
+      stats: "byDateRange", group: "pitching", season: yr, startDate: `${yr}-03-01`, endDate,
+    });
+    const s = data.stats?.[0]?.splits?.[0]?.stat || {};
+    const era = parseFloat(s.era);
+    if (!isFinite(era)) return null;
+    return { era, inningsPitched: parseFloat(s.inningsPitched) || 0, asOf: endDate };
+  } catch (e) { return null; }
+}
+// POINT-IN-TIME team pitching ERA (whole-staff) through endDate — backtest proxy
+// for bullpen strength. Held identical across A/B arms, so it can't bias the test.
+async function getTeamPitchingAsOf(teamId, endDate, season) {
+  if (!teamId || !endDate) return null;
+  const yr = season || parseInt(String(endDate).slice(0, 4), 10) || new Date().getFullYear();
+  try {
+    const data = await mlbGet(`/teams/${teamId}/stats`, {
+      stats: "byDateRange", group: "pitching", season: yr, startDate: `${yr}-03-01`, endDate,
+    });
+    const s = data.stats?.[0]?.splits?.[0]?.stat || {};
+    const era = parseFloat(s.era);
+    if (!isFinite(era)) return null;
+    return { era, asOf: endDate };
+  } catch (e) { return null; }
+}
 async function getTeamPitchingStats(teamId, season) {
   if (!teamId) return null;
   const yr = season || new Date().getFullYear();
@@ -589,7 +618,7 @@ module.exports = {
   getGameHRHitters, normPlayerName,
   getPitcherSeasonStats, getBatterSeasonStats,
   getTeamSeasonStats, getTeamPitchingStats, getTeamRoster, getLinescore,
-  getTeamHittingAsOf,
+  getTeamHittingAsOf, getPitcherEraAsOf, getTeamPitchingAsOf,
   getParkHRFactor, getParkRunFactor,
   getBatterVsPitcherHistory, getPitcherRecentStarts, getBatterRecentStats, getBatterStatcast,
   getProjectedLineup,
