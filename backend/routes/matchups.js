@@ -14,6 +14,7 @@ const {
   getScheduleForDate,
   getTeamRoster,
   getBatterSeasonStats,
+  getTeamHittingAsOf,
 } = require("../services/mlbStatsApi");
 
 const MLB_BASE = "https://statsapi.mlb.com/api/v1";
@@ -161,6 +162,63 @@ router.get("/mlb/:gameId", async (req, res) => {
   } catch (err) {
     console.error("[matchups] error:", err.message);
     res.status(500).json({ error: "Failed to compute matchups", details: err.message });
+  }
+});
+
+// TEMP backtest diagnostic — STEP 1 of the season-weight test. READ-ONLY.
+// For a PAST date's finished games, fetches each team's hitting OPS AS OF the day
+// BEFORE the game (point-in-time, no lookahead) and shows it next to who actually
+// won. Computes NO projection or weighting yet — its only job is to confirm the
+// point-in-time data is clean (OPS look sane and reflect only games BEFORE the
+// date) before we build any A/B comparison on top of it. Remove after the build.
+// Usage: GET /api/matchups/backtest/2026-05-15
+router.get("/backtest/:date", async (req, res) => {
+  const date = req.params.date; // YYYY-MM-DD
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ error: "date must be YYYY-MM-DD" });
+  try {
+    const games = await getScheduleForDate(date);
+    const finished = (games || []).filter((g) => g.homeScore != null && g.awayScore != null);
+    // As-of = the day BEFORE the game date, so stats exclude the game itself.
+    const d = new Date(date + "T12:00:00Z");
+    d.setUTCDate(d.getUTCDate() - 1);
+    const asOf = d.toISOString().split("T")[0];
+    const out = [];
+    for (const g of finished) {
+      const [awayHit, homeHit] = await Promise.all([
+        getTeamHittingAsOf(g.awayId, asOf).catch(() => null),
+        getTeamHittingAsOf(g.homeId, asOf).catch(() => null),
+      ]);
+      const winner = g.homeScore > g.awayScore ? "home" : g.awayScore > g.homeScore ? "away" : "tie";
+      out.push({
+        matchup: `${g.awayAbbr} @ ${g.homeAbbr}`,
+        finalScore: `${g.awayScore}-${g.homeScore}`,
+        winner,
+        awayOPS_asOf: awayHit?.ops ?? null,
+        homeOPS_asOf: homeHit?.ops ?? null,
+        awayGames_asOf: awayHit?.games ?? null,
+        homeGames_asOf: homeHit?.games ?? null,
+        // Sanity flag: did the team with the better as-of OPS win? (raw, no model)
+        betterOpsWon:
+          awayHit?.ops != null && homeHit?.ops != null
+            ? ((awayHit.ops > homeHit.ops ? "away" : "home") === winner)
+            : null,
+      });
+    }
+    const withOps = out.filter((r) => r.betterOpsWon != null);
+    const betterOpsRecord = withOps.length
+      ? `${withOps.filter((r) => r.betterOpsWon).length}-${withOps.filter((r) => !r.betterOpsWon).length}`
+      : "n/a";
+    res.json({
+      note: "TEMP backtest STEP 1 — point-in-time data check (NO projection/weighting yet). Verify the as-of OPS look like real season-to-date numbers and that awayGames_asOf reflects games BEFORE this date.",
+      date,
+      asOf,
+      finishedGames: out.length,
+      rawBetterOpsTeamRecord: betterOpsRecord,
+      games: out,
+    });
+  } catch (err) {
+    console.error("[matchups backtest] failed:", err.message);
+    res.status(502).json({ error: err.message });
   }
 });
 
