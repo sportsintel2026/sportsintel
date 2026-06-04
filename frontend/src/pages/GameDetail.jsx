@@ -910,6 +910,8 @@ function PitcherCard({ pitcher, label, compare, hasFullAccess, navigate }) {
             <StatBlock label="IP" value={stats.inningsPitched != null ? stats.inningsPitched : "—"} status={compare?.ip} />
             <StatBlock label="H" value={stats.hits != null ? stats.hits : "—"} status={compare?.h} />
             <StatBlock label="BB" value={stats.walks != null ? stats.walks : "—"} status={compare?.bb} />
+            <StatBlock label="SO" value={stats.strikeouts != null ? stats.strikeouts : "—"} />
+            <StatBlock label="HR" value={stats.homeRuns != null ? stats.homeRuns : "—"} />
           </div>
         </>
       )}
