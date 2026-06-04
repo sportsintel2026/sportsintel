@@ -101,12 +101,13 @@ function PerfBody({ data }) {
       {/* Disclaimer */}
       <div style={{ background: "#1a1410", border: "1px solid #f5970022", borderLeft: "3px solid #f59700", borderRadius: 6, padding: "10px 14px", marginBottom: 20, fontSize: 12, color: "#fbbf24" }}>
         <strong>Qualified picks.</strong> <span style={{ color: "#a8915c" }}>
-          Showing the model's {graded} higher-conviction play{graded === 1 ? "" : "s"}
-          {excluded > 0 ? ` (${excluded} low-conviction play${excluded === 1 ? "" : "s"} set aside)` : ""}
+          Showing the model's {graded} graded higher-conviction play{graded === 1 ? "" : "s"}
+          {(excluded > 0 || pending > 0)
+            ? ` (${excluded > 0 ? `${excluded} low-conviction set aside` : ""}${excluded > 0 && pending > 0 ? "; " : ""}${pending > 0 ? `${pending} more still pending` : ""})`
+            : ""}
           {full && full.overall && full.overall.total
             ? ` · full sample: ${full.overall.wins}-${full.overall.losses}, ${full.overall.winPct}% win`
-            : ""}
-          {pending > 0 ? ` · ${pending} still pending` : ""}. Small samples are noisy — a few weeks of data is where this gets meaningful.
+            : ""}. Small samples are noisy — a few weeks of data is where this gets meaningful.
         </span>
       </div>
       {/* CLV — led as the most reliable signal of edge */}
