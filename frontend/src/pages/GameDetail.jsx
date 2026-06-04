@@ -942,12 +942,19 @@ function WinProbabilityCard({ awayAbbr, homeAbbr, awayProb, homeProb, awayOdds, 
 }
 function MLBox({ abbr, prob, odds, book, edge, side }) {
   const positive = edge != null && edge > 0;
+  // Market % is derived from the model prob and the edge the backend already
+  // computed (edge = model − market), so model / market / edge always stay
+  // internally consistent: model − market reads back to the edge shown.
+  const marketPct = (prob != null && edge != null) ? Math.round((prob - edge) * 100) : null;
   return (
     <div style={{ background: "#0a0e14", border: `1px solid ${positive ? "#22c55e30" : "#1f2937"}`, borderRadius: 8, padding: 14 }}>
       <div style={{ fontSize: 10, color: "#6b7280", letterSpacing: "0.08em", fontWeight: 600, marginBottom: 4 }}>{side.toUpperCase()}</div>
       <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>{abbr} ML · {formatOdds(odds)}</div>
       {book && <div style={{ fontSize: 10, color: "#22c55e", fontWeight: 600, marginBottom: 6 }}>best at {book}</div>}
       <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 2 }}>Model: <span style={{ color: "#22c55e", fontWeight: 600 }}>{prob != null ? Math.round(prob * 100) : "—"}%</span></div>
+      {marketPct != null && (
+        <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 2 }}>Market: <span style={{ color: "#9ca3af", fontWeight: 600 }}>{marketPct}%</span></div>
+      )}
       {edge != null && (
         <div style={{ marginTop: 10, fontSize: 18, fontWeight: 800, color: positive ? "#22c55e" : "#ef4444" }}>
           {positive ? "+" : ""}{(edge * 100).toFixed(1)}%
