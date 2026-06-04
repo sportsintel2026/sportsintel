@@ -208,6 +208,10 @@ router.get("/backtest/:date", async (req, res) => {
     }
     const games = [];
     const acc = { A: { ll: 0, correct: 0, n: 0 }, B: { ll: 0, correct: 0, n: 0 } };
+    // Calibration buckets for the CURRENT model (arm A): predicted home-win prob
+    // vs how often the home team actually won. Reveals over/under-confidence.
+    const calEdges = [0, 0.4, 0.45, 0.5, 0.55, 0.6, 1.01];
+    const calib = calEdges.slice(0, -1).map((lo, i) => ({ lo, hi: calEdges[i + 1], n: 0, predSum: 0, homeWins: 0 }));
     for (const gd of dates) {
       const sched = await getScheduleForDate(gd);
       const finished = (sched || []).filter((x) => x.homeScore != null && x.awayScore != null && x.homeScore !== x.awayScore);
@@ -237,6 +241,8 @@ router.get("/backtest/:date", async (req, res) => {
           pB = btHomeWinProb(inputs, BT_ARM_B);
           acc.A.ll += btLogLoss(pA, homeWon); acc.A.n++; if ((pA > 0.5) === homeWon) acc.A.correct++;
           acc.B.ll += btLogLoss(pB, homeWon); acc.B.n++; if ((pB > 0.5) === homeWon) acc.B.correct++;
+          const cb = calib.find((b) => pA >= b.lo && pA < b.hi);
+          if (cb) { cb.n++; cb.predSum += pA; cb.homeWins += homeWon ? 1 : 0; }
         }
         games.push({
           date: gd, matchup: `${x.awayAbbr} @ ${x.homeAbbr}`, final: `${x.awayScore}-${x.homeScore}`,
@@ -258,6 +264,13 @@ router.get("/backtest/:date", async (req, res) => {
       note: "TEMP backtest STEP 2 — A/B offense weight. Lower logLoss = more accurate. One run is NOT a verdict; aggregate ~150+ games across several dates. Verify the raw per-game inputs look like real point-in-time numbers.",
       datesCovered: dates, armA: "offense^0.40 (current)", armB: "offense^0.55",
       resultA: A, resultB: B, verdict,
+      calibration: calib.filter((b) => b.n > 0).map((b) => ({
+        bucket: `${b.lo.toFixed(2)}-${(b.hi > 1 ? 1 : b.hi).toFixed(2)}`,
+        n: b.n,
+        predictedHome: +((b.predSum / b.n) * 100).toFixed(0),
+        actualHomeWin: +((b.homeWins / b.n) * 100).toFixed(0),
+      })),
+      calibrationNote: "predictedHome = model's avg home-win %; actualHomeWin = how often home actually won. Big gaps = mis-calibration. Watch the 0.60+ bucket: if actual >> predicted across a big sample, the model is too timid when confident.",
       games,
     });
   } catch (err) {
