@@ -148,6 +148,30 @@ async function getTeamSeasonStats(teamId, season) {
     };
   } catch (e) { return null; }
 }
+// POINT-IN-TIME team hitting — season-to-date stats as they stood THROUGH endDate
+// (YYYY-MM-DD). Used for honest backtesting: predicting a past game must use only
+// stats available BEFORE it, never full-season totals (which would be lookahead).
+async function getTeamHittingAsOf(teamId, endDate, season) {
+  if (!teamId || !endDate) return null;
+  const yr = season || parseInt(String(endDate).slice(0, 4), 10) || new Date().getFullYear();
+  try {
+    const data = await mlbGet(`/teams/${teamId}/stats`, {
+      stats: "byDateRange", group: "hitting", season: yr,
+      startDate: `${yr}-03-01`, endDate,
+    });
+    const s = data.stats?.[0]?.splits?.[0]?.stat || {};
+    if (s.ops == null && s.avg == null) return null;
+    return {
+      ops: parseFloat(s.ops) || null,
+      avg: parseFloat(s.avg) || null,
+      obp: parseFloat(s.obp) || null,
+      slg: parseFloat(s.slg) || null,
+      atBats: parseIntSafe(s.atBats),
+      games: parseIntSafe(s.gamesPlayed),
+      asOf: endDate,
+    };
+  } catch (e) { return null; }
+}
 async function getTeamPitchingStats(teamId, season) {
   if (!teamId) return null;
   const yr = season || new Date().getFullYear();
@@ -565,6 +589,7 @@ module.exports = {
   getGameHRHitters, normPlayerName,
   getPitcherSeasonStats, getBatterSeasonStats,
   getTeamSeasonStats, getTeamPitchingStats, getTeamRoster, getLinescore,
+  getTeamHittingAsOf,
   getParkHRFactor, getParkRunFactor,
   getBatterVsPitcherHistory, getPitcherRecentStarts, getBatterRecentStats, getBatterStatcast,
   getProjectedLineup,
