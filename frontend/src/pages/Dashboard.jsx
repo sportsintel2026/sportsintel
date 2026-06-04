@@ -236,6 +236,7 @@ function TopPlayRow({ edge, navigate }) {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
           <ConfidenceBadge conf={edge.conviction} />
+          {edge.convictionScore != null && <span style={{ fontSize: 10, color: "#6b7280", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{edge.convictionScore}</span>}
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: "#e4e7eb" }}>{topPlayLabel(edge)}</div>
             <div style={{ fontSize: 11, color: "#6b7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{edge.matchup} · {formatOdds(edge.odds)}</div>
