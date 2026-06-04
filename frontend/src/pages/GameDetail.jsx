@@ -786,7 +786,14 @@ function BattingOrderCard({ lineups, awayAbbr, homeAbbr }) {
           : order.map((p, i) => (
             <div key={i} style={{ display: "flex", alignItems: "center", gap: 9, padding: "5px 0", borderBottom: i < order.length - 1 ? "1px solid #14181f" : "none" }}>
               <span style={{ flexShrink: 0, width: 18, height: 18, borderRadius: "50%", background: `${accent}1f`, color: accent, fontSize: 10, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center" }}>{i + 1}</span>
-              <span style={{ flex: 1, fontSize: 12.5, color: "#e4e7eb", fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: "block", fontSize: 12.5, color: "#e4e7eb", fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</span>
+                {p.season && (p.season.avg != null || p.season.homeRuns != null) && (
+                  <span style={{ fontSize: 9.5, color: "#6b7280", fontWeight: 500 }}>
+                    {p.season.avg != null ? p.season.avg.toFixed(3).replace(/^0/, "") : "—"} · {p.season.homeRuns ?? 0} HR · {p.season.ops != null ? p.season.ops.toFixed(3).replace(/^0/, "") : "—"} OPS
+                  </span>
+                )}
+              </div>
               <span style={{ fontSize: 10, color: "#6b7280", fontWeight: 700 }}>{p.pos}</span>
             </div>
           ))}
