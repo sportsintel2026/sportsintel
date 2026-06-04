@@ -539,9 +539,16 @@ function BvPTable({ teamAbbr, pitcherName, batters }) {
             const avgColor = b.avg > 0.300 ? "#22c55e" : b.avg < 0.150 ? "#ef4444" : "#e4e7eb";
             return (
               <tr key={i} style={{ borderTop: "1px solid #131820", background: notable ? "#0f1419" : "transparent" }}>
-                <td style={{ ...bvpTd("left"), maxWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {notable && <span style={{ color: "#22c55e", marginRight: 4 }}>⭐</span>}
-                  {b.batterName}
+                <td style={{ ...bvpTd("left"), maxWidth: 0 }}>
+                  <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {notable && <span style={{ color: "#22c55e", marginRight: 4 }}>⭐</span>}
+                    {b.batterName}
+                  </div>
+                  {b.season && (b.season.avg != null || b.season.homeRuns != null) && (
+                    <div style={{ fontSize: 9.5, color: "#6b7280", fontWeight: 500, marginTop: 1, lineHeight: 1.3 }}>
+                      szn {b.season.avg != null ? b.season.avg.toFixed(3).replace(/^0/, "") : "—"} · {b.season.homeRuns ?? 0} HR · {b.season.ops != null ? b.season.ops.toFixed(3).replace(/^0/, "") : "—"} OPS
+                    </div>
+                  )}
                 </td>
                 <td style={bvpTd("right", "#9ca3af")}>{b.plateAppearances}</td>
                 <td style={bvpTd("right", "#e4e7eb")}>{b.hits}</td>
