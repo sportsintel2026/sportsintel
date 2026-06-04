@@ -141,4 +141,62 @@ router.get('/livediag/:gameId', async (req, res) => {
     res.status(502).json({ error: err.message });
   }
 });
+
+// TEMP diagnostic — LIVE odds pipeline test. Polls The Odds API for NBA h2h,
+// de-vigs each book's two-way moneyline, and returns the CONSENSUS (median)
+// no-vig market probability per team. READ-ONLY and NOT wired to any page —
+// this only proves the live-odds -> de-vig -> consensus pipeline against real
+// live data before we build the public live edge. Key via ?key= (temp) or the
+// ODDS_API_KEY env var. Safe to remove later.
+router.get('/liveoddsdiag', async (req, res) => {
+  const key = req.query.key || process.env.ODDS_API_KEY;
+  if (!key) return res.status(400).json({ error: 'no api key — pass ?key= or set ODDS_API_KEY' });
+  const ODDS_URL = `https://api.the-odds-api.com/v4/sports/basketball_nba/odds/?apiKey=${key}&regions=us&markets=h2h&oddsFormat=american`;
+  const imp = (o) => (o == null ? null : o > 0 ? 100 / (o + 100) : -o / (-o + 100)); // American -> raw implied
+  const median = (vals) => {
+    const a = vals.filter((x) => x != null).slice().sort((x, y) => x - y);
+    if (!a.length) return null;
+    const m = Math.floor(a.length / 2);
+    return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
+  };
+  try {
+    const r = await fetch(ODDS_URL, { headers: { Accept: 'application/json' } });
+    const quota = { remaining: r.headers.get('x-requests-remaining'), used: r.headers.get('x-requests-used') };
+    if (!r.ok) {
+      const body = await r.text();
+      return res.status(502).json({ error: 'odds api ' + r.status, body: body.slice(0, 300), quota });
+    }
+    const games = await r.json();
+    const out = (games || []).map((g) => {
+      const books = (g.bookmakers || []).map((b) => {
+        const mkt = (b.markets || []).find((x) => x.key === 'h2h');
+        const oc = (mkt && mkt.outcomes) || [];
+        const homeP = (oc.find((o) => o.name === g.home_team) || {}).price;
+        const awayP = (oc.find((o) => o.name === g.away_team) || {}).price;
+        const rh = imp(homeP), ra = imp(awayP);
+        const s = rh != null && ra != null ? rh + ra : null;
+        return {
+          book: b.title,
+          homeML: homeP, awayML: awayP,
+          homeNoVig: s ? +((rh / s) * 100).toFixed(1) : null,
+          awayNoVig: s ? +((ra / s) * 100).toFixed(1) : null,
+          vigPct: s ? +(((s - 1) * 100).toFixed(2)) : null,
+          lastUpdate: b.last_update,
+        };
+      });
+      const homeVals = books.map((b) => b.homeNoVig).filter((x) => x != null);
+      return {
+        away: g.away_team, home: g.home_team, commence: g.commence_time,
+        nBooks: books.length,
+        consensusNoVig: { home: median(books.map((b) => b.homeNoVig)), away: median(books.map((b) => b.awayNoVig)) },
+        bookSpread: homeVals.length ? { homeMin: Math.min(...homeVals), homeMax: Math.max(...homeVals) } : null,
+        books,
+      };
+    });
+    res.json({ note: 'TEMP live-odds pipeline diagnostic. Read-only; not wired to any page.', quota, gameCount: out.length, games: out });
+  } catch (err) {
+    console.error('[nba route] liveoddsdiag failed:', err);
+    res.status(502).json({ error: err.message });
+  }
+});
 module.exports = router;
