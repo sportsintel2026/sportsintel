@@ -476,6 +476,98 @@ function finalizeConviction(base, agreement) {
   return { score, tier: convictionTier(score) };
 }
 
+// ── HONEST REASONING GENERATOR (template-assembled from real model fields) ──────
+// Every clause is gated on a real data field. If a field is missing, its clause
+// is omitted — we never paper over a gap with a guess. No free-written prose:
+// the narrative can only ever say what the model's inputs actually contain.
+const r1 = (x) => (x == null ? null : Math.round(x * 10) / 10);
+const pct = (p) => (p == null ? null : Math.round(p * 100));
+function eraWord(era) {
+  if (era == null) return null;
+  if (era <= 3.3) return "sharp";
+  if (era <= 4.0) return "solid";
+  if (era >= 4.75) return "hittable";
+  return null;
+}
+function parkClause(parkRunFactor, adj) {
+  if (parkRunFactor == null || adj == null || Math.abs(adj) < 0.15) return null;
+  if (parkRunFactor > 1.03) return "a hitter-friendly park";
+  if (parkRunFactor < 0.97) return "a pitcher-friendly park";
+  return null;
+}
+function weatherClause(weather, adj) {
+  if (!weather || weather.indoor || adj == null || Math.abs(adj) < 0.15) return null;
+  if (weather.windEffect === "out") return "wind blowing out";
+  if (weather.windEffect === "in") return "wind holding the ball in";
+  if (weather.tempEffect === "hot") return "warm air helping carry";
+  if (weather.tempEffect === "cold") return "cold air suppressing carry";
+  return null;
+}
+function bullpenClause(adj) {
+  if (adj == null || Math.abs(adj) < 0.2) return null;
+  return adj > 0 ? "shaky bullpens" : "strong bullpens";
+}
+function trustLine(tier, stability, completeness, agreement) {
+  const parts = [];
+  if (completeness >= 85) parts.push("full data");
+  else if (completeness >= 70) parts.push("most inputs in");
+  else parts.push("partial data — some inputs on league averages");
+  if (stability >= 70) parts.push("starters past the small-sample zone");
+  else if (stability >= 40) parts.push("starter sample still building");
+  else parts.push("very early starter sample");
+  if (agreement >= 65) parts.push("factors aligned");
+  else if (agreement >= 45) parts.push("factors mostly aligned");
+  else parts.push("edge rests mainly on one factor");
+  const word = tier === "HIGH" ? "High" : tier === "MEDIUM" ? "Medium" : "Low";
+  return `${word} conviction: ${parts.join(", ")}.`;
+}
+function describeTotals(side, ctx) {
+  const { projected, line, breakdown, awayEra, homeEra, awayAbbr, homeAbbr, parkRunFactor, weather } = ctx;
+  const lead = projected != null && line != null
+    ? `Model projects ${r1(projected)} runs against the ${line} line.`
+    : projected != null ? `Model projects ${r1(projected)} runs.` : null;
+  const clauses = [];
+  if (breakdown && Math.abs(breakdown.pitcherAdj) >= 0.15) {
+    const aw = eraWord(awayEra), hw = eraWord(homeEra);
+    if (side === "under" && breakdown.pitcherAdj < 0 && (aw || hw)) {
+      const bits = [];
+      if (aw) bits.push(`${awayAbbr} ${r1(awayEra)} ERA`);
+      if (hw) bits.push(`${homeAbbr} ${r1(homeEra)} ERA`);
+      clauses.push(`starting pitching pulls it down (${bits.join(", ")})`);
+    } else if (side === "over" && breakdown.pitcherAdj > 0) {
+      clauses.push("the starters profile as hittable");
+    }
+  }
+  const pk = parkClause(parkRunFactor, breakdown && breakdown.parkAdj);
+  if (pk && ((side === "over") === (breakdown.parkAdj > 0))) clauses.push(pk);
+  const wx = weatherClause(weather, breakdown && breakdown.weatherAdj);
+  if (wx && ((side === "over") === (breakdown.weatherAdj > 0))) clauses.push(wx);
+  const bp = bullpenClause(breakdown && breakdown.bullpenAdj);
+  if (bp && ((side === "over") === (breakdown.bullpenAdj > 0))) clauses.push(bp);
+  if (!lead && clauses.length === 0) return null;
+  if (clauses.length === 0) return lead;
+  const joined = clauses.length === 1 ? clauses[0] : clauses.slice(0, -1).join(", ") + " and " + clauses.slice(-1);
+  const cap = joined.charAt(0).toUpperCase() + joined.slice(1);
+  return `${lead ? lead + " " : ""}${cap}.`;
+}
+function describeMoneyline(side, ctx) {
+  const { winProb, marketProb, teamAbbr, oppAbbr, era, oppEra, ops, oppOps } = ctx;
+  const lead = winProb != null && marketProb != null
+    ? `Model gives ${teamAbbr} a ${pct(winProb)}% chance vs the market's ${marketProb}%.`
+    : winProb != null ? `Model gives ${teamAbbr} a ${pct(winProb)}% chance.` : null;
+  const clauses = [];
+  if (era != null && oppEra != null && oppEra - era >= 0.4) {
+    clauses.push(`a starting-pitcher edge (${teamAbbr} ${r1(era)} vs ${oppAbbr} ${r1(oppEra)} ERA)`);
+  }
+  if (ops != null && oppOps != null && ops - oppOps >= 0.03) {
+    clauses.push(`the bats (${teamAbbr} ${ops.toFixed(3)} vs ${oppAbbr} ${oppOps.toFixed(3)} OPS)`);
+  }
+  if (!lead && clauses.length === 0) return null;
+  if (clauses.length === 0) return lead;
+  const joined = clauses.length === 1 ? clauses[0] : clauses.slice(0, -1).join(", ") + " and " + clauses.slice(-1);
+  return `${lead ? lead + " " : ""}Lean rests on ${joined}.`;
+}
+
 async function calculateGameEdges(game, oddsForGame) {
   const [
     awayPitcher,
@@ -625,10 +717,31 @@ async function calculateGameEdges(game, oddsForGame) {
     awayLineupSource: awayLineup.source, homeLineupSource: homeLineup.source,
     awayBullpen, homeBullpen, weather, awayHandSplits, homeHandSplits, awayHit, homeHit,
   });
-  const cvAwayML = finalizeConviction(convBase, leanAgreement(ml, totals.breakdown, "away"));
-  const cvHomeML = finalizeConviction(convBase, leanAgreement(ml, totals.breakdown, "home"));
-  const cvOver = finalizeConviction(convBase, totalAgreement(totals.breakdown, "over"));
-  const cvUnder = finalizeConviction(convBase, totalAgreement(totals.breakdown, "under"));
+  const agAwayML = leanAgreement(ml, totals.breakdown, "away");
+  const agHomeML = leanAgreement(ml, totals.breakdown, "home");
+  const agOver = totalAgreement(totals.breakdown, "over");
+  const agUnder = totalAgreement(totals.breakdown, "under");
+  const cvAwayML = finalizeConviction(convBase, agAwayML);
+  const cvHomeML = finalizeConviction(convBase, agHomeML);
+  const cvOver = finalizeConviction(convBase, agOver);
+  const cvUnder = finalizeConviction(convBase, agUnder);
+
+  // Honest reasoning strings — assembled from the real fields above; never free-written.
+  const mlMarket = (wp, edge) => (wp != null && edge != null ? Math.round((wp - edge) * 100) : null);
+  const totReasonCtx = {
+    projected: totals.projectedTotal, line: totalLine, breakdown: totals.breakdown,
+    awayEra: awayPitcherForm?.era, homeEra: homePitcherForm?.era,
+    awayAbbr: game.awayAbbr, homeAbbr: game.homeAbbr,
+    parkRunFactor: game.parkRunFactor, weather,
+  };
+  const awayReason = describeMoneyline("away", { winProb: ml.awayWinProb, marketProb: mlMarket(ml.awayWinProb, awayEdge), teamAbbr: game.awayAbbr, oppAbbr: game.homeAbbr, era: awayPitcherForm?.era, oppEra: homePitcherForm?.era, ops: awayHit?.ops, oppOps: homeHit?.ops });
+  const homeReason = describeMoneyline("home", { winProb: ml.homeWinProb, marketProb: mlMarket(ml.homeWinProb, homeEdge), teamAbbr: game.homeAbbr, oppAbbr: game.awayAbbr, era: homePitcherForm?.era, oppEra: awayPitcherForm?.era, ops: homeHit?.ops, oppOps: awayHit?.ops });
+  const overReason = describeTotals("over", totReasonCtx);
+  const underReason = describeTotals("under", totReasonCtx);
+  const awayTrust = trustLine(cvAwayML.tier, convBase.stability, convBase.completeness, agAwayML);
+  const homeTrust = trustLine(cvHomeML.tier, convBase.stability, convBase.completeness, agHomeML);
+  const overTrust = trustLine(cvOver.tier, convBase.stability, convBase.completeness, agOver);
+  const underTrust = trustLine(cvUnder.tier, convBase.stability, convBase.completeness, agUnder);
 
   return {
     game: {
@@ -687,6 +800,10 @@ async function calculateGameEdges(game, oddsForGame) {
       homeConviction: cvHomeML.tier,
       awayConvictionScore: cvAwayML.score,
       homeConvictionScore: cvHomeML.score,
+      awayReason,
+      homeReason,
+      awayTrust,
+      homeTrust,
       awayInflation,
       homeInflation,
     },
@@ -708,6 +825,10 @@ async function calculateGameEdges(game, oddsForGame) {
       underConviction: cvUnder.tier,
       overConvictionScore: cvOver.score,
       underConvictionScore: cvUnder.score,
+      overReason,
+      underReason,
+      overTrust,
+      underTrust,
       overInflation,
       underInflation,
     },
