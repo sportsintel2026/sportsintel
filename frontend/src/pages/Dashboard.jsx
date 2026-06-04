@@ -200,6 +200,7 @@ function MLBDashboard({ edges, loading, hasFullAccess, navigate, onRefresh }) {
           </button>
         </div>
       )}
+      <TopPlays edges={edges} hasFullAccess={hasFullAccess} navigate={navigate} />
       <div className="edge-grid-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16, gridAutoRows: "1fr" }}>
         <EdgePanel title="Top moneyline edges" icon="💰" edges={edges.moneylineEdges || []} renderRow={(e) => <MoneylineRow edge={e} key={e.gameId + e.side} navigate={navigate} />} emptyText="No edges found in current slate" hasFullAccess={hasFullAccess} navigate={navigate} />
         <EdgePanel title="Top totals edges" icon="📊" edges={edges.totalsEdges || []} renderRow={(e) => <TotalsRow edge={e} key={e.gameId + e.side} navigate={navigate} />} emptyText="No edges found in current slate" hasFullAccess={hasFullAccess} navigate={navigate} />
@@ -221,6 +222,77 @@ function MLBDashboard({ edges, loading, hasFullAccess, navigate, onRefresh }) {
   );
 }
 
+// Top Plays: the day's best edges, ranked by CONVICTION (not raw edge size, which
+// surfaces noise). Pools moneyline + totals, keeps only HIGH/MEDIUM conviction with
+// a positive edge, sorts by conviction score. Honest empty state when nothing
+// stands out — we do NOT manufacture a "top pick" on a sharp board.
+function topPlayLabel(e) {
+  if (e.side === "over" || e.side === "under") return `${e.side === "over" ? "Over" : "Under"} ${e.line ?? ""}`.trim();
+  return `${e.teamAbbr} ML`;
+}
+function TopPlayRow({ edge, navigate }) {
+  return (
+    <div className="edge-row" onClick={() => navigate(`/game/mlb/${edge.gameId}`)} style={{ padding: 12, background: "#0a0e14", borderRadius: 6 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+          <ConfidenceBadge conf={edge.conviction} />
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#e4e7eb" }}>{topPlayLabel(edge)}</div>
+            <div style={{ fontSize: 11, color: "#6b7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{edge.matchup} · {formatOdds(edge.odds)}</div>
+          </div>
+        </div>
+        <EdgeBadge edge={edge.edge} />
+      </div>
+      {edge.reason && <div style={{ fontSize: 11.5, color: "#cbd5e1", lineHeight: 1.5, marginTop: 8 }}>{edge.reason}</div>}
+      {edge.trust && <div style={{ fontSize: 10.5, color: "#6b7280", lineHeight: 1.45, marginTop: 4 }}>{edge.trust}</div>}
+    </div>
+  );
+}
+function TopPlays({ edges, hasFullAccess, navigate }) {
+  const pool = [...(edges.moneylineEdges || []), ...(edges.totalsEdges || [])]
+    .filter((e) => e.convictionScore != null && (e.conviction === "HIGH" || e.conviction === "MEDIUM") && (e.edge ?? 0) > 0);
+  pool.sort((a, b) => (b.convictionScore - a.convictionScore) || ((b.edge ?? 0) - (a.edge ?? 0)));
+  const top = pool.slice(0, 5);
+  const titleRow = (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+      <div style={{ fontSize: 13, fontWeight: 700, color: "#e4e7eb" }}>🎯 Top plays today</div>
+      <span style={{ fontSize: 10, color: "#6b7280", letterSpacing: "0.04em" }}>ranked by conviction</span>
+    </div>
+  );
+  if (top.length === 0) {
+    return (
+      <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 18, marginBottom: 16 }}>
+        {titleRow}
+        <div style={{ fontSize: 12, color: "#9ca3af", lineHeight: 1.55 }}>
+          No high-conviction plays on today's board — the model isn't seeing a standout worth highlighting. That's normal when the market is sharp. You can still browse every edge below, or check back closer to first pitch as lines and data firm up.
+        </div>
+      </div>
+    );
+  }
+  const visible = hasFullAccess ? top : top.slice(0, 1);
+  const hidden = hasFullAccess ? [] : top.slice(1);
+  return (
+    <div style={{ background: "#0f1419", border: "1px solid #22c55e30", borderRadius: 10, padding: 18, marginBottom: 16 }}>
+      {titleRow}
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {visible.map((e) => <TopPlayRow edge={e} key={"top" + e.gameId + e.side} navigate={navigate} />)}
+      </div>
+      {hidden.length > 0 && (
+        <div style={{ position: "relative", marginTop: 6 }}>
+          <div style={{ filter: "blur(4px)", pointerEvents: "none", display: "flex", flexDirection: "column", gap: 6 }}>
+            {hidden.map((e) => <TopPlayRow edge={e} key={"toph" + e.gameId + e.side} navigate={navigate} />)}
+          </div>
+          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <button onClick={() => navigate("/pricing")} style={{ background: "#ef4444", color: "#fff", border: "none", borderRadius: 6, padding: "8px 18px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>🔒 Unlock all top plays — $7/mo</button>
+          </div>
+        </div>
+      )}
+      <div style={{ marginTop: 12, fontSize: 10.5, color: "#6b7280", lineHeight: 1.5 }}>
+        The model's highest-conviction edges today, ranked by how much supporting data backs each. Conviction reflects data quality and agreement — not a guarantee. Even strong plays lose; bet responsibly.
+      </div>
+    </div>
+  );
+}
 function EdgePanel({ title, icon, edges, renderRow, emptyText, hasFullAccess, navigate, wide }) {
   const visible = hasFullAccess ? edges : edges.slice(0, 1);
   const hidden = hasFullAccess ? [] : edges.slice(1, 5);
