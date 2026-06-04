@@ -177,7 +177,13 @@ function calculateMoneylineProjection(game, awayPitcher, homePitcher, awayTeamHi
     Math.pow(homeOffenseFactor, 0.40) *
     Math.pow(homeBullpenFactor, 0.20);
 
-  const HOME_BOOST = 1.04;
+  // HOME_BOOST raised 1.04 -> 1.10 (Jun 2026). Backtest over ~180 finished games
+  // showed the pure model under-rated home teams: predicted ~50.3% vs actual ~51.4%.
+  // 1.10 centers predicted home-win within ~0.3pts of actual AND had the lowest
+  // log-loss of {1.04, 1.10, 1.15}; 1.15 overshot. Mainly fixes the home/away
+  // centering (trims a systematic road-underdog lean in the edges); only a marginal
+  // log-loss change. NOTE: this resets the clean CLV measurement going forward.
+  const HOME_BOOST = 1.10;
   const adjHomeStrength = homeStrength * HOME_BOOST;
   const homeWinProb = adjHomeStrength / (adjHomeStrength + awayStrength);
   const awayWinProb = 1 - homeWinProb;
