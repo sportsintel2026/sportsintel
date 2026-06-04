@@ -430,6 +430,13 @@ async function getTeamLineup(teamId, gamePk) {
 async function getLineupOffense(lineup) {
   if (!lineup || lineup.length < 8) return null;
   const stats = await Promise.all(lineup.map(p => getBatterSeasonStats(p.id).catch(() => null)));
+  // Surface each hitter's season line on the lineup objects (used for the
+  // batting-order display). These were already fetched for the OPS calc — we
+  // just stop throwing them away. No extra API calls.
+  lineup.forEach((p, idx) => {
+    const s = stats[idx];
+    p.season = s ? { avg: s.avg, homeRuns: s.homeRuns, ops: s.ops } : null;
+  });
   const valid = stats.filter(s => s && s.ops != null && s.plateAppearances >= 20);
   if (valid.length < 6) return null; // not enough resolved hitters to trust it
   const avgOps = valid.reduce((sum, s) => sum + s.ops, 0) / valid.length;
