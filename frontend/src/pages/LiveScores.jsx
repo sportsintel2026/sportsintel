@@ -215,7 +215,7 @@ function TeamLine({ t, showScore }) {
 
 // Box score (innings/quarters line score + player stat lines). Exported so the
 // full matchup page (GameDetail) can render the exact same component.
-export function BoxScore({ detail }) {
+export function BoxScore({ detail, logos }) {
   const ls = detail.lineScore || [];
   const players = detail.players || [];
   const maxPeriods = Math.max(0, ...ls.map((r) => r.periods.length));
@@ -257,6 +257,7 @@ export function BoxScore({ detail }) {
     if (ab && t.logo) logoByAbbrev[ab] = t.logo;
   }
   for (const r of ls) { if (r && r.abbrev && r.logo) logoByAbbrev[r.abbrev] = r.logo; }
+  if (logos) for (const k in logos) { if (logos[k]) logoByAbbrev[k] = logos[k]; } // known-good logos passed from the score card
   const teamLogo = (ab) => logoByAbbrev[ab] || null;
   const COLS = {
     nba: ["MIN", "PTS", "REB", "AST"],
