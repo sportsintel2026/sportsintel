@@ -311,7 +311,7 @@ function SectionTitle({ children }) {
 function marketLabel(m) {
   const map = {
     moneyline: "Moneyline", total: "Totals", run_line: "Run line", spread: "Spread",
-    hr_prop: "HR props", player_strikeouts: "Strikeouts", player_points: "Points", player_rebounds: "Rebounds",
+    hr_prop: "HR props", player_strikeouts: "Strikeouts", player_hits: "Hits", player_points: "Points", player_rebounds: "Rebounds",
     player_assists: "Assists", player_threes: "3PT made", player_props: "Player props",
   };
   return map[m] || m;
