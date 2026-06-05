@@ -164,7 +164,9 @@ function MLBDashboard({ edges, loading, hasFullAccess, navigate, onRefresh }) {
   const pregameEdgeCount =
     (edges.moneylineEdges?.length || 0) +
     (edges.totalsEdges?.length || 0) +
-    (edges.hrPropEdges?.length || 0);
+    (edges.hrPropEdges?.length || 0) +
+    (edges.kPropEdges?.length || 0) +
+    (edges.hitsPropEdges?.length || 0);
   // Only show when: there ARE games, at least one is live, none are still
   // waiting to start, and there are no pre-game edges left to show.
   const allGamesUnderway =
@@ -207,6 +209,13 @@ function MLBDashboard({ edges, loading, hasFullAccess, navigate, onRefresh }) {
       </div>
       <div style={{ marginBottom: 16 }}>
         <EdgePanel title="Top home run props" icon="💣" edges={edges.hrPropEdges || []} renderRow={(e) => <HRPropRow edge={e} key={e.player + e.game} />} emptyText="HR prop data updates closer to first pitch" hasFullAccess={hasFullAccess} navigate={navigate} wide />
+      </div>
+      <div style={{ marginBottom: 8, fontSize: 11, color: "#a8915c", display: "flex", alignItems: "center", gap: 6, lineHeight: 1.5 }}>
+        ⚠️ Experimental — strikeout & hits projections are v1 and still being calibrated. Treat as directional, not proven.
+      </div>
+      <div className="edge-grid-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16, gridAutoRows: "1fr" }}>
+        <EdgePanel title="Pitcher strikeouts" icon="🔥" edges={edges.kPropEdges || []} renderRow={(e) => <KPropRow edge={e} key={e.player + e.game} />} emptyText="K prop data updates closer to first pitch" hasFullAccess={hasFullAccess} navigate={navigate} wide />
+        <EdgePanel title="Batter hits" icon="🏏" edges={edges.hitsPropEdges || []} renderRow={(e) => <HitsPropRow edge={e} key={e.player + e.game} />} emptyText="Hits prop data updates closer to first pitch" hasFullAccess={hasFullAccess} navigate={navigate} wide />
       </div>
 
       <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 8, padding: "16px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
@@ -396,6 +405,50 @@ function TotalsRow({ edge, navigate }) {
       <div style={{ textAlign: "right", marginLeft: 10 }}>
         <EdgeBadge edge={edge.edge} />
         <div style={{ fontSize: 10, color: "#6b7280", marginTop: 2 }}>proj {edge.projected}</div>
+      </div>
+    </div>
+  );
+}
+
+function KPropRow({ edge }) {
+  const sideLabel = edge.side === "under" ? "Under" : "Over";
+  const detail = [
+    edge.opponent ? `vs ${edge.opponent}` : null,
+    edge.pitcherK9 != null ? `${edge.pitcherK9} K/9` : null,
+    edge.expectedKs != null ? `proj ${edge.expectedKs}` : null,
+  ].filter(Boolean).join(" · ");
+  return (
+    <div className="edge-row hr-prop-row" style={{ display: "grid", gridTemplateColumns: "2.2fr 1fr 1fr 1fr 80px", gap: 10, padding: 10, background: "#0a0e14", borderRadius: 4, alignItems: "center" }}>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 12, fontWeight: 600 }}>{edge.player} <span style={{ color: "#9ca3af", fontWeight: 500 }}>{sideLabel} {edge.line} K</span></div>
+        <div style={{ fontSize: 10, color: "#6b7280", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{edge.team}{detail ? ` · ${detail}` : ""}</div>
+      </div>
+      <div className="hr-prop-stats" style={{ display: "contents" }}>
+        <div style={{ fontSize: 11, color: "#9ca3af" }}>{formatOdds(edge.odds)}</div>
+        <div style={{ fontSize: 11, color: "#9ca3af" }}>{Math.round(edge.kProb * 100)}% model</div>
+        <EdgeBadge edge={edge.edge} />
+        <ConfidenceBadge conf={edge.confidence} />
+      </div>
+    </div>
+  );
+}
+
+function HitsPropRow({ edge }) {
+  const lineLabel = edge.line === 0.5
+    ? (edge.side === "under" ? "Under 0.5 H (0 hits)" : "Over 0.5 H (1+ hits)")
+    : `${edge.side === "under" ? "Under" : "Over"} ${edge.line} H`;
+  const avgText = edge.battingAvg != null ? `${edge.battingAvg.toFixed(3).replace(/^0/, ".")} AVG` : null;
+  return (
+    <div className="edge-row hr-prop-row" style={{ display: "grid", gridTemplateColumns: "2.2fr 1fr 1fr 1fr 80px", gap: 10, padding: 10, background: "#0a0e14", borderRadius: 4, alignItems: "center" }}>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 12, fontWeight: 600 }}>{edge.player} <span style={{ color: "#9ca3af", fontWeight: 500 }}>{lineLabel}</span></div>
+        <div style={{ fontSize: 10, color: "#6b7280", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{edge.team} · facing {edge.opposingPitcher || "TBD"}{avgText ? ` · ${avgText}` : ""}</div>
+      </div>
+      <div className="hr-prop-stats" style={{ display: "contents" }}>
+        <div style={{ fontSize: 11, color: "#9ca3af" }}>{formatOdds(edge.odds)}</div>
+        <div style={{ fontSize: 11, color: "#9ca3af" }}>{Math.round(edge.hitsProb * 100)}% model</div>
+        <EdgeBadge edge={edge.edge} />
+        <ConfidenceBadge conf={edge.confidence} />
       </div>
     </div>
   );
