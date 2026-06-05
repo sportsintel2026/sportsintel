@@ -149,7 +149,7 @@ function PerfBody({ data, league }) {
         ))}
       </div>
       {/* Props — its OWN table; never part of the core record or CLV */}
-      <SectionTitle>{league === "mlb" ? "🔥 Home run props" : "🎯 Player props"}</SectionTitle>
+      <SectionTitle>🎯 Player props</SectionTitle>
       <PropsCard p={data.props || data.hrProps} league={league} />
       {/* By confidence */}
       <SectionTitle>By confidence tier</SectionTitle>
@@ -259,7 +259,6 @@ function PropsCard({ p, league }) {
   }
   const profit = p.roi >= 0;
   const fmtOdds = p.avgOdds == null ? "—" : (p.avgOdds > 0 ? `+${p.avgOdds}` : `${p.avgOdds}`);
-  const isMlb = league === "mlb";
   const labelLc = (p.label || "prop").toLowerCase();
   return (
     <div style={{ background: "linear-gradient(180deg,#1a1410,#0f1419)", border: "1px solid #f5970033", borderLeft: "3px solid #f59700", borderRadius: 12, padding: 24, marginBottom: 24 }}>
@@ -292,11 +291,7 @@ function PropsCard({ p, league }) {
         </div>
       )}
       <div style={{ marginTop: 14, fontSize: 11, color: "#6b7280", lineHeight: 1.6 }}>
-        Across {p.picks} graded {labelLc} pick{p.picks === 1 ? "" : "s"}.
-        {isMlb
-          ? " Home-run props are longshots, so a low hit rate is normal — at plus-money odds, hitting even a fraction can be profitable. ROI is the truer measure than hit rate."
-          : " Props are longshots — ROI is the truer measure than hit rate."}
-        {" Small samples are noisy."}
+        Across {p.picks} graded {labelLc} pick{p.picks === 1 ? "" : "s"}. Props are graded by hit rate and ROI, kept separate from the record and CLV — ROI is the truer measure than hit rate, since prop odds and hit rates vary widely by type. Small samples are noisy.
         {p.byMarket && Object.keys(p.byMarket).length >= 2 ? " Each stat type is a tiny sample on its own — the per-type rows are directional at best until volume builds." : ""}
       </div>
     </div>
@@ -316,7 +311,7 @@ function SectionTitle({ children }) {
 function marketLabel(m) {
   const map = {
     moneyline: "Moneyline", total: "Totals", run_line: "Run line", spread: "Spread",
-    hr_prop: "HR props", player_points: "Points", player_rebounds: "Rebounds",
+    hr_prop: "HR props", player_strikeouts: "Strikeouts", player_points: "Points", player_rebounds: "Rebounds",
     player_assists: "Assists", player_threes: "3PT made", player_props: "Player props",
   };
   return map[m] || m;
