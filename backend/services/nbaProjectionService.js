@@ -157,7 +157,7 @@ function parseInjuries(summary) {
 // Returns { map, state, date, injuries }: state is "pre"|"in"|"post".
 async function buildIdMap(gameId) {
   const c = idCache.get(gameId);
-  if (c && Date.now() - c.t < ID_TTL) return { map: c.map, state: c.state, date: c.date, injuries: c.injuries };
+  if (c && Date.now() - c.t < ID_TTL) return { map: c.map, state: c.state, date: c.date, injuries: c.injuries, logoBySide: c.logoBySide };
 
   const res = await fetch(`${SUMMARY}?event=${gameId}`);
   if (!res.ok) throw new Error('espn summary ' + res.status);
@@ -168,11 +168,16 @@ async function buildIdMap(gameId) {
   const date = comp.date || null;
   const injuries = parseInjuries(summary);
 
-  // Each competitor carries home/away — record it so every player can later be
-  // grouped by team without any cross-source name/abbreviation matching.
+  // Each competitor carries home/away AND a team logo — record both so players
+  // can be grouped by team (no name-matching) and the UI can show a logo.
   const sideByTeamId = {};
+  const logoBySide = {};
   for (const c of (comp.competitors || [])) {
-    if (c && c.team && c.team.id) sideByTeamId[String(c.team.id)] = c.homeAway || null;
+    if (c && c.team && c.team.id) {
+      const sd = c.homeAway || null; // "home" | "away"
+      sideByTeamId[String(c.team.id)] = sd;
+      if (sd) logoBySide[sd] = c.team.logo || (c.team.logos && c.team.logos[0] && c.team.logos[0].href) || null;
+    }
   }
 
   const athletes = collectAthletes(summary);
@@ -191,8 +196,8 @@ async function buildIdMap(gameId) {
   const map = buildMapFromAthletes(athletes);
   // Only cache a map that actually found players — never let an empty/transient
   // result get pinned for the full TTL.
-  if (Object.keys(map.full).length) idCache.set(gameId, { t: Date.now(), map, state, date, injuries });
-  return { map, state, date, injuries };
+  if (Object.keys(map.full).length) idCache.set(gameId, { t: Date.now(), map, state, date, injuries, logoBySide });
+  return { map, state, date, injuries, logoBySide };
 }
 
 async function getGamelogCached(athleteId) {
@@ -250,6 +255,7 @@ async function getNbaPropProjections(gameId) {
   const sideForName = (nm) => sideFull[norm(nm)] || sideLast[lastName(nm)] || null;
   if (Array.isArray(out.players)) out.players = out.players.map(p => ({ ...p, side: sideForName(p.name) }));
   if (Array.isArray(out.edges))   out.edges   = out.edges.map(e => ({ ...e, side: sideForName(e.name) }));
+  out.teamLogos = idInfo.logoBySide || {}; // { home, away } logo URLs for UI team headers
 
   // Snapshot picks for the Performance tracker — pre-game only, best-effort.
   if (idInfo.state === 'pre') {
