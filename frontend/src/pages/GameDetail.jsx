@@ -365,6 +365,11 @@ function LiveScoreHeader({ gameId, awayAbbr, homeAbbr, league = "mlb" }) {
   const isLiveNow = match.bucket === "live";
   const a = match.away || {};
   const h = match.home || {};
+  // Logos from the scores feed (the ones already showing on the score card),
+  // keyed by every abbrev they might appear under, to pass into the box score.
+  const teamLogos = {};
+  if (a.logo) { if (a.abbrev) teamLogos[a.abbrev] = a.logo; if (awayAbbr) teamLogos[awayAbbr] = a.logo; }
+  if (h.logo) { if (h.abbrev) teamLogos[h.abbrev] = h.logo; if (homeAbbr) teamLogos[homeAbbr] = h.logo; }
   const accent = isLiveNow ? "#ef4444" : "#22c55e";
   return (
     <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: "16px 20px", marginBottom: 10 }}>
@@ -381,7 +386,7 @@ function LiveScoreHeader({ gameId, awayAbbr, homeAbbr, league = "mlb" }) {
       </div>
       {/* Box score (innings/quarters line + player stats) — same component as the games list */}
       <div style={{ marginTop: 16, borderTop: "1px solid #1f2937", paddingTop: 14 }}>
-        {box ? <BoxScore detail={box} /> : boxLoading ? (
+        {box ? <BoxScore detail={box} logos={teamLogos} /> : boxLoading ? (
           <div style={{ fontSize: 12, color: "#6b7280" }}>Loading box score…</div>
         ) : (
           <div style={{ fontSize: 12, color: "#6b7280" }}>Box score not available yet.</div>
