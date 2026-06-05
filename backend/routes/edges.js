@@ -14,10 +14,12 @@ const {
 const {
   getMLBMainOdds,
   getMLBHRPropsForAllEvents,
+  getMLBStrikeoutPropsForAllEvents,
 } = require("../services/oddsApi");
 const {
   calculateGameEdges,
   calculateHRPropEdges,
+  calculateStrikeoutPropEdges,
 } = require("../services/edgesModel");
 const { recordPredictions } = require("../services/predictionTracker");
 // In-memory cache
@@ -85,7 +87,7 @@ router.get("/mlb", async (req, res) => {
     const games = allGames.filter(g => g.status !== "postponed" && g.status !== "cancelled");
     console.log(`[Edges] Found ${games.length} MLB games for ${slateDate}`);
     if (games.length === 0) {
-      const empty = { date: slateDate, rolledToNextDay: rolled, games: [], moneylineEdges: [], totalsEdges: [], runLineEdges: [], hrPropEdges: [], computedAt: new Date().toISOString() };
+      const empty = { date: slateDate, rolledToNextDay: rolled, games: [], moneylineEdges: [], totalsEdges: [], runLineEdges: [], hrPropEdges: [], kPropEdges: [], computedAt: new Date().toISOString() };
       edgesCache = empty;
       edgesCacheAt = Date.now();
       edgesCacheDate = slateDate;
@@ -270,6 +272,7 @@ router.get("/mlb", async (req, res) => {
     }
     runLineEdges.sort((a, b) => (b.edge ?? -1) - (a.edge ?? -1));
     let hrPropEdges = [];
+    let kPropEdges = [];
     try {
       // Take the first 5 not-yet-started games WITH ODDS for HR props.
       // Skip live/final games (sportsbooks pull or re-price HR props once underway).
@@ -282,6 +285,8 @@ router.get("/mlb", async (req, res) => {
       if (eventIds.length > 0) {
         const hrOddsByEvent = await getMLBHRPropsForAllEvents(eventIds, 5);
         hrPropEdges = await calculateHRPropEdges(topGamesForHR, hrOddsByEvent);
+        const kOddsByEvent = await getMLBStrikeoutPropsForAllEvents(eventIds, 5);
+        kPropEdges = await calculateStrikeoutPropEdges(topGamesForHR, kOddsByEvent);
       } else {
         console.log("[Edges-HR] NO eventIds — HR props skipped");
       }
@@ -311,6 +316,7 @@ router.get("/mlb", async (req, res) => {
       totalsEdges: totalsEdges.slice(0, 10),
       runLineEdges: runLineEdges.slice(0, 10),
       hrPropEdges: hrPropEdges.slice(0, 25),
+      kPropEdges: kPropEdges.slice(0, 25),
       computedAt: new Date().toISOString(),
       cached: false,
     };
