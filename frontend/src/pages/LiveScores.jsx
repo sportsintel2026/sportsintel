@@ -279,11 +279,11 @@ export function BoxScore({ detail, logos }) {
           <table style={{ borderCollapse: "collapse", fontSize: 14, width: "100%", minWidth: 320 }}>
             <thead>
               <tr style={{ background: "#0a0e14" }}>
-                <th style={{ textAlign: "left", padding: "8px 10px", fontSize: 11, fontWeight: 600, color: "#fff", letterSpacing: "0.06em", textTransform: "uppercase" }}>Team</th>
+                <th style={{ textAlign: "left", padding: "8px 10px", fontSize: 11, fontWeight: 600, color: "#9ca3af", letterSpacing: "0.06em", textTransform: "uppercase" }}>Team</th>
                 {Array.from({ length: maxPeriods }).map((_, i) => (
-                  <th key={i} style={{ textAlign: "center", padding: "8px 10px", fontSize: 13, fontWeight: 600, color: "#fff" }}>{i + 1}</th>
+                  <th key={i} style={{ textAlign: "center", padding: "8px 10px", fontSize: 12, fontWeight: 600, color: "#9ca3af" }}>{i + 1}</th>
                 ))}
-                <th style={{ textAlign: "center", padding: "8px 10px", fontSize: 13, fontWeight: 600, color: "#fff", borderLeft: "1px solid #3a4757" }}>T</th>
+                <th style={{ textAlign: "center", padding: "8px 10px", fontSize: 12, fontWeight: 600, color: "#9ca3af", borderLeft: "1px solid #3a4757" }}>T</th>
               </tr>
             </thead>
             <tbody>
