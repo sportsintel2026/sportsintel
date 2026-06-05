@@ -375,9 +375,9 @@ function LiveScoreHeader({ gameId, awayAbbr, homeAbbr, league = "mlb" }) {
         {isLiveNow && <span style={{ marginLeft: "auto", fontSize: 10, color: "#6b7280" }}>updates automatically</span>}
       </div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-        <ScoreRow abbr={a.abbrev || awayAbbr} name={a.name} score={a.score} />
+        <ScoreRow abbr={a.abbrev || awayAbbr} name={a.name} score={a.score} logo={a.logo} />
         <div style={{ fontSize: 12, color: "#4b5563", fontWeight: 700 }}>@</div>
-        <ScoreRow abbr={h.abbrev || homeAbbr} name={h.name} score={h.score} alignRight />
+        <ScoreRow abbr={h.abbrev || homeAbbr} name={h.name} score={h.score} logo={h.logo} alignRight />
       </div>
       {/* Box score (innings/quarters line + player stats) — same component as the games list */}
       <div style={{ marginTop: 16, borderTop: "1px solid #1f2937", paddingTop: 14 }}>
@@ -390,15 +390,22 @@ function LiveScoreHeader({ gameId, awayAbbr, homeAbbr, league = "mlb" }) {
     </div>
   );
 }
-function ScoreRow({ abbr, name, score, alignRight }) {
+function ScoreRow({ abbr, name, score, logo, alignRight }) {
+  const scoreEl = <span style={{ fontSize: 30, fontWeight: 800, color: "#fff", fontVariantNumeric: "tabular-nums", minWidth: 32, textAlign: "center" }}>{score != null ? score : "—"}</span>;
+  const logoEl = logo ? <img src={logo} alt="" width="34" height="34" style={{ objectFit: "contain", flexShrink: 0 }} onError={(e) => { e.currentTarget.style.display = "none"; }} /> : null;
+  const teamEl = (
+    <div style={{ textAlign: alignRight ? "right" : "left" }}>
+      <div style={{ fontSize: 16, fontWeight: 700, color: "#e4e7eb" }}>{abbr}</div>
+      {name && <div style={{ fontSize: 11, color: "#6b7280" }}>{name}</div>}
+    </div>
+  );
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, justifyContent: alignRight ? "flex-end" : "flex-start" }}>
-      {!alignRight && <span style={{ fontSize: 30, fontWeight: 800, color: "#fff", fontVariantNumeric: "tabular-nums", minWidth: 32, textAlign: "center" }}>{score != null ? score : "—"}</span>}
-      <div style={{ textAlign: alignRight ? "right" : "left" }}>
-        <div style={{ fontSize: 16, fontWeight: 700, color: "#e4e7eb" }}>{abbr}</div>
-        {name && <div style={{ fontSize: 11, color: "#6b7280" }}>{name}</div>}
-      </div>
-      {alignRight && <span style={{ fontSize: 30, fontWeight: 800, color: "#fff", fontVariantNumeric: "tabular-nums", minWidth: 32, textAlign: "center" }}>{score != null ? score : "—"}</span>}
+      {!alignRight && scoreEl}
+      {!alignRight && logoEl}
+      {teamEl}
+      {alignRight && logoEl}
+      {alignRight && scoreEl}
     </div>
   );
 }
