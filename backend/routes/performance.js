@@ -1,20 +1,31 @@
-// Performance route — serves the model's tracked record.
+// Performance route — serves the model's tracked record, per sport (league).
 //
-// GET /api/performance/mlb  → win/loss/ROI by market and confidence tier.
+// GET /api/performance/:league   (league = mlb | nba | nfl | cfb)
+//   → win/loss/ROI by market and confidence tier, a CLV summary, and a SEPARATE
+//     props table. Props NEVER count toward the core record or CLV — they live in
+//     their own table, measured by hit-rate / ROI (plus-money longshots).
 //
 // "Qualified picks": the model publishes every edge it finds, but its low-conviction
-// (NEUTRAL / LOW) plays are noise and drag the record down. The headline record now
-// reflects only QUALIFIED picks — those the model actually rated with conviction
-// (confidence in QUALIFYING_TIERS) OR whose modeled edge clears MIN_EDGE.
-// We still return the FULL record alongside it, so nothing is hidden.
+// (NEUTRAL / LOW) plays are noise and drag the record down. The headline record
+// reflects only QUALIFIED picks (confidence in QUALIFYING_TIERS). The FULL record
+// is returned alongside it, so nothing is hidden.
 const express = require("express");
 const router = express.Router();
 const { createClient } = require("@supabase/supabase-js");
 
+// --- per-sport market config -------------------------------------------------
+// core  = team markets that count toward the overall record + CLV
+// props = prop markets shown in their OWN table (hit-rate / ROI), never in core
+// clv   = markets eligible for a captured closing line; a market with none simply
+//         yields clv = null (honest "not captured yet" state for new sports)
+const LEAGUE_CONFIG = {
+  mlb: { core: ["moneyline", "total", "run_line"], props: ["hr_prop"], clv: ["moneyline", "total"], propsLabel: "Home run props" },
+  nba: { core: ["moneyline", "spread", "total"], props: ["player_points", "player_rebounds", "player_assists", "player_threes"], clv: ["moneyline", "spread", "total"], propsLabel: "Player props" },
+  nfl: { core: ["moneyline", "spread", "total"], props: ["player_props"], clv: ["moneyline", "spread", "total"], propsLabel: "Player props" },
+  cfb: { core: ["moneyline", "spread", "total"], props: ["player_props"], clv: ["moneyline", "spread", "total"], propsLabel: "Player props" },
+};
+
 // --- selection rule (tune here) ---------------------------------------------
-// Qualified picks = the model's conviction plays. NEUTRAL/LOW are the model
-// saying "no real lean" — those are the noise that drags the record down, so
-// they're set aside. Change QUALIFYING_TIERS to widen/narrow what counts.
 const QUALIFYING_TIERS = ["HIGH", "MEDIUM"];
 function isQualified(r) {
   const conf = (r.confidence || "NEUTRAL").toUpperCase();
@@ -31,22 +42,25 @@ function unitProfit(odds) {
   return odds > 0 ? odds / 100 : 100 / Math.abs(odds);
 }
 
-router.get("/mlb", async (req, res) => {
+router.get("/:league", async (req, res) => {
+  const league = String(req.params.league || "").toLowerCase();
+  const cfg = LEAGUE_CONFIG[league];
+  if (!cfg) {
+    return res.status(400).json({ error: "Unknown league", league, supported: Object.keys(LEAGUE_CONFIG) });
+  }
   try {
     const supabase = db();
     const { data, error } = await supabase
       .from("model_predictions")
       .select("market, confidence, result, odds, edge, game_date, clv, beat_close, closing_odds")
-      .eq("league", "mlb")
+      .eq("league", league)
       .in("result", ["win", "loss"]); // graded, decisive only (skip pending/push)
     if (error) throw new Error(error.message);
     const rows = data || [];
 
-    // HR props are plus-money longshots — a win/loss record is meaningless for them
-    // (a 12% hit rate can still be profitable). They distort the headline, so the
-    // core record (overall, by market, by confidence) is moneyline + totals only.
-    // HR props live exclusively in their own section below (hrProps), measured by ROI.
-    const coreRows = rows.filter(r => r.market !== "hr_prop");
+    // Props are kept entirely out of the core record and CLV — own table only.
+    const coreRows = rows.filter(r => cfg.core.includes(r.market));
+    const propRows = rows.filter(r => cfg.props.includes(r.market));
 
     // Qualified set drives the headline; full set kept for transparency.
     const qualifiedRows = coreRows.filter(isQualified);
@@ -72,22 +86,21 @@ router.get("/mlb", async (req, res) => {
     const qualified = build(qualifiedRows);
     const full = build(coreRows);
 
-    // also count pending (core markets only — matches the headline record)
+    // pending (core markets for THIS league only — matches the headline record)
     const { count: pendingCount } = await supabase
       .from("model_predictions")
       .select("id", { count: "exact", head: true })
+      .eq("league", league)
       .eq("result", "pending")
-      .in("market", ["moneyline", "total"]);
+      .in("market", cfg.core);
 
-    // ── CLV summary ───────────────────────────────────────────────────────────
-    // CLV is captured at game start regardless of win/loss, so we compute it over
-    // ALL qualified MLB ML/totals picks that have a closing line (not just decided
-    // ones). Average CLV and % that beat the close are the sharp-signal metrics.
+    // ── CLV summary (core markets with a captured closing line) ───────────────
+    // A sport with no captured closing lines simply returns clv = null.
     const { data: clvData } = await supabase
       .from("model_predictions")
       .select("confidence, clv, beat_close")
-      .eq("league", "mlb")
-      .in("market", ["moneyline", "total"])
+      .eq("league", league)
+      .in("market", cfg.clv)
       .not("clv", "is", null);
     const clvRows = (clvData || []).filter(isQualified);
     let clvSummary = null;
@@ -98,26 +111,23 @@ router.get("/mlb", async (req, res) => {
         sample: clvRows.length,
         beatClose: beat,
         beatClosePct: Math.round((beat / clvRows.length) * 1000) / 10,
-        // express avg CLV as a percentage-point swing in fair win prob
         avgClvPct: Math.round(avgClv * 10000) / 100,
       };
     }
 
-    // ── HR-prop accuracy ──────────────────────────────────────────────────────
-    // HR props are plus-money longshots, so they're shown separately and NOT gated
-    // to the qualified tiers. Hit rate = how often the picked player actually homered.
-    const hrRows = rows.filter(r => r.market === "hr_prop");
-    let hrProps = null;
-    if (hrRows.length > 0) {
+    // ── Props table (SEPARATE; hit-rate + ROI; never in core record or CLV) ───
+    let props = null;
+    if (propRows.length > 0) {
       let wins = 0, units = 0, oddsSum = 0, oddsN = 0;
-      for (const r of hrRows) {
+      for (const r of propRows) {
         const won = r.result === "win";
         if (won) wins++;
         units += won ? unitProfit(r.odds) : -1;
         if (r.odds != null) { oddsSum += Number(r.odds); oddsN++; }
       }
-      const n = hrRows.length;
-      hrProps = {
+      const n = propRows.length;
+      props = {
+        label: cfg.propsLabel,
         picks: n,
         hits: wins,
         misses: n - wins,
@@ -128,16 +138,17 @@ router.get("/mlb", async (req, res) => {
     }
 
     res.json({
+      league,
       // Headline = qualified picks (what we stand behind).
       ...qualified,
       totalGraded: qualifiedRows.length,
       // Full sample kept visible so nothing is hidden.
-      fullSample: {
-        ...full,
-        totalGraded: rows.length,
-      },
+      fullSample: { ...full, totalGraded: rows.length },
       clv: clvSummary,
-      hrProps,
+      props,
+      // Back-compat: the existing MLB page reads `hrProps`. Keep it for mlb until
+      // the page is updated to the generic `props` field.
+      hrProps: league === "mlb" ? props : undefined,
       filter: {
         qualifyingTiers: QUALIFYING_TIERS,
         excludedCount: rows.length - qualifiedRows.length,
