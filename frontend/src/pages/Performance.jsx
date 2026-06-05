@@ -12,14 +12,15 @@ export default function PerformancePage() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [league, setLeague] = useState("mlb");
   useEffect(() => { subscriptionApi.getMyPlan().then(setPlan).catch(() => {}); }, []);
   useEffect(() => {
-    setLoading(true); setError(false);
-    fetch(`${API_BASE}/api/performance/mlb`)
+    setLoading(true); setError(false); setData(null);
+    fetch(`${API_BASE}/api/performance/${league}`)
       .then(r => { if (!r.ok) throw new Error("bad"); return r.json(); })
       .then(d => { setData(d); setLoading(false); })
       .catch(() => { setError(true); setLoading(false); });
-  }, []);
+  }, [league]);
   return (
     <div style={{ minHeight: "100vh", background: "#0a0e14", color: "#e4e7eb", fontFamily: "'Inter',system-ui,-apple-system,sans-serif" }}>
       <style>{`
@@ -62,18 +63,39 @@ export default function PerformancePage() {
       <div className="main-content" style={{ marginLeft: 200 }}>
         <div className="perf-content" style={{ maxWidth: 900, margin: "0 auto", padding: "32px 24px 80px", animation: "fadeIn .3s ease" }}>
           <h1 style={{ margin: "0 0 8px", fontSize: 28, fontWeight: 700, letterSpacing: "-0.01em" }}>📈 Model Performance</h1>
-          <p style={{ margin: "0 0 28px", fontSize: 13, color: "#9ca3af" }}>
-            How the model's edges have actually performed · MLB moneyline, totals & HR props
+          <p style={{ margin: "0 0 20px", fontSize: 13, color: "#9ca3af" }}>
+            How the model's edges have actually performed · each sport tracked separately
           </p>
+          <SportTabs league={league} setLeague={setLeague} />
           {loading && <Loader />}
           {error && !loading && <ErrorState />}
-          {!loading && !error && data && <PerfBody data={data} />}
+          {!loading && !error && data && <PerfBody data={data} league={league} />}
         </div>
       </div>
     </div>
   );
 }
-function PerfBody({ data }) {
+const SPORTS = [
+  { key: "mlb", label: "MLB", icon: "⚾" },
+  { key: "nba", label: "NBA", icon: "🏀" },
+  { key: "nfl", label: "NFL", icon: "🏈" },
+  { key: "cfb", label: "CFB", icon: "🎓" },
+];
+function SportTabs({ league, setLeague }) {
+  return (
+    <div style={{ display: "flex", gap: 8, marginBottom: 24, flexWrap: "wrap" }}>
+      {SPORTS.map(s => {
+        const active = s.key === league;
+        return (
+          <button key={s.key} onClick={() => setLeague(s.key)} style={{ display: "flex", alignItems: "center", gap: 6, background: active ? "#ef4444" : "#0f1419", color: active ? "#fff" : "#9ca3af", border: `1px solid ${active ? "#ef4444" : "#1f2937"}`, borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", transition: "all .15s" }}>
+            <span>{s.icon}</span>{s.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+function PerfBody({ data, league }) {
   const graded = data.totalGraded || 0;
   const pending = data.pendingCount || 0;
   const full = data.fullSample || null;
@@ -110,6 +132,11 @@ function PerfBody({ data }) {
             : ""}. Small samples are noisy — a few weeks of data is where this gets meaningful.
         </span>
       </div>
+      {graded > 0 && graded < 25 && (
+        <div style={{ background: "#1a1410", border: "1px solid #f5970022", borderRadius: 6, padding: "8px 12px", marginBottom: 16, fontSize: 11.5, color: "#fbbf24" }}>
+          ⚠️ Very early sample ({graded} graded pick{graded === 1 ? "" : "s"}) — treat these as noise, not a track record yet.
+        </div>
+      )}
       {/* CLV — led as the most reliable signal of edge */}
       <ClvCard clv={data.clv} />
       {/* Overall record — ROI demoted + contextualized, shown below CLV */}
@@ -121,9 +148,9 @@ function PerfBody({ data }) {
           <StatCard key={market} label={marketLabel(market)} b={b} />
         ))}
       </div>
-      {/* HR prop accuracy — its own section (longshots; shown across all HR picks) */}
-      <SectionTitle>🔥 Home run props</SectionTitle>
-      <HrPropCard hr={data.hrProps} />
+      {/* Props — its OWN table; never part of the core record or CLV */}
+      <SectionTitle>{league === "mlb" ? "🔥 Home run props" : "🎯 Player props"}</SectionTitle>
+      <PropsCard p={data.props || data.hrProps} league={league} />
       {/* By confidence */}
       <SectionTitle>By confidence tier</SectionTitle>
       <div className="perf-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
@@ -222,30 +249,38 @@ function StatCard({ label, b, accent }) {
     </div>
   );
 }
-function HrPropCard({ hr }) {
-  if (!hr || !hr.picks) {
+function PropsCard({ p, league }) {
+  if (!p || !p.picks) {
     return (
       <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 20, marginBottom: 24, fontSize: 13, color: "#9ca3af", lineHeight: 1.6 }}>
-        Tracking the model's home-run prop picks. Hit rate and ROI post here once HR picks have been graded from final box scores.
+        Tracking the model's {(p && p.label ? p.label.toLowerCase() : "prop")} picks. Hit rate and ROI post here once props have been graded.
       </div>
     );
   }
-  const profit = hr.roi >= 0;
-  const fmtOdds = hr.avgOdds == null ? "—" : (hr.avgOdds > 0 ? `+${hr.avgOdds}` : `${hr.avgOdds}`);
+  const profit = p.roi >= 0;
+  const fmtOdds = p.avgOdds == null ? "—" : (p.avgOdds > 0 ? `+${p.avgOdds}` : `${p.avgOdds}`);
+  const isMlb = league === "mlb";
+  const labelLc = (p.label || "prop").toLowerCase();
   return (
     <div style={{ background: "linear-gradient(180deg,#1a1410,#0f1419)", border: "1px solid #f5970033", borderLeft: "3px solid #f59700", borderRadius: 12, padding: 24, marginBottom: 24 }}>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16 }}>
-        <Metric label="Hit rate" value={`${hr.hitRatePct}%`} color="#fbbf24" />
-        <Metric label="Hit / Missed" value={`${hr.hits}-${hr.misses}`} />
+        <Metric label="Hit rate" value={`${p.hitRatePct}%`} color="#fbbf24" />
+        <Metric label="Hit / Missed" value={`${p.hits}-${p.misses}`} />
         <div>
           <div style={{ fontSize: 10, color: "#6b7280", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 600, marginBottom: 6 }}>ROI</div>
-          <div style={{ fontSize: 28, fontWeight: 800, color: profit ? "#22c55e" : "#ef4444", lineHeight: 1 }}>{`${profit ? "+" : ""}${hr.roi}%`}</div>
+          <div style={{ fontSize: 28, fontWeight: 800, color: profit ? "#22c55e" : "#ef4444", lineHeight: 1 }}>{`${profit ? "+" : ""}${p.roi}%`}</div>
           <div style={{ fontSize: 9.5, color: "#a8915c", marginTop: 5, fontWeight: 600 }}>avg odds {fmtOdds}</div>
         </div>
       </div>
       <div style={{ marginTop: 14, fontSize: 11, color: "#6b7280", lineHeight: 1.6 }}>
-        Across {hr.picks} graded HR pick{hr.picks === 1 ? "" : "s"}. Home-run props are longshots, so a low hit rate is normal and expected —
-        at plus-money odds, hitting even a fraction of them can be profitable. ROI is the truer measure here than hit rate. Small samples are noisy.
+        Across {p.picks} graded {labelLc} pick{p.picks === 1 ? "" : "s"}.
+        {isMlb
+          ? " Home-run props are longshots, so a low hit rate is normal — at plus-money odds, hitting even a fraction can be profitable. ROI is the truer measure than hit rate."
+          : " Props are longshots — ROI is the truer measure than hit rate."}
+        {" Small samples are noisy."}
+        {league === "nba"
+          ? " ⚠️ Provisional: some NBA prop picks were recorded before a side-tracking fix, so a few may be graded against the wrong side — don't trust this record until the pre-fix rows are cleaned."
+          : ""}
       </div>
     </div>
   );
@@ -262,7 +297,12 @@ function SectionTitle({ children }) {
   return <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#6b7280", fontWeight: 700, textTransform: "uppercase", marginBottom: 12 }}>{children}</div>;
 }
 function marketLabel(m) {
-  return m === "moneyline" ? "Moneyline" : m === "total" ? "Totals" : m === "run_line" ? "Run line" : m === "hr_prop" ? "HR Props" : m;
+  const map = {
+    moneyline: "Moneyline", total: "Totals", run_line: "Run line", spread: "Spread",
+    hr_prop: "HR props", player_points: "Points", player_rebounds: "Rebounds",
+    player_assists: "Assists", player_threes: "3PT made", player_props: "Player props",
+  };
+  return map[m] || m;
 }
 function confColor(c) {
   return c === "HIGH" ? "#22c55e" : c === "MEDIUM" ? "#f59e0b" : "#9ca3af";
