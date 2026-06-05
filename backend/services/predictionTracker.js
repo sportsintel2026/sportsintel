@@ -65,6 +65,33 @@ function closingOddsForPick(pick, ev) {
   return null; // props not tracked for CLV yet
 }
 
+// NBA closing price for a pick's side, from the matchOdds/extractLines shape
+// ({ home:{ml,spread}, away:{ml,spread}, total:{overPrice,underPrice} }). NBA has
+// a spread market the MLB helper above doesn't handle.
+function nbaClosingOddsForPick(pick, lines) {
+  if (!lines) return null;
+  if (pick.market === "moneyline") {
+    const thisOdds = pick.selection === "home" ? lines.home?.ml : lines.away?.ml;
+    const oppOdds = pick.selection === "home" ? lines.away?.ml : lines.home?.ml;
+    if (thisOdds == null || oppOdds == null) return null;
+    return { thisOdds, oppOdds };
+  }
+  if (pick.market === "spread") {
+    const thisSp = pick.selection === "home" ? lines.home?.spread : lines.away?.spread;
+    const oppSp = pick.selection === "home" ? lines.away?.spread : lines.home?.spread;
+    if (!thisSp || !oppSp || thisSp.price == null || oppSp.price == null) return null;
+    return { thisOdds: thisSp.price, oppOdds: oppSp.price };
+  }
+  if (pick.market === "total") {
+    if (!lines.total) return null;
+    const thisOdds = pick.selection === "over" ? lines.total.overPrice : lines.total.underPrice;
+    const oppOdds = pick.selection === "over" ? lines.total.underPrice : lines.total.overPrice;
+    if (thisOdds == null || oppOdds == null) return null;
+    return { thisOdds, oppOdds };
+  }
+  return null;
+}
+
 // Capture closing lines for MLB ML/totals picks whose game is about to start
 // (within the pre-game window, not yet underway) and that don't yet have a
 // closing line. Reading just before first pitch gives the true closing price;
@@ -152,6 +179,84 @@ async function captureClosingLines() {
   }
 
   console.log(`[CLV] captured closing lines for ${captured}/${toCapture.length} picks`);
+  return captured;
+}
+
+// NBA counterpart to captureClosingLines. Same idea — grab the closing price in
+// the ~35-min pre-tip window and compute CLV — but NBA has its own schedule
+// source (ESPN scoreboard), its own odds fetch (fetchNbaOdds), and a spread
+// market. Kept separate so the MLB path is untouched.
+async function captureNbaClosingLines() {
+  const supabase = db();
+  const { fetchNbaOdds, matchOdds } = require("./nbaService");
+
+  const { data: pending, error } = await supabase
+    .from("model_predictions")
+    .select("*")
+    .eq("league", "nba")
+    .in("market", ["moneyline", "spread", "total"])
+    .is("closing_odds", null)
+    .eq("result", "pending");
+
+  if (error) { console.error("[CLV][NBA] fetch error:", error.message); return 0; }
+  if (!pending || pending.length === 0) { console.log("[CLV][NBA] no picks awaiting closing line"); return 0; }
+
+  const dates = [...new Set(pending.map(p => p.game_date))];
+  const CLOSING_WINDOW_MS = 35 * 60 * 1000;
+  const now = Date.now();
+  const gamesById = {};
+  const closingWindowGameIds = new Set();
+  for (const date of dates) {
+    try {
+      const board = await fetchScoreboard(date);
+      const games = Array.isArray(board) ? board : (board && board.games) || [];
+      for (const g of games) {
+        gamesById[String(g.gameId)] = { home: g.home, away: g.away, date: g.date };
+        if (g.state !== "pre" || !g.date) continue;
+        const msToStart = new Date(g.date).getTime() - now;
+        if (msToStart > 0 && msToStart <= CLOSING_WINDOW_MS) {
+          closingWindowGameIds.add(String(g.gameId));
+        }
+      }
+    } catch (e) { console.error(`[CLV][NBA] scoreboard ${date} failed:`, e.message); }
+  }
+
+  const toCapture = pending.filter(p => closingWindowGameIds.has(String(p.game_id)));
+  if (toCapture.length === 0) { console.log("[CLV][NBA] no games in pre-game closing window"); return 0; }
+
+  let oddsEvents = [];
+  try { oddsEvents = await fetchNbaOdds(); }
+  catch (e) { console.error("[CLV][NBA] odds fetch failed:", e.message); return 0; }
+  if (!oddsEvents || oddsEvents.length === 0) { console.log("[CLV][NBA] no odds events available"); return 0; }
+
+  let captured = 0;
+  for (const pick of toCapture) {
+    const g = gamesById[String(pick.game_id)];
+    if (!g || !g.home || !g.away) continue;
+    const lines = matchOdds({ home: g.home, away: g.away, date: g.date }, oddsEvents);
+    const closing = nbaClosingOddsForPick(pick, lines);
+    if (!closing) continue;
+
+    const pickImplied = americanToImpliedProb(pick.odds);
+    const closeImplied = americanToImpliedProb(closing.thisOdds);
+    const clv = (pickImplied != null && closeImplied != null)
+      ? round4(closeImplied - pickImplied)
+      : null;
+
+    const { error: upErr } = await supabase
+      .from("model_predictions")
+      .update({
+        closing_odds: closing.thisOdds,
+        closing_opp_odds: closing.oppOdds,
+        clv,
+        beat_close: clv != null ? clv > 0 : null,
+        closing_captured_at: new Date().toISOString(),
+      })
+      .eq("id", pick.id);
+    if (!upErr) captured++;
+  }
+
+  console.log(`[CLV][NBA] captured closing lines for ${captured}/${toCapture.length} picks`);
   return captured;
 }
 
@@ -686,4 +791,4 @@ function gradeOne(p, g) {
   return null;
 }
 
-module.exports = { recordPredictions, recordNbaPropPredictions, recordNbaTeamPredictions, gradeFinishedGames, gradeNbaProp, captureClosingLines };
+module.exports = { recordPredictions, recordNbaPropPredictions, recordNbaTeamPredictions, gradeFinishedGames, gradeNbaProp, captureClosingLines, captureNbaClosingLines };
