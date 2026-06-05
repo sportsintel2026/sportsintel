@@ -5,7 +5,7 @@
 // gradeFinishedGames()  → cron: grades pending MLB (team scores) and NBA (player gamelog).
 
 const { createClient } = require("@supabase/supabase-js");
-const { getEasternDate, getScheduleForDate, getGameHRHitters, getGamePitcherStrikeouts, normPlayerName } = require("./mlbStatsApi");
+const { getEasternDate, getScheduleForDate, getGameHRHitters, getGamePitcherStrikeouts, getGameBatterHits, normPlayerName } = require("./mlbStatsApi");
 const { fetchGamelog } = require("./nbaGamelog");
 const { fetchScoreboard } = require("./nbaDataSource");
 const { getMLBMainOdds } = require("./oddsApi");
@@ -361,6 +361,20 @@ async function recordPredictions(result) {
     });
   }
 
+  // Hits props (two-sided; selection encodes the side)
+  for (const e of result.hitsPropEdges || []) {
+    if (statusById[e.gameId] === "final") continue;
+    const side = (e.side || "over").toUpperCase();
+    rows.push({
+      game_id: e.gameId, game_date: gameDate, league: "mlb",
+      matchup: e.game, market: "player_hits",
+      selection: `${e.player}:${side}`,
+      description: `${e.player} ${side === "OVER" ? "Over" : "Under"} ${e.line} H`,
+      model_prob: e.hitsProb, odds: e.odds, edge: e.edge,
+      confidence: e.confidence, line: e.line,
+    });
+  }
+
   if (rows.length === 0) return;
 
   // Defensive: drop any row missing a game_id (shouldn't happen, but the DB
@@ -641,6 +655,25 @@ function resolveK(kMap, playerName) {
   return { found: false, k: null };
 }
 
+// Generic name->value resolver for box-score stat maps (used for hits).
+function resolvePlayerStat(statMap, playerName) {
+  const target = normPlayerName(playerName);
+  if (!target) return { found: false, value: null };
+  if (statMap.has(target)) return { found: true, value: statMap.get(target) };
+  const parts = target.split(" ");
+  if (parts.length >= 2) {
+    const firstInitial = parts[0][0];
+    const last = parts[parts.length - 1];
+    const matches = [];
+    for (const [name, v] of statMap.entries()) {
+      const np = name.split(" ");
+      if (np.length >= 2 && np[np.length - 1] === last && np[0][0] === firstInitial) matches.push(v);
+    }
+    if (matches.length === 1) return { found: true, value: matches[0] };
+  }
+  return { found: false, value: null };
+}
+
 // MLB grading — moneyline/totals from the schedule score; HR props from the
 // official boxscore (one fetch per game, cached for this run).
 async function gradeMlb(supabase, pending) {
@@ -652,6 +685,7 @@ async function gradeMlb(supabase, pending) {
   let graded = 0;
   const hrCache = new Map(); // game_id -> { ok, hr }
   const kCache = new Map(); // game_id -> { ok, ks }
+  const hitsCache = new Map(); // game_id -> { ok, hits }
 
   for (const [date, preds] of Object.entries(byDate)) {
     let schedule;
@@ -684,6 +718,23 @@ async function gradeMlb(supabase, pending) {
           const over = k > (p.line ?? 0);
           const win = side === "OVER" ? over : !over;
           outcome = { result: win ? "win" : "loss", actual: k };
+        }
+      } else if (p.market === "player_hits") {
+        if (!hitsCache.has(p.game_id)) {
+          hitsCache.set(p.game_id, await getGameBatterHits(p.game_id));
+        }
+        const box = hitsCache.get(p.game_id);
+        if (!box || !box.ok) continue;                 // couldn't read → retry later
+        const ci = p.selection.lastIndexOf(":");
+        const pname = ci >= 0 ? p.selection.slice(0, ci) : p.selection;
+        const side = (ci >= 0 ? p.selection.slice(ci + 1) : "OVER").toUpperCase();
+        const { found, value } = resolvePlayerStat(box.hits, pname);
+        if (!found) continue;                          // batter not located → never false-loss
+        if (p.line != null && value === p.line) outcome = { result: "push", actual: value };
+        else {
+          const over = value > (p.line ?? 0);
+          const win = side === "OVER" ? over : !over;
+          outcome = { result: win ? "win" : "loss", actual: value };
         }
       } else if (p.market === "hr_prop") {
         // Box score holds per-player HRs. Fetch once per game, cache for this run.
