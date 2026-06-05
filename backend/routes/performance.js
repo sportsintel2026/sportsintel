@@ -116,25 +116,15 @@ router.get("/:league", async (req, res) => {
     }
 
     // ── Props table (SEPARATE; hit-rate + ROI; never in core record or CLV) ───
+    // Overall props summary PLUS a per-stat breakdown (points / rebounds /
+    // assists / 3PT for NBA; a single HR-props entry for MLB). Each stat type
+    // becomes its own sub-row on the page.
     let props = null;
     if (propRows.length > 0) {
-      let wins = 0, units = 0, oddsSum = 0, oddsN = 0;
-      for (const r of propRows) {
-        const won = r.result === "win";
-        if (won) wins++;
-        units += won ? unitProfit(r.odds) : -1;
-        if (r.odds != null) { oddsSum += Number(r.odds); oddsN++; }
-      }
-      const n = propRows.length;
-      props = {
-        label: cfg.propsLabel,
-        picks: n,
-        hits: wins,
-        misses: n - wins,
-        hitRatePct: Math.round((wins / n) * 1000) / 10,
-        roi: Math.round((units / n) * 1000) / 10,
-        avgOdds: oddsN ? Math.round(oddsSum / oddsN) : null,
-      };
+      props = { label: cfg.propsLabel, ...propSummary(propRows), byMarket: {} };
+      const byMkt = {};
+      for (const r of propRows) { (byMkt[r.market] ||= []).push(r); }
+      for (const mkt of Object.keys(byMkt)) props.byMarket[mkt] = propSummary(byMkt[mkt]);
     }
 
     res.json({
@@ -173,5 +163,25 @@ function finalize(b) {
   b.winPct = total > 0 ? Math.round((b.wins / total) * 1000) / 10 : null;
   b.roi = total > 0 ? Math.round((b.units / total) * 1000) / 10 : null; // % ROI per unit
   b.units = Math.round(b.units * 100) / 100;
+}
+// Hit-rate / ROI summary for a set of prop rows (used for the props table and
+// each per-stat sub-row). Props are graded by hit-rate + ROI, never win/loss record.
+function propSummary(rows) {
+  let wins = 0, units = 0, oddsSum = 0, oddsN = 0;
+  for (const r of rows) {
+    const won = r.result === "win";
+    if (won) wins++;
+    units += won ? unitProfit(r.odds) : -1;
+    if (r.odds != null) { oddsSum += Number(r.odds); oddsN++; }
+  }
+  const n = rows.length;
+  return {
+    picks: n,
+    hits: wins,
+    misses: n - wins,
+    hitRatePct: Math.round((wins / n) * 1000) / 10,
+    roi: Math.round((units / n) * 1000) / 10,
+    avgOdds: oddsN ? Math.round(oddsSum / oddsN) : null,
+  };
 }
 module.exports = router;
