@@ -20,7 +20,7 @@ const expertGradeRoutes = require("./routes/expertGrade");
 const dailyCardRoutes = require("./routes/dailyCard");
 
 const { refreshDailyGames } = require("./services/sportsData");
-const { gradeFinishedGames, captureClosingLines } = require("./services/predictionTracker");
+const { gradeFinishedGames, captureClosingLines, captureNbaClosingLines } = require("./services/predictionTracker");
 const { gradeExpertPicks } = require("./services/expertPicksGrader");
 const { gradeDailyCard } = require("./services/dailyCard");
 
@@ -118,6 +118,11 @@ cron.schedule("*/30 12-23,0-1 * * *", async () => {
     await captureClosingLines();
   } catch (err) {
     console.error("[CRON] Closing-line capture failed:", err.message);
+  }
+  try {
+    await captureNbaClosingLines();
+  } catch (err) {
+    console.error("[CRON] NBA closing-line capture failed:", err.message);
   }
 }, { timezone: "America/New_York" });
 
