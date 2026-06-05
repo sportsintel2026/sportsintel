@@ -688,7 +688,8 @@ function NBAPropsSection({ games, hasFullAccess, navigate }) {
           for (const s of r.suspects || []) allSuspects.push({ ...s, matchup, gameId: r.gameId });
           for (const p of r.players || []) {
             if (!p.markets) continue; // skip out/unresolved players
-            allRows.push({ name: p.name, matchup, gameId: r.gameId, injuryStatus: p.injuryStatus || null, markets: p.markets });
+            const team = p.side === "home" ? nbaAbbr(r.home) : p.side === "away" ? nbaAbbr(r.away) : null;
+            allRows.push({ name: p.name, matchup, team, gameId: r.gameId, injuryStatus: p.injuryStatus || null, markets: p.markets });
           }
         }
         allEdges.sort((a, b) => Math.abs(b.edge) - Math.abs(a.edge));
@@ -774,6 +775,32 @@ function NBAAllPropsTable({ rows, hasFullAccess, navigate }) {
   const visible = hasFullAccess ? rows : rows.slice(0, 6);
   const lockedCount = hasFullAccess ? 0 : Math.max(0, rows.length - visible.length);
 
+  // Group visible players by team. If team info is missing (one group), fall
+  // back to a flat list so the table never looks broken.
+  const groups = [];
+  const idx = new Map();
+  for (const r of visible) {
+    const key = r.team || "—";
+    let g = idx.get(key);
+    if (!g) { g = { team: key, rows: [] }; idx.set(key, g); groups.push(g); }
+    g.rows.push(r);
+  }
+  const grouped = groups.length > 1;
+  const renderRow = (r, i) => (
+    <tr key={(r.team || "") + r.gameId + r.name + i} className="game-row" onClick={() => navigate(`/game/nba/${r.gameId}`)} style={{ borderBottom: "1px solid #1a212c", background: i % 2 === 1 ? "#0b1118" : "transparent", cursor: "pointer" }}>
+      <td style={{ ...td(), padding: "13px 8px" }}>
+        <div style={{ fontWeight: 600, fontSize: 13 }}>{r.name}</div>
+        <div style={{ fontSize: 10, color: "#5b6472", marginTop: 1 }}>
+          {r.matchup}{r.injuryStatus ? ` · ${r.injuryStatus}` : ""}
+        </div>
+      </td>
+      <td style={{ ...td("right"), padding: "13px 8px" }}><StatCell m={r.markets.points} /></td>
+      <td style={{ ...td("right"), padding: "13px 8px" }}><StatCell m={r.markets.rebounds} /></td>
+      <td style={{ ...td("right"), padding: "13px 8px" }}><StatCell m={r.markets.assists} /></td>
+      <td style={{ ...td("right"), padding: "13px 8px" }}><StatCell m={r.markets.threes} /></td>
+    </tr>
+  );
+
   return (
     <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 8, padding: 14 }}>
       <div className="section-header" onClick={() => setOpen(!open)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: open ? 6 : 0 }}>
@@ -800,20 +827,17 @@ function NBAAllPropsTable({ rows, hasFullAccess, navigate }) {
                 </tr>
               </thead>
               <tbody>
-                {visible.map((r, i) => (
-                  <tr key={r.gameId + r.name + i} className="game-row" onClick={() => navigate(`/game/nba/${r.gameId}`)} style={{ borderBottom: "1px solid #1a212c", background: i % 2 === 1 ? "#0b1118" : "transparent", cursor: "pointer" }}>
-                    <td style={{ ...td(), padding: "13px 8px" }}>
-                      <div style={{ fontWeight: 600, fontSize: 13 }}>{r.name}</div>
-                      <div style={{ fontSize: 10, color: "#5b6472", marginTop: 1 }}>
-                        {r.matchup}{r.injuryStatus ? ` · ${r.injuryStatus}` : ""}
-                      </div>
-                    </td>
-                    <td style={{ ...td("right"), padding: "13px 8px" }}><StatCell m={r.markets.points} /></td>
-                    <td style={{ ...td("right"), padding: "13px 8px" }}><StatCell m={r.markets.rebounds} /></td>
-                    <td style={{ ...td("right"), padding: "13px 8px" }}><StatCell m={r.markets.assists} /></td>
-                    <td style={{ ...td("right"), padding: "13px 8px" }}><StatCell m={r.markets.threes} /></td>
-                  </tr>
-                ))}
+                {grouped
+                  ? groups.flatMap((g) => [
+                      <tr key={"hdr-" + g.team}>
+                        <td colSpan={5} style={{ padding: "12px 8px 6px", borderBottom: "1px solid #1f2937" }}>
+                          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.5, color: "#e4e7eb" }}>{g.team}</span>
+                          <span style={{ fontSize: 10, color: "#5b6472", marginLeft: 8 }}>{g.rows.length} player{g.rows.length === 1 ? "" : "s"}</span>
+                        </td>
+                      </tr>,
+                      ...g.rows.map((r, i) => renderRow(r, i)),
+                    ])
+                  : visible.map((r, i) => renderRow(r, i))}
               </tbody>
             </table>
           </div>
