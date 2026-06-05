@@ -262,6 +262,66 @@ function parseHRProps(ev) {
   return Array.from(playerMap.values());
 }
 
+// ── MLB Pitcher Strikeout Props ───────────────────────────────────────────────
+// Two-sided market (Over/Under a line), so unlike HR props we can de-vig cleanly.
+async function getMLBStrikeoutPropsForEvent(eventId) {
+  const cacheKey = `mlb_k_${eventId}`;
+  const cached = cache.get(cacheKey);
+  if (isCacheValid(cached)) return cached.data;
+  try {
+    const data = await oddsGet(`/sports/baseball_mlb/events/${eventId}/odds`, {
+      regions: "us",
+      markets: "pitcher_strikeouts",
+      oddsFormat: "american",
+    });
+    const props = parseStrikeoutProps(data);
+    console.log(`[OddsAPI-K] Parsed ${props.length} strikeout props from event ${eventId}`);
+    cache.set(cacheKey, { data: props, fetchedAt: Date.now() });
+    return props;
+  } catch (e) {
+    console.error(`[OddsAPI] K props error for ${eventId}:`, e.message);
+    if (cached) return cached.data;
+    return [];
+  }
+}
+
+// Per pitcher, keep the FIRST book that posts BOTH Over and Under at the same line
+// (a same-book pair is required to de-vig). Returns { player, line, overOdds, underOdds, book }.
+function parseStrikeoutProps(ev) {
+  const out = new Map(); // player -> pair
+  for (const bm of (ev.bookmakers || [])) {
+    for (const m of (bm.markets || [])) {
+      if (m.key !== "pitcher_strikeouts") continue;
+      const byPlayer = new Map(); // player -> { line, over, under }
+      for (const o of (m.outcomes || [])) {
+        const player = o.description;
+        if (!player || o.point == null || o.price == null) continue;
+        const side = (o.name || "").toLowerCase();
+        const rec = byPlayer.get(player) || { line: o.point };
+        if (side === "over") rec.over = o.price;
+        else if (side === "under") rec.under = o.price;
+        rec.line = o.point;
+        byPlayer.set(player, rec);
+      }
+      for (const [player, rec] of byPlayer) {
+        if (rec.over == null || rec.under == null) continue;
+        if (out.has(player)) continue; // first book wins
+        out.set(player, { player, line: rec.line, overOdds: rec.over, underOdds: rec.under, book: bm.title });
+      }
+    }
+  }
+  return Array.from(out.values());
+}
+
+async function getMLBStrikeoutPropsForAllEvents(eventIds, maxEvents = 5) {
+  const targets = eventIds.slice(0, maxEvents);
+  const results = {};
+  for (const id of targets) {
+    results[id] = await getMLBStrikeoutPropsForEvent(id);
+  }
+  return results;
+}
+
 async function getMLBHRPropsForAllEvents(eventIds, maxEvents = 5) {
   const targets = eventIds.slice(0, maxEvents);
   const results = {};
@@ -299,6 +359,8 @@ module.exports = {
   getMLBLiveOdds,
   getMLBHRPropsForEvent,
   getMLBHRPropsForAllEvents,
+  getMLBStrikeoutPropsForEvent,
+  getMLBStrikeoutPropsForAllEvents,
   americanToImpliedProb,
   clearOddsCache,
   getCacheStats,
