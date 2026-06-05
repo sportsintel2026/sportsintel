@@ -613,9 +613,41 @@ async function getGameHRHitters(gamePk) {
   }
 }
 
+// Per-pitcher strikeouts from a finished game's box score — grades K props.
+// Mirrors getGameHRHitters but reads pitching.strikeOuts; keyed by normPlayerName
+// so pick selections (by pitcher name) match. Guards against a field-path change.
+async function getGamePitcherStrikeouts(gamePk) {
+  try {
+    const data = await mlbGet(`/game/${gamePk}/boxscore`);
+    const teams = data && data.teams;
+    if (!teams || !teams.home || !teams.away) return { ok: false, ks: null };
+    const ks = new Map();
+    let pitchingObjectsSeen = 0;
+    for (const side of ["home", "away"]) {
+      const players = teams[side] && teams[side].players;
+      if (!players) continue;
+      for (const key of Object.keys(players)) {
+        const pl = players[key];
+        const name = pl && pl.person && pl.person.fullName;
+        const pitching = pl && pl.stats && pl.stats.pitching;
+        if (!name) continue;
+        if (pitching && typeof pitching === "object" && pitching.strikeOuts != null) {
+          pitchingObjectsSeen++;
+          ks.set(normPlayerName(name), parseIntSafe(pitching.strikeOuts) || 0);
+        }
+      }
+    }
+    if (pitchingObjectsSeen === 0) return { ok: false, ks: null };
+    return { ok: true, ks };
+  } catch (e) {
+    return { ok: false, ks: null };
+  }
+}
+
 module.exports = {
   getEasternDate, getScheduleForDate,
-  getGameHRHitters, normPlayerName,
+  getGameHRHitters,
+  getGamePitcherStrikeouts, normPlayerName,
   getPitcherSeasonStats, getBatterSeasonStats,
   getTeamSeasonStats, getTeamPitchingStats, getTeamRoster, getLinescore,
   getTeamHittingAsOf, getPitcherEraAsOf, getTeamPitchingAsOf,
