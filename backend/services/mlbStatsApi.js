@@ -644,10 +644,41 @@ async function getGamePitcherStrikeouts(gamePk) {
   }
 }
 
+// Per-batter hits from a finished game's box score — grades hits props.
+// Mirrors getGameHRHitters but reads batting.hits.
+async function getGameBatterHits(gamePk) {
+  try {
+    const data = await mlbGet(`/game/${gamePk}/boxscore`);
+    const teams = data && data.teams;
+    if (!teams || !teams.home || !teams.away) return { ok: false, hits: null };
+    const hits = new Map();
+    let battingObjectsSeen = 0;
+    for (const side of ["home", "away"]) {
+      const players = teams[side] && teams[side].players;
+      if (!players) continue;
+      for (const key of Object.keys(players)) {
+        const pl = players[key];
+        const name = pl && pl.person && pl.person.fullName;
+        const batting = pl && pl.stats && pl.stats.batting;
+        if (!name) continue;
+        if (batting && typeof batting === "object" && batting.hits != null) {
+          battingObjectsSeen++;
+          hits.set(normPlayerName(name), parseIntSafe(batting.hits) || 0);
+        }
+      }
+    }
+    if (battingObjectsSeen === 0) return { ok: false, hits: null };
+    return { ok: true, hits };
+  } catch (e) {
+    return { ok: false, hits: null };
+  }
+}
+
 module.exports = {
   getEasternDate, getScheduleForDate,
   getGameHRHitters,
-  getGamePitcherStrikeouts, normPlayerName,
+  getGamePitcherStrikeouts,
+  getGameBatterHits, normPlayerName,
   getPitcherSeasonStats, getBatterSeasonStats,
   getTeamSeasonStats, getTeamPitchingStats, getTeamRoster, getLinescore,
   getTeamHittingAsOf, getPitcherEraAsOf, getTeamPitchingAsOf,
