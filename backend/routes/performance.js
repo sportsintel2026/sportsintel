@@ -19,7 +19,7 @@ const { createClient } = require("@supabase/supabase-js");
 // clv   = markets eligible for a captured closing line; a market with none simply
 //         yields clv = null (honest "not captured yet" state for new sports)
 const LEAGUE_CONFIG = {
-  mlb: { core: ["moneyline", "total", "run_line"], props: ["hr_prop"], clv: ["moneyline", "total"], propsLabel: "Home run props" },
+  mlb: { core: ["moneyline", "total", "run_line"], props: ["hr_prop", "player_strikeouts"], clv: ["moneyline", "total"], propsLabel: "Player props" },
   nba: { core: ["moneyline", "spread", "total"], props: ["player_points", "player_rebounds", "player_assists", "player_threes"], clv: ["moneyline", "spread", "total"], propsLabel: "Player props" },
   nfl: { core: ["moneyline", "spread", "total"], props: ["player_props"], clv: ["moneyline", "spread", "total"], propsLabel: "Player props" },
   cfb: { core: ["moneyline", "spread", "total"], props: ["player_props"], clv: ["moneyline", "spread", "total"], propsLabel: "Player props" },
