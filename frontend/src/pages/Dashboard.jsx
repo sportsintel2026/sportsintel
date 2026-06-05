@@ -213,8 +213,10 @@ function MLBDashboard({ edges, loading, hasFullAccess, navigate, onRefresh }) {
       <div style={{ marginBottom: 8, fontSize: 11, color: "#a8915c", display: "flex", alignItems: "center", gap: 6, lineHeight: 1.5 }}>
         ⚠️ Experimental — strikeout & hits projections are v1 and still being calibrated. Treat as directional, not proven.
       </div>
-      <div className="edge-grid-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16, gridAutoRows: "1fr" }}>
+      <div style={{ marginBottom: 16 }}>
         <EdgePanel title="Pitcher strikeouts" icon="🔥" edges={edges.kPropEdges || []} renderRow={(e) => <KPropRow edge={e} key={e.player + e.game} />} emptyText="K prop data updates closer to first pitch" hasFullAccess={hasFullAccess} navigate={navigate} wide />
+      </div>
+      <div style={{ marginBottom: 16 }}>
         <EdgePanel title="Batter hits" icon="🏏" edges={edges.hitsPropEdges || []} renderRow={(e) => <HitsPropRow edge={e} key={e.player + e.game} />} emptyText="Hits prop data updates closer to first pitch" hasFullAccess={hasFullAccess} navigate={navigate} wide />
       </div>
 
@@ -435,7 +437,7 @@ function KPropRow({ edge }) {
 
 function HitsPropRow({ edge }) {
   const lineLabel = edge.line === 0.5
-    ? (edge.side === "under" ? "Under 0.5 H (0 hits)" : "Over 0.5 H (1+ hits)")
+    ? (edge.side === "under" ? "0 hits" : "1+ hits")
     : `${edge.side === "under" ? "Under" : "Over"} ${edge.line} H`;
   const avgText = edge.battingAvg != null ? `${edge.battingAvg.toFixed(3).replace(/^0/, ".")} AVG` : null;
   return (
