@@ -57,6 +57,10 @@ export default function DashboardPage() {
         .section-header:hover{color:#fff!important}
         .hamburger-btn{display:none}
         .mobile-only{display:none}
+        .edge-scroll{scrollbar-width:thin;scrollbar-color:#374151 transparent;-webkit-overflow-scrolling:touch}
+        .edge-scroll::-webkit-scrollbar{width:6px}
+        .edge-scroll::-webkit-scrollbar-thumb{background:#374151;border-radius:3px}
+        .edge-scroll::-webkit-scrollbar-track{background:transparent}
         .desktop-sidebar{display:block}
         @media (max-width: 768px) {
           .desktop-sidebar{display:none!important}
@@ -208,16 +212,16 @@ function MLBDashboard({ edges, loading, hasFullAccess, navigate, onRefresh }) {
         <EdgePanel title="Top totals edges" icon="📊" edges={edges.totalsEdges || []} renderRow={(e) => <TotalsRow edge={e} key={e.gameId + e.side} navigate={navigate} />} emptyText="No edges found in current slate" hasFullAccess={hasFullAccess} navigate={navigate} />
       </div>
       <div style={{ marginBottom: 16 }}>
-        <EdgePanel title="Top home run props" icon="💣" edges={edges.hrPropEdges || []} renderRow={(e) => <HRPropRow edge={e} key={e.player + e.game} />} emptyText="HR prop data updates closer to first pitch" hasFullAccess={hasFullAccess} navigate={navigate} wide />
+        <EdgePanel title="Top home run props" icon="💣" edges={edges.hrPropEdges || []} renderRow={(e) => <HRPropRow edge={e} key={e.player + e.game} />} emptyText="HR prop data updates closer to first pitch" hasFullAccess={hasFullAccess} navigate={navigate} wide scroll />
       </div>
       <div style={{ marginBottom: 8, fontSize: 11, color: "#a8915c", display: "flex", alignItems: "center", gap: 6, lineHeight: 1.5 }}>
         ⚠️ Experimental — strikeout & hits projections are v1 and still being calibrated. Treat as directional, not proven.
       </div>
       <div style={{ marginBottom: 16 }}>
-        <EdgePanel title="Pitcher strikeouts" icon="🔥" edges={edges.kPropEdges || []} renderRow={(e) => <KPropRow edge={e} key={e.player + e.game} />} emptyText="K prop data updates closer to first pitch" hasFullAccess={hasFullAccess} navigate={navigate} wide />
+        <EdgePanel title="Pitcher strikeouts" icon="🔥" edges={edges.kPropEdges || []} renderRow={(e) => <KPropRow edge={e} key={e.player + e.game} />} emptyText="K prop data updates closer to first pitch" hasFullAccess={hasFullAccess} navigate={navigate} wide scroll />
       </div>
       <div style={{ marginBottom: 16 }}>
-        <EdgePanel title="Batter hits" icon="🏏" edges={edges.hitsPropEdges || []} renderRow={(e) => <HitsPropRow edge={e} key={e.player + e.game} />} emptyText="Hits prop data updates closer to first pitch" hasFullAccess={hasFullAccess} navigate={navigate} wide />
+        <EdgePanel title="Batter hits" icon="🏏" edges={edges.hitsPropEdges || []} renderRow={(e) => <HitsPropRow edge={e} key={e.player + e.game} />} emptyText="Hits prop data updates closer to first pitch" hasFullAccess={hasFullAccess} navigate={navigate} wide scroll />
       </div>
 
       <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 8, padding: "16px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
@@ -305,7 +309,7 @@ function TopPlays({ edges, hasFullAccess, navigate }) {
     </div>
   );
 }
-function EdgePanel({ title, icon, edges, renderRow, emptyText, hasFullAccess, navigate, wide }) {
+function EdgePanel({ title, icon, edges, renderRow, emptyText, hasFullAccess, navigate, wide, scroll }) {
   const visible = hasFullAccess ? edges : edges.slice(0, 1);
   const hidden = hasFullAccess ? [] : edges.slice(1, 5);
   return (
@@ -317,7 +321,7 @@ function EdgePanel({ title, icon, edges, renderRow, emptyText, hasFullAccess, na
       {edges.length === 0 ? (
         <div style={{ color: "#4b5563", fontSize: 12, textAlign: "center", padding: "16px 0" }}>{emptyText}</div>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        <div className="edge-scroll" style={{ display: "flex", flexDirection: "column", gap: 6, ...(scroll ? { maxHeight: 380, overflowY: "auto", paddingRight: 4 } : {}) }}>
           {visible.map(renderRow)}
           {hidden.length > 0 && (
             <div style={{ position: "relative", marginTop: 4 }}>
