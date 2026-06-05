@@ -331,6 +331,64 @@ async function getMLBHRPropsForAllEvents(eventIds, maxEvents = 5) {
   return results;
 }
 
+// ── MLB Batter Hits Props ─────────────────────────────────────────────────────
+// Two-sided; standard 0.5 line ("1+ hits"). Filter to 0.5 to avoid mixing alt lines.
+async function getMLBHitsPropsForEvent(eventId) {
+  const cacheKey = `mlb_hits_${eventId}`;
+  const cached = cache.get(cacheKey);
+  if (isCacheValid(cached)) return cached.data;
+  try {
+    const data = await oddsGet(`/sports/baseball_mlb/events/${eventId}/odds`, {
+      regions: "us",
+      markets: "batter_hits",
+      oddsFormat: "american",
+    });
+    const props = parseHitsProps(data);
+    console.log(`[OddsAPI-Hits] Parsed ${props.length} hits props from event ${eventId}`);
+    cache.set(cacheKey, { data: props, fetchedAt: Date.now() });
+    return props;
+  } catch (e) {
+    console.error(`[OddsAPI] Hits props error for ${eventId}:`, e.message);
+    if (cached) return cached.data;
+    return [];
+  }
+}
+
+function parseHitsProps(ev) {
+  const out = new Map();
+  for (const bm of (ev.bookmakers || [])) {
+    for (const m of (bm.markets || [])) {
+      if (m.key !== "batter_hits") continue;
+      const byPlayer = new Map();
+      for (const o of (m.outcomes || [])) {
+        if (o.point !== 0.5) continue; // standard "1+ hits" line only
+        const player = o.description;
+        if (!player || o.price == null) continue;
+        const side = (o.name || "").toLowerCase();
+        const rec = byPlayer.get(player) || { line: 0.5 };
+        if (side === "over") rec.over = o.price;
+        else if (side === "under") rec.under = o.price;
+        byPlayer.set(player, rec);
+      }
+      for (const [player, rec] of byPlayer) {
+        if (rec.over == null || rec.under == null) continue;
+        if (out.has(player)) continue; // first book wins
+        out.set(player, { player, line: 0.5, overOdds: rec.over, underOdds: rec.under, book: bm.title });
+      }
+    }
+  }
+  return Array.from(out.values());
+}
+
+async function getMLBHitsPropsForAllEvents(eventIds, maxEvents = 5) {
+  const targets = eventIds.slice(0, maxEvents);
+  const results = {};
+  for (const id of targets) {
+    results[id] = await getMLBHitsPropsForEvent(id);
+  }
+  return results;
+}
+
 // ── Convert American odds to implied probability ──────────────────────────────
 
 function americanToImpliedProb(american) {
@@ -361,6 +419,8 @@ module.exports = {
   getMLBHRPropsForAllEvents,
   getMLBStrikeoutPropsForEvent,
   getMLBStrikeoutPropsForAllEvents,
+  getMLBHitsPropsForEvent,
+  getMLBHitsPropsForAllEvents,
   americanToImpliedProb,
   clearOddsCache,
   getCacheStats,
