@@ -875,7 +875,7 @@ function StatCell({ m }) {
   const arrow = isOver ? "▲" : "▼";
   return (
     <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-end", gap: 2, lineHeight: 1.15 }}>
-      <span style={{ fontSize: 16, fontWeight: m.flagged ? 800 : 600, color: m.flagged ? color : "#e4e7eb", fontVariantNumeric: "tabular-nums" }}>
+      <span style={{ fontSize: 14, fontWeight: m.flagged ? 700 : 600, color: m.flagged ? color : "#e4e7eb", fontVariantNumeric: "tabular-nums" }}>
         {m.projection}{m.suspect ? <span style={{ display: "inline-block", width: 7, height: 7, borderRadius: "50%", background: "#f59700", marginLeft: 5, verticalAlign: "middle" }} /> : null}
       </span>
       <span style={{ fontSize: 10, color: "#5b6472", fontVariantNumeric: "tabular-nums" }}>vs {m.line}</span>
