@@ -352,7 +352,7 @@ function sanitizeEdge(edge) {
 // knob. To revert to exact pre-blend behavior, set MARKET_BLEND_ENABLED = false
 // (or W_MODEL = 1.0) and redeploy — no old code to dig up.
 const MARKET_BLEND_ENABLED = true; // master switch — false = exact old behavior
-const W_MODEL = 0.45;              // 0.45 = 45% our model, 55% market. Higher = trust model more.
+const W_MODEL = 0.55;              // 0.55 = 55% our model, 45% market. Higher = trust model more.
 
 // Blend our model probability toward the market's fair probability, then return the
 // edge vs that fair market number. Needs BOTH sides' odds for a real de-vig; if a
