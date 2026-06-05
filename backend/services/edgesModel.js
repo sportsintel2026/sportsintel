@@ -315,6 +315,28 @@ function strikeoutOverProb(pitcherStats, oppTeamStats, line) {
   return round3(1 - poissonCdf(Math.floor(line), lambda));
 }
 
+// ── BATTER HITS PROP MODEL ────────────────────────────────────────────────────
+// Per-AB hit prob = batting avg, adjusted by the opposing starter's BAA, over
+// expected at-bats. Single-game hits modeled as Poisson(expected hits). v1 — same
+// calibration family as the K model, so tune both together once results land.
+const LEAGUE_BAA = 0.245;          // league batting average against
+const DEFAULT_AB_PER_GAME = 3.8;   // expected at-bats for a lineup regular
+
+function hitsOverProb(batterStats, oppPitcherStats, line) {
+  if (!batterStats || line == null) return null;
+  const avg = batterStats.avg;
+  if (avg == null || avg <= 0) return null;
+  let perAB = avg;
+  const baa = oppPitcherStats && oppPitcherStats.battingAvgAgainst;
+  if (baa != null && baa > 0) {
+    perAB = avg * Math.max(0.80, Math.min(1.20, baa / LEAGUE_BAA));
+  }
+  perAB = Math.max(0.10, Math.min(0.45, perAB)); // sane per-AB bounds
+  const expHits = DEFAULT_AB_PER_GAME * perAB;
+  if (!(expHits > 0)) return null;
+  return round3(1 - poissonCdf(Math.floor(line), expHits));
+}
+
 // ── EDGE CALCULATION ──────────────────────────────────────────────────────────
 // One-sided edge (model prob minus raw vig-inflated implied). Kept for HR props,
 // where we only have the "Over" side and can't cleanly de-vig.
@@ -1050,6 +1072,61 @@ async function calculateStrikeoutPropEdges(games, kOddsByEvent) {
     .sort((a, b) => (b.edge ?? -1) - (a.edge ?? -1));
 }
 
+const MAX_HITS_GAMES = 6; // cap games we pull hits props for (credit budget)
+
+// Batter hits prop edges. Two-sided market — de-vig and take the better side.
+// Mirrors calculateHRPropEdges (per batter) with the strikeout build's de-vig.
+async function calculateHitsPropEdges(games, hitsOddsByEvent) {
+  const targetGames = games.slice(0, MAX_HITS_GAMES);
+  const out = [];
+  for (const game of targetGames) {
+    const eventId = findEventIdForGame(game, hitsOddsByEvent);
+    const hitsOdds = eventId ? hitsOddsByEvent[eventId] : null;
+    if (!hitsOdds || hitsOdds.length === 0) continue;
+    for (const propOdds of hitsOdds) {
+      const batter = await findPlayerByName(propOdds.player, [game.awayId, game.homeId]);
+      if (!batter) continue;
+      const onAwayTeam = batter.teamId === game.awayId;
+      const opposingPitcherProbable = onAwayTeam ? game.homeProbable : game.awayProbable;
+      const oppPitcherStats = opposingPitcherProbable
+        ? regressThinSample(await getPitcherSeasonStats(opposingPitcherProbable.id))
+        : null;
+      const batterStats = await getBatterSeasonStats(batter.id);
+      const overProb = hitsOverProb(batterStats, oppPitcherStats, propOdds.line);
+      if (overProb == null) continue;
+      const fairOver = devigTwoWay(propOdds.overOdds, propOdds.underOdds);
+      const underProb = round3(1 - overProb);
+      const edgeOver = sanitizeEdge(fairOver != null ? round3(overProb - fairOver) : calculateEdge(overProb, propOdds.overOdds));
+      const edgeUnder = sanitizeEdge(fairOver != null ? round3(underProb - (1 - fairOver)) : calculateEdge(underProb, propOdds.underOdds));
+      const overBetter = (edgeOver ?? -1) >= (edgeUnder ?? -1);
+      const side = overBetter ? "over" : "under";
+      const edge = overBetter ? edgeOver : edgeUnder;
+      const modelProb = overBetter ? overProb : underProb;
+      const odds = overBetter ? propOdds.overOdds : propOdds.underOdds;
+      const oppOdds = overBetter ? propOdds.underOdds : propOdds.overOdds;
+      out.push({
+        gameId: game.id,
+        player: propOdds.player,
+        team: onAwayTeam ? game.awayAbbr : game.homeAbbr,
+        opposingPitcher: opposingPitcherProbable?.name,
+        game: `${game.awayAbbr} @ ${game.homeAbbr}`,
+        line: propOdds.line,
+        side,
+        hitsProb: modelProb,
+        odds,
+        oppOdds,
+        book: propOdds.book,
+        edge,
+        confidence: rateConfidence(edge),
+        battingAvg: batterStats?.avg ?? null,
+      });
+    }
+  }
+  return out
+    .filter(p => p.edge != null && p.edge > -0.05)
+    .sort((a, b) => (b.edge ?? -1) - (a.edge ?? -1));
+}
+
 function findEventIdForGame(game, hrOddsByEvent) {
   return game._oddsEventId || null;
 }
@@ -1131,6 +1208,7 @@ module.exports = {
   calculateGameEdges,
   calculateHRPropEdges,
   calculateStrikeoutPropEdges,
+  calculateHitsPropEdges,
   rateConfidence,
   calculateEdge,
   calculateEdgeDevig,
