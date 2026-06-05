@@ -278,9 +278,6 @@ function PropsCard({ p, league }) {
           ? " Home-run props are longshots, so a low hit rate is normal — at plus-money odds, hitting even a fraction can be profitable. ROI is the truer measure than hit rate."
           : " Props are longshots — ROI is the truer measure than hit rate."}
         {" Small samples are noisy."}
-        {league === "nba"
-          ? " ⚠️ Provisional: some NBA prop picks were recorded before a side-tracking fix, so a few may be graded against the wrong side — don't trust this record until the pre-fix rows are cleaned."
-          : ""}
       </div>
     </div>
   );
