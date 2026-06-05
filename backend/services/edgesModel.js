@@ -269,6 +269,52 @@ function calculateHRProbability(batterStats, opposingPitcherStats, game, weather
   return round3(1 - noHRProb);
 }
 
+// ── PITCHER STRIKEOUT PROP MODEL ──────────────────────────────────────────────
+// Expected Ks for a starter = K/9 × (expected innings / 9) × opponent-K factor.
+// Single-game Ks are modeled as Poisson(expectedKs); P(over a .5 line) follows.
+// A v1 projection — calibrate the constants once real K-prop results accumulate.
+const LEAGUE_K9 = 8.6;              // league starter strikeouts per 9
+const LEAGUE_TEAM_K_PER_GAME = 8.6; // league average team strikeouts per game
+const DEFAULT_START_IP = 5.3;       // league-average starter innings per start
+
+function poissonCdf(k, lambda) {
+  if (k < 0 || !(lambda > 0)) return 0;
+  let term = Math.exp(-lambda);
+  let sum = term;
+  for (let i = 1; i <= k; i++) { term *= lambda / i; sum += term; }
+  return Math.min(1, sum);
+}
+
+function expectedKsFor(pitcherStats) {
+  const k9 = pitcherStats.strikeoutsPer9 ?? LEAGUE_K9;
+  let expIP = DEFAULT_START_IP;
+  if (pitcherStats.gamesStarted > 0 && pitcherStats.inningsPitched > 0) {
+    expIP = Math.max(3.5, Math.min(7.0, pitcherStats.inningsPitched / pitcherStats.gamesStarted));
+  }
+  return round2((k9 / 9) * expIP);
+}
+
+// P(strikeouts OVER the line) for a starting pitcher vs a given opponent.
+function strikeoutOverProb(pitcherStats, oppTeamStats, line) {
+  if (!pitcherStats || line == null) return null;
+  const k9 = pitcherStats.strikeoutsPer9 ?? LEAGUE_K9;
+  if (!k9) return null;
+  let expIP = DEFAULT_START_IP;
+  if (pitcherStats.gamesStarted > 0 && pitcherStats.inningsPitched > 0) {
+    expIP = pitcherStats.inningsPitched / pitcherStats.gamesStarted;
+  }
+  expIP = Math.max(3.5, Math.min(7.0, expIP));
+  let oppFactor = 1.0;
+  if (oppTeamStats && oppTeamStats.games > 0 && oppTeamStats.strikeouts != null) {
+    oppFactor = (oppTeamStats.strikeouts / oppTeamStats.games) / LEAGUE_TEAM_K_PER_GAME;
+    oppFactor = Math.max(0.82, Math.min(1.18, oppFactor)); // one stat shouldn't swing it wildly
+  }
+  const lambda = (k9 / 9) * expIP * oppFactor;
+  if (!(lambda > 0)) return null;
+  // .5 lines: over wins on K >= floor(line)+1, so P(over) = 1 - CDF(floor(line))
+  return round3(1 - poissonCdf(Math.floor(line), lambda));
+}
+
 // ── EDGE CALCULATION ──────────────────────────────────────────────────────────
 // One-sided edge (model prob minus raw vig-inflated implied). Kept for HR props,
 // where we only have the "Over" side and can't cleanly de-vig.
@@ -934,6 +980,76 @@ async function calculateHRPropEdges(games, hrOddsByEvent) {
     .sort((a, b) => (b.edge ?? -1) - (a.edge ?? -1));
 }
 
+const MAX_K_GAMES = 8; // cap games we pull K props for (Odds API credit budget)
+
+// Match a prop's pitcher name to one of the game's two probable starters.
+function findProbableStarter(playerName, game) {
+  const target = normalizePlayerName(playerName);
+  const cands = [];
+  if (game.awayProbable) cands.push({ id: game.awayProbable.id, name: game.awayProbable.name, teamId: game.awayId });
+  if (game.homeProbable) cands.push({ id: game.homeProbable.id, name: game.homeProbable.name, teamId: game.homeId });
+  for (const c of cands) if (normalizePlayerName(c.name) === target) return c;
+  const tl = extractLastName(target);
+  for (const c of cands) if (extractLastName(normalizePlayerName(c.name)) === tl) return c;
+  return null;
+}
+
+// Pitcher strikeout prop edges. Two-sided market, so we de-vig and take the better
+// side (over/under). Mirrors calculateHRPropEdges but per-pitcher, not per-batter.
+async function calculateStrikeoutPropEdges(games, kOddsByEvent) {
+  const targetGames = games.slice(0, MAX_K_GAMES);
+  const out = [];
+  for (const game of targetGames) {
+    const eventId = findEventIdForGame(game, kOddsByEvent);
+    const kOdds = eventId ? kOddsByEvent[eventId] : null;
+    if (!kOdds || kOdds.length === 0) continue;
+    const [awayTeam, homeTeam] = await Promise.all([
+      getTeamSeasonStats(game.awayId),
+      getTeamSeasonStats(game.homeId),
+    ]);
+    for (const propOdds of kOdds) {
+      const pitcher = findProbableStarter(propOdds.player, game);
+      if (!pitcher) continue;
+      const pitcherStats = regressThinSample(await getPitcherSeasonStats(pitcher.id));
+      if (!pitcherStats) continue;
+      const onAwayTeam = pitcher.teamId === game.awayId;
+      const oppTeamStats = onAwayTeam ? homeTeam : awayTeam; // the lineup he faces
+      const overProb = strikeoutOverProb(pitcherStats, oppTeamStats, propOdds.line);
+      if (overProb == null) continue;
+      const fairOver = devigTwoWay(propOdds.overOdds, propOdds.underOdds);
+      const underProb = round3(1 - overProb);
+      const edgeOver = sanitizeEdge(fairOver != null ? round3(overProb - fairOver) : calculateEdge(overProb, propOdds.overOdds));
+      const edgeUnder = sanitizeEdge(fairOver != null ? round3(underProb - (1 - fairOver)) : calculateEdge(underProb, propOdds.underOdds));
+      const overBetter = (edgeOver ?? -1) >= (edgeUnder ?? -1);
+      const side = overBetter ? "over" : "under";
+      const edge = overBetter ? edgeOver : edgeUnder;
+      const modelProb = overBetter ? overProb : underProb;
+      const odds = overBetter ? propOdds.overOdds : propOdds.underOdds;
+      const oppOdds = overBetter ? propOdds.underOdds : propOdds.overOdds;
+      out.push({
+        gameId: game.id,
+        player: propOdds.player,
+        team: onAwayTeam ? game.awayAbbr : game.homeAbbr,
+        opponent: onAwayTeam ? game.homeAbbr : game.awayAbbr,
+        game: `${game.awayAbbr} @ ${game.homeAbbr}`,
+        line: propOdds.line,
+        side,
+        kProb: modelProb,
+        odds,
+        oppOdds,
+        book: propOdds.book,
+        edge,
+        confidence: rateConfidence(edge),
+        expectedKs: expectedKsFor(pitcherStats),
+        pitcherK9: pitcherStats.strikeoutsPer9 ?? null,
+      });
+    }
+  }
+  return out
+    .filter(p => p.edge != null && p.edge > -0.05)
+    .sort((a, b) => (b.edge ?? -1) - (a.edge ?? -1));
+}
+
 function findEventIdForGame(game, hrOddsByEvent) {
   return game._oddsEventId || null;
 }
@@ -1014,6 +1130,7 @@ function round3(n) { return Math.round(n * 1000) / 1000; }
 module.exports = {
   calculateGameEdges,
   calculateHRPropEdges,
+  calculateStrikeoutPropEdges,
   rateConfidence,
   calculateEdge,
   calculateEdgeDevig,
