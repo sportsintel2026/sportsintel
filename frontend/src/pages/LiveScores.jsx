@@ -266,24 +266,24 @@ export function BoxScore({ detail, logos }) {
   const wanted = COLS[detail.league] || [];
 
   const cellNum = { textAlign: "center", padding: "8px 10px", color: "#cbd5e1", fontSize: 14, fontWeight: 400, fontVariantNumeric: "tabular-nums" };
-  const headCell = { textAlign: "center", padding: "8px 10px", fontSize: 12, fontWeight: 900, color: "#ffffff", letterSpacing: "0.06em", textTransform: "uppercase" };
+  const headCell = { textAlign: "center", padding: "8px 10px", fontSize: 12, fontWeight: 600, color: "#ffffff", letterSpacing: "0.06em", textTransform: "uppercase" };
 
   return (
     <div>
       {/* line score (innings / quarters) */}
       {ls.length > 0 && maxPeriods > 0 && (
         <div style={{ overflowX: "auto", marginBottom: 18 }}>
-          <div style={{ fontSize: 11, fontWeight: 900, color: "#9ca3af", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 6 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 6 }}>
             {detail.league === "nba" ? "Quarters" : "Innings"}
           </div>
           <table style={{ borderCollapse: "collapse", fontSize: 14, width: "100%", minWidth: 320 }}>
             <thead>
               <tr style={{ background: "#0a0e14" }}>
-                <th style={{ textAlign: "left", padding: "8px 10px", fontSize: 11, fontWeight: 900, color: "#fff", letterSpacing: "0.06em", textTransform: "uppercase" }}>Team</th>
+                <th style={{ textAlign: "left", padding: "8px 10px", fontSize: 11, fontWeight: 600, color: "#fff", letterSpacing: "0.06em", textTransform: "uppercase" }}>Team</th>
                 {Array.from({ length: maxPeriods }).map((_, i) => (
-                  <th key={i} style={{ textAlign: "center", padding: "8px 10px", fontSize: 13, fontWeight: 900, color: "#fff" }}>{i + 1}</th>
+                  <th key={i} style={{ textAlign: "center", padding: "8px 10px", fontSize: 13, fontWeight: 600, color: "#fff" }}>{i + 1}</th>
                 ))}
-                <th style={{ textAlign: "center", padding: "8px 10px", fontSize: 13, fontWeight: 900, color: "#fff", borderLeft: "1px solid #3a4757" }}>T</th>
+                <th style={{ textAlign: "center", padding: "8px 10px", fontSize: 13, fontWeight: 600, color: "#fff", borderLeft: "1px solid #3a4757" }}>T</th>
               </tr>
             </thead>
             <tbody>
@@ -296,7 +296,7 @@ export function BoxScore({ detail, logos }) {
                   {Array.from({ length: maxPeriods }).map((_, i) => (
                     <td key={i} style={{ textAlign: "center", padding: "8px 10px", color: "#cbd5e1", fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>{r.periods[i] != null ? r.periods[i] : "·"}</td>
                   ))}
-                  <td style={{ textAlign: "center", padding: "8px 10px", color: "#fff", fontWeight: 800, fontSize: 16, borderLeft: "1px solid #3a4757", fontVariantNumeric: "tabular-nums" }}>{r.total != null ? r.total : ""}</td>
+                  <td style={{ textAlign: "center", padding: "8px 10px", color: "#fff", fontWeight: 700, fontSize: 16, borderLeft: "1px solid #3a4757", fontVariantNumeric: "tabular-nums" }}>{r.total != null ? r.total : ""}</td>
                 </tr>
               ))}
             </tbody>
