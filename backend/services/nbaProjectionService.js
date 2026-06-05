@@ -62,6 +62,8 @@ function buildMapFromAthletes(athletes) {
   const full = {};
   const lastCount = {};
   const lastMap = {};
+  const sideFull = {};        // normName -> "home"|"away"
+  const sideLastMap = {};
   for (const ath of athletes || []) {
     const name = ath && (ath.displayName || ath.fullName);
     if (!ath || !ath.id || !name) continue;
@@ -69,10 +71,15 @@ function buildMapFromAthletes(athletes) {
     const ln = lastName(name);
     lastCount[ln] = (lastCount[ln] || 0) + 1;
     lastMap[ln] = String(ath.id);
+    if (ath._side) { sideFull[norm(name)] = ath._side; sideLastMap[ln] = ath._side; }
   }
   const lastUnique = {};
-  for (const ln in lastCount) if (lastCount[ln] === 1) lastUnique[ln] = lastMap[ln];
-  return { full, lastUnique };
+  const sideLast = {};
+  for (const ln in lastCount) if (lastCount[ln] === 1) {
+    lastUnique[ln] = lastMap[ln];
+    if (sideLastMap[ln]) sideLast[ln] = sideLastMap[ln];
+  }
+  return { full, lastUnique, sideFull, sideLast };
 }
 
 function parseBoxscoreIds(json) {
@@ -161,11 +168,23 @@ async function buildIdMap(gameId) {
   const date = comp.date || null;
   const injuries = parseInjuries(summary);
 
+  // Each competitor carries home/away — record it so every player can later be
+  // grouped by team without any cross-source name/abbreviation matching.
+  const sideByTeamId = {};
+  for (const c of (comp.competitors || [])) {
+    if (c && c.team && c.team.id) sideByTeamId[String(c.team.id)] = c.homeAway || null;
+  }
+
   const athletes = collectAthletes(summary);
   for (const teamId of competitorTeamIds(summary)) {
     try {
       const rr = await fetch(`${ROSTER}/${teamId}/roster`);
-      if (rr.ok) athletes.push(...parseRoster(await rr.json()));
+      if (rr.ok) {
+        const ros = parseRoster(await rr.json());
+        const side = sideByTeamId[String(teamId)] || null; // "home" | "away"
+        for (const a of ros) if (a) a._side = side;
+        athletes.push(...ros);
+      }
     } catch (_) { /* skip a failed roster; partial map still useful */ }
   }
 
@@ -224,6 +243,13 @@ async function getNbaPropProjections(gameId) {
     note: 'Experimental projections. Prop markets are sharp — flagged edges are rare and informational, not betting advice.',
     ...proj, // experimental, generatedAt, players, edges, suspects
   };
+
+  // Tag each player with "home"/"away" so the UI can group projections by team.
+  const sideFull = (idInfo.map && idInfo.map.sideFull) || {};
+  const sideLast = (idInfo.map && idInfo.map.sideLast) || {};
+  const sideForName = (nm) => sideFull[norm(nm)] || sideLast[lastName(nm)] || null;
+  if (Array.isArray(out.players)) out.players = out.players.map(p => ({ ...p, side: sideForName(p.name) }));
+  if (Array.isArray(out.edges))   out.edges   = out.edges.map(e => ({ ...e, side: sideForName(e.name) }));
 
   // Snapshot picks for the Performance tracker — pre-game only, best-effort.
   if (idInfo.state === 'pre') {
