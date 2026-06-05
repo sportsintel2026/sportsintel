@@ -689,7 +689,8 @@ function NBAPropsSection({ games, hasFullAccess, navigate }) {
           for (const p of r.players || []) {
             if (!p.markets) continue; // skip out/unresolved players
             const team = p.side === "home" ? nbaAbbr(r.home) : p.side === "away" ? nbaAbbr(r.away) : null;
-            allRows.push({ name: p.name, matchup, team, gameId: r.gameId, injuryStatus: p.injuryStatus || null, markets: p.markets });
+            const teamLogo = (r.teamLogos && p.side) ? (r.teamLogos[p.side] || null) : null;
+            allRows.push({ name: p.name, matchup, team, teamLogo, gameId: r.gameId, injuryStatus: p.injuryStatus || null, markets: p.markets });
           }
         }
         allEdges.sort((a, b) => Math.abs(b.edge) - Math.abs(a.edge));
@@ -828,15 +829,21 @@ function NBAAllPropsTable({ rows, hasFullAccess, navigate }) {
               </thead>
               <tbody>
                 {grouped
-                  ? groups.flatMap((g) => [
+                  ? groups.flatMap((g) => {
+                      const logo = (g.rows.find((r) => r.teamLogo) || {}).teamLogo || null;
+                      return [
                       <tr key={"hdr-" + g.team}>
-                        <td colSpan={5} style={{ padding: "12px 8px 6px", borderBottom: "1px solid #1f2937" }}>
-                          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.5, color: "#e4e7eb" }}>{g.team}</span>
-                          <span style={{ fontSize: 10, color: "#5b6472", marginLeft: 8 }}>{g.rows.length} player{g.rows.length === 1 ? "" : "s"}</span>
+                        <td colSpan={5} style={{ padding: "14px 10px 10px", background: "#11181f", borderTop: "2px solid #ef4444", borderBottom: "1px solid #1f2937" }}>
+                          {logo
+                            ? <img src={logo} alt="" width="22" height="22" style={{ verticalAlign: "middle", marginRight: 9, objectFit: "contain" }} onError={(e) => { e.currentTarget.style.display = "none"; }} />
+                            : <span style={{ display: "inline-block", width: 4, height: 14, background: "#ef4444", borderRadius: 2, verticalAlign: "middle", marginRight: 9 }} />}
+                          <span style={{ fontSize: 14, fontWeight: 800, letterSpacing: 0.3, color: "#ffffff", verticalAlign: "middle" }}>{g.team}</span>
+                          <span style={{ fontSize: 11, color: "#6b7280", marginLeft: 9, verticalAlign: "middle" }}>{g.rows.length} player{g.rows.length === 1 ? "" : "s"}</span>
                         </td>
                       </tr>,
                       ...g.rows.map((r, i) => renderRow(r, i)),
-                    ])
+                    ];
+                    })
                   : visible.map((r, i) => renderRow(r, i))}
               </tbody>
             </table>
