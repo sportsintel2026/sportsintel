@@ -272,12 +272,32 @@ function PropsCard({ p, league }) {
           <div style={{ fontSize: 9.5, color: "#a8915c", marginTop: 5, fontWeight: 600 }}>avg odds {fmtOdds}</div>
         </div>
       </div>
+      {p.byMarket && Object.keys(p.byMarket).length >= 2 && (
+        <div style={{ marginTop: 18, borderTop: "1px solid #f5970022", paddingTop: 14 }}>
+          <div style={{ fontSize: 10, color: "#a8915c", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 700, marginBottom: 8 }}>By prop type</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr 1fr", gap: 8, fontSize: 9.5, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, paddingBottom: 6 }}>
+            <span>Stat</span><span style={{ textAlign: "right" }}>Hit / Miss</span><span style={{ textAlign: "right" }}>Hit %</span><span style={{ textAlign: "right" }}>ROI</span>
+          </div>
+          {Object.entries(p.byMarket).map(([mkt, b]) => {
+            const bp = b.roi >= 0;
+            return (
+              <div key={mkt} style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr 1fr", gap: 8, alignItems: "center", padding: "7px 0", borderTop: "1px solid #ffffff08", fontSize: 12.5 }}>
+                <span style={{ fontWeight: 600 }}>{marketLabel(mkt)}</span>
+                <span style={{ textAlign: "right", color: "#9ca3af" }}>{b.hits}-{b.misses}</span>
+                <span style={{ textAlign: "right", color: "#fbbf24", fontWeight: 600 }}>{b.hitRatePct}%</span>
+                <span style={{ textAlign: "right", color: bp ? "#22c55e" : "#ef4444", fontWeight: 600 }}>{`${bp ? "+" : ""}${b.roi}%`}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
       <div style={{ marginTop: 14, fontSize: 11, color: "#6b7280", lineHeight: 1.6 }}>
         Across {p.picks} graded {labelLc} pick{p.picks === 1 ? "" : "s"}.
         {isMlb
           ? " Home-run props are longshots, so a low hit rate is normal — at plus-money odds, hitting even a fraction can be profitable. ROI is the truer measure than hit rate."
           : " Props are longshots — ROI is the truer measure than hit rate."}
         {" Small samples are noisy."}
+        {p.byMarket && Object.keys(p.byMarket).length >= 2 ? " Each stat type is a tiny sample on its own — the per-type rows are directional at best until volume builds." : ""}
       </div>
     </div>
   );
