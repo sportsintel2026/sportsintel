@@ -249,6 +249,15 @@ export function BoxScore({ detail }) {
     if (p.didNotPlay) continue;
     (teams[p.team] ||= []).push(p);
   }
+  // Team logos for the box score (abbrev -> logo URL), gathered from whatever
+  // the detail payload provides; falls back to no logo if absent.
+  const logoByAbbrev = {};
+  for (const t of [detail.away, detail.home, detail.awayTeam, detail.homeTeam]) {
+    const ab = t && (t.abbrev || t.abbreviation);
+    if (ab && t.logo) logoByAbbrev[ab] = t.logo;
+  }
+  for (const r of ls) { if (r && r.abbrev && r.logo) logoByAbbrev[r.abbrev] = r.logo; }
+  const teamLogo = (ab) => logoByAbbrev[ab] || null;
   const COLS = {
     nba: ["MIN", "PTS", "REB", "AST"],
     mlb: ["AB", "R", "H", "RBI"],
@@ -279,7 +288,10 @@ export function BoxScore({ detail }) {
             <tbody>
               {orderedLs.map((r, idx) => (
                 <tr key={idx} style={{ borderTop: "1px solid #4b5563" }}>
-                  <td style={{ padding: "8px 10px", fontWeight: 800, color: "#fff", fontSize: 14 }}>{r.abbrev}</td>
+                  <td style={{ padding: "8px 10px", fontWeight: 800, color: "#fff", fontSize: 14 }}>
+                    {teamLogo(r.abbrev) && <img src={teamLogo(r.abbrev)} alt="" width="18" height="18" style={{ objectFit: "contain", verticalAlign: "middle", marginRight: 7 }} onError={(e) => { e.currentTarget.style.display = "none"; }} />}
+                    <span style={{ verticalAlign: "middle" }}>{r.abbrev}</span>
+                  </td>
                   {Array.from({ length: maxPeriods }).map((_, i) => (
                     <td key={i} style={{ textAlign: "center", padding: "8px 10px", color: "#cbd5e1", fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>{r.periods[i] != null ? r.periods[i] : "·"}</td>
                   ))}
@@ -344,7 +356,10 @@ export function BoxScore({ detail }) {
 
         return (
           <div key={teamAbbrev} style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 12, fontWeight: 800, color: "#fff", letterSpacing: 0.5, marginBottom: 8, paddingBottom: 6, borderBottom: "2px solid #2a3340" }}>{teamAbbrev}</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, paddingBottom: 6, borderBottom: "2px solid #2a3340" }}>
+              {teamLogo(teamAbbrev) && <img src={teamLogo(teamAbbrev)} alt="" width="22" height="22" style={{ objectFit: "contain" }} onError={(e) => { e.currentTarget.style.display = "none"; }} />}
+              <span style={{ fontSize: 13, fontWeight: 800, color: "#fff", letterSpacing: 0.5 }}>{teamAbbrev}</span>
+            </div>
 
             {/* Batters */}
             <div style={{ overflowX: "auto", marginBottom: pitchers.length ? 12 : 0 }}>
