@@ -254,7 +254,9 @@ async function getNbaPropProjections(gameId) {
   const sideLast = (idInfo.map && idInfo.map.sideLast) || {};
   const sideForName = (nm) => sideFull[norm(nm)] || sideLast[lastName(nm)] || null;
   if (Array.isArray(out.players)) out.players = out.players.map(p => ({ ...p, side: sideForName(p.name) }));
-  if (Array.isArray(out.edges))   out.edges   = out.edges.map(e => ({ ...e, side: sideForName(e.name) }));
+  // NOTE: edges keep their OVER/UNDER side from the projection engine — do NOT overwrite it.
+  // The team (home/away) goes on a separate key so the prop-edge rows + tracker read the right direction.
+  if (Array.isArray(out.edges))   out.edges   = out.edges.map(e => ({ ...e, teamSide: sideForName(e.name) }));
   out.teamLogos = idInfo.logoBySide || {}; // { home, away } logo URLs for UI team headers
 
   // Snapshot picks for the Performance tracker — pre-game only, best-effort.
