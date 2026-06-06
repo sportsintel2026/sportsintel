@@ -22,6 +22,7 @@ const {
   calculateHRPropEdges,
   calculateStrikeoutPropEdges,
   calculateHitsPropEdges,
+  debugHitsProps,
 } = require("../services/edgesModel");
 const { recordPredictions } = require("../services/predictionTracker");
 // In-memory cache
@@ -121,7 +122,7 @@ router.get("/mlb", async (req, res) => {
     const { date: slateDate, rolled } = await resolveSlateDate();
 
     // Cache is valid only if it's fresh AND for the same date we now want to serve.
-    if (edgesCache && edgesCacheDate === slateDate && (Date.now() - edgesCacheAt) < CACHE_TTL_MS) {
+    if (!req.query.hits_debug && edgesCache && edgesCacheDate === slateDate && (Date.now() - edgesCacheAt) < CACHE_TTL_MS) {
       console.log(`[Edges] Returning cached results for ${slateDate}`);
       return res.json({ ...edgesCache, cached: true });
     }
@@ -333,9 +334,14 @@ router.get("/mlb", async (req, res) => {
         const kOddsByEvent = await getMLBStrikeoutPropsForAllEvents(eventIds, 5);
         kPropEdges = await calculateStrikeoutPropEdges(topGamesForHR, kOddsByEvent);
         const hitsOddsByEvent = await getMLBHitsPropsForAllEvents(eventIds, 5);
+        if (req.query.hits_debug) {
+          const dbg = await debugHitsProps(topGamesForHR, hitsOddsByEvent);
+          return res.json({ ok: true, slateDate, gamesUsed: topGamesForHR.map(g => `${g.awayAbbr}@${g.homeAbbr}`), count: dbg.length, hits_debug: dbg });
+        }
         hitsPropEdges = await calculateHitsPropEdges(topGamesForHR, hitsOddsByEvent);
       } else {
         console.log("[Edges-HR] NO eventIds — HR props skipped");
+        if (req.query.hits_debug) return res.json({ ok: true, slateDate, note: "no pre-game games with odds right now — try when tonight's slate is upcoming", hits_debug: [] });
       }
     } catch (e) {
       console.error("[Edges] HR props failed:", e.message);
