@@ -412,6 +412,39 @@ function getCacheStats() {
   };
 }
 
+// DEBUG (read-only): returns the RAW totals-market outcomes per book for the MLB
+// slate, exactly as the Odds API returns them (unparsed). Lets us confirm whether
+// the "totals" market is a single main line or a ladder of alternate lines (which
+// would explain junk lines like 1.5 / 15.5 leaking into picks). `filter` matches
+// the matchup text (e.g. "LAD") or an Odds-API event id; omit to dump the slate.
+// Costs ~2 Odds API credits per call — run on demand, not on a schedule.
+async function getRawTotalsDebug(filter) {
+  const data = await oddsGet("/sports/baseball_mlb/odds", {
+    regions: "us",
+    markets: "h2h,totals,spreads",
+    oddsFormat: "american",
+    dateFormat: "iso",
+  });
+  const f = filter ? String(filter).toLowerCase() : null;
+  const out = [];
+  for (const ev of data || []) {
+    const matchup = `${ev.away_team} @ ${ev.home_team}`;
+    if (f && !(matchup.toLowerCase().includes(f) || ev.id === filter)) continue;
+    const books = [];
+    for (const bm of ev.bookmakers || []) {
+      const tot = (bm.markets || []).find(m => m.key === "totals");
+      if (!tot) continue;
+      books.push({
+        book: bm.key,
+        outcomeCount: (tot.outcomes || []).length,
+        outcomes: (tot.outcomes || []).map(o => ({ name: o.name, point: o.point, price: o.price })),
+      });
+    }
+    out.push({ eventId: ev.id, matchup, commenceTime: ev.commence_time, books });
+  }
+  return { ok: true, events: out.length, data: out };
+}
+
 module.exports = {
   getMLBMainOdds,
   getMLBLiveOdds,
@@ -422,6 +455,7 @@ module.exports = {
   getMLBHitsPropsForEvent,
   getMLBHitsPropsForAllEvents,
   americanToImpliedProb,
+  getRawTotalsDebug,
   clearOddsCache,
   getCacheStats,
 };
