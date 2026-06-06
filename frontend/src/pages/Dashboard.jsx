@@ -208,8 +208,8 @@ function MLBDashboard({ edges, loading, hasFullAccess, navigate, onRefresh }) {
       )}
       <TopPlays edges={edges} hasFullAccess={hasFullAccess} navigate={navigate} />
       <div className="edge-grid-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16, gridAutoRows: "1fr" }}>
-        <EdgePanel title="Top moneyline edges" icon="💰" edges={edges.moneylineEdges || []} renderRow={(e) => <MoneylineRow edge={e} key={e.gameId + e.side} navigate={navigate} />} emptyText="No edges found in current slate" hasFullAccess={hasFullAccess} navigate={navigate} />
-        <EdgePanel title="Top totals edges" icon="📊" edges={edges.totalsEdges || []} renderRow={(e) => <TotalsRow edge={e} key={e.gameId + e.side} navigate={navigate} />} emptyText="No edges found in current slate" hasFullAccess={hasFullAccess} navigate={navigate} />
+        <EdgePanel title="Top moneyline edges" icon="💰" edges={oneSidePerGame(edges.moneylineEdges)} renderRow={(e) => <MoneylineRow edge={e} key={e.gameId + e.side} navigate={navigate} />} emptyText="No edges found in current slate" hasFullAccess={hasFullAccess} navigate={navigate} />
+        <EdgePanel title="Top totals edges" icon="📊" edges={oneSidePerGame(edges.totalsEdges)} renderRow={(e) => <TotalsRow edge={e} key={e.gameId + e.side} navigate={navigate} />} emptyText="No edges found in current slate" hasFullAccess={hasFullAccess} navigate={navigate} />
       </div>
       <div style={{ marginBottom: 16 }}>
         <EdgePanel title="Top home run props" icon="💣" edges={edges.hrPropEdges || []} renderRow={(e) => <HRPropRow edge={e} key={e.player + e.game} />} emptyText="HR prop data updates closer to first pitch" hasFullAccess={hasFullAccess} navigate={navigate} wide scroll />
@@ -352,6 +352,34 @@ function LiveBadge() {
 // it surfaces the gap between the sharp market price and our model so the user
 // can apply their own read (e.g. fading a public/streak-inflated favorite).
 // Shows only when the backend attached an `inflation` flag to this edge.
+// Collapse a mirrored team-market list (both sides of each game are present) to
+// ONE row per game: the side the model actually likes (positive edge). The two
+// sides are mirror images, so listing both just doubles the panel and confuses
+// "who has the edge?". If the faded side was market-inflated, we fold that onto
+// the kept row — the market overrating the other side is *why* this side has value.
+function oneSidePerGame(edges) {
+  const byGame = new Map();
+  for (const e of edges || []) {
+    const prev = byGame.get(e.gameId);
+    if (!prev || (e.edge ?? -Infinity) > (prev.edge ?? -Infinity)) byGame.set(e.gameId, e);
+  }
+  const fadedByGame = new Map();
+  for (const e of edges || []) {
+    const kept = byGame.get(e.gameId);
+    if (kept && e !== kept && e.inflation && e.inflation.inflated) {
+      fadedByGame.set(e.gameId, {
+        gap: e.inflation.gap,
+        note: e.inflation.note,
+        team: e.teamAbbr || (e.side === "over" ? "the over" : e.side === "under" ? "the under" : "the other side"),
+      });
+    }
+  }
+  return Array.from(byGame.values())
+    .filter((e) => (e.edge ?? 0) > 0) // only the side with a real edge
+    .sort((a, b) => (b.edge ?? 0) - (a.edge ?? 0))
+    .map((e) => (fadedByGame.has(e.gameId) ? { ...e, fadedInflation: fadedByGame.get(e.gameId) } : e));
+}
+
 function InflationTag({ inflation }) {
   if (!inflation || !inflation.inflated) return null;
   const gapPct = inflation.gap != null ? Math.round(inflation.gap * 100) : null;
@@ -372,6 +400,26 @@ function InflationTag({ inflation }) {
   );
 }
 
+// Shown on the KEPT (positive-edge) row when the model is fading a market-inflated
+// opponent — reframes the old "MARKET HIGH" warning as support for this pick.
+function FadedInflationTag({ faded }) {
+  if (!faded) return null;
+  const gapPct = faded.gap != null ? Math.round(faded.gap * 100) : null;
+  return (
+    <span
+      title={faded.note || `Market rates ${faded.team} higher than our model — possible public/streak inflation, which adds value to this side.`}
+      style={{
+        display: "inline-flex", alignItems: "center", gap: 3, fontSize: 9, fontWeight: 700,
+        padding: "2px 6px", borderRadius: 3, background: "#f5970015", color: "#fbbf24",
+        border: "1px solid #f5970040", letterSpacing: "0.04em", marginLeft: 6, cursor: "help",
+        whiteSpace: "nowrap",
+      }}
+    >
+      ⚠ market overrating {faded.team}{gapPct != null ? ` +${gapPct}%` : ""}
+    </span>
+  );
+}
+
 function MoneylineRow({ edge, navigate }) {
   const isLive = edge.status === "live";
   return (
@@ -381,6 +429,7 @@ function MoneylineRow({ edge, navigate }) {
           {edge.teamAbbr} ML
           {isLive && <LiveBadge />}
           <InflationTag inflation={edge.inflation} />
+          <FadedInflationTag faded={edge.fadedInflation} />
         </div>
         <div style={{ fontSize: 10, color: "#6b7280", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
           {edge.matchup} · {formatOdds(edge.odds)} {isLive && edge.inning ? `· ${edge.inning}` : edge.time && `· ${edge.time}`}
@@ -403,6 +452,7 @@ function TotalsRow({ edge, navigate }) {
           {edge.side === "over" ? "Over" : "Under"} {edge.line}
           {isLive && <LiveBadge />}
           <InflationTag inflation={edge.inflation} />
+          <FadedInflationTag faded={edge.fadedInflation} />
         </div>
         <div style={{ fontSize: 10, color: "#6b7280", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
           {edge.matchup} · {formatOdds(edge.odds)} {isLive && edge.inning ? `· ${edge.inning}` : ""}
