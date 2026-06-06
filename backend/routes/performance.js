@@ -57,6 +57,17 @@ function unitProfit(odds) {
   if (odds == null) return 1;
   return odds > 0 ? odds / 100 : 100 / Math.abs(odds);
 }
+// Average odds must be computed in DECIMAL space — linearly averaging American
+// odds is meaningless when picks straddle the +/- line (e.g. -110 and +110
+// "average" to 0). Convert → average decimals → convert back to American.
+function americanToDecimal(o) {
+  if (o == null) return null;
+  return o > 0 ? 1 + o / 100 : 1 + 100 / Math.abs(o);
+}
+function decimalToAmerican(d) {
+  if (d == null || d <= 1) return null;
+  return d >= 2 ? Math.round((d - 1) * 100) : -Math.round(100 / (d - 1));
+}
 
 router.get("/:league", async (req, res) => {
   const league = String(req.params.league || "").toLowerCase();
@@ -198,12 +209,12 @@ function finalize(b) {
 // Hit-rate / ROI summary for a set of prop rows (used for the props table and
 // each per-stat sub-row). Props are graded by hit-rate + ROI, never win/loss record.
 function propSummary(rows) {
-  let wins = 0, units = 0, oddsSum = 0, oddsN = 0;
+  let wins = 0, units = 0, decSum = 0, decN = 0;
   for (const r of rows) {
     const won = r.result === "win";
     if (won) wins++;
     units += won ? unitProfit(r.odds) : -1;
-    if (r.odds != null) { oddsSum += Number(r.odds); oddsN++; }
+    if (r.odds != null) { const d = americanToDecimal(Number(r.odds)); if (d) { decSum += d; decN++; } }
   }
   const n = rows.length;
   return {
@@ -212,7 +223,7 @@ function propSummary(rows) {
     misses: n - wins,
     hitRatePct: Math.round((wins / n) * 1000) / 10,
     roi: Math.round((units / n) * 1000) / 10,
-    avgOdds: oddsN ? Math.round(oddsSum / oddsN) : null,
+    avgOdds: decN ? decimalToAmerican(decSum / decN) : null,
   };
 }
 module.exports = router;
