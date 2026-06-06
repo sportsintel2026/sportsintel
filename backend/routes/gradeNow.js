@@ -19,6 +19,7 @@ const {
   getScheduleForDate, getGameHRHitters, getGamePitcherStrikeouts,
   getGameBatterHits, normPlayerName, getEasternDate,
 } = require("../services/mlbStatsApi");
+const { getRawTotalsDebug } = require("../services/oddsApi");
 
 function db() {
   return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
@@ -32,6 +33,8 @@ router.get("/", async (req, res) => {
     if (req.query.counts === "1" || req.query.counts === "true") return res.json(await countsReport());
     if (req.query.prop_results === "1" || req.query.prop_results === "true") return res.json(await propResults());
     if (req.query.hr_tiers === "1" || req.query.hr_tiers === "true") return res.json(await hrTiers());
+    if (req.query.totals_debug != null) return res.json(await getRawTotalsDebug(req.query.totals_debug));
+    if (req.query.totals_audit === "1" || req.query.totals_audit === "true") return res.json(await totalsAudit());
     const graded = await gradeFinishedGames();
     res.json({ ok: true, graded: graded == null ? 0 : graded });
   } catch (err) {
@@ -391,6 +394,65 @@ async function hrTiers() {
     note: "roiPct = unit profit / (win+loss), 1u per play, real American odds; push excluded. ALL_current should match the Performance page; compare gates to pick the threshold.",
     byTier,
     gates,
+  };
+}
+
+// READ-ONLY. Splits recorded MLB total picks into CLEAN (line in the real
+// game-total range) vs JUNK (out-of-range lines like 1.5 / 15.5 that the old
+// parser let through). Shows what each did to the record, so we can see how much
+// the junk near-locks inflated the totals number before excluding them.
+async function totalsAudit() {
+  const supabase = db();
+  const MIN = 5.5, MAX = 13.5;
+  const amerToProfit = (o) => o == null ? null : (o > 0 ? o / 100 : 100 / Math.abs(o));
+
+  const rows = [];
+  const PAGE = 1000;
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from("model_predictions")
+      .select("line, odds, result, selection, matchup, game_date, confidence")
+      .eq("league", "mlb")
+      .eq("market", "total")
+      .neq("result", "pending")
+      .order("id")
+      .range(from, from + PAGE - 1);
+    if (error) return { ok: false, error: error.message };
+    const batch = data || [];
+    rows.push(...batch);
+    if (batch.length < PAGE) break;
+  }
+
+  function summarize(set) {
+    const win = set.filter(r => r.result === "win").length;
+    const loss = set.filter(r => r.result === "loss").length;
+    const push = set.filter(r => r.result === "push").length;
+    const decisions = win + loss;
+    let profit = 0;
+    for (const r of set) {
+      if (r.result === "win") { const p = amerToProfit(r.odds); profit += (p == null ? 0 : p); }
+      else if (r.result === "loss") profit -= 1;
+    }
+    return {
+      n: set.length, win, loss, push,
+      hitRatePct: decisions ? +(win / decisions * 100).toFixed(1) : null,
+      roiPct: decisions ? +(profit / decisions * 100).toFixed(1) : null,
+    };
+  }
+
+  const inRange = (r) => r.line != null && r.line >= MIN && r.line <= MAX;
+  const junk = rows.filter(r => !inRange(r));
+
+  return {
+    ok: true,
+    lineRange: `${MIN}-${MAX}`,
+    all: summarize(rows),                 // what the page shows today
+    clean: summarize(rows.filter(inRange)), // what the record SHOULD be
+    junk: summarize(junk),                // the contamination (expect near-locks)
+    junkSamples: junk.slice(0, 30).map(r => ({
+      matchup: r.matchup, selection: r.selection, line: r.line,
+      odds: r.odds, result: r.result, date: r.game_date,
+    })),
   };
 }
 
