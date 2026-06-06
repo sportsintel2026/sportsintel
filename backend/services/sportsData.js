@@ -253,7 +253,12 @@ async function getCachedGames(league, date) {
 }
 
 async function refreshDailyGames() {
-  const today = new Date().toISOString().split("T")[0];
+  // Anchor "today" to Eastern time, NOT UTC. toISOString() is always UTC, so
+  // after ~8pm ET (= midnight UTC) it rolls to TOMORROW's date and we'd query
+  // the wrong day's schedule — e.g. a live NBA game at 8:34pm ET returned
+  // "0 games" because UTC had already flipped to the next day. en-CA gives
+  // YYYY-MM-DD; the whole app is ET-anchored (cron tz, game times, grading).
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
   const fetchers = [
     {league:"mlb",fn:()=>fetchMLBSchedule(today)},
     {league:"nba",fn:()=>fetchNBASchedule(today)},
