@@ -18,6 +18,7 @@ const {
   getPitcherHand,
 } = require("./mlbStatsApi");
 const { americanToImpliedProb } = require("./oddsApi");
+const { getBatterExpectedStats } = require("./savantApi");
 const { getWeatherForVenue } = require("./weatherApi");
 
 const LEAGUE_AVG = {
@@ -1271,6 +1272,10 @@ async function calculateHitsPropEdges(games, hitsOddsByEvent) {
 async function debugHitsProps(games, hitsOddsByEvent) {
   const targetGames = games.slice(0, MAX_HITS_GAMES);
   const rows = [];
+  // Pull the Savant expected-stats map once (cached). Null-safe: if Savant is
+  // unreachable the probe simply shows savantJoined:false and falls through.
+  let savantMap = null;
+  try { savantMap = await getBatterExpectedStats(); } catch (e) { savantMap = null; }
   const PROBE_LIMIT = 12; // deep-probe (statcast/recent/lineup) only the first N batters to bound API calls
   let probed = 0;
   for (const game of targetGames) {
@@ -1332,6 +1337,12 @@ async function debugHitsProps(games, hitsOddsByEvent) {
           recentAvg: recent?.avg ?? null,
           lineupSpot: spotIdx >= 0 ? spotIdx + 1 : null,
           lineupSource: (lineupRes && lineupRes.source) || "none",
+          // ── SAVANT JOIN: does this batter's MLBAM id find his xBA in the feed? ──
+          savantJoined: !!(savantMap && savantMap.get(batter.id)),
+          savantXBA: savantMap ? (savantMap.get(batter.id)?.xBA ?? null) : null,
+          savantXwoba: savantMap ? (savantMap.get(batter.id)?.xwOBA ?? null) : null,
+          savantBA: savantMap ? (savantMap.get(batter.id)?.ba ?? null) : null,
+          savantPA: savantMap ? (savantMap.get(batter.id)?.pa ?? null) : null,
         };
       }
 
