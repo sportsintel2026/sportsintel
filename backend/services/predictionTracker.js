@@ -299,9 +299,12 @@ async function recordPredictions(result) {
   const statusById = {};
   for (const g of result.games) statusById[g.id] = g.status;
 
-  // Moneyline — record both sides when an edge exists
+  // Moneyline — record ONLY the side the model likes (positive edge). The two
+  // sides are mirror images, so recording the negative side logs a pick we'd
+  // never make and dilutes the record toward 50% / -vig.
   for (const e of result.moneylineEdges || []) {
     if (statusById[e.gameId] === "final") continue;
+    if (e.edge == null || e.edge <= 0) continue;
     rows.push({
       game_id: e.gameId, game_date: gameDate, league: "mlb",
       matchup: e.matchup, market: "moneyline", selection: e.side,
@@ -311,9 +314,10 @@ async function recordPredictions(result) {
     });
   }
 
-  // Totals
+  // Totals — positive-edge side only (the over/under sides mirror each other).
   for (const e of result.totalsEdges || []) {
     if (statusById[e.gameId] === "final") continue;
+    if (e.edge == null || e.edge <= 0) continue;
     rows.push({
       game_id: e.gameId, game_date: gameDate, league: "mlb",
       matchup: e.matchup, market: "total", selection: e.side,
@@ -323,9 +327,10 @@ async function recordPredictions(result) {
     });
   }
 
-  // Run line (±1.5)
+  // Run line (±1.5) — positive-edge side only (the two sides mirror each other).
   for (const e of result.runLineEdges || []) {
     if (statusById[e.gameId] === "final") continue;
+    if (e.edge == null || e.edge <= 0) continue;
     rows.push({
       game_id: e.gameId, game_date: gameDate, league: "mlb",
       matchup: e.matchup, market: "run_line", selection: e.side,
