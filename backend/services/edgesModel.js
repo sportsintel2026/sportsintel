@@ -1271,10 +1271,17 @@ async function calculateHitsPropEdges(games, hitsOddsByEvent) {
 async function debugHitsProps(games, hitsOddsByEvent) {
   const targetGames = games.slice(0, MAX_HITS_GAMES);
   const rows = [];
+  const PROBE_LIMIT = 12; // deep-probe (statcast/recent/lineup) only the first N batters to bound API calls
+  let probed = 0;
   for (const game of targetGames) {
     const eventId = findEventIdForGame(game, hitsOddsByEvent);
     const hitsOdds = eventId ? hitsOddsByEvent[eventId] : null;
     if (!hitsOdds || hitsOdds.length === 0) continue;
+    // Lineups once per game (for batting-order spot → expected AB).
+    const [awayLineupRes, homeLineupRes] = await Promise.all([
+      getTeamLineup(game.awayId, game.id),
+      getTeamLineup(game.homeId, game.id),
+    ]);
     for (const propOdds of hitsOdds) {
       const batter = await findPlayerByName(propOdds.player, [game.awayId, game.homeId]);
       const onAwayTeam = batter ? batter.teamId === game.awayId : null;
@@ -1301,6 +1308,33 @@ async function debugHitsProps(games, hitsOddsByEvent) {
         const eUnder = marketFairOver != null ? underProb - (1 - marketFairOver) : null;
         modelSide = (eOver ?? -1) >= (eUnder ?? -1) ? "over" : "under";
       }
+
+      // ── B-INPUT PROBE: do the inputs a real model would need actually come back?
+      //    Deep-probe only the first PROBE_LIMIT matched batters to bound API calls.
+      let probe = null;
+      if (batter && probed < PROBE_LIMIT) {
+        probed++;
+        const [statcast, recent] = await Promise.all([
+          getBatterStatcast(batter.id),
+          getBatterRecentStats(batter.id, 15),
+        ]);
+        const lineupRes = onAwayTeam ? awayLineupRes : homeLineupRes;
+        const myLineup = (lineupRes && lineupRes.lineup) || [];
+        const spotIdx = myLineup.findIndex(p => p.id === batter.id);
+        probe = {
+          statcastPresent: !!statcast,
+          statcastXwoba: statcast?.xwOBA ?? null,
+          statcastBarrelRate: statcast?.barrelRate ?? null,
+          statcastHardHit: statcast?.hardHitRate ?? null,
+          recentPresent: !!recent,
+          recentAB: recent?.atBats ?? null,
+          recentHits: recent?.hits ?? null,
+          recentAvg: recent?.avg ?? null,
+          lineupSpot: spotIdx >= 0 ? spotIdx + 1 : null,
+          lineupSource: (lineupRes && lineupRes.source) || "none",
+        };
+      }
+
       rows.push({
         oddsApiName: propOdds.player,
         matchedName: batter ? (batter.name || null) : null,
@@ -1320,6 +1354,7 @@ async function debugHitsProps(games, hitsOddsByEvent) {
         modelOverProb: overProb,
         modelUnderProb: underProb,
         modelSide,
+        probe,
       });
     }
   }
