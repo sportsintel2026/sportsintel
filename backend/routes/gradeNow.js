@@ -17,7 +17,7 @@ const { createClient } = require("@supabase/supabase-js");
 const { gradeFinishedGames } = require("../services/predictionTracker");
 const {
   getScheduleForDate, getGameHRHitters, getGamePitcherStrikeouts,
-  getGameBatterHits, normPlayerName,
+  getGameBatterHits, normPlayerName, getEasternDate,
 } = require("../services/mlbStatsApi");
 
 function db() {
@@ -29,6 +29,7 @@ router.get("/", async (req, res) => {
     if (req.query.debug === "1" || req.query.debug === "true") return res.json(await debugReport());
     if (req.query.probe === "1" || req.query.probe === "true") return res.json(await probeReport());
     if (req.query.void_unmatched === "1" || req.query.void_unmatched === "true") return res.json(await voidUnmatched());
+    if (req.query.counts === "1" || req.query.counts === "true") return res.json(await countsReport());
     const graded = await gradeFinishedGames();
     res.json({ ok: true, graded: graded == null ? 0 : graded });
   } catch (err) {
@@ -206,6 +207,55 @@ async function voidUnmatched() {
     }
   }
   return { ok: true, finalPropsChecked: finalChecked, voided, details };
+}
+
+// READ-ONLY. Real graded vs pending counts so nothing is taken on faith:
+// overall, per market, and per recent date. "graded" = result is not pending
+// (win/loss/push). Uses head:true count queries (no rows fetched).
+async function countsReport() {
+  const supabase = db();
+  const LEAGUE = "mlb";
+
+  async function n(filter) {
+    let q = supabase.from("model_predictions").select("*", { count: "exact", head: true }).eq("league", LEAGUE);
+    for (const [col, op, val] of filter) {
+      if (op === "eq") q = q.eq(col, val);
+      else if (op === "neq") q = q.neq(col, val);
+    }
+    const { count, error } = await q;
+    return error ? `err:${error.message}` : (count || 0);
+  }
+
+  const overall = {
+    pending: await n([["result", "eq", "pending"]]),
+    graded: await n([["result", "neq", "pending"]]),
+    win: await n([["result", "eq", "win"]]),
+    loss: await n([["result", "eq", "loss"]]),
+    push: await n([["result", "eq", "push"]]),
+  };
+
+  const markets = ["moneyline", "total", "run_line", "hr_prop", "player_strikeouts", "player_hits"];
+  const byMarket = {};
+  for (const m of markets) {
+    byMarket[m] = {
+      graded: await n([["market", "eq", m], ["result", "neq", "pending"]]),
+      pending: await n([["market", "eq", m], ["result", "eq", "pending"]]),
+      win: await n([["market", "eq", m], ["result", "eq", "win"]]),
+      loss: await n([["market", "eq", m], ["result", "eq", "loss"]]),
+      push: await n([["market", "eq", m], ["result", "eq", "push"]]),
+    };
+  }
+
+  const byDate = {};
+  for (let i = 0; i <= 6; i++) {
+    const d = getEasternDate(-i);
+    byDate[d] = {
+      graded: await n([["game_date", "eq", d], ["result", "neq", "pending"]]),
+      pending: await n([["game_date", "eq", d], ["result", "eq", "pending"]]),
+    };
+  }
+
+  return { ok: true, overall, byMarket, byDate };
 }
 
 module.exports = router;
