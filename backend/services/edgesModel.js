@@ -323,6 +323,13 @@ function marketCapMult(bvp, americanOdds) {
   return qualifies ? MAX_OVER_MARKET_BVP : MAX_OVER_MARKET;
 }
 
+// RECORDING GATE (2026-06-06): only stake/record a prop when the model rates it a
+// real edge. Was `edge > -0.05`, which logged the model's OWN rated-losers (a big
+// driver of the -7.2% HR ROI). 0.025 = the MEDIUM confidence tier (see
+// rateConfidence). Applies to HR / strikeouts / hits. Lower to 0.005 (LOW+) for
+// more volume, raise to 0.05 (HIGH-only) for fewer/stronger picks.
+const MIN_PROP_EDGE = 0.025;
+
 function calculateHRProbability(batterStats, opposingPitcherStats, game, weather, recent15, statcast, bvp, battingOrder) {
   if (!batterStats) return null;
   const seasonRate = batterStats.hrPerPA ?? LEAGUE_AVG.hrPerPA;
@@ -1127,7 +1134,7 @@ async function calculateHRPropEdges(games, hrOddsByEvent) {
     }
   }
   return allHRProps
-    .filter(p => p.edge != null && p.edge > -0.05)
+    .filter(p => p.edge != null && p.edge >= MIN_PROP_EDGE)
     .sort((a, b) => (b.hrProb ?? -1) - (a.hrProb ?? -1)); // likelihood-first, not payout-first
 }
 
@@ -1197,7 +1204,7 @@ async function calculateStrikeoutPropEdges(games, kOddsByEvent) {
     }
   }
   return out
-    .filter(p => p.edge != null && p.edge > -0.05)
+    .filter(p => p.edge != null && p.edge >= MIN_PROP_EDGE)
     .sort((a, b) => (b.edge ?? -1) - (a.edge ?? -1));
 }
 
@@ -1252,7 +1259,7 @@ async function calculateHitsPropEdges(games, hitsOddsByEvent) {
     }
   }
   return out
-    .filter(p => p.edge != null && p.edge > -0.05)
+    .filter(p => p.edge != null && p.edge >= MIN_PROP_EDGE)
     .sort((a, b) => (b.edge ?? -1) - (a.edge ?? -1));
 }
 
