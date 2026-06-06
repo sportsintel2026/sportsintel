@@ -273,6 +273,14 @@ function calculateHRProbability(batterStats, opposingPitcherStats, game, weather
 // Expected Ks for a starter = K/9 × (expected innings / 9) × opponent-K factor.
 // Single-game Ks are modeled as Poisson(expectedKs); P(over a .5 line) follows.
 // A v1 projection — calibrate the constants once real K-prop results accumulate.
+// CALIBRATION (2026-06-06, step 1): single-game prop counts are OVERDISPERSED
+// vs the Poisson we model them with, so raw over/under probabilities come out
+// too extreme (June 5: model claimed ~60-67% on its OVER picks, they hit
+// 25-46%). Shrink every prop probability toward 0.5 by this factor to tame the
+// overconfidence WITHOUT flipping which side we take. Small, reversible nudge —
+// raise toward 1.0 to weaken it, lower to strengthen. Re-evaluate after a week.
+const PROP_PROB_SHRINK = 0.75;
+function shrinkProb(p) { return p == null ? null : 0.5 + PROP_PROB_SHRINK * (p - 0.5); }
 const LEAGUE_K9 = 8.6;              // league starter strikeouts per 9
 const LEAGUE_TEAM_K_PER_GAME = 8.6; // league average team strikeouts per game
 const DEFAULT_START_IP = 5.3;       // league-average starter innings per start
@@ -312,7 +320,7 @@ function strikeoutOverProb(pitcherStats, oppTeamStats, line) {
   const lambda = (k9 / 9) * expIP * oppFactor;
   if (!(lambda > 0)) return null;
   // .5 lines: over wins on K >= floor(line)+1, so P(over) = 1 - CDF(floor(line))
-  return round3(1 - poissonCdf(Math.floor(line), lambda));
+  return round3(shrinkProb(1 - poissonCdf(Math.floor(line), lambda)));
 }
 
 // ── BATTER HITS PROP MODEL ────────────────────────────────────────────────────
@@ -320,7 +328,7 @@ function strikeoutOverProb(pitcherStats, oppTeamStats, line) {
 // expected at-bats. Single-game hits modeled as Poisson(expected hits). v1 — same
 // calibration family as the K model, so tune both together once results land.
 const LEAGUE_BAA = 0.245;          // league batting average against
-const DEFAULT_AB_PER_GAME = 3.8;   // expected at-bats for a lineup regular
+const DEFAULT_AB_PER_GAME = 3.4;   // expected at-bats (lowered 3.8->3.4 2026-06-06: model over-picked fringe/platoon bats assuming full-regular ABs)
 
 function hitsOverProb(batterStats, oppPitcherStats, line) {
   if (!batterStats || line == null) return null;
@@ -334,7 +342,7 @@ function hitsOverProb(batterStats, oppPitcherStats, line) {
   perAB = Math.max(0.10, Math.min(0.45, perAB)); // sane per-AB bounds
   const expHits = DEFAULT_AB_PER_GAME * perAB;
   if (!(expHits > 0)) return null;
-  return round3(1 - poissonCdf(Math.floor(line), expHits));
+  return round3(shrinkProb(1 - poissonCdf(Math.floor(line), expHits)));
 }
 
 // ── EDGE CALCULATION ──────────────────────────────────────────────────────────
