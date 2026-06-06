@@ -33,6 +33,22 @@ function isQualified(r) {
 }
 // ----------------------------------------------------------------------------
 
+// --- per-market track-record resets -----------------------------------------
+// A market's published record only counts graded picks on/after this date,
+// because the model for that market was materially rebuilt and older picks no
+// longer reflect it. NON-DESTRUCTIVE: the old rows stay in the DB, they're just
+// not counted on the page (reversible — remove the entry to count them again).
+// The cutoff date is also returned to the page so it can show an honest
+// "tracking reset on <date>" note rather than silently dropping a record.
+const MARKET_RESET = {
+  hr_prop: "2026-06-06", // start HR count today (note: 6/6 picks recorded pre-deploy are old-model)
+};
+function afterReset(r) {
+  const cut = MARKET_RESET[r.market];
+  return !cut || (r.game_date && r.game_date >= cut);
+}
+// ----------------------------------------------------------------------------
+
 function db() {
   return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 }
@@ -73,7 +89,7 @@ router.get("/:league", async (req, res) => {
 
     // Props are kept entirely out of the core record and CLV — own table only.
     const coreRows = rows.filter(r => cfg.core.includes(r.market));
-    const propRows = rows.filter(r => cfg.props.includes(r.market));
+    const propRows = rows.filter(r => cfg.props.includes(r.market) && afterReset(r));
 
     // Qualified set drives the headline; full set kept for transparency.
     const qualifiedRows = coreRows.filter(isQualified);
@@ -149,6 +165,8 @@ router.get("/:league", async (req, res) => {
       fullSample: { ...full, totalGraded: rows.length },
       clv: clvSummary,
       props,
+      // Reset cutoffs (per market) so the page can show "tracking reset on <date>".
+      propResets: MARKET_RESET,
       // Back-compat: the existing MLB page reads `hrProps`. Keep it for mlb until
       // the page is updated to the generic `props` field.
       hrProps: league === "mlb" ? props : undefined,
