@@ -1,1358 +1,1100 @@
-// Edges model v0.4 — research-grade MLB betting projections
-// + Weather, Batter vs Pitcher, Pitcher recent form
-// + NEW v0.4: lineup handedness splits vs opposing starter, reliever-only bullpen quality
-const {
-  getPitcherSeasonStats,
-  getBatterSeasonStats,
-  getTeamSeasonStats,
-  getTeamLineup,
-  getLineupOffense,
-  getTeamPitchingStats,
-  getTeamRoster,
-  getBatterVsPitcherHistory,
-  getPitcherRecentStarts,
-  getBatterRecentStats,
-  getBatterStatcast,
-  getTeamHandednessSplits,
-  getTeamBullpenStats,
-  getPitcherHand,
-} = require("./mlbStatsApi");
-const { americanToImpliedProb } = require("./oddsApi");
-const { getWeatherForVenue } = require("./weatherApi");
+import { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../hooks/useAuth";
+import { edgesApi, subscriptionApi } from "../lib/api";
+import Sidebar from "./Sidebar";
 
-const LEAGUE_AVG = {
-  era: 4.30,
-  runsPerGame: 4.40,
-  hrPerPA: 0.032,
-  homeRunsPer9: 1.20,
-  iso: 0.155,
-  ops: 0.720,
-  bullpenEra: 4.10,
-};
+const LEAGUES = [
+  { id: "mlb", label: "MLB", icon: "⚾", live: true },
+  { id: "nba", label: "NBA", icon: "🏀", live: true },
+  { id: "nhl", label: "NHL", icon: "🏒", live: false },
+  { id: "nfl", label: "NFL", icon: "🏈", live: false },
+  { id: "ncaafb", label: "CFB", icon: "🏟️", live: false },
+  { id: "ncaamb", label: "CBB", icon: "🎓", live: false },
+];
 
-// ── PITCHER QUALITY HELPER ────────────────────────────────────────────────────
-// ERA is noisy (defense + sequencing + luck) and slow to stabilize. FIP rebuilds
-// a pitcher's run-prevention from only what they control — strikeouts, walks, and
-// home runs — and predicts FUTURE ERA better than past ERA does. We already fetch
-// K/9, BB/9, and HR/9, so we can compute a FIP-style number for free and BLEND it
-// with ERA (not fully replace — a thin early-season sample of the components can
-// be jumpy). Returns an "effective ERA" the rest of the model can use as before.
-//   FIP = ((13*HR) + (3*BB) - (2*K)) / IP + constant.  Using per-9 rates this is
-//   equivalent to: (13*HR9 + 3*BB9 - 2*K9)/9 + C, with C chosen so league-avg
-//   FIP ~ league-avg ERA.
-const FIP_CONSTANT = 3.10; // calibrates FIP onto the ERA scale (league ERA ~4.30)
-function effectiveERA(p) {
-  if (!p) return null;
-  const era = p.era ?? null;
-  const k9 = p.strikeoutsPer9 ?? null;
-  const bb9 = p.walksPer9 ?? null;
-  const hr9 = p.homeRunsPer9 ?? null;
-  // Need the three components to compute FIP; otherwise fall back to ERA.
-  if (k9 == null || bb9 == null || hr9 == null) return era;
-  const fip = (13 * hr9 + 3 * bb9 - 2 * k9) / 9 + FIP_CONSTANT;
-  if (era == null) return round2(fip);
-  // Blend: 60% FIP (more predictive) + 40% ERA (captures real results/defense).
-  return round2(0.6 * fip + 0.4 * era);
-}
+export default function DashboardPage() {
+  const { user, signOut } = useAuth();
+  const navigate = useNavigate();
+  const [league, setLeague] = useState("mlb");
+  const [edges, setEdges] = useState(null);
+  const [edgesLoading, setEdgesLoading] = useState(true);
+  const [plan, setPlan] = useState({ tier: "free", isAdmin: false });
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const isAdmin = plan.isAdmin === true;
+  const isPro = plan.tier === "pro" || plan.tier === "elite";
+  const hasFullAccess = isAdmin || isPro;
 
-// ERA over the pitcher's recent starts (earned runs / innings × 9).
-// `recentStarts` is the array from getPitcherRecentStarts. Returns null if the
-// sample is too thin to mean anything (need ~10+ recent innings).
-function recentFormEra(recentStarts) {
-  if (!Array.isArray(recentStarts) || recentStarts.length === 0) return null;
-  let er = 0, ip = 0;
-  for (const s of recentStarts) {
-    er += s.er ?? 0;
-    ip += s.ip ?? 0;
-  }
-  if (ip < 10) return null; // too few innings — don't trust it
-  return round2((er / ip) * 9);
-}
+  useEffect(() => { subscriptionApi.getMyPlan().then(setPlan).catch(() => {}); }, []);
 
-// Returns a COPY of the pitcher object with its `era` lightly nudged toward
-// recent form. We blend 75% season / 25% recent: recent pitching matters, but
-// 3 starts is a small, noisy sample, so it should adjust — not dominate. Because
-// effectiveERA() reads p.era, this flows into BOTH the moneyline and totals.
-// FIP components (k9/bb9/hr9) are left at season values (3-start rate stats are
-// far too noisy to touch). Clamps the recent blend so one disaster start can't
-// wreck the projection.
-function blendRecentForm(pitcher, recentStarts) {
-  if (!pitcher || pitcher.era == null) return pitcher;
-  const recentEra = recentFormEra(recentStarts);
-  if (recentEra == null) return pitcher;
-  // Clamp recent ERA to a sane band before blending (a 2-inning 9-ER nightmare
-  // shouldn't read as a 40 ERA pitcher going forward).
-  const clampedRecent = Math.max(1.0, Math.min(9.0, recentEra));
-  const blended = round2(0.75 * pitcher.era + 0.25 * clampedRecent);
-  return { ...pitcher, era: blended, _seasonEra: pitcher.era, _recentEra: recentEra };
-}
+  const loadEdges = useCallback(async () => {
+    if (league !== "mlb") { setEdges(null); setEdgesLoading(false); return; }
+    setEdgesLoading(true);
+    try { const data = await edgesApi.getMLB(); setEdges(data); }
+    catch (e) { console.error("Failed to load edges:", e); setEdges(null); }
+    setEdgesLoading(false);
+  }, [league]);
+  useEffect(() => { loadEdges(); }, [loadEdges]);
 
-// ── THIN-SAMPLE REGRESSION ────────────────────────────────────────────────────
-// A pitcher's rate stats (ERA, WHIP, K9, BB9, HR9) are statistically meaningless
-// over a handful of innings. A call-up or spot starter with 0.2 IP and one run
-// allowed shows a 13.50 ERA / 13.50 HR9 — which the model would otherwise read as
-// "batting practice," wildly inflating the run total AND every opposing hitter's
-// HR prop at once (the exact KC @ CIN failure: model projected 11.22 vs a 9.5
-// market line because CIN's starter had pitched two-thirds of an inning).
-//
-// The fix is standard regression to the mean: until a pitcher has thrown enough
-// innings to stabilize, pull his rate stats toward league average, weighted by how
-// thin the sample is. At 0 IP he is 100% league average (we genuinely know nothing
-// about him); by FULL_TRUST_IP he is 100% his own numbers; in between it slides
-// linearly. Counting stats (wins, hits, etc.) are left untouched — only the rate
-// stats that feed the projection get regressed. This corrects the moneyline,
-// totals, and HR props at the SOURCE, before any of them are computed.
-const FULL_TRUST_IP = 30;        // at/above this many IP, use the pitcher's own rates as-is
-const LEAGUE_RATE = {            // league-average pitcher rates to regress toward
-  era: LEAGUE_AVG.era,           // 4.30
-  whip: 1.30,
-  strikeoutsPer9: 8.6,
-  walksPer9: 3.1,
-  homeRunsPer9: LEAGUE_AVG.homeRunsPer9, // 1.20
-};
-function regressThinSample(pitcher) {
-  if (!pitcher) return pitcher;
-  const ip = pitcher.inningsPitched ?? 0;
-  // Enough innings to trust the pitcher's own numbers — leave untouched.
-  if (ip >= FULL_TRUST_IP) return pitcher;
-  // Weight on the pitcher's OWN stats grows linearly from 0 (at 0 IP) to 1 (at
-  // FULL_TRUST_IP). The remainder is weight on league average.
-  const wSelf = Math.max(0, Math.min(1, ip / FULL_TRUST_IP));
-  const wLeague = 1 - wSelf;
-  const mix = (selfVal, leagueVal) => {
-    if (selfVal == null) return leagueVal; // no own number → use league
-    return round2(wSelf * selfVal + wLeague * leagueVal);
-  };
-  return {
-    ...pitcher,
-    era: mix(pitcher.era, LEAGUE_RATE.era),
-    whip: mix(pitcher.whip, LEAGUE_RATE.whip),
-    strikeoutsPer9: mix(pitcher.strikeoutsPer9, LEAGUE_RATE.strikeoutsPer9),
-    walksPer9: mix(pitcher.walksPer9, LEAGUE_RATE.walksPer9),
-    homeRunsPer9: mix(pitcher.homeRunsPer9, LEAGUE_RATE.homeRunsPer9),
-    _rawEra: pitcher.era,        // keep originals for debugging/display
-    _regressedFromIP: ip,
-  };
-}
+  return (
+    <div style={{ minHeight: "100vh", background: "#0a0e14", color: "#e4e7eb", fontFamily: "'Inter',system-ui,-apple-system,sans-serif" }}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+        *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+        @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+        @keyframes spin{to{transform:rotate(360deg)}}
+        @keyframes slideIn{from{transform:translateX(-100%)}to{transform:translateX(0)}}
+        ::-webkit-scrollbar{width:6px;height:6px}
+        ::-webkit-scrollbar-thumb{background:#1f2937;border-radius:3px}
+        .edge-row{transition:background .15s,transform .15s;cursor:pointer}
+        .edge-row:hover{background:#131820!important;transform:translateX(2px)}
+        .game-row{transition:background .15s;cursor:pointer}
+        .game-row:hover{background:#131820}
+        .tab-btn{transition:all .15s;cursor:pointer}
+        .tab-btn:hover{color:#fff}
+        .section-header{transition:color .15s;cursor:pointer}
+        .section-header:hover{color:#fff!important}
+        .hamburger-btn{display:none}
+        .mobile-only{display:none}
+        .edge-scroll{scrollbar-width:thin;scrollbar-color:#374151 transparent;-webkit-overflow-scrolling:touch}
+        .edge-scroll::-webkit-scrollbar{width:6px}
+        .edge-scroll::-webkit-scrollbar-thumb{background:#374151;border-radius:3px}
+        .edge-scroll::-webkit-scrollbar-track{background:transparent}
+        .desktop-sidebar{display:block}
+        @media (max-width: 768px) {
+          .desktop-sidebar{display:none!important}
+          .main-content{margin-left:0!important;padding-top:0!important}
+          .hamburger-btn{display:flex!important}
+          .mobile-only{display:flex!important}
+          .edge-grid-2{grid-template-columns:1fr!important}
+          .hr-prop-row{grid-template-columns:1fr!important;gap:8px!important}
+          .hr-prop-stats{display:flex!important;flex-wrap:wrap!important;gap:12px!important;justify-content:space-between!important}
+          .games-table-wrap{margin:0 -14px!important}
+          .games-table{font-size:11px!important}
+          .games-table th,.games-table td{padding:6px 4px!important}
+          .league-tabs-inner{padding:0 12px!important}
+          .dashboard-content{padding:16px 14px 60px!important}
+          h1{font-size:22px!important}
+        }
+      `}</style>
 
+      {/* Desktop sidebar — fixed left */}
+      <div className="desktop-sidebar">
+        <Sidebar user={user} plan={plan} signOut={signOut} navigate={navigate} />
+      </div>
 
-// Given a team's vsLHP/vsRHP splits and the opposing starter's hand,
-// return a multiplier (~0.92–1.08) reflecting how well they hit that hand
-// relative to their own overall level. Falls back to 1.0 when data is missing.
-function handednessMultiplier(splits, opposingHand, teamOverallOps) {
-  if (!splits || !opposingHand || !teamOverallOps) return 1.0;
-  const facing = opposingHand === "L" ? splits.vsLHP : splits.vsRHP;
-  if (!facing || !facing.ops || facing.atBats < 50) return 1.0; // too small a sample
-  // How much better/worse they hit this hand vs their season OPS
-  let mult = facing.ops / teamOverallOps;
-  // Dampen so it nudges rather than dominates, and clamp to a sane band
-  mult = 1 + (mult - 1) * 0.6;
-  return Math.max(0.90, Math.min(1.10, mult));
-}
+      {/* Mobile drawer — slides in from left when opened */}
+      {drawerOpen && (
+        <>
+          <div onClick={() => setDrawerOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 49 }} />
+          <div style={{ position: "fixed", top: 0, left: 0, bottom: 0, animation: "slideIn .2s ease-out", zIndex: 51 }}>
+            <Sidebar user={user} plan={plan} signOut={signOut} navigate={(path) => { setDrawerOpen(false); navigate(path); }} />
+          </div>
+        </>
+      )}
 
-// ── MONEYLINE MODEL ───────────────────────────────────────────────────────────
-function calculateMoneylineProjection(game, awayPitcher, homePitcher, awayTeamHit, homeTeamHit, awayBullpen, homeBullpen, awayHandMult, homeHandMult) {
-  // Use FIP-blended effective ERA (more predictive than raw ERA) when components exist.
-  const awayEff = effectiveERA(awayPitcher);
-  const homeEff = effectiveERA(homePitcher);
-  const awayPitcherFactor = awayEff ? LEAGUE_AVG.era / Math.max(awayEff, 1.5) : 1.0;
-  const homePitcherFactor = homeEff ? LEAGUE_AVG.era / Math.max(homeEff, 1.5) : 1.0;
+      {/* Mobile top bar — only shows on mobile */}
+      <div className="mobile-only" style={{ display: "none", position: "sticky", top: 0, zIndex: 40, background: "#0a0e14", borderBottom: "1px solid #1a1f28", padding: "10px 14px", alignItems: "center", justifyContent: "space-between" }}>
+        <button onClick={() => setDrawerOpen(true)} className="hamburger-btn" style={{ background: "none", border: "none", color: "#e4e7eb", fontSize: 22, padding: 4, cursor: "pointer", display: "none", alignItems: "center" }}>
+          ☰
+        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e", display: "inline-block", animation: "pulse 2s infinite" }} />
+          <span style={{ fontSize: 15, fontWeight: 800 }}>Wize<span style={{ color: "#ef4444" }}>Picks</span></span>
+        </div>
+        <div style={{ width: 30 }} />
+      </div>
 
-  // Offense factor now adjusted by handedness vs the opposing starter
-  const awayOffenseFactor = (awayTeamHit?.ops ? awayTeamHit.ops / LEAGUE_AVG.ops : 1.0) * (awayHandMult || 1.0);
-  const homeOffenseFactor = (homeTeamHit?.ops ? homeTeamHit.ops / LEAGUE_AVG.ops : 1.0) * (homeHandMult || 1.0);
-
-  // Bullpen factor now uses reliever-only ERA when available (more accurate than full-staff)
-  const awayPenEra = awayBullpen?.era ?? null;
-  const homePenEra = homeBullpen?.era ?? null;
-  const awayBullpenFactor = awayPenEra ? LEAGUE_AVG.era / Math.max(awayPenEra, 2.5) : 1.0;
-  const homeBullpenFactor = homePenEra ? LEAGUE_AVG.era / Math.max(homePenEra, 2.5) : 1.0;
-
-  const awayStrength =
-    Math.pow(awayPitcherFactor, 0.40) *
-    Math.pow(awayOffenseFactor, 0.40) *
-    Math.pow(awayBullpenFactor, 0.20);
-  const homeStrength =
-    Math.pow(homePitcherFactor, 0.40) *
-    Math.pow(homeOffenseFactor, 0.40) *
-    Math.pow(homeBullpenFactor, 0.20);
-
-  // HOME_BOOST raised 1.04 -> 1.10 (Jun 2026). Backtest over ~180 finished games
-  // showed the pure model under-rated home teams: predicted ~50.3% vs actual ~51.4%.
-  // 1.10 centers predicted home-win within ~0.3pts of actual AND had the lowest
-  // log-loss of {1.04, 1.10, 1.15}; 1.15 overshot. Mainly fixes the home/away
-  // centering (trims a systematic road-underdog lean in the edges); only a marginal
-  // log-loss change. NOTE: this resets the clean CLV measurement going forward.
-  const HOME_BOOST = 1.10;
-  const adjHomeStrength = homeStrength * HOME_BOOST;
-  const homeWinProb = adjHomeStrength / (adjHomeStrength + awayStrength);
-  const awayWinProb = 1 - homeWinProb;
-  return { awayWinProb: round3(awayWinProb), homeWinProb: round3(homeWinProb) };
-}
-
-// ── TOTALS MODEL ──────────────────────────────────────────────────────────────
-function calculateTotalProjection(game, awayPitcher, homePitcher, awayTeamHit, homeTeamHit, weather, awayBullpen, homeBullpen, awayHandMult, homeHandMult) {
-  // Offense scaled by handedness vs the opposing starter
-  const awayRPG = (awayTeamHit?.runsPerGame ?? LEAGUE_AVG.runsPerGame) * (awayHandMult || 1.0);
-  const homeRPG = (homeTeamHit?.runsPerGame ?? LEAGUE_AVG.runsPerGame) * (homeHandMult || 1.0);
-  const baseTotal = awayRPG + homeRPG;
-
-  const awayPitcherERA = effectiveERA(awayPitcher) ?? LEAGUE_AVG.era;
-  const homePitcherERA = effectiveERA(homePitcher) ?? LEAGUE_AVG.era;
-  const pitcherAdj = ((awayPitcherERA + homePitcherERA) / 2 - LEAGUE_AVG.era) * 0.40;
-
-  const parkAdj = (game.parkRunFactor - 1.0) * baseTotal;
-
-  let weatherAdj = 0;
-  if (weather && !weather.indoor) {
-    if (weather.windEffect === "out") weatherAdj += 0.4;
-    if (weather.windEffect === "in") weatherAdj -= 0.4;
-    if (weather.tempEffect === "hot") weatherAdj += 0.3;
-    if (weather.tempEffect === "cold") weatherAdj -= 0.3;
-  }
-
-  // Bullpen adjustment: both pens pitch ~3 innings/game. A good pen suppresses
-  // late runs; a bad pen inflates them. Compare each pen to league avg.
-  let bullpenAdj = 0;
-  const awayPenEra = awayBullpen?.era;
-  const homePenEra = homeBullpen?.era;
-  if (awayPenEra) bullpenAdj += ((awayPenEra - LEAGUE_AVG.bullpenEra) / 9) * 3.0;
-  if (homePenEra) bullpenAdj += ((homePenEra - LEAGUE_AVG.bullpenEra) / 9) * 3.0;
-
-  const projected = baseTotal + pitcherAdj + parkAdj + weatherAdj + bullpenAdj;
-  return {
-    projectedTotal: round2(projected),
-    breakdown: {
-      base: round2(baseTotal),
-      pitcherAdj: round2(pitcherAdj),
-      parkAdj: round2(parkAdj),
-      weatherAdj: round2(weatherAdj),
-      bullpenAdj: round2(bullpenAdj),
-    },
-  };
-}
-
-// ── HR PROP MODEL ─────────────────────────────────────────────────────────────
-// recent15 (last-15-day stats) is now an INPUT, not just display: a hitter on a
-// genuine power surge (or slump) gets nudged off their season HR rate. Kept
-// conservative — 15 days is a small sample — so it blends, never dominates.
-//
-// CALIBRATION (2026-06-06, HR): the first real graded sample (808 picks) showed
-// the model's confidence running BACKWARDS — the HIGH-confidence tier claimed a
-// 27.6% game-HR rate but delivered 11.4% over 362 picks (≈7.6% per-PA projected
-// vs ≈2.9% actual), and was its WORST tier by ROI (-21.5%). Cause: the env
-// factors (pitcher × park × iso × weather) multiply RAW, so "good in every
-// category" compounds into fantasy projections (some picks implied a 40%+ game
-// HR chance — no hitter does that). Three principled, reversible damps below.
-// To revert toward old behavior: cap → 0.15, damp → 1.0, shrink → 1.0.
-const HR_PERPA_CAP = 0.08;    // per-PA HR ceiling (was 0.15). Elite sluggers top out ~7-8%/PA.
-const HR_FACTOR_DAMP = 0.5;   // pull the COMBINED env multiplier toward 1 (^0.5 = sqrt): still tilts, can't stack into a lock.
-const HR_PROB_SHRINK = 0.7;   // shrink the adjusted per-PA rate 30% back toward the batter's OWN base rate (keeps player differentiation, unlike shrinking to league avg).
-
-// ── HR MODEL v2 INPUTS (2026-06-06) ───────────────────────────────────────────
-// Three new signals layered on the calibrated base. Each is bounded so it tilts
-// the projection without re-creating the overconfidence the calibration removed.
-// The 0.08 per-PA cap above is the final backstop beneath all of them.
-//
-// (a) STATCAST power — barrel rate is the most HR-predictive metric available, so
-//     it (blended with xwOBA) becomes the power input, preferred over raw ISO.
-const LEAGUE_BARREL_RATE = 0.080; // league-avg barrels / batted-ball event (~8%)
-const LEAGUE_XWOBA = 0.320;       // league-avg xwOBA
-function clampHR(x, lo, hi) { return Math.max(lo, Math.min(hi, x)); }
-function powerFactor(batterStats, statcast) {
-  const parts = [];
-  if (statcast) {
-    if (statcast.barrelRate != null) {
-      let br = statcast.barrelRate; if (br > 1) br /= 100; // auto-normalize percent vs fraction
-      parts.push(clampHR(br / LEAGUE_BARREL_RATE, 0.6, 1.8));
-    }
-    if (statcast.xwOBA != null && statcast.xwOBA > 0) {
-      parts.push(clampHR(statcast.xwOBA / LEAGUE_XWOBA, 0.7, 1.5));
-    }
-  }
-  if (parts.length === 0) {
-    // No Statcast — fall back to the original ISO-based power factor.
-    return (batterStats && batterStats.iso) ? (batterStats.iso / LEAGUE_AVG.iso) ** 0.5 : 1.0;
-  }
-  const avg = parts.reduce((a, b) => a + b, 0) / parts.length;
-  return clampHR(avg, 0.85, 1.30); // hard cap; further sqrt-dampened inside the env stack
-}
-
-// (b) BATTER vs PITCHER — mostly noise (tiny samples, HR is a rare event), so it
-//     is a BOUNDED nudge only: needs a real sample, sample-weighted, capped ±12%.
-//     Raise BVP_MAX_TILT to trust it more (not recommended), 0 to disable.
-const BVP_MIN_AB = 20;     // below this many career AB vs the pitcher → ignore
-const BVP_FULL_AB = 60;    // weight ramps to ~full here (HR-vs-pitcher rarely exceeds this)
-const BVP_MAX_TILT = 0.12; // max ± influence on the projection
-function bvpNudge(bvp) {
-  if (!bvp || (bvp.atBats || 0) < BVP_MIN_AB || bvp.hr == null) return 1.0;
-  const bvpRate = bvp.hr / bvp.atBats;             // HR per AB vs this pitcher
-  const w = Math.min(1, bvp.atBats / BVP_FULL_AB); // sample weight
-  const ratio = bvpRate / LEAGUE_AVG.hrPerPA;      // vs league HR rate
-  const tilt = BVP_MAX_TILT * w * clampHR(ratio - 1, -1, 1);
-  return clampHR(1 + tilt, 1 - BVP_MAX_TILT, 1 + BVP_MAX_TILT);
-}
-
-// (c) LINEUP SPOT → expected plate appearances. Leadoff sees ~4.6 PA/game, the
-//     9-hole ~3.7 — more PA = more HR chances. Unknown order falls back to 4.1.
-const LINEUP_PA = { 1: 4.65, 2: 4.55, 3: 4.45, 4: 4.30, 5: 4.20, 6: 4.05, 7: 3.95, 8: 3.85, 9: 3.75 };
-function expectedPAForOrder(order) { return LINEUP_PA[order] ?? 4.1; }
-
-// (d) MARKET PRIOR (owner's insight, 2026-06-06): the book's price is a sharp
-//     signal of true HR likelihood. The model may sit at most this multiple above
-//     the book's implied prob — a long price is the book's clue the hitter is
-//     unlikely, so a model that claims a deep longshot is a lock is almost always
-//     wrong. Caps longshot "edges"; lets shorter-priced book-likely hitters rise.
-//     1.0 = never bet above the book; raise to trust the model's disagreement more.
-const MAX_OVER_MARKET = 1.5;
-
-// (d-exception) BvP override on the market cap: a LONGSHOT with a GENUINE record
-// vs this exact pitcher earns a higher ceiling (2.0× instead of 1.5×). Strictly
-// gated so it can't re-open the longshot leak the cap exists to plug — only a
-// real sample qualifies (30+ career AB, 2+ HR), and only on longshot prices
-// (+400 and up), where the cap actually binds. Thin "2-for-6" samples do NOT
-// qualify. Even when it fires, the 0.08 per-PA cap still backstops the result.
-const MAX_OVER_MARKET_BVP = 2.0; // elevated cap multiple when BvP qualifies
-const BVP_EXC_MIN_AB = 30;       // need a real sample vs the pitcher
-const BVP_EXC_MIN_HR = 2;        // and demonstrated power within it
-const BVP_EXC_MIN_ODDS = 400;    // only for longshots (the +450–+1000 band)
-function marketCapMult(bvp, americanOdds) {
-  const qualifies =
-    americanOdds != null && americanOdds >= BVP_EXC_MIN_ODDS &&
-    bvp && (bvp.atBats || 0) >= BVP_EXC_MIN_AB && (bvp.hr || 0) >= BVP_EXC_MIN_HR;
-  return qualifies ? MAX_OVER_MARKET_BVP : MAX_OVER_MARKET;
-}
-
-// RECORDING GATE (2026-06-06): only stake/record a prop when the model rates it a
-// real edge. Was `edge > -0.05`, which logged the model's OWN rated-losers (a big
-// driver of the -7.2% HR ROI). 0.025 = the MEDIUM confidence tier (see
-// rateConfidence). Applies to HR / strikeouts / hits. Lower to 0.005 (LOW+) for
-// more volume, raise to 0.05 (HIGH-only) for fewer/stronger picks.
-const MIN_PROP_EDGE = 0.025;
-
-function calculateHRProbability(batterStats, opposingPitcherStats, game, weather, recent15, statcast, bvp, battingOrder) {
-  if (!batterStats) return null;
-  const seasonRate = batterStats.hrPerPA ?? LEAGUE_AVG.hrPerPA;
-  if (seasonRate === 0) return null;
-
-  // Blend recent form into the base rate. recent15 gives HR over recent AB; turn
-  // that into a per-PA-ish rate and require a real sample (≥25 AB) before trusting
-  // it. 70% season / 30% recent, then clamp the blended rate to ±60% of season so
-  // one hot/cold streak can't produce a silly projection.
-  let baseHRRate = seasonRate;
-  if (recent15 && recent15.atBats >= 25 && recent15.homeRuns != null) {
-    const recentRate = recent15.homeRuns / (recent15.atBats * 1.08); // approx PA from AB
-    const blended = 0.70 * seasonRate + 0.30 * recentRate;
-    baseHRRate = Math.max(seasonRate * 0.4, Math.min(seasonRate * 1.6, blended));
-  }
-
-  const expectedPA = expectedPAForOrder(battingOrder); // (c) lineup-aware PA
-  const pitcherHR9 = opposingPitcherStats?.homeRunsPer9 ?? LEAGUE_AVG.homeRunsPer9;
-  const pitcherFactor = pitcherHR9 / LEAGUE_AVG.homeRunsPer9;
-  const parkFactor = game.parkHRFactor || 1.0;
-  const powFactor = powerFactor(batterStats, statcast); // (a) Statcast-preferred power
-  let weatherFactor = 1.0;
-  if (weather && !weather.indoor) {
-    if (weather.windEffect === "out") weatherFactor *= 1.15;
-    if (weather.windEffect === "in") weatherFactor *= 0.85;
-    if (weather.tempEffect === "hot") weatherFactor *= 1.08;
-    if (weather.tempEffect === "cold") weatherFactor *= 0.92;
-  }
-  // Environmental adjustment: dampened so good-in-everything tilts the
-  // projection without compounding into a lock (see HR_FACTOR_DAMP note above).
-  const envMult = Math.pow(
-    pitcherFactor * parkFactor * powFactor * weatherFactor,
-    HR_FACTOR_DAMP
+      <div className="main-content" style={{ marginLeft: 200 }}>
+        <LeagueTabs league={league} setLeague={setLeague} navigate={navigate} />
+        <div className="dashboard-content" style={{ maxWidth: 1200, margin: "0 auto", padding: "20px 24px 60px" }}>
+          {league === "mlb" ? (
+            <MLBDashboard edges={edges} loading={edgesLoading} hasFullAccess={hasFullAccess} navigate={navigate} onRefresh={loadEdges} />
+          ) : league === "nba" ? (
+            <NBADashboard hasFullAccess={hasFullAccess} navigate={navigate} />
+          ) : (
+            <ComingSoon league={LEAGUES.find(l => l.id === league)} navigate={navigate} />
+          )}
+        </div>
+      </div>
+    </div>
   );
-  // (b) BvP applied as a small bounded nudge OUTSIDE the dampened stack.
-  const bvpFactor = bvpNudge(bvp);
-  let perPAProb = baseHRRate * envMult * bvpFactor;
-  // Shrink the adjusted rate back toward the batter's own base rate, then cap.
-  perPAProb = baseHRRate + HR_PROB_SHRINK * (perPAProb - baseHRRate);
-  perPAProb = Math.max(0, Math.min(HR_PERPA_CAP, perPAProb));
-  const noHRProb = Math.pow(1 - perPAProb, expectedPA);
-  return round3(1 - noHRProb);
 }
 
-// ── PITCHER STRIKEOUT PROP MODEL ──────────────────────────────────────────────
-// Expected Ks for a starter = K/9 × (expected innings / 9) × opponent-K factor.
-// Single-game Ks are modeled as Poisson(expectedKs); P(over a .5 line) follows.
-// A v1 projection — calibrate the constants once real K-prop results accumulate.
-// CALIBRATION (2026-06-06, step 1): single-game prop counts are OVERDISPERSED
-// vs the Poisson we model them with, so raw over/under probabilities come out
-// too extreme (June 5: model claimed ~60-67% on its OVER picks, they hit
-// 25-46%). Shrink every prop probability toward 0.5 by this factor to tame the
-// overconfidence WITHOUT flipping which side we take. Small, reversible nudge —
-// raise toward 1.0 to weaken it, lower to strengthen. Re-evaluate after a week.
-const PROP_PROB_SHRINK = 0.75;
-function shrinkProb(p) { return p == null ? null : 0.5 + PROP_PROB_SHRINK * (p - 0.5); }
-const LEAGUE_K9 = 8.6;              // league starter strikeouts per 9
-const LEAGUE_TEAM_K_PER_GAME = 8.6; // league average team strikeouts per game
-const DEFAULT_START_IP = 5.3;       // league-average starter innings per start
-
-function poissonCdf(k, lambda) {
-  if (k < 0 || !(lambda > 0)) return 0;
-  let term = Math.exp(-lambda);
-  let sum = term;
-  for (let i = 1; i <= k; i++) { term *= lambda / i; sum += term; }
-  return Math.min(1, sum);
-}
-
-function expectedKsFor(pitcherStats) {
-  const k9 = pitcherStats.strikeoutsPer9 ?? LEAGUE_K9;
-  let expIP = DEFAULT_START_IP;
-  if (pitcherStats.gamesStarted > 0 && pitcherStats.inningsPitched > 0) {
-    expIP = Math.max(3.5, Math.min(7.0, pitcherStats.inningsPitched / pitcherStats.gamesStarted));
-  }
-  return round2((k9 / 9) * expIP);
-}
-
-// P(strikeouts OVER the line) for a starting pitcher vs a given opponent.
-function strikeoutOverProb(pitcherStats, oppTeamStats, line) {
-  if (!pitcherStats || line == null) return null;
-  const k9 = pitcherStats.strikeoutsPer9 ?? LEAGUE_K9;
-  if (!k9) return null;
-  let expIP = DEFAULT_START_IP;
-  if (pitcherStats.gamesStarted > 0 && pitcherStats.inningsPitched > 0) {
-    expIP = pitcherStats.inningsPitched / pitcherStats.gamesStarted;
-  }
-  expIP = Math.max(3.5, Math.min(7.0, expIP));
-  let oppFactor = 1.0;
-  if (oppTeamStats && oppTeamStats.games > 0 && oppTeamStats.strikeouts != null) {
-    oppFactor = (oppTeamStats.strikeouts / oppTeamStats.games) / LEAGUE_TEAM_K_PER_GAME;
-    oppFactor = Math.max(0.82, Math.min(1.18, oppFactor)); // one stat shouldn't swing it wildly
-  }
-  const lambda = (k9 / 9) * expIP * oppFactor;
-  if (!(lambda > 0)) return null;
-  // .5 lines: over wins on K >= floor(line)+1, so P(over) = 1 - CDF(floor(line))
-  return round3(shrinkProb(1 - poissonCdf(Math.floor(line), lambda)));
-}
-
-// ── BATTER HITS PROP MODEL ────────────────────────────────────────────────────
-// Per-AB hit prob = batting avg, adjusted by the opposing starter's BAA, over
-// expected at-bats. Single-game hits modeled as Poisson(expected hits). v1 — same
-// calibration family as the K model, so tune both together once results land.
-const LEAGUE_BAA = 0.245;          // league batting average against
-const DEFAULT_AB_PER_GAME = 3.4;   // expected at-bats (lowered 3.8->3.4 2026-06-06: model over-picked fringe/platoon bats assuming full-regular ABs)
-
-function hitsOverProb(batterStats, oppPitcherStats, line) {
-  if (!batterStats || line == null) return null;
-  const avg = batterStats.avg;
-  if (avg == null || avg <= 0) return null;
-  let perAB = avg;
-  const baa = oppPitcherStats && oppPitcherStats.battingAvgAgainst;
-  if (baa != null && baa > 0) {
-    perAB = avg * Math.max(0.80, Math.min(1.20, baa / LEAGUE_BAA));
-  }
-  perAB = Math.max(0.10, Math.min(0.45, perAB)); // sane per-AB bounds
-  const expHits = DEFAULT_AB_PER_GAME * perAB;
-  if (!(expHits > 0)) return null;
-  return round3(shrinkProb(1 - poissonCdf(Math.floor(line), expHits)));
-}
-
-// ── EDGE CALCULATION ──────────────────────────────────────────────────────────
-// One-sided edge (model prob minus raw vig-inflated implied). Kept for HR props,
-// where we only have the "Over" side and can't cleanly de-vig.
-function calculateEdge(modelProb, americanOdds) {
-  if (modelProb == null || americanOdds == null) return null;
-  const implied = americanToImpliedProb(americanOdds);
-  if (implied == null) return null;
-  return round3(modelProb - implied);
-}
-
-// De-vig a two-way market: the book's two implied probs sum to >1 (their margin).
-// Normalizing them to sum to 1 recovers the book's FAIR probability — which is
-// what we must compare the model against. Comparing to the raw implied prob
-// instead overstates every edge by roughly half the vig (~2-2.5% on a -110 market),
-// which is larger than our entire LOW->MEDIUM threshold. This is the single most
-// important correctness fix in the model.
-function devigTwoWay(thisOdds, otherOdds) {
-  if (thisOdds == null || otherOdds == null) return null;
-  const a = americanToImpliedProb(thisOdds);
-  const b = americanToImpliedProb(otherOdds);
-  if (a == null || b == null) return null;
-  const sum = a + b;
-  if (!(sum > 0)) return null;
-  return a / sum; // fair, no-vig probability for THIS side
-}
-
-// Edge vs the FAIR (de-vigged) line. Needs both sides' odds.
-function calculateEdgeDevig(modelProb, thisOdds, otherOdds) {
-  if (modelProb == null) return null;
-  const fair = devigTwoWay(thisOdds, otherOdds);
-  if (fair == null) return calculateEdge(modelProb, thisOdds); // fallback if a side is missing
-  return round3(modelProb - fair);
-}
-function rateConfidence(edge) {
-  if (edge == null) return "NEUTRAL";
-  if (edge >= 0.05) return "HIGH";
-  if (edge >= 0.025) return "MEDIUM";
-  if (edge >= 0.005) return "LOW";
-  return "NEUTRAL";
-}
-
-// ── SANITY BACKSTOP ───────────────────────────────────────────────────────────
-// A legitimate pre-game edge is almost never larger than ~15% (a strong play is
-// 5-10%; the clean pre-game slate tops out around 12%). An edge beyond
-// SANE_EDGE_MAX is virtually ALWAYS a symptom of the model being compared against
-// the wrong number — e.g. a stale pre-game projection measured against a LIVE
-// in-game line for a game already underway, or a bad odds-to-game match — not a
-// real opportunity. Surfacing a wild +44% / +69% "edge" destroys trust, so we
-// DROP it at the source: every edge the model produces passes through here, and
-// anything implausible becomes null. Because all display paths already hide a
-// null edge (lists guard `edge != null`; game pages render an edge only when
-// present), a dropped edge cleanly disappears EVERYWHERE — every list, every game
-// page, and any future view — without each of them needing its own guard. This is
-// the last line of defense; the primary correctness gate is still showing
-// pre-game edges only for games that haven't started.
-const SANE_EDGE_MAX = 0.30;
-function sanitizeEdge(edge) {
-  if (edge == null) return null;
-  if (!Number.isFinite(edge)) return null;
-  if (Math.abs(edge) > SANE_EDGE_MAX) return null; // implausible → almost certainly a bad comparison
-  return edge;
-}
-
-// ── MARKET BLEND + OVERREACTION FLAG (v0.5) ───────────────────────────────────
-// The de-vigged closing line is the single sharpest predictor in sports betting —
-// sharper than almost any model. So instead of trusting our raw model number 100%,
-// we ANCHOR it partway toward the market's fair (de-vigged) probability. This does
-// two honest things at once:
-//   1. Accuracy: we borrow the market's wisdom, so our number is better calibrated.
-//   2. Discipline: a model number that wildly disagrees with a sharp price gets
-//      pulled back toward reality, so we can't manufacture a fake edge by being
-//      stubbornly far from the market. (Same inflated-edge problem, fixed at the
-//      math level rather than just capped after the fact.)
-//
-// The edge we then report is (blended model view) − (fair market) — i.e. how far
-// our blended opinion still sits from the market AFTER respecting it. If we fully
-// agreed with the market the edge would be ~0, which is correct: agreeing with a
-// sharp price is not an edge.
-//
-// SAFETY: this is core model math. It is behind an on/off switch + a single weight
-// knob. To revert to exact pre-blend behavior, set MARKET_BLEND_ENABLED = false
-// (or W_MODEL = 1.0) and redeploy — no old code to dig up.
-const MARKET_BLEND_ENABLED = true; // master switch — false = exact old behavior
-const W_MODEL = 0.55;              // 0.55 = 55% our model, 45% market. Higher = trust model more.
-
-// Blend our model probability toward the market's fair probability, then return the
-// edge vs that fair market number. Needs BOTH sides' odds for a real de-vig; if a
-// side is missing we fall back to the existing un-blended edge so nothing breaks.
-function blendedEdge(modelProb, thisOdds, otherOdds) {
-  if (modelProb == null) return null;
-  if (!MARKET_BLEND_ENABLED) {
-    return calculateEdgeDevig(modelProb, thisOdds, otherOdds); // old path
-  }
-  const fair = devigTwoWay(thisOdds, otherOdds);
-  if (fair == null) {
-    // No clean two-way market → can't blend meaningfully; keep old behavior.
-    return calculateEdgeDevig(modelProb, thisOdds, otherOdds);
-  }
-  const blended = W_MODEL * modelProb + (1 - W_MODEL) * fair;
-  return round3(blended - fair);
-}
-
-// "Market overreaction" flag — the owner's contrarian read as honest CONTEXT, not a
-// bet recommendation. When the market's fair probability for a side sits well ABOVE
-// our model's fundamentals (market thinks this side is more likely than we do by
-// >= INFLATION_THRESHOLD), the price is probably carrying public/streak hype the
-// fundamentals don't support — the classic "hot team over-bet by the public" spot.
-// We surface a neutral note; the user decides what to do with it. We NEVER tell
-// them to bet a side. We flag the side the MARKET is high on (the likely-inflated
-// favorite), so a fade-the-public reader knows where to look.
-const INFLATION_THRESHOLD = 0.08; // market fair prob exceeds model prob by 8%+
-function overreactionNote(modelProb, thisOdds, otherOdds) {
-  if (modelProb == null) return null;
-  const fair = devigTwoWay(thisOdds, otherOdds);
-  if (fair == null) return null;
-  const gap = fair - modelProb; // + => market rates this side higher than our model
-  if (gap >= INFLATION_THRESHOLD) {
-    return {
-      inflated: true,
-      gap: round3(gap),
-      note: "Market rates this side higher than our model — possible public/streak inflation.",
-    };
-  }
-  return null;
-}
-
-// ── ORCHESTRATION ─────────────────────────────────────────────────────────────
-const MAX_HR_GAMES = 5;
-// ── CONVICTION (v0.6) ─────────────────────────────────────────────────────────
-// Conviction is ORTHOGONAL to edge. Edge = how much value vs the line; conviction
-// = how much we trust the projection behind it, 0–100, from three signals the
-// model already computes:
-//   • stability    — are the starters past the sample where their stats mean
-//                    something (regressThinSample's ip/FULL_TRUST_IP), or mostly
-//                    league-average guesswork?
-//   • completeness — how many real inputs fed the projection vs league-average
-//                    placeholders (confirmed starters, lineup, bullpen, weather…)?
-//   • agreement    — do the independent factors point the SAME way as the pick,
-//                    or does the edge rest on one factor while the others disagree?
-// Conviction NEVER changes the edge, the pick, or grading — pure annotation, so a
-// user can tell "modest edge, high conviction" from "juicy edge, thin data." It is
-// deliberately falsifiable: persisted so we can later check whether high-conviction
-// picks actually beat the close more than low ones.
-const CONVICTION_WEIGHTS = { stability: 0.40, completeness: 0.35, agreement: 0.25 };
-const clampScore = (x) => Math.max(0, Math.min(100, x));
-
-// Shared game-level inputs: stability + completeness (same for every side).
-function convictionBase(ctx) {
-  // stability: average of each starter's own-sample weight (ip / FULL_TRUST_IP).
-  const ipWeight = (p) => {
-    if (!p || p.inningsPitched == null) return 0; // TBD / unknown starter → no trust
-    return Math.max(0, Math.min(1, p.inningsPitched / FULL_TRUST_IP));
-  };
-  const stability = clampScore(((ipWeight(ctx.awayPitcher) + ipWeight(ctx.homePitcher)) / 2) * 100);
-
-  // completeness: 100 minus a dock for every input running on a placeholder.
-  let completeness = 100;
-  if (!ctx.awayPitcher) completeness -= 20;
-  if (!ctx.homePitcher) completeness -= 20;
-  const lineupDock = (src) => (src === "confirmed" ? 0 : src === "recent" ? 4 : 8);
-  completeness -= lineupDock(ctx.awayLineupSource);
-  completeness -= lineupDock(ctx.homeLineupSource);
-  if (!ctx.awayBullpen?.era) completeness -= 6;
-  if (!ctx.homeBullpen?.era) completeness -= 6;
-  if (!ctx.weather) completeness -= 5;
-  if (!ctx.awayHandSplits) completeness -= 3;
-  if (!ctx.homeHandSplits) completeness -= 3;
-  if (!ctx.awayHit?.ops) completeness -= 5;
-  if (!ctx.homeHit?.ops) completeness -= 5;
-
-  return { stability: Math.round(stability), completeness: Math.round(clampScore(completeness)) };
-}
-
-// Agreement for a TOTAL pick: of the signed adjustments moving the projection off
-// its base, how many push the SAME way as our side (over = up, under = down)?
-// All aligned → high; an edge that exists despite most factors disagreeing → low.
-function totalAgreement(breakdown, side /* "over" | "under" */) {
-  if (!breakdown) return 50;
-  const adjs = [breakdown.pitcherAdj, breakdown.parkAdj, breakdown.weatherAdj, breakdown.bullpenAdj];
-  const want = side === "over" ? 1 : -1;
-  const moving = adjs.filter((a) => Math.abs(a) > 0.05); // ignore ~zero factors
-  if (moving.length === 0) return 45; // nothing pushing the total → weak read
-  const aligned = moving.filter((a) => Math.sign(a) === want).length;
-  return clampScore(30 + (aligned / moving.length) * 70);
-}
-
-// Agreement for a MONEYLINE / run-line pick: how decisive is our side's win-prob
-// lean (distance from a coin flip), plus a small bonus when the matchup reads as
-// pitching-driven (a coherent reason to back a side rather than chase offense).
-function leanAgreement(ml, breakdown, side /* "away" | "home" */) {
-  const winProb = side === "away" ? ml.awayWinProb : ml.homeWinProb;
-  if (winProb == null) return 50;
-  const lean = Math.min(1, Math.abs(winProb - 0.5) / 0.25); // .25 over a coin flip = full
-  let score = 40 + lean * 50;
-  if (breakdown && breakdown.pitcherAdj < -0.15) score += 5; // pitching-driven matchup
-  return clampScore(score);
-}
-
-function convictionTier(score) {
-  if (score >= 72) return "HIGH";
-  if (score >= 50) return "MEDIUM";
-  return "LOW";
-}
-
-function finalizeConviction(base, agreement) {
-  const score = Math.round(
-    CONVICTION_WEIGHTS.stability * base.stability +
-    CONVICTION_WEIGHTS.completeness * base.completeness +
-    CONVICTION_WEIGHTS.agreement * agreement
+function LeagueTabs({ league, setLeague, navigate }) {
+  return (
+    <div style={{ background: "#0a0e14", borderBottom: "1px solid #1a1f28", position: "sticky", top: 0, zIndex: 39 }}>
+      <div className="league-tabs-inner" style={{ maxWidth: 1200, margin: "0 auto", padding: "0 24px", display: "flex", gap: 4, overflowX: "auto" }}>
+        {LEAGUES.map(l => {
+          const active = league === l.id;
+          return (
+            <button key={l.id} className="tab-btn" onClick={() => (l.path ? navigate(l.path) : setLeague(l.id))} style={{ background: "none", border: "none", padding: "14px 14px", fontSize: 13, fontWeight: active ? 700 : 500, color: active ? "#fff" : "#6b7280", borderBottom: `2px solid ${active ? "#ef4444" : "transparent"}`, marginBottom: -1, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 6 }}>
+              <span>{l.icon}</span>
+              <span>{l.label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
-  return { score, tier: convictionTier(score) };
 }
 
-// ── HONEST REASONING GENERATOR (template-assembled from real model fields) ──────
-// Every clause is gated on a real data field. If a field is missing, its clause
-// is omitted — we never paper over a gap with a guess. No free-written prose:
-// the narrative can only ever say what the model's inputs actually contain.
-const r1 = (x) => (x == null ? null : Math.round(x * 10) / 10);
-const pct = (p) => (p == null ? null : Math.round(p * 100));
-function eraWord(era) {
-  if (era == null) return null;
-  if (era <= 3.3) return "sharp";
-  if (era <= 4.0) return "solid";
-  if (era >= 4.75) return "hittable";
-  return null;
-}
-function parkClause(parkRunFactor, adj) {
-  if (parkRunFactor == null || adj == null || Math.abs(adj) < 0.15) return null;
-  if (parkRunFactor > 1.03) return "a hitter-friendly park";
-  if (parkRunFactor < 0.97) return "a pitcher-friendly park";
-  return null;
-}
-function weatherClause(weather, adj) {
-  if (!weather || weather.indoor || adj == null || Math.abs(adj) < 0.15) return null;
-  if (weather.windEffect === "out") return "wind blowing out";
-  if (weather.windEffect === "in") return "wind holding the ball in";
-  if (weather.tempEffect === "hot") return "warm air helping carry";
-  if (weather.tempEffect === "cold") return "cold air suppressing carry";
-  return null;
-}
-function bullpenClause(adj) {
-  if (adj == null || Math.abs(adj) < 0.2) return null;
-  return adj > 0 ? "shaky bullpens" : "strong bullpens";
-}
-function trustLine(tier, stability, completeness, agreement) {
-  const parts = [];
-  if (completeness >= 85) parts.push("full data");
-  else if (completeness >= 70) parts.push("most inputs in");
-  else parts.push("partial data — some inputs on league averages");
-  if (stability >= 70) parts.push("starters past the small-sample zone");
-  else if (stability >= 40) parts.push("starter sample still building");
-  else parts.push("very early starter sample");
-  if (agreement >= 65) parts.push("factors aligned");
-  else if (agreement >= 45) parts.push("factors mostly aligned");
-  else parts.push("edge rests mainly on one factor");
-  const word = tier === "HIGH" ? "High" : tier === "MEDIUM" ? "Medium" : "Low";
-  return `${word} conviction: ${parts.join(", ")}.`;
-}
-function describeTotals(side, ctx) {
-  const { projected, line, breakdown, awayEra, homeEra, awayAbbr, homeAbbr, parkRunFactor, weather } = ctx;
-  const lead = projected != null && line != null
-    ? `Model projects ${r1(projected)} runs against the ${line} line.`
-    : projected != null ? `Model projects ${r1(projected)} runs.` : null;
-  const clauses = [];
-  if (breakdown && Math.abs(breakdown.pitcherAdj) >= 0.15) {
-    const aw = eraWord(awayEra), hw = eraWord(homeEra);
-    if (side === "under" && breakdown.pitcherAdj < 0 && (aw || hw)) {
-      const bits = [];
-      if (aw) bits.push(`${awayAbbr} ${r1(awayEra)} ERA`);
-      if (hw) bits.push(`${homeAbbr} ${r1(homeEra)} ERA`);
-      clauses.push(`starting pitching pulls it down (${bits.join(", ")})`);
-    } else if (side === "over" && breakdown.pitcherAdj > 0) {
-      clauses.push("the starters profile as hittable");
-    }
-  }
-  const pk = parkClause(parkRunFactor, breakdown && breakdown.parkAdj);
-  if (pk && ((side === "over") === (breakdown.parkAdj > 0))) clauses.push(pk);
-  const wx = weatherClause(weather, breakdown && breakdown.weatherAdj);
-  if (wx && ((side === "over") === (breakdown.weatherAdj > 0))) clauses.push(wx);
-  const bp = bullpenClause(breakdown && breakdown.bullpenAdj);
-  if (bp && ((side === "over") === (breakdown.bullpenAdj > 0))) clauses.push(bp);
-  if (!lead && clauses.length === 0) return null;
-  if (clauses.length === 0) return lead;
-  const joined = clauses.length === 1 ? clauses[0] : clauses.slice(0, -1).join(", ") + " and " + clauses.slice(-1);
-  const cap = joined.charAt(0).toUpperCase() + joined.slice(1);
-  return `${lead ? lead + " " : ""}${cap}.`;
-}
-function describeMoneyline(side, ctx) {
-  const { winProb, marketProb, teamAbbr, oppAbbr, era, oppEra, ops, oppOps } = ctx;
-  const lead = winProb != null && marketProb != null
-    ? `Model gives ${teamAbbr} a ${pct(winProb)}% chance vs the market's ${marketProb}%.`
-    : winProb != null ? `Model gives ${teamAbbr} a ${pct(winProb)}% chance.` : null;
-  const clauses = [];
-  if (era != null && oppEra != null && oppEra - era >= 0.4) {
-    clauses.push(`a starting-pitcher edge (${teamAbbr} ${r1(era)} vs ${oppAbbr} ${r1(oppEra)} ERA)`);
-  }
-  if (ops != null && oppOps != null && ops - oppOps >= 0.03) {
-    clauses.push(`the bats (${teamAbbr} ${ops.toFixed(3)} vs ${oppAbbr} ${oppOps.toFixed(3)} OPS)`);
-  }
-  if (!lead && clauses.length === 0) return null;
-  if (clauses.length === 0) return lead;
-  const joined = clauses.length === 1 ? clauses[0] : clauses.slice(0, -1).join(", ") + " and " + clauses.slice(-1);
-  return `${lead ? lead + " " : ""}Lean rests on ${joined}.`;
-}
-
-async function calculateGameEdges(game, oddsForGame) {
-  const [
-    awayPitcher,
-    homePitcher,
-    awayTeamHit,
-    homeTeamHit,
-    awayBullpen,
-    homeBullpen,
-    weather,
-    awayPitcherRecent,
-    homePitcherRecent,
-    awayHandSplits,
-    homeHandSplits,
-    awayPitcherHand,
-    homePitcherHand,
-  ] = await Promise.all([
-    game.awayProbable ? getPitcherSeasonStats(game.awayProbable.id) : null,
-    game.homeProbable ? getPitcherSeasonStats(game.homeProbable.id) : null,
-    getTeamSeasonStats(game.awayId),
-    getTeamSeasonStats(game.homeId),
-    getTeamBullpenStats(game.awayId),
-    getTeamBullpenStats(game.homeId),
-    getWeatherForVenue(game.venue),
-    game.awayProbable ? getPitcherRecentStarts(game.awayProbable.id, 3) : [],
-    game.homeProbable ? getPitcherRecentStarts(game.homeProbable.id, 3) : [],
-    getTeamHandednessSplits(game.awayId),
-    getTeamHandednessSplits(game.homeId),
-    game.awayProbable ? getPitcherHand(game.awayProbable.id) : null,
-    game.homeProbable ? getPitcherHand(game.homeProbable.id) : null,
-  ]);
-
-  // Confirmed/projected lineups → lineup-based offense (who's ACTUALLY playing),
-  // replacing full-team OPS when we have a trustworthy lineup. Tier:
-  // confirmed (today's card) > recent (last game) > team season stats (fallback).
-  let awayLineup = { lineup: [], source: "none" };
-  let homeLineup = { lineup: [], source: "none" };
-  let awayLineupOff = null;
-  let homeLineupOff = null;
+function MLBDashboard({ edges, loading, hasFullAccess, navigate, onRefresh }) {
+  if (loading) return <Loader />;
+  if (!edges) return <ErrorState onRetry={onRefresh} />;
+  // Use the date the BACKEND actually served (it rolls over to tomorrow once all
+  // of today's games are final), not the browser's "now". Parse YYYY-MM-DD as a
+  // local date so the weekday is correct.
+  const rolled = !!edges.rolledToNextDay;
+  let weekday = "";
   try {
-    [awayLineup, homeLineup] = await Promise.all([
-      getTeamLineup(game.awayId, game.id),
-      getTeamLineup(game.homeId, game.id),
-    ]);
-    [awayLineupOff, homeLineupOff] = await Promise.all([
-      getLineupOffense(awayLineup.lineup),
-      getLineupOffense(homeLineup.lineup),
-    ]);
-  } catch (_) { /* fall back to team stats below */ }
-
-  // Overlay: if we have a lineup offense, use ITS ops as the offense input while
-  // keeping the team's season ops for the handedness baseline comparison. We do
-  // NOT touch runsPerGame (that stays team-level) — lineup ops drives the ML
-  // offense factor, which is where who's-playing matters most.
-  const awayTeamOps = awayTeamHit?.ops ?? null;
-  const homeTeamOps = homeTeamHit?.ops ?? null;
-  const awayHit = awayLineupOff
-    ? { ...awayTeamHit, ops: awayLineupOff.ops, _lineupSource: awayLineup.source }
-    : awayTeamHit;
-  const homeHit = homeLineupOff
-    ? { ...homeTeamHit, ops: homeLineupOff.ops, _lineupSource: homeLineup.source }
-    : homeTeamHit;
-
-  // Away offense faces the HOME starter's hand; home offense faces the AWAY starter's hand.
-  // Handedness multiplier compares the team's split vs its TEAM-level ops baseline.
-  const awayHandMult = handednessMultiplier(awayHandSplits, homePitcherHand, awayTeamOps);
-  const homeHandMult = handednessMultiplier(homeHandSplits, awayPitcherHand, homeTeamOps);
-
-  // Blend recent form (last 3 starts) lightly into each starter's ERA before
-  // projecting. Catches a pitcher who's clearly hot or slumping without letting
-  // a tiny sample dominate. Flows into both ML and totals via effectiveERA.
-  // First regress thin-sample starters toward league average (a 0.2-IP "13.50
-  // ERA" must not be taken at face value), THEN nudge for recent form. Order
-  // matters: regress the unreliable raw number first, then apply form on top.
-  const awayPitcherReg = regressThinSample(awayPitcher);
-  const homePitcherReg = regressThinSample(homePitcher);
-  const awayPitcherForm = blendRecentForm(awayPitcherReg, awayPitcherRecent);
-  const homePitcherForm = blendRecentForm(homePitcherReg, homePitcherRecent);
-
-  console.log(`[Edges] ${game.awayAbbr}@${game.homeAbbr} | lineup away=${awayLineup.source}(ops ${awayLineupOff?.ops ?? "n/a"}) home=${homeLineup.source}(ops ${homeLineupOff?.ops ?? "n/a"}) | recentForm away ${awayPitcher?.era ?? "n/a"}→${awayPitcherForm?.era ?? "n/a"} home ${homePitcher?.era ?? "n/a"}→${homePitcherForm?.era ?? "n/a"} | handMult away=${awayHandMult.toFixed(3)} home=${homeHandMult.toFixed(3)}`);
-
-  const ml = calculateMoneylineProjection(game, awayPitcherForm, homePitcherForm, awayHit, homeHit, awayBullpen, homeBullpen, awayHandMult, homeHandMult);
-  const totals = calculateTotalProjection(game, awayPitcherForm, homePitcherForm, awayHit, homeHit, weather, awayBullpen, homeBullpen, awayHandMult, homeHandMult);
-
-  const odds = oddsForGame || { h2h: {}, totals: {} };
-  const awayML = odds.h2h?.away;
-  const homeML = odds.h2h?.home;
-  const totalLine = odds.totals?.line;
-  const overOdds = odds.totals?.over;
-  const underOdds = odds.totals?.under;
-
-  // Every edge is blended toward the de-vigged market line (v0.5) then passed
-  // through sanitizeEdge() so an implausible number can never surface.
-  const awayEdge = sanitizeEdge(blendedEdge(ml.awayWinProb, awayML, homeML));
-  const homeEdge = sanitizeEdge(blendedEdge(ml.homeWinProb, homeML, awayML));
-  // Neutral "market overreaction" context (the side the market is high on).
-  const awayInflation = overreactionNote(ml.awayWinProb, awayML, homeML);
-  const homeInflation = overreactionNote(ml.homeWinProb, homeML, awayML);
-
-  let overProb = null;
-  let underProb = null;
-  if (totalLine != null) {
-    // Convert the projected-vs-line gap into a probability. The divisor is the
-    // approximate standard deviation of an MLB game total (~4 runs). The old
-    // value of 3.0 was too small, making the sigmoid too steep and OVERSTATING
-    // how confident we were on every total (inflated edges). ~4.0 is closer to
-    // the real spread of game outcomes.
-    const TOTAL_SD = 4.0;
-    overProb = sigmoid((totals.projectedTotal - totalLine) / TOTAL_SD);
-    underProb = 1 - overProb;
+    const [y, mo, d] = String(edges.date).split("-").map(Number);
+    weekday = new Date(y, mo - 1, d).toLocaleDateString("en-US", { weekday: "long" });
+  } catch (_) {
+    weekday = new Date().toLocaleDateString("en-US", { weekday: "long" });
   }
-  const overEdge = sanitizeEdge(blendedEdge(overProb, overOdds, underOdds));
-  const underEdge = sanitizeEdge(blendedEdge(underProb, underOdds, overOdds));
-  const overInflation = overreactionNote(overProb, overOdds, underOdds);
-  const underInflation = overreactionNote(underProb, underOdds, overOdds);
+  const heading = rolled ? "Next up" : "Today's edges";
+  const gameCount = edges.games?.length || 0;
 
-  // Run line (±1.5). Derive an expected run margin from the win prob, then the
-  // probability each side covers. This is the moneyline opinion expressed at a
-  // spread price (same lean, more variance) — blended toward the market like ML.
-  const MARGIN_SD = 3.0; // approx SD of an MLB game's run margin
-  const homeRLLine = odds.spreads?.homeLine ?? null;
-  const awayRLLine = odds.spreads?.awayLine ?? null;
-  const homeRLOdds = odds.spreads?.home ?? null;
-  const awayRLOdds = odds.spreads?.away ?? null;
-  let homeCoverProb = null, awayCoverProb = null, homeRLEdge = null, awayRLEdge = null;
-  if (homeRLLine != null && awayRLLine != null && homeRLOdds != null && awayRLOdds != null) {
-    // Derive the margin from the market-BLENDED win prob — the same humility the
-    // moneyline edge gets. Using the raw win prob lets an overconfident model
-    // inflate the run line into implausible cover %s and edges.
-    const fairHomeWin = devigTwoWay(homeML, awayML);
-    const blendedHomeWin = (MARKET_BLEND_ENABLED && fairHomeWin != null)
-      ? (W_MODEL * ml.homeWinProb + (1 - W_MODEL) * fairHomeWin)
-      : ml.homeWinProb;
-    const muHome = MARGIN_SD * invNorm(blendedHomeWin); // expected home run margin
-    const hCover = normalCDF((muHome + homeRLLine) / MARGIN_SD);
-    const aCover = 1 - hCover;
-    homeCoverProb = round3(hCover);
-    awayCoverProb = round3(aCover);
-    homeRLEdge = sanitizeEdge(blendedEdge(hCover, homeRLOdds, awayRLOdds));
-    awayRLEdge = sanitizeEdge(blendedEdge(aCover, awayRLOdds, homeRLOdds));
+  // Detect the "all of today's games are already in progress / finished" case.
+  // When that happens the PRE-GAME edge lists are empty (correctly) because the
+  // model's pre-game edges only apply before first pitch — the live edges have
+  // moved onto each game's page. Without a note, the empty panels read like the
+  // product is broken, so we show a friendly signpost pointing to the live games.
+  const games = edges.games || [];
+  const liveCount = games.filter((g) => g.status === "live").length;
+  const scheduledCount = games.filter((g) => g.status === "scheduled" || (g.status !== "live" && g.status !== "final")).length;
+  const pregameEdgeCount =
+    (edges.moneylineEdges?.length || 0) +
+    (edges.totalsEdges?.length || 0) +
+    (edges.hrPropEdges?.length || 0) +
+    (edges.kPropEdges?.length || 0) +
+    (edges.hitsPropEdges?.length || 0);
+  // Only show when: there ARE games, at least one is live, none are still
+  // waiting to start, and there are no pre-game edges left to show.
+  const allGamesUnderway =
+    gameCount > 0 && liveCount > 0 && scheduledCount === 0 && pregameEdgeCount === 0;
+
+  return (
+    <div style={{ animation: "fadeIn .3s ease" }}>
+      <div style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 8 }}>
+        <h1 style={{ margin: 0, fontSize: 26, fontWeight: 700 }}>{heading} · {weekday}</h1>
+        <span style={{ fontSize: 12, color: "#6b7280" }}>
+          {gameCount} games · {edges.cached ? "Cached" : "Updated"} {new Date(edges.computedAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+        </span>
+      </div>
+      <p style={{ margin: "0 0 24px", fontSize: 13, color: "#9ca3af" }}>
+        Model projections vs sportsbook lines · weather, batter vs pitcher history, recent form. <span style={{ color: "#ef4444", fontWeight: 600 }}>Click any game</span> for deep analysis.
+      </p>
+
+      {allGamesUnderway && (
+        <div style={{ background: "linear-gradient(180deg,#1a1410 0%,#0f1419 100%)", border: "1px solid #ef444433", borderLeft: "3px solid #ef4444", borderRadius: 10, padding: "16px 20px", marginBottom: 16, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <span style={{ width: 9, height: 9, borderRadius: "50%", background: "#ef4444", animation: "pulse 1.2s infinite", flexShrink: 0 }} />
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#e4e7eb", marginBottom: 2 }}>
+                All of today's games are now in progress
+              </div>
+              <div style={{ fontSize: 12, color: "#9ca3af", lineHeight: 1.5 }}>
+                Pre-game edges have closed — live in-game edges are now on each game's page. Tap a live game to see them.
+              </div>
+            </div>
+          </div>
+          <button onClick={() => navigate("/games")} style={{ background: "#ef4444", color: "#fff", border: "none", borderRadius: 6, padding: "10px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}>
+            View live games →
+          </button>
+        </div>
+      )}
+      <TopPlays edges={edges} hasFullAccess={hasFullAccess} navigate={navigate} />
+      <div className="edge-grid-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16, gridAutoRows: "1fr" }}>
+        <EdgePanel title="Top moneyline edges" icon="💰" edges={oneSidePerGame(edges.moneylineEdges)} renderRow={(e) => <MoneylineRow edge={e} key={e.gameId + e.side} navigate={navigate} />} emptyText="No edges found in current slate" hasFullAccess={hasFullAccess} navigate={navigate} />
+        <EdgePanel title="Top totals edges" icon="📊" edges={oneSidePerGame(edges.totalsEdges)} renderRow={(e) => <TotalsRow edge={e} key={e.gameId + e.side} navigate={navigate} />} emptyText="No edges found in current slate" hasFullAccess={hasFullAccess} navigate={navigate} />
+      </div>
+      <div style={{ marginBottom: 16 }}>
+        <EdgePanel title="Top home run props" icon="💣" edges={(edges.hrPropEdges || []).slice(0, MAX_PROP_ROWS)} renderRow={(e) => <HRPropRow edge={e} key={e.player + e.game} />} emptyText="HR prop data updates closer to first pitch" hasFullAccess={hasFullAccess} navigate={navigate} wide scroll />
+      </div>
+      <div style={{ marginBottom: 8, fontSize: 11, color: "#a8915c", display: "flex", alignItems: "center", gap: 6, lineHeight: 1.5 }}>
+        ⚠️ Experimental — strikeout & hits projections are v1 and still being calibrated. Treat as directional, not proven.
+      </div>
+      <div style={{ marginBottom: 16 }}>
+        <EdgePanel title="Pitcher strikeouts" icon="🔥" edges={(edges.kPropEdges || []).slice(0, MAX_PROP_ROWS)} renderRow={(e) => <KPropRow edge={e} key={e.player + e.game} />} emptyText="K prop data updates closer to first pitch" hasFullAccess={hasFullAccess} navigate={navigate} wide scroll />
+      </div>
+      <div style={{ marginBottom: 16 }}>
+        <EdgePanel title="Batter hits" icon="🏏" edges={(edges.hitsPropEdges || []).slice(0, MAX_PROP_ROWS)} renderRow={(e) => <HitsPropRow edge={e} key={e.player + e.game} />} emptyText="Hits prop data updates closer to first pitch" hasFullAccess={hasFullAccess} navigate={navigate} wide scroll />
+      </div>
+
+      <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 8, padding: "16px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "#e4e7eb", marginBottom: 2 }}>⚾ Want to see all today's games?</div>
+          <div style={{ fontSize: 12, color: "#9ca3af" }}>{gameCount} games · live scores, matchups, weather & more</div>
+        </div>
+        <button onClick={() => navigate("/games")} style={{ background: "#ef4444", color: "#fff", border: "none", borderRadius: 6, padding: "10px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}>
+          View MLB Games →
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Top Plays: the day's best edges, ranked by CONVICTION (not raw edge size, which
+// surfaces noise). Pools moneyline + totals, keeps only HIGH/MEDIUM conviction with
+// a positive edge, sorts by conviction score. Honest empty state when nothing
+// stands out — we do NOT manufacture a "top pick" on a sharp board.
+function topPlayLabel(e) {
+  if (e.side === "over" || e.side === "under") return `${e.side === "over" ? "Over" : "Under"} ${e.line ?? ""}`.trim();
+  return `${e.teamAbbr} ML`;
+}
+function TopPlayRow({ edge, navigate }) {
+  return (
+    <div className="edge-row" onClick={() => navigate(`/game/mlb/${edge.gameId}`)} style={{ padding: 12, background: "#0a0e14", borderRadius: 6 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+          <ConfidenceBadge conf={edge.conviction} />
+          {edge.convictionScore != null && <span style={{ fontSize: 10, color: "#6b7280", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{edge.convictionScore}</span>}
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#e4e7eb" }}>{topPlayLabel(edge)}</div>
+            <div style={{ fontSize: 11, color: "#6b7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{edge.matchup} · {formatOdds(edge.odds)}</div>
+          </div>
+        </div>
+        <EdgeBadge edge={edge.edge} />
+      </div>
+      {edge.reason && <div style={{ fontSize: 11.5, color: "#cbd5e1", lineHeight: 1.5, marginTop: 8 }}>{edge.reason}</div>}
+      {edge.trust && <div style={{ fontSize: 10.5, color: "#6b7280", lineHeight: 1.45, marginTop: 4 }}>{edge.trust}</div>}
+    </div>
+  );
+}
+function TopPlays({ edges, hasFullAccess, navigate }) {
+  const pool = [...(edges.moneylineEdges || []), ...(edges.totalsEdges || [])]
+    .filter((e) => e.convictionScore != null && (e.conviction === "HIGH" || e.conviction === "MEDIUM") && (e.edge ?? 0) > 0);
+  pool.sort((a, b) => (b.convictionScore - a.convictionScore) || ((b.edge ?? 0) - (a.edge ?? 0)));
+  const top = pool.slice(0, 5);
+  const titleRow = (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+      <div style={{ fontSize: 13, fontWeight: 700, color: "#e4e7eb" }}>🎯 Top plays today</div>
+      <span style={{ fontSize: 10, color: "#6b7280", letterSpacing: "0.04em" }}>ranked by conviction</span>
+    </div>
+  );
+  if (top.length === 0) {
+    return (
+      <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 18, marginBottom: 16 }}>
+        {titleRow}
+        <div style={{ fontSize: 12, color: "#9ca3af", lineHeight: 1.55 }}>
+          No high-conviction plays on today's board — the model isn't seeing a standout worth highlighting. That's normal when the market is sharp. You can still browse every edge below, or check back closer to first pitch as lines and data firm up.
+        </div>
+      </div>
+    );
   }
+  const visible = hasFullAccess ? top : top.slice(0, 1);
+  const hidden = hasFullAccess ? [] : top.slice(1);
+  return (
+    <div style={{ background: "#0f1419", border: "1px solid #22c55e30", borderRadius: 10, padding: 18, marginBottom: 16 }}>
+      {titleRow}
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {visible.map((e) => <TopPlayRow edge={e} key={"top" + e.gameId + e.side} navigate={navigate} />)}
+      </div>
+      {hidden.length > 0 && (
+        <div style={{ position: "relative", marginTop: 6 }}>
+          <div style={{ filter: "blur(4px)", pointerEvents: "none", display: "flex", flexDirection: "column", gap: 6 }}>
+            {hidden.map((e) => <TopPlayRow edge={e} key={"toph" + e.gameId + e.side} navigate={navigate} />)}
+          </div>
+          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <button onClick={() => navigate("/pricing")} style={{ background: "#ef4444", color: "#fff", border: "none", borderRadius: 6, padding: "8px 18px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>🔒 Unlock all top plays — $7/mo</button>
+          </div>
+        </div>
+      )}
+      <div style={{ marginTop: 12, fontSize: 10.5, color: "#6b7280", lineHeight: 1.5 }}>
+        The model's highest-conviction edges today, ranked by how much supporting data backs each. Conviction reflects data quality and agreement — not a guarantee. Even strong plays lose; bet responsibly.
+      </div>
+    </div>
+  );
+}
+function EdgePanel({ title, icon, edges, renderRow, emptyText, hasFullAccess, navigate, wide, scroll }) {
+  const visible = hasFullAccess ? edges : edges.slice(0, 1);
+  const hidden = hasFullAccess ? [] : edges.slice(1, 5);
+  return (
+    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 8, padding: 14, display: "flex", flexDirection: "column" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+        <span style={{ fontSize: 11, letterSpacing: 1, color: "#9ca3af", fontWeight: 500 }}>{icon} {title.toUpperCase()}</span>
+        <span style={{ fontSize: 10, color: "#6b7280" }}>{edges.length} found</span>
+      </div>
+      {edges.length === 0 ? (
+        <div style={{ color: "#4b5563", fontSize: 12, textAlign: "center", padding: "16px 0" }}>{emptyText}</div>
+      ) : (
+        <div className="edge-scroll" style={{ display: "flex", flexDirection: "column", gap: 6, ...(scroll ? { maxHeight: 380, overflowY: "auto", paddingRight: 4 } : {}) }}>
+          {visible.map(renderRow)}
+          {hidden.length > 0 && (
+            <div style={{ position: "relative", marginTop: 4 }}>
+              <div style={{ filter: "blur(4px)", pointerEvents: "none", display: "flex", flexDirection: "column", gap: 6 }}>
+                {hidden.map(renderRow)}
+              </div>
+              <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <button onClick={() => navigate("/pricing")} style={{ background: "#ef4444", color: "#fff", border: "none", borderRadius: 6, padding: "8px 18px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>🔒 Unlock all edges — $7/mo</button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
-  // ── Conviction (v0.6): trust in the projection, ORTHOGONAL to edge size. ──────
-  // Shared stability+completeness from the inputs that actually fed this game,
-  // then a per-side factor-agreement term. Never alters edge, pick, or grading.
-  const convBase = convictionBase({
-    awayPitcher, homePitcher,
-    awayLineupSource: awayLineup.source, homeLineupSource: homeLineup.source,
-    awayBullpen, homeBullpen, weather, awayHandSplits, homeHandSplits, awayHit, homeHit,
-  });
-  const agAwayML = leanAgreement(ml, totals.breakdown, "away");
-  const agHomeML = leanAgreement(ml, totals.breakdown, "home");
-  const agOver = totalAgreement(totals.breakdown, "over");
-  const agUnder = totalAgreement(totals.breakdown, "under");
-  const cvAwayML = finalizeConviction(convBase, agAwayML);
-  const cvHomeML = finalizeConviction(convBase, agHomeML);
-  const cvOver = finalizeConviction(convBase, agOver);
-  const cvUnder = finalizeConviction(convBase, agUnder);
+function LiveBadge() {
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 9, fontWeight: 800, padding: "2px 6px", borderRadius: 3, background: "#ef444415", color: "#ef4444", border: "1px solid #ef444440", letterSpacing: "0.05em", marginLeft: 6 }}>
+      <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#ef4444", animation: "pulse 1.5s infinite" }} />
+      LIVE
+    </span>
+  );
+}
 
-  // Honest reasoning strings — assembled from the real fields above; never free-written.
-  const mlMarket = (wp, edge) => (wp != null && edge != null ? Math.round((wp - edge) * 100) : null);
-  const totReasonCtx = {
-    projected: totals.projectedTotal, line: totalLine, breakdown: totals.breakdown,
-    awayEra: awayPitcherForm?.era, homeEra: homePitcherForm?.era,
-    awayAbbr: game.awayAbbr, homeAbbr: game.homeAbbr,
-    parkRunFactor: game.parkRunFactor, weather,
+// Neutral "market may be overrating this side" tag. NOT a bet recommendation —
+// it surfaces the gap between the sharp market price and our model so the user
+// can apply their own read (e.g. fading a public/streak-inflated favorite).
+// Shows only when the backend attached an `inflation` flag to this edge.
+// Props board is curated, not exhaustive: show only the top N per type (already
+// sorted best-first — HR by likelihood, K/hits by edge). Everything still gets
+// recorded; this just keeps the board a tight shortlist like moneyline/totals.
+const MAX_PROP_ROWS = 8;
+
+// Collapse a mirrored team-market list (both sides of each game are present) to
+// ONE row per game: the side the model actually likes (positive edge). The two
+// sides are mirror images, so listing both just doubles the panel and confuses
+// "who has the edge?". If the faded side was market-inflated, we fold that onto
+// the kept row — the market overrating the other side is *why* this side has value.
+function oneSidePerGame(edges) {
+  const byGame = new Map();
+  for (const e of edges || []) {
+    const prev = byGame.get(e.gameId);
+    if (!prev || (e.edge ?? -Infinity) > (prev.edge ?? -Infinity)) byGame.set(e.gameId, e);
+  }
+  const fadedByGame = new Map();
+  for (const e of edges || []) {
+    const kept = byGame.get(e.gameId);
+    if (kept && e !== kept && e.inflation && e.inflation.inflated) {
+      fadedByGame.set(e.gameId, {
+        gap: e.inflation.gap,
+        note: e.inflation.note,
+        team: e.teamAbbr || (e.side === "over" ? "the over" : e.side === "under" ? "the under" : "the other side"),
+      });
+    }
+  }
+  return Array.from(byGame.values())
+    .filter((e) => (e.edge ?? 0) > 0) // only the side with a real edge
+    .sort((a, b) => (b.edge ?? 0) - (a.edge ?? 0))
+    .map((e) => (fadedByGame.has(e.gameId) ? { ...e, fadedInflation: fadedByGame.get(e.gameId) } : e));
+}
+
+function InflationTag({ inflation }) {
+  if (!inflation || !inflation.inflated) return null;
+  const gapPct = inflation.gap != null ? Math.round(inflation.gap * 100) : null;
+  const title = inflation.note
+    || "Market rates this side higher than our model — possible public/streak inflation.";
+  return (
+    <span
+      title={title}
+      style={{
+        display: "inline-flex", alignItems: "center", gap: 3, fontSize: 9, fontWeight: 700,
+        padding: "2px 6px", borderRadius: 3, background: "#f5970015", color: "#fbbf24",
+        border: "1px solid #f5970040", letterSpacing: "0.04em", marginLeft: 6, cursor: "help",
+        whiteSpace: "nowrap",
+      }}
+    >
+      ⚠ MARKET HIGH{gapPct != null ? ` +${gapPct}%` : ""}
+    </span>
+  );
+}
+
+// Shown on the KEPT (positive-edge) row when the model is fading a market-inflated
+// opponent — reframes the old "MARKET HIGH" warning as support for this pick.
+function FadedInflationTag({ faded }) {
+  if (!faded) return null;
+  const gapPct = faded.gap != null ? Math.round(faded.gap * 100) : null;
+  return (
+    <span
+      title={faded.note || `Market rates ${faded.team} higher than our model — possible public/streak inflation, which adds value to this side.`}
+      style={{
+        display: "inline-flex", alignItems: "center", gap: 3, fontSize: 9, fontWeight: 700,
+        padding: "2px 6px", borderRadius: 3, background: "#f5970015", color: "#fbbf24",
+        border: "1px solid #f5970040", letterSpacing: "0.04em", marginLeft: 6, cursor: "help",
+        whiteSpace: "nowrap",
+      }}
+    >
+      ⚠ market overrating {faded.team}{gapPct != null ? ` +${gapPct}%` : ""}
+    </span>
+  );
+}
+
+function MoneylineRow({ edge, navigate }) {
+  const isLive = edge.status === "live";
+  return (
+    <div className="edge-row" onClick={() => navigate(`/game/mlb/${edge.gameId}`)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: 10, background: "#0a0e14", borderRadius: 4 }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 2, display: "flex", alignItems: "center", flexWrap: "wrap", rowGap: 3 }}>
+          {edge.teamAbbr} ML
+          {isLive && <LiveBadge />}
+          <InflationTag inflation={edge.inflation} />
+          <FadedInflationTag faded={edge.fadedInflation} />
+        </div>
+        <div style={{ fontSize: 10, color: "#6b7280", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          {edge.matchup} · {formatOdds(edge.odds)} {isLive && edge.inning ? `· ${edge.inning}` : edge.time && `· ${edge.time}`}
+        </div>
+      </div>
+      <div style={{ textAlign: "right", marginLeft: 10 }}>
+        <EdgeBadge edge={edge.edge} />
+        <div style={{ fontSize: 10, color: "#6b7280", marginTop: 2 }}>{Math.round(edge.modelProb * 100)}% model</div>
+      </div>
+    </div>
+  );
+}
+
+function TotalsRow({ edge, navigate }) {
+  const isLive = edge.status === "live";
+  return (
+    <div className="edge-row" onClick={() => navigate(`/game/mlb/${edge.gameId}`)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: 10, background: "#0a0e14", borderRadius: 4 }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 2, display: "flex", alignItems: "center", flexWrap: "wrap", rowGap: 3 }}>
+          {edge.side === "over" ? "Over" : "Under"} {edge.line}
+          {isLive && <LiveBadge />}
+          <InflationTag inflation={edge.inflation} />
+          <FadedInflationTag faded={edge.fadedInflation} />
+        </div>
+        <div style={{ fontSize: 10, color: "#6b7280", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          {edge.matchup} · {formatOdds(edge.odds)} {isLive && edge.inning ? `· ${edge.inning}` : ""}
+        </div>
+      </div>
+      <div style={{ textAlign: "right", marginLeft: 10 }}>
+        <EdgeBadge edge={edge.edge} />
+        <div style={{ fontSize: 10, color: "#6b7280", marginTop: 2 }}>proj {edge.projected}</div>
+      </div>
+    </div>
+  );
+}
+
+function KPropRow({ edge }) {
+  const sideLabel = edge.side === "under" ? "Under" : "Over";
+  const detail = [
+    edge.opponent ? `vs ${edge.opponent}` : null,
+    edge.pitcherK9 != null ? `${edge.pitcherK9} K/9` : null,
+    edge.expectedKs != null ? `proj ${edge.expectedKs}` : null,
+  ].filter(Boolean).join(" · ");
+  return (
+    <div className="edge-row hr-prop-row" style={{ display: "grid", gridTemplateColumns: "2.2fr 1fr 1fr 1fr 80px", gap: 10, padding: 10, background: "#0a0e14", borderRadius: 4, alignItems: "center" }}>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 12, fontWeight: 600 }}>{edge.player} <span style={{ color: "#9ca3af", fontWeight: 500 }}>{sideLabel} {edge.line} K</span></div>
+        <div style={{ fontSize: 10, color: "#6b7280", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{edge.team}{detail ? ` · ${detail}` : ""}</div>
+      </div>
+      <div className="hr-prop-stats" style={{ display: "contents" }}>
+        <div style={{ fontSize: 11, color: "#9ca3af" }}>{formatOdds(edge.odds)}</div>
+        <div style={{ fontSize: 11, color: "#9ca3af" }}>{Math.round(edge.kProb * 100)}% model</div>
+        <EdgeBadge edge={edge.edge} />
+        <ConfidenceBadge conf={edge.confidence} />
+      </div>
+    </div>
+  );
+}
+
+function HitsPropRow({ edge }) {
+  const lineLabel = edge.line === 0.5
+    ? (edge.side === "under" ? "0 hits" : "1+ hits")
+    : `${edge.side === "under" ? "Under" : "Over"} ${edge.line} H`;
+  const avgText = edge.battingAvg != null ? `${edge.battingAvg.toFixed(3).replace(/^0/, ".")} AVG` : null;
+  return (
+    <div className="edge-row hr-prop-row" style={{ display: "grid", gridTemplateColumns: "2.2fr 1fr 1fr 1fr 80px", gap: 10, padding: 10, background: "#0a0e14", borderRadius: 4, alignItems: "center" }}>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 12, fontWeight: 600 }}>{edge.player} <span style={{ color: "#9ca3af", fontWeight: 500 }}>{lineLabel}</span></div>
+        <div style={{ fontSize: 10, color: "#6b7280", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{edge.team} · facing {edge.opposingPitcher || "TBD"}{avgText ? ` · ${avgText}` : ""}</div>
+      </div>
+      <div className="hr-prop-stats" style={{ display: "contents" }}>
+        <div style={{ fontSize: 11, color: "#9ca3af" }}>{formatOdds(edge.odds)}</div>
+        <div style={{ fontSize: 11, color: "#9ca3af" }}>{Math.round(edge.hitsProb * 100)}% model</div>
+        <EdgeBadge edge={edge.edge} />
+        <ConfidenceBadge conf={edge.confidence} />
+      </div>
+    </div>
+  );
+}
+
+function HRPropRow({ edge }) {
+  const bvpText = edge.bvp && edge.bvp.atBats > 0
+    ? `Career vs starter: ${edge.bvp.hits}/${edge.bvp.atBats}${edge.bvp.hr > 0 ? `, ${edge.bvp.hr} HR` : ""}`
+    : null;
+  const recentText = edge.recent15
+    ? `Last 15d: ${(edge.recent15.avg * 1000).toFixed(0).replace(/^0/, ".")}${edge.recent15.hr > 0 ? `, ${edge.recent15.hr} HR` : ""}`
+    : null;
+  const detailLine = [recentText, bvpText].filter(Boolean).join(" · ");
+
+  return (
+    <div className="edge-row hr-prop-row" style={{ display: "grid", gridTemplateColumns: "2.2fr 1fr 1fr 1fr 80px", gap: 10, padding: 10, background: "#0a0e14", borderRadius: 4, alignItems: "center" }}>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 12, fontWeight: 600 }}>{edge.player}</div>
+        <div style={{ fontSize: 10, color: "#6b7280", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          {edge.team} · facing {edge.opposingPitcher || "TBD"}
+        </div>
+        {detailLine && (
+          <div style={{ fontSize: 10, color: "#22c55e", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            {detailLine}
+          </div>
+        )}
+      </div>
+      <div className="hr-prop-stats" style={{ display: "contents" }}>
+        <div style={{ fontSize: 11, color: "#9ca3af" }}><span style={{ display: "none" }} className="mobile-only-label">Odds: </span>{formatOdds(edge.odds)}</div>
+        <div style={{ fontSize: 11, color: "#9ca3af" }}>{Math.round(edge.hrProb * 100)}% model</div>
+        <EdgeBadge edge={edge.edge} />
+        <ConfidenceBadge conf={edge.confidence} />
+      </div>
+    </div>
+  );
+}
+
+function GamesSection({ title, titleColor, games, navigate, defaultOpen, showLiveBadge, showFinalScore }) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+  return (
+    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 8, padding: 14, marginBottom: 12 }}>
+      <div className="section-header" onClick={() => setIsOpen(!isOpen)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: isOpen ? 12 : 0 }}>
+        <span style={{ fontSize: 11, letterSpacing: 1, color: titleColor, fontWeight: 700 }}>
+          {title} {showLiveBadge && <span style={{ marginLeft: 4 }}>· {games.length} game{games.length === 1 ? "" : "s"}</span>}
+          {!showLiveBadge && <span style={{ marginLeft: 4, color: "#6b7280" }}>· {games.length} game{games.length === 1 ? "" : "s"}</span>}
+        </span>
+        <span style={{ fontSize: 12, color: "#6b7280" }}>{isOpen ? "▲ hide" : "▼ show"}</span>
+      </div>
+      {isOpen && (
+        <div className="games-table-wrap" style={{ overflowX: "auto" }}>
+          <table className="games-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+            <thead>
+              <tr style={{ borderBottom: "1px solid #1f2937", color: "#6b7280" }}>
+                <th style={th()}>Game</th>
+                <th style={th()}>{showFinalScore ? "Final" : "Status"}</th>
+                <th style={th()}>Pitchers</th>
+                <th style={th("center")}>Wx</th>
+                <th style={th("right")}>Model</th>
+                <th style={th("right")}>Total</th>
+                <th style={th("right")}>Park</th>
+                <th style={th("right")}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {games.map(g => (
+                <tr key={g.id} className="game-row" onClick={() => navigate(`/game/mlb/${g.id}`)} style={{ borderBottom: "1px solid #131820" }}>
+                  <td style={td()}>{g.awayAbbr} @ {g.homeAbbr}</td>
+                  <td style={td()}>
+                    {g.status === "live" && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
+                        <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#ef4444", animation: "pulse 1.5s infinite" }} />
+                        <span style={{ color: "#ef4444", fontWeight: 700, fontSize: 11 }}>LIVE</span>
+                        {g.awayScore != null && <span style={{ color: "#9ca3af", fontSize: 11 }}>{g.awayScore}-{g.homeScore}</span>}
+                      </div>
+                    )}
+                    {g.status === "final" && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
+                        <span style={{ color: "#22c55e", fontWeight: 700, fontSize: 11 }}>FINAL</span>
+                        {g.awayScore != null && <span style={{ color: "#e4e7eb", fontSize: 11, fontWeight: 600 }}>{g.awayScore}-{g.homeScore}</span>}
+                      </div>
+                    )}
+                    {g.status !== "live" && g.status !== "final" && <span style={{ color: "#9ca3af" }}>{g.time}</span>}
+                  </td>
+                  <td style={td()}>
+                    <div style={{ color: "#9ca3af", whiteSpace: "nowrap" }}>{g.pitchers?.away?.name || "TBD"}</div>
+                    <div style={{ color: "#9ca3af", whiteSpace: "nowrap" }}>{g.pitchers?.home?.name || "TBD"}</div>
+                  </td>
+                  <td style={td("center")}><WeatherIndicator weather={g.weather} /></td>
+                  <td style={td("right")}>
+                    {g.moneyline?.awayWinProb != null ? `${Math.round(g.moneyline.awayWinProb * 100)}/${Math.round(g.moneyline.homeWinProb * 100)}` : "—"}
+                  </td>
+                  <td style={td("right")}>{g.totals?.projected ?? "—"}</td>
+                  <td style={td("right")}>
+                    <span style={{ color: g.parkRunFactor > 1.05 ? "#22c55e" : g.parkRunFactor < 0.95 ? "#ef4444" : "#9ca3af" }}>
+                      {g.parkRunFactor?.toFixed(2)}
+                    </span>
+                  </td>
+                  <td style={td("right")}><span style={{ color: "#ef4444", fontSize: 14 }}>→</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function WeatherIndicator({ weather }) {
+  if (!weather) return <span style={{ color: "#4b5563", fontSize: 11 }}>—</span>;
+  if (weather.indoor) return <span title="Indoor stadium" style={{ fontSize: 14 }}>🏟️</span>;
+  const icons = [];
+  let tooltip = `${weather.tempF}°F`;
+  if (weather.windEffect === "out") { icons.push("💨↗"); tooltip += ` · Wind OUT ${weather.windMph}mph (favors hitters)`; }
+  else if (weather.windEffect === "in") { icons.push("💨↙"); tooltip += ` · Wind IN ${weather.windMph}mph (favors pitchers)`; }
+  else if (weather.windEffect === "cross") { icons.push("💨"); tooltip += ` · Cross wind ${weather.windMph}mph`; }
+  if (weather.tempEffect === "hot") { icons.push("🔥"); tooltip += " · Warm air carries"; }
+  else if (weather.tempEffect === "cold") { icons.push("🥶"); tooltip += " · Cold air dense"; }
+  if (weather.isRaining) { icons.push("🌧️"); tooltip += " · Rain"; }
+  if (icons.length === 0) return <span title={tooltip} style={{ fontSize: 11, color: "#6b7280" }}>{weather.tempF}°</span>;
+  return <span title={tooltip} style={{ fontSize: 13, cursor: "help" }}>{icons.join(" ")}</span>;
+}
+
+function th(align = "left") {
+  return { padding: "8px 6px", textAlign: align, fontWeight: 500, fontSize: 10, letterSpacing: "0.05em", textTransform: "uppercase" };
+}
+function td(align = "left") {
+  return { padding: "10px 6px", textAlign: align, color: "#e4e7eb", fontSize: 12 };
+}
+
+function EdgeBadge({ edge }) {
+  if (edge == null) return <span style={{ fontSize: 11, color: "#6b7280" }}>—</span>;
+  const positive = edge > 0;
+  const color = positive ? "#22c55e" : "#ef4444";
+  const sign = positive ? "+" : "";
+  return <span style={{ fontSize: 14, fontWeight: 600, color, fontVariantNumeric: "tabular-nums" }}>{sign}{(edge * 100).toFixed(1)}%</span>;
+}
+
+function ConfidenceBadge({ conf }) {
+  const colors = {
+    HIGH: { bg: "#22c55e15", fg: "#22c55e", border: "#22c55e30" },
+    MEDIUM: { bg: "#f59e0b15", fg: "#f59e0b", border: "#f59e0b30" },
+    LOW: { bg: "#1f2937", fg: "#9ca3af", border: "#374151" },
+    NEUTRAL: { bg: "#1f2937", fg: "#6b7280", border: "#374151" },
   };
-  const awayReason = describeMoneyline("away", { winProb: ml.awayWinProb, marketProb: mlMarket(ml.awayWinProb, awayEdge), teamAbbr: game.awayAbbr, oppAbbr: game.homeAbbr, era: awayPitcherForm?.era, oppEra: homePitcherForm?.era, ops: awayHit?.ops, oppOps: homeHit?.ops });
-  const homeReason = describeMoneyline("home", { winProb: ml.homeWinProb, marketProb: mlMarket(ml.homeWinProb, homeEdge), teamAbbr: game.homeAbbr, oppAbbr: game.awayAbbr, era: homePitcherForm?.era, oppEra: awayPitcherForm?.era, ops: homeHit?.ops, oppOps: awayHit?.ops });
-  const overReason = describeTotals("over", totReasonCtx);
-  const underReason = describeTotals("under", totReasonCtx);
-  const awayTrust = trustLine(cvAwayML.tier, convBase.stability, convBase.completeness, agAwayML);
-  const homeTrust = trustLine(cvHomeML.tier, convBase.stability, convBase.completeness, agHomeML);
-  const overTrust = trustLine(cvOver.tier, convBase.stability, convBase.completeness, agOver);
-  const underTrust = trustLine(cvUnder.tier, convBase.stability, convBase.completeness, agUnder);
-
-  return {
-    game: {
-      id: game.id,
-      away: game.away,
-      home: game.home,
-      awayAbbr: game.awayAbbr,
-      homeAbbr: game.homeAbbr,
-      time: game.time,
-      venue: game.venue,
-      parkHRFactor: game.parkHRFactor,
-      parkRunFactor: game.parkRunFactor,
-      lineups: {
-        away: { source: awayLineup.source, ops: awayLineupOff?.ops ?? null, batters: awayLineupOff?.batters ?? 0, order: (awayLineup.lineup || []).map(p => ({ name: p.name, pos: p.position, season: p.season || null })) },
-        home: { source: homeLineup.source, ops: homeLineupOff?.ops ?? null, batters: homeLineupOff?.batters ?? 0, order: (homeLineup.lineup || []).map(p => ({ name: p.name, pos: p.position, season: p.season || null })) },
-      },
-    },
-    pitchers: {
-      away: game.awayProbable ? {
-        ...game.awayProbable,
-        hand: awayPitcherHand,
-        stats: awayPitcher,
-        recentStarts: awayPitcherRecent,
-      } : null,
-      home: game.homeProbable ? {
-        ...game.homeProbable,
-        hand: homePitcherHand,
-        stats: homePitcher,
-        recentStarts: homePitcherRecent,
-      } : null,
-    },
-    weather,
-    bullpen: {
-      away: awayBullpen ? { era: awayBullpen.era, whip: awayBullpen.whip } : null,
-      home: homeBullpen ? { era: homeBullpen.era, whip: homeBullpen.whip } : null,
-    },
-    handedness: {
-      awayMult: round3(awayHandMult),
-      homeMult: round3(homeHandMult),
-      awayVsHand: homePitcherHand,
-      homeVsHand: awayPitcherHand,
-    },
-    convictionInputs: { stability: convBase.stability, completeness: convBase.completeness },
-    moneyline: {
-      awayWinProb: ml.awayWinProb,
-      homeWinProb: ml.homeWinProb,
-      awayOdds: awayML,
-      homeOdds: homeML,
-      awayBook: odds.h2h?.awayBook ?? null,
-      homeBook: odds.h2h?.homeBook ?? null,
-      awayEdge,
-      homeEdge,
-      awayConfidence: rateConfidence(awayEdge),
-      homeConfidence: rateConfidence(homeEdge),
-      awayConviction: cvAwayML.tier,
-      homeConviction: cvHomeML.tier,
-      awayConvictionScore: cvAwayML.score,
-      homeConvictionScore: cvHomeML.score,
-      awayReason,
-      homeReason,
-      awayTrust,
-      homeTrust,
-      awayInflation,
-      homeInflation,
-    },
-    totals: {
-      projected: totals.projectedTotal,
-      breakdown: totals.breakdown,
-      line: totalLine,
-      overOdds,
-      underOdds,
-      overBook: odds.totals?.overBook ?? null,
-      underBook: odds.totals?.underBook ?? null,
-      overProb: overProb != null ? round3(overProb) : null,
-      underProb: underProb != null ? round3(underProb) : null,
-      overEdge,
-      underEdge,
-      overConfidence: rateConfidence(overEdge),
-      underConfidence: rateConfidence(underEdge),
-      overConviction: cvOver.tier,
-      underConviction: cvUnder.tier,
-      overConvictionScore: cvOver.score,
-      underConvictionScore: cvUnder.score,
-      overReason,
-      underReason,
-      overTrust,
-      underTrust,
-      overInflation,
-      underInflation,
-    },
-    runLine: {
-      awayLine: awayRLLine,
-      homeLine: homeRLLine,
-      awayOdds: awayRLOdds,
-      homeOdds: homeRLOdds,
-      awayBook: odds.spreads?.awayBook ?? null,
-      homeBook: odds.spreads?.homeBook ?? null,
-      awayCoverProb,
-      homeCoverProb,
-      awayEdge: awayRLEdge,
-      homeEdge: homeRLEdge,
-      awayConfidence: awayRLEdge != null ? rateConfidence(awayRLEdge) : null,
-      homeConfidence: homeRLEdge != null ? rateConfidence(homeRLEdge) : null,
-      awayConviction: awayRLEdge != null ? cvAwayML.tier : null,
-      homeConviction: homeRLEdge != null ? cvHomeML.tier : null,
-      awayConvictionScore: awayRLEdge != null ? cvAwayML.score : null,
-      homeConvictionScore: homeRLEdge != null ? cvHomeML.score : null,
-    },
-  };
+  const c = colors[conf] || colors.NEUTRAL;
+  return <span style={{ fontSize: 9, fontWeight: 700, padding: "3px 7px", borderRadius: 4, background: c.bg, color: c.fg, border: `1px solid ${c.border}`, letterSpacing: "0.05em" }}>{conf?.slice(0, 3) || "—"}</span>;
 }
 
-async function calculateHRPropEdges(games, hrOddsByEvent) {
-  const targetGames = games.slice(0, MAX_HR_GAMES);
-  const allHRProps = [];
-  for (const game of targetGames) {
-    const eventId = findEventIdForGame(game, hrOddsByEvent);
-    const hrOdds = eventId ? hrOddsByEvent[eventId] : null;
-    if (!hrOdds || hrOdds.length === 0) continue;
-    const weather = await getWeatherForVenue(game.venue);
-    // v2: pull both teams' batting orders once per game (confirmed when MLB posts
-    // it, recent-game order as fallback) so each batter gets a lineup-aware PA.
-    const [awayLineupRes, homeLineupRes] = await Promise.all([
-      getTeamLineup(game.awayId, game.id),
-      getTeamLineup(game.homeId, game.id),
-    ]);
-    for (const propOdds of hrOdds) {
-      const batter = await findPlayerByName(propOdds.player, [game.awayId, game.homeId]);
-      if (!batter) continue;
-      const onAwayTeam = batter.teamId === game.awayId;
-      // v2: find this batter's spot in his team's batting order (1-9), null if absent.
-      const myLineupRes = onAwayTeam ? awayLineupRes : homeLineupRes;
-      const myLineup = (myLineupRes && myLineupRes.lineup) || [];
-      const lineupIdx = myLineup.findIndex(p => p.id === batter.id);
-      const battingOrder = lineupIdx >= 0 ? lineupIdx + 1 : null;
-      const lineupSource = (myLineupRes && myLineupRes.source) || "none";
-      const opposingPitcherProbable = onAwayTeam ? game.homeProbable : game.awayProbable;
-      const opposingPitcherStats = opposingPitcherProbable
-        ? regressThinSample(await getPitcherSeasonStats(opposingPitcherProbable.id))
-        : null;
-      const [batterStats, recent15, bvp, statcast] = await Promise.all([
-        getBatterSeasonStats(batter.id),
-        getBatterRecentStats(batter.id, 15),
-        opposingPitcherProbable ? getBatterVsPitcherHistory(batter.id, opposingPitcherProbable.id) : null,
-        getBatterStatcast(batter.id),
-      ]);
-      const hrProbRaw = calculateHRProbability(batterStats, opposingPitcherStats, game, weather, recent15, statcast, bvp, battingOrder);
-      if (hrProbRaw == null) continue;
-      // (d) Market cap: don't let the model sit more than the cap multiple above
-      // the book's implied prob. Default 1.5×; a longshot with a genuine record vs
-      // this pitcher (see marketCapMult) earns 2.0×. Only binds on wild disagreement.
-      const marketImplied = americanToImpliedProb(propOdds.price);
-      const capMult = marketCapMult(bvp, propOdds.price);
-      const hrProb = (marketImplied != null && marketImplied > 0)
-        ? Math.min(hrProbRaw, marketImplied * capMult)
-        : hrProbRaw;
-      const edge = sanitizeEdge(calculateEdge(hrProb, propOdds.price));
-      allHRProps.push({
-        gameId: game.id,
-        player: propOdds.player,
-        team: onAwayTeam ? game.awayAbbr : game.homeAbbr,
-        opposingPitcher: opposingPitcherProbable?.name,
-        game: `${game.awayAbbr} @ ${game.homeAbbr}`,
-        venue: game.venue,
-        hrProb,
-        odds: propOdds.price,
-        book: propOdds.book,
-        edge,
-        confidence: rateConfidence(edge),
-        batterStats: batterStats ? {
-          hr: batterStats.homeRuns,
-          iso: round3(batterStats.iso),
-          slg: batterStats.slg,
-          hrPerPA: round3(batterStats.hrPerPA),
-        } : null,
-        recent15: recent15 ? {
-          atBats: recent15.atBats,
-          hr: recent15.homeRuns,
-          avg: recent15.avg,
-          ops: recent15.ops,
-          hrPerAB: round3(recent15.hrPerAB),
-        } : null,
-        bvp: bvp ? {
-          atBats: bvp.atBats,
-          hits: bvp.hits,
-          hr: bvp.homeRuns,
-          avg: round3(bvp.avg),
-          ops: bvp.ops ? round3(bvp.ops) : null,
-        } : null,
-        statcast: statcast ? {
-          avgExitVelo: statcast.avgExitVelocity,
-          maxExitVelo: statcast.maxExitVelocity,
-          barrelRate: statcast.barrelRate,
-          hardHitRate: statcast.hardHitRate,
-          xwOBA: statcast.xwOBA,
-        } : null,
-        parkHRFactor: game.parkHRFactor,
-        battingOrder,
-        lineupSource,
-        bvpCapException: capMult > MAX_OVER_MARKET,
-        opposingPitcherHR9: opposingPitcherStats?.homeRunsPer9 ?? null,
-        weatherEffect: weather?.windEffect || null,
+function formatOdds(american) {
+  if (american == null) return "—";
+  return american > 0 ? `+${american}` : `${american}`;
+}
+
+function Loader() {
+  return (
+    <div style={{ textAlign: "center", padding: 64 }}>
+      <div style={{ width: 32, height: 32, border: "3px solid #1f2937", borderTopColor: "#ef4444", borderRadius: "50%", animation: "spin .8s linear infinite", margin: "0 auto 14px" }} />
+      <div style={{ fontSize: 13, color: "#6b7280" }}>Running model on today's slate...</div>
+      <div style={{ fontSize: 11, color: "#4b5563", marginTop: 6 }}>This can take ~10 seconds the first time</div>
+    </div>
+  );
+}
+
+function ErrorState({ onRetry }) {
+  return (
+    <div style={{ textAlign: "center", padding: 64, background: "#0f1419", border: "1px solid #1f2937", borderRadius: 8 }}>
+      <div style={{ fontSize: 32, marginBottom: 12 }}>⚠️</div>
+      <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>Could not load edges</div>
+      <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 16 }}>The model service might be warming up. Try again in a moment.</div>
+      <button onClick={onRetry} style={{ background: "#ef4444", color: "#fff", border: "none", borderRadius: 6, padding: "8px 18px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Retry</button>
+    </div>
+  );
+}
+
+function NBADashboard({ hasFullAccess, navigate }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true); setError(false);
+    try {
+      const base = import.meta.env.VITE_API_URL || "https://sportsintel-production.up.railway.app";
+      const res = await fetch(`${base}/api/nba/predictions`);
+      if (!res.ok) throw new Error("bad status");
+      setData(await res.json());
+    } catch (e) { console.error("Failed to load NBA edges:", e); setError(true); setData(null); }
+    setLoading(false);
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  if (loading) return <Loader />;
+  if (error) return <ErrorState onRetry={load} />;
+
+  // only resolved matchups with usable data
+  const games = (data?.predictions || []).filter(
+    (g) => !(g.home || "").includes("/") && !(g.away || "").includes("/") && g.dataQuality !== "insufficient"
+  );
+
+  const mlEdges = [];
+  const totalEdges = [];
+  for (const g of games) {
+    const matchup = `${nbaAbbr(g.away)} @ ${nbaAbbr(g.home)}`;
+    const time = nbaTime(g.date);
+    const ml = g.predictions?.moneyline;
+    if (ml?.value) {
+      const pickHome = ml.pick === "home";
+      mlEdges.push({
+        gameId: g.gameId, matchup, time,
+        teamAbbr: nbaAbbr(ml.pickTeam),
+        odds: pickHome ? ml.book?.home : ml.book?.away,
+        edgePct: ml.edge,
+        modelPct: Math.round(pickHome ? ml.homeWinProb : ml.awayWinProb),
+        inflation: ml.inflation || null,
+      });
+    }
+    const to = g.predictions?.total;
+    if (to?.value) {
+      totalEdges.push({
+        gameId: g.gameId, matchup,
+        side: to.pick, line: to.line,
+        edgePts: to.edge, projected: to.projectedTotal,
       });
     }
   }
-  return allHRProps
-    .filter(p => p.edge != null && p.edge >= MIN_PROP_EDGE)
-    .sort((a, b) => (b.hrProb ?? -1) - (a.hrProb ?? -1)); // likelihood-first, not payout-first
+  mlEdges.sort((a, b) => b.edgePct - a.edgePct);
+  totalEdges.sort((a, b) => b.edgePts - a.edgePts);
+
+  return (
+    <div style={{ animation: "fadeIn .3s ease" }}>
+      <div style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 8 }}>
+        <h1 style={{ margin: 0, fontSize: 26, fontWeight: 700 }}>🏀 NBA Playoff edges</h1>
+        <span style={{ fontSize: 12, color: "#6b7280" }}>{games.length} game{games.length === 1 ? "" : "s"}</span>
+      </div>
+      <p style={{ margin: "0 0 24px", fontSize: 13, color: "#9ca3af" }}>
+        Model projections vs sportsbook lines · <span style={{ color: "#ef4444", fontWeight: 600 }}>click any edge</span> for the full matchup.
+      </p>
+
+      <div className="edge-grid-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16, gridAutoRows: "1fr" }}>
+        <EdgePanel title="Top moneyline edges" icon="💰" edges={mlEdges} renderRow={(e) => <NBAMoneylineRow edge={e} key={e.gameId} navigate={navigate} />} emptyText="No moneyline edges in the current slate" hasFullAccess={hasFullAccess} navigate={navigate} />
+        <EdgePanel title="Top totals edges" icon="📊" edges={totalEdges} renderRow={(e) => <NBATotalRow edge={e} key={e.gameId} navigate={navigate} />} emptyText="No totals edges — books are sharp here" hasFullAccess={hasFullAccess} navigate={navigate} />
+      </div>
+
+      <NBAPropsSection games={games} hasFullAccess={hasFullAccess} navigate={navigate} />
+
+      <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 8, padding: "16px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginTop: 16 }}>
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "#e4e7eb", marginBottom: 2 }}>🏀 Want to see every NBA game?</div>
+          <div style={{ fontSize: 12, color: "#9ca3af" }}>Full slate with projections, win %, and matchup detail</div>
+        </div>
+        <button onClick={() => navigate("/nba")} style={{ background: "#ef4444", color: "#fff", border: "none", borderRadius: 6, padding: "10px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}>
+          View NBA Playoffs →
+        </button>
+      </div>
+    </div>
+  );
 }
 
-const MAX_K_GAMES = 8; // cap games we pull K props for (Odds API credit budget)
+// ── NBA player props (points / rebounds / assists) ──────────────────────────────
+// Pulls projections for each game in the slate from /api/nba/props/:gameId/projections,
+// collects the model's flagged prop edges and the held-back "suspect" picks.
+function NBAPropsSection({ games, hasFullAccess, navigate }) {
+  const [edges, setEdges] = useState(null);
+  const [suspects, setSuspects] = useState([]);
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-// Match a prop's pitcher name to one of the game's two probable starters.
-function findProbableStarter(playerName, game) {
-  const target = normalizePlayerName(playerName);
-  const cands = [];
-  if (game.awayProbable) cands.push({ id: game.awayProbable.id, name: game.awayProbable.name, teamId: game.awayId });
-  if (game.homeProbable) cands.push({ id: game.homeProbable.id, name: game.homeProbable.name, teamId: game.homeId });
-  for (const c of cands) if (normalizePlayerName(c.name) === target) return c;
-  const tl = extractLastName(target);
-  for (const c of cands) if (extractLastName(normalizePlayerName(c.name)) === tl) return c;
-  return null;
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const base = import.meta.env.VITE_API_URL || "https://sportsintel-production.up.railway.app";
+        const slate = (games || []).slice(0, 6); // cap fetches; playoff slates are small
+        const results = await Promise.all(
+          slate.map((g) =>
+            fetch(`${base}/api/nba/props/${g.gameId}/projections`)
+              .then((r) => (r.ok ? r.json() : null))
+              .catch(() => null)
+          )
+        );
+        const allEdges = [];
+        const allSuspects = [];
+        const allRows = [];
+        for (const r of results) {
+          if (!r || !r.available) continue;
+          const matchup = `${nbaAbbr(r.away)} @ ${nbaAbbr(r.home)}`;
+          for (const e of r.edges || []) allEdges.push({ ...e, matchup, gameId: r.gameId });
+          for (const s of r.suspects || []) allSuspects.push({ ...s, matchup, gameId: r.gameId });
+          for (const p of r.players || []) {
+            if (!p.markets) continue; // skip out/unresolved players
+            const team = p.side === "home" ? nbaAbbr(r.home) : p.side === "away" ? nbaAbbr(r.away) : null;
+            const teamLogo = (r.teamLogos && p.side) ? (r.teamLogos[p.side] || null) : null;
+            allRows.push({ name: p.name, matchup, team, teamLogo, gameId: r.gameId, injuryStatus: p.injuryStatus || null, markets: p.markets });
+          }
+        }
+        allEdges.sort((a, b) => Math.abs(b.edge) - Math.abs(a.edge));
+        allSuspects.sort((a, b) => Math.abs(b.edge) - Math.abs(a.edge));
+        // biggest projection-vs-line gap (any market) first
+        const gap = (row) => Math.max(...["points", "rebounds", "assists", "threes"].map((k) => Math.abs(row.markets[k]?.edge ?? 0)));
+        allRows.sort((a, b) => gap(b) - gap(a));
+        if (!cancelled) { setEdges(allEdges); setSuspects(allSuspects); setRows(allRows); }
+      } catch (e) {
+        if (!cancelled) { setEdges([]); setSuspects([]); setRows([]); }
+      }
+      if (!cancelled) setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [games]);
+
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4, flexWrap: "wrap", gap: 8 }}>
+        <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>🎯 Player props</h2>
+        <span style={{ fontSize: 11, color: "#6b7280" }}>points · rebounds · assists · 3PT</span>
+      </div>
+      <p style={{ margin: "0 0 12px", fontSize: 12, color: "#9ca3af" }}>
+        Model projection vs the book line. Out / injured players are removed automatically;
+        questionable players are held back below.
+      </p>
+
+      {loading ? (
+        <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 8, padding: 28, textAlign: "center", color: "#6b7280", fontSize: 12 }}>
+          <div style={{ width: 22, height: 22, border: "3px solid #1f2937", borderTopColor: "#ef4444", borderRadius: "50%", animation: "spin .8s linear infinite", margin: "0 auto 10px" }} />
+          Loading player props…
+        </div>
+      ) : (
+        <>
+          <EdgePanel
+            title="Top player prop edges"
+            icon="🎯"
+            edges={edges || []}
+            renderRow={(e) => <NBAPropRow edge={e} key={e.gameId + e.name + e.stat} navigate={navigate} />}
+            emptyText="No prop edges cleared the guardrails in this slate"
+            hasFullAccess={hasFullAccess}
+            navigate={navigate}
+            wide
+          />
+          {suspects.length > 0 && (
+            <div style={{ marginTop: 12 }}>
+              <NBASuspectPanel suspects={suspects} />
+            </div>
+          )}
+          {rows.length > 0 && (
+            <div style={{ marginTop: 12 }}>
+              <NBAAllPropsTable rows={rows} hasFullAccess={hasFullAccess} navigate={navigate} />
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
 }
 
-// Pitcher strikeout prop edges. Two-sided market, so we de-vig and take the better
-// side (over/under). Mirrors calculateHRPropEdges but per-pitcher, not per-batter.
-async function calculateStrikeoutPropEdges(games, kOddsByEvent) {
-  const targetGames = games.slice(0, MAX_K_GAMES);
-  const out = [];
-  for (const game of targetGames) {
-    const eventId = findEventIdForGame(game, kOddsByEvent);
-    const kOdds = eventId ? kOddsByEvent[eventId] : null;
-    if (!kOdds || kOdds.length === 0) continue;
-    const [awayTeam, homeTeam] = await Promise.all([
-      getTeamSeasonStats(game.awayId),
-      getTeamSeasonStats(game.homeId),
-    ]);
-    for (const propOdds of kOdds) {
-      const pitcher = findProbableStarter(propOdds.player, game);
-      if (!pitcher) continue;
-      const pitcherStats = regressThinSample(await getPitcherSeasonStats(pitcher.id));
-      if (!pitcherStats) continue;
-      const onAwayTeam = pitcher.teamId === game.awayId;
-      const oppTeamStats = onAwayTeam ? homeTeam : awayTeam; // the lineup he faces
-      const overProb = strikeoutOverProb(pitcherStats, oppTeamStats, propOdds.line);
-      if (overProb == null) continue;
-      const fairOver = devigTwoWay(propOdds.overOdds, propOdds.underOdds);
-      const underProb = round3(1 - overProb);
-      const edgeOver = sanitizeEdge(fairOver != null ? round3(overProb - fairOver) : calculateEdge(overProb, propOdds.overOdds));
-      const edgeUnder = sanitizeEdge(fairOver != null ? round3(underProb - (1 - fairOver)) : calculateEdge(underProb, propOdds.underOdds));
-      const overBetter = (edgeOver ?? -1) >= (edgeUnder ?? -1);
-      const side = overBetter ? "over" : "under";
-      const edge = overBetter ? edgeOver : edgeUnder;
-      const modelProb = overBetter ? overProb : underProb;
-      const odds = overBetter ? propOdds.overOdds : propOdds.underOdds;
-      const oppOdds = overBetter ? propOdds.underOdds : propOdds.overOdds;
-      out.push({
-        gameId: game.id,
-        player: propOdds.player,
-        team: onAwayTeam ? game.awayAbbr : game.homeAbbr,
-        opponent: onAwayTeam ? game.homeAbbr : game.awayAbbr,
-        game: `${game.awayAbbr} @ ${game.homeAbbr}`,
-        line: propOdds.line,
-        side,
-        kProb: modelProb,
-        odds,
-        oppOdds,
-        book: propOdds.book,
-        edge,
-        confidence: rateConfidence(edge),
-        expectedKs: expectedKsFor(pitcherStats),
-        pitcherK9: pitcherStats.strikeoutsPer9 ?? null,
-      });
-    }
+function NBAPropRow({ edge, navigate }) {
+  const sideColor = edge.side === "OVER" ? "#22c55e" : "#ef4444";
+  const edgeText = `${edge.edge > 0 ? "+" : ""}${Number(edge.edge).toFixed(1)}`;
+  return (
+    <div className="edge-row hr-prop-row" onClick={() => navigate(`/game/nba/${edge.gameId}`)} style={{ display: "grid", gridTemplateColumns: "2.2fr 1fr 1fr 1fr 80px", gap: 10, padding: 10, background: "#0a0e14", borderRadius: 4, alignItems: "center" }}>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 12, fontWeight: 600 }}>{edge.name}</div>
+        <div style={{ fontSize: 10, color: "#6b7280", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{edge.matchup}</div>
+      </div>
+      <div className="hr-prop-stats" style={{ display: "contents" }}>
+        <div style={{ fontSize: 11, color: "#9ca3af", textTransform: "capitalize" }}>{edge.stat}</div>
+        <div style={{ fontSize: 12, fontWeight: 700, color: sideColor }}>{edge.side} {edge.line}</div>
+        <div style={{ fontSize: 11, color: "#9ca3af" }}>proj {edge.projection}</div>
+        <span style={{ fontSize: 14, fontWeight: 600, color: sideColor, fontVariantNumeric: "tabular-nums" }}>{edgeText}</span>
+      </div>
+    </div>
+  );
+}
+
+// Full table: every projected player, all three markets, projection vs line.
+function NBAAllPropsTable({ rows, hasFullAccess, navigate }) {
+  const [open, setOpen] = useState(true);
+  const visible = hasFullAccess ? rows : rows.slice(0, 6);
+  const lockedCount = hasFullAccess ? 0 : Math.max(0, rows.length - visible.length);
+
+  // Group visible players by team. If team info is missing (one group), fall
+  // back to a flat list so the table never looks broken.
+  const groups = [];
+  const idx = new Map();
+  for (const r of visible) {
+    const key = r.team || "—";
+    let g = idx.get(key);
+    if (!g) { g = { team: key, rows: [] }; idx.set(key, g); groups.push(g); }
+    g.rows.push(r);
   }
-  return out
-    .filter(p => p.edge != null && p.edge >= MIN_PROP_EDGE)
-    .sort((a, b) => (b.edge ?? -1) - (a.edge ?? -1));
+  const grouped = groups.length > 1;
+  const renderRow = (r, i) => (
+    <tr key={(r.team || "") + r.gameId + r.name + i} className="game-row" onClick={() => navigate(`/game/nba/${r.gameId}`)} style={{ borderBottom: "1px solid #1a212c", background: i % 2 === 1 ? "#0b1118" : "transparent", cursor: "pointer" }}>
+      <td style={{ ...td(), padding: "13px 8px" }}>
+        <div style={{ fontWeight: 600, fontSize: 13 }}>{r.name}</div>
+        <div style={{ fontSize: 10, color: "#5b6472", marginTop: 1 }}>
+          {r.matchup}{r.injuryStatus ? ` · ${r.injuryStatus}` : ""}
+        </div>
+      </td>
+      <td style={{ ...td("right"), padding: "13px 8px" }}><StatCell m={r.markets.points} /></td>
+      <td style={{ ...td("right"), padding: "13px 8px" }}><StatCell m={r.markets.rebounds} /></td>
+      <td style={{ ...td("right"), padding: "13px 8px" }}><StatCell m={r.markets.assists} /></td>
+      <td style={{ ...td("right"), padding: "13px 8px" }}><StatCell m={r.markets.threes} /></td>
+    </tr>
+  );
+
+  return (
+    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 8, padding: 14 }}>
+      <div className="section-header" onClick={() => setOpen(!open)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: open ? 6 : 0 }}>
+        <span style={{ fontSize: 11, letterSpacing: 1, color: "#9ca3af", fontWeight: 600 }}>📋 ALL PLAYER PROJECTIONS · {rows.length}</span>
+        <span style={{ fontSize: 12, color: "#6b7280" }}>{open ? "▲ hide" : "▼ show"}</span>
+      </div>
+      {open && (
+        <>
+          <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 12, lineHeight: 1.6 }}>
+            Each stat shows our <strong style={{ color: "#e4e7eb" }}>projection</strong> and how far it sits from the book's <strong style={{ color: "#e4e7eb" }}>line</strong>:
+            {" "}<span style={{ color: "#22c55e", fontWeight: 700 }}>▲ over</span> /{" "}
+            <span style={{ color: "#ef4444", fontWeight: 700 }}>▼ under</span>, with the gap (e.g. <span style={{ color: "#22c55e", fontWeight: 700 }}>▲ 2.5</span> = we project 2.5 above the line).
+            {" "}A <strong style={{ color: "#e4e7eb" }}>highlighted pill</strong> = flagged edge · <span style={{ display: "inline-block", width: 7, height: 7, borderRadius: "50%", background: "#f59700", verticalAlign: "middle" }} /> = line looks off (likely news).
+          </div>
+          <div className="games-table-wrap" style={{ overflowX: "auto" }}>
+            <table className="games-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+              <thead>
+                <tr style={{ borderBottom: "1px solid #1f2937", color: "#6b7280" }}>
+                  <th style={th()}>Player</th>
+                  <th style={th("right")}>Points</th>
+                  <th style={th("right")}>Rebounds</th>
+                  <th style={th("right")}>Assists</th>
+                  <th style={th("right")}>3PT Made</th>
+                </tr>
+              </thead>
+              <tbody>
+                {grouped
+                  ? groups.flatMap((g) => {
+                      const logo = (g.rows.find((r) => r.teamLogo) || {}).teamLogo || null;
+                      return [
+                      <tr key={"hdr-" + g.team}>
+                        <td colSpan={5} style={{ padding: "14px 10px 10px", background: "#11181f", borderTop: "2px solid #ef4444", borderBottom: "1px solid #1f2937" }}>
+                          {logo
+                            ? <img src={logo} alt="" width="22" height="22" style={{ verticalAlign: "middle", marginRight: 9, objectFit: "contain" }} onError={(e) => { e.currentTarget.style.display = "none"; }} />
+                            : <span style={{ display: "inline-block", width: 4, height: 14, background: "#ef4444", borderRadius: 2, verticalAlign: "middle", marginRight: 9 }} />}
+                          <span style={{ fontSize: 14, fontWeight: 800, letterSpacing: 0.3, color: "#ffffff", verticalAlign: "middle" }}>{g.team}</span>
+                          <span style={{ fontSize: 11, color: "#6b7280", marginLeft: 9, verticalAlign: "middle" }}>{g.rows.length} player{g.rows.length === 1 ? "" : "s"}</span>
+                        </td>
+                      </tr>,
+                      ...g.rows.map((r, i) => renderRow(r, i)),
+                    ];
+                    })
+                  : visible.map((r, i) => renderRow(r, i))}
+              </tbody>
+            </table>
+          </div>
+          {lockedCount > 0 && (
+            <div style={{ marginTop: 12, textAlign: "center" }}>
+              <button onClick={() => navigate("/pricing")} style={{ background: "#ef4444", color: "#fff", border: "none", borderRadius: 6, padding: "8px 18px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+                🔒 Unlock {lockedCount} more player{lockedCount === 1 ? "" : "s"} — $7/mo
+              </button>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
 }
 
-const MAX_HITS_GAMES = 6; // cap games we pull hits props for (credit budget)
-
-// Batter hits prop edges. Two-sided market — de-vig and take the better side.
-// Mirrors calculateHRPropEdges (per batter) with the strikeout build's de-vig.
-async function calculateHitsPropEdges(games, hitsOddsByEvent) {
-  const targetGames = games.slice(0, MAX_HITS_GAMES);
-  const out = [];
-  for (const game of targetGames) {
-    const eventId = findEventIdForGame(game, hitsOddsByEvent);
-    const hitsOdds = eventId ? hitsOddsByEvent[eventId] : null;
-    if (!hitsOdds || hitsOdds.length === 0) continue;
-    for (const propOdds of hitsOdds) {
-      const batter = await findPlayerByName(propOdds.player, [game.awayId, game.homeId]);
-      if (!batter) continue;
-      const onAwayTeam = batter.teamId === game.awayId;
-      const opposingPitcherProbable = onAwayTeam ? game.homeProbable : game.awayProbable;
-      const oppPitcherStats = opposingPitcherProbable
-        ? regressThinSample(await getPitcherSeasonStats(opposingPitcherProbable.id))
-        : null;
-      const batterStats = await getBatterSeasonStats(batter.id);
-      const overProb = hitsOverProb(batterStats, oppPitcherStats, propOdds.line);
-      if (overProb == null) continue;
-      const fairOver = devigTwoWay(propOdds.overOdds, propOdds.underOdds);
-      const underProb = round3(1 - overProb);
-      const edgeOver = sanitizeEdge(fairOver != null ? round3(overProb - fairOver) : calculateEdge(overProb, propOdds.overOdds));
-      const edgeUnder = sanitizeEdge(fairOver != null ? round3(underProb - (1 - fairOver)) : calculateEdge(underProb, propOdds.underOdds));
-      const overBetter = (edgeOver ?? -1) >= (edgeUnder ?? -1);
-      const side = overBetter ? "over" : "under";
-      const edge = overBetter ? edgeOver : edgeUnder;
-      const modelProb = overBetter ? overProb : underProb;
-      const odds = overBetter ? propOdds.overOdds : propOdds.underOdds;
-      const oppOdds = overBetter ? propOdds.underOdds : propOdds.overOdds;
-      out.push({
-        gameId: game.id,
-        player: propOdds.player,
-        team: onAwayTeam ? game.awayAbbr : game.homeAbbr,
-        opposingPitcher: opposingPitcherProbable?.name,
-        game: `${game.awayAbbr} @ ${game.homeAbbr}`,
-        line: propOdds.line,
-        side,
-        hitsProb: modelProb,
-        odds,
-        oppOdds,
-        book: propOdds.book,
-        edge,
-        confidence: rateConfidence(edge),
-        battingAvg: batterStats?.avg ?? null,
-      });
-    }
+// One stat cell: projection prominent, line muted, a LIGHT lean indicator.
+// Baseline cells stay calm (arrow + gap, no heavy pill) so the eye isn't flooded;
+// only a FLAGGED edge gets the strong treatment (bold color + subtle pill) so the
+// rare real edges actually stand out instead of 64 identical loud pills.
+function StatCell({ m }) {
+  if (!m || !m.eligible || m.line == null || m.projection == null) {
+    return <span style={{ color: "#374151", fontSize: 13 }}>—</span>;
   }
-  return out
-    .filter(p => p.edge != null && p.edge >= MIN_PROP_EDGE)
-    .sort((a, b) => (b.edge ?? -1) - (a.edge ?? -1));
+  const isOver = m.side === "OVER";
+  const color = isOver ? "#22c55e" : "#ef4444";
+  const gap = Math.abs(m.edge).toFixed(1);
+  const arrow = isOver ? "▲" : "▼";
+  return (
+    <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-end", gap: 2, lineHeight: 1.15 }}>
+      <span style={{ fontSize: 14, fontWeight: m.flagged ? 700 : 600, color: m.flagged ? color : "#e4e7eb", fontVariantNumeric: "tabular-nums" }}>
+        {m.projection}{m.suspect ? <span style={{ display: "inline-block", width: 7, height: 7, borderRadius: "50%", background: "#f59700", marginLeft: 5, verticalAlign: "middle" }} /> : null}
+      </span>
+      <span style={{ fontSize: 10, color: "#5b6472", fontVariantNumeric: "tabular-nums" }}>vs {m.line}</span>
+      {m.flagged ? (
+        <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.4, color, background: `${color}1a`, border: `1px solid ${color}40`, borderRadius: 4, padding: "2px 6px", marginTop: 1 }}>
+          {arrow} {m.side} {gap}
+        </span>
+      ) : (
+        <span style={{ fontSize: 10, fontWeight: 600, color, fontVariantNumeric: "tabular-nums", opacity: 0.85 }}>
+          {arrow} {gap}
+        </span>
+      )}
+    </div>
+  );
 }
 
-function findEventIdForGame(game, hrOddsByEvent) {
-  return game._oddsEventId || null;
+function NBASuspectPanel({ suspects }) {
+  return (
+    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderLeft: "3px solid #f59700", borderRadius: 8, padding: 14 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+        <span style={{ fontSize: 11, letterSpacing: 1, color: "#fbbf24", fontWeight: 600 }}>⚠️ HELD BACK · LIKELY NEWS OR INJURY</span>
+        <span style={{ fontSize: 10, color: "#6b7280" }}>{suspects.length} flagged</span>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {suspects.map((s, i) => (
+          <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: 10, background: "#0a0e14", borderRadius: 4 }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 12, fontWeight: 600 }}>
+                {s.name} · <span style={{ textTransform: "capitalize", color: "#9ca3af" }}>{s.stat}</span>{" "}
+                <span style={{ color: s.side === "OVER" ? "#22c55e" : "#ef4444" }}>{s.side} {s.line}</span>
+              </div>
+              <div style={{ fontSize: 10, color: "#a8915c", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.suspectReason || "suspect line"}</div>
+            </div>
+            <span style={{ fontSize: 11, color: "#6b7280", whiteSpace: "nowrap" }}>{s.matchup}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
-// ── PLAYER NAME MATCHING ──────────────────────────────────────────────────────
-const rosterCache = new Map();
-function normalizePlayerName(name) {
-  if (!name) return "";
-  return name
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[.,'`]/g, "")
-    .replace(/\s+(jr|sr|ii|iii|iv)\.?$/i, "")
-    .trim()
-    .replace(/\s+/g, " ");
+function NBAMoneylineRow({ edge, navigate }) {
+  return (
+    <div className="edge-row" onClick={() => navigate(`/game/nba/${edge.gameId}`)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: 10, background: "#0a0e14", borderRadius: 4 }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 2, display: "flex", alignItems: "center", flexWrap: "wrap", rowGap: 3 }}>
+          {edge.teamAbbr} ML
+          <InflationTag inflation={edge.inflation} />
+        </div>
+        <div style={{ fontSize: 10, color: "#6b7280", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          {edge.matchup} · {formatOdds(edge.odds)}{edge.time ? ` · ${edge.time}` : ""}
+        </div>
+      </div>
+      <div style={{ textAlign: "right", marginLeft: 10 }}>
+        <span style={{ fontSize: 14, fontWeight: 600, color: "#22c55e", fontVariantNumeric: "tabular-nums" }}>+{edge.edgePct.toFixed(1)}%</span>
+        <div style={{ fontSize: 10, color: "#6b7280", marginTop: 2 }}>{edge.modelPct}% model</div>
+      </div>
+    </div>
+  );
 }
-function extractLastName(normalizedName) {
-  if (!normalizedName) return "";
-  const parts = normalizedName.split(" ");
+
+function NBATotalRow({ edge, navigate }) {
+  return (
+    <div className="edge-row" onClick={() => navigate(`/game/nba/${edge.gameId}`)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: 10, background: "#0a0e14", borderRadius: 4 }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 2 }}>{edge.side === "over" ? "Over" : "Under"} {edge.line}</div>
+        <div style={{ fontSize: 10, color: "#6b7280", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{edge.matchup}</div>
+      </div>
+      <div style={{ textAlign: "right", marginLeft: 10 }}>
+        <span style={{ fontSize: 14, fontWeight: 600, color: "#22c55e", fontVariantNumeric: "tabular-nums" }}>{edge.edgePts.toFixed(1)} pts</span>
+        <div style={{ fontSize: 10, color: "#6b7280", marginTop: 2 }}>proj {edge.projected}</div>
+      </div>
+    </div>
+  );
+}
+
+function nbaAbbr(full) {
+  if (!full) return "—";
+  const parts = full.split(" ");
   return parts[parts.length - 1];
 }
-async function findPlayerByName(playerName, teamIds) {
-  if (!playerName) return null;
-  const normalized = normalizePlayerName(playerName);
-  const targetLastName = extractLastName(normalized);
-  for (const teamId of teamIds) {
-    if (!teamId) continue;
-    if (!rosterCache.has(teamId)) {
-      rosterCache.set(teamId, await getTeamRoster(teamId));
-    }
-    const roster = rosterCache.get(teamId);
-    let match = roster.find(p => normalizePlayerName(p.name) === normalized);
-    if (match) return { ...match, teamId };
-    match = roster.find(p => extractLastName(normalizePlayerName(p.name)) === targetLastName);
-    if (match) return { ...match, teamId };
-    match = roster.find(p => {
-      const rn = normalizePlayerName(p.name);
-      return rn.includes(normalized) || normalized.includes(rn);
-    });
-    if (match) return { ...match, teamId };
-  }
-  return null;
+function nbaTime(dateStr) {
+  if (!dateStr) return "";
+  try {
+    return new Date(dateStr).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" });
+  } catch { return ""; }
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-function sigmoid(x) { return 1 / (1 + Math.exp(-x)); }
-// Standard normal CDF (Zelen & Severo approximation, ~7.5e-8 accuracy).
-function normalCDF(x) {
-  const t = 1 / (1 + 0.2316419 * Math.abs(x));
-  const d = 0.3989422804014327 * Math.exp(-x * x / 2);
-  const p = d * t * (0.319381530 + t * (-0.356563782 + t * (1.781477937 + t * (-1.821255978 + t * 1.330274429))));
-  return x >= 0 ? 1 - p : p;
+function ComingSoon({ league, navigate }) {
+  const GAMES_PATH = { nhl: "/nhl-games", nfl: "/nfl-games", ncaafb: "/cfb-games" };
+  const path = GAMES_PATH[league?.id];
+  return (
+    <div style={{ textAlign: "center", padding: 80, background: "#0f1419", border: "1px solid #1f2937", borderRadius: 8 }}>
+      <div style={{ fontSize: 48, marginBottom: 16 }}>{league?.icon}</div>
+      <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 8 }}>{league?.label} edges — coming soon</h2>
+      <p style={{ fontSize: 13, color: "#9ca3af", maxWidth: 460, margin: "0 auto 20px", lineHeight: 1.7 }}>
+        {path
+          ? `We're not publishing ${league?.label} model edges yet. Live scores and the full schedule are available now.`
+          : `We're not publishing ${league?.label} edges yet. Check back in season.`}
+      </p>
+      {path && (
+        <button onClick={() => navigate(path)} style={{ background: "#ef4444", color: "#fff", border: "none", borderRadius: 6, padding: "10px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}>
+          View {league?.label} schedule →
+        </button>
+      )}
+    </div>
+  );
 }
-// Inverse normal CDF (Acklam's algorithm, ~1e-9 accuracy). Input clamped to (0,1).
-function invNorm(p) {
-  p = Math.min(Math.max(p, 1e-6), 1 - 1e-6);
-  const a = [-39.6968302866538, 220.946098424521, -275.928510446969, 138.357751867269, -30.6647980661472, 2.50662827745924];
-  const b = [-54.4760987982241, 161.585836858041, -155.698979859887, 66.8013118877197, -13.2806815528857];
-  const c = [-0.00778489400243029, -0.322396458041136, -2.40075827716184, -2.54973253934373, 4.37466414146497, 2.93816398269878];
-  const d = [0.00778469570904146, 0.32246712907004, 2.445134137143, 3.75440866190742];
-  const plow = 0.02425, phigh = 1 - 0.02425;
-  let q, r;
-  if (p < plow) {
-    q = Math.sqrt(-2 * Math.log(p));
-    return (((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) / ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1);
-  } else if (p <= phigh) {
-    q = p - 0.5; r = q * q;
-    return (((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) * q / (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1);
-  } else {
-    q = Math.sqrt(-2 * Math.log(1 - p));
-    return -(((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) / ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1);
-  }
-}
-function round2(n) { return Math.round(n * 100) / 100; }
-function round3(n) { return Math.round(n * 1000) / 1000; }
-
-module.exports = {
-  calculateGameEdges,
-  calculateHRPropEdges,
-  calculateStrikeoutPropEdges,
-  calculateHitsPropEdges,
-  rateConfidence,
-  calculateEdge,
-  calculateEdgeDevig,
-  devigTwoWay,
-  effectiveERA,
-  sanitizeEdge,
-  blendedEdge,
-  overreactionNote,
-  regressThinSample,
-  LEAGUE_AVG,
-};
