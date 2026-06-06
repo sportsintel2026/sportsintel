@@ -111,6 +111,15 @@ function plausibleTotalOdds(price) {
   // Real MLB total prices sit near even money; reject anything wild.
   return price != null && price < 300 && price > -400;
 }
+// Real MLB game totals sit in a tight band. A "totals" market that returns a
+// LADDER of alternate lines (1.5, 2.5 … 15.5) was letting junk rungs like
+// "Over 1.5 @ +105" get stamped onto a real price — the price looked sane, but
+// nothing guarded the LINE. Reject any line outside the real game-total range.
+const MLB_TOTAL_LINE_MIN = 5.5;
+const MLB_TOTAL_LINE_MAX = 13.5;
+function plausibleTotalLine(point) {
+  return typeof point === "number" && point >= MLB_TOTAL_LINE_MIN && point <= MLB_TOTAL_LINE_MAX;
+}
 
 function parseMainOddsEvent(ev) {
   const h2h = { away: null, home: null, awayBook: null, homeBook: null };
@@ -138,15 +147,29 @@ function parseMainOddsEvent(ev) {
           h2h.homeBook = bm.title;
         }
       } else if (m.key === "totals" && m.outcomes?.length >= 2) {
-        const over = m.outcomes.find(o => o.name === "Over");
-        const under = m.outcomes.find(o => o.name === "Under");
-        if (over && under && over.point != null
-            && plausibleTotalOdds(over.price) && plausibleTotalOdds(under.price)) {
-          totalsQuotes.push({
-            line: over.point,
-            over: over.price, overBook: bm.title,
-            under: under.price, underBook: bm.title,
-          });
+        // A book may return a LADDER of total lines as separate outcomes, not just
+        // the main line. Group outcomes by their point, pair Over & Under AT THE
+        // SAME line, and only accept lines in the real game-total range. This kills
+        // junk rungs (e.g. Over 1.5) and prevents a line from one rung being paired
+        // with a price from another. Downstream, the consensus line across books
+        // still resolves to the true main line.
+        const byPoint = new Map();
+        for (const o of m.outcomes || []) {
+          if (o.point == null || !plausibleTotalLine(o.point)) continue;
+          const slot = byPoint.get(o.point) || {};
+          if (o.name === "Over") slot.over = o.price;
+          else if (o.name === "Under") slot.under = o.price;
+          byPoint.set(o.point, slot);
+        }
+        for (const [point, slot] of byPoint) {
+          if (slot.over != null && slot.under != null
+              && plausibleTotalOdds(slot.over) && plausibleTotalOdds(slot.under)) {
+            totalsQuotes.push({
+              line: point,
+              over: slot.over, overBook: bm.title,
+              under: slot.under, underBook: bm.title,
+            });
+          }
         }
       } else if (m.key === "spreads" && m.outcomes?.length >= 2) {
         // Run line: take the standard ±1.5 outcomes for each team, best price.
