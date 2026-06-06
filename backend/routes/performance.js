@@ -50,13 +50,26 @@ router.get("/:league", async (req, res) => {
   }
   try {
     const supabase = db();
-    const { data, error } = await supabase
-      .from("model_predictions")
-      .select("market, confidence, result, odds, edge, game_date, clv, beat_close, closing_odds")
-      .eq("league", league)
-      .in("result", ["win", "loss"]); // graded, decisive only (skip pending/push)
-    if (error) throw new Error(error.message);
-    const rows = data || [];
+    // Fetch ALL graded rows by paging. Supabase caps a single select at 1000 rows;
+    // once MLB passed ~1000 graded win/loss rows, an unpaginated query silently
+    // returned only the OLDEST 1000 and dropped the NEWEST — hiding recent grades,
+    // including every newly added strikeout/hits pick (the most recent rows). Page
+    // through in 1000-row chunks ordered by id so nothing is lost.
+    const rows = [];
+    const PAGE = 1000;
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await supabase
+        .from("model_predictions")
+        .select("market, confidence, result, odds, edge, game_date, clv, beat_close, closing_odds")
+        .eq("league", league)
+        .in("result", ["win", "loss"]) // graded, decisive only (skip pending/push)
+        .order("id", { ascending: true })
+        .range(from, from + PAGE - 1);
+      if (error) throw new Error(error.message);
+      const batch = data || [];
+      rows.push(...batch);
+      if (batch.length < PAGE) break;
+    }
 
     // Props are kept entirely out of the core record and CLV — own table only.
     const coreRows = rows.filter(r => cfg.core.includes(r.market));
