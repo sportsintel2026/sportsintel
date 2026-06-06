@@ -36,21 +36,63 @@ function normalizeTeam(name) {
     .replace(/^(los angeles|new york|san francisco|san diego|st\.? louis|tampa bay|chicago|kansas city|washington|cleveland|cincinnati|colorado|arizona|atlanta|baltimore|boston|detroit|houston|miami|milwaukee|minnesota|oakland|philadelphia|pittsburgh|seattle|texas|toronto)\s+/i, "")
     .trim();
 }
+// Match a schedule game to its Odds API event. ORDER MATTERS: try an exact
+// normalized match on BOTH teams first, and only fall back to loose substring
+// matching if that loose match is UNIQUE. A non-unique or cross-day loose match
+// is REJECTED (returns null) — assigning the wrong event silently staples another
+// game's players onto this game's id, which then never grades. No odds beats wrong
+// odds. Same-day is required; doubleheaders are split by closest start time.
+function sameEtDay(ev, game) {
+  const day = game.date || null;
+  if (!day || !ev.commenceTime) return true; // can't compare → don't exclude
+  try {
+    const evDay = new Date(ev.commenceTime).toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+    return evDay === day;
+  } catch { return true; }
+}
+function closestByStart(events, game) {
+  const t = game.startTimeUTC ? new Date(game.startTimeUTC).getTime() : null;
+  if (t == null) return events[0];
+  let best = events[0], bestDiff = Infinity;
+  for (const ev of events) {
+    if (!ev.commenceTime) continue;
+    const diff = Math.abs(new Date(ev.commenceTime).getTime() - t);
+    if (diff < bestDiff) { bestDiff = diff; best = ev; }
+  }
+  return best;
+}
 function matchOddsToGame(game, oddsEvents) {
   const awayN = normalizeTeam(game.away);
   const homeN = normalizeTeam(game.home);
-  for (const ev of oddsEvents) {
-    const evAwayN = normalizeTeam(ev.awayTeam);
-    const evHomeN = normalizeTeam(ev.homeTeam);
-    if (
-      (awayN === evAwayN && homeN === evHomeN) ||
-      (awayN.includes(evAwayN) || evAwayN.includes(awayN)) &&
-      (homeN.includes(evHomeN) || evHomeN.includes(homeN))
-    ) {
-      return ev;
-    }
+
+  // Pass 1: exact normalized match on both teams, same ET day.
+  const exact = oddsEvents.filter(ev =>
+    normalizeTeam(ev.awayTeam) === awayN &&
+    normalizeTeam(ev.homeTeam) === homeN &&
+    sameEtDay(ev, game)
+  );
+  if (exact.length === 1) return exact[0];
+  if (exact.length > 1) return closestByStart(exact, game); // doubleheader
+
+  // Pass 2: loose substring match on both teams, same ET day — ONLY if it resolves
+  // to a single event (or a doubleheader of the same matchup). Guards against ""
+  // (every string includes "") which would match everything.
+  const loose = oddsEvents.filter(ev => {
+    const ea = normalizeTeam(ev.awayTeam), eh = normalizeTeam(ev.homeTeam);
+    const awayOk = !!ea && (awayN.includes(ea) || ea.includes(awayN));
+    const homeOk = !!eh && (homeN.includes(eh) || eh.includes(homeN));
+    return awayOk && homeOk && sameEtDay(ev, game);
+  });
+  if (loose.length === 1) return loose[0];
+  if (loose.length > 1) {
+    // Accept only if all loose matches are the SAME matchup (a doubleheader);
+    // if they disagree on teams, it's ambiguous → refuse rather than mis-assign.
+    const sig = (ev) => normalizeTeam(ev.awayTeam) + "@" + normalizeTeam(ev.homeTeam);
+    const allSame = loose.every(ev => sig(ev) === sig(loose[0]));
+    if (allSame) return closestByStart(loose, game);
   }
-  return null;
+
+  return null; // ambiguous or no match → no odds, never WRONG odds
 }
 
 // Decide which date to serve. If every one of today's games is final (or there
