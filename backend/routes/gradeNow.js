@@ -31,6 +31,7 @@ router.get("/", async (req, res) => {
     if (req.query.void_unmatched === "1" || req.query.void_unmatched === "true") return res.json(await voidUnmatched());
     if (req.query.counts === "1" || req.query.counts === "true") return res.json(await countsReport());
     if (req.query.prop_results === "1" || req.query.prop_results === "true") return res.json(await propResults());
+    if (req.query.hr_tiers === "1" || req.query.hr_tiers === "true") return res.json(await hrTiers());
     const graded = await gradeFinishedGames();
     res.json({ ok: true, graded: graded == null ? 0 : graded });
   } catch (err) {
@@ -305,6 +306,91 @@ async function propResults() {
       hits: { OVER: agg("player_hits", "OVER"), UNDER: agg("player_hits", "UNDER") },
     },
     rows,
+  };
+}
+
+// READ-ONLY. HR-prop ROI broken out by confidence tier, plus cumulative
+// "gate" aggregates that map to candidate recording thresholds. Answers: would
+// tightening the HR pick gate (HIGH-only / MEDIUM+ / LOW+) have actually made
+// money, or is every tier underwater? Pages through ALL graded rows in 1,000-row
+// chunks (Supabase silently caps a select at 1,000 and returns oldest-first, so
+// an unbounded select would drop the newest grades — see the §8 1,000-row bug).
+async function hrTiers() {
+  const supabase = db();
+
+  // American odds -> profit on a 1-unit win. -1 unit on a loss; push = no action.
+  const amerToProfit = (odds) =>
+    odds == null ? null : (odds > 0 ? odds / 100 : 100 / Math.abs(odds));
+
+  // Paginate all graded HR picks.
+  const rows = [];
+  const PAGE = 1000;
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from("model_predictions")
+      .select("odds,result,confidence,model_prob,edge,game_date,selection")
+      .eq("league", "mlb")
+      .eq("market", "hr_prop")
+      .neq("result", "pending")
+      .order("id")
+      .range(from, from + PAGE - 1);
+    if (error) return { ok: false, error: error.message };
+    const batch = data || [];
+    rows.push(...batch);
+    if (batch.length < PAGE) break;
+  }
+
+  function summarize(set) {
+    const n = set.length;
+    const win = set.filter(r => r.result === "win").length;
+    const loss = set.filter(r => r.result === "loss").length;
+    const push = set.filter(r => r.result === "push").length;
+    const decisions = win + loss; // push excluded from ROI + hit rate
+    let profit = 0;
+    for (const r of set) {
+      if (r.result === "win") { const p = amerToProfit(r.odds); profit += (p == null ? 0 : p); }
+      else if (r.result === "loss") { profit -= 1; }
+    }
+    const mean = (vals) => {
+      const f = vals.filter(v => v != null);
+      return f.length ? f.reduce((a, b) => a + b, 0) / f.length : null;
+    };
+    const mOdds = mean(set.map(r => r.odds));
+    const mProb = mean(set.map(r => r.model_prob));
+    const mEdge = mean(set.map(r => r.edge));
+    return {
+      n, win, loss, push,
+      hitRatePct: decisions ? +(win / decisions * 100).toFixed(1) : null,
+      roiPct: decisions ? +(profit / decisions * 100).toFixed(1) : null,
+      unitsProfit: +profit.toFixed(1),
+      meanOdds: mOdds == null ? null : Math.round(mOdds),
+      meanModelProb: mProb == null ? null : +mProb.toFixed(3),
+      meanEdge: mEdge == null ? null : +mEdge.toFixed(3),
+    };
+  }
+
+  const tier = (r) => (r.confidence || "NEUTRAL").toUpperCase();
+  const byTier = {};
+  for (const t of ["HIGH", "MEDIUM", "LOW", "NEUTRAL"]) {
+    byTier[t] = summarize(rows.filter(r => tier(r) === t));
+  }
+
+  // Cumulative gates — each is "what the record would look like if we only kept
+  // picks at or above this edge tier." These map to the gate options directly.
+  const gates = {
+    "HIGH_only (edge>=5%)":  summarize(rows.filter(r => tier(r) === "HIGH")),
+    "MEDIUM+ (edge>=2.5%)":  summarize(rows.filter(r => ["HIGH", "MEDIUM"].includes(tier(r)))),
+    "LOW+ (edge>=0.5%)":     summarize(rows.filter(r => ["HIGH", "MEDIUM", "LOW"].includes(tier(r)))),
+    "ALL_current (no gate)": summarize(rows),
+  };
+
+  return {
+    ok: true,
+    market: "hr_prop",
+    totalGraded: rows.length,
+    note: "roiPct = unit profit / (win+loss), 1u per play, real American odds; push excluded. ALL_current should match the Performance page; compare gates to pick the threshold.",
+    byTier,
+    gates,
   };
 }
 
