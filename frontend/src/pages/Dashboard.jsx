@@ -212,16 +212,16 @@ function MLBDashboard({ edges, loading, hasFullAccess, navigate, onRefresh }) {
         <EdgePanel title="Top totals edges" icon="📊" edges={oneSidePerGame(edges.totalsEdges)} renderRow={(e) => <TotalsRow edge={e} key={e.gameId + e.side} navigate={navigate} />} emptyText="No edges found in current slate" hasFullAccess={hasFullAccess} navigate={navigate} />
       </div>
       <div style={{ marginBottom: 16 }}>
-        <EdgePanel title="Top home run props" icon="💣" edges={edges.hrPropEdges || []} renderRow={(e) => <HRPropRow edge={e} key={e.player + e.game} />} emptyText="HR prop data updates closer to first pitch" hasFullAccess={hasFullAccess} navigate={navigate} wide scroll />
+        <EdgePanel title="Top home run props" icon="💣" edges={(edges.hrPropEdges || []).slice(0, MAX_PROP_ROWS)} renderRow={(e) => <HRPropRow edge={e} key={e.player + e.game} />} emptyText="HR prop data updates closer to first pitch" hasFullAccess={hasFullAccess} navigate={navigate} wide scroll />
       </div>
       <div style={{ marginBottom: 8, fontSize: 11, color: "#a8915c", display: "flex", alignItems: "center", gap: 6, lineHeight: 1.5 }}>
         ⚠️ Experimental — strikeout & hits projections are v1 and still being calibrated. Treat as directional, not proven.
       </div>
       <div style={{ marginBottom: 16 }}>
-        <EdgePanel title="Pitcher strikeouts" icon="🔥" edges={edges.kPropEdges || []} renderRow={(e) => <KPropRow edge={e} key={e.player + e.game} />} emptyText="K prop data updates closer to first pitch" hasFullAccess={hasFullAccess} navigate={navigate} wide scroll />
+        <EdgePanel title="Pitcher strikeouts" icon="🔥" edges={(edges.kPropEdges || []).slice(0, MAX_PROP_ROWS)} renderRow={(e) => <KPropRow edge={e} key={e.player + e.game} />} emptyText="K prop data updates closer to first pitch" hasFullAccess={hasFullAccess} navigate={navigate} wide scroll />
       </div>
       <div style={{ marginBottom: 16 }}>
-        <EdgePanel title="Batter hits" icon="🏏" edges={edges.hitsPropEdges || []} renderRow={(e) => <HitsPropRow edge={e} key={e.player + e.game} />} emptyText="Hits prop data updates closer to first pitch" hasFullAccess={hasFullAccess} navigate={navigate} wide scroll />
+        <EdgePanel title="Batter hits" icon="🏏" edges={(edges.hitsPropEdges || []).slice(0, MAX_PROP_ROWS)} renderRow={(e) => <HitsPropRow edge={e} key={e.player + e.game} />} emptyText="Hits prop data updates closer to first pitch" hasFullAccess={hasFullAccess} navigate={navigate} wide scroll />
       </div>
 
       <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 8, padding: "16px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
@@ -352,6 +352,11 @@ function LiveBadge() {
 // it surfaces the gap between the sharp market price and our model so the user
 // can apply their own read (e.g. fading a public/streak-inflated favorite).
 // Shows only when the backend attached an `inflation` flag to this edge.
+// Props board is curated, not exhaustive: show only the top N per type (already
+// sorted best-first — HR by likelihood, K/hits by edge). Everything still gets
+// recorded; this just keeps the board a tight shortlist like moneyline/totals.
+const MAX_PROP_ROWS = 8;
+
 // Collapse a mirrored team-market list (both sides of each game are present) to
 // ONE row per game: the side the model actually likes (positive edge). The two
 // sides are mirror images, so listing both just doubles the panel and confuses
