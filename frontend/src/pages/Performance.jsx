@@ -149,7 +149,7 @@ function PerfBody({ data, league }) {
         ))}
       </div>
       {/* Props — its OWN table; never part of the core record or CLV */}
-      <SectionTitle>🎯 Player props</SectionTitle>
+      <SectionTitle>🎯 {propsDisplayLabel(data.props || data.hrProps)}</SectionTitle>
       <PropsCard p={data.props || data.hrProps} league={league} />
       {/* By confidence */}
       <SectionTitle>By confidence tier</SectionTitle>
@@ -259,7 +259,7 @@ function PropsCard({ p, league }) {
   }
   const profit = p.roi >= 0;
   const fmtOdds = p.avgOdds == null ? "—" : (p.avgOdds > 0 ? `+${p.avgOdds}` : `${p.avgOdds}`);
-  const labelLc = (p.label || "prop").toLowerCase();
+  const labelLc = propsDisplayLabel(p).toLowerCase();
   return (
     <div style={{ background: "linear-gradient(180deg,#1a1410,#0f1419)", border: "1px solid #f5970033", borderLeft: "3px solid #f59700", borderRadius: 12, padding: 24, marginBottom: 24 }}>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16 }}>
@@ -307,6 +307,11 @@ function Metric({ label, value, color }) {
 }
 function SectionTitle({ children }) {
   return <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#6b7280", fontWeight: 700, textTransform: "uppercase", marginBottom: 12 }}>{children}</div>;
+}
+function propsDisplayLabel(p) {
+  const mkts = p && p.byMarket ? Object.keys(p.byMarket) : [];
+  if (mkts.length === 1) return marketLabel(mkts[0]); // only one type graded -> name it honestly (e.g. "HR props")
+  return (p && p.label) || "Player props";
 }
 function marketLabel(m) {
   const map = {
