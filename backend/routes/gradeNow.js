@@ -30,6 +30,7 @@ router.get("/", async (req, res) => {
     if (req.query.probe === "1" || req.query.probe === "true") return res.json(await probeReport());
     if (req.query.void_unmatched === "1" || req.query.void_unmatched === "true") return res.json(await voidUnmatched());
     if (req.query.counts === "1" || req.query.counts === "true") return res.json(await countsReport());
+    if (req.query.prop_results === "1" || req.query.prop_results === "true") return res.json(await propResults());
     const graded = await gradeFinishedGames();
     res.json({ ok: true, graded: graded == null ? 0 : graded });
   } catch (err) {
@@ -256,6 +257,55 @@ async function countsReport() {
   }
 
   return { ok: true, overall, byMarket, byDate };
+}
+
+// READ-ONLY. Every graded K / hits pick with projection vs actual, plus per-side
+// aggregates — the raw material for calibrating the projections.
+async function propResults() {
+  const supabase = db();
+  const { data, error } = await supabase
+    .from("model_predictions")
+    .select("market,selection,line,model_prob,odds,result,actual_value,confidence,game_date")
+    .eq("league", "mlb")
+    .in("market", ["player_strikeouts", "player_hits"])
+    .neq("result", "pending")
+    .limit(1000);
+  if (error) return { ok: false, error: error.message };
+
+  const rows = (data || []).map(r => {
+    const ci = (r.selection || "").lastIndexOf(":");
+    const side = ci >= 0 ? r.selection.slice(ci + 1).toUpperCase() : "OVER";
+    const player = ci >= 0 ? r.selection.slice(0, ci) : r.selection;
+    return { market: r.market, player, side, line: r.line, modelProb: r.model_prob, odds: r.odds, result: r.result, actual: r.actual_value, conf: r.confidence, date: r.game_date };
+  });
+
+  function agg(market, side) {
+    const set = rows.filter(r => r.market === market && r.side === side && r.actual != null);
+    const n = set.length;
+    if (!n) return { n: 0 };
+    const wins = set.filter(r => r.result === "win").length;
+    const losses = set.filter(r => r.result === "loss").length;
+    const push = set.filter(r => r.result === "push").length;
+    const mean = (arr) => arr.reduce((a, b) => a + b, 0) / arr.length;
+    return {
+      n, wins, losses, push,
+      hitRatePct: Math.round((wins / (wins + losses || 1)) * 100),
+      meanLine: +mean(set.map(r => r.line)).toFixed(2),
+      meanActual: +mean(set.map(r => r.actual)).toFixed(2),
+      meanModelProb: +mean(set.map(r => r.modelProb)).toFixed(3),
+      actualOverLineRate: +(set.filter(r => r.actual > r.line).length / n).toFixed(2),
+    };
+  }
+
+  return {
+    ok: true,
+    totals: { k: rows.filter(r => r.market === "player_strikeouts").length, hits: rows.filter(r => r.market === "player_hits").length },
+    aggregates: {
+      strikeouts: { OVER: agg("player_strikeouts", "OVER"), UNDER: agg("player_strikeouts", "UNDER") },
+      hits: { OVER: agg("player_hits", "OVER"), UNDER: agg("player_hits", "UNDER") },
+    },
+    rows,
+  };
 }
 
 module.exports = router;
