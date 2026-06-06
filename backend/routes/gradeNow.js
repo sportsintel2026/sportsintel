@@ -20,6 +20,7 @@ const {
   getGameBatterHits, normPlayerName, getEasternDate,
 } = require("../services/mlbStatsApi");
 const { getRawTotalsDebug } = require("../services/oddsApi");
+const { probeExpectedStats } = require("../services/savantApi");
 
 function db() {
   return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
@@ -33,6 +34,7 @@ router.get("/", async (req, res) => {
     if (req.query.counts === "1" || req.query.counts === "true") return res.json(await countsReport());
     if (req.query.prop_results === "1" || req.query.prop_results === "true") return res.json(await propResults());
     if (req.query.hr_tiers === "1" || req.query.hr_tiers === "true") return res.json(await hrTiers());
+    if (req.query.savant_probe === "1" || req.query.savant_probe === "true") return res.json(await probeExpectedStats());
     if (req.query.totals_debug != null) return res.json(await getRawTotalsDebug(req.query.totals_debug));
     if (req.query.totals_audit === "1" || req.query.totals_audit === "true") return res.json(await totalsAudit());
     const graded = await gradeFinishedGames();
