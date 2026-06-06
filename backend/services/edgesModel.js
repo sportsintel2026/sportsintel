@@ -236,6 +236,18 @@ function calculateTotalProjection(game, awayPitcher, homePitcher, awayTeamHit, h
 // recent15 (last-15-day stats) is now an INPUT, not just display: a hitter on a
 // genuine power surge (or slump) gets nudged off their season HR rate. Kept
 // conservative — 15 days is a small sample — so it blends, never dominates.
+//
+// CALIBRATION (2026-06-06, HR): the first real graded sample (808 picks) showed
+// the model's confidence running BACKWARDS — the HIGH-confidence tier claimed a
+// 27.6% game-HR rate but delivered 11.4% over 362 picks (≈7.6% per-PA projected
+// vs ≈2.9% actual), and was its WORST tier by ROI (-21.5%). Cause: the env
+// factors (pitcher × park × iso × weather) multiply RAW, so "good in every
+// category" compounds into fantasy projections (some picks implied a 40%+ game
+// HR chance — no hitter does that). Three principled, reversible damps below.
+// To revert toward old behavior: cap → 0.15, damp → 1.0, shrink → 1.0.
+const HR_PERPA_CAP = 0.08;    // per-PA HR ceiling (was 0.15). Elite sluggers top out ~7-8%/PA.
+const HR_FACTOR_DAMP = 0.5;   // pull the COMBINED env multiplier toward 1 (^0.5 = sqrt): still tilts, can't stack into a lock.
+const HR_PROB_SHRINK = 0.7;   // shrink the adjusted per-PA rate 30% back toward the batter's OWN base rate (keeps player differentiation, unlike shrinking to league avg).
 function calculateHRProbability(batterStats, opposingPitcherStats, game, weather, recent15) {
   if (!batterStats) return null;
   const seasonRate = batterStats.hrPerPA ?? LEAGUE_AVG.hrPerPA;
@@ -264,7 +276,16 @@ function calculateHRProbability(batterStats, opposingPitcherStats, game, weather
     if (weather.tempEffect === "hot") weatherFactor *= 1.08;
     if (weather.tempEffect === "cold") weatherFactor *= 0.92;
   }
-  const perPAProb = Math.min(0.15, baseHRRate * pitcherFactor * parkFactor * isoFactor * weatherFactor);
+  // Environmental adjustment: dampened so good-in-everything tilts the
+  // projection without compounding into a lock (see HR_FACTOR_DAMP note above).
+  const envMult = Math.pow(
+    pitcherFactor * parkFactor * isoFactor * weatherFactor,
+    HR_FACTOR_DAMP
+  );
+  let perPAProb = baseHRRate * envMult;
+  // Shrink the adjusted rate back toward the batter's own base rate, then cap.
+  perPAProb = baseHRRate + HR_PROB_SHRINK * (perPAProb - baseHRRate);
+  perPAProb = Math.max(0, Math.min(HR_PERPA_CAP, perPAProb));
   const noHRProb = Math.pow(1 - perPAProb, expectedPA);
   return round3(1 - noHRProb);
 }
