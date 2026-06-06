@@ -248,7 +248,82 @@ function calculateTotalProjection(game, awayPitcher, homePitcher, awayTeamHit, h
 const HR_PERPA_CAP = 0.08;    // per-PA HR ceiling (was 0.15). Elite sluggers top out ~7-8%/PA.
 const HR_FACTOR_DAMP = 0.5;   // pull the COMBINED env multiplier toward 1 (^0.5 = sqrt): still tilts, can't stack into a lock.
 const HR_PROB_SHRINK = 0.7;   // shrink the adjusted per-PA rate 30% back toward the batter's OWN base rate (keeps player differentiation, unlike shrinking to league avg).
-function calculateHRProbability(batterStats, opposingPitcherStats, game, weather, recent15) {
+
+// ── HR MODEL v2 INPUTS (2026-06-06) ───────────────────────────────────────────
+// Three new signals layered on the calibrated base. Each is bounded so it tilts
+// the projection without re-creating the overconfidence the calibration removed.
+// The 0.08 per-PA cap above is the final backstop beneath all of them.
+//
+// (a) STATCAST power — barrel rate is the most HR-predictive metric available, so
+//     it (blended with xwOBA) becomes the power input, preferred over raw ISO.
+const LEAGUE_BARREL_RATE = 0.080; // league-avg barrels / batted-ball event (~8%)
+const LEAGUE_XWOBA = 0.320;       // league-avg xwOBA
+function clampHR(x, lo, hi) { return Math.max(lo, Math.min(hi, x)); }
+function powerFactor(batterStats, statcast) {
+  const parts = [];
+  if (statcast) {
+    if (statcast.barrelRate != null) {
+      let br = statcast.barrelRate; if (br > 1) br /= 100; // auto-normalize percent vs fraction
+      parts.push(clampHR(br / LEAGUE_BARREL_RATE, 0.6, 1.8));
+    }
+    if (statcast.xwOBA != null && statcast.xwOBA > 0) {
+      parts.push(clampHR(statcast.xwOBA / LEAGUE_XWOBA, 0.7, 1.5));
+    }
+  }
+  if (parts.length === 0) {
+    // No Statcast — fall back to the original ISO-based power factor.
+    return (batterStats && batterStats.iso) ? (batterStats.iso / LEAGUE_AVG.iso) ** 0.5 : 1.0;
+  }
+  const avg = parts.reduce((a, b) => a + b, 0) / parts.length;
+  return clampHR(avg, 0.85, 1.30); // hard cap; further sqrt-dampened inside the env stack
+}
+
+// (b) BATTER vs PITCHER — mostly noise (tiny samples, HR is a rare event), so it
+//     is a BOUNDED nudge only: needs a real sample, sample-weighted, capped ±12%.
+//     Raise BVP_MAX_TILT to trust it more (not recommended), 0 to disable.
+const BVP_MIN_AB = 20;     // below this many career AB vs the pitcher → ignore
+const BVP_FULL_AB = 60;    // weight ramps to ~full here (HR-vs-pitcher rarely exceeds this)
+const BVP_MAX_TILT = 0.12; // max ± influence on the projection
+function bvpNudge(bvp) {
+  if (!bvp || (bvp.atBats || 0) < BVP_MIN_AB || bvp.hr == null) return 1.0;
+  const bvpRate = bvp.hr / bvp.atBats;             // HR per AB vs this pitcher
+  const w = Math.min(1, bvp.atBats / BVP_FULL_AB); // sample weight
+  const ratio = bvpRate / LEAGUE_AVG.hrPerPA;      // vs league HR rate
+  const tilt = BVP_MAX_TILT * w * clampHR(ratio - 1, -1, 1);
+  return clampHR(1 + tilt, 1 - BVP_MAX_TILT, 1 + BVP_MAX_TILT);
+}
+
+// (c) LINEUP SPOT → expected plate appearances. Leadoff sees ~4.6 PA/game, the
+//     9-hole ~3.7 — more PA = more HR chances. Unknown order falls back to 4.1.
+const LINEUP_PA = { 1: 4.65, 2: 4.55, 3: 4.45, 4: 4.30, 5: 4.20, 6: 4.05, 7: 3.95, 8: 3.85, 9: 3.75 };
+function expectedPAForOrder(order) { return LINEUP_PA[order] ?? 4.1; }
+
+// (d) MARKET PRIOR (owner's insight, 2026-06-06): the book's price is a sharp
+//     signal of true HR likelihood. The model may sit at most this multiple above
+//     the book's implied prob — a long price is the book's clue the hitter is
+//     unlikely, so a model that claims a deep longshot is a lock is almost always
+//     wrong. Caps longshot "edges"; lets shorter-priced book-likely hitters rise.
+//     1.0 = never bet above the book; raise to trust the model's disagreement more.
+const MAX_OVER_MARKET = 1.5;
+
+// (d-exception) BvP override on the market cap: a LONGSHOT with a GENUINE record
+// vs this exact pitcher earns a higher ceiling (2.0× instead of 1.5×). Strictly
+// gated so it can't re-open the longshot leak the cap exists to plug — only a
+// real sample qualifies (30+ career AB, 2+ HR), and only on longshot prices
+// (+400 and up), where the cap actually binds. Thin "2-for-6" samples do NOT
+// qualify. Even when it fires, the 0.08 per-PA cap still backstops the result.
+const MAX_OVER_MARKET_BVP = 2.0; // elevated cap multiple when BvP qualifies
+const BVP_EXC_MIN_AB = 30;       // need a real sample vs the pitcher
+const BVP_EXC_MIN_HR = 2;        // and demonstrated power within it
+const BVP_EXC_MIN_ODDS = 400;    // only for longshots (the +450–+1000 band)
+function marketCapMult(bvp, americanOdds) {
+  const qualifies =
+    americanOdds != null && americanOdds >= BVP_EXC_MIN_ODDS &&
+    bvp && (bvp.atBats || 0) >= BVP_EXC_MIN_AB && (bvp.hr || 0) >= BVP_EXC_MIN_HR;
+  return qualifies ? MAX_OVER_MARKET_BVP : MAX_OVER_MARKET;
+}
+
+function calculateHRProbability(batterStats, opposingPitcherStats, game, weather, recent15, statcast, bvp, battingOrder) {
   if (!batterStats) return null;
   const seasonRate = batterStats.hrPerPA ?? LEAGUE_AVG.hrPerPA;
   if (seasonRate === 0) return null;
@@ -264,11 +339,11 @@ function calculateHRProbability(batterStats, opposingPitcherStats, game, weather
     baseHRRate = Math.max(seasonRate * 0.4, Math.min(seasonRate * 1.6, blended));
   }
 
-  const expectedPA = 4.1;
+  const expectedPA = expectedPAForOrder(battingOrder); // (c) lineup-aware PA
   const pitcherHR9 = opposingPitcherStats?.homeRunsPer9 ?? LEAGUE_AVG.homeRunsPer9;
   const pitcherFactor = pitcherHR9 / LEAGUE_AVG.homeRunsPer9;
   const parkFactor = game.parkHRFactor || 1.0;
-  const isoFactor = batterStats.iso ? (batterStats.iso / LEAGUE_AVG.iso) ** 0.5 : 1.0;
+  const powFactor = powerFactor(batterStats, statcast); // (a) Statcast-preferred power
   let weatherFactor = 1.0;
   if (weather && !weather.indoor) {
     if (weather.windEffect === "out") weatherFactor *= 1.15;
@@ -279,10 +354,12 @@ function calculateHRProbability(batterStats, opposingPitcherStats, game, weather
   // Environmental adjustment: dampened so good-in-everything tilts the
   // projection without compounding into a lock (see HR_FACTOR_DAMP note above).
   const envMult = Math.pow(
-    pitcherFactor * parkFactor * isoFactor * weatherFactor,
+    pitcherFactor * parkFactor * powFactor * weatherFactor,
     HR_FACTOR_DAMP
   );
-  let perPAProb = baseHRRate * envMult;
+  // (b) BvP applied as a small bounded nudge OUTSIDE the dampened stack.
+  const bvpFactor = bvpNudge(bvp);
+  let perPAProb = baseHRRate * envMult * bvpFactor;
   // Shrink the adjusted rate back toward the batter's own base rate, then cap.
   perPAProb = baseHRRate + HR_PROB_SHRINK * (perPAProb - baseHRRate);
   perPAProb = Math.max(0, Math.min(HR_PERPA_CAP, perPAProb));
@@ -964,10 +1041,22 @@ async function calculateHRPropEdges(games, hrOddsByEvent) {
     const hrOdds = eventId ? hrOddsByEvent[eventId] : null;
     if (!hrOdds || hrOdds.length === 0) continue;
     const weather = await getWeatherForVenue(game.venue);
+    // v2: pull both teams' batting orders once per game (confirmed when MLB posts
+    // it, recent-game order as fallback) so each batter gets a lineup-aware PA.
+    const [awayLineupRes, homeLineupRes] = await Promise.all([
+      getTeamLineup(game.awayId, game.id),
+      getTeamLineup(game.homeId, game.id),
+    ]);
     for (const propOdds of hrOdds) {
       const batter = await findPlayerByName(propOdds.player, [game.awayId, game.homeId]);
       if (!batter) continue;
       const onAwayTeam = batter.teamId === game.awayId;
+      // v2: find this batter's spot in his team's batting order (1-9), null if absent.
+      const myLineupRes = onAwayTeam ? awayLineupRes : homeLineupRes;
+      const myLineup = (myLineupRes && myLineupRes.lineup) || [];
+      const lineupIdx = myLineup.findIndex(p => p.id === batter.id);
+      const battingOrder = lineupIdx >= 0 ? lineupIdx + 1 : null;
+      const lineupSource = (myLineupRes && myLineupRes.source) || "none";
       const opposingPitcherProbable = onAwayTeam ? game.homeProbable : game.awayProbable;
       const opposingPitcherStats = opposingPitcherProbable
         ? regressThinSample(await getPitcherSeasonStats(opposingPitcherProbable.id))
@@ -978,8 +1067,16 @@ async function calculateHRPropEdges(games, hrOddsByEvent) {
         opposingPitcherProbable ? getBatterVsPitcherHistory(batter.id, opposingPitcherProbable.id) : null,
         getBatterStatcast(batter.id),
       ]);
-      const hrProb = calculateHRProbability(batterStats, opposingPitcherStats, game, weather, recent15);
-      if (hrProb == null) continue;
+      const hrProbRaw = calculateHRProbability(batterStats, opposingPitcherStats, game, weather, recent15, statcast, bvp, battingOrder);
+      if (hrProbRaw == null) continue;
+      // (d) Market cap: don't let the model sit more than the cap multiple above
+      // the book's implied prob. Default 1.5×; a longshot with a genuine record vs
+      // this pitcher (see marketCapMult) earns 2.0×. Only binds on wild disagreement.
+      const marketImplied = americanToImpliedProb(propOdds.price);
+      const capMult = marketCapMult(bvp, propOdds.price);
+      const hrProb = (marketImplied != null && marketImplied > 0)
+        ? Math.min(hrProbRaw, marketImplied * capMult)
+        : hrProbRaw;
       const edge = sanitizeEdge(calculateEdge(hrProb, propOdds.price));
       allHRProps.push({
         gameId: game.id,
@@ -1021,6 +1118,9 @@ async function calculateHRPropEdges(games, hrOddsByEvent) {
           xwOBA: statcast.xwOBA,
         } : null,
         parkHRFactor: game.parkHRFactor,
+        battingOrder,
+        lineupSource,
+        bvpCapException: capMult > MAX_OVER_MARKET,
         opposingPitcherHR9: opposingPitcherStats?.homeRunsPer9 ?? null,
         weatherEffect: weather?.windEffect || null,
       });
@@ -1028,7 +1128,7 @@ async function calculateHRPropEdges(games, hrOddsByEvent) {
   }
   return allHRProps
     .filter(p => p.edge != null && p.edge > -0.05)
-    .sort((a, b) => (b.edge ?? -1) - (a.edge ?? -1));
+    .sort((a, b) => (b.hrProb ?? -1) - (a.hrProb ?? -1)); // likelihood-first, not payout-first
 }
 
 const MAX_K_GAMES = 8; // cap games we pull K props for (Odds API credit budget)
