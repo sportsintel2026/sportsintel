@@ -429,26 +429,78 @@ function strikeoutOverProb(pitcherStats, oppTeamStats, line) {
   return round3(shrinkProb(1 - poissonCdf(Math.floor(line), lambda)));
 }
 
-// ── BATTER HITS PROP MODEL ────────────────────────────────────────────────────
-// Per-AB hit prob = batting avg, adjusted by the opposing starter's BAA, over
-// expected at-bats. Single-game hits modeled as Poisson(expected hits). v1 — same
-// calibration family as the K model, so tune both together once results land.
+// ── BATTER HITS PROP MODEL v2 ─────────────────────────────────────────────────
+// True-talent per-AB hit rate driven by Baseball Savant xBA (expected batting avg
+// from contact quality) — NOT raw season AVG, which is luck-noisy and was making the
+// old model chase hot/cold streaks. Adjusted gently by the opposing starter's BAA,
+// spread over LINEUP-BASED expected at-bats, and the single-game hit count is modeled
+// BINOMIALLY (the old Poisson form overstated P(0 hits) → systematic false Unders).
+// Finally the projection is ANCHORED to the de-vigged market: this is a sharp full-game
+// market that season-level inputs only narrowly beat, so we trust it substantially and
+// only diverge when our xBA/AB read disagrees strongly. No shrink-to-0.5 (that dragged
+// every legit Over toward a coin flip). EXPERIMENTAL — validate on graded results.
 const LEAGUE_BAA = 0.245;          // league batting average against
-const DEFAULT_AB_PER_GAME = 3.4;   // expected at-bats (lowered 3.8->3.4 2026-06-06: model over-picked fringe/platoon bats assuming full-regular ABs)
+const DEFAULT_AB_PER_GAME = 3.7;   // fallback expected AB when lineup spot unknown (regular starter)
+const HITS_MARKET_WEIGHT = 0.60;   // anchor weight on the sharp de-vigged market (0=pure model, 1=pure market)
+const HITS_XBA_BLEND = 0.70;       // weight on Savant xBA vs season AVG when xBA present
 
-function hitsOverProb(batterStats, oppPitcherStats, line) {
-  if (!batterStats || line == null) return null;
-  const avg = batterStats.avg;
-  if (avg == null || avg <= 0) return null;
-  let perAB = avg;
+// Expected AB per game by batting-order spot (1..9). Top of order sees more AB;
+// reflects ~PA-per-spot minus walks. Beats the old flat 3.4 for everyone.
+const AB_BY_SPOT = [3.95, 3.88, 3.80, 3.72, 3.63, 3.55, 3.47, 3.40, 3.33];
+function expABForSpot(spot) {
+  if (!spot || spot < 1 || spot > 9) return DEFAULT_AB_PER_GAME;
+  return AB_BY_SPOT[spot - 1];
+}
+
+// Binomial helpers (log-space PMF for stability). Used for line >= 1.5; the standard
+// 0.5 line uses the closed form 1-(1-p)^AB so fractional expected AB is honoured.
+function binomPmf(k, n, p) {
+  if (k < 0 || k > n) return 0;
+  let logC = 0;
+  for (let i = 1; i <= k; i++) logC += Math.log((n - i + 1) / i);
+  return Math.exp(logC + k * Math.log(p) + (n - k) * Math.log(1 - p));
+}
+function binomCdf(k, n, p) {
+  if (p <= 0) return 1;
+  if (p >= 1) return k >= n ? 1 : 0;
+  let s = 0;
+  for (let i = 0; i <= k; i++) s += binomPmf(i, n, p);
+  return Math.min(1, s);
+}
+
+// opts: { xBA, expAB, marketFairOver } — all optional (backward compatible).
+function hitsOverProb(batterStats, oppPitcherStats, line, opts = {}) {
+  if (line == null) return null;
+  const avg = batterStats && batterStats.avg != null ? batterStats.avg : null;
+  const xBA = opts.xBA != null && opts.xBA > 0 ? opts.xBA : null;
+  if ((avg == null || avg <= 0) && xBA == null) return null;
+
+  // 1) True-talent per-AB hit rate: prefer xBA, blend with season AVG for stability.
+  let base;
+  if (xBA != null) base = (avg != null && avg > 0) ? (HITS_XBA_BLEND * xBA + (1 - HITS_XBA_BLEND) * avg) : xBA;
+  else base = avg;
+
+  // 2) Gentle opposing-pitcher adjustment (tighter clamp than v1).
+  let perAB = base;
   const baa = oppPitcherStats && oppPitcherStats.battingAvgAgainst;
-  if (baa != null && baa > 0) {
-    perAB = avg * Math.max(0.80, Math.min(1.20, baa / LEAGUE_BAA));
-  }
-  perAB = Math.max(0.10, Math.min(0.45, perAB)); // sane per-AB bounds
-  const expHits = DEFAULT_AB_PER_GAME * perAB;
-  if (!(expHits > 0)) return null;
-  return round3(shrinkProb(1 - poissonCdf(Math.floor(line), expHits)));
+  if (baa != null && baa > 0) perAB = base * Math.max(0.85, Math.min(1.15, baa / LEAGUE_BAA));
+  perAB = Math.max(0.10, Math.min(0.45, perAB));
+
+  // 3) Lineup-based expected at-bats.
+  const expAB = opts.expAB != null && opts.expAB > 0 ? opts.expAB : DEFAULT_AB_PER_GAME;
+
+  // 4) Binomial P(over). k+1 hits needed to clear the line.
+  const k = Math.floor(line);
+  let pOver;
+  if (k <= 0) pOver = 1 - Math.pow(1 - perAB, expAB);        // P(>=1 hit) — fractional AB ok
+  else pOver = 1 - binomCdf(k, Math.max(1, Math.round(expAB)), perAB);
+  if (!(pOver >= 0)) return null;
+
+  // 5) Anchor to the sharp de-vigged market (no shrink-to-0.5).
+  const m = opts.marketFairOver;
+  let finalP = pOver;
+  if (m != null && m > 0 && m < 1) finalP = HITS_MARKET_WEIGHT * m + (1 - HITS_MARKET_WEIGHT) * pOver;
+  return round3(Math.max(0.02, Math.min(0.98, finalP)));
 }
 
 // ── EDGE CALCULATION ──────────────────────────────────────────────────────────
@@ -1216,10 +1268,18 @@ const MAX_HITS_GAMES = 6; // cap games we pull hits props for (credit budget)
 async function calculateHitsPropEdges(games, hitsOddsByEvent) {
   const targetGames = games.slice(0, MAX_HITS_GAMES);
   const out = [];
+  // Savant xBA map once (cached); null-safe — model falls back to season AVG if absent.
+  let savantMap = null;
+  try { savantMap = await getBatterExpectedStats(); } catch (e) { savantMap = null; }
   for (const game of targetGames) {
     const eventId = findEventIdForGame(game, hitsOddsByEvent);
     const hitsOdds = eventId ? hitsOddsByEvent[eventId] : null;
     if (!hitsOdds || hitsOdds.length === 0) continue;
+    // Lineups once per game for batting-order spot → expected AB.
+    const [awayLineupRes, homeLineupRes] = await Promise.all([
+      getTeamLineup(game.awayId, game.id),
+      getTeamLineup(game.homeId, game.id),
+    ]);
     for (const propOdds of hitsOdds) {
       const batter = await findPlayerByName(propOdds.player, [game.awayId, game.homeId]);
       if (!batter) continue;
@@ -1229,9 +1289,16 @@ async function calculateHitsPropEdges(games, hitsOddsByEvent) {
         ? regressThinSample(await getPitcherSeasonStats(opposingPitcherProbable.id))
         : null;
       const batterStats = await getBatterSeasonStats(batter.id);
-      const overProb = hitsOverProb(batterStats, oppPitcherStats, propOdds.line);
-      if (overProb == null) continue;
       const fairOver = devigTwoWay(propOdds.overOdds, propOdds.underOdds);
+      const lineupRes = onAwayTeam ? awayLineupRes : homeLineupRes;
+      const myLineup = (lineupRes && lineupRes.lineup) || [];
+      const spotIdx = myLineup.findIndex(p => p.id === batter.id);
+      const expAB = expABForSpot(spotIdx >= 0 ? spotIdx + 1 : null);
+      const savantXBA = savantMap ? (savantMap.get(batter.id)?.xBA ?? null) : null;
+      const overProb = hitsOverProb(batterStats, oppPitcherStats, propOdds.line, {
+        xBA: savantXBA, expAB, marketFairOver: fairOver,
+      });
+      if (overProb == null) continue;
       const underProb = round3(1 - overProb);
       const edgeOver = sanitizeEdge(fairOver != null ? round3(overProb - fairOver) : calculateEdge(overProb, propOdds.overOdds));
       const edgeUnder = sanitizeEdge(fairOver != null ? round3(underProb - (1 - fairOver)) : calculateEdge(underProb, propOdds.underOdds));
@@ -1297,16 +1364,30 @@ async function debugHitsProps(games, hitsOddsByEvent) {
       const oppBaa = oppPitcherStats?.battingAvgAgainst ?? null;
       const batterStats = batter ? await getBatterSeasonStats(batter.id) : null;
 
-      let perAB = null, expHits = null;
-      if (batterStats && batterStats.avg != null && batterStats.avg > 0) {
-        perAB = batterStats.avg;
-        if (oppBaa != null && oppBaa > 0) perAB = batterStats.avg * Math.max(0.80, Math.min(1.20, oppBaa / LEAGUE_BAA));
-        perAB = Math.max(0.10, Math.min(0.45, perAB));
-        expHits = round3(DEFAULT_AB_PER_GAME * perAB);
-      }
-      const overProb = hitsOverProb(batterStats, oppPitcherStats, propOdds.line);
-      const underProb = overProb != null ? round3(1 - overProb) : null;
+      // v2 inputs (computed for ALL batters; cheap — lineups already fetched above).
+      const lineupResAll = batter ? (onAwayTeam ? awayLineupRes : homeLineupRes) : null;
+      const myLineupAll = (lineupResAll && lineupResAll.lineup) || [];
+      const spotIdxAll = batter ? myLineupAll.findIndex(p => p.id === batter.id) : -1;
+      const expABAll = expABForSpot(spotIdxAll >= 0 ? spotIdxAll + 1 : null);
+      const savantXBAAll = (batter && savantMap) ? (savantMap.get(batter.id)?.xBA ?? null) : null;
       const marketFairOver = devigTwoWay(propOdds.overOdds, propOdds.underOdds);
+
+      // Informational: the per-AB rate and expected hits the v2 model actually uses.
+      let perAB = null, expHits = null;
+      const baseAvg = batterStats && batterStats.avg != null ? batterStats.avg : null;
+      if ((baseAvg != null && baseAvg > 0) || savantXBAAll != null) {
+        let base;
+        if (savantXBAAll != null) base = (baseAvg != null && baseAvg > 0) ? (HITS_XBA_BLEND * savantXBAAll + (1 - HITS_XBA_BLEND) * baseAvg) : savantXBAAll;
+        else base = baseAvg;
+        perAB = base;
+        if (oppBaa != null && oppBaa > 0) perAB = base * Math.max(0.85, Math.min(1.15, oppBaa / LEAGUE_BAA));
+        perAB = round3(Math.max(0.10, Math.min(0.45, perAB)));
+        expHits = round3(expABAll * perAB);
+      }
+      const overProb = hitsOverProb(batterStats, oppPitcherStats, propOdds.line, {
+        xBA: savantXBAAll, expAB: expABAll, marketFairOver,
+      });
+      const underProb = overProb != null ? round3(1 - overProb) : null;
       let modelSide = null;
       if (overProb != null) {
         const eOver = marketFairOver != null ? overProb - marketFairOver : null;
@@ -1360,6 +1441,8 @@ async function debugHitsProps(games, hitsOddsByEvent) {
         hits: batterStats?.hits ?? null,
         oppPitcher: opposingPitcherProbable?.name ?? null,
         oppBaaAgainst: oppBaa,
+        usedXBA: savantXBAAll,
+        expAB: round3(expABAll),
         perAB: perAB != null ? round3(perAB) : null,
         expHits,
         modelOverProb: overProb,
