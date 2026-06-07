@@ -88,6 +88,53 @@ async function getBatterExpectedStats(year) {
   }
 }
 
+// ── BARREL RATE (separate Savant leaderboard) ─────────────────────────────────
+// xBA/xwOBA come from the expected_statistics leaderboard above. Barrel rate lives
+// on a DIFFERENT leaderboard (exit velocity & barrels). We don't yet know the exact
+// slug / min param / column names for the CSV export, so probeBarrels tries several
+// candidate URLs in one shot and reports what each returns — one Railway run reveals
+// the working endpoint AND the real header so we can build the parser with no guessing.
+const BARREL_URL_CANDIDATES = (year) => ([
+  `${SAVANT_BASE}/leaderboard/statcast?type=batter&year=${year}&position=&team=&min=1&csv=true`,
+  `${SAVANT_BASE}/leaderboard/statcast?type=batter&year=${year}&position=&team=&min=q&csv=true`,
+  `${SAVANT_BASE}/leaderboard/exit_velocity_barrels?type=batter&year=${year}&position=&team=&min=1&csv=true`,
+  `${SAVANT_BASE}/leaderboard/exit_velocity_barrels?type=batter&year=${year}&min=q&csv=true`,
+]);
+
+async function probeBarrels(year) {
+  const y = year || new Date().getFullYear();
+  const urls = BARREL_URL_CANDIDATES(y);
+  const attempts = [];
+  for (const url of urls) {
+    try {
+      const res = await axios.get(url, {
+        timeout: 15000,
+        responseType: "text",
+        transformResponse: (x) => x,
+        validateStatus: () => true,
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; WizePicks/1.0)", Accept: "text/csv,text/plain,*/*" },
+      });
+      const body = typeof res.data === "string" ? res.data : JSON.stringify(res.data);
+      const lines = body.split(/\r?\n/).filter((l) => l.length > 0);
+      const isHtml = /^\s*<(!doctype|html)/i.test(body);
+      const looksCsv = !isHtml && lines.length > 1 && /,/.test(lines[0]);
+      attempts.push({
+        url, httpStatus: res.status,
+        contentType: (res.headers && res.headers["content-type"]) || null,
+        byteLength: body.length, dataLineCount: lines.length,
+        looksCsv, looksLikeHtml: isHtml,
+        headerLine: looksCsv ? lines[0] : (isHtml ? "(html page)" : (lines[0] || null)),
+        firstDataRow: looksCsv ? lines[1] : null,
+      });
+      if (looksCsv) break; // found a working CSV endpoint — stop here
+    } catch (e) {
+      attempts.push({ url, error: e.message });
+    }
+  }
+  const winner = attempts.find((a) => a.looksCsv) || null;
+  return { ok: !!winner, year: y, winningUrl: winner ? winner.url : null, attempts };
+}
+
 // Raw probe: report what Savant returns WITHOUT parsing (used to confirm reachability
 // and the real column layout). Never throws.
 async function probeExpectedStats(year) {
@@ -119,4 +166,5 @@ async function probeExpectedStats(year) {
 module.exports = {
   getBatterExpectedStats, parseExpectedStatsCsv, parseCsvLine,
   probeExpectedStats, expectedStatsUrl, SAVANT_BASE,
+  probeBarrels,
 };
