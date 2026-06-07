@@ -41,7 +41,8 @@ function isQualified(r) {
 // The cutoff date is also returned to the page so it can show an honest
 // "tracking reset on <date>" note rather than silently dropping a record.
 const MARKET_RESET = {
-  hr_prop: "2026-06-06", // start HR count today (note: 6/6 picks recorded pre-deploy are old-model)
+  hr_prop: "2026-06-07",     // bumped 6/6→6/7: HR power factor revived onto Savant xwOBA today (was ISO fallback), so count the new model from a clean slate
+  player_hits: "2026-06-07", // hits model rebuilt today onto xBA + binomial + market anchor; earlier picks were the broken season-AVG model
 };
 function afterReset(r) {
   const cut = MARKET_RESET[r.market];
