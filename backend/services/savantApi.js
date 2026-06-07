@@ -90,10 +90,63 @@ async function getBatterExpectedStats(year) {
 
 // ── BARREL RATE (separate Savant leaderboard) ─────────────────────────────────
 // xBA/xwOBA come from the expected_statistics leaderboard above. Barrel rate lives
-// on a DIFFERENT leaderboard (exit velocity & barrels). We don't yet know the exact
-// slug / min param / column names for the CSV export, so probeBarrels tries several
-// candidate URLs in one shot and reports what each returns — one Railway run reveals
-// the working endpoint AND the real header so we can build the parser with no guessing.
+// on the statcast (exit velocity & barrels) leaderboard — confirmed live 2026-06-07:
+// HTTP 200, text/csv, ~538 batters, columns incl. player_id, attempts (BBE),
+// brl_percent (barrels per batted-ball event, in PERCENT units), brl_pa.
+function barrelsUrl(year) {
+  return `${SAVANT_BASE}/leaderboard/statcast?type=batter&year=${year}&position=&team=&min=1&csv=true`;
+}
+
+// Parse the barrels CSV into a Map: playerId(Number) -> { barrelRate, brlPa, bbe }.
+// brl_percent is in PERCENT units (Arraez 0.4 = 0.4%), so divide by 100 to get the
+// fraction the HR power factor expects (relative to LEAGUE_BARREL_RATE 0.080).
+function parseBarrelsCsv(text) {
+  const map = new Map();
+  if (!text || typeof text !== "string") return map;
+  const lines = text.split(/\r?\n/).filter((l) => l.length > 0);
+  if (lines.length < 2) return map;
+  const cols = parseCsvLine(lines[0]).map((c) => c.trim());
+  const iId = cols.indexOf("player_id");
+  const iBrl = cols.indexOf("brl_percent");
+  const iAtt = cols.indexOf("attempts");
+  const iBrlPa = cols.indexOf("brl_pa");
+  if (iId < 0 || iBrl < 0) return map; // wrong shape — bail rather than mis-map
+  for (let r = 1; r < lines.length; r++) {
+    const f = parseCsvLine(lines[r]);
+    const id = parseInt(f[iId], 10);
+    const pct = parseFloat(f[iBrl]);
+    if (!Number.isFinite(id) || !Number.isFinite(pct)) continue;
+    map.set(id, {
+      barrelRate: pct / 100, // percent -> fraction
+      brlPa: iBrlPa >= 0 ? (parseFloat(f[iBrlPa]) || null) : null,
+      bbe: iAtt >= 0 ? (parseInt(f[iAtt], 10) || null) : null,
+    });
+  }
+  return map;
+}
+
+let _barrelCache = { date: null, map: null };
+async function getBatterBarrels(year) {
+  const y = year || new Date().getFullYear();
+  const today = new Date().toISOString().slice(0, 10);
+  if (_barrelCache.map && _barrelCache.date === today) return _barrelCache.map;
+  try {
+    const res = await axios.get(barrelsUrl(y), {
+      timeout: 15000,
+      responseType: "text",
+      transformResponse: (x) => x,
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; WizePicks/1.0)", Accept: "text/csv,*/*" },
+    });
+    const map = parseBarrelsCsv(typeof res.data === "string" ? res.data : "");
+    if (map.size > 0) { _barrelCache = { date: today, map }; return map; }
+    return null;
+  } catch (e) {
+    return null;
+  }
+}
+
+// Raw probe (kept for re-checking the endpoint): tries candidate URLs and reports
+// what each returns. The first (statcast min=1) is the confirmed working one.
 const BARREL_URL_CANDIDATES = (year) => ([
   `${SAVANT_BASE}/leaderboard/statcast?type=batter&year=${year}&position=&team=&min=1&csv=true`,
   `${SAVANT_BASE}/leaderboard/statcast?type=batter&year=${year}&position=&team=&min=q&csv=true`,
@@ -166,5 +219,5 @@ async function probeExpectedStats(year) {
 module.exports = {
   getBatterExpectedStats, parseExpectedStatsCsv, parseCsvLine,
   probeExpectedStats, expectedStatsUrl, SAVANT_BASE,
-  probeBarrels,
+  probeBarrels, getBatterBarrels, parseBarrelsCsv, barrelsUrl,
 };
