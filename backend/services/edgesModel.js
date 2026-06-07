@@ -913,7 +913,7 @@ async function calculateGameEdges(game, oddsForGame) {
     getTeamSeasonStats(game.homeId),
     getTeamBullpenStats(game.awayId),
     getTeamBullpenStats(game.homeId),
-    getWeatherForVenue(game.venue),
+    getWeatherForVenue(game.venue, game.startTimeUTC),
     game.awayProbable ? getPitcherRecentStarts(game.awayProbable.id, 3) : [],
     game.homeProbable ? getPitcherRecentStarts(game.homeProbable.id, 3) : [],
     getTeamHandednessSplits(game.awayId),
@@ -1190,7 +1190,7 @@ async function calculateHRPropEdges(games, hrOddsByEvent) {
     const eventId = findEventIdForGame(game, hrOddsByEvent);
     const hrOdds = eventId ? hrOddsByEvent[eventId] : null;
     if (!hrOdds || hrOdds.length === 0) continue;
-    const weather = await getWeatherForVenue(game.venue);
+    const weather = await getWeatherForVenue(game.venue, game.startTimeUTC);
     // v2: pull both teams' batting orders once per game (confirmed when MLB posts
     // it, recent-game order as fallback) so each batter gets a lineup-aware PA.
     const [awayLineupRes, homeLineupRes] = await Promise.all([
