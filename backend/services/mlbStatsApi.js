@@ -418,14 +418,35 @@ function ipToOuts(ip) {
 function outsToIp(outs) {
   return `${Math.floor(outs / 3)}.${outs % 3}`;
 }
+// Caches: prior-date schedules and final box scores are immutable, so cache them
+// for the process lifetime; usage results cache per team per day. This keeps the
+// edges hot path cheap — the day's first compute fills the cache, the rest are free.
+const _pastScheduleCache = new Map();  // date -> games[]
+const _boxscoreCache = new Map();      // gamePk -> boxscore json
+const _bullpenUsageCache = new Map();  // `${tid}:${date}:${days}` -> usage
+async function _scheduleForPastDate(date) {
+  if (_pastScheduleCache.has(date)) return _pastScheduleCache.get(date);
+  let games = [];
+  try { games = await getScheduleForDate(date); } catch (_) { games = []; }
+  _pastScheduleCache.set(date, games);
+  return games;
+}
+async function _boxscoreCached(gamePk) {
+  if (_boxscoreCache.has(gamePk)) return _boxscoreCache.get(gamePk);
+  let box = null;
+  try { box = await mlbGet(`/game/${gamePk}/boxscore`); } catch (_) { box = null; }
+  _boxscoreCache.set(gamePk, box);
+  return box;
+}
 async function getTeamBullpenUsage(teamId, days = 3) {
   if (!teamId) return null;
   const tid = Number(teamId);
+  const cacheKey = `${tid}:${getEasternDate(0)}:${days}`;
+  if (_bullpenUsageCache.has(cacheKey)) return _bullpenUsageCache.get(cacheKey);
   const recent = [];
   for (let d = 1; d <= days; d++) {
     const date = getEasternDate(-d);
-    let games = [];
-    try { games = await getScheduleForDate(date); } catch (_) { continue; }
+    const games = await _scheduleForPastDate(date);
     for (const g of games) {
       if (g.status !== "final") continue;
       const isAway = Number(g.awayId) === tid;
@@ -438,8 +459,7 @@ async function getTeamBullpenUsage(teamId, days = 3) {
   let reliefOutsTotal = 0;
   const relieverDays = new Map();
   for (const r of recent) {
-    let box;
-    try { box = await mlbGet(`/game/${r.gamePk}/boxscore`); } catch (_) { continue; }
+    const box = await _boxscoreCached(r.gamePk);
     const team = box && box.teams && box.teams[r.side];
     const order = team && Array.isArray(team.pitchers) ? team.pitchers : [];
     if (order.length === 0) continue;
@@ -459,12 +479,14 @@ async function getTeamBullpenUsage(teamId, days = 3) {
     gamesOut.push({ date: r.date, opponent: r.opponent, reliefIP: outsToIp(reliefOuts), reliefOuts, relievers });
   }
   const multiDay = [...relieverDays.entries()].filter(([, set]) => set.size >= 2).map(([n]) => n);
-  return {
+  const result = {
     teamId: tid, days, gamesInWindow: gamesOut.length,
     reliefOutsTotal, reliefIPTotal: outsToIp(reliefOutsTotal),
     distinctRelievers: relieverDays.size, relieversUsedMultipleDays: multiDay,
     games: gamesOut,
   };
+  _bullpenUsageCache.set(cacheKey, result);
+  return result;
 }
 
 // ── Pitcher throwing hand ("L" or "R") ──────────────────────────────────────
