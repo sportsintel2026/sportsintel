@@ -15,6 +15,7 @@ const PARK_HR_FACTOR = {
   "Fenway Park": 0.94, "Camden Yards": 0.93, "Tropicana Field": 0.92,
   "Nationals Park": 0.91, "T-Mobile Park": 0.90, "loanDepot park": 0.88,
   "Oracle Park": 0.85, "Oakland Coliseum": 0.84, "Sutter Health Park": 1.05,
+  "Rate Field": 1.09,
 };
 const PARK_RUN_FACTOR = {
   "Coors Field": 1.18, "Great American Ball Park": 1.08, "Globe Life Field": 1.07,
@@ -27,9 +28,21 @@ const PARK_RUN_FACTOR = {
   "Camden Yards": 0.95, "Nationals Park": 0.94, "Petco Park": 0.93,
   "Tropicana Field": 0.92, "loanDepot park": 0.91, "T-Mobile Park": 0.90,
   "Oracle Park": 0.89, "Oakland Coliseum": 0.88, "Sutter Health Park": 1.02,
+  "Rate Field": 1.02,
 };
-function getParkHRFactor(venueName) { return PARK_HR_FACTOR[venueName] ?? 1.0; }
-function getParkRunFactor(venueName) { return PARK_RUN_FACTOR[venueName] ?? 1.0; }
+// Some stadiums get sponsor renames; the schedule feed returns the CURRENT name
+// while the tables above are keyed by canonical names. Without this, a renamed
+// park silently falls back to a neutral 1.0 factor (no park adjustment at all).
+// Map current feed strings -> the canonical table key so the factor still applies.
+// To handle a future rename, just add one line here.
+const VENUE_ALIASES = {
+  "Daikin Park": "Minute Maid Park",                  // HOU (renamed from Minute Maid Park)
+  "UNIQLO Field at Dodger Stadium": "Dodger Stadium", // LAD sponsor name
+  "Oriole Park at Camden Yards": "Camden Yards",      // BAL official full name
+};
+function canonicalVenue(venueName) { return VENUE_ALIASES[venueName] || venueName; }
+function getParkHRFactor(venueName) { return PARK_HR_FACTOR[canonicalVenue(venueName)] ?? 1.0; }
+function getParkRunFactor(venueName) { return PARK_RUN_FACTOR[canonicalVenue(venueName)] ?? 1.0; }
 
 // ── HTTP helper ───────────────────────────────────────────────────────────────
 async function mlbGet(path, params = {}) {
