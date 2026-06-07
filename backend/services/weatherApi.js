@@ -37,6 +37,9 @@ const VENUE_COORDS = {
   "Nationals Park": { lat: 38.8730, lon: -77.0074, orientation: 30 },
   "Citizens Bank Park": { lat: 39.9061, lon: -75.1665, orientation: 15 },
   "Angel Stadium": { lat: 33.8003, lon: -117.8827, orientation: 41 },
+  // Retractable-roof parks played closed in summer heat — treat as indoor (weather neutral).
+  "Daikin Park": { lat: 29.7572, lon: -95.3554, orientation: 30, indoor: true }, // HOU (was Minute Maid Park)
+  "Chase Field": { lat: 33.4453, lon: -112.0667, orientation: 0, indoor: true }, // AZ (was missing entirely)
 };
 
 const cache = new Map();
