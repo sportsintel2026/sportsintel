@@ -403,6 +403,70 @@ async function getTeamBullpenStats(teamId, season) {
   } catch (e) { return null; }
 }
 
+// ── Bullpen recent USAGE / fatigue (last N days) ────────────────────────────
+// Season bullpen ERA can't tell you the pen is gassed TONIGHT. This reads recent
+// workload: for each of the team's FINAL games over the last `days`, relief outs =
+// total team pitching outs MINUS the starter's outs (starter = first pitcher used).
+// Outs (not float "innings") are summed so 6.1 + 0.2 = 7.0, never 6.3. Flags any
+// reliever who appeared on 2+ of the recent dates (a back-to-back / heavy-use tell).
+// READ-ONLY and null-safe.
+function ipToOuts(ip) {
+  if (ip == null) return 0;
+  const [w, f] = String(ip).split(".");
+  return (parseInt(w, 10) || 0) * 3 + (parseInt(f, 10) || 0);
+}
+function outsToIp(outs) {
+  return `${Math.floor(outs / 3)}.${outs % 3}`;
+}
+async function getTeamBullpenUsage(teamId, days = 3) {
+  if (!teamId) return null;
+  const tid = Number(teamId);
+  const recent = [];
+  for (let d = 1; d <= days; d++) {
+    const date = getEasternDate(-d);
+    let games = [];
+    try { games = await getScheduleForDate(date); } catch (_) { continue; }
+    for (const g of games) {
+      if (g.status !== "final") continue;
+      const isAway = Number(g.awayId) === tid;
+      const isHome = Number(g.homeId) === tid;
+      if (!isAway && !isHome) continue;
+      recent.push({ date, gamePk: g.id, side: isAway ? "away" : "home", opponent: isAway ? g.home : g.away });
+    }
+  }
+  const gamesOut = [];
+  let reliefOutsTotal = 0;
+  const relieverDays = new Map();
+  for (const r of recent) {
+    let box;
+    try { box = await mlbGet(`/game/${r.gamePk}/boxscore`); } catch (_) { continue; }
+    const team = box && box.teams && box.teams[r.side];
+    const order = team && Array.isArray(team.pitchers) ? team.pitchers : [];
+    if (order.length === 0) continue;
+    let reliefOuts = 0;
+    const relievers = [];
+    for (let i = 1; i < order.length; i++) {
+      const pl = team.players && team.players[`ID${order[i]}`];
+      const name = pl && pl.person && pl.person.fullName;
+      reliefOuts += ipToOuts(pl && pl.stats && pl.stats.pitching && pl.stats.pitching.inningsPitched);
+      if (name) {
+        relievers.push(name);
+        if (!relieverDays.has(name)) relieverDays.set(name, new Set());
+        relieverDays.get(name).add(r.date);
+      }
+    }
+    reliefOutsTotal += reliefOuts;
+    gamesOut.push({ date: r.date, opponent: r.opponent, reliefIP: outsToIp(reliefOuts), reliefOuts, relievers });
+  }
+  const multiDay = [...relieverDays.entries()].filter(([, set]) => set.size >= 2).map(([n]) => n);
+  return {
+    teamId: tid, days, gamesInWindow: gamesOut.length,
+    reliefOutsTotal, reliefIPTotal: outsToIp(reliefOutsTotal),
+    distinctRelievers: relieverDays.size, relieversUsedMultipleDays: multiDay,
+    games: gamesOut,
+  };
+}
+
 // ── Pitcher throwing hand ("L" or "R") ──────────────────────────────────────
 async function getPitcherHand(pitcherId) {
   if (!pitcherId) return null;
@@ -700,5 +764,5 @@ module.exports = {
   getProjectedLineup,
   getTeamLineup, getLineupOffense,
   getLiveGameState,
-  getTeamHandednessSplits, getTeamBullpenStats, getPitcherHand,
+  getTeamHandednessSplits, getTeamBullpenStats, getTeamBullpenUsage, getPitcherHand,
 };
