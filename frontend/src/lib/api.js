@@ -30,6 +30,10 @@ export const edgesApi = {
   getMLB: () => apiFetch("/api/edges/mlb"),
   clearCache: () => apiFetch("/api/edges/cache", { method: "DELETE" }),
 };
+// NEW — consensus (Best Bets ∩ model edges), read-only
+export const consensusApi = {
+  getMLB: () => apiFetch("/api/consensus/mlb"),
+};
 // Live in-game win probability + moneyline edge
 export const liveApi = {
   getMLB: () => apiFetch("/api/live/mlb"),
