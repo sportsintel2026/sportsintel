@@ -69,26 +69,56 @@ async function getWeatherForVenue(venueName, gameTimeISO) {
   if (isCacheValid(cached)) return cached.data;
 
   try {
+    const wantHourly = !!gameTimeISO;
     const res = await axios.get("https://api.open-meteo.com/v1/forecast", {
       params: {
         latitude: venue.lat,
         longitude: venue.lon,
         current: "temperature_2m,wind_speed_10m,wind_direction_10m,precipitation,weather_code",
+        ...(wantHourly ? { hourly: "temperature_2m,wind_speed_10m,wind_direction_10m,precipitation,weather_code", forecast_days: 2 } : {}),
         temperature_unit: "fahrenheit",
         wind_speed_unit: "mph",
         timezone: "auto",
       },
-      timeout: 5000,
+      timeout: 6000,
     });
 
-    const current = res.data?.current;
-    if (!current) return null;
+    // Default to current conditions; if a first-pitch time is given, swap in the
+    // forecast hour nearest first pitch (open-air totals/HR depend on GAME-TIME
+    // wind & temp, not whenever the cron happened to run). Falls back to current
+    // if the hour can't be matched within ~2h.
+    let src = res.data?.current;
+    let forecastAtGameTime = false;
+    if (wantHourly && res.data?.hourly?.time?.length) {
+      const h = res.data.hourly;
+      const offsetMs = (res.data.utc_offset_seconds || 0) * 1000;
+      const target = Date.parse(gameTimeISO);
+      if (Number.isFinite(target)) {
+        let bestIdx = -1, bestDiff = Infinity;
+        for (let i = 0; i < h.time.length; i++) {
+          const hourUTC = Date.parse(h.time[i] + "Z") - offsetMs; // local → UTC instant
+          const diff = Math.abs(hourUTC - target);
+          if (diff < bestDiff) { bestDiff = diff; bestIdx = i; }
+        }
+        if (bestIdx >= 0 && bestDiff <= 2 * 3600 * 1000) {
+          src = {
+            temperature_2m: h.temperature_2m?.[bestIdx],
+            wind_speed_10m: h.wind_speed_10m?.[bestIdx],
+            wind_direction_10m: h.wind_direction_10m?.[bestIdx],
+            precipitation: h.precipitation?.[bestIdx],
+            weather_code: h.weather_code?.[bestIdx],
+          };
+          forecastAtGameTime = true;
+        }
+      }
+    }
+    if (!src || src.temperature_2m == null) return null;
 
-    const tempF = Math.round(current.temperature_2m);
-    const windMph = Math.round(current.wind_speed_10m);
-    const windDir = current.wind_direction_10m; // degrees from N
-    const precip = current.precipitation;
-    const code = current.weather_code;
+    const tempF = Math.round(src.temperature_2m);
+    const windMph = Math.round(src.wind_speed_10m);
+    const windDir = src.wind_direction_10m; // degrees from N
+    const precip = src.precipitation;
+    const code = src.weather_code;
 
     // Calculate wind direction relative to home plate → CF
     // If wind direction matches venue orientation (±45deg), wind is "out to CF"
@@ -130,6 +160,7 @@ async function getWeatherForVenue(venueName, gameTimeISO) {
       tempEffect, // "hot" | "cold" | "neutral"
       conditions,
       isRaining,
+      forecastAtGameTime,
       summary: buildSummary({ tempF, windEffect, windMph, tempEffect, conditions, isRaining }),
     };
 
