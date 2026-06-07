@@ -15,6 +15,7 @@ const {
   getBatterStatcast,
   getTeamHandednessSplits,
   getTeamBullpenStats,
+  getTeamBullpenUsage,
   getPitcherHand,
 } = require("./mlbStatsApi");
 const { americanToImpliedProb } = require("./oddsApi");
@@ -192,7 +193,7 @@ function calculateMoneylineProjection(game, awayPitcher, homePitcher, awayTeamHi
 }
 
 // ── TOTALS MODEL ──────────────────────────────────────────────────────────────
-function calculateTotalProjection(game, awayPitcher, homePitcher, awayTeamHit, homeTeamHit, weather, awayBullpen, homeBullpen, awayHandMult, homeHandMult) {
+function calculateTotalProjection(game, awayPitcher, homePitcher, awayTeamHit, homeTeamHit, weather, awayBullpen, homeBullpen, awayHandMult, homeHandMult, awayFatigue, homeFatigue) {
   // Offense scaled by handedness vs the opposing starter
   const awayRPG = (awayTeamHit?.runsPerGame ?? LEAGUE_AVG.runsPerGame) * (awayHandMult || 1.0);
   const homeRPG = (homeTeamHit?.runsPerGame ?? LEAGUE_AVG.runsPerGame) * (homeHandMult || 1.0);
@@ -220,7 +221,9 @@ function calculateTotalProjection(game, awayPitcher, homePitcher, awayTeamHit, h
   if (awayPenEra) bullpenAdj += ((awayPenEra - LEAGUE_AVG.bullpenEra) / 9) * 3.0;
   if (homePenEra) bullpenAdj += ((homePenEra - LEAGUE_AVG.bullpenEra) / 9) * 3.0;
 
-  const projected = baseTotal + pitcherAdj + parkAdj + weatherAdj + bullpenAdj;
+  const fatigueAdj = fatigueRunAdj(awayFatigue, homeFatigue);
+
+  const projected = baseTotal + pitcherAdj + parkAdj + weatherAdj + bullpenAdj + fatigueAdj;
   return {
     projectedTotal: round2(projected),
     breakdown: {
@@ -229,6 +232,9 @@ function calculateTotalProjection(game, awayPitcher, homePitcher, awayTeamHit, h
       parkAdj: round2(parkAdj),
       weatherAdj: round2(weatherAdj),
       bullpenAdj: round2(bullpenAdj),
+      fatigueAdj: round2(fatigueAdj),
+      awayBullpenFatigue: awayFatigue || null,
+      homeBullpenFatigue: homeFatigue || null,
     },
   };
 }
@@ -816,6 +822,9 @@ function describeTotals(side, ctx) {
   if (wx && ((side === "over") === (breakdown.weatherAdj > 0))) clauses.push(wx);
   const bp = bullpenClause(breakdown && breakdown.bullpenAdj);
   if (bp && ((side === "over") === (breakdown.bullpenAdj > 0))) clauses.push(bp);
+  if (breakdown && breakdown.fatigueAdj != null && Math.abs(breakdown.fatigueAdj) >= 0.15 && ((side === "over") === (breakdown.fatigueAdj > 0))) {
+    clauses.push(breakdown.fatigueAdj > 0 ? "a worn-down bullpen" : "fresh bullpens");
+  }
   if (!lead && clauses.length === 0) return null;
   if (clauses.length === 0) return lead;
   const joined = clauses.length === 1 ? clauses[0] : clauses.slice(0, -1).join(", ") + " and " + clauses.slice(-1);
@@ -840,6 +849,46 @@ function describeMoneyline(side, ctx) {
   return `${lead ? lead + " " : ""}Lean rests on ${joined}.`;
 }
 
+// ── Bullpen fatigue → totals (EXPERIMENTAL, live 2026-06-07, small + capped) ──
+// A gassed pen tends to give up more late runs than its season ERA implies.
+// This is UNCALIBRATED — the magnitudes below are a deliberately small starting
+// guess, hard-capped, and fully reversible. To kill it: set FATIGUE_ENABLED=false.
+// To retune once we have results: edit FATIGUE_PER_TEAM / FATIGUE_MAX. The applied
+// adjustment and the per-team levels are persisted on each totals pick so we can
+// later check whether it actually helped before trusting these numbers.
+const FATIGUE_ENABLED = true;
+const FATIGUE_PER_TEAM = { heavy: 0.15, normal: 0, light: -0.10 }; // runs per pen
+const FATIGUE_MAX = 0.30; // hard cap on the total fatigue swing (runs)
+
+// Recent bullpen workload descriptor. Thresholds are per-GAME relief load so a
+// normal 3-game stretch isn't misread as heavy. Returns null when no recent games.
+function describeFatigue(u) {
+  if (!u || !u.gamesInWindow) return null;
+  const back2back = (u.relieversUsedMultipleDays || []).length;
+  const perGameOuts = u.reliefOutsTotal / u.gamesInWindow;
+  let level = "normal";
+  if (perGameOuts >= 13 || back2back >= 2) level = "heavy";
+  else if (perGameOuts <= 8 && u.gamesInWindow >= 2) level = "light";
+  return {
+    level,
+    reliefIP: u.reliefIPTotal,
+    gamesInWindow: u.gamesInWindow,
+    backToBack: u.relieversUsedMultipleDays || [],
+  };
+}
+
+// Capped run adjustment from both pens' fatigue. Heavy → more runs (over), light
+// → fewer. Small by design; never larger than FATIGUE_MAX in either direction.
+function fatigueRunAdj(awayF, homeF) {
+  if (!FATIGUE_ENABLED) return 0;
+  const a = awayF ? (FATIGUE_PER_TEAM[awayF.level] || 0) : 0;
+  const h = homeF ? (FATIGUE_PER_TEAM[homeF.level] || 0) : 0;
+  let adj = a + h;
+  if (adj > FATIGUE_MAX) adj = FATIGUE_MAX;
+  if (adj < -FATIGUE_MAX) adj = -FATIGUE_MAX;
+  return round2(adj);
+}
+
 async function calculateGameEdges(game, oddsForGame) {
   const [
     awayPitcher,
@@ -855,6 +904,8 @@ async function calculateGameEdges(game, oddsForGame) {
     homeHandSplits,
     awayPitcherHand,
     homePitcherHand,
+    awayBullpenUsage,
+    homeBullpenUsage,
   ] = await Promise.all([
     game.awayProbable ? getPitcherSeasonStats(game.awayProbable.id) : null,
     game.homeProbable ? getPitcherSeasonStats(game.homeProbable.id) : null,
@@ -869,6 +920,8 @@ async function calculateGameEdges(game, oddsForGame) {
     getTeamHandednessSplits(game.homeId),
     game.awayProbable ? getPitcherHand(game.awayProbable.id) : null,
     game.homeProbable ? getPitcherHand(game.homeProbable.id) : null,
+    getTeamBullpenUsage(game.awayId).catch(() => null),
+    getTeamBullpenUsage(game.homeId).catch(() => null),
   ]);
 
   // Confirmed/projected lineups → lineup-based offense (who's ACTUALLY playing),
@@ -921,7 +974,9 @@ async function calculateGameEdges(game, oddsForGame) {
   console.log(`[Edges] ${game.awayAbbr}@${game.homeAbbr} | lineup away=${awayLineup.source}(ops ${awayLineupOff?.ops ?? "n/a"}) home=${homeLineup.source}(ops ${homeLineupOff?.ops ?? "n/a"}) | recentForm away ${awayPitcher?.era ?? "n/a"}→${awayPitcherForm?.era ?? "n/a"} home ${homePitcher?.era ?? "n/a"}→${homePitcherForm?.era ?? "n/a"} | handMult away=${awayHandMult.toFixed(3)} home=${homeHandMult.toFixed(3)}`);
 
   const ml = calculateMoneylineProjection(game, awayPitcherForm, homePitcherForm, awayHit, homeHit, awayBullpen, homeBullpen, awayHandMult, homeHandMult);
-  const totals = calculateTotalProjection(game, awayPitcherForm, homePitcherForm, awayHit, homeHit, weather, awayBullpen, homeBullpen, awayHandMult, homeHandMult);
+  const awayFatigue = describeFatigue(awayBullpenUsage);
+  const homeFatigue = describeFatigue(homeBullpenUsage);
+  const totals = calculateTotalProjection(game, awayPitcherForm, homePitcherForm, awayHit, homeHit, weather, awayBullpen, homeBullpen, awayHandMult, homeHandMult, awayFatigue, homeFatigue);
 
   const odds = oddsForGame || { h2h: {}, totals: {} };
   const awayML = odds.h2h?.away;
