@@ -440,13 +440,15 @@ function strikeoutOverProb(pitcherStats, oppTeamStats, line) {
 // only diverge when our xBA/AB read disagrees strongly. No shrink-to-0.5 (that dragged
 // every legit Over toward a coin flip). EXPERIMENTAL — validate on graded results.
 const LEAGUE_BAA = 0.245;          // league batting average against
-const DEFAULT_AB_PER_GAME = 3.7;   // fallback expected AB when lineup spot unknown (regular starter)
-const HITS_MARKET_WEIGHT = 0.60;   // anchor weight on the sharp de-vigged market (0=pure model, 1=pure market)
+const DEFAULT_AB_PER_GAME = 3.35;  // fallback effective AB when lineup spot unknown
+const HITS_MARKET_WEIGHT = 0.65;   // anchor weight on the sharp de-vigged market (0=pure model, 1=pure market)
 const HITS_XBA_BLEND = 0.70;       // weight on Savant xBA vs season AVG when xBA present
+const HITS_REGRESS_K = 160;        // AB-equivalent prior weight: regress per-AB rate toward league (kills small-sample noise)
 
-// Expected AB per game by batting-order spot (1..9). Top of order sees more AB;
-// reflects ~PA-per-spot minus walks. Beats the old flat 3.4 for everyone.
-const AB_BY_SPOT = [3.95, 3.88, 3.80, 3.72, 3.63, 3.55, 3.47, 3.40, 3.33];
+// Effective AB per game by batting-order spot (1..9). Discounted below full-game
+// starter AB to reflect walks, early exits, and game-to-game usage variance — the
+// level that actually centers single-game P(1+ hit) on the sharp de-vigged market.
+const AB_BY_SPOT = [3.65, 3.58, 3.50, 3.42, 3.33, 3.25, 3.17, 3.10, 3.03];
 function expABForSpot(spot) {
   if (!spot || spot < 1 || spot > 9) return DEFAULT_AB_PER_GAME;
   return AB_BY_SPOT[spot - 1];
@@ -479,6 +481,11 @@ function hitsOverProb(batterStats, oppPitcherStats, line, opts = {}) {
   let base;
   if (xBA != null) base = (avg != null && avg > 0) ? (HITS_XBA_BLEND * xBA + (1 - HITS_XBA_BLEND) * avg) : xBA;
   else base = avg;
+
+  // 1b) Regress toward league by sample size — small samples (noisy xBA/AVG) pull
+  //     hard toward league, killing fake edges on 14-AB hitters.
+  const n = opts.sampleAB != null && opts.sampleAB > 0 ? opts.sampleAB : 80;
+  base = (base * n + LEAGUE_BAA * HITS_REGRESS_K) / (n + HITS_REGRESS_K);
 
   // 2) Gentle opposing-pitcher adjustment (tighter clamp than v1).
   let perAB = base;
@@ -1296,7 +1303,7 @@ async function calculateHitsPropEdges(games, hitsOddsByEvent) {
       const expAB = expABForSpot(spotIdx >= 0 ? spotIdx + 1 : null);
       const savantXBA = savantMap ? (savantMap.get(batter.id)?.xBA ?? null) : null;
       const overProb = hitsOverProb(batterStats, oppPitcherStats, propOdds.line, {
-        xBA: savantXBA, expAB, marketFairOver: fairOver,
+        xBA: savantXBA, expAB, marketFairOver: fairOver, sampleAB: batterStats?.atBats ?? null,
       });
       if (overProb == null) continue;
       const underProb = round3(1 - overProb);
@@ -1379,13 +1386,15 @@ async function debugHitsProps(games, hitsOddsByEvent) {
         let base;
         if (savantXBAAll != null) base = (baseAvg != null && baseAvg > 0) ? (HITS_XBA_BLEND * savantXBAAll + (1 - HITS_XBA_BLEND) * baseAvg) : savantXBAAll;
         else base = baseAvg;
+        const nAB = batterStats?.atBats != null && batterStats.atBats > 0 ? batterStats.atBats : 80;
+        base = (base * nAB + LEAGUE_BAA * HITS_REGRESS_K) / (nAB + HITS_REGRESS_K);
         perAB = base;
         if (oppBaa != null && oppBaa > 0) perAB = base * Math.max(0.85, Math.min(1.15, oppBaa / LEAGUE_BAA));
         perAB = round3(Math.max(0.10, Math.min(0.45, perAB)));
         expHits = round3(expABAll * perAB);
       }
       const overProb = hitsOverProb(batterStats, oppPitcherStats, propOdds.line, {
-        xBA: savantXBAAll, expAB: expABAll, marketFairOver,
+        xBA: savantXBAAll, expAB: expABAll, marketFairOver, sampleAB: batterStats?.atBats ?? null,
       });
       const underProb = overProb != null ? round3(1 - overProb) : null;
       let modelSide = null;
