@@ -279,6 +279,20 @@ function powerFactor(batterStats, statcast) {
   return clampHR(avg, 0.85, 1.30); // hard cap; further sqrt-dampened inside the env stack
 }
 
+// Merge live Statcast (currently dead for batters via MLB StatsAPI) with Baseball
+// Savant's xwOBA so the HR power factor is no longer stuck on the ISO fallback. Live
+// Statcast wins if it ever returns; otherwise Savant xwOBA fills in. Barrel rate is
+// NOT on the Savant expected-stats leaderboard, so it stays whatever live Statcast
+// had (today: null) — the power factor then runs on xwOBA alone, still far better
+// than ISO. Returns null only when there is genuinely no power signal at all.
+function effectiveStatcast(statcast, savantEntry) {
+  const sx = statcast && statcast.xwOBA != null && statcast.xwOBA > 0 ? statcast.xwOBA : null;
+  const vx = savantEntry && savantEntry.xwOBA != null && savantEntry.xwOBA > 0 ? savantEntry.xwOBA : null;
+  const xwOBA = sx != null ? sx : vx;
+  if (!statcast && xwOBA == null) return null;
+  return { ...(statcast || {}), xwOBA, xwobaSource: sx != null ? "statcast" : (vx != null ? "savant" : null) };
+}
+
 // (b) BATTER vs PITCHER — mostly noise (tiny samples, HR is a rare event), so it
 //     is a BOUNDED nudge only: needs a real sample, sample-weighted, capped ±12%.
 //     Raise BVP_MAX_TILT to trust it more (not recommended), 0 to disable.
@@ -1103,6 +1117,9 @@ async function calculateGameEdges(game, oddsForGame) {
 async function calculateHRPropEdges(games, hrOddsByEvent) {
   const targetGames = games.slice(0, MAX_HR_GAMES);
   const allHRProps = [];
+  // Savant xwOBA map once (cached); null-safe — HR power falls back to ISO if absent.
+  let savantMap = null;
+  try { savantMap = await getBatterExpectedStats(); } catch (e) { savantMap = null; }
   for (const game of targetGames) {
     const eventId = findEventIdForGame(game, hrOddsByEvent);
     const hrOdds = eventId ? hrOddsByEvent[eventId] : null;
@@ -1134,7 +1151,9 @@ async function calculateHRPropEdges(games, hrOddsByEvent) {
         opposingPitcherProbable ? getBatterVsPitcherHistory(batter.id, opposingPitcherProbable.id) : null,
         getBatterStatcast(batter.id),
       ]);
-      const hrProbRaw = calculateHRProbability(batterStats, opposingPitcherStats, game, weather, recent15, statcast, bvp, battingOrder);
+      // Fill xwOBA from Savant when live Statcast is empty (it currently always is).
+      const sc = effectiveStatcast(statcast, savantMap ? savantMap.get(batter.id) : null);
+      const hrProbRaw = calculateHRProbability(batterStats, opposingPitcherStats, game, weather, recent15, sc, bvp, battingOrder);
       if (hrProbRaw == null) continue;
       // (d) Market cap: don't let the model sit more than the cap multiple above
       // the book's implied prob. Default 1.5×; a longshot with a genuine record vs
@@ -1177,12 +1196,13 @@ async function calculateHRPropEdges(games, hrOddsByEvent) {
           avg: round3(bvp.avg),
           ops: bvp.ops ? round3(bvp.ops) : null,
         } : null,
-        statcast: statcast ? {
-          avgExitVelo: statcast.avgExitVelocity,
-          maxExitVelo: statcast.maxExitVelocity,
-          barrelRate: statcast.barrelRate,
-          hardHitRate: statcast.hardHitRate,
-          xwOBA: statcast.xwOBA,
+        statcast: sc ? {
+          avgExitVelo: sc.avgExitVelocity,
+          maxExitVelo: sc.maxExitVelocity,
+          barrelRate: sc.barrelRate,
+          hardHitRate: sc.hardHitRate,
+          xwOBA: sc.xwOBA,
+          xwobaSource: sc.xwobaSource,
         } : null,
         parkHRFactor: game.parkHRFactor,
         battingOrder,
