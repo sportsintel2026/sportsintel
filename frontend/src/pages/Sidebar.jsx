@@ -46,6 +46,12 @@ export default function Sidebar({ user, plan, signOut, navigate }) {
         label="Best Bets"
       />
       <NavLink
+        to="/consensus"
+        active={isActive("/consensus")}
+        icon="🤝"
+        label="Consensus"
+      />
+      <NavLink
         to="/guide"
         active={isActive("/guide")}
         icon="📖"
