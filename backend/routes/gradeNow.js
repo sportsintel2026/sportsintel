@@ -21,6 +21,7 @@ const {
 } = require("../services/mlbStatsApi");
 const { getRawTotalsDebug } = require("../services/oddsApi");
 const { probeExpectedStats, probeBarrels } = require("../services/savantApi");
+const { fetchScoreboard } = require("../services/nbaDataSource"); // TEMP: nba_audit probe (6/8)
 
 function db() {
   return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
@@ -40,6 +41,7 @@ router.get("/", async (req, res) => {
     if (req.query.totals_audit === "1" || req.query.totals_audit === "true") return res.json(await totalsAudit());
     if (req.query.score_probe === "1" || req.query.score_probe === "true") return res.json(await scoreProbe());
     if (req.query.game_audit != null) return res.json(await getGameStatusAndScore(req.query.game_audit));
+    if (req.query.nba_audit === "1" || req.query.nba_audit === "true") return res.json(await nbaAudit());
     const graded = await gradeFinishedGames();
     res.json({ ok: true, graded: graded == null ? 0 : graded });
   } catch (err) {
@@ -494,6 +496,97 @@ async function scoreProbe() {
     }
   }
   return { ok: true, games: out };
+}
+
+// ── TEMP read-only diagnostic (added 6/8) — REMOVE in the next cleanup ──────────
+// Root-causes stuck NBA picks (e.g. the 3 on 401859965) the SAME WAY gradeNba sees
+// the world: via the real ESPN scoreboard (fetchScoreboard). gradeNba finds a team
+// pick's game with `fetchScoreboard(p.game_date).find(x => String(x.gameId)===id)`
+// and only grades when `state==="post"` with scores. The two ways that silently
+// fails forever are (a) the game is filed by ESPN under a DIFFERENT date than the
+// one we stored (date-bucket mismatch), so the lookup never finds it, or (b) the id
+// genuinely isn't on ESPN for any nearby date. This probe checks the stored date AND
+// date±1 so we can tell those apart instead of voiding blind. Writes NOTHING.
+function shiftDate(dateStr, deltaDays) {
+  const d = new Date(`${dateStr}T12:00:00Z`); // noon UTC avoids any DST/tz roll
+  d.setUTCDate(d.getUTCDate() + deltaDays);
+  return d.toISOString().slice(0, 10);
+}
+
+async function pendingNba() {
+  const supabase = db();
+  const { data, error } = await supabase
+    .from("model_predictions")
+    .select("id,league,market,selection,line,game_id,game_date,result")
+    .eq("result", "pending")
+    .eq("league", "nba");
+  if (error) throw new Error(error.message);
+  return data || [];
+}
+
+async function nbaAudit() {
+  const pend = await pendingNba();
+  if (!pend.length) return { ok: true, pendingNba: 0, note: "No pending NBA picks." };
+
+  // Build the set of dates we must fetch: each stored date and its neighbors.
+  const dates = new Set();
+  for (const p of pend) {
+    if (!p.game_date) continue;
+    dates.add(p.game_date);
+    dates.add(shiftDate(p.game_date, -1));
+    dates.add(shiftDate(p.game_date, +1));
+  }
+
+  // One scoreboard fetch per date; index games by id for each date.
+  const boardByDate = {}; // date -> { gameId -> game }
+  for (const date of dates) {
+    try {
+      const games = await fetchScoreboard(date);
+      const idx = {};
+      for (const g of games || []) idx[String(g.gameId)] = g;
+      boardByDate[date] = idx;
+    } catch (e) {
+      boardByDate[date] = { __error: e.message };
+    }
+  }
+
+  const describe = (g) => g && !g.__error ? {
+    state: g.state,
+    homeName: g.home?.displayName ?? null, homeScore: g.home?.score ?? null,
+    awayName: g.away?.displayName ?? null, awayScore: g.away?.score ?? null,
+  } : null;
+
+  const rows = pend.map((p) => {
+    const id = String(p.game_id);
+    const onDate = boardByDate[p.game_date]?.[id] || null;
+    const onPrev = boardByDate[shiftDate(p.game_date, -1)]?.[id] || null;
+    const onNext = boardByDate[shiftDate(p.game_date, +1)]?.[id] || null;
+    const matchDate = onDate ? p.game_date : onPrev ? shiftDate(p.game_date, -1) : onNext ? shiftDate(p.game_date, +1) : null;
+    const matched = onDate || onPrev || onNext || null;
+
+    let verdict;
+    if (!matched) verdict = "id_not_found_on_any_date"; // wrong id, or game not on ESPN near this date
+    else if (matched.state !== "post") verdict = `not_final (state=${matched.state})`;
+    else if (matched.home?.score == null || matched.away?.score == null) verdict = "final_but_no_score";
+    else if (onDate) verdict = "GRADEABLE_NOW_on_stored_date"; // grader *should* settle it → look elsewhere
+    else verdict = `DATE_BUCKET_MISMATCH (stored ${p.game_date}, ESPN files it ${matchDate})`; // ROOT CAUSE candidate
+
+    return {
+      id: p.id, game_id: id, game_date: p.game_date,
+      market: p.market, selection: p.selection, line: p.line,
+      foundOn: { stored: !!onDate, prevDay: !!onPrev, nextDay: !!onNext },
+      espnMatchDate: matchDate,
+      game: describe(matched),
+      verdict,
+    };
+  });
+
+  return {
+    ok: true,
+    pendingNba: pend.length,
+    datesFetched: Object.fromEntries(Object.entries(boardByDate).map(([d, idx]) => [d, idx.__error ? { error: idx.__error } : { games: Object.keys(idx).length }])),
+    rows,
+  };
 }
 
 module.exports = router;
