@@ -714,24 +714,11 @@ async function gradeMlb(supabase, pending) {
     for (const p of preds) {
       const g = gameById[p.game_id];
       if (!g || g.status !== "final") continue;
-      // Team markets read the final score off the SCHEDULE. Occasionally the
-      // schedule omits a final game's score (seen on 823539) — which would skip
-      // the WHOLE game (props included, since this guard runs before the market
-      // branch) and leave every pick on it pending forever. Fall back to the
-      // linescore (one fetch per game, cached) before giving up.
-      if (g.awayScore == null || g.homeScore == null) {
-        if (!scoreCache.has(p.game_id)) {
-          let ls = null;
-          try { ls = await getLinescore(p.game_id); } catch (_) { ls = null; }
-          const as = ls && ls.teams && ls.teams.away ? ls.teams.away.runs : null;
-          const hs = ls && ls.teams && ls.teams.home ? ls.teams.home.runs : null;
-          scoreCache.set(p.game_id, (as != null && hs != null) ? { awayScore: as, homeScore: hs } : null);
-        }
-        const fixed = scoreCache.get(p.game_id);
-        if (!fixed) continue;            // still no score → leave pending, retry next run
-        g.awayScore = fixed.awayScore;
-        g.homeScore = fixed.homeScore;
-      }
+      // NOTE: team markets need a final score and enforce that in their own branch
+      // below (schedule → linescore fallback). Props do NOT — they read the
+      // boxscore directly — so we must NOT gate the whole game on team score here,
+      // or a final game missing its schedule score (e.g. 823539) would wrongly
+      // strand its gradeable props too.
 
       let outcome;
       if (p.market === "player_strikeouts") {
@@ -780,6 +767,23 @@ async function gradeMlb(supabase, pending) {
         if (!found) continue;                          // player not located → never false-loss
         outcome = { result: hr >= 1 ? "win" : "loss", actual: hr };
       } else {
+        // Team markets (moneyline/run_line/total) settle off the final score.
+        // Prefer the schedule; if it's missing (seen on 823539), fall back to the
+        // linescore. If neither has a score, leave pending — a truly unsettleable
+        // final (suspended/no-score feed) is handled by voiding, not grading.
+        if (g.awayScore == null || g.homeScore == null) {
+          if (!scoreCache.has(p.game_id)) {
+            let ls = null;
+            try { ls = await getLinescore(p.game_id); } catch (_) { ls = null; }
+            const as = ls && ls.teams && ls.teams.away ? ls.teams.away.runs : null;
+            const hs = ls && ls.teams && ls.teams.home ? ls.teams.home.runs : null;
+            scoreCache.set(p.game_id, (as != null && hs != null) ? { awayScore: as, homeScore: hs } : null);
+          }
+          const fixed = scoreCache.get(p.game_id);
+          if (!fixed) continue;          // no score anywhere → leave pending (void separately)
+          g.awayScore = fixed.awayScore;
+          g.homeScore = fixed.homeScore;
+        }
         outcome = gradeOne(p, g);
       }
       if (!outcome) continue;
