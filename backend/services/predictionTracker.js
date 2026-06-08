@@ -5,7 +5,7 @@
 // gradeFinishedGames()  → cron: grades pending MLB (team scores) and NBA (player gamelog).
 
 const { createClient } = require("@supabase/supabase-js");
-const { getEasternDate, getScheduleForDate, getGameHRHitters, getGamePitcherStrikeouts, getGameBatterHits, normPlayerName } = require("./mlbStatsApi");
+const { getEasternDate, getScheduleForDate, getGameHRHitters, getGamePitcherStrikeouts, getGameBatterHits, getLinescore, normPlayerName } = require("./mlbStatsApi");
 const { fetchGamelog } = require("./nbaGamelog");
 const { fetchScoreboard } = require("./nbaDataSource");
 const { getMLBMainOdds } = require("./oddsApi");
@@ -701,6 +701,7 @@ async function gradeMlb(supabase, pending) {
   const hrCache = new Map(); // game_id -> { ok, hr }
   const kCache = new Map(); // game_id -> { ok, ks }
   const hitsCache = new Map(); // game_id -> { ok, hits }
+  const scoreCache = new Map(); // game_id -> { awayScore, homeScore } | null (linescore fallback)
 
   for (const [date, preds] of Object.entries(byDate)) {
     let schedule;
@@ -713,7 +714,24 @@ async function gradeMlb(supabase, pending) {
     for (const p of preds) {
       const g = gameById[p.game_id];
       if (!g || g.status !== "final") continue;
-      if (g.awayScore == null || g.homeScore == null) continue;
+      // Team markets read the final score off the SCHEDULE. Occasionally the
+      // schedule omits a final game's score (seen on 823539) — which would skip
+      // the WHOLE game (props included, since this guard runs before the market
+      // branch) and leave every pick on it pending forever. Fall back to the
+      // linescore (one fetch per game, cached) before giving up.
+      if (g.awayScore == null || g.homeScore == null) {
+        if (!scoreCache.has(p.game_id)) {
+          let ls = null;
+          try { ls = await getLinescore(p.game_id); } catch (_) { ls = null; }
+          const as = ls && ls.teams && ls.teams.away ? ls.teams.away.runs : null;
+          const hs = ls && ls.teams && ls.teams.home ? ls.teams.home.runs : null;
+          scoreCache.set(p.game_id, (as != null && hs != null) ? { awayScore: as, homeScore: hs } : null);
+        }
+        const fixed = scoreCache.get(p.game_id);
+        if (!fixed) continue;            // still no score → leave pending, retry next run
+        g.awayScore = fixed.awayScore;
+        g.homeScore = fixed.homeScore;
+      }
 
       let outcome;
       if (p.market === "player_strikeouts") {
