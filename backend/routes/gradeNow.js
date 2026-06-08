@@ -17,7 +17,7 @@ const { createClient } = require("@supabase/supabase-js");
 const { gradeFinishedGames } = require("../services/predictionTracker");
 const {
   getScheduleForDate, getGameHRHitters, getGamePitcherStrikeouts,
-  getGameBatterHits, normPlayerName, getEasternDate, getLinescore,
+  getGameBatterHits, normPlayerName, getEasternDate, getLinescore, getGameStatusAndScore,
 } = require("../services/mlbStatsApi");
 const { getRawTotalsDebug } = require("../services/oddsApi");
 const { probeExpectedStats, probeBarrels } = require("../services/savantApi");
@@ -39,6 +39,7 @@ router.get("/", async (req, res) => {
     if (req.query.totals_debug != null) return res.json(await getRawTotalsDebug(req.query.totals_debug));
     if (req.query.totals_audit === "1" || req.query.totals_audit === "true") return res.json(await totalsAudit());
     if (req.query.score_probe === "1" || req.query.score_probe === "true") return res.json(await scoreProbe());
+    if (req.query.game_audit != null) return res.json(await getGameStatusAndScore(req.query.game_audit));
     const graded = await gradeFinishedGames();
     res.json({ ok: true, graded: graded == null ? 0 : graded });
   } catch (err) {
