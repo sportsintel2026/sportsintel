@@ -5,7 +5,7 @@
 // gradeFinishedGames()  → cron: grades pending MLB (team scores) and NBA (player gamelog).
 
 const { createClient } = require("@supabase/supabase-js");
-const { getEasternDate, getScheduleForDate, getGameHRHitters, getGamePitcherStrikeouts, getGameBatterHits, getLinescore, normPlayerName } = require("./mlbStatsApi");
+const { getEasternDate, getScheduleForDate, getGameHRHitters, getGamePitcherStrikeouts, getGameBatterHits, getLinescore, getGameStatusAndScore, normPlayerName } = require("./mlbStatsApi");
 const { fetchGamelog } = require("./nbaGamelog");
 const { fetchScoreboard } = require("./nbaDataSource");
 const { getMLBMainOdds } = require("./oddsApi");
@@ -702,6 +702,7 @@ async function gradeMlb(supabase, pending) {
   const kCache = new Map(); // game_id -> { ok, ks }
   const hitsCache = new Map(); // game_id -> { ok, hits }
   const scoreCache = new Map(); // game_id -> { awayScore, homeScore } | null (linescore fallback)
+  const statusCache = new Map(); // game_id -> authoritative feed status+score
 
   for (const [date, preds] of Object.entries(byDate)) {
     let schedule;
@@ -713,12 +714,45 @@ async function gradeMlb(supabase, pending) {
 
     for (const p of preds) {
       const g = gameById[p.game_id];
-      if (!g || g.status !== "final") continue;
-      // NOTE: team markets need a final score and enforce that in their own branch
-      // below (schedule → linescore fallback). Props do NOT — they read the
-      // boxscore directly — so we must NOT gate the whole game on team score here,
-      // or a final game missing its schedule score (e.g. 823539) would wrongly
-      // strand its gradeable props too.
+      if (!g) continue; // not on this date's schedule
+
+      // Do NOT trust the schedule's status for grading. It can mislabel a
+      // postponed/suspended game as "final" (abstractState Final on a no-action
+      // game), which previously graded picks against an empty preview box. Fast
+      // path: a clean schedule final WITH a score is trusted as-is. Otherwise we
+      // consult the AUTHORITATIVE feed (one read per game, cached) and decide.
+      const schedClean = g.status === "final" && g.awayScore != null && g.homeScore != null;
+      if (!schedClean) {
+        if (!statusCache.has(p.game_id)) {
+          statusCache.set(p.game_id, await getGameStatusAndScore(p.game_id));
+        }
+        const auth = statusCache.get(p.game_id);
+        if (!auth || !auth.ok) continue; // feed unreadable → retry next run
+
+        if (auth.abstractGameState === "Final") {
+          // Genuinely final, but guard against an empty/anomalous feed: never grade
+          // against a game with no runs AND no batter stats.
+          if (auth.homeRuns == null && auth.awayRuns == null && auth.battersWithStats === 0) continue;
+          if (auth.homeRuns != null) g.homeScore = auth.homeRuns; // adopt authoritative score
+          if (auth.awayRuns != null) g.awayScore = auth.awayRuns;
+        } else {
+          // Not final. If the slate date has already passed and the game never
+          // became a real final (postponed / cancelled / never started), it's a
+          // no-action → void (push) so it can't rot as pending or grade later
+          // against the wrong game. In-progress/suspended or future games stay
+          // pending and will grade when they truly finalize.
+          const past = p.game_date < getEasternDate(0);
+          const ds = auth.detailedState || "";
+          if (past && (auth.abstractGameState === "Preview" || ds === "Postponed" || ds === "Cancelled")) {
+            const { error: vErr } = await supabase
+              .from("model_predictions")
+              .update({ result: "push", actual_value: null, graded_at: new Date().toISOString() })
+              .eq("id", p.id);
+            if (!vErr) graded++;
+          }
+          continue;
+        }
+      }
 
       let outcome;
       if (p.market === "player_strikeouts") {
