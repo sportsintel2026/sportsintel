@@ -92,10 +92,14 @@ function parseGame(g, date) {
   };
 }
 function mapStatus(abstractState, detailedState) {
-  if (abstractState === "Live") return "live";
-  if (abstractState === "Final") return "final";
+  // No-action / not-completed states take precedence: MLB can carry
+  // abstractState "Final" on a Postponed game, so these MUST be checked first or
+  // a postponed game gets mislabeled "final" and graded against an empty box.
   if (detailedState === "Postponed") return "postponed";
   if (detailedState === "Cancelled") return "cancelled";
+  if (detailedState === "Suspended") return "suspended";
+  if (abstractState === "Live") return "live";
+  if (abstractState === "Final") return "final";
   return "scheduled";
 }
 
