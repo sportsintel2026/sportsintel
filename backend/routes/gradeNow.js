@@ -17,7 +17,7 @@ const { createClient } = require("@supabase/supabase-js");
 const { gradeFinishedGames } = require("../services/predictionTracker");
 const {
   getScheduleForDate, getGameHRHitters, getGamePitcherStrikeouts,
-  getGameBatterHits, normPlayerName, getEasternDate,
+  getGameBatterHits, normPlayerName, getEasternDate, getLinescore,
 } = require("../services/mlbStatsApi");
 const { getRawTotalsDebug } = require("../services/oddsApi");
 const { probeExpectedStats, probeBarrels } = require("../services/savantApi");
@@ -38,6 +38,7 @@ router.get("/", async (req, res) => {
     if (req.query.barrel_probe === "1" || req.query.barrel_probe === "true") return res.json(await probeBarrels());
     if (req.query.totals_debug != null) return res.json(await getRawTotalsDebug(req.query.totals_debug));
     if (req.query.totals_audit === "1" || req.query.totals_audit === "true") return res.json(await totalsAudit());
+    if (req.query.score_probe === "1" || req.query.score_probe === "true") return res.json(await scoreProbe());
     const graded = await gradeFinishedGames();
     res.json({ ok: true, graded: graded == null ? 0 : graded });
   } catch (err) {
@@ -457,6 +458,41 @@ async function totalsAudit() {
       odds: r.odds, result: r.result, date: r.game_date,
     })),
   };
+}
+
+// TEMP read-only diagnostic: for each pending MLB game, show what the SCHEDULE
+// reports for status + scores vs what a direct LINESCORE read returns. No writes.
+async function scoreProbe() {
+  const mlb = await pendingMlb();
+  const byDate = {};
+  for (const p of mlb) (byDate[p.game_date] ||= []).push(p);
+  const out = [];
+  for (const [date, preds] of Object.entries(byDate)) {
+    let schedule = [];
+    try { schedule = await getScheduleForDate(date); } catch (_) {}
+    const sched = {};
+    for (const g of schedule) sched[String(g.id)] = g;
+    const seen = new Set();
+    for (const p of preds) {
+      const id = String(p.game_id);
+      if (seen.has(id)) continue; seen.add(id);
+      const g = sched[id];
+      let ls = null;
+      try { ls = await getLinescore(id); } catch (_) {}
+      out.push({
+        date, game_id: id,
+        inSchedule: !!g,
+        schedStatus: g ? g.status : null,
+        schedAwayScore: g ? (g.awayScore ?? null) : null,
+        schedHomeScore: g ? (g.homeScore ?? null) : null,
+        lsAwayRuns: ls && ls.teams && ls.teams.away ? (ls.teams.away.runs ?? null) : null,
+        lsHomeRuns: ls && ls.teams && ls.teams.home ? (ls.teams.home.runs ?? null) : null,
+        lsTeamsKeys: ls && ls.teams ? Object.keys(ls.teams) : null,
+        lsTopKeys: ls ? Object.keys(ls).slice(0, 12) : null,
+      });
+    }
+  }
+  return { ok: true, games: out };
 }
 
 module.exports = router;
