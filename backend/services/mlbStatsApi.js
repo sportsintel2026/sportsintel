@@ -666,6 +666,41 @@ async function getLiveGameState(gamePk) {
   }
 }
 
+// Authoritative status + final score from the full feed/live feed (v1.1). This
+// carries the real detailedState AND the score even when the thin /linescore
+// endpoint is hollow. Returns nulls (never 0) when a value is genuinely absent,
+// so callers can tell "0-0" apart from "no score posted".
+async function getGameStatusAndScore(gamePk) {
+  try {
+    const feedUrl = `https://statsapi.mlb.com/api/v1.1/game/${gamePk}/feed/live`;
+    const { data } = await axios.get(feedUrl, { timeout: 8000 });
+    const st = (data && data.gameData && data.gameData.status) || {};
+    const ls = data && data.liveData && data.liveData.linescore;
+    const box = data && data.liveData && data.liveData.boxscore;
+    let battersWithStats = 0;
+    if (box && box.teams) {
+      for (const side of ["home", "away"]) {
+        const players = (box.teams[side] && box.teams[side].players) || {};
+        for (const k of Object.keys(players)) {
+          const b = players[k] && players[k].stats && players[k].stats.batting;
+          if (b && b.atBats != null) battersWithStats++;
+        }
+      }
+    }
+    return {
+      ok: true,
+      abstractGameState: st.abstractGameState ?? null,
+      detailedState: st.detailedState ?? null,
+      codedGameState: st.codedGameState ?? null,
+      homeRuns: (ls && ls.teams && ls.teams.home && ls.teams.home.runs != null) ? ls.teams.home.runs : null,
+      awayRuns: (ls && ls.teams && ls.teams.away && ls.teams.away.runs != null) ? ls.teams.away.runs : null,
+      battersWithStats,
+    };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+}
+
 // Normalize a player name for matching: strip accents, lowercase, drop
 // punctuation (Jr., periods), collapse spaces. "José Ramírez Jr." -> "jose ramirez jr".
 function normPlayerName(s) {
@@ -786,5 +821,6 @@ module.exports = {
   getProjectedLineup,
   getTeamLineup, getLineupOffense,
   getLiveGameState,
+  getGameStatusAndScore,
   getTeamHandednessSplits, getTeamBullpenStats, getTeamBullpenUsage, getPitcherHand,
 };
