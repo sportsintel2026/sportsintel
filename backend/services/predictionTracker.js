@@ -21,6 +21,16 @@ function etDate(iso) {
   catch { return null; }
 }
 
+// Shift a 'YYYY-MM-DD' date by N days. Anchored at noon UTC so no DST/tz edge
+// can roll the day. Used to look an NBA game up across its neighboring ESPN
+// filing dates (ESPN can file a game under a date ±1 from the one we stored).
+function shiftYmd(dateStr, deltaDays) {
+  if (!dateStr) return dateStr;
+  const d = new Date(`${dateStr}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + deltaDays);
+  return d.toISOString().slice(0, 10);
+}
+
 // ── CLV (Closing Line Value) ────────────────────────────────────────────────
 // The closing line is the price right before a game starts — the market's
 // sharpest number. If our picks consistently got a BETTER price than the close,
@@ -201,7 +211,11 @@ async function captureNbaClosingLines() {
   if (error) { console.error("[CLV][NBA] fetch error:", error.message); return 0; }
   if (!pending || pending.length === 0) { console.log("[CLV][NBA] no picks awaiting closing line"); return 0; }
 
-  const dates = [...new Set(pending.map(p => p.game_date))];
+  // ESPN can file a game under a neighboring date, and a pre-game pick's stored
+  // date may drift by a day; games are keyed by unique id below, so widening the
+  // fetch window to ±1 only ever helps us find the right game.
+  const baseDates = [...new Set(pending.map(p => p.game_date))];
+  const dates = [...new Set(baseDates.flatMap(d => [shiftYmd(d, -1), d, shiftYmd(d, 1)]))];
   const CLOSING_WINDOW_MS = 35 * 60 * 1000;
   const now = Date.now();
   const gamesById = {};
@@ -500,7 +514,6 @@ const NBA_W = 0.55; // match the NBA model's 55/45 blend
 async function recordNbaTeamPredictions(predictions) {
   if (!Array.isArray(predictions) || predictions.length === 0) return;
   const supabase = db();
-  const gameDate = getEasternDate(0);
   const rows = [];
 
   for (const p of predictions) {
@@ -509,6 +522,13 @@ async function recordNbaTeamPredictions(predictions) {
     if (p.dataQuality && !(p.dataQuality === "ok" || p.dataQuality === "offense-only")) continue;
     const pr = p.predictions || {};
     const gid = String(p.gameId);
+    // Date the pick by the GAME's own start time (Eastern), not the wall-clock when
+    // this cron ran — mirrors the prop path (recordNbaPropPredictions). Stamping the
+    // record-time date was the root cause of stranded NBA picks: a game's row could
+    // land on the wrong day (here, days before tip), and grading + CLV — which look
+    // the game up by date — never found it. Falls back to today only if the game
+    // carries no start time.
+    const gameDate = etDate(p.date) || getEasternDate(0);
 
     // Moneyline (already a probability edge from the model)
     const ml = pr.moneyline;
@@ -583,7 +603,7 @@ async function recordNbaTeamPredictions(predictions) {
       .from("model_predictions")
       .upsert(rows, { onConflict: "game_id,market,selection,game_date", ignoreDuplicates: true });
     if (error) console.error("[Tracker] nba team record error:", error.message);
-    else console.log(`[Tracker] Snapshotted ${rows.length} NBA team picks for ${gameDate} (dups ignored)`);
+    else console.log(`[Tracker] Snapshotted ${rows.length} NBA team picks for ${[...new Set(rows.map(r => r.game_date))].join(", ")} (dups ignored)`);
   } catch (e) {
     console.error("[Tracker] nba team record exception:", e.message);
   }
@@ -844,14 +864,25 @@ async function gradeNba(supabase, pending) {
   // ── Team markets: grade from final scores (ESPN scoreboard) ──────────────────
   if (teamRows.length) {
     const sbCache = {}; // date -> games (one scoreboard fetch per date per run)
+    const boardFor = async (date) => {
+      if (sbCache[date] !== undefined) return sbCache[date];
+      try { sbCache[date] = await fetchScoreboard(date); }
+      catch (e) { sbCache[date] = null; } // transient → try again next run
+      return sbCache[date];
+    };
     for (const p of teamRows) {
-      let games = sbCache[p.game_date];
-      if (!games) {
-        try { games = await fetchScoreboard(p.game_date); sbCache[p.game_date] = games; }
-        catch (e) { continue; } // try again next run
+      // ESPN files a game under its own date, which can differ by up to a day from
+      // the date we stored (UTC-vs-Eastern bucketing for night games). Find the game
+      // by its UNIQUE id across the stored date and ±1 — a date-stamp drift can no
+      // longer strand a finished game as pending, and matching by id means we can
+      // never grade the wrong game.
+      let g = null;
+      for (const d of [p.game_date, shiftYmd(p.game_date, -1), shiftYmd(p.game_date, 1)]) {
+        const games = await boardFor(d);
+        g = (games || []).find(x => String(x.gameId) === String(p.game_id));
+        if (g) break;
       }
-      const g = (games || []).find(x => String(x.gameId) === String(p.game_id));
-      if (!g || g.state !== "post") continue; // not final yet → stay pending
+      if (!g || g.state !== "post") continue; // not found / not final yet → stay pending
       const hs = g.home?.score, as = g.away?.score;
       if (hs == null || as == null) continue;
 
