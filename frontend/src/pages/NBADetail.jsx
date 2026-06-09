@@ -124,6 +124,7 @@ function Detail({ matchup, prediction, gameId }) {
       <LeadersCard m={m} />
       <InjuriesCard m={m} />
       {m.series && <SeriesCard series={m.series} />}
+      {m.headToHead && <NbaHeadToHeadSection h2h={m.headToHead} />}
       <div style={{ fontSize: 11, color: "#6b7280", marginTop: 6, lineHeight: 1.5 }}>
         Model v0.1 · ratings/pace from ESPN season data. Player figures are season averages.
         Injuries shown but not yet weighted into the line (v0.2).
@@ -529,6 +530,36 @@ function SeriesCard({ series }) {
     <div style={card()}>
       <SectionLabel>🏆 {series.title}</SectionLabel>
       <div style={{ fontSize: 15, fontWeight: 700, color: "#e4e7eb" }}>{series.summary || "—"}</div>
+    </div>
+  );
+}
+
+// Season head-to-head: regular-season series record + recent meetings.
+// Data comes pre-built on the matchup payload (matchup.headToHead); the section
+// is only rendered when meetings exist, so it stays hidden in the offseason / on
+// first meetings.
+function NbaHeadToHeadSection({ h2h }) {
+  return (
+    <div style={card()}>
+      <SectionLabel>🆚 Season series</SectionLabel>
+      <div style={{ fontSize: 15, fontWeight: 700, color: "#e4e7eb", marginBottom: 2 }}>{h2h.summary}</div>
+      <div style={{ fontSize: 11, color: "#6b7280", marginBottom: h2h.recent && h2h.recent.length ? 14 : 0 }}>
+        {h2h.played} game{h2h.played === 1 ? "" : "s"} played this season
+      </div>
+      {h2h.recent && h2h.recent.length > 0 && (
+        <div>
+          <div style={{ fontSize: 10, letterSpacing: "0.08em", color: "#6b7280", fontWeight: 600, textTransform: "uppercase", marginBottom: 8 }}>Recent meetings</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {h2h.recent.map((mtg, i) => (
+              <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 10, alignItems: "center", padding: "8px 10px", background: "#0a0e14", borderRadius: 4 }}>
+                <div style={{ fontSize: 11, color: "#9ca3af" }}>{mtg.date}</div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: "#e4e7eb", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{mtg.away} {mtg.score} {mtg.home}</div>
+                <div style={{ fontSize: 11, color: "#22c55e", textAlign: "right" }}>{mtg.winner ? `${mtg.winner} won` : ""}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
