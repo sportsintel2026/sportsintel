@@ -193,12 +193,74 @@ function buildEdgesDebug(gameEdges, gamesWithOdds, slateDate) {
   };
 }
 
+// READ-ONLY HR FEED AUDIT (?hr_audit=1). Traces every input that feeds the HR
+// prediction for today's actual picks and reports which are LIVE vs falling back —
+// the standing "is everything still flowing?" check. The power factor silently
+// reverts to ISO when Savant xwOBA/barrel are missing (the failure mode that ran
+// dead for weeks), so feedHealth.powerFactor.savantPct is the number to watch: it
+// should be ~100%. Builds purely from the already-computed edge objects (zero extra
+// Odds-API cost). Each HR edge carries statcast.{xwobaSource,barrelSource,bbe},
+// recent15, bvp, parkHRFactor, opposingPitcherHR9, weatherEffect, hrProb.
+function summarizeHrFeeds(edges) {
+  const list = edges || [];
+  const n = list.length;
+  const pct = (c) => n ? +(100 * c / n).toFixed(1) : null;
+  let xwSavant = 0, xwStatcast = 0, xwNull = 0, brSavant = 0, brStatcast = 0, brNull = 0;
+  let savantPower = 0, isoFallback = 0;
+  let hasRecent = 0, hasBvp = 0, hasPark = 0, hasPitcherHR9 = 0, hasWeather = 0;
+  const probs = [], rows = [];
+  for (const e of list) {
+    const sc = e.statcast || {};
+    const xs = sc.xwobaSource || null;
+    const bs = sc.barrelSource || null;
+    if (xs === "savant") xwSavant++; else if (xs === "statcast") xwStatcast++; else xwNull++;
+    if (bs === "savant") brSavant++; else if (bs === "statcast") brStatcast++; else brNull++;
+    const powered = (xs === "savant" || xs === "statcast" || bs === "savant" || bs === "statcast");
+    if (powered) savantPower++; else isoFallback++;
+    if (e.recent15 && e.recent15.atBats) hasRecent++;
+    if (e.bvp && e.bvp.atBats) hasBvp++;
+    if (e.parkHRFactor != null && e.parkHRFactor !== 1) hasPark++;
+    if (e.opposingPitcherHR9 != null) hasPitcherHR9++;
+    if (e.weatherEffect != null) hasWeather++;
+    if (e.hrProb != null) probs.push(e.hrProb);
+    rows.push({
+      player: e.player, hrProb: e.hrProb, edge: e.edge,
+      xwOBA: sc.xwOBA ?? null, xwobaSource: xs,
+      barrelRate: sc.barrelRate ?? null, barrelSource: bs, bbe: sc.bbe ?? null,
+      power: powered ? "statcast/savant" : "ISO fallback",
+      recent15AB: e.recent15 ? e.recent15.atBats : null,
+      bvpAB: e.bvp ? e.bvp.atBats : null,
+      parkHRFactor: e.parkHRFactor ?? null,
+      oppPitcherHR9: e.opposingPitcherHR9 ?? null,
+      weather: e.weatherEffect ?? null,
+    });
+  }
+  probs.sort((a, b) => a - b);
+  const mean = probs.length ? +(probs.reduce((a, b) => a + b, 0) / probs.length).toFixed(3) : null;
+  return {
+    n,
+    feedHealth: {
+      powerFactor: { savantOrStatcast: savantPower, isoFallback, savantPct: pct(savantPower) }, // KEY — want ~100%
+      xwOBA: { savant: xwSavant, statcast: xwStatcast, missing: xwNull, savantPct: pct(xwSavant) },
+      barrel: { savant: brSavant, statcast: brStatcast, missingOrThin: brNull, savantPct: pct(brSavant) },
+      recent15: { present: hasRecent, pct: pct(hasRecent) },
+      bvp: { present: hasBvp, pct: pct(hasBvp) },
+      parkFactor: { nonNeutral: hasPark, pct: pct(hasPark) },
+      pitcherHR9: { present: hasPitcherHR9, pct: pct(hasPitcherHR9) },
+      weather: { present: hasWeather, pct: pct(hasWeather) },
+    },
+    hrProbDist: { n: probs.length, min: probs[0] ?? null, mean, max: probs[probs.length - 1] ?? null },
+    rows: rows.slice(0, 30),
+    note: "feedHealth.powerFactor.savantPct should be ~100%. If many rows show power:'ISO fallback', the Savant batter xwOBA/barrel feed is NOT reaching the HR power factor (silent-null failure). recent15/bvp/parkFactor/pitcherHR9/weather show whether each secondary feed reaches the projection.",
+  };
+}
+
 router.get("/mlb", async (req, res) => {
   try {
     const { date: slateDate, rolled } = await resolveSlateDate();
 
     // Cache is valid only if it's fresh AND for the same date we now want to serve.
-    if (!req.query.hits_debug && !req.query.edges_debug && edgesCache && edgesCacheDate === slateDate && (Date.now() - edgesCacheAt) < CACHE_TTL_MS) {
+    if (!req.query.hits_debug && !req.query.edges_debug && !req.query.hr_audit && edgesCache && edgesCacheDate === slateDate && (Date.now() - edgesCacheAt) < CACHE_TTL_MS) {
       console.log(`[Edges] Returning cached results for ${slateDate}`);
       return res.json({ ...edgesCache, cached: true });
     }
@@ -410,6 +472,9 @@ router.get("/mlb", async (req, res) => {
       if (eventIds.length > 0) {
         const hrOddsByEvent = await getMLBHRPropsForAllEvents(eventIds, 5);
         hrPropEdges = await calculateHRPropEdges(topGamesForHR, hrOddsByEvent);
+        if (req.query.hr_audit) {
+          return res.json({ ok: true, slateDate, gamesUsed: topGamesForHR.map(g => `${g.awayAbbr}@${g.homeAbbr}`), ...summarizeHrFeeds(hrPropEdges) });
+        }
         const kOddsByEvent = await getMLBStrikeoutPropsForAllEvents(eventIds, 5);
         kPropEdges = await calculateStrikeoutPropEdges(topGamesForHR, kOddsByEvent);
         const hitsOddsByEvent = await getMLBHitsPropsForAllEvents(eventIds, 5);
@@ -421,6 +486,7 @@ router.get("/mlb", async (req, res) => {
       } else {
         console.log("[Edges-HR] NO eventIds — HR props skipped");
         if (req.query.hits_debug) return res.json({ ok: true, slateDate, note: "no pre-game games with odds right now — try when tonight's slate is upcoming", hits_debug: [] });
+        if (req.query.hr_audit) return res.json({ ok: true, slateDate, note: "no pre-game games with odds right now — run when tonight's slate is upcoming", n: 0 });
       }
     } catch (e) {
       console.error("[Edges] HR props failed:", e.message);
