@@ -41,8 +41,9 @@ export default function LandingPage() {
 
   const COMPETITORS = [
     { name: "Picks Sites", price: "$20–$100+/mo", desc: "Sell you picks. No data, no reasoning.", highlight: false },
+    { name: "Line-Shopping / Odds Tools", price: "$50–$200+/mo", desc: "Multi-book odds screens — and that's all.", highlight: false },
     { name: "ESPN+", price: "$10.99/mo", desc: "Scores only. No model, no edges.", highlight: false },
-    { name: "WizePicks", price: "$7/mo", desc: "A real model + the data behind every number.", highlight: true },
+    { name: "WizePicks", price: "$7/mo", desc: "A real model, the data behind every number, AND every book's price in one screen.", highlight: true },
   ];
 
   // Sample cards for the blurred "look inside" preview — fake but realistic data,
@@ -103,10 +104,10 @@ export default function LandingPage() {
             <span style={{ color: "#ef4444" }}>every game.</span>
           </h1>
           <p style={{ fontSize: 16, color: "#94a3b8", maxWidth: 540, marginBottom: 14, lineHeight: 1.8 }}>
-            WizePicks runs a research-grade model that folds in <strong style={{ color: "#e2e8f0" }}>live conditions, matchup history, recent form, and situational factors</strong> — then compares it against real sportsbook lines to surface where the market is wrong.
+            WizePicks runs a research-grade model that folds in <strong style={{ color: "#e2e8f0" }}>live conditions, matchup history, recent form, and situational factors</strong> — then lays it next to real sportsbook lines so you can see where the model and the market disagree.
           </p>
           <p style={{ fontSize: 15, color: "#64748b", maxWidth: 520, marginBottom: 32, lineHeight: 1.8 }}>
-            You don't buy picks here. You get the <strong style={{ color: "#e2e8f0" }}>same depth of data the pros use</strong> to make your own — for <strong style={{ color: "#ef4444" }}>$7/month</strong>.
+            You don't buy picks here. You get the <strong style={{ color: "#e2e8f0" }}>same depth of data the pros use</strong> — plus every book's price in one screen — to make your own call.
           </p>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
             <Link to="/signup" className="btn-red" style={{ fontSize: 15, padding: "14px 32px" }}>Sign Up Free →</Link>
@@ -248,6 +249,47 @@ export default function LandingPage() {
               <strong style={{ color: "#e2e8f0" }}>Click into any game</strong> for the full breakdown — model win probability vs the market, projected scoring vs the line, the key matchups, and <strong style={{ color: "#e2e8f0" }}>head-to-head history</strong> showing how the people involved have actually performed against each other.
             </div>
           </div>
+        </div>
+
+        {/* Odds Shop — line shopping */}
+        <div style={{ borderTop: "1px solid #0f0f1a", marginBottom: 56 }} />
+        <div style={{ marginBottom: 64 }}>
+          <div style={{ marginBottom: 8, fontSize: 11, color: "#1D9E75", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase" }}>💲 Live Odds · every book, one screen</div>
+          <h2 style={{ fontSize: "clamp(20px,4vw,30px)", fontWeight: 800, color: "#fff", marginBottom: 8 }}>Shop every book. Take the best price. Every time.</h2>
+          <p style={{ fontSize: 14, color: "#94a3b8", maxWidth: 580, marginBottom: 16, lineHeight: 1.8 }}>
+            The same bet pays differently at different sportsbooks. We put <strong style={{ color: "#e2e8f0" }}>every major US book side by side</strong>, best price highlighted — so you always grab the better number, a real edge that has nothing to do with luck. And when one book hangs a line out of step with the rest, you'll see it sitting there.
+          </p>
+          <p style={{ fontSize: 14, color: "#64748b", maxWidth: 580, marginBottom: 24, lineHeight: 1.8 }}>
+            Other sites lock this behind a steep monthly fee. With us it's just part of the room.
+          </p>
+          <div style={{ background: "#0a0a14", border: "1px solid #1a1a2e", borderRadius: 12, padding: 18, maxWidth: 520 }}>
+            <div style={{ fontSize: 10, color: "#475569", marginBottom: 12, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>Same bet · four books</div>
+            {[["BetMGM", "−130", false], ["Caesars", "−128", false], ["DraftKings", "−125", false], ["FanDuel", "−120", true]].map(([book, price, best], i) => (
+              <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderTop: i ? "1px solid #12121f" : "none" }}>
+                <span style={{ fontSize: 13, color: best ? "#fff" : "#64748b", fontWeight: best ? 700 : 500 }}>{book}</span>
+                <span style={{ fontSize: 14, fontVariantNumeric: "tabular-nums", fontWeight: best ? 800 : 500, color: best ? "#1D9E75" : "#64748b", background: best ? "rgba(29,158,117,0.10)" : "transparent", borderRadius: 4, padding: best ? "2px 8px" : "2px 0" }}>{price}{best ? "  ✓ best" : ""}</span>
+              </div>
+            ))}
+            <div style={{ fontSize: 12, color: "#64748b", marginTop: 12, lineHeight: 1.7 }}>
+              Same side, four prices. <strong style={{ color: "#1D9E75" }}>−120 pays more than −130</strong> on the identical bet. That difference, on every wager, compounds into real money.
+            </div>
+          </div>
+        </div>
+
+        {/* Don't bet blind — the pitch */}
+        <div style={{ borderTop: "1px solid #0f0f1a", marginBottom: 56 }} />
+        <div style={{ marginBottom: 64, background: "linear-gradient(180deg, #0c1410 0%, #0a0a14 100%)", border: "1px solid #1D9E7530", borderRadius: 16, padding: "32px 26px" }}>
+          <h2 style={{ fontSize: "clamp(22px,4vw,32px)", fontWeight: 900, color: "#fff", marginBottom: 16, letterSpacing: "-0.01em" }}>Don't bet blind.</h2>
+          <p style={{ fontSize: 15, color: "#cbd5e1", maxWidth: 600, marginBottom: 14, lineHeight: 1.8 }}>
+            Everyone wants winners. Smart bettors want winners <em style={{ color: "#fff", fontStyle: "normal", fontWeight: 700 }}>at the best price</em> — because price matters too.
+          </p>
+          <p style={{ fontSize: 14, color: "#94a3b8", maxWidth: 600, marginBottom: 14, lineHeight: 1.8 }}>
+            We don't sell locks. We don't chase trends. We break down the full market, show you the reasoning behind every number, and put every book's price side by side so you can take the best one.
+          </p>
+          <p style={{ fontSize: 14, color: "#94a3b8", maxWidth: 600, marginBottom: 20, lineHeight: 1.8 }}>
+            What you're really getting isn't a "🔥 LOCK OF THE DAY" with no explanation. It's the data, the matchup, and the market — so you decide with information instead of hope.
+          </p>
+          <div style={{ fontSize: 18, fontWeight: 900, color: "#1D9E75", letterSpacing: "-0.01em" }}>Bet smarter. Bet Wize.</div>
         </div>
 
         {/* Daily picks preview (only if picks exist) */}
