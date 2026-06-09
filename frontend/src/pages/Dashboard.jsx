@@ -268,7 +268,7 @@ function TopPlays({ edges, hasFullAccess, navigate }) {
   const pool = [...(edges.moneylineEdges || []), ...(edges.totalsEdges || [])]
     .filter((e) => e.convictionScore != null && (e.conviction === "HIGH" || e.conviction === "MEDIUM") && (e.edge ?? 0) > 0);
   pool.sort((a, b) => (b.convictionScore - a.convictionScore) || ((b.edge ?? 0) - (a.edge ?? 0)));
-  const top = pool.slice(0, 5);
+  const top = pool.slice(0, 12);
   const titleRow = (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
       <div style={{ fontSize: 13, fontWeight: 700, color: "#e4e7eb" }}>🎯 Top plays today</div>
