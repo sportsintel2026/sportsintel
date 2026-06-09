@@ -185,8 +185,67 @@ async function getNbaMatchup(gameId) {
     home: teamObj(homeC, boxHome, leadHome),
     away: teamObj(awayC, boxAway, leadAway),
     series,
+    headToHead: buildHeadToHead(s, homeId, awayId, homeC.team?.abbreviation, awayC.team?.abbreviation),
     predictor,
     odds,
+  };
+}
+
+// Season head-to-head (regular-season series), distinct from the playoff
+// `series` above. ESPN files it under seasonseries (type "total"); its `events`
+// array carries each meeting. Parsed defensively — ESPN shapes vary and the NBA
+// regular season isn't live right now, so this returns null (and the frontend
+// hides the section) unless real completed meetings are present. Mapped to THIS
+// game's home/away by team id.
+function buildHeadToHead(s, homeId, awayId, homeAbbr, awayAbbr) {
+  const list = s.seasonseries || [];
+  const entry =
+    list.find((x) => x.type === 'total') ||
+    list.find((x) => x.type !== 'playoff' && Array.isArray(x.events) && x.events.length) ||
+    null;
+  if (!entry) return null;
+
+  const events = Array.isArray(entry.events) ? entry.events : [];
+  const cid = (c) => String(c.id || c.team?.id || '');
+  let homeWins = 0, awayWins = 0;
+  const meetings = [];
+  for (const ev of events) {
+    const cs = ev.competitors || [];
+    if (cs.length < 2) continue;
+    const h = cs.find((c) => c.homeAway === 'home') || cs[0];
+    const a = cs.find((c) => c.homeAway === 'away') || cs[1];
+    const hScore = h.score != null ? parseInt(h.score, 10) : NaN;
+    const aScore = a.score != null ? parseInt(a.score, 10) : NaN;
+    if (Number.isNaN(hScore) || Number.isNaN(aScore)) continue; // only completed games
+    const winnerId = h.winner ? cid(h) : a.winner ? cid(a)
+      : (hScore > aScore ? cid(h) : aScore > hScore ? cid(a) : null);
+    if (winnerId === String(homeId)) homeWins++;
+    else if (winnerId === String(awayId)) awayWins++;
+    const winnerAbbr = winnerId === String(homeId) ? homeAbbr
+      : winnerId === String(awayId) ? awayAbbr
+      : winnerId === cid(h) ? (h.abbreviation || homeAbbr)
+      : winnerId === cid(a) ? (a.abbreviation || awayAbbr) : null;
+    meetings.push({
+      date: (ev.date || '').slice(0, 10),
+      away: a.abbreviation || awayAbbr || '',
+      home: h.abbreviation || homeAbbr || '',
+      score: `${aScore}-${hScore}`,
+      winner: winnerAbbr,
+    });
+  }
+  const played = meetings.length;
+  if (played === 0) return null;
+  meetings.sort((m1, m2) => (m1.date < m2.date ? -1 : 1));
+  let summary;
+  if (awayWins === homeWins) summary = `Season series tied ${awayWins}-${homeWins}`;
+  else if (awayWins > homeWins) summary = `${awayAbbr} leads season series ${awayWins}-${homeWins}`;
+  else summary = `${homeAbbr} leads season series ${homeWins}-${awayWins}`;
+  return {
+    summary,
+    played,
+    away: { abbr: awayAbbr, wins: awayWins },
+    home: { abbr: homeAbbr, wins: homeWins },
+    recent: [...meetings].reverse().slice(0, 5),
   };
 }
 
