@@ -48,7 +48,11 @@ router.get("/", async (req, res) => {
       const cutoff = /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : "2026-06-04"; // PLACEHOLDER until the real v2 deploy date is set
       return res.json(await hrSplit(cutoff));
     }
-    if (req.query.hr_backtest === "1" || req.query.hr_backtest === "true") return res.json(await hrBacktest());
+    if (req.query.hr_backtest != null) {
+      const v = String(req.query.hr_backtest);
+      const cutoff = /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null; // optional era split
+      return res.json(await hrBacktest(cutoff));
+    }
     const graded = await gradeFinishedGames();
     res.json({ ok: true, graded: graded == null ? 0 : graded });
   } catch (err) {
@@ -788,7 +792,7 @@ async function hrSplit(cutoff) {
 // rescues a +EV slice, or do we trim HR like the run line? Slices graded HR ROI by
 // edge band and by odds band, shows calibration (model_prob vs actual), and flags
 // any slice that's +EV with non-trivial volume. Writes NOTHING.
-async function hrBacktest() {
+async function hrBacktest(cutoff) {
   const supabase = db();
   const rows = [];
   const PAGE = 1000;
@@ -842,6 +846,23 @@ async function hrBacktest() {
   const salvage = [...byEdge.map(b => ({ kind: "edge", ...b })), ...byOdds.map(b => ({ kind: "odds", ...b }))]
     .filter(b => b.roiPct != null && b.roiPct > 0 && b.n >= 30);
 
+  // Candidate gate = keep HR only where edge <= 0.05 (low/modest-edge plays). Evaluate
+  // it overall AND split by era so we know it isn't carried by the dead-Statcast period.
+  const gateSet = (set) => set.filter(r => r.edge != null && r.edge <= 0.05);
+  const candidateGate = { rule: "edge <= 0.05 (drop the inflated high-confidence region)", overall: summarize(gateSet(graded)) };
+  let eraSplit = null;
+  if (cutoff) {
+    const before = graded.filter(r => r.game_date && r.game_date < cutoff);
+    const after = graded.filter(r => r.game_date && r.game_date >= cutoff);
+    const edgeBandsFor = (set) => edgeBands.map(([lo, hi]) => ({ band: `${lo}-${hi === 1 ? "+" : hi}`, ...summarize(set.filter(r => r.edge != null && r.edge >= lo && r.edge < hi)) }));
+    eraSplit = {
+      cutoff,
+      beforeRebuild: { all: summarize(before), edgeBands: edgeBandsFor(before), candidateGate_edgeLte05: summarize(gateSet(before)) },
+      afterRebuild: { all: summarize(after), edgeBands: edgeBandsFor(after), candidateGate_edgeLte05: summarize(gateSet(after)) },
+      gateVerdictNote: "Trust the gate only if afterRebuild.candidateGate_edgeLte05 is clearly +EV with volume. If it's flat/negative post-rebuild, the +EV was a dead-Statcast-era artifact → trim HR instead.",
+    };
+  }
+
   return {
     ok: true, n, baseRate,
     overall: summarize(graded),
@@ -849,10 +870,12 @@ async function hrBacktest() {
     byOddsBand: byOdds,
     calibration,
     salvageableSlices: salvage,
+    candidateGate,
+    eraSplit,
     verdictNote: salvage.length
-      ? "At least one slice is +EV with volume — consider GATING HR to it rather than trimming. Confirm it holds out-of-sample before trusting it."
+      ? "At least one slice is +EV with volume — consider GATING HR to it rather than trimming. Confirm it holds post-rebuild (pass ?hr_backtest=YYYY-MM-DD) before trusting it."
       : "No +EV slice with volume. The honest call is to TRIM HR from the recorded card (like the run line at -15%), or shelve it until the power factor is rebuilt and re-backtested.",
-    method: "ROI = unit profit / decisions, real American odds, push excluded. Calibration: if actualHitRate sits flat/below meanModelProb across rising buckets, the model's HR confidence carries no signal.",
+    method: "ROI = unit profit / decisions, real American odds, push excluded. Pass ?hr_backtest=YYYY-MM-DD to split the edge bands + candidate gate by era.",
   };
 }
 
