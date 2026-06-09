@@ -115,6 +115,7 @@ export default function SettingsPage() {
           </Section>
 
           <Section title="Support">
+            <Row label="Email us" value={<a href="mailto:wizepickshelp@gmail.com?subject=WizePicks%20support" style={{ color: "#1D9E75", textDecoration: "none", fontWeight: 600 }}>wizepickshelp@gmail.com</a>} />
             <Row label="Feedback" value="Use the thumbs-down button anywhere" />
           </Section>
 
