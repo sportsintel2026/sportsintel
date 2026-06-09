@@ -19,7 +19,7 @@ const {
   getPitcherHand,
 } = require("./mlbStatsApi");
 const { americanToImpliedProb } = require("./oddsApi");
-const { getBatterExpectedStats, getBatterBarrels } = require("./savantApi");
+const { getBatterExpectedStats, getBatterBarrels, getPitcherWhiffStats } = require("./savantApi");
 const { getWeatherForVenue } = require("./weatherApi");
 
 const LEAGUE_AVG = {
@@ -455,9 +455,20 @@ function kNegBinomCdf(k, mu, phi) {
   return Math.min(1, s);
 }
 
-// Recent-aware K projection. Blends the pitcher's ACTUAL last starts (IP + K) with
-// season rates, regressing thin samples to league. Returns {lambda, expIP, k9}.
-function kProjection(pitcherStats, recentStarts, oppTeamStats) {
+// v2.1 (2026-06-09): the strikeout RATE now comes from Savant k_percent (true K per
+// batter faced) when available — a cleaner rate than K/9, which is contaminated by
+// baserunners/innings. λ = kRate × expected batters faced × opponent factor, where
+// expBF = expIP × BF_PER_IP and expIP is the recent-aware innings estimate from v2.
+// When a pitcher isn't in the Savant map, kRate falls back to the K/9-derived rate —
+// which makes λ mathematically identical to v2, so missing Savant data degrades
+// gracefully (never a silent break). Savant k% is regressed to league for thin PA.
+const BF_PER_IP = 4.3;       // league avg batters faced per inning
+const LEAGUE_K_PCT = 0.22;   // league avg strikeout rate per plate appearance
+
+// Recent-aware K projection. expIP from recent starts + season; strikeout RATE from
+// Savant k% (preferred) blended with recent form; opponent-adjusted. savantK is the
+// pitcher's Savant row {kPct, whiffPct, pa} or null. Returns {lambda, expIP, kRate, ...}.
+function kProjection(pitcherStats, recentStarts, oppTeamStats, savantK) {
   const ps = pitcherStats || {};
   const seasonK9 = ps.strikeoutsPer9 ?? LEAGUE_K9;
   let seasonIP_GS = DEFAULT_START_IP;
@@ -465,39 +476,54 @@ function kProjection(pitcherStats, recentStarts, oppTeamStats) {
 
   const starts = Array.isArray(recentStarts) ? recentStarts.filter(s => s && s.ip > 0) : [];
   const n = starts.length;
-  let recentIP = null, recentK9 = null;
+  let recentIP = null, recentIPsum = 0, recentKsum = 0;
   if (n) {
-    const ipSum = starts.reduce((a, s) => a + s.ip, 0);
-    const kSum = starts.reduce((a, s) => a + (s.k || 0), 0);
-    recentIP = ipSum / n;
-    recentK9 = ipSum > 0 ? (kSum / ipSum) * 9 : null;
+    recentIPsum = starts.reduce((a, s) => a + s.ip, 0);
+    recentKsum = starts.reduce((a, s) => a + (s.k || 0), 0);
+    recentIP = recentIPsum / n;
   }
-  const wRecent = Math.min(0.6, n * 0.2);              // ramps to 0.6 at 3+ starts
+  // expected innings (the v2 root-cause fix): lean on recent starts, clamp sane.
+  const wRecent = Math.min(0.6, n * 0.2);
   let expIP = recentIP != null ? wRecent * recentIP + (1 - wRecent) * seasonIP_GS : seasonIP_GS;
   expIP = Math.max(3.5, Math.min(7.0, expIP));
-  let k9 = seasonK9;
-  if (recentK9 != null) k9 = wRecent * recentK9 + (1 - wRecent) * seasonK9;
-  if (n < 2) k9 = 0.5 * k9 + 0.5 * LEAGUE_K9;          // thin sample → pull toward league
+  const expBF = expIP * BF_PER_IP;
+
+  // strikeout RATE per batter faced. Prefer Savant k%; else derive from K/9 (the
+  // (k9/9)/BF_PER_IP identity makes the no-Savant path collapse exactly to v2).
+  const haveSavant = !!(savantK && Number.isFinite(savantK.kPct) && savantK.kPct > 0);
+  const baseKPct = haveSavant ? savantK.kPct : (seasonK9 / 9) / BF_PER_IP;
+  // recent-form nudge: recent K over estimated recent batters faced
+  const recentKPct = recentIPsum > 0 ? recentKsum / (recentIPsum * BF_PER_IP) : null;
+  const wRecentK = recentKPct != null ? Math.min(0.3, n * 0.1) : 0; // up to 0.3 at 3+ starts
+  let kRate = (1 - wRecentK) * baseKPct + wRecentK * recentKPct;
+  // thin Savant sample (early season) → pull toward league k%
+  if (haveSavant) {
+    const pa = savantK.pa || 0;
+    if (pa < 80) { const w = pa / 80; kRate = w * kRate + (1 - w) * LEAGUE_K_PCT; }
+  } else if (n < 2) {
+    kRate = 0.5 * kRate + 0.5 * (LEAGUE_K9 / 9) / BF_PER_IP; // thin & no Savant → league
+  }
+  kRate = Math.max(0.08, Math.min(0.45, kRate)); // sane bounds
 
   let oppFactor = 1.0;
   if (oppTeamStats && oppTeamStats.games > 0 && oppTeamStats.strikeouts != null) {
     oppFactor = (oppTeamStats.strikeouts / oppTeamStats.games) / LEAGUE_TEAM_K_PER_GAME;
     oppFactor = Math.max(0.82, Math.min(1.18, oppFactor)); // one stat shouldn't swing it wildly
   }
-  const lambda = (k9 / 9) * expIP * oppFactor;
-  return { lambda: lambda > 0 ? lambda : null, expIP: round2(expIP), k9: round2(k9) };
+  const lambda = kRate * expBF * oppFactor;
+  return { lambda: lambda > 0 ? lambda : null, expIP: round2(expIP), kRate: round3(kRate), expBF: round2(expBF), usedSavant: haveSavant };
 }
 
-function expectedKsFor(pitcherStats, recentStarts) {
-  const { expIP, k9 } = kProjection(pitcherStats, recentStarts, null);
-  return round2((k9 / 9) * expIP);
+function expectedKsFor(pitcherStats, recentStarts, savantK) {
+  const { lambda } = kProjection(pitcherStats, recentStarts, null, savantK);
+  return lambda != null ? round2(lambda) : null;
 }
 
-// P(strikeouts OVER the line) — negative-binomial, recent-aware. No blunt shrink:
-// the overdispersion (φ) does the tempering the old 0.75 shrink used to hack in.
-function strikeoutOverProb(pitcherStats, oppTeamStats, line, recentStarts) {
+// P(strikeouts OVER the line) — negative-binomial, recent-aware, Savant-k%-driven.
+// No blunt shrink: the overdispersion (φ) does the tempering the old 0.75 shrink hacked in.
+function strikeoutOverProb(pitcherStats, oppTeamStats, line, recentStarts, savantK) {
   if (!pitcherStats || line == null) return null;
-  const { lambda } = kProjection(pitcherStats, recentStarts, oppTeamStats);
+  const { lambda } = kProjection(pitcherStats, recentStarts, oppTeamStats, savantK);
   if (!(lambda > 0)) return null;
   // .5 lines: over wins on K ≥ floor(line)+1, so P(over) = 1 - CDF(floor(line))
   return round3(1 - kNegBinomCdf(Math.floor(line), lambda, K_DISPERSION_PHI));
@@ -1358,6 +1384,10 @@ function findProbableStarter(playerName, game) {
 async function calculateStrikeoutPropEdges(games, kOddsByEvent) {
   const targetGames = games.slice(0, MAX_K_GAMES);
   const out = [];
+  // Savant k%/whiff% map (cached daily). Verified to flow via ?whiff_data=1. If it's
+  // null (Savant outage), kProjection falls back to the K/9 path — identical to v2.
+  let whiffMap = null;
+  try { whiffMap = await getPitcherWhiffStats(); } catch (e) { whiffMap = null; }
   for (const game of targetGames) {
     const eventId = findEventIdForGame(game, kOddsByEvent);
     const kOdds = eventId ? kOddsByEvent[eventId] : null;
@@ -1372,9 +1402,10 @@ async function calculateStrikeoutPropEdges(games, kOddsByEvent) {
       const pitcherStats = regressThinSample(await getPitcherSeasonStats(pitcher.id));
       if (!pitcherStats) continue;
       const recentStarts = await getPitcherRecentStarts(pitcher.id, 5).catch(() => []);
+      const savantK = whiffMap ? (whiffMap.get(Number(pitcher.id)) || null) : null;
       const onAwayTeam = pitcher.teamId === game.awayId;
       const oppTeamStats = onAwayTeam ? homeTeam : awayTeam; // the lineup he faces
-      const overProb = strikeoutOverProb(pitcherStats, oppTeamStats, propOdds.line, recentStarts);
+      const overProb = strikeoutOverProb(pitcherStats, oppTeamStats, propOdds.line, recentStarts, savantK);
       if (overProb == null) continue;
       const fairOver = devigTwoWay(propOdds.overOdds, propOdds.underOdds);
       const underProb = round3(1 - overProb);
@@ -1406,7 +1437,7 @@ async function calculateStrikeoutPropEdges(games, kOddsByEvent) {
         book: propOdds.book,
         edge,
         confidence: rateConfidence(edge),
-        expectedKs: expectedKsFor(pitcherStats, recentStarts),
+        expectedKs: expectedKsFor(pitcherStats, recentStarts, savantK),
         pitcherK9: pitcherStats.strikeoutsPer9 ?? null,
       });
     }
