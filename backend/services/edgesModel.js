@@ -252,9 +252,19 @@ function calculateTotalProjection(game, awayPitcher, homePitcher, awayTeamHit, h
 // category" compounds into fantasy projections (some picks implied a 40%+ game
 // HR chance — no hitter does that). Three principled, reversible damps below.
 // To revert toward old behavior: cap → 0.15, damp → 1.0, shrink → 1.0.
-const HR_PERPA_CAP = 0.08;    // per-PA HR ceiling (was 0.15). Elite sluggers top out ~7-8%/PA.
+// RECALIBRATION (2026-06-09): hr_audit confirmed all feeds 100% live (no flow bug);
+// hr_backtest showed the model claimed ~20-29% on its top picks that hit ~11-13%
+// (post-rebuild -24.6% ROI). Root cause: the raw projection ran to ~30% game probs
+// and the market cap (1.5×) then displayed 1.5× a SHARP book — structurally +50%
+// overconfident on every pick. Fix: cap 0.08→0.05 (game-prob ceiling ~20%, not 30%),
+// shrink 0.7→0.55 (pull the env-stack inflation harder toward the batter's own rate),
+// and the market cap tightened to 1.1 (see MAX_OVER_MARKET below). HR is shown as an
+// honest likelihood ranking, NOT a +EV bet — the HR market is sharp and the model
+// does not beat it; this makes the displayed % truthful.
+const HR_PERPA_CAP = 0.05;    // per-PA HR ceiling. Over ~4.3 PA → game-prob tops ~20% (realistic elite ceiling).
 const HR_FACTOR_DAMP = 0.5;   // pull the COMBINED env multiplier toward 1 (^0.5 = sqrt): still tilts, can't stack into a lock.
-const HR_PROB_SHRINK = 0.7;   // shrink the adjusted per-PA rate 30% back toward the batter's OWN base rate (keeps player differentiation, unlike shrinking to league avg).
+const HR_PROB_SHRINK = 0.55;  // shrink the adjusted per-PA rate 45% back toward the batter's OWN base rate (tightened from 0.7 — the env stack was over-inflating).
+const HR_MIN_DISPLAY_PROB = 0.08; // HR picks are RANKED BY LIKELIHOOD, not a fake edge. Show only batters with ≥8% game HR chance (genuinely elevated power), top-N by hrProb.
 
 // ── HR MODEL v2 INPUTS (2026-06-06) ───────────────────────────────────────────
 // Three new signals layered on the calibrated base. Each is bounded so it tilts
@@ -336,7 +346,10 @@ function expectedPAForOrder(order) { return LINEUP_PA[order] ?? 4.1; }
 //     unlikely, so a model that claims a deep longshot is a lock is almost always
 //     wrong. Caps longshot "edges"; lets shorter-priced book-likely hitters rise.
 //     1.0 = never bet above the book; raise to trust the model's disagreement more.
-const MAX_OVER_MARKET = 1.5;
+//     RECALIBRATION (2026-06-09): tightened 1.5 → 1.1. The HR market is sharp — the
+//     backtest proved the model does NOT beat it — so letting the model sit 50% above
+//     the book was the core overconfidence. 1.1 = at most a slim 10% above implied.
+const MAX_OVER_MARKET = 1.1;
 
 // (d-exception) BvP override on the market cap: a LONGSHOT with a GENUINE record
 // vs this exact pitcher earns a higher ceiling (2.0× instead of 1.5×). Strictly
@@ -344,7 +357,7 @@ const MAX_OVER_MARKET = 1.5;
 // real sample qualifies (30+ career AB, 2+ HR), and only on longshot prices
 // (+400 and up), where the cap actually binds. Thin "2-for-6" samples do NOT
 // qualify. Even when it fires, the 0.08 per-PA cap still backstops the result.
-const MAX_OVER_MARKET_BVP = 2.0; // elevated cap multiple when BvP qualifies
+const MAX_OVER_MARKET_BVP = 1.25; // elevated cap multiple when BvP qualifies (tightened from 2.0 with the 2026-06-09 recalibration)
 const BVP_EXC_MIN_AB = 30;       // need a real sample vs the pitcher
 const BVP_EXC_MIN_HR = 2;        // and demonstrated power within it
 const BVP_EXC_MIN_ODDS = 400;    // only for longshots (the +450–+1000 band)
@@ -1361,8 +1374,8 @@ async function calculateHRPropEdges(games, hrOddsByEvent) {
     }
   }
   return allHRProps
-    .filter(p => p.edge != null && p.edge >= MIN_PROP_EDGE)
-    .sort((a, b) => (b.hrProb ?? -1) - (a.hrProb ?? -1)); // likelihood-first, not payout-first
+    .filter(p => p.hrProb != null && p.hrProb >= HR_MIN_DISPLAY_PROB) // likelihood ranking, not a (now-honest, near-zero) edge gate
+    .sort((a, b) => (b.hrProb ?? -1) - (a.hrProb ?? -1)); // most likely to homer first
 }
 
 const MAX_K_GAMES = 8; // cap games we pull K props for (Odds API credit budget)
