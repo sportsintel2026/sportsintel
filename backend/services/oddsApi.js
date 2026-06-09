@@ -468,6 +468,96 @@ async function getRawTotalsDebug(filter) {
   return { ok: true, events: out.length, data: out };
 }
 
+// ── READ-ONLY coverage + cost probe (for the line-shopping page feasibility) ──
+// Answers the two questions that decide whether a multi-book odds page is a $7
+// feature or a budget-buster: (1) which bookmakers does THIS key actually return
+// (the line-shopping inventory), and (2) what does one all-books pull COST in
+// Odds API credits. The Odds API bills regions × markets per call and returns the
+// exact cost of the call in the `x-requests-last` header. Makes ONE live call
+// (so it costs a few credits to run). Widen coverage with regions=us,us2,uk,eu —
+// each region adds cost. Writes nothing.
+async function probeOddsCoverage({ regions = "us", markets = "h2h,totals", sport = "baseball_mlb" } = {}) {
+  if (!ODDS_API_KEY) return { ok: false, error: "ODDS_API_KEY not configured" };
+  try {
+    const res = await axios.get(`${ODDS_BASE}/sports/${sport}/odds`, {
+      params: { apiKey: ODDS_API_KEY, regions, markets, oddsFormat: "american" },
+      timeout: 15000,
+    });
+    const games = res.data || [];
+    const hdr = res.headers || {};
+    const creditsLast = hdr["x-requests-last"] != null ? Number(hdr["x-requests-last"]) : null;
+    const creditsRemaining = hdr["x-requests-remaining"] != null ? Number(hdr["x-requests-remaining"]) : null;
+    const creditsUsed = hdr["x-requests-used"] != null ? Number(hdr["x-requests-used"]) : null;
+
+    // Distinct bookmakers across all games = the line-shopping inventory.
+    const bookMap = {};
+    for (const g of games) {
+      for (const bm of g.bookmakers || []) {
+        if (!bookMap[bm.key]) bookMap[bm.key] = bm.title || bm.key;
+      }
+    }
+    const books = Object.entries(bookMap)
+      .map(([key, title]) => ({ key, title }))
+      .sort((a, b) => (a.key < b.key ? -1 : 1));
+
+    // Sample: first game's per-book prices, so we can see the shape we'd render.
+    let sample = null;
+    if (games[0]) {
+      const g0 = games[0];
+      sample = {
+        game: `${g0.away_team} @ ${g0.home_team}`,
+        commence: g0.commence_time,
+        perBook: (g0.bookmakers || []).map(bm => {
+          const h2h = (bm.markets || []).find(m => m.key === "h2h");
+          const tot = (bm.markets || []).find(m => m.key === "totals");
+          return {
+            book: bm.title || bm.key,
+            h2h: h2h ? h2h.outcomes.map(o => `${o.name} ${o.price}`).join(" / ") : null,
+            total: tot ? tot.outcomes.map(o => `${o.name} ${o.point} (${o.price})`).join(" / ") : null,
+          };
+        }),
+      };
+    }
+
+    const perRefresh = creditsLast != null ? creditsLast
+      : regions.split(",").length * markets.split(",").length;
+    const costModel = {
+      creditsPerRefresh: perRefresh,
+      howBillingWorks: "Odds API bills (regions × markets) credits per call; x-requests-last is the exact cost of THIS call.",
+      estDailyAt_every5min: perRefresh * 288,
+      estDailyAt_every15min: perRefresh * 96,
+      estDailyAt_every30min: perRefresh * 48,
+      estMonthlyAt_every5min: perRefresh * 288 * 30,
+      estMonthlyAt_every15min: perRefresh * 96 * 30,
+      note: "Refresh-on-view + caching is far cheaper than a fixed interval — the page only costs credits when someone loads it past the cache window. Use this + creditsRemaining to judge headroom on the current plan.",
+    };
+
+    return {
+      ok: true,
+      sport, regions, markets,
+      games: games.length,
+      bookCount: books.length,
+      books,
+      credits: { thisCall: creditsLast, remaining: creditsRemaining, used: creditsUsed },
+      costModel,
+      sample,
+      note: "READ-ONLY. 'books' = every bookmaker your key returned for these regions = your line-shopping inventory. Widen via ?regions=us,us2,uk,eu (each region adds credits). Add markets via ?markets=h2h,totals,spreads.",
+    };
+  } catch (e) {
+    const status = e.response?.status;
+    const remaining = e.response?.headers?.["x-requests-remaining"];
+    return {
+      ok: false,
+      error: e.message,
+      httpStatus: status,
+      creditsRemaining: remaining != null ? Number(remaining) : undefined,
+      hint: status === 401 ? "401 = bad/missing ODDS_API_KEY"
+        : status === 422 ? "422 = a regions/markets value isn't allowed on this plan (try regions=us, markets=h2h,totals)"
+        : undefined,
+    };
+  }
+}
+
 module.exports = {
   getMLBMainOdds,
   getMLBLiveOdds,
@@ -479,6 +569,7 @@ module.exports = {
   getMLBHitsPropsForAllEvents,
   americanToImpliedProb,
   getRawTotalsDebug,
+  probeOddsCoverage,
   clearOddsCache,
   getCacheStats,
 };
