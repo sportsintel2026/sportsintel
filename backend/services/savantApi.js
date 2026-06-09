@@ -216,8 +216,60 @@ async function probeExpectedStats(year) {
   }
 }
 
+// ── PITCHER WHIFF / K% PROBE (read-only, for K v2.1) ──────────────────────────
+// Before wiring ANY Savant pitcher feed into the K model, verify which leaderboard
+// actually carries the strikeout-predictive columns (k_percent, whiff_percent, the
+// swinging-strike signal). Tries each candidate, reports the full header + a sample
+// row + which target columns are present, and does NOT stop early — we want to
+// compare all sources and pick the cleanest. Never throws. (This is the discipline
+// that the HR power factor skipped, which is how it silently returned null for weeks.)
+const PITCHER_WHIFF_CANDIDATES = (year) => ([
+  `${SAVANT_BASE}/leaderboard/expected_statistics?type=pitcher&year=${year}&position=&team=&min=1&csv=true`,
+  `${SAVANT_BASE}/leaderboard/statcast?type=pitcher&year=${year}&position=&team=&min=1&csv=true`,
+  `${SAVANT_BASE}/leaderboard/pitch-arsenal-stats?type=pitcher&year=${year}&min=1&csv=true`,
+  `${SAVANT_BASE}/leaderboard/custom?year=${year}&type=pitcher&filter=&min=q&selections=pa,k_percent,bb_percent,whiff_percent,swing_percent&sort=k_percent&sortDir=desc&csv=true`,
+]);
+const WHIFF_TARGET_COLS = ["player_id", "player_name", "last_name, first_name", "pa", "k_percent", "bb_percent", "whiff_percent", "swing_percent", "est_ba", "est_woba", "pitches"];
+async function probePitcherWhiff(year) {
+  const y = year || new Date().getFullYear();
+  const urls = PITCHER_WHIFF_CANDIDATES(y);
+  const attempts = [];
+  for (const url of urls) {
+    try {
+      const res = await axios.get(url, {
+        timeout: 15000, responseType: "text", transformResponse: (x) => x,
+        validateStatus: () => true,
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; WizePicks/1.0)", Accept: "text/csv,text/plain,*/*" },
+      });
+      const body = typeof res.data === "string" ? res.data : JSON.stringify(res.data);
+      const lines = body.split(/\r?\n/).filter((l) => l.length > 0);
+      const isHtml = /^\s*<(!doctype|html)/i.test(body);
+      const looksCsv = !isHtml && lines.length > 1 && /,/.test(lines[0]);
+      const cols = looksCsv ? parseCsvLine(lines[0]).map((c) => c.trim()) : [];
+      const hasColumns = {};
+      for (const t of WHIFF_TARGET_COLS) hasColumns[t] = cols.includes(t);
+      attempts.push({
+        url, httpStatus: res.status,
+        contentType: (res.headers && res.headers["content-type"]) || null,
+        byteLength: body.length, dataLineCount: lines.length,
+        looksCsv, looksLikeHtml: isHtml,
+        headerLine: looksCsv ? lines[0] : (isHtml ? "(html page)" : (lines[0] || null)),
+        firstDataRow: looksCsv ? lines[1] : null,
+        hasColumns,
+      });
+    } catch (e) {
+      attempts.push({ url, error: e.message });
+    }
+  }
+  // "usable" = a CSV with player_id AND at least one K-signal column (k_percent/whiff_percent)
+  const usable = attempts.filter(a => a.looksCsv && a.hasColumns && a.hasColumns.player_id &&
+    (a.hasColumns.k_percent || a.hasColumns.whiff_percent));
+  return { ok: usable.length > 0, year: y, usableUrls: usable.map(u => u.url), attempts };
+}
+
 module.exports = {
   getBatterExpectedStats, parseExpectedStatsCsv, parseCsvLine,
   probeExpectedStats, expectedStatsUrl, SAVANT_BASE,
   probeBarrels, getBatterBarrels, parseBarrelsCsv, barrelsUrl,
+  probePitcherWhiff,
 };
