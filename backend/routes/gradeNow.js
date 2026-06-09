@@ -43,6 +43,11 @@ router.get("/", async (req, res) => {
     if (req.query.game_audit != null) return res.json(await getGameStatusAndScore(req.query.game_audit));
     if (req.query.nba_audit === "1" || req.query.nba_audit === "true") return res.json(await nbaAudit());
     if (req.query.ml_backtest === "1" || req.query.ml_backtest === "true") return res.json(await mlBacktest());
+    if (req.query.hr_split != null) {
+      const v = String(req.query.hr_split);
+      const cutoff = /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : "2026-06-04"; // PLACEHOLDER until the real v2 deploy date is set
+      return res.json(await hrSplit(cutoff));
+    }
     const graded = await gradeFinishedGames();
     res.json({ ok: true, graded: graded == null ? 0 : graded });
   } catch (err) {
@@ -693,6 +698,86 @@ async function mlBacktest() {
     calibrationAtBestK: calibAt(best.k),
     fixNote: `Apply k=${best.k} as p'=sigmoid(${best.k}*logit(p)) on homeWinProb/awayWinProb in calculateMoneylineProjection (raw win prob is what's stored). Re-run after each batch of grades — k will firm up as n grows.`,
     method: "p' = sigmoid(k*logit(p)); k>1 decompresses. bestK = lowest log-loss across graded ML picks.",
+  };
+}
+
+// ── READ-ONLY HR before/after-rebuild split (added 6/8) ────────────────────────
+// The HR record (944 graded, ~-8% ROI, HIGH tier ~-24%) is CONTAMINATED: it spans
+// the era when the Statcast power factor was silently returning null (dead) AND the
+// v2 era with live Statcast. We've never seen v2-alone. This splits graded HR picks
+// at a cutoff game_date — before (likely dead-Statcast) vs after (v2/live) — and
+// reports tier ROI for each, PLUS a per-day breakdown so you can find the real
+// transition date and re-run with ?hr_split=YYYY-MM-DD. Writes NOTHING.
+async function hrSplit(cutoff) {
+  const supabase = db();
+  const rows = [];
+  const PAGE = 1000;
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from("model_predictions")
+      .select("odds,result,confidence,model_prob,edge,game_date,selection")
+      .eq("league", "mlb")
+      .eq("market", "hr_prop")
+      .neq("result", "pending")
+      .order("id")
+      .range(from, from + PAGE - 1);
+    if (error) return { ok: false, error: error.message };
+    const b = data || [];
+    rows.push(...b);
+    if (b.length < PAGE) break;
+  }
+
+  const amerToProfit = (o) => o == null ? null : (o > 0 ? o / 100 : 100 / Math.abs(o));
+  const mean = (vals) => { const f = vals.filter(v => v != null); return f.length ? f.reduce((a, b) => a + b, 0) / f.length : null; };
+  const summarize = (set) => {
+    const n = set.length;
+    const win = set.filter(r => r.result === "win").length;
+    const loss = set.filter(r => r.result === "loss").length;
+    const push = set.filter(r => r.result === "push").length;
+    const decisions = win + loss;
+    let profit = 0;
+    for (const r of set) {
+      if (r.result === "win") { const p = amerToProfit(r.odds); profit += (p == null ? 0 : p); }
+      else if (r.result === "loss") profit -= 1;
+    }
+    const mOdds = mean(set.map(r => r.odds));
+    const mProb = mean(set.map(r => r.model_prob));
+    const mEdge = mean(set.map(r => r.edge));
+    return {
+      n, win, loss, push,
+      hitRatePct: decisions ? +(win / decisions * 100).toFixed(1) : null,
+      roiPct: decisions ? +(profit / decisions * 100).toFixed(1) : null,
+      unitsProfit: +profit.toFixed(1),
+      meanOdds: mOdds == null ? null : Math.round(mOdds),
+      meanModelProb: mProb == null ? null : +mProb.toFixed(3),
+      meanEdge: mEdge == null ? null : +mEdge.toFixed(3),
+    };
+  };
+  const byTier = (set) => ({
+    HIGH: summarize(set.filter(r => r.confidence === "HIGH")),
+    MEDIUM: summarize(set.filter(r => r.confidence === "MEDIUM")),
+    LOW: summarize(set.filter(r => r.confidence === "LOW")),
+    NEUTRAL: summarize(set.filter(r => r.confidence === "NEUTRAL")),
+  });
+
+  const before = rows.filter(r => r.game_date && r.game_date < cutoff);
+  const after = rows.filter(r => r.game_date && r.game_date >= cutoff);
+
+  const dates = [...new Set(rows.map(r => r.game_date).filter(Boolean))].sort();
+  const byDate = dates.map(d => {
+    const s = summarize(rows.filter(r => r.game_date === d));
+    return { date: d, n: s.n, win: s.win, loss: s.loss, roiPct: s.roiPct, meanModelProb: s.meanModelProb, meanEdge: s.meanEdge };
+  });
+
+  return {
+    ok: true,
+    cutoff,
+    totalGraded: rows.length,
+    cutoffNote: `⚠️ CONFIRM THE CUTOFF. '${cutoff}' is a PLACEHOLDER. Set the real v2/live-Statcast deploy date via ?hr_split=YYYY-MM-DD. 'afterRebuild' = game_date >= cutoff.`,
+    readNote: "If afterRebuild ROI (esp. HIGH tier) is climbing toward break-even vs beforeRebuild, the v2 rebuild worked and the bad number is legacy. If afterRebuild is still deeply negative, v2 itself is betting overs that can't hit → real model fix needed.",
+    beforeRebuild: { ...summarize(before), byTier: byTier(before) },
+    afterRebuild: { ...summarize(after), byTier: byTier(after) },
+    byDate,
   };
 }
 
