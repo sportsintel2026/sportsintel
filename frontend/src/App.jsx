@@ -17,6 +17,7 @@ import MyPicksPage from "./pages/MyPicks";
 import ExpertPicksPage from "./pages/ExpertPicks";
 import ConsensusPage from "./pages/Consensus";
 import OddsPage from "./pages/OddsPage";
+import ClvPage from "./pages/Clv";
 import NBAPage from "./pages/NBA";
 import NBADetailPage from "./pages/NBADetail";
 import LiveScoresPage from "./pages/LiveScores";
@@ -149,6 +150,11 @@ export default function App() {
           <Route path="/odds" element={
             <PrivateRoute>
               <OddsPage />
+            </PrivateRoute>
+          } />
+          <Route path="/clv" element={
+            <PrivateRoute>
+              <ClvPage />
             </PrivateRoute>
           } />
           <Route path="/guide" element={
