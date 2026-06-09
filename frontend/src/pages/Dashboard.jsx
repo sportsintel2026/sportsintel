@@ -525,7 +525,7 @@ function HRPropRow({ edge }) {
   const detailLine = [recentText, bvpText].filter(Boolean).join(" · ");
 
   return (
-    <div className="edge-row hr-prop-row" style={{ display: "grid", gridTemplateColumns: "2.2fr 1fr 1fr 1fr 80px", gap: 10, padding: 10, background: "#0a0e14", borderRadius: 4, alignItems: "center" }}>
+    <div className="edge-row hr-prop-row" style={{ display: "grid", gridTemplateColumns: "2.2fr 1fr 1.6fr", gap: 10, padding: 10, background: "#0a0e14", borderRadius: 4, alignItems: "center" }}>
       <div style={{ minWidth: 0 }}>
         <div style={{ fontSize: 12, fontWeight: 600 }}>{edge.player}</div>
         <div style={{ fontSize: 10, color: "#6b7280", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
@@ -539,9 +539,14 @@ function HRPropRow({ edge }) {
       </div>
       <div className="hr-prop-stats" style={{ display: "contents" }}>
         <div style={{ fontSize: 11, color: "#9ca3af" }}><span style={{ display: "none" }} className="mobile-only-label">Odds: </span>{formatOdds(edge.odds)}</div>
-        <div style={{ fontSize: 11, color: "#9ca3af" }}>{Math.round(edge.hrProb * 100)}% model</div>
-        <EdgeBadge edge={edge.edge} />
-        <ConfidenceBadge conf={edge.confidence} />
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ flex: 1, minWidth: 38, maxWidth: 90, height: 6, background: "#1f2937", borderRadius: 3, overflow: "hidden" }}>
+            <div style={{ width: `${Math.min(100, Math.round((edge.hrProb || 0) * 100))}%`, height: "100%", background: "#1D9E75" }} />
+          </div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "#e4e7eb", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
+            {Math.round((edge.hrProb || 0) * 100)}%<span style={{ fontSize: 9, color: "#6b7280", fontWeight: 500 }}> to HR</span>
+          </div>
+        </div>
       </div>
     </div>
   );
