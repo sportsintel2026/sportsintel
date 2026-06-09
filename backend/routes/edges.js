@@ -117,12 +117,88 @@ async function resolveSlateDate() {
 }
 
 // ── Main endpoint ─────────────────────────────────────────────────────────────
+// ── TEMP read-only diagnostic (added 6/8) — REMOVE in the next cleanup ──────────
+// The totals/ML twin of hits_debug. Lays bare HOW each team-market pick was
+// assembled — base → adjustments → projected → gap-vs-line → prob → edge → pick —
+// plus a live/defaulted flag on every input feed. Answers "how did it ever come
+// up with that number." Built ENTIRELY from the model's existing return object;
+// runs no new model calls and writes nothing. W_MODEL is 0.55 in edgesModel.js,
+// so edge = 0.55 * (modelProb - marketFairProb); a tiny projection gap therefore
+// yields a tiny "LOW" edge whose SIDE is essentially noise — that's the tell.
+const NOISE_GAP_RUNS = 0.75;   // totals: |projected - line| under this ≈ noise pick
+const THIN_EDGE = 0.025;       // ML: best edge under this ≈ noise pick
+function buildEdgesDebug(gameEdges, gamesWithOdds, slateDate) {
+  const r2 = (n) => (n == null ? null : Math.round(n * 100) / 100);
+  const rows = gameEdges.map((ge) => {
+    const src = gamesWithOdds.find(g => g.id === ge.game.id);
+    const t = ge.totals || {};
+    const m = ge.moneyline || {};
+    const bd = t.breakdown || {};
+    const gap = (t.projected != null && t.line != null) ? r2(t.projected - t.line) : null;
+    const totPick = (t.overEdge != null && t.underEdge != null)
+      ? (t.overEdge >= t.underEdge ? "over" : "under") : null;
+    const totEdge = totPick === "over" ? t.overEdge : totPick === "under" ? t.underEdge : null;
+    const mlPick = (m.awayEdge != null && m.homeEdge != null)
+      ? (m.awayEdge >= m.homeEdge ? "away" : "home") : null;
+    const mlEdge = mlPick === "away" ? m.awayEdge : mlPick === "home" ? m.homeEdge : null;
+    return {
+      matchup: `${ge.game.awayAbbr}@${ge.game.homeAbbr}`,
+      status: src?.status ?? null,
+      feeds: {
+        awayPitcher: ge.pitchers?.away?.stats ? "live" : "MISSING",
+        homePitcher: ge.pitchers?.home?.stats ? "live" : "MISSING",
+        weather: ge.weather ? (ge.weather.indoor ? "indoor" : "live") : "MISSING",
+        bullpenAway: ge.bullpen?.away?.era != null ? "live" : "MISSING",
+        bullpenHome: ge.bullpen?.home?.era != null ? "live" : "MISSING",
+        lineupAway: ge.game?.lineups?.away?.source ?? "none",
+        lineupHome: ge.game?.lineups?.home?.source ?? "none",
+      },
+      totals: {
+        line: t.line, projected: t.projected,
+        chain: {
+          base: bd.base, pitcherAdj: bd.pitcherAdj, parkAdj: bd.parkAdj,
+          weatherAdj: bd.weatherAdj, bullpenAdj: bd.bullpenAdj, fatigueAdj: bd.fatigueAdj,
+        },
+        gapVsLine: gap,
+        overProb: t.overProb, overEdge: t.overEdge, underEdge: t.underEdge,
+        pick: totPick, pickEdge: totEdge, confidence: totPick === "over" ? t.overConfidence : t.underConfidence,
+        conviction: totPick === "over" ? t.overConviction : t.underConviction,
+        noiseFlag: gap != null && Math.abs(gap) < NOISE_GAP_RUNS,
+      },
+      moneyline: {
+        awayWinProb: m.awayWinProb, homeWinProb: m.homeWinProb,
+        awayOdds: m.awayOdds, homeOdds: m.homeOdds,
+        awayEdge: m.awayEdge, homeEdge: m.homeEdge,
+        pick: mlPick, pickEdge: mlEdge, confidence: mlPick === "away" ? m.awayConfidence : m.homeConfidence,
+        conviction: mlPick === "away" ? m.awayConviction : m.homeConviction,
+        thinEdgeFlag: mlEdge != null && Math.abs(mlEdge) < THIN_EDGE,
+      },
+    };
+  });
+  const noiseTotals = rows.filter(r => r.totals.noiseFlag).length;
+  const thinML = rows.filter(r => r.moneyline.thinEdgeFlag).length;
+  const feedTally = (key) => rows.reduce((acc, r) => { const v = r.feeds[key]; acc[v] = (acc[v] || 0) + 1; return acc; }, {});
+  return {
+    ok: true, slateDate, games: rows.length,
+    note: "edge = 0.55*(modelProb - marketFairProb); W_MODEL=0.55. noiseFlag = totals pick off a <0.75-run gap. thinEdgeFlag = ML edge <2.5%.",
+    summary: {
+      totalsPicksOnNoiseGap: `${noiseTotals}/${rows.length}`,
+      mlPicksOnThinEdge: `${thinML}/${rows.length}`,
+      feedHealth: {
+        weather: feedTally("weather"), bullpenAway: feedTally("bullpenAway"),
+        lineupAway: feedTally("lineupAway"), awayPitcher: feedTally("awayPitcher"),
+      },
+    },
+    rows,
+  };
+}
+
 router.get("/mlb", async (req, res) => {
   try {
     const { date: slateDate, rolled } = await resolveSlateDate();
 
     // Cache is valid only if it's fresh AND for the same date we now want to serve.
-    if (!req.query.hits_debug && edgesCache && edgesCacheDate === slateDate && (Date.now() - edgesCacheAt) < CACHE_TTL_MS) {
+    if (!req.query.hits_debug && !req.query.edges_debug && edgesCache && edgesCacheDate === slateDate && (Date.now() - edgesCacheAt) < CACHE_TTL_MS) {
       console.log(`[Edges] Returning cached results for ${slateDate}`);
       return res.json({ ...edgesCache, cached: true });
     }
@@ -156,6 +232,9 @@ router.get("/mlb", async (req, res) => {
       }))
     );
     const gameEdges = allEdges.filter(Boolean);
+    if (req.query.edges_debug) {
+      return res.json(buildEdgesDebug(gameEdges, gamesWithOdds, slateDate));
+    }
     // The pre-game model is only valid for games that HAVEN'T STARTED. Once a game
     // is live, the sportsbook re-prices to live odds (and live totals), but our
     // projection is still the full-game pre-game number — comparing the two
