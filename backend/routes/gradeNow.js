@@ -48,6 +48,7 @@ router.get("/", async (req, res) => {
       const cutoff = /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : "2026-06-04"; // PLACEHOLDER until the real v2 deploy date is set
       return res.json(await hrSplit(cutoff));
     }
+    if (req.query.hr_backtest === "1" || req.query.hr_backtest === "true") return res.json(await hrBacktest());
     const graded = await gradeFinishedGames();
     res.json({ ok: true, graded: graded == null ? 0 : graded });
   } catch (err) {
@@ -778,6 +779,80 @@ async function hrSplit(cutoff) {
     beforeRebuild: { ...summarize(before), byTier: byTier(before) },
     afterRebuild: { ...summarize(after), byTier: byTier(after) },
     byDate,
+  };
+}
+
+// ── READ-ONLY HR salvage backtest (added 6/8) ─────────────────────────────────
+// HR is a confirmed leak (every era negative, confidence inverted, power factor
+// anti-predictive). This answers the only remaining question: is there a GATE that
+// rescues a +EV slice, or do we trim HR like the run line? Slices graded HR ROI by
+// edge band and by odds band, shows calibration (model_prob vs actual), and flags
+// any slice that's +EV with non-trivial volume. Writes NOTHING.
+async function hrBacktest() {
+  const supabase = db();
+  const rows = [];
+  const PAGE = 1000;
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from("model_predictions")
+      .select("odds,result,confidence,model_prob,edge,game_date")
+      .eq("league", "mlb").eq("market", "hr_prop").neq("result", "pending")
+      .order("id").range(from, from + PAGE - 1);
+    if (error) return { ok: false, error: error.message };
+    const b = data || []; rows.push(...b);
+    if (b.length < PAGE) break;
+  }
+  const graded = rows.filter(r => r.result === "win" || r.result === "loss");
+  const n = graded.length;
+  if (!n) return { ok: true, n: 0, note: "no graded HR picks" };
+
+  const amerToProfit = (o) => o == null ? null : (o > 0 ? o / 100 : 100 / Math.abs(o));
+  const summarize = (set) => {
+    const w = set.filter(r => r.result === "win").length;
+    const d = set.length;
+    let profit = 0;
+    for (const r of set) profit += r.result === "win" ? (amerToProfit(r.odds) ?? 0) : -1;
+    return {
+      n: d, win: w, loss: d - w,
+      hitRatePct: d ? +(w / d * 100).toFixed(1) : null,
+      roiPct: d ? +(profit / d * 100).toFixed(1) : null,
+      units: +profit.toFixed(1),
+      meanModelProb: d ? +(set.reduce((a, r) => a + (r.model_prob || 0), 0) / d).toFixed(3) : null,
+    };
+  };
+
+  const baseRate = +(graded.filter(r => r.result === "win").length / n).toFixed(3);
+
+  // ROI by edge band
+  const edgeBands = [[-1, 0], [0, 0.02], [0.02, 0.05], [0.05, 0.10], [0.10, 0.20], [0.20, 1]];
+  const byEdge = edgeBands.map(([lo, hi]) => ({ band: `${lo}-${hi === 1 ? "+" : hi}`, ...summarize(graded.filter(r => r.edge != null && r.edge >= lo && r.edge < hi)) }));
+
+  // ROI by odds band (HR is +money; longshots vs shorter prices behave differently)
+  const oddsBands = [[-10000, 300], [300, 600], [600, 1000], [1000, 100000]];
+  const byOdds = oddsBands.map(([lo, hi]) => ({ band: `${lo <= -10000 ? "<" : ""}${hi === 100000 ? "1000+" : `${lo}-${hi}`}`, ...summarize(graded.filter(r => r.odds != null && r.odds >= lo && r.odds < hi)) }));
+
+  // Calibration: does model_prob mean anything?
+  const probBins = [[0, 0.10], [0.10, 0.15], [0.15, 0.20], [0.20, 0.30], [0.30, 1]];
+  const calibration = probBins.map(([lo, hi]) => {
+    const set = graded.filter(r => r.model_prob != null && r.model_prob >= lo && r.model_prob < hi);
+    return { bucket: `${lo}-${hi === 1 ? "+" : hi}`, n: set.length, meanModelProb: set.length ? +(set.reduce((a, r) => a + r.model_prob, 0) / set.length).toFixed(3) : null, actualHitRate: set.length ? +(set.filter(r => r.result === "win").length / set.length).toFixed(3) : null };
+  });
+
+  // Flag any slice that's +EV with >=30 picks
+  const salvage = [...byEdge.map(b => ({ kind: "edge", ...b })), ...byOdds.map(b => ({ kind: "odds", ...b }))]
+    .filter(b => b.roiPct != null && b.roiPct > 0 && b.n >= 30);
+
+  return {
+    ok: true, n, baseRate,
+    overall: summarize(graded),
+    byEdgeBand: byEdge,
+    byOddsBand: byOdds,
+    calibration,
+    salvageableSlices: salvage,
+    verdictNote: salvage.length
+      ? "At least one slice is +EV with volume — consider GATING HR to it rather than trimming. Confirm it holds out-of-sample before trusting it."
+      : "No +EV slice with volume. The honest call is to TRIM HR from the recorded card (like the run line at -15%), or shelve it until the power factor is rebuilt and re-backtested.",
+    method: "ROI = unit profit / decisions, real American odds, push excluded. Calibration: if actualHitRate sits flat/below meanModelProb across rising buckets, the model's HR confidence carries no signal.",
   };
 }
 
