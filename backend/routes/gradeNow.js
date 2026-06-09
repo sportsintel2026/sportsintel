@@ -42,6 +42,7 @@ router.get("/", async (req, res) => {
     if (req.query.score_probe === "1" || req.query.score_probe === "true") return res.json(await scoreProbe());
     if (req.query.game_audit != null) return res.json(await getGameStatusAndScore(req.query.game_audit));
     if (req.query.nba_audit === "1" || req.query.nba_audit === "true") return res.json(await nbaAudit());
+    if (req.query.ml_backtest === "1" || req.query.ml_backtest === "true") return res.json(await mlBacktest());
     const graded = await gradeFinishedGames();
     res.json({ ok: true, graded: graded == null ? 0 : graded });
   } catch (err) {
@@ -586,6 +587,100 @@ async function nbaAudit() {
     pendingNba: pend.length,
     datesFetched: Object.fromEntries(Object.entries(boardByDate).map(([d, idx]) => [d, idx.__error ? { error: idx.__error } : { games: Object.keys(idx).length }])),
     rows,
+  };
+}
+
+// ── READ-ONLY win-prob calibration backtest (added 6/8) ────────────────────────
+// Answers "how compressed are the moneyline win probs, and how much decompression
+// does the data want?" For every GRADED ML pick we have the model's committed raw
+// win prob (model_prob) and the actual result. We sweep a decompression factor k —
+// p' = sigmoid(k * logit(p)) — which pushes probs AWAY from 0.5 for k>1, and report
+// log-loss + Brier at each k plus a calibration table at the best k. The k with the
+// lowest log-loss is the decompression to apply inside calculateMoneylineProjection
+// (transform homeWinProb/awayWinProb before returning). Also splits picks by whether
+// the bet side was the market favorite (odds<0) or underdog (odds>0) to quantify the
+// favorite-fade directly. Writes NOTHING.
+// CAVEAT: this calibrates the picks the model actually RECORDED (the +edge side), a
+// selected sample — not every game. It's the most direct evidence we have of whether
+// the committed probabilities match outcomes, but read it as "are our picks calibrated"
+// not "is the universe calibrated."
+function _logit(p) { const c = Math.min(0.999, Math.max(0.001, p)); return Math.log(c / (1 - c)); }
+function _sharpen(p, k) { return 1 / (1 + Math.exp(-k * _logit(p))); }
+
+async function mlBacktest() {
+  const supabase = db();
+  const rows = [];
+  const PAGE = 1000;
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from("model_predictions")
+      .select("model_prob,odds,result,game_date,selection")
+      .eq("league", "mlb")
+      .eq("market", "moneyline")
+      .in("result", ["win", "loss"])
+      .order("id")
+      .range(from, from + PAGE - 1);
+    if (error) return { ok: false, error: error.message };
+    const b = data || [];
+    rows.push(...b);
+    if (b.length < PAGE) break;
+  }
+  const usable = rows.filter(r => r.model_prob != null);
+  const n = usable.length;
+  if (!n) return { ok: true, n: 0, note: "no graded ML picks yet" };
+
+  const winRate = (set) => {
+    const w = set.filter(r => r.result === "win").length;
+    return set.length ? +(w / set.length * 100).toFixed(1) : null;
+  };
+
+  // Favorite-fade split: market favorite = negative American odds on the bet side.
+  const dog = usable.filter(r => r.odds != null && r.odds > 0);
+  const fav = usable.filter(r => r.odds != null && r.odds < 0);
+
+  // Decompression sweep.
+  const Ks = [1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0];
+  const sweep = Ks.map(k => {
+    let ll = 0, br = 0;
+    for (const r of usable) {
+      const y = r.result === "win" ? 1 : 0;
+      const p = Math.min(0.999, Math.max(0.001, _sharpen(r.model_prob, k)));
+      ll += -(y * Math.log(p) + (1 - y) * Math.log(1 - p));
+      br += (p - y) * (p - y);
+    }
+    return { k, logLoss: +(ll / n).toFixed(4), brier: +(br / n).toFixed(4) };
+  });
+  const best = sweep.reduce((a, b) => (b.logLoss < a.logLoss ? b : a));
+
+  // Calibration table at the best k (and at k=1 for comparison).
+  const bins = [[0, 0.45], [0.45, 0.5], [0.5, 0.55], [0.55, 0.6], [0.6, 1.01]];
+  const calibAt = (k) => bins.map(([lo, hi]) => {
+    const set = usable.filter(r => { const p = _sharpen(r.model_prob, k); return p >= lo && p < hi; });
+    const d = set.length;
+    return {
+      bucket: `${lo}-${hi === 1.01 ? 1 : hi}`,
+      n: d,
+      meanPred: d ? +(set.reduce((a, r) => a + _sharpen(r.model_prob, k), 0) / d).toFixed(3) : null,
+      actualWinRate: d ? +(set.filter(r => r.result === "win").length / d).toFixed(3) : null,
+    };
+  });
+
+  return {
+    ok: true,
+    n,
+    overallWinRatePct: winRate(usable),
+    rawMeanModelProb: +(usable.reduce((a, r) => a + r.model_prob, 0) / n).toFixed(3),
+    favoriteFade: {
+      betMarketUnderdog: { n: dog.length, winRatePct: winRate(dog) },
+      betMarketFavorite: { n: fav.length, winRatePct: winRate(fav) },
+      note: "Heavy underdog count + sub-50% win rate on dogs = the compression-driven favorite fade.",
+    },
+    sharpenSweep: sweep,
+    bestK: best,
+    calibrationRaw_k1: calibAt(1.0),
+    calibrationAtBestK: calibAt(best.k),
+    fixNote: `Apply k=${best.k} as p'=sigmoid(${best.k}*logit(p)) on homeWinProb/awayWinProb in calculateMoneylineProjection (raw win prob is what's stored). Re-run after each batch of grades — k will firm up as n grows.`,
+    method: "p' = sigmoid(k*logit(p)); k>1 decompresses. bestK = lowest log-loss across graded ML picks.",
   };
 }
 
