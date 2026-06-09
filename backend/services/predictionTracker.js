@@ -102,35 +102,38 @@ function nbaClosingOddsForPick(pick, lines) {
   return null;
 }
 
-// Capture closing lines for MLB ML/totals picks whose game is about to start
-// (within the pre-game window, not yet underway) and that don't yet have a
-// closing line. Reading just before first pitch gives the true closing price;
-// reading after the game is live would capture a contaminated in-play line.
-// One odds fetch total. If we miss a game's pre-game window, it simply gets no
-// CLV — an honest gap is better than a fake closing line.
+// Capture closing lines for MLB ML/totals picks whose game is about to start.
+// RATCHET design: on every cron tick within the pre-game window we re-read the
+// price and OVERWRITE the stored closing line when it changed, so the LAST
+// pre-game price before first pitch wins. We re-attempt every tick (no
+// "already has a line" filter) over a 90-min window (~3 ticks/game), so a single
+// missed/failed tick self-heals on the next one — this is the fix for the ~50%
+// capture coverage the old single-shot 35-min design produced. Reading after the
+// game is live would capture a contaminated in-play price, so the status gate
+// below still excludes live/final; once first pitch passes the last pre-game
+// value is frozen.
 async function captureClosingLines() {
   const supabase = db();
 
-  // Pending MLB ML/totals picks without a closing line yet.
+  // Pending MLB ML/totals picks (re-checked every tick — NO closing-line filter,
+  // so we can ratchet toward the true close as the line moves).
   const { data: pending, error } = await supabase
     .from("model_predictions")
     .select("*")
     .eq("league", "mlb")
     .in("market", ["moneyline", "total"])
-    .is("closing_odds", null)
     .eq("result", "pending");
 
   if (error) { console.error("[CLV] fetch error:", error.message); return 0; }
   if (!pending || pending.length === 0) { console.log("[CLV] no picks awaiting closing line"); return 0; }
 
-  // Which games are in their pre-game closing window? A game qualifies when it
-  // has NOT started yet (status "scheduled") and first pitch is within the next
-  // ~35 minutes. The grading cron runs every 30 min, so a 35-min window
-  // guarantees at least one tick lands just before first pitch — capturing the
-  // genuine closing line. Games already live/final are intentionally excluded:
-  // their book price now reflects in-play action, not the close.
+  // A game qualifies whenever it is still pre-game ("scheduled") and first pitch
+  // is within the next ~90 minutes. The status gate excludes live/final (their
+  // book price reflects in-play action, not the close). The 90-min window means
+  // ~3 cron ticks land per game, and because we overwrite on each tick (below),
+  // the last pre-game price wins and a missed tick is recovered next tick.
   const dates = [...new Set(pending.map(p => p.game_date))];
-  const CLOSING_WINDOW_MS = 35 * 60 * 1000;
+  const CLOSING_WINDOW_MS = 90 * 60 * 1000;
   const now = Date.now();
   const closingWindowGameIds = new Set();
   const gameNames = {};
@@ -175,6 +178,10 @@ async function captureClosingLines() {
       ? round4(closeImplied - pickImplied)
       : null;
 
+    // RATCHET: skip the write if the price is unchanged from what we already
+    // stored — keeps the last pre-game price as the close without churning rows.
+    if (pick.closing_odds != null && pick.closing_odds === closing.thisOdds) continue;
+
     const { error: upErr } = await supabase
       .from("model_predictions")
       .update({
@@ -205,7 +212,6 @@ async function captureNbaClosingLines() {
     .select("*")
     .eq("league", "nba")
     .in("market", ["moneyline", "spread", "total"])
-    .is("closing_odds", null)
     .eq("result", "pending");
 
   if (error) { console.error("[CLV][NBA] fetch error:", error.message); return 0; }
@@ -216,7 +222,7 @@ async function captureNbaClosingLines() {
   // fetch window to ±1 only ever helps us find the right game.
   const baseDates = [...new Set(pending.map(p => p.game_date))];
   const dates = [...new Set(baseDates.flatMap(d => [shiftYmd(d, -1), d, shiftYmd(d, 1)]))];
-  const CLOSING_WINDOW_MS = 35 * 60 * 1000;
+  const CLOSING_WINDOW_MS = 90 * 60 * 1000; // ratchet window: ~3 ticks/tip, last pre-game price wins
   const now = Date.now();
   const gamesById = {};
   const closingWindowGameIds = new Set();
@@ -256,6 +262,9 @@ async function captureNbaClosingLines() {
     const clv = (pickImplied != null && closeImplied != null)
       ? round4(closeImplied - pickImplied)
       : null;
+
+    // RATCHET: only overwrite when the price changed (last pre-game price wins).
+    if (pick.closing_odds != null && pick.closing_odds === closing.thisOdds) continue;
 
     const { error: upErr } = await supabase
       .from("model_predictions")
