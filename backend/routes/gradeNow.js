@@ -20,7 +20,7 @@ const {
   getGameBatterHits, normPlayerName, getEasternDate, getLinescore, getGameStatusAndScore,
 } = require("../services/mlbStatsApi");
 const { getRawTotalsDebug } = require("../services/oddsApi");
-const { probeExpectedStats, probeBarrels } = require("../services/savantApi");
+const { probeExpectedStats, probeBarrels, probePitcherWhiff } = require("../services/savantApi");
 const { fetchScoreboard } = require("../services/nbaDataSource"); // TEMP: nba_audit probe (6/8)
 
 function db() {
@@ -37,6 +37,7 @@ router.get("/", async (req, res) => {
     if (req.query.hr_tiers === "1" || req.query.hr_tiers === "true") return res.json(await hrTiers());
     if (req.query.savant_probe === "1" || req.query.savant_probe === "true") return res.json(await probeExpectedStats());
     if (req.query.barrel_probe === "1" || req.query.barrel_probe === "true") return res.json(await probeBarrels());
+    if (req.query.whiff_probe === "1" || req.query.whiff_probe === "true") return res.json(await probePitcherWhiff());
     if (req.query.totals_debug != null) return res.json(await getRawTotalsDebug(req.query.totals_debug));
     if (req.query.totals_audit === "1" || req.query.totals_audit === "true") return res.json(await totalsAudit());
     if (req.query.score_probe === "1" || req.query.score_probe === "true") return res.json(await scoreProbe());
