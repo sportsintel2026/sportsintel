@@ -148,9 +148,12 @@ function PerfBody({ data, league }) {
           <StatCard key={market} label={marketLabel(market)} b={b} />
         ))}
       </div>
-      {/* Props — its OWN table; never part of the core record or CLV */}
-      <SectionTitle>🎯 {propsDisplayLabel(data.props || data.hrProps)}</SectionTitle>
-      <PropsCard p={data.props || data.hrProps} league={league} />
+      {/* Tracked prop: HITS ONLY — the one prop with proven edge. HR & strikeout
+          props are speculative: shown on the Edges page, recorded silently for our
+          own calibration, but NOT displayed/tracked here. (Strikeouts can graduate
+          to a tracked prop once recalibrated.) */}
+      <SectionTitle>Tracked prop</SectionTitle>
+      <TrackedPropCard p={data.props || data.hrProps} league={league} />
       {/* By confidence */}
       <SectionTitle>By confidence tier</SectionTitle>
       <div className="perf-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
@@ -249,50 +252,46 @@ function StatCard({ label, b, accent }) {
     </div>
   );
 }
-function PropsCard({ p, league }) {
-  if (!p || !p.picks) {
-    return (
-      <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 20, marginBottom: 24, fontSize: 13, color: "#9ca3af", lineHeight: 1.6 }}>
-        Tracking the model's {(p && p.label ? p.label.toLowerCase() : "prop")} picks. Hit rate and ROI post here once props have been graded.
-      </div>
-    );
+function TrackedPropCard({ p, league }) {
+  // Feature ONLY the hits prop (proven +EV). HR & strikeouts are deliberately not
+  // shown here — they're speculative and live on the Edges page. The blended prop
+  // ROI (mixing a +EV prop with losing ones) was meaningless and has been removed.
+  const hits = p && p.byMarket && p.byMarket.player_hits;
+  const decisions = hits ? ((hits.hits || 0) + (hits.misses || 0)) : 0;
+  if (!hits || !decisions) {
+    return <SpeculativeNote league={league} />;
   }
-  const profit = p.roi >= 0;
-  const fmtOdds = p.avgOdds == null ? "—" : (p.avgOdds > 0 ? `+${p.avgOdds}` : `${p.avgOdds}`);
-  const labelLc = propsDisplayLabel(p).toLowerCase();
+  const profit = hits.roi >= 0;
   return (
-    <div style={{ background: "linear-gradient(180deg,#1a1410,#0f1419)", border: "1px solid #f5970033", borderLeft: "3px solid #f59700", borderRadius: 12, padding: 24, marginBottom: 24 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16 }}>
-        <Metric label="Hit rate" value={`${p.hitRatePct}%`} color="#fbbf24" />
-        <Metric label="Hit / Missed" value={`${p.hits}-${p.misses}`} />
-        <div>
-          <div style={{ fontSize: 10, color: "#6b7280", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 600, marginBottom: 6 }}>ROI</div>
-          <div style={{ fontSize: 28, fontWeight: 800, color: profit ? "#22c55e" : "#ef4444", lineHeight: 1 }}>{`${profit ? "+" : ""}${p.roi}%`}</div>
-          <div style={{ fontSize: 9.5, color: "#a8915c", marginTop: 5, fontWeight: 600 }}>avg odds {fmtOdds}</div>
+    <>
+      <div style={{ background: "linear-gradient(180deg,#0c1a14,#0a0e14)", border: "1px solid #1D9E7555", borderLeft: "3px solid #1D9E75", borderRadius: 12, padding: 24, marginBottom: 14 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+          <span style={{ fontSize: 16, fontWeight: 700, color: "#e4e7eb" }}>Hits</span>
+          <span style={{ background: "#1D9E7522", color: "#3FD39B", fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", padding: "3px 9px", borderRadius: 6, textTransform: "uppercase" }}>Sharpest prop</span>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16 }}>
+          <Metric label="Hit rate" value={`${hits.hitRatePct}%`} color="#3FD39B" />
+          <Metric label="Hit / Missed" value={`${hits.hits}-${hits.misses}`} />
+          <div>
+            <div style={{ fontSize: 10, color: "#6b7280", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 600, marginBottom: 6 }}>ROI</div>
+            <div style={{ fontSize: 28, fontWeight: 800, color: profit ? "#22c55e" : "#ef4444", lineHeight: 1 }}>{`${profit ? "+" : ""}${hits.roi}%`}</div>
+            <div style={{ fontSize: 9.5, color: "#6b7280", marginTop: 5, fontWeight: 600 }}>{decisions} graded</div>
+          </div>
+        </div>
+        <div style={{ marginTop: 14, fontSize: 11, color: "#6b7280", lineHeight: 1.6 }}>
+          Our sharpest prop. Tracked and counted. Other prop types are shown on the Edges page but kept out of this record while they're calibrated.
         </div>
       </div>
-      {p.byMarket && Object.keys(p.byMarket).length >= 2 && (
-        <div style={{ marginTop: 18, borderTop: "1px solid #f5970022", paddingTop: 14 }}>
-          <div style={{ fontSize: 10, color: "#a8915c", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 700, marginBottom: 8 }}>By prop type</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr 1fr", gap: 8, fontSize: 9.5, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, paddingBottom: 6 }}>
-            <span>Stat</span><span style={{ textAlign: "right" }}>Hit / Miss</span><span style={{ textAlign: "right" }}>Hit %</span><span style={{ textAlign: "right" }}>ROI</span>
-          </div>
-          {Object.entries(p.byMarket).map(([mkt, b]) => {
-            const bp = b.roi >= 0;
-            return (
-              <div key={mkt} style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr 1fr", gap: 8, alignItems: "center", padding: "7px 0", borderTop: "1px solid #ffffff08", fontSize: 12.5 }}>
-                <span style={{ fontWeight: 600 }}>{marketLabel(mkt)}</span>
-                <span style={{ textAlign: "right", color: "#9ca3af" }}>{b.hits}-{b.misses}</span>
-                <span style={{ textAlign: "right", color: "#fbbf24", fontWeight: 600 }}>{b.hitRatePct}%</span>
-                <span style={{ textAlign: "right", color: bp ? "#22c55e" : "#ef4444", fontWeight: 600 }}>{`${bp ? "+" : ""}${b.roi}%`}</span>
-              </div>
-            );
-          })}
-        </div>
-      )}
-      <div style={{ marginTop: 14, fontSize: 11, color: "#6b7280", lineHeight: 1.6 }}>
-        Across {p.picks} graded {labelLc} pick{p.picks === 1 ? "" : "s"}. Props are graded by hit rate and ROI, kept separate from the record and CLV — ROI is the truer measure than hit rate, since prop odds and hit rates vary widely by type. Small samples are noisy.
-        {p.byMarket && Object.keys(p.byMarket).length >= 2 ? " Each stat type is a tiny sample on its own — the per-type rows are directional at best until volume builds." : ""}
+      <SpeculativeNote league={league} />
+    </>
+  );
+}
+function SpeculativeNote({ league }) {
+  return (
+    <div style={{ display: "flex", gap: 10, alignItems: "flex-start", background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: "13px 15px", marginBottom: 24 }}>
+      <span style={{ color: "#6b7280", fontSize: 15, lineHeight: 1.4 }}>ℹ️</span>
+      <div style={{ fontSize: 12, color: "#9ca3af", lineHeight: 1.6 }}>
+        Home-run and strikeout props are <span style={{ color: "#cbd5e1" }}>speculative</span> and shown on the <span style={{ color: "#3FD39B" }}>Edges</span> page for guidance. They're recorded behind the scenes but aren't tracked toward this record.
       </div>
     </div>
   );
