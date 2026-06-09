@@ -42,6 +42,7 @@ router.get("/", async (req, res) => {
     if (req.query.totals_audit === "1" || req.query.totals_audit === "true") return res.json(await totalsAudit());
     if (req.query.ml_backtest === "1" || req.query.ml_backtest === "true") return res.json(await mlBacktest());
     if (req.query.k_backtest === "1" || req.query.k_backtest === "true") return res.json(await kBacktest());
+    if (req.query.clv_audit === "1" || req.query.clv_audit === "true") return res.json(await clvAudit());
     if (req.query.hr_split != null) {
       const v = String(req.query.hr_split);
       const cutoff = /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : "2026-06-04"; // PLACEHOLDER until the real v2 deploy date is set
@@ -863,6 +864,168 @@ async function hrBacktest(cutoff) {
       ? "At least one slice is +EV with volume — consider GATING HR to it rather than trimming. Confirm it holds post-rebuild (pass ?hr_backtest=YYYY-MM-DD) before trusting it."
       : "No +EV slice with volume. The honest call is to TRIM HR from the recorded card (like the run line at -15%), or shelve it until the power factor is rebuilt and re-backtested.",
     method: "ROI = unit profit / decisions, real American odds, push excluded. Pass ?hr_backtest=YYYY-MM-DD to split the edge bands + candidate gate by era.",
+  };
+}
+
+// ── READ-ONLY CLV (closing-line value) audit (added 2026-06-09) ─────────────────
+// Answers "why is CLV flat?" by separating the THREE possible causes with facts:
+//   (1) CAPTURE COVERAGE — what fraction of graded MLB ML/total picks ever got a
+//       closing line at all. The capture cron runs every 30 min against a 35-min
+//       pre-game window; if it misses, the pick has null closing/clv and reads as
+//       "flat" when really it's ABSENT. Low coverage => a measurement/timing-of-
+//       capture problem, not an edge problem.
+//   (2) LINE MOVEMENT — for captured picks, how far the price actually moved from
+//       our pick odds to the close (mean |move| in implied-prob points), and how
+//       many moved ZERO. If we're pricing at/near the close, there's no room for
+//       CLV by construction (zero-movement share high, mean move ~0).
+//   (3) REAL EDGE — for captured picks with real movement, the signed CLV
+//       distribution + % beat-close, split by market. CLV centered on 0 on an
+//       efficient market is the honest "model agrees with the line" result.
+// Also reports the record->close TIME GAP when a record timestamp exists (CLV can
+// only exist when there's a gap between locking our price and the close). Writes
+// NOTHING. clv is stored as a fraction (closeImplied - pickImplied); reported here
+// as percentage POINTS for readability.
+function _amerToImplied(a) {
+  if (a == null || isNaN(a)) return null;
+  const n = Number(a);
+  return n < 0 ? (-n) / ((-n) + 100) : 100 / (n + 100);
+}
+function _median(arr) {
+  if (!arr.length) return null;
+  const s = [...arr].sort((x, y) => x - y);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+}
+function _pickRecordTs(r) {
+  // model_predictions may or may not carry a record timestamp; read defensively.
+  return r.created_at || r.inserted_at || r.recorded_at || null;
+}
+async function clvAudit() {
+  const supabase = db();
+  const rows = [];
+  const PAGE = 1000;
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from("model_predictions")
+      .select("*")
+      .eq("league", "mlb")
+      .in("market", ["moneyline", "total"])
+      .in("result", ["win", "loss", "push"])
+      .order("id")
+      .range(from, from + PAGE - 1);
+    if (error) return { ok: false, error: error.message };
+    const b = data || [];
+    rows.push(...b);
+    if (b.length < PAGE) break;
+  }
+
+  const graded = rows.length;
+  if (!graded) return { ok: true, graded: 0, note: "no graded MLB ML/total picks yet" };
+
+  const recordTsAvailable = rows.some(r => _pickRecordTs(r) != null);
+
+  // Per-pick derived view.
+  const view = rows.map(r => {
+    const captured = r.closing_odds != null;
+    const pickImplied = _amerToImplied(r.odds);
+    const closeImplied = _amerToImplied(r.closing_odds);
+    // Prefer the stored clv (computed at capture time); fall back to recompute.
+    let clv = r.clv;
+    if (clv == null && pickImplied != null && closeImplied != null) clv = closeImplied - pickImplied;
+    const moveAbs = (pickImplied != null && closeImplied != null) ? Math.abs(closeImplied - pickImplied) : null;
+    const recTs = _pickRecordTs(r);
+    const closeTs = r.closing_captured_at || null;
+    const gapHours = (recTs && closeTs)
+      ? (new Date(closeTs).getTime() - new Date(recTs).getTime()) / 3600000
+      : null;
+    return { market: r.market, selection: r.selection, line: r.line, odds: r.odds,
+      closing_odds: r.closing_odds, captured, clv, moveAbs, beatClose: clv != null ? clv > 0 : null,
+      gapHours, game_date: r.game_date, result: r.result };
+  });
+
+  const summarize = (set) => {
+    const n = set.length;
+    const cap = set.filter(v => v.captured);
+    const withClv = cap.filter(v => v.clv != null);
+    const clvs = withClv.map(v => v.clv);
+    const moves = cap.filter(v => v.moveAbs != null).map(v => v.moveAbs);
+    const zeroMove = moves.filter(m => m < 0.0005).length;
+    const beat = withClv.filter(v => v.beatClose === true).length;
+    const pct = (x, d) => d ? +(x / d * 100).toFixed(1) : null;
+    const pp = (x) => x == null ? null : +(x * 100).toFixed(2); // fraction -> pct points
+    return {
+      graded: n,
+      captured: cap.length,
+      capturedPct: pct(cap.length, n),
+      missingClosing: n - cap.length,
+      withClv: withClv.length,
+      meanClvPP: clvs.length ? pp(clvs.reduce((a, b) => a + b, 0) / clvs.length) : null,
+      medianClvPP: clvs.length ? pp(_median(clvs)) : null,
+      beatClosePct: pct(beat, withClv.length),
+      minClvPP: clvs.length ? pp(Math.min(...clvs)) : null,
+      maxClvPP: clvs.length ? pp(Math.max(...clvs)) : null,
+      meanAbsMovePP: moves.length ? pp(moves.reduce((a, b) => a + b, 0) / moves.length) : null,
+      zeroMovementPct: pct(zeroMove, moves.length),
+    };
+  };
+
+  const ml = view.filter(v => v.market === "moneyline");
+  const tot = view.filter(v => v.market === "total");
+
+  // Timing gap (record -> close), captured picks only.
+  const gaps = view.filter(v => v.gapHours != null).map(v => v.gapHours);
+  const timing = {
+    recordTimestampAvailable: recordTsAvailable,
+    nWithGap: gaps.length,
+    meanGapHours: gaps.length ? +(gaps.reduce((a, b) => a + b, 0) / gaps.length).toFixed(2) : null,
+    medianGapHours: gaps.length ? +(_median(gaps).toFixed(2)) : null,
+    note: recordTsAvailable
+      ? "Gap = hours between when the pick (and its odds) was recorded and when the closing line was captured. CLV needs this gap to exist; a tiny gap means we price near the close."
+      : "No record timestamp column on model_predictions — can't measure the record->close gap directly. Infer timing from zeroMovementPct + meanAbsMovePP instead.",
+  };
+
+  // A small recent sample to eyeball.
+  const sample = [...view]
+    .filter(v => v.captured)
+    .slice(-12)
+    .map(v => ({
+      game_date: v.game_date, market: v.market, selection: v.selection, line: v.line,
+      odds: v.odds, closing_odds: v.closing_odds,
+      clvPP: v.clv != null ? +(v.clv * 100).toFixed(2) : null,
+      beatClose: v.beatClose, gapHours: v.gapHours != null ? +v.gapHours.toFixed(2) : null,
+    }));
+
+  // Factual flags (no spin) to point at the dominant cause.
+  const overall = summarize(view);
+  const flags = [];
+  if (overall.capturedPct != null && overall.capturedPct < 70)
+    flags.push(`LOW CAPTURE COVERAGE (${overall.capturedPct}% of graded picks got a closing line). A big chunk of "flat CLV" is actually MISSING closing lines — the 35-min window vs 30-min cron is dropping captures. Fix capture before judging edge.`);
+  if (overall.zeroMovementPct != null && overall.zeroMovementPct >= 30)
+    flags.push(`HIGH ZERO-MOVEMENT (${overall.zeroMovementPct}% of captured picks had ~no price change pick->close). Suggests we're pricing at/near the close (no room for CLV) or capturing a stale/identical line.`);
+  if (overall.meanAbsMovePP != null && overall.meanAbsMovePP < 1.0)
+    flags.push(`SMALL AVERAGE MOVEMENT (~${overall.meanAbsMovePP} pts pick->close). Little line travel to capture — consistent with pricing near the close.`);
+  if (timing.meanGapHours != null && timing.meanGapHours < 1.0)
+    flags.push(`SHORT RECORD->CLOSE GAP (mean ${timing.meanGapHours}h). Picks are recorded close to first pitch, leaving almost no window for the line to move our way.`);
+  if (overall.withClv >= 30 && overall.meanClvPP != null && Math.abs(overall.meanClvPP) < 0.5 && (overall.zeroMovementPct == null || overall.zeroMovementPct < 30))
+    flags.push(`CLV CENTERED ON ~0 WITH REAL MOVEMENT (mean ${overall.meanClvPP} pts, beat-close ${overall.beatClosePct}%). On the picks that DID move, we're neither beating nor losing the close — the honest "model ≈ market" result. Look market-by-market: totals is where the edge should show if anywhere.`);
+  if (!flags.length) flags.push("No single cause dominates at these thresholds — read overall + byMarket + timing together.");
+
+  return {
+    ok: true,
+    league: "mlb",
+    markets: ["moneyline", "total"],
+    graded,
+    overall,
+    byMarket: { moneyline: summarize(ml), total: summarize(tot) },
+    timing,
+    sample,
+    flags,
+    legend: {
+      clvPP: "closing implied prob - pick implied prob, in percentage POINTS. Positive = price shortened in our favor after we recorded = we beat the close.",
+      capturedPct: "share of graded picks that actually have a closing line. Low = capture/timing problem, not an edge problem.",
+      zeroMovementPct: "share of captured picks whose price didn't move pick->close. High = pricing at the close.",
+      beatClosePct: "of picks with a real CLV value, share with positive CLV.",
+    },
   };
 }
 
