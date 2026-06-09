@@ -43,6 +43,7 @@ router.get("/", async (req, res) => {
     if (req.query.game_audit != null) return res.json(await getGameStatusAndScore(req.query.game_audit));
     if (req.query.nba_audit === "1" || req.query.nba_audit === "true") return res.json(await nbaAudit());
     if (req.query.ml_backtest === "1" || req.query.ml_backtest === "true") return res.json(await mlBacktest());
+    if (req.query.k_backtest === "1" || req.query.k_backtest === "true") return res.json(await kBacktest());
     if (req.query.hr_split != null) {
       const v = String(req.query.hr_split);
       const cutoff = /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : "2026-06-04"; // PLACEHOLDER until the real v2 deploy date is set
@@ -327,6 +328,120 @@ async function propResults() {
       hits: { OVER: agg("player_hits", "OVER"), UNDER: agg("player_hits", "UNDER") },
     },
     rows,
+  };
+}
+
+// READ-ONLY. Strikeout-prop calibration backtest. Answers what the blanket 0.75
+// shrink can't: (1) DIRECTIONAL bias — do OVER picks bleed while UNDERs hold (or
+// vice versa)? (2) is the stated confidence honest (does a claimed 65% win 65%)?
+// (3) what shrink best CALIBRATES the probs — an empirical sweep scored by log-loss
+// (lower=better) and Brier, exactly like the ML decompression sweep. Reconstructs
+// the pre-shrink raw prob from the stored model_prob (which already has the current
+// 0.75 baked in), re-applies each candidate shrink, and scores it against the real
+// win/loss. Pages all graded K rows in 1,000-row chunks (Supabase caps select 1000).
+const K_CURRENT_SHRINK = 0.75; // MUST match PROP_PROB_SHRINK in edgesModel.js
+async function kBacktest() {
+  const supabase = db();
+  const amerToProfit = (o) => o == null ? null : (o > 0 ? o / 100 : 100 / Math.abs(o));
+  const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
+
+  const rows = [];
+  const PAGE = 1000;
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from("model_predictions")
+      .select("selection, line, model_prob, odds, edge, result, actual_value, game_date")
+      .eq("league", "mlb")
+      .eq("market", "player_strikeouts")
+      .neq("result", "pending")
+      .order("id")
+      .range(from, from + PAGE - 1);
+    if (error) return { ok: false, error: error.message };
+    const batch = data || [];
+    rows.push(...batch);
+    if (batch.length < PAGE) break;
+  }
+
+  const parsed = rows.map(r => {
+    const ci = (r.selection || "").lastIndexOf(":");
+    const side = ci >= 0 ? r.selection.slice(ci + 1).toUpperCase() : "OVER";
+    return { side, line: r.line, sp: r.model_prob, odds: r.odds, edge: r.edge, result: r.result, actual: r.actual_value, date: r.game_date };
+  }).filter(r => r.result === "win" || r.result === "loss"); // decisions only
+
+  const mean = (arr) => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null;
+  function summarize(set) {
+    const win = set.filter(r => r.result === "win").length;
+    const loss = set.filter(r => r.result === "loss").length;
+    const decisions = win + loss;
+    let profit = 0;
+    for (const r of set) {
+      if (r.result === "win") { const p = amerToProfit(r.odds); profit += (p == null ? 0 : p); }
+      else profit -= 1;
+    }
+    return {
+      n: set.length, win, loss,
+      hitRatePct: decisions ? +(win / decisions * 100).toFixed(1) : null,
+      roiPct: decisions ? +(profit / decisions * 100).toFixed(1) : null,
+      units: +profit.toFixed(1),
+      meanModelProb: set.length ? +mean(set.map(r => r.sp).filter(x => x != null)).toFixed(3) : null,
+      meanActual: set.length ? +mean(set.map(r => r.actual).filter(x => x != null)).toFixed(2) : null,
+      meanLine: set.length ? +mean(set.map(r => r.line).filter(x => x != null)).toFixed(2) : null,
+    };
+  }
+
+  // calibration on the CURRENT stored prob (prob of taken side = P(win))
+  const calBuckets = [[0, 0.5], [0.5, 0.55], [0.55, 0.6], [0.6, 0.65], [0.65, 0.7], [0.7, 1.01]];
+  const calibration = calBuckets.map(([lo, hi]) => {
+    const set = parsed.filter(r => r.sp != null && r.sp >= lo && r.sp < hi);
+    const win = set.filter(r => r.result === "win").length;
+    return {
+      bucket: `${lo}-${hi}`, n: set.length,
+      meanStatedProb: set.length ? +(set.reduce((a, r) => a + r.sp, 0) / set.length).toFixed(3) : null,
+      actualWinRate: set.length ? +(win / set.length).toFixed(3) : null,
+    };
+  }).filter(b => b.n > 0);
+
+  // shrink sweep: reconstruct raw, re-shrink, score by log-loss + Brier vs win/loss
+  const candidates = [0.30, 0.40, 0.50, 0.60, 0.75, 0.90, 1.00];
+  const sweep = candidates.map(s => {
+    let ll = 0, brier = 0, sumCand = 0, n = 0, win = 0;
+    for (const r of parsed) {
+      if (r.sp == null) continue;
+      const raw = clamp(0.5 + (r.sp - 0.5) / K_CURRENT_SHRINK, 0.001, 0.999);
+      const cand = clamp(0.5 + s * (raw - 0.5), 1e-6, 1 - 1e-6);
+      const y = r.result === "win" ? 1 : 0;
+      ll += -(y * Math.log(cand) + (1 - y) * Math.log(1 - cand));
+      brier += (cand - y) * (cand - y);
+      sumCand += cand; win += y; n++;
+    }
+    return {
+      shrink: s,
+      logLoss: n ? +(ll / n).toFixed(4) : null,
+      brier: n ? +(brier / n).toFixed(4) : null,
+      meanStatedProb: n ? +(sumCand / n).toFixed(3) : null,
+      actualWinRate: n ? +(win / n).toFixed(3) : null,
+      calibrationGap: n ? +((sumCand - win) / n).toFixed(3) : null, // + = overconfident
+      note: s === K_CURRENT_SHRINK ? "current" : (s === 1.00 ? "no shrink (raw Poisson)" : ""),
+    };
+  });
+  const best = sweep.filter(x => x.logLoss != null).sort((a, b) => a.logLoss - b.logLoss)[0];
+
+  // edge-band ROI: does a tighter edge gate help? which side is the leak?
+  const edgeBands = [[0, 0.02], [0.02, 0.05], [0.05, 0.1], [0.1, 1]].map(([lo, hi]) => ({
+    band: `${lo}-${hi}`, ...summarize(parsed.filter(r => (r.edge ?? 0) >= lo && (r.edge ?? 0) < hi)),
+  }));
+
+  return {
+    ok: true,
+    method: "Decisions only (push/void excluded). model_prob = P(taken side) = P(win). ROI uses real American odds. Shrink sweep rebuilds the pre-shrink raw prob (current shrink 0.75), re-applies each candidate, scores by log-loss (lower=better) vs real win/loss.",
+    overall: summarize(parsed),
+    bySide: { OVER: summarize(parsed.filter(r => r.side === "OVER")), UNDER: summarize(parsed.filter(r => r.side === "UNDER")) },
+    calibration,
+    shrinkSweep: sweep,
+    bestShrinkByLogLoss: best ? best.shrink : null,
+    baselineLogLoss: +(-Math.log(0.5)).toFixed(4), // 0.6931 = pure coin flip
+    byEdgeBand: edgeBands,
+    verdictNote: "If bySide shows OVER deeply -EV but UNDER ~breakeven (or vice versa), the fix is a DIRECTIONAL gate (require more edge on the losing side), not just shrink. If both sides are overconfident symmetrically, lower PROP_PROB_SHRINK toward bestShrinkByLogLoss. Compare every sweep logLoss to baselineLogLoss (0.6931): if even the best barely beats a coin flip, the K model has little real signal and the honest move is a hard shrink + wider edge gate.",
   };
 }
 
