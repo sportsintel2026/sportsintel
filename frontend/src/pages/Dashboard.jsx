@@ -213,9 +213,9 @@ function MLBDashboard({ edges, loading, hasFullAccess, navigate, onRefresh }) {
       </div>
       <div style={{ marginBottom: 16 }}>
         <EdgePanel title="Top home run props" icon="💣" edges={(edges.hrPropEdges || []).slice(0, MAX_PROP_ROWS)} renderRow={(e) => <HRPropRow edge={e} key={e.player + e.game} />} emptyText="HR prop data updates closer to first pitch" hasFullAccess={hasFullAccess} navigate={navigate} wide scroll />
-      </div>
-      <div style={{ marginBottom: 8, fontSize: 11, color: "#a8915c", display: "flex", alignItems: "center", gap: 6, lineHeight: 1.5 }}>
-        ⚠️ Experimental — strikeout & hits projections are v1 and still being calibrated. Treat as directional, not proven.
+        <div style={{ marginTop: 8, fontSize: 11, color: "#6b7280", lineHeight: 1.5 }}>
+          Speculative · longshot bets — ranked by the model's projected chance to homer, not a guarantee. Even the top names hit a home run only some of the time.
+        </div>
       </div>
       <div style={{ marginBottom: 16 }}>
         <EdgePanel title="Pitcher strikeouts" icon="🔥" edges={(edges.kPropEdges || []).slice(0, MAX_PROP_ROWS)} renderRow={(e) => <KPropRow edge={e} key={e.player + e.game} />} emptyText="K prop data updates closer to first pitch" hasFullAccess={hasFullAccess} navigate={navigate} wide scroll />
