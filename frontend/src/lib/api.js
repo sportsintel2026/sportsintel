@@ -34,6 +34,10 @@ export const edgesApi = {
 export const consensusApi = {
   getMLB: () => apiFetch("/api/consensus/mlb"),
 };
+// NEW — multi-book odds comparison (line-shopping page), read-only
+export const oddsApi = {
+  getMLB: () => apiFetch("/api/odds/mlb"),
+};
 // Live in-game win probability + moneyline edge
 export const liveApi = {
   getMLB: () => apiFetch("/api/live/mlb"),
