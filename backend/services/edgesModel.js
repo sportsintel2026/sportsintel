@@ -406,21 +406,25 @@ function calculateHRProbability(batterStats, opposingPitcherStats, game, weather
   return round3(1 - noHRProb);
 }
 
-// ── PITCHER STRIKEOUT PROP MODEL ──────────────────────────────────────────────
-// Expected Ks for a starter = K/9 × (expected innings / 9) × opponent-K factor.
-// Single-game Ks are modeled as Poisson(expectedKs); P(over a .5 line) follows.
-// A v1 projection — calibrate the constants once real K-prop results accumulate.
-// CALIBRATION (2026-06-06, step 1): single-game prop counts are OVERDISPERSED
-// vs the Poisson we model them with, so raw over/under probabilities come out
-// too extreme (June 5: model claimed ~60-67% on its OVER picks, they hit
-// 25-46%). Shrink every prop probability toward 0.5 by this factor to tame the
-// overconfidence WITHOUT flipping which side we take. Small, reversible nudge —
-// raise toward 1.0 to weaken it, lower to strengthen. Re-evaluate after a week.
-const PROP_PROB_SHRINK = 0.75;
-function shrinkProb(p) { return p == null ? null : 0.5 + PROP_PROB_SHRINK * (p - 0.5); }
+// ── PITCHER STRIKEOUT PROP MODEL v2 (2026-06-09) ──────────────────────────────
+// v1 was Poisson(λ) with λ = season K/9 × a FLAT 5.3 IP × team-K factor, then a
+// blunt 0.75→0.50 shrink to fight overconfidence. k_backtest (68 graded) exposed
+// the real failure: OVER picks hit 35% for -32% ROI — the model assumed starters
+// go deeper (and miss more bats) than they actually do. v2 fixes the ROOT:
+//   • Expected innings AND K/9 are now blended toward the pitcher's ACTUAL RECENT
+//     STARTS (getPitcherRecentStarts — already flowing in the team model), so early
+//     hooks / pitch limits pull λ DOWN instead of the flat 5.3 inflating it.
+//   • Single-game K counts are modeled NEGATIVE-BINOMIAL (overdispersed: variance
+//     = φ·mean) instead of Poisson. The wider, honest tails REPLACE the blunt
+//     shrink — no more hacking probabilities toward 0.5 after the fact.
+// Overs stay suppressed (K_ALLOW_OVERS=false) until v2 is re-backtested; this
+// rebuild tightens the unders' calibration and sets overs up to be re-enabled once
+// the data confirms λ is no longer inflated.
 const LEAGUE_K9 = 8.6;              // league starter strikeouts per 9
 const LEAGUE_TEAM_K_PER_GAME = 8.6; // league average team strikeouts per game
 const DEFAULT_START_IP = 5.3;       // league-average starter innings per start
+const K_ALLOW_OVERS = false;        // K OVER picks were confirmed -EV pre-v2; unders only until v2 overs re-validate via k_backtest. Flip to true to re-enable.
+const K_DISPERSION_PHI = 1.5;       // negbin variance/mean ratio (>1 = overdispersed). Tunable; sweep via k_backtest as volume grows.
 
 function poissonCdf(k, lambda) {
   if (k < 0 || !(lambda > 0)) return 0;
@@ -430,34 +434,73 @@ function poissonCdf(k, lambda) {
   return Math.min(1, sum);
 }
 
-function expectedKsFor(pitcherStats) {
-  const k9 = pitcherStats.strikeoutsPer9 ?? LEAGUE_K9;
-  let expIP = DEFAULT_START_IP;
-  if (pitcherStats.gamesStarted > 0 && pitcherStats.inningsPitched > 0) {
-    expIP = Math.max(3.5, Math.min(7.0, pitcherStats.inningsPitched / pitcherStats.gamesStarted));
-  }
-  return round2((k9 / 9) * expIP);
+// Negative-binomial (mean μ, overdispersion φ = variance/μ). φ→1 collapses to Poisson.
+function _logGamma(z) {
+  const c = [0.99999999999980993, 676.5203681218851, -1259.1392167224028, 771.32342877765313, -176.61502916214059, 12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7];
+  if (z < 0.5) return Math.log(Math.PI / Math.sin(Math.PI * z)) - _logGamma(1 - z);
+  z -= 1; let x = c[0]; for (let i = 1; i < 9; i++) x += c[i] / (z + i);
+  const t = z + 7 + 0.5;
+  return 0.5 * Math.log(2 * Math.PI) + (z + 0.5) * Math.log(t) - t + Math.log(x);
+}
+function negBinomPmf(k, mu, phi) {
+  if (!(mu > 0)) return k === 0 ? 1 : 0;
+  if (phi <= 1.0001) return Math.exp(-mu + k * Math.log(mu) - _logGamma(k + 1)); // Poisson limit
+  const r = mu / (phi - 1);          // size; variance = μ + μ²/r = φ·μ
+  const p = r / (r + mu);
+  return Math.exp(_logGamma(k + r) - _logGamma(k + 1) - _logGamma(r) + r * Math.log(p) + k * Math.log(1 - p));
+}
+function kNegBinomCdf(k, mu, phi) {
+  if (k < 0 || !(mu > 0)) return 0;
+  let s = 0; for (let i = 0; i <= k; i++) s += negBinomPmf(i, mu, phi);
+  return Math.min(1, s);
 }
 
-// P(strikeouts OVER the line) for a starting pitcher vs a given opponent.
-function strikeoutOverProb(pitcherStats, oppTeamStats, line) {
-  if (!pitcherStats || line == null) return null;
-  const k9 = pitcherStats.strikeoutsPer9 ?? LEAGUE_K9;
-  if (!k9) return null;
-  let expIP = DEFAULT_START_IP;
-  if (pitcherStats.gamesStarted > 0 && pitcherStats.inningsPitched > 0) {
-    expIP = pitcherStats.inningsPitched / pitcherStats.gamesStarted;
+// Recent-aware K projection. Blends the pitcher's ACTUAL last starts (IP + K) with
+// season rates, regressing thin samples to league. Returns {lambda, expIP, k9}.
+function kProjection(pitcherStats, recentStarts, oppTeamStats) {
+  const ps = pitcherStats || {};
+  const seasonK9 = ps.strikeoutsPer9 ?? LEAGUE_K9;
+  let seasonIP_GS = DEFAULT_START_IP;
+  if (ps.gamesStarted > 0 && ps.inningsPitched > 0) seasonIP_GS = ps.inningsPitched / ps.gamesStarted;
+
+  const starts = Array.isArray(recentStarts) ? recentStarts.filter(s => s && s.ip > 0) : [];
+  const n = starts.length;
+  let recentIP = null, recentK9 = null;
+  if (n) {
+    const ipSum = starts.reduce((a, s) => a + s.ip, 0);
+    const kSum = starts.reduce((a, s) => a + (s.k || 0), 0);
+    recentIP = ipSum / n;
+    recentK9 = ipSum > 0 ? (kSum / ipSum) * 9 : null;
   }
+  const wRecent = Math.min(0.6, n * 0.2);              // ramps to 0.6 at 3+ starts
+  let expIP = recentIP != null ? wRecent * recentIP + (1 - wRecent) * seasonIP_GS : seasonIP_GS;
   expIP = Math.max(3.5, Math.min(7.0, expIP));
+  let k9 = seasonK9;
+  if (recentK9 != null) k9 = wRecent * recentK9 + (1 - wRecent) * seasonK9;
+  if (n < 2) k9 = 0.5 * k9 + 0.5 * LEAGUE_K9;          // thin sample → pull toward league
+
   let oppFactor = 1.0;
   if (oppTeamStats && oppTeamStats.games > 0 && oppTeamStats.strikeouts != null) {
     oppFactor = (oppTeamStats.strikeouts / oppTeamStats.games) / LEAGUE_TEAM_K_PER_GAME;
     oppFactor = Math.max(0.82, Math.min(1.18, oppFactor)); // one stat shouldn't swing it wildly
   }
   const lambda = (k9 / 9) * expIP * oppFactor;
+  return { lambda: lambda > 0 ? lambda : null, expIP: round2(expIP), k9: round2(k9) };
+}
+
+function expectedKsFor(pitcherStats, recentStarts) {
+  const { expIP, k9 } = kProjection(pitcherStats, recentStarts, null);
+  return round2((k9 / 9) * expIP);
+}
+
+// P(strikeouts OVER the line) — negative-binomial, recent-aware. No blunt shrink:
+// the overdispersion (φ) does the tempering the old 0.75 shrink used to hack in.
+function strikeoutOverProb(pitcherStats, oppTeamStats, line, recentStarts) {
+  if (!pitcherStats || line == null) return null;
+  const { lambda } = kProjection(pitcherStats, recentStarts, oppTeamStats);
   if (!(lambda > 0)) return null;
-  // .5 lines: over wins on K >= floor(line)+1, so P(over) = 1 - CDF(floor(line))
-  return round3(shrinkProb(1 - poissonCdf(Math.floor(line), lambda)));
+  // .5 lines: over wins on K ≥ floor(line)+1, so P(over) = 1 - CDF(floor(line))
+  return round3(1 - kNegBinomCdf(Math.floor(line), lambda, K_DISPERSION_PHI));
 }
 
 // ── BATTER HITS PROP MODEL v2 ─────────────────────────────────────────────────
@@ -1328,9 +1371,10 @@ async function calculateStrikeoutPropEdges(games, kOddsByEvent) {
       if (!pitcher) continue;
       const pitcherStats = regressThinSample(await getPitcherSeasonStats(pitcher.id));
       if (!pitcherStats) continue;
+      const recentStarts = await getPitcherRecentStarts(pitcher.id, 5).catch(() => []);
       const onAwayTeam = pitcher.teamId === game.awayId;
       const oppTeamStats = onAwayTeam ? homeTeam : awayTeam; // the lineup he faces
-      const overProb = strikeoutOverProb(pitcherStats, oppTeamStats, propOdds.line);
+      const overProb = strikeoutOverProb(pitcherStats, oppTeamStats, propOdds.line, recentStarts);
       if (overProb == null) continue;
       const fairOver = devigTwoWay(propOdds.overOdds, propOdds.underOdds);
       const underProb = round3(1 - overProb);
@@ -1338,6 +1382,12 @@ async function calculateStrikeoutPropEdges(games, kOddsByEvent) {
       const edgeUnder = sanitizeEdge(fairOver != null ? round3(underProb - (1 - fairOver)) : calculateEdge(underProb, propOdds.underOdds));
       const overBetter = (edgeOver ?? -1) >= (edgeUnder ?? -1);
       const side = overBetter ? "over" : "under";
+      // CALIBRATION (2026-06-08): K OVER picks are a confirmed leak — across 34 graded
+      // they hit 35% for -32% ROI (actual Ks 4.06 vs a 4.85 line). The model overrates
+      // strikeout upside, and an over's "edge" comes from that inflated projection, so a
+      // bigger over-edge is MORE wrong, not less. UNDERs validate (50%, -8.5% = ~vig).
+      // Skip overs until lambda is rebuilt. Reversible: set K_ALLOW_OVERS = true above.
+      if (side === "over" && !K_ALLOW_OVERS) continue;
       const edge = overBetter ? edgeOver : edgeUnder;
       const modelProb = overBetter ? overProb : underProb;
       const odds = overBetter ? propOdds.overOdds : propOdds.underOdds;
@@ -1356,7 +1406,7 @@ async function calculateStrikeoutPropEdges(games, kOddsByEvent) {
         book: propOdds.book,
         edge,
         confidence: rateConfidence(edge),
-        expectedKs: expectedKsFor(pitcherStats),
+        expectedKs: expectedKsFor(pitcherStats, recentStarts),
         pitcherK9: pitcherStats.strikeoutsPer9 ?? null,
       });
     }
