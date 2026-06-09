@@ -633,6 +633,17 @@ async function mlBacktest() {
     const w = set.filter(r => r.result === "win").length;
     return set.length ? +(w / set.length * 100).toFixed(1) : null;
   };
+  // American odds -> profit on a 1-unit win (-1 on loss). The real decider: a 44%
+  // win rate on +money dogs can still be +EV, while 59% on juiced favorites may not.
+  const amerToProfit = (odds) => odds == null ? null : (odds > 0 ? odds / 100 : 100 / Math.abs(odds));
+  const roi = (set) => {
+    let profit = 0, decisions = 0;
+    for (const r of set) {
+      if (r.result === "win") { const p = amerToProfit(r.odds); if (p != null) { profit += p; decisions++; } }
+      else if (r.result === "loss") { profit -= 1; decisions++; }
+    }
+    return decisions ? { units: +profit.toFixed(2), roiPct: +(profit / decisions * 100).toFixed(1), avgOdds: Math.round(set.reduce((a, r) => a + (r.odds || 0), 0) / set.length) } : { units: 0, roiPct: null, avgOdds: null };
+  };
 
   // Favorite-fade split: market favorite = negative American odds on the bet side.
   const dog = usable.filter(r => r.odds != null && r.odds > 0);
@@ -669,11 +680,12 @@ async function mlBacktest() {
     ok: true,
     n,
     overallWinRatePct: winRate(usable),
+    roiOverall: roi(usable),
     rawMeanModelProb: +(usable.reduce((a, r) => a + r.model_prob, 0) / n).toFixed(3),
     favoriteFade: {
-      betMarketUnderdog: { n: dog.length, winRatePct: winRate(dog) },
-      betMarketFavorite: { n: fav.length, winRatePct: winRate(fav) },
-      note: "Heavy underdog count + sub-50% win rate on dogs = the compression-driven favorite fade.",
+      betMarketUnderdog: { n: dog.length, winRatePct: winRate(dog), ...roi(dog) },
+      betMarketFavorite: { n: fav.length, winRatePct: winRate(fav), ...roi(fav) },
+      note: "ROI is the decider, not win rate. If favorites carry +ROI and dogs bleed → gate to favorite-agreement. If dogs are +ROI on +money → leave it. If both bleed → trim ML like the run line.",
     },
     sharpenSweep: sweep,
     bestK: best,
