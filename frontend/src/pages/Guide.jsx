@@ -194,6 +194,36 @@ export default function GuidePage() {
             </P>
           </Card>
 
+          {/* Shop the best line + reading odds + CLV */}
+          <Card accent="#1D9E75">
+            <Eyebrow>Shop the best line (the simplest edge there is)</Eyebrow>
+            <P>
+              The same bet doesn't pay the same everywhere. One book might price a side at <B>−130</B>
+              while another has the <i>identical</i> bet at <B>−120</B>. Taking −120 means you risk less to
+              win the same amount — a better price, guaranteed, with zero extra risk. Do that on every bet
+              and it compounds into real money over a season.
+            </P>
+            <P>
+              That's what the <B>💲 Live Odds</B> page is for: every major US book's price for each game, side by
+              side, with the <span style={{ color: "#1D9E75", fontWeight: 700 }}>best available price highlighted</span>.
+              You don't have to hunt — we surface it. And when one book hangs a number out of step with the
+              rest, you'll spot it sitting there.
+            </P>
+            <Term term="How to read American odds" tint="#1D9E75">
+              A <B>minus</B> number (−120) is how much you risk to win $100 — −120 risks $120 to win $100.
+              A <B>plus</B> number (+110) is how much you win on a $100 risk. So for the side you want:
+              the <B>higher (more positive / less negative) number is always the better price.</B> That's
+              the whole rule.
+            </Term>
+            <Term term="What is CLV (closing-line value)?" tint="#1D9E75" last>
+              The <B>closing line</B> is the final price right before a game starts — the market's sharpest,
+              most-informed number. If you consistently bet a better price than the close, you have
+              <B> closing-line value</B>, and over time that's the single cleanest sign your bets were
+              actually good — more reliable than any week of wins or losses. Line-shopping is the most
+              direct way to get it: a better price now <i>is</i> beating the number a slower bettor takes later.
+            </Term>
+          </Card>
+
           {/* Responsible play */}
           <Card accent="#ef4444">
             <Eyebrow tint="#ef4444">Play responsibly</Eyebrow>
