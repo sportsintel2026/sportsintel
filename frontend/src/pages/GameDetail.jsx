@@ -200,8 +200,53 @@ function GameDetail({ game, scoresId, hrProps, hasFullAccess, navigate }) {
       <LineupBadge lineups={game.lineups} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} />
       <BattingOrderCard lineups={game.lineups} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} />
       <BatterVsPitcherSection gameId={game.id} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} hasFullAccess={hasFullAccess} navigate={navigate} />
+      <HeadToHeadSection gameId={game.id} />
       <ContextCard game={game} />
       {hrProps.length > 0 && <HRPropsCard hrProps={hrProps} hasFullAccess={hasFullAccess} navigate={navigate} />}
+    </div>
+  );
+}
+// Season head-to-head: the series record between the two teams + recent
+// meetings with scores. Fetched lazily from /api/matchups/mlb/:gameId/h2h.
+// Hides itself until loaded, and stays hidden if the teams haven't met yet.
+function HeadToHeadSection({ gameId }) {
+  const [h2h, setH2h] = useState(null);
+  const [done, setDone] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    const base = import.meta.env.VITE_API_URL || "https://sportsintel-production.up.railway.app";
+    fetch(`${base}/api/matchups/mlb/${gameId}/h2h`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => { if (!cancelled) { setH2h(d && d.headToHead ? d.headToHead : null); setDone(true); } })
+      .catch(() => { if (!cancelled) setDone(true); });
+    return () => { cancelled = true; };
+  }, [gameId]);
+
+  if (!done || !h2h || h2h.played === 0) return null;
+
+  return (
+    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 20, marginBottom: 18 }}>
+      <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 10 }}>
+        🆚 Season series · {h2h.season}
+      </div>
+      <div style={{ fontSize: 15, fontWeight: 700, color: "#e4e7eb", marginBottom: 2 }}>{h2h.summary}</div>
+      <div style={{ fontSize: 11, color: "#6b7280", marginBottom: h2h.recent && h2h.recent.length ? 14 : 0 }}>
+        {h2h.played} game{h2h.played === 1 ? "" : "s"} played this season
+      </div>
+      {h2h.recent && h2h.recent.length > 0 && (
+        <div>
+          <div style={{ fontSize: 10, letterSpacing: "0.08em", color: "#6b7280", fontWeight: 600, textTransform: "uppercase", marginBottom: 8 }}>Recent meetings</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {h2h.recent.map((m, i) => (
+              <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 10, alignItems: "center", padding: "8px 10px", background: "#0a0e14", borderRadius: 4 }}>
+                <div style={{ fontSize: 11, color: "#9ca3af" }}>{m.date}</div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: "#e4e7eb", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{m.away} {m.score} {m.home}</div>
+                <div style={{ fontSize: 11, color: "#22c55e", textAlign: "right" }}>{m.winner ? `${m.winner} won` : ""}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
