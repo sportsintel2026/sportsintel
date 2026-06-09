@@ -471,7 +471,7 @@ function strikeoutOverProb(pitcherStats, oppTeamStats, line) {
 // only diverge when our xBA/AB read disagrees strongly. No shrink-to-0.5 (that dragged
 // every legit Over toward a coin flip). EXPERIMENTAL — validate on graded results.
 const LEAGUE_BAA = 0.245;          // league batting average against
-const DEFAULT_AB_PER_GAME = 3.35;  // fallback effective AB when lineup spot unknown
+const DEFAULT_AB_PER_GAME = 3.78;  // fallback effective AB when lineup spot unknown (≈ avg of AB_BY_SPOT)
 const HITS_MARKET_WEIGHT = 0.65;   // anchor weight on the sharp de-vigged market (0=pure model, 1=pure market)
 const HITS_XBA_BLEND = 0.70;       // weight on Savant xBA vs season AVG when xBA present
 const HITS_REGRESS_K = 160;        // AB-equivalent prior weight: regress per-AB rate toward league (kills small-sample noise)
@@ -479,7 +479,13 @@ const HITS_REGRESS_K = 160;        // AB-equivalent prior weight: regress per-AB
 // Effective AB per game by batting-order spot (1..9). Discounted below full-game
 // starter AB to reflect walks, early exits, and game-to-game usage variance — the
 // level that actually centers single-game P(1+ hit) on the sharp de-vigged market.
-const AB_BY_SPOT = [3.65, 3.58, 3.50, 3.42, 3.33, 3.25, 3.17, 3.10, 3.03];
+// Expected AT-BATS per game by lineup spot. Derived from the HR model's plate-
+// appearance table (LINEUP_PA: 4.65→3.75) × ~0.90 for the PA→AB conversion
+// (walks/HBP/sac are not at-bats and can't be hits). The old table topped out at
+// 3.65 AB for the leadoff spot — it assumed ~20% of PAs were non-AB when the real
+// figure is ~10%, undercounting every hitter's chances by ~0.4-0.5 AB and biasing
+// P(>=1 hit) low (the root of the measured UNDER bias). Spots 1→9:
+const AB_BY_SPOT = [4.19, 4.10, 4.01, 3.87, 3.78, 3.65, 3.56, 3.47, 3.38];
 function expABForSpot(spot) {
   if (!spot || spot < 1 || spot > 9) return DEFAULT_AB_PER_GAME;
   return AB_BY_SPOT[spot - 1];
