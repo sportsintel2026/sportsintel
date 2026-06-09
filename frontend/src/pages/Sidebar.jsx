@@ -55,7 +55,14 @@ export default function Sidebar({ user, plan, signOut, navigate }) {
         to="/odds"
         active={isActive("/odds")}
         icon="💲"
-        label="Odds Shop"
+        label="Live Odds"
+        dot
+      />
+      <NavLink
+        to="/clv"
+        active={isActive("/clv")}
+        icon="📈"
+        label="Beat the Close"
       />
       <NavLink
         to="/guide"
@@ -161,7 +168,7 @@ export default function Sidebar({ user, plan, signOut, navigate }) {
     </div>
   );
 }
-function NavLink({ to, active, icon, label, soon }) {
+function NavLink({ to, active, icon, label, soon, dot }) {
   return (
     <Link
       to={soon ? "#" : to}
@@ -171,6 +178,7 @@ function NavLink({ to, active, icon, label, soon }) {
       <div style={navBtnStyle(active, soon)}>
         <span style={{ fontSize: 14, opacity: soon ? 0.4 : 0.9 }}>{icon}</span>
         <span style={{ flex: 1 }}>{label}</span>
+        {dot && <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#1D9E75", display: "inline-block", animation: "pulse 1.4s infinite", boxShadow: "0 0 6px #1D9E75" }} />}
         {soon && <span style={{ fontSize: 9, color: "#4b5563", letterSpacing: "0.05em" }}>SOON</span>}
       </div>
     </Link>
