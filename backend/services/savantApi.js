@@ -267,9 +267,83 @@ async function probePitcherWhiff(year) {
   return { ok: usable.length > 0, year: y, usableUrls: usable.map(u => u.url), attempts };
 }
 
+// ── PITCHER K% / WHIFF% PIPELINE (K model v2.1) ───────────────────────────────
+// Probe (whiff_probe) confirmed the CUSTOM leaderboard is the clean source: one row
+// per pitcher, keyed by player_id (joins to our pitcher.id), with k_percent +
+// whiff_percent + swing_percent in PERCENT units. We use min=1 (not min=q) so we get
+// ALL pitchers, not just the ~65 qualified. Fetched once/day and cached, exactly like
+// the batter pipelines. k_percent (strikeouts per PA) is the prize input — a cleaner
+// strikeout rate than K/9, which is innings-contaminated.
+function pitcherWhiffUrl(year) {
+  return `${SAVANT_BASE}/leaderboard/custom?year=${year}&type=pitcher&filter=&min=1&selections=pa,k_percent,bb_percent,whiff_percent,swing_percent&sort=k_percent&sortDir=desc&csv=true`;
+}
+
+// Parse the custom CSV into a Map: playerId(Number) -> { kPct, whiffPct, bbPct, swingPct, pa }.
+// Percents are converted to FRACTIONS (32.4 -> 0.324). Header-indexed (robust to
+// column reordering). Pure function — unit-testable offline.
+function parsePitcherWhiffCsv(text) {
+  const map = new Map();
+  if (!text || typeof text !== "string") return map;
+  const lines = text.split(/\r?\n/).filter((l) => l.length > 0);
+  if (lines.length < 2) return map;
+  const cols = parseCsvLine(lines[0]).map((c) => c.trim());
+  const iId = cols.indexOf("player_id");
+  const iK = cols.indexOf("k_percent");
+  const iWhiff = cols.indexOf("whiff_percent");
+  const iBb = cols.indexOf("bb_percent");
+  const iSwing = cols.indexOf("swing_percent");
+  const iPa = cols.indexOf("pa");
+  if (iId < 0 || iK < 0) return map; // wrong shape — bail rather than mis-map
+  for (let r = 1; r < lines.length; r++) {
+    const f = parseCsvLine(lines[r]);
+    const id = parseInt(f[iId], 10);
+    const kPct = parseFloat(f[iK]);
+    if (!Number.isFinite(id) || !Number.isFinite(kPct)) continue;
+    map.set(id, {
+      kPct: kPct / 100, // percent -> fraction
+      whiffPct: iWhiff >= 0 ? ((parseFloat(f[iWhiff]) || 0) / 100) || null : null,
+      bbPct: iBb >= 0 ? ((parseFloat(f[iBb]) || 0) / 100) || null : null,
+      swingPct: iSwing >= 0 ? ((parseFloat(f[iSwing]) || 0) / 100) || null : null,
+      pa: iPa >= 0 ? (parseInt(f[iPa], 10) || null) : null,
+    });
+  }
+  return map;
+}
+
+let _whiffCache = { date: null, map: null };
+async function getPitcherWhiffStats(year) {
+  const y = year || new Date().getFullYear();
+  const today = new Date().toISOString().slice(0, 10);
+  if (_whiffCache.map && _whiffCache.date === today) return _whiffCache.map;
+  try {
+    const res = await axios.get(pitcherWhiffUrl(y), {
+      timeout: 15000, responseType: "text", transformResponse: (x) => x,
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; WizePicks/1.0)", Accept: "text/csv,*/*" },
+    });
+    const map = parsePitcherWhiffCsv(typeof res.data === "string" ? res.data : "");
+    if (map.size > 0) { _whiffCache = { date: today, map }; return map; }
+    return null;
+  } catch (e) {
+    return null;
+  }
+}
+
+// VERIFY (read-only): run the REAL production fetch+parse and report the parsed map
+// size + sample rows, so we confirm the full pitcher set flows (not 65) and the unit
+// conversion is right BEFORE wiring k%/whiff% into the model. Never throws.
+async function probePitcherWhiffData(year) {
+  const y = year || new Date().getFullYear();
+  const map = await getPitcherWhiffStats(y);
+  if (!map) return { ok: false, year: y, reason: "fetch/parse returned null", url: pitcherWhiffUrl(y) };
+  const sample = [];
+  for (const [id, v] of map) { sample.push({ player_id: id, ...v }); if (sample.length >= 6) break; }
+  return { ok: map.size > 0, year: y, mapSize: map.size, url: pitcherWhiffUrl(y), sample };
+}
+
 module.exports = {
   getBatterExpectedStats, parseExpectedStatsCsv, parseCsvLine,
   probeExpectedStats, expectedStatsUrl, SAVANT_BASE,
   probeBarrels, getBatterBarrels, parseBarrelsCsv, barrelsUrl,
   probePitcherWhiff,
+  pitcherWhiffUrl, parsePitcherWhiffCsv, getPitcherWhiffStats, probePitcherWhiffData,
 };
