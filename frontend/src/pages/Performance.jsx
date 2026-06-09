@@ -152,7 +152,6 @@ function PerfBody({ data, league }) {
           props are speculative: shown on the Edges page, recorded silently for our
           own calibration, but NOT displayed/tracked here. (Strikeouts can graduate
           to a tracked prop once recalibrated.) */}
-      <SectionTitle>Tracked prop</SectionTitle>
       <TrackedPropCard p={data.props || data.hrProps} league={league} />
       {/* By confidence */}
       <SectionTitle>By confidence tier</SectionTitle>
@@ -258,13 +257,12 @@ function TrackedPropCard({ p, league }) {
   // ROI (mixing a +EV prop with losing ones) was meaningless and has been removed.
   const hits = p && p.byMarket && p.byMarket.player_hits;
   const decisions = hits ? ((hits.hits || 0) + (hits.misses || 0)) : 0;
-  if (!hits || !decisions) {
-    return <SpeculativeNote league={league} />;
-  }
+  if (!hits || !decisions) return null;
   const profit = hits.roi >= 0;
   return (
     <>
-      <div style={{ background: "linear-gradient(180deg,#0c1a14,#0a0e14)", border: "1px solid #1D9E7555", borderLeft: "3px solid #1D9E75", borderRadius: 12, padding: 24, marginBottom: 14 }}>
+      <SectionTitle>Tracked prop</SectionTitle>
+      <div style={{ background: "linear-gradient(180deg,#0c1a14,#0a0e14)", border: "1px solid #1D9E7555", borderLeft: "3px solid #1D9E75", borderRadius: 12, padding: 24, marginBottom: 24 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
           <span style={{ fontSize: 16, fontWeight: 700, color: "#e4e7eb" }}>Hits</span>
           <span style={{ background: "#1D9E7522", color: "#3FD39B", fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", padding: "3px 9px", borderRadius: 6, textTransform: "uppercase" }}>Sharpest prop</span>
@@ -282,18 +280,7 @@ function TrackedPropCard({ p, league }) {
           Our sharpest prop. Tracked and counted. Other prop types are shown on the Edges page but kept out of this record while they're calibrated.
         </div>
       </div>
-      <SpeculativeNote league={league} />
     </>
-  );
-}
-function SpeculativeNote({ league }) {
-  return (
-    <div style={{ display: "flex", gap: 10, alignItems: "flex-start", background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: "13px 15px", marginBottom: 24 }}>
-      <span style={{ color: "#6b7280", fontSize: 15, lineHeight: 1.4 }}>ℹ️</span>
-      <div style={{ fontSize: 12, color: "#9ca3af", lineHeight: 1.6 }}>
-        Home-run and strikeout props are <span style={{ color: "#cbd5e1" }}>speculative</span> and shown on the <span style={{ color: "#3FD39B" }}>Edges</span> page for guidance. They're recorded behind the scenes but aren't tracked toward this record.
-      </div>
-    </div>
   );
 }
 function Metric({ label, value, color }) {
