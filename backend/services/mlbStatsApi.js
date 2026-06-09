@@ -812,6 +812,47 @@ async function getGameBatterHits(gamePk) {
   }
 }
 
+// Season head-to-head between two teams (regular season). One schedule call,
+// filtered by teamId + opponentId. Returns each team's win count and the
+// chronological list of completed meetings. Null-safe — H2H simply won't show
+// if the call fails. mapStatus() reuse keeps "final" detection consistent with
+// the rest of the app (postponed games are NOT counted).
+async function getSeasonHeadToHead(teamIdA, teamIdB, season) {
+  if (!teamIdA || !teamIdB) return null;
+  const yr = season || new Date().getFullYear();
+  try {
+    const data = await mlbGet(`/schedule`, {
+      sportId: 1, season: yr, teamId: teamIdA, opponentId: teamIdB, gameType: "R",
+    });
+    const winsByTeamId = {};
+    const meetings = [];
+    for (const dateBlock of data.dates || []) {
+      for (const g of dateBlock.games || []) {
+        const status = mapStatus(g.status?.abstractGameState, g.status?.detailedState);
+        if (status !== "final") continue;
+        const away = g.teams?.away, home = g.teams?.home;
+        const awayScore = away?.score, homeScore = home?.score;
+        if (awayScore == null || homeScore == null) continue;
+        const awayId = away?.team?.id, homeId = home?.team?.id;
+        const winnerId = away?.isWinner ? awayId
+          : home?.isWinner ? homeId
+          : (awayScore > homeScore ? awayId : homeScore > awayScore ? homeId : null);
+        if (winnerId != null) winsByTeamId[winnerId] = (winsByTeamId[winnerId] || 0) + 1;
+        meetings.push({
+          date: (dateBlock.date || g.gameDate || "").slice(0, 10),
+          awayId, awayAbbr: away?.team?.abbreviation || "",
+          homeId, homeAbbr: home?.team?.abbreviation || "",
+          awayScore, homeScore, winnerId,
+        });
+      }
+    }
+    meetings.sort((a, b) => (a.date < b.date ? -1 : 1)); // chronological
+    return { season: yr, played: meetings.length, winsByTeamId, meetings };
+  } catch (e) {
+    return null;
+  }
+}
+
 module.exports = {
   getEasternDate, getScheduleForDate,
   getGameHRHitters,
@@ -827,4 +868,5 @@ module.exports = {
   getLiveGameState,
   getGameStatusAndScore,
   getTeamHandednessSplits, getTeamBullpenStats, getTeamBullpenUsage, getPitcherHand,
+  getSeasonHeadToHead,
 };
