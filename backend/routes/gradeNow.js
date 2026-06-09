@@ -972,6 +972,34 @@ async function clvAudit() {
   const ml = view.filter(v => v.market === "moneyline");
   const tot = view.filter(v => v.market === "total");
 
+  // Coverage by game_date — the fast proof the capture fix is working. Pre-fix
+  // dates stay ~50%; dates from the ratchet deploy (2026-06-09) forward should
+  // climb toward ~90%+ as those slates grade in. Sorted newest-first.
+  const FIX_DATE = "2026-06-09";
+  const dateMap = {};
+  for (const v of view) {
+    const d = v.game_date || "unknown";
+    (dateMap[d] ||= { graded: 0, captured: 0 });
+    dateMap[d].graded++;
+    if (v.captured) dateMap[d].captured++;
+  }
+  const byDateCoverage = Object.entries(dateMap)
+    .sort((a, b) => (a[0] < b[0] ? 1 : -1))
+    .map(([date, c]) => ({
+      date, graded: c.graded, captured: c.captured,
+      capturedPct: c.graded ? +(c.captured / c.graded * 100).toFixed(1) : null,
+    }));
+  // Pre/post split around the fix date for a one-glance verdict.
+  const preFix = view.filter(v => v.game_date && v.game_date < FIX_DATE);
+  const postFix = view.filter(v => v.game_date && v.game_date >= FIX_DATE);
+  const covPct = (set) => set.length ? +(set.filter(v => v.captured).length / set.length * 100).toFixed(1) : null;
+  const prePostCoverage = {
+    fixDate: FIX_DATE,
+    preFix: { graded: preFix.length, capturedPct: covPct(preFix) },
+    postFix: { graded: postFix.length, capturedPct: covPct(postFix) },
+    note: "preFix is frozen (those games already played under the old single-shot capture). postFix should trend ~90%+ as ratchet-era slates grade in; if postFix graded is still 0, no new slate has graded yet — re-check in a couple days.",
+  };
+
   // Timing gap (record -> close), captured picks only.
   const gaps = view.filter(v => v.gapHours != null).map(v => v.gapHours);
   const timing = {
@@ -1010,6 +1038,16 @@ async function clvAudit() {
     flags.push(`CLV CENTERED ON ~0 WITH REAL MOVEMENT (mean ${overall.meanClvPP} pts, beat-close ${overall.beatClosePct}%). On the picks that DID move, we're neither beating nor losing the close — the honest "model ≈ market" result. Look market-by-market: totals is where the edge should show if anywhere.`);
   if (!flags.length) flags.push("No single cause dominates at these thresholds — read overall + byMarket + timing together.");
 
+  if (prePostCoverage.postFix.graded > 0) {
+    const pre = prePostCoverage.preFix.capturedPct, post = prePostCoverage.postFix.capturedPct;
+    if (post != null && pre != null && post > pre + 15)
+      flags.push(`CAPTURE FIX WORKING: post-fix coverage ${post}% vs pre-fix ${pre}% (over ${prePostCoverage.postFix.graded} graded ratchet-era picks). The ratchet is capturing closing lines as intended.`);
+    else if (post != null)
+      flags.push(`POST-FIX COVERAGE ${post}% over only ${prePostCoverage.postFix.graded} graded picks so far — small sample; give it a few more days before reading it.`);
+  } else {
+    flags.push("No ratchet-era (>= 2026-06-09) picks have GRADED yet, so capture coverage can't have moved — this is expected right after deploy. Re-run in 2-3 days.");
+  }
+
   return {
     ok: true,
     league: "mlb",
@@ -1017,6 +1055,8 @@ async function clvAudit() {
     graded,
     overall,
     byMarket: { moneyline: summarize(ml), total: summarize(tot) },
+    prePostCoverage,
+    byDateCoverage,
     timing,
     sample,
     flags,
