@@ -17,6 +17,7 @@ const {
   getTeamHittingAsOf,
   getPitcherEraAsOf,
   getTeamPitchingAsOf,
+  getSeasonHeadToHead,
 } = require("../services/mlbStatsApi");
 
 const MLB_BASE = "https://statsapi.mlb.com/api/v1";
@@ -164,6 +165,72 @@ router.get("/mlb/:gameId", async (req, res) => {
   } catch (err) {
     console.error("[matchups] error:", err.message);
     res.status(500).json({ error: "Failed to compute matchups", details: err.message });
+  }
+});
+
+// In-memory cache for head-to-head (changes at most once/day) — keyed by gameId.
+const h2hCache = new Map();
+const H2H_TTL_MS = 6 * 60 * 60 * 1000; // 6h
+
+// GET /api/matchups/mlb/:gameId/h2h
+//   Season head-to-head between the two teams in this game: each side's series
+//   wins + the recent meetings with scores. Read-only, cached 6h.
+router.get("/mlb/:gameId/h2h", async (req, res) => {
+  const { gameId } = req.params;
+
+  const cached = h2hCache.get(gameId);
+  if (cached && (Date.now() - cached.fetchedAt) < H2H_TTL_MS) {
+    return res.json({ ...cached.data, cached: true });
+  }
+
+  try {
+    const today = getEasternDate(0);
+    const games = await getScheduleForDate(today);
+    const game = games.find(g => String(g.id) === String(gameId));
+    if (!game) {
+      return res.status(404).json({ error: "Game not found in today's slate" });
+    }
+
+    const season = new Date().getFullYear();
+    const h2h = await getSeasonHeadToHead(game.awayId, game.homeId, season);
+    if (!h2h) return res.json({ gameId, headToHead: null });
+
+    const awayWins = h2h.winsByTeamId[game.awayId] || 0;
+    const homeWins = h2h.winsByTeamId[game.homeId] || 0;
+    let summary;
+    if (h2h.played === 0) summary = "First meeting of the season";
+    else if (awayWins === homeWins) summary = `Season series tied ${awayWins}-${homeWins}`;
+    else if (awayWins > homeWins) summary = `${game.awayAbbr} leads season series ${awayWins}-${homeWins}`;
+    else summary = `${game.homeAbbr} leads season series ${homeWins}-${awayWins}`;
+
+    // Most recent up to 5 meetings, newest first.
+    const recent = [...h2h.meetings].reverse().slice(0, 5).map(m => ({
+      date: m.date,
+      away: m.awayAbbr,
+      home: m.homeAbbr,
+      score: `${m.awayScore}-${m.homeScore}`,
+      winner: m.winnerId === m.awayId ? m.awayAbbr : m.winnerId === m.homeId ? m.homeAbbr : null,
+    }));
+
+    const result = {
+      gameId,
+      headToHead: {
+        season,
+        played: h2h.played,
+        away: { abbr: game.awayAbbr, id: game.awayId, wins: awayWins },
+        home: { abbr: game.homeAbbr, id: game.homeId, wins: homeWins },
+        summary,
+        recent,
+      },
+      computedAt: new Date().toISOString(),
+      cached: false,
+    };
+
+    h2hCache.set(gameId, { data: result, fetchedAt: Date.now() });
+    res.json(result);
+  } catch (err) {
+    console.error("[matchups][h2h] error:", err.message);
+    res.status(500).json({ error: "Failed to compute head-to-head", details: err.message });
   }
 });
 
