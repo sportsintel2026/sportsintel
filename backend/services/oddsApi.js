@@ -468,6 +468,99 @@ async function getRawTotalsDebug(filter) {
   return { ok: true, events: out.length, data: out };
 }
 
+// ── Multi-book odds comparison (the line-shopping page) ───────────────────────
+// Returns EVERY US book's price per game (not collapsed to a best line like
+// getMLBMainOdds) so subscribers can shop for the best number themselves. Own
+// 90-second cache + refresh-on-view keeps credit cost tiny (one ~2-credit call
+// only when the page is loaded past the cache window). Reuses the SAME
+// plausibility guards as the model so a stale/suspended junk quote can't win
+// "best price." Best price = highest American number on each side (better payout
+// for the bettor); over/under "best" is compared only among books on the
+// consensus line, so it's apples-to-apples.
+const COMPARISON_TTL_MS = 90 * 1000;
+
+function buildComparisonGame(ev) {
+  if (!ev || !ev.home_team || !ev.away_team) return null;
+  const away = ev.away_team, home = ev.home_team;
+
+  const books = [];
+  const totalLineCounts = {};
+  for (const bm of ev.bookmakers || []) {
+    const h2h = (bm.markets || []).find(m => m.key === "h2h");
+    const tot = (bm.markets || []).find(m => m.key === "totals");
+
+    let awayML = null, homeML = null;
+    for (const o of (h2h?.outcomes || [])) {
+      if (o.name === away && plausibleMlOdds(o.price)) awayML = o.price;
+      else if (o.name === home && plausibleMlOdds(o.price)) homeML = o.price;
+    }
+
+    let totalLine = null, over = null, under = null;
+    if (tot) {
+      const ov = (tot.outcomes || []).find(o => o.name === "Over");
+      const un = (tot.outcomes || []).find(o => o.name === "Under");
+      const line = ov?.point ?? un?.point ?? null;
+      if (plausibleTotalLine(line)) {
+        totalLine = line;
+        if (ov && plausibleTotalOdds(ov.price)) over = ov.price;
+        if (un && plausibleTotalOdds(un.price)) under = un.price;
+        totalLineCounts[line] = (totalLineCounts[line] || 0) + 1;
+      }
+    }
+
+    if (awayML == null && homeML == null && over == null && under == null) continue;
+    books.push({ book: bm.title || bm.key, awayML, homeML, totalLine, over, under });
+  }
+  if (!books.length) return null;
+
+  // Consensus total line = the line the most books agree on.
+  let consensusLine = null, maxCount = 0;
+  for (const [line, n] of Object.entries(totalLineCounts)) {
+    if (n > maxCount) { maxCount = n; consensusLine = Number(line); }
+  }
+
+  // Best price per market (higher American number = better for the bettor).
+  const best = { awayML: null, homeML: null, over: null, under: null };
+  for (const r of books) {
+    if (r.awayML != null && (best.awayML == null || r.awayML > best.awayML.price)) best.awayML = { price: r.awayML, book: r.book };
+    if (r.homeML != null && (best.homeML == null || r.homeML > best.homeML.price)) best.homeML = { price: r.homeML, book: r.book };
+    if (consensusLine != null && r.totalLine === consensusLine) {
+      if (r.over != null && (best.over == null || r.over > best.over.price)) best.over = { price: r.over, book: r.book };
+      if (r.under != null && (best.under == null || r.under > best.under.price)) best.under = { price: r.under, book: r.book };
+    }
+  }
+
+  return {
+    id: ev.id,
+    away, home,
+    commenceTime: ev.commence_time,
+    consensusTotalLine: consensusLine,
+    books: books.sort((a, b) => a.book.localeCompare(b.book)),
+    best,
+  };
+}
+
+async function getMLBOddsComparison() {
+  const cacheKey = "mlb_odds_comparison";
+  const cached = cache.get(cacheKey);
+  if (cached && (Date.now() - cached.fetchedAt) < COMPARISON_TTL_MS) {
+    return { ...cached.data, cached: true };
+  }
+  try {
+    const data = await oddsGet("/sports/baseball_mlb/odds", {
+      regions: "us", markets: "h2h,totals", oddsFormat: "american", dateFormat: "iso",
+    });
+    const games = (data || []).map(buildComparisonGame).filter(Boolean);
+    const result = { updatedAt: new Date().toISOString(), gameCount: games.length, games, cached: false };
+    cache.set(cacheKey, { data: result, fetchedAt: Date.now() });
+    return result;
+  } catch (e) {
+    console.error("[OddsAPI] comparison error:", e.message);
+    if (cached) return { ...cached.data, cached: true, stale: true };
+    return { updatedAt: new Date().toISOString(), gameCount: 0, games: [], error: e.message };
+  }
+}
+
 // ── READ-ONLY coverage + cost probe (for the line-shopping page feasibility) ──
 // Answers the two questions that decide whether a multi-book odds page is a $7
 // feature or a budget-buster: (1) which bookmakers does THIS key actually return
@@ -570,6 +663,7 @@ module.exports = {
   americanToImpliedProb,
   getRawTotalsDebug,
   probeOddsCoverage,
+  getMLBOddsComparison,
   clearOddsCache,
   getCacheStats,
 };
