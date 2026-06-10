@@ -169,7 +169,7 @@ export default function OddsPage() {
       <div className="main-content" style={{ marginLeft: 200 }}>
         <div className="od-content" style={{ maxWidth: 860, margin: "0 auto", padding: "24px 24px 60px" }}>
           <div style={{ marginBottom: 6 }}>
-            <h1 style={{ margin: 0, fontSize: 26, fontWeight: 700 }}>💲 Live Odds</h1>
+            <h1 style={{ margin: 0, fontSize: 26, fontWeight: 700 }}>💹 Market Price</h1>
           </div>
           <p style={{ margin: "0 0 22px", fontSize: 13, color: "#9ca3af", lineHeight: 1.6 }}>
             Every major US book's price, side by side — so you can grab the <strong style={{ color: "#cbd2da" }}>best number</strong> before you bet.
@@ -182,7 +182,7 @@ export default function OddsPage() {
             </div>
           ) : !hasFullAccess ? (
             <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 28, textAlign: "center" }}>
-              <div style={{ fontSize: 15, fontWeight: 700, color: "#e4e7eb", marginBottom: 8 }}>🔒 Live Odds is an All-Access feature</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: "#e4e7eb", marginBottom: 8 }}>🔒 Market Price is an All-Access feature</div>
               <p style={{ fontSize: 13, color: "#9ca3af", lineHeight: 1.6, maxWidth: 460, margin: "0 auto 18px" }}>
                 Compare every US sportsbook's line in one place and always bet the best price — the kind of tool other sites charge a fortune for.
               </p>
