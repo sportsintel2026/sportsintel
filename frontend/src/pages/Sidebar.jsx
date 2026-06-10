@@ -30,8 +30,8 @@ export default function Sidebar({ user, plan, signOut, navigate }) {
       <NavLink
         to="/odds"
         active={isActive("/odds")}
-        icon="💲"
-        label="The Books Price"
+        icon="💹"
+        label="Market Price"
         dot
       />
       <NavLink
@@ -77,8 +77,8 @@ export default function Sidebar({ user, plan, signOut, navigate }) {
       <NavLink
         to="/daily-card"
         active={isActive("/daily-card")}
-        icon="🎲"
-        label="Quick Picks"
+        icon="🎰"
+        label="Quick Spin"
       />
       <NavLink
         to="/expert-picks"
