@@ -20,36 +20,12 @@ export default function Sidebar({ user, plan, signOut, navigate }) {
           Wize<span style={{ color: "#1D9E75" }}>Picks</span>
         </span>
       </div>
-      {/* General — applies across all sports */}
+      {/* Main — daily-use tools */}
       <NavLink
         to="/dashboard"
         active={isActive("/dashboard")}
         icon="📊"
         label="Edges"
-      />
-      <NavLink
-        to="/daily-card"
-        active={isActive("/daily-card")}
-        icon="🎲"
-        label="Quick Picks"
-      />
-      <NavLink
-        to="/performance"
-        active={isActive("/performance")}
-        icon="📈"
-        label="Performance"
-      />
-      <NavLink
-        to="/expert-picks"
-        active={isActive("/expert-picks")}
-        icon="🎯"
-        label="Best Bets"
-      />
-      <NavLink
-        to="/consensus"
-        active={isActive("/consensus")}
-        icon="🤝"
-        label="Consensus"
       />
       <NavLink
         to="/odds"
@@ -59,27 +35,19 @@ export default function Sidebar({ user, plan, signOut, navigate }) {
         dot
       />
       <NavLink
-        to="/clv"
-        active={isActive("/clv")}
+        to="/performance"
+        active={isActive("/performance")}
         icon="📈"
-        label="Beat the Close"
+        label="Performance"
       />
-      <NavLink
-        to="/guide"
-        active={isActive("/guide")}
-        icon="📖"
-        label="How It Works"
-      />
-      {/* MLB section */}
-      <div style={{ ...sectionLabelStyle, marginTop: 18 }}>MLB</div>
+      {/* Scores — games by sport */}
+      <div style={{ ...sectionLabelStyle, marginTop: 18 }}>SCORES</div>
       <NavLink
         to="/games"
         active={isActive("/games") || isActive("/game/mlb")}
         icon="⚾"
         label="MLB Games"
       />
-      {/* NBA section */}
-      <div style={{ ...sectionLabelStyle, marginTop: 18 }}>NBA</div>
       <NavLink
         to="/nba-games"
         active={isActive("/nba-games") || isActive("/game/nba")}
@@ -87,34 +55,36 @@ export default function Sidebar({ user, plan, signOut, navigate }) {
         label="NBA Games"
       />
       <NavLink
-        to="/nba"
-        active={isActive("/nba")}
-        icon="📊"
-        label="NBA Playoffs"
-      />
-      {/* NFL section */}
-      <div style={{ ...sectionLabelStyle, marginTop: 18 }}>NFL</div>
-      <NavLink
         to="/nfl-games"
         active={isActive("/nfl-games") || isActive("/game/nfl")}
         icon="🏈"
         label="NFL Games"
       />
-      {/* CFB section */}
-      <div style={{ ...sectionLabelStyle, marginTop: 18 }}>COLLEGE FOOTBALL</div>
       <NavLink
         to="/cfb-games"
         active={isActive("/cfb-games") || isActive("/game/cfb")}
         icon="🏟️"
         label="College Football"
       />
-      {/* NHL section */}
-      <div style={{ ...sectionLabelStyle, marginTop: 18 }}>NHL</div>
       <NavLink
         to="/nhl-games"
         active={isActive("/nhl-games") || isActive("/game/nhl")}
         icon="🏒"
         label="NHL Games"
+      />
+      {/* More tools */}
+      <div style={{ height: 14 }} />
+      <NavLink
+        to="/daily-card"
+        active={isActive("/daily-card")}
+        icon="🎲"
+        label="Quick Picks"
+      />
+      <NavLink
+        to="/expert-picks"
+        active={isActive("/expert-picks")}
+        icon="🎯"
+        label="WizePlays"
       />
       {/* Account section */}
       <div style={{ ...sectionLabelStyle, marginTop: 18 }}>ACCOUNT</div>
