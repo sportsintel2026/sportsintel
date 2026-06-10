@@ -75,9 +75,9 @@ export default function StartHereGuide({ navigate }) {
               <div style={stepNum}>3</div>
               <div>
                 <div style={stepTitle}>Read the price — shop every book</div>
-                <div style={stepBody}>The Books Price puts every sportsbook side by side so you can grab the best number on any bet — a real edge, pure math. It also shows where books agree or disagree: the odds themselves tell you a lot about what the market really thinks of a game.</div>
+                <div style={stepBody}>Market Price puts every sportsbook side by side so you can grab the best number on any bet — a real edge, pure math. It also shows where books agree or disagree: the odds themselves tell you a lot about what the market really thinks of a game.</div>
                 <div style={{ marginTop: 8 }}>
-                  <button onClick={() => navigate("/odds")} style={linkBtn}>→ Open The Books Price</button>
+                  <button onClick={() => navigate("/odds")} style={linkBtn}>→ Open Market Price</button>
                 </div>
               </div>
             </div>
