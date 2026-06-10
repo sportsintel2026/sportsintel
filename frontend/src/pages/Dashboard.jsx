@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { edgesApi, subscriptionApi } from "../lib/api";
 import Sidebar from "./Sidebar";
+import StartHereGuide from "./StartHereGuide";
 
 const LEAGUES = [
   { id: "mlb", label: "MLB", icon: "⚾", live: true },
@@ -109,6 +110,7 @@ export default function DashboardPage() {
       <div className="main-content" style={{ marginLeft: 200 }}>
         <LeagueTabs league={league} setLeague={setLeague} navigate={navigate} />
         <div className="dashboard-content" style={{ maxWidth: 1200, margin: "0 auto", padding: "20px 24px 60px" }}>
+          <StartHereGuide navigate={navigate} />
           {league === "mlb" ? (
             <MLBDashboard edges={edges} loading={edgesLoading} hasFullAccess={hasFullAccess} navigate={navigate} onRefresh={loadEdges} />
           ) : league === "nba" ? (
