@@ -156,12 +156,12 @@ export default function ExpertPicksPage() {
       <div className="main-content" style={{ marginLeft: 200 }}>
         <div className="ep-content" style={{ maxWidth: 1000, margin: "0 auto", padding: "24px 24px 60px" }}>
           <div style={{ marginBottom: 6 }}>
-            <h1 style={{ margin: 0, fontSize: 26, fontWeight: 700 }}>🎯 Best Bets</h1>
+            <h1 style={{ margin: 0, fontSize: 26, fontWeight: 700 }}>🎯 WizePlays</h1>
           </div>
-          <p style={{ margin: "0 0 14px", fontSize: 13, color: "#9ca3af", lineHeight: 1.6 }}>
-            Hand-picked parlays and straight bets across MLB, NBA, NFL, NHL & college.
-            Every pick is tracked — wins <em>and</em> losses — so you see the real record.
-          </p>
+          <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: "14px 16px", margin: "0 0 14px", fontSize: 13, color: "#9ca3af", lineHeight: 1.6 }}>
+            <p style={{ margin: "0 0 10px" }}>Handpicked by our analysts — a fresh slate of plays every day, across MLB, NBA, NFL, NHL &amp; college.</p>
+            <p style={{ margin: 0, color: "#e4e7eb", fontWeight: 700 }}>Every play is tracked — wins <em style={{ fontStyle: "normal" }}>and</em> losses — with complete transparency. Nothing hidden, nothing fabricated.</p>
+          </div>
 
           {/* Posting-time note */}
           <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "0 0 22px", fontSize: 12, color: "#6b7280" }}>
@@ -246,11 +246,11 @@ function LockedTeaser({ record, navigate }) {
   const graded = record.wins + record.losses;
   const hook = graded > 0
     ? `${record.wins}-${record.losses} on tracked picks · ${record.units >= 0 ? "+" : ""}${record.units.toFixed(2)} units`
-    : "Daily best bets — parlays & straight bets across MLB, NBA, NFL, NHL & college";
+    : "Daily WizePlays — parlays & straight bets across MLB, NBA, NFL, NHL & college";
   return (
     <div style={{ position: "relative", background: "linear-gradient(180deg,#1a1410 0%,#0f1419 100%)", border: "1px solid #ef444433", borderLeft: "3px solid #ef4444", borderRadius: 10, padding: "40px 28px", textAlign: "center" }}>
       <div style={{ fontSize: 38, marginBottom: 12 }}>🔒</div>
-      <div style={{ fontSize: 20, fontWeight: 800, marginBottom: 8 }}>Subscribe to see Best Bets</div>
+      <div style={{ fontSize: 20, fontWeight: 800, marginBottom: 8 }}>Subscribe to see WizePlays</div>
       <div style={{ fontSize: 13, color: "#9ca3af", maxWidth: 460, margin: "0 auto 22px", lineHeight: 1.6 }}>
         {hook}. Full parlay breakdowns, straight bets, and an honest, fully-tracked record.
       </div>
@@ -266,7 +266,7 @@ function EmptyState() {
     <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 8, padding: "48px 24px", textAlign: "center" }}>
       <div style={{ fontSize: 34, marginBottom: 12 }}>🗓️</div>
       <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>No picks posted yet today</div>
-      <div style={{ fontSize: 12, color: "#6b7280" }}>New best bets and parlays drop here daily. Check back soon.</div>
+      <div style={{ fontSize: 12, color: "#6b7280" }}>New WizePlays drop here daily. Check back soon.</div>
     </div>
   );
 }
@@ -401,7 +401,7 @@ function Loader() {
   return (
     <div style={{ textAlign: "center", padding: 56 }}>
       <div style={{ width: 30, height: 30, border: "3px solid #1f2937", borderTopColor: "#ef4444", borderRadius: "50%", animation: "spin .8s linear infinite", margin: "0 auto 12px" }} />
-      <div style={{ fontSize: 13, color: "#6b7280" }}>Loading Best Bets…</div>
+      <div style={{ fontSize: 13, color: "#6b7280" }}>Loading WizePlays…</div>
     </div>
   );
 }
