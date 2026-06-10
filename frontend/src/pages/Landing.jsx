@@ -14,7 +14,7 @@ export default function LandingPage() {
 
   const OUTPUTS = [
     { label: "Moneyline edges", desc: "Where our win probability disagrees with the market" },
-    { label: "Total run edges", desc: "Projected runs vs the posted over/under line" },
+    { label: "Totals O/U edges", desc: "Projected runs vs the posted over/under line" },
     { label: "Player props", desc: "Per-player probabilities built from matchup history, recent form, and situational context" },
   ];
 
