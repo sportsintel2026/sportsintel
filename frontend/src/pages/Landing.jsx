@@ -1,35 +1,14 @@
 import { Link } from "react-router-dom";
-import { useState, useEffect } from "react";
-import { supabase } from "../lib/api";
 
 // Launch gate for the Quick Picks teaser. Flip to false to hide it from the homepage.
 const SHOW_QUICKPICKS_TEASER = true;
 
 export default function LandingPage() {
-  const [picks, setPicks] = useState([]);
-
-  useEffect(() => {
-    const loadPicks = async () => {
-      try {
-        const today = new Date().toISOString().split("T")[0];
-        const { data } = await supabase
-          .from("daily_picks")
-          .select("*")
-          .eq("date", today)
-          .maybeSingle();
-        if (data?.picks) setPicks(JSON.parse(data.picks));
-      } catch (e) {}
-    };
-    loadPicks();
-  }, []);
-
   // The depth — what actually powers the model
   const MODEL_INPUTS = [
     { icon: "📊", title: "Model Projections", desc: "Win probabilities and projected scoring built from real performance data, not gut feel" },
     { icon: "⚔️", title: "Matchup History", desc: "Head-to-head history that shows how the people involved have actually performed against each other" },
     { icon: "📈", title: "Recent Form", desc: "Who's hot and who's cold right now — because season averages hide what's happening lately" },
-    { icon: "🌤", title: "Situational Factors", desc: "Conditions, venue, and context that the raw stat line leaves out but that quietly move games" },
-    { icon: "🎯", title: "Key Performer Profiles", desc: "The rate stats that actually predict outcomes for the players who decide games" },
     { icon: "💰", title: "Live Market Lines", desc: "Real sportsbook odds from major books, compared head-to-head with our model" },
   ];
 
@@ -142,6 +121,30 @@ export default function LandingPage() {
           <div style={{ fontSize: 18, fontWeight: 900, color: "#1D9E75", letterSpacing: "-0.01em" }}>Bet smarter. Bet Wize.</div>
         </div>
 
+        <div style={{ borderTop: "1px solid #0f0f1a", marginBottom: 56 }} />
+
+        {/* Comparison */}
+        <div style={{ marginBottom: 64 }}>
+          <div style={{ marginBottom: 28 }}>
+            <div style={{ fontSize: 11, color: "#ef4444", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8 }}>Compare</div>
+            <h2 style={{ fontSize: "clamp(20px,4vw,30px)", fontWeight: 800, color: "#fff" }}>Why <span style={{ color: "#1D9E75" }}>WizePicks</span> is different</h2>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {COMPETITORS.map((c, i) => (
+              <div key={i} style={{ background: c.highlight ? "#ef44440a" : "#0a0a14", border: `1px solid ${c.highlight ? "#ef444430" : "#1a1a2e"}`, borderRadius: 12, padding: "14px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: c.highlight ? "#fff" : "#64748b", marginBottom: 3 }}>{c.name}</div>
+                  <div style={{ fontSize: 12, color: c.highlight ? "#94a3b8" : "#334155" }}>{c.desc}</div>
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  <div style={{ fontSize: 16, fontWeight: 800, color: c.highlight ? "#ef4444" : "#334155" }}>{c.price}</div>
+                  {c.highlight && <div style={{ fontSize: 10, color: "#22c55e", fontWeight: 700, marginTop: 2 }}>BEST VALUE ✓</div>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
         {SHOW_QUICKPICKS_TEASER && (
           <>
             <div style={{ borderTop: "1px solid #0f0f1a", marginBottom: 56 }} />
@@ -202,76 +205,6 @@ export default function LandingPage() {
             <div style={{ fontSize: 13, color: "#94a3b8", lineHeight: 1.8 }}>
               <strong style={{ color: "#e2e8f0" }}>Click into any game</strong> for the full breakdown — model win probability vs the market, projected scoring vs the line, the key matchups, and <strong style={{ color: "#e2e8f0" }}>head-to-head history</strong> showing how the people involved have actually performed against each other.
             </div>
-          </div>
-        </div>
-
-        {/* Daily picks preview (only if picks exist) */}
-        {picks.length > 0 && (
-          <>
-            <div style={{ borderTop: "1px solid #0f0f1a", marginBottom: 56 }} />
-            <div style={{ marginBottom: 64 }}>
-              <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
-                <div>
-                  <div style={{ fontSize: 11, color: "#ef4444", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8 }}>🎯 Editorial best bets</div>
-                  <h2 style={{ fontSize: "clamp(20px,4vw,30px)", fontWeight: 800, color: "#fff" }}>Today's analyst picks</h2>
-                </div>
-                <Link to="/signup" style={{ fontSize: 12, color: "#475569", border: "1px solid #1a1a2e", borderRadius: 8, padding: "6px 14px" }}>Full analysis inside →</Link>
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {picks.map((p, i) => (
-                  <div key={i} style={{ background: "#0a0a14", border: "1px solid #1a1a2e", borderRadius: 12, padding: 18, position: "relative", overflow: "hidden" }}>
-                    {i > 0 && (
-                      <div style={{ position: "absolute", inset: 0, backdropFilter: "blur(8px)", background: "#08081085", zIndex: 2, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 12 }}>
-                        <div style={{ textAlign: "center" }}>
-                          <div style={{ fontSize: 18, marginBottom: 6 }}>🔒</div>
-                          <Link to="/signup" style={{ fontSize: 12, color: "#ef4444", fontWeight: 700 }}>Sign up to unlock →</Link>
-                        </div>
-                      </div>
-                    )}
-                    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 11, color: "#475569", marginBottom: 5, fontWeight: 500 }}>
-                          {p.league === "MLB" ? "⚾" : p.league === "NBA" ? "🏀" : p.league === "NFL" ? "🏈" : p.league === "NHL" ? "🏒" : p.league === "Soccer" ? "⚽" : p.league === "MMA" ? "🥊" : "⛳"} {p.league} · {p.game}
-                        </div>
-                        <div style={{ fontSize: 17, fontWeight: 700, color: "#fff", marginBottom: 5 }}>
-                          {p.pick} <span style={{ fontSize: 13, color: "#64748b", fontWeight: 400 }}>{p.odds}</span>
-                        </div>
-                        <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.7 }}>{p.analysis}</div>
-                      </div>
-                      <div style={{ flexShrink: 0 }}>
-                        <span style={{ background: p.confidence === "HIGH" ? "#22c55e15" : p.confidence === "MEDIUM" ? "#f59e0b15" : "#ef444415", border: `1px solid ${p.confidence === "HIGH" ? "#22c55e30" : p.confidence === "MEDIUM" ? "#f59e0b30" : "#ef444430"}`, borderRadius: 6, padding: "3px 10px", fontSize: 10, fontWeight: 700, color: p.confidence === "HIGH" ? "#22c55e" : p.confidence === "MEDIUM" ? "#f59e0b" : "#ef4444" }}>
-                          {p.confidence}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </>
-        )}
-
-        <div style={{ borderTop: "1px solid #0f0f1a", marginBottom: 56 }} />
-
-        {/* Comparison */}
-        <div style={{ marginBottom: 64 }}>
-          <div style={{ marginBottom: 28 }}>
-            <div style={{ fontSize: 11, color: "#ef4444", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8 }}>Compare</div>
-            <h2 style={{ fontSize: "clamp(20px,4vw,30px)", fontWeight: 800, color: "#fff" }}>Why <span style={{ color: "#1D9E75" }}>WizePicks</span> is different</h2>
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {COMPETITORS.map((c, i) => (
-              <div key={i} style={{ background: c.highlight ? "#ef44440a" : "#0a0a14", border: `1px solid ${c.highlight ? "#ef444430" : "#1a1a2e"}`, borderRadius: 12, padding: "14px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: c.highlight ? "#fff" : "#64748b", marginBottom: 3 }}>{c.name}</div>
-                  <div style={{ fontSize: 12, color: c.highlight ? "#94a3b8" : "#334155" }}>{c.desc}</div>
-                </div>
-                <div style={{ textAlign: "right" }}>
-                  <div style={{ fontSize: 16, fontWeight: 800, color: c.highlight ? "#ef4444" : "#334155" }}>{c.price}</div>
-                  {c.highlight && <div style={{ fontSize: 10, color: "#22c55e", fontWeight: 700, marginTop: 2 }}>BEST VALUE ✓</div>}
-                </div>
-              </div>
-            ))}
           </div>
         </div>
 
