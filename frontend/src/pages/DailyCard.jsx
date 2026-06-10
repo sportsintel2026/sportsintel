@@ -96,6 +96,14 @@ export default function DailyCardPage() {
           <p style={{ margin: "0 0 16px", fontSize: 13, color: "#9ca3af" }}>
             One model-built pick and parlay, locked once a day. Pulled only from the model's value edges — never random.
           </p>
+          <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: "14px 16px", marginBottom: 20, fontSize: 13, color: "#9ca3af", lineHeight: 1.6 }}>
+            <p style={{ margin: "0 0 10px" }}>Short on time? Give the wheel a spin to surface the model's value plays instantly.</p>
+            <p style={{ margin: "0 0 10px" }}>Built for convenience and a little fun — not a replacement for the full WizePicks research process.</p>
+            <p style={{ margin: 0, color: "#e4e7eb", fontWeight: 700 }}>
+              The real edge still lives in{" "}
+              <span onClick={() => navigate("/dashboard")} style={{ color: "#1D9E75", cursor: "pointer" }}>Today's Edges →</span>
+            </p>
+          </div>
           <HowToUse open={howOpen} onToggle={() => setHowOpen(o => !o)} />
           <ScopeTabs scope={scope} onChange={setScope} />
           {loading && <Loader />}
