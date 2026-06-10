@@ -83,7 +83,7 @@ export default function LandingPage() {
 
         {/* Live Odds — line shopping (moved up: lead with the value) */}
         <div style={{ marginBottom: 64 }}>
-          <div style={{ marginBottom: 8, fontSize: 11, color: "#1D9E75", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase" }}>💲 Live Odds · every book, one screen</div>
+          <div style={{ marginBottom: 8, fontSize: 11, color: "#1D9E75", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase" }}>💲 The Books Price · every book, one screen</div>
           <h2 style={{ fontSize: "clamp(20px,4vw,30px)", fontWeight: 800, color: "#fff", marginBottom: 8 }}>Shop every book. Take the best price. Every time.</h2>
           <p style={{ fontSize: 14, color: "#94a3b8", maxWidth: 580, marginBottom: 16, lineHeight: 1.8 }}>
             The same bet pays differently at different sportsbooks. We put <strong style={{ color: "#e2e8f0" }}>every major US book side by side</strong>, best price highlighted — so you always grab the better number, a real edge that has nothing to do with luck. And when one book hangs a line out of step with the rest, you'll see it sitting there.
