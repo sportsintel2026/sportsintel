@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 
-// Launch gate for the Quick Picks teaser. Flip to false to hide it from the homepage.
+// Launch gate for the Quick Spin teaser. Flip to false to hide it from the homepage.
 const SHOW_QUICKPICKS_TEASER = true;
 
 export default function LandingPage() {
@@ -68,7 +68,7 @@ export default function LandingPage() {
             <span style={{ color: "#ef4444" }}>every game.</span>
           </h1>
           <p style={{ fontSize: 17, color: "#e2e8f0", maxWidth: 560, marginBottom: 12, lineHeight: 1.7, fontWeight: 700 }}>
-            Model projections. Live odds. Every major sportsbook.
+            Model projections. Market price. Every major sportsbook.
           </p>
           <p style={{ fontSize: 15, color: "#94a3b8", maxWidth: 520, marginBottom: 32, lineHeight: 1.8 }}>
             Find where our model disagrees with the market — and make smarter bets.
@@ -81,9 +81,9 @@ export default function LandingPage() {
 
         </div>
 
-        {/* Live Odds — line shopping (moved up: lead with the value) */}
+        {/* Market Price — line shopping (moved up: lead with the value) */}
         <div style={{ marginBottom: 64 }}>
-          <div style={{ marginBottom: 8, fontSize: 11, color: "#1D9E75", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase" }}>💲 The Books Price · every book, one screen</div>
+          <div style={{ marginBottom: 8, fontSize: 11, color: "#1D9E75", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase" }}>💹 Market Price · every book, one screen</div>
           <h2 style={{ fontSize: "clamp(20px,4vw,30px)", fontWeight: 800, color: "#fff", marginBottom: 8 }}>Shop every book. Take the best price. Every time.</h2>
           <p style={{ fontSize: 14, color: "#94a3b8", maxWidth: 580, marginBottom: 16, lineHeight: 1.8 }}>
             The same bet pays differently at different sportsbooks. We put <strong style={{ color: "#e2e8f0" }}>every major US book side by side</strong>, best price highlighted — so you always grab the better number, a real edge that has nothing to do with luck. And when one book hangs a line out of step with the rest, you'll see it sitting there.
@@ -150,9 +150,9 @@ export default function LandingPage() {
             <div style={{ borderTop: "1px solid #0f0f1a", marginBottom: 56 }} />
             <div style={{ marginBottom: 56 }}>
               <div style={{ marginBottom: 8, fontSize: 11, color: "#1D9E75", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase" }}>New · Subscriber feature</div>
-              <h2 style={{ fontSize: "clamp(20px,4vw,30px)", fontWeight: 800, color: "#fff", marginBottom: 8 }}>🎲 Quick Picks — straight bets & parlays, built for you</h2>
+              <h2 style={{ fontSize: "clamp(20px,4vw,30px)", fontWeight: 800, color: "#fff", marginBottom: 8 }}>🎰 Quick Spin — straight bets & parlays, built for you</h2>
               <p style={{ fontSize: 14, color: "#64748b", maxWidth: 560, marginBottom: 24, lineHeight: 1.8 }}>
-                Members get more than the board. Our Quick Picks feature generates a ready-to-play straight bet <em>and</em> a parlay every day — built automatically from the model's best edges across MLB and NBA. No digging required.
+                Members get more than the board. Our Quick Spin feature generates a ready-to-play straight bet <em>and</em> a parlay every day — built automatically from the model's best edges across MLB and NBA. No digging required.
               </p>
               <div style={{ background: "#0a0a14", border: "1px solid #1a1a2e", borderRadius: 16, padding: 24, display: "flex", gap: 24, flexWrap: "wrap", alignItems: "center", justifyContent: "space-between" }}>
                 <div style={{ flex: "1 1 300px" }}>
