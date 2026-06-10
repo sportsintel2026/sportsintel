@@ -31,7 +31,7 @@ export default function Sidebar({ user, plan, signOut, navigate }) {
         to="/odds"
         active={isActive("/odds")}
         icon="💲"
-        label="Live Odds"
+        label="The Books Price"
         dot
       />
       <NavLink
