@@ -6,7 +6,10 @@ import { useState } from "react";
 // handing them a "play." Hide state persists per-browser via localStorage.
 export default function StartHereGuide({ navigate }) {
   const [hidden, setHidden] = useState(() => {
-    try { return localStorage.getItem("wp_guide_hidden") === "1"; } catch (e) { return false; }
+    try {
+      const saved = localStorage.getItem("wp_guide_hidden");
+      return saved === null ? true : saved === "1"; // collapsed by default until the user opens it
+    } catch (e) { return true; }
   });
 
   const toggle = () => {
