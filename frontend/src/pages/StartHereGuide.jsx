@@ -51,8 +51,8 @@ export default function StartHereGuide({ navigate }) {
             <div style={{ display: "flex", gap: 13 }}>
               <div style={stepNum}>1</div>
               <div>
-                <div style={stepTitle}>Read the board</div>
-                <div style={stepBody}>Every game shows our model's win probability next to the market's. When they agree, the market has it priced. When they don't, that gap is where to look first.</div>
+                <div style={stepTitle}>Read the Edges board</div>
+                <div style={stepBody}>Right below this you'll see today's games — that's the Edges board. Each game lists our model's win probability next to the market's odds. When they agree, the market has it priced. When they don't, that gap is where to look first.</div>
               </div>
             </div>
 
@@ -83,7 +83,7 @@ export default function StartHereGuide({ navigate }) {
               <div style={stepNum}>4</div>
               <div>
                 <div style={stepTitle}>Do your own homework</div>
-                <div style={stepBody}>Dig into the matchup history, recent form, and breakdowns to build your own read. The model informs you — then you decide which side you think has the edge.</div>
+                <div style={stepBody}>Click into any game to see the full matchup — head-to-head history, recent form, and the breakdowns behind the number. Build your own read: the model informs you, then you decide which side you think has the edge.</div>
               </div>
             </div>
           </div>
