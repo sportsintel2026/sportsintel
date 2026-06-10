@@ -92,7 +92,7 @@ export default function DailyCardPage() {
       </div>
       <div className="main-content" style={{ marginLeft: 200 }}>
         <div className="dc-content" style={{ maxWidth: 560, margin: "0 auto", padding: "32px 24px 80px", animation: "fadeIn .3s ease" }}>
-          <h1 style={{ margin: "0 0 8px", fontSize: 28, fontWeight: 700, letterSpacing: "-0.01em" }}>🎲 Quick Picks</h1>
+          <h1 style={{ margin: "0 0 8px", fontSize: 28, fontWeight: 700, letterSpacing: "-0.01em" }}>🎰 Quick Spin</h1>
           <p style={{ margin: "0 0 16px", fontSize: 13, color: "#9ca3af" }}>
             One model-built pick and parlay, locked once a day. Pulled only from the model's value edges — never random.
           </p>
@@ -147,7 +147,7 @@ function HowToUse({ open, onToggle }) {
         onClick={onToggle}
         style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", background: "#0f1419", border: "none", padding: "12px 16px", color: "#e4e7eb", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}
       >
-        <span>How to use Quick Picks</span>
+        <span>How to use Quick Spin</span>
         <span style={{ color: "#6b7280", transform: open ? "rotate(180deg)" : "none", transition: "transform .15s" }}>▾</span>
       </button>
       {open && (
@@ -222,7 +222,7 @@ function CardBody({ card, record, navigate }) {
       <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 12, padding: 28, textAlign: "center" }}>
         <div style={{ fontSize: 32, marginBottom: 10 }}>🏟️</div>
         <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>Today's games have all started</div>
-        <div style={{ fontSize: 13, color: "#9ca3af", lineHeight: 1.5 }}>Quick Picks only locks a play while a game's line is still open — once first pitch is thrown, the price isn't one you could actually bet. The board's done for today; fresh picks post tomorrow when the next slate's lines open.</div>
+        <div style={{ fontSize: 13, color: "#9ca3af", lineHeight: 1.5 }}>Quick Spin only locks a play while a game's line is still open — once first pitch is thrown, the price isn't one you could actually bet. The board's done for today; fresh picks post tomorrow when the next slate's lines open.</div>
       </div>
     );
   }
@@ -231,7 +231,7 @@ function CardBody({ card, record, navigate }) {
     return (
       <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 12, padding: 28, textAlign: "center" }}>
         <div style={{ fontSize: 32, marginBottom: 10 }}>⏳</div>
-        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>Quick Picks aren't ready yet</div>
+        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>Quick Spin isn't ready yet</div>
         <div style={{ fontSize: 13, color: "#9ca3af", lineHeight: 1.5 }}>The model locks the picks once the day's lines and value edges are in. Check back a little later — they usually post once the slate firms up.</div>
       </div>
     );
@@ -541,7 +541,7 @@ function LockedState({ navigate, record }) {
   return (
     <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 12, padding: 28, textAlign: "center" }}>
       <div style={{ fontSize: 34, marginBottom: 12 }}>🎲</div>
-      <div style={{ fontSize: 18, fontWeight: 800, color: "#fff", marginBottom: 8 }}>Unlock Quick Picks</div>
+      <div style={{ fontSize: 18, fontWeight: 800, color: "#fff", marginBottom: 8 }}>Unlock Quick Spin</div>
       <div style={{ fontSize: 13, color: "#9ca3af", lineHeight: 1.6, marginBottom: 18, maxWidth: 380, marginLeft: "auto", marginRight: "auto" }}>
         Every day the model locks one value pick and a small parlay — pulled only from its best edges, with the honest fair-vs-book math shown. Subscribers get it daily.
       </div>
@@ -565,14 +565,14 @@ function Loader() {
   return (
     <div style={{ textAlign: "center", padding: 60 }}>
       <div style={{ width: 36, height: 36, border: "3px solid #1e2235", borderTopColor: "#1D9E75", borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto 14px" }} />
-      <div style={{ color: "#6b7280", fontSize: 13 }}>Loading quick picks...</div>
+      <div style={{ color: "#6b7280", fontSize: 13 }}>Loading quick spin...</div>
     </div>
   );
 }
 function ErrorState() {
   return (
     <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 12, padding: 28, textAlign: "center", color: "#9ca3af", fontSize: 13 }}>
-      Couldn't load quick picks right now. Please try again in a moment.
+      Couldn't load quick spin right now. Please try again in a moment.
     </div>
   );
 }
