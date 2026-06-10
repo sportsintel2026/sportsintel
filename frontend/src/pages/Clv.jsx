@@ -124,7 +124,7 @@ export default function ClvPage() {
             <Eyebrow>How to actually capture CLV</Eyebrow>
             <Step n="1" title="Shop every book for the best price">
               The same bet pays differently across sportsbooks. Taking the best available number <i>is</i>
-              getting a head start on the close. Our <B>💲 Live Odds</B> page puts every major US book side by
+              getting a head start on the close. Our <B>💹 Market Price</B> page puts every major US book side by
               side and highlights the best price, so you grab it without hunting.
             </Step>
             <Step n="2" title="Spot the book that's out of step">
@@ -140,7 +140,7 @@ export default function ClvPage() {
           <Card>
             <Eyebrow>How WizePicks helps — honestly</Eyebrow>
             <P>
-              We give you the tools to chase CLV: the <B>Live Odds</B> page for the best price on every game, the
+              We give you the tools to chase CLV: the <B>Market Price</B> page for the best price on every game, the
               full data and reasoning behind each number, and matchup context so you can move early with
               conviction.
             </P>
@@ -155,7 +155,7 @@ export default function ClvPage() {
 
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 8 }}>
             <button onClick={() => navigate("/odds")} style={{ background: "#1D9E75", color: "#fff", border: "none", borderRadius: 6, padding: "11px 22px", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
-              Open Live Odds →
+              Open Market Price →
             </button>
             <button onClick={() => navigate("/performance")} style={{ background: "transparent", color: "#9ca3af", border: "1px solid #1f2937", borderRadius: 6, padding: "11px 22px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
               See our tracked CLV
