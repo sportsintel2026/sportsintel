@@ -206,7 +206,7 @@ export default function GuidePage() {
               and it compounds into real money over a season.
             </P>
             <P>
-              That's what the <B>💲 Live Odds</B> page is for: every major US book's price for each game, side by
+              That's what the <B>💹 Market Price</B> page is for: every major US book's price for each game, side by
               side, with the <span style={{ color: "#1D9E75", fontWeight: 700 }}>best available price highlighted</span>.
               You don't have to hunt — we surface it. And when one book hangs a number out of step with the
               rest, you'll spot it sitting there.
