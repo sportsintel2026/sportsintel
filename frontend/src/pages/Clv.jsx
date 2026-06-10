@@ -63,6 +63,7 @@ export default function ClvPage() {
 
       <div className="main-content" style={{ marginLeft: 200 }}>
         <div className="clv-content" style={{ maxWidth: 760, margin: "0 auto", padding: "24px 24px 60px" }}>
+          <button onClick={() => navigate("/dashboard")} style={{ background: "transparent", border: "1px solid #1f2937", color: "#9ca3af", fontSize: 13, fontWeight: 600, padding: "7px 14px", borderRadius: 8, cursor: "pointer", marginBottom: 20, fontFamily: "inherit" }}>← Back to Edges</button>
           <div style={{ marginBottom: 6 }}>
             <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800, letterSpacing: "-0.01em" }}>Beat the Close</h1>
           </div>
