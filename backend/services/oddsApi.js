@@ -651,8 +651,132 @@ async function probeOddsCoverage({ regions = "us", markets = "h2h,totals", sport
   }
 }
 
+// ── READ-ONLY Pinnacle anchor comparison (measure BEFORE re-anchoring) ────────
+// Pulls today's slate with regions=us,eu, finds PINNACLE's moneyline, de-vigs it
+// with the SAME americanToImpliedProb the model already uses, and compares
+// Pinnacle's fair (no-vig) probability to the de-vigged CONSENSUS of the soft US
+// books the model currently anchors to (PREFERRED_BOOKS_MAIN). The per-game delta
+// = how far apart the two "markets" are, i.e. how much re-anchoring the edge engine
+// to Pinnacle would move the line the model measures itself against.
+// Writes NOTHING and re-anchors NOTHING. Costs ~2 credits (us+eu) per run.
+async function getPinnacleAnchorComparison({ sport = "baseball_mlb", regions = "us,eu" } = {}) {
+  if (!ODDS_API_KEY) return { ok: false, error: "ODDS_API_KEY not configured" };
+
+  // Local de-vig so this stays self-contained (avoids an edgesModel circular import).
+  const fairProb = (thisOdds, otherOdds) => {
+    const a = americanToImpliedProb(thisOdds);
+    const b = americanToImpliedProb(otherOdds);
+    if (a == null || b == null) return null;
+    const sum = a + b;
+    if (!(sum > 0)) return null;
+    return a / sum; // fair, no-vig probability for THIS side
+  };
+  const pp = (x) => (x == null ? null : Math.round(x * 1000) / 10); // prob -> pct points, 1dp
+
+  try {
+    const res = await axios.get(`${ODDS_BASE}/sports/${sport}/odds`, {
+      params: { apiKey: ODDS_API_KEY, regions, markets: "h2h", oddsFormat: "american", dateFormat: "iso" },
+      timeout: 15000,
+    });
+    const games = res.data || [];
+    const hdr = res.headers || {};
+    const creditsLast = hdr["x-requests-last"] != null ? Number(hdr["x-requests-last"]) : null;
+    const creditsRemaining = hdr["x-requests-remaining"] != null ? Number(hdr["x-requests-remaining"]) : null;
+
+    const rows = [];
+    for (const g of games) {
+      const away = g.away_team, home = g.home_team;
+
+      // Extract a book's two-way h2h as { awayOdds, homeOdds } (American), or null.
+      const h2hOf = (bm) => {
+        const m = (bm.markets || []).find(mk => mk.key === "h2h");
+        if (!m) return null;
+        const ao = (m.outcomes || []).find(o => o.name === away);
+        const ho = (m.outcomes || []).find(o => o.name === home);
+        if (!ao || !ho || ao.price == null || ho.price == null) return null;
+        return { awayOdds: ao.price, homeOdds: ho.price };
+      };
+
+      const pinBm = (g.bookmakers || []).find(b => b.key === "pinnacle");
+      const pin = pinBm ? h2hOf(pinBm) : null;
+      const pinFairAway = pin ? fairProb(pin.awayOdds, pin.homeOdds) : null;
+
+      // Soft consensus = de-vig each PREFERRED_BOOKS_MAIN book, average the fair away probs.
+      const softFairAways = [];
+      const softBooksUsed = [];
+      for (const bm of (g.bookmakers || [])) {
+        if (!PREFERRED_BOOKS_MAIN.includes(bm.key)) continue;
+        const o = h2hOf(bm);
+        if (!o) continue;
+        const f = fairProb(o.awayOdds, o.homeOdds);
+        if (f != null) { softFairAways.push(f); softBooksUsed.push(bm.key); }
+      }
+      const softFairAway = softFairAways.length
+        ? softFairAways.reduce((s, x) => s + x, 0) / softFairAways.length
+        : null;
+
+      const deltaAway = (pinFairAway != null && softFairAway != null)
+        ? pinFairAway - softFairAway : null;
+
+      rows.push({
+        game: `${away} @ ${home}`,
+        commence: g.commence_time,
+        pinnacle: pin ? {
+          raw: `${away} ${pin.awayOdds} / ${home} ${pin.homeOdds}`,
+          fairAwayPct: pp(pinFairAway),
+          fairHomePct: pinFairAway != null ? pp(1 - pinFairAway) : null,
+        } : null,
+        softConsensus: softFairAway != null ? {
+          fairAwayPct: pp(softFairAway),
+          fairHomePct: pp(1 - softFairAway),
+          books: softBooksUsed,
+        } : null,
+        deltaAwayPP: deltaAway != null ? Math.round(deltaAway * 1000) / 10 : null, // signed pp
+      });
+    }
+
+    const withBoth = rows.filter(r => r.deltaAwayPP != null);
+    const absDeltas = withBoth.map(r => Math.abs(r.deltaAwayPP));
+    const mean = absDeltas.length ? absDeltas.reduce((s, x) => s + x, 0) / absDeltas.length : null;
+    const max = absDeltas.length ? Math.max(...absDeltas) : null;
+    const gt2 = withBoth.filter(r => Math.abs(r.deltaAwayPP) > 2).length;
+
+    return {
+      ok: true,
+      sport, regions,
+      games: rows.length,
+      gamesWithPinnacle: rows.filter(r => r.pinnacle).length,
+      gamesComparable: withBoth.length,
+      aggregate: {
+        meanAbsDeltaPP: mean != null ? Math.round(mean * 10) / 10 : null,
+        maxAbsDeltaPP: max,
+        gamesDivergingOver2PP: gt2,
+        interpretation:
+          mean == null ? "No comparable games (need both Pinnacle and >=1 soft book per game)."
+          : mean < 1 ? "Pinnacle and your soft-book consensus agree closely (mean <1pp). Re-anchoring would shift edges only slightly — your current de-vig is already near-sharp."
+          : mean < 2 ? "Mild divergence (mean 1-2pp). Re-anchoring to Pinnacle would trim some edges; worth a parallel CLV track to confirm direction."
+          : "Notable divergence (mean >2pp). Pinnacle regularly disagrees with the soft consensus — re-anchoring would materially change the edge board. Strong case to anchor on Pinnacle, after a parallel-track confirmation.",
+      },
+      rows,
+      credits: { thisCall: creditsLast, remaining: creditsRemaining },
+      note: "READ-ONLY. deltaAwayPP = Pinnacle fair away% minus soft-consensus fair away% (positive = Pinnacle rates the AWAY team more likely than the soft books do). Nothing was written or re-anchored — this only measures how far apart the two 'markets' are, so we can decide whether anchoring to Pinnacle is worth it.",
+    };
+  } catch (e) {
+    const status = e.response?.status;
+    const remaining = e.response?.headers?.["x-requests-remaining"];
+    return {
+      ok: false, error: e.message, httpStatus: status,
+      creditsRemaining: remaining != null ? Number(remaining) : undefined,
+      hint: status === 401 ? "401 = bad/missing ODDS_API_KEY"
+        : status === 422 ? "422 = regions/markets not allowed on this plan (try regions=us,eu markets=h2h)"
+        : undefined,
+    };
+  }
+}
+
 module.exports = {
   getMLBMainOdds,
+  getPinnacleAnchorComparison,
   getMLBLiveOdds,
   getMLBHRPropsForEvent,
   getMLBHRPropsForAllEvents,
