@@ -46,10 +46,10 @@ async function oddsGet(path, params = {}) {
 
 // ── MLB Moneyline + Totals ────────────────────────────────────────────────────
 
-async function getMLBMainOdds() {
+async function getMLBMainOdds({ forceFresh = false } = {}) {
   const cacheKey = "mlb_main";
   const cached = cache.get(cacheKey);
-  if (isCacheValid(cached)) {
+  if (!forceFresh && isCacheValid(cached)) {
     console.log("[OddsAPI] Returning cached MLB main odds");
     return cached.data;
   }
