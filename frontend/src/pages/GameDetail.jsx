@@ -152,7 +152,13 @@ function PreGameDetail({ scoresGame }) {
         {scoresGame.venue && <div style={{ marginTop: 8, fontSize: 13, color: "#6b7280" }}>📍 {scoresGame.venue}</div>}
         {scoresGame.seriesSummary && <div style={{ marginTop: 4, fontSize: 12, color: "#9ca3af" }}>{scoresGame.seriesSummary}</div>}
       </div>
+
+      {/* ── MATCHUP ── (sparse here — full matchup cards arrive once the model posts) */}
+      <GroupLabel>Matchup</GroupLabel>
       <TeamForm gameId={scoresGame.id} awayAbbr={a.abbrev} homeAbbr={h.abbrev} awayName={a.name} homeName={h.name} league="mlb" />
+
+      {/* ── DETAILS ── */}
+      <GroupLabel>Details</GroupLabel>
       <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderLeft: "3px solid #ef4444", borderRadius: 10, padding: "16px 20px", marginTop: 10 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: "#e4e7eb", marginBottom: 4 }}>🔍 Full model breakdown posts closer to first pitch</div>
         <div style={{ fontSize: 12, color: "#9ca3af", lineHeight: 1.5 }}>
