@@ -19,7 +19,7 @@ const {
   getScheduleForDate, getGameHRHitters, getGamePitcherStrikeouts,
   getGameBatterHits, normPlayerName, getEasternDate, getLinescore,
 } = require("../services/mlbStatsApi");
-const { getRawTotalsDebug, probeOddsCoverage } = require("../services/oddsApi");
+const { getRawTotalsDebug, probeOddsCoverage, getPinnacleAnchorComparison } = require("../services/oddsApi");
 const { probeExpectedStats, probeBarrels, probePitcherWhiff, probePitcherWhiffData } = require("../services/savantApi");
 
 function db() {
@@ -40,6 +40,7 @@ router.get("/", async (req, res) => {
     if (req.query.whiff_data === "1" || req.query.whiff_data === "true") return res.json(await probePitcherWhiffData());
     if (req.query.totals_debug != null) return res.json(await getRawTotalsDebug(req.query.totals_debug));
     if (req.query.odds_probe === "1" || req.query.odds_probe === "true") return res.json(await probeOddsCoverage({ regions: req.query.regions, markets: req.query.markets }));
+    if (req.query.pinnacle_anchor === "1" || req.query.pinnacle_anchor === "true") return res.json(await getPinnacleAnchorComparison({ sport: req.query.sport, regions: req.query.regions }));
     if (req.query.totals_audit === "1" || req.query.totals_audit === "true") return res.json(await totalsAudit());
     if (req.query.ml_backtest === "1" || req.query.ml_backtest === "true") return res.json(await mlBacktest());
     if (req.query.k_backtest === "1" || req.query.k_backtest === "true") return res.json(await kBacktest());
