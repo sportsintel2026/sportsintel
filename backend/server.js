@@ -118,7 +118,7 @@ cron.schedule("0 8 * * *", async () => {
 // snapshots the closing price for any pending MLB ML/totals pick whose game has
 // just started, then computes CLV. One odds fetch per run (~2 credits) covers
 // all of today's games, so this is cheap on the API budget.
-cron.schedule("*/30 12-23,0-1 * * *", async () => {
+cron.schedule("*/15 11-23,0-2 * * *", async () => {
   console.log("[CRON] Capturing closing lines (CLV)...");
   try {
     await captureClosingLines();
