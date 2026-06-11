@@ -1324,6 +1324,7 @@ async function calculateHRPropEdges(games, hrOddsByEvent) {
       const edge = sanitizeEdge(calculateEdge(hrProb, propOdds.price));
       allHRProps.push({
         gameId: game.id,
+        playerId: batter.id,
         player: propOdds.player,
         team: onAwayTeam ? game.awayAbbr : game.homeAbbr,
         opposingPitcher: opposingPitcherProbable?.name,
@@ -1438,6 +1439,7 @@ async function calculateStrikeoutPropEdges(games, kOddsByEvent) {
       const oppOdds = overBetter ? propOdds.underOdds : propOdds.overOdds;
       out.push({
         gameId: game.id,
+        playerId: pitcher.id,
         player: propOdds.player,
         team: onAwayTeam ? game.awayAbbr : game.homeAbbr,
         opponent: onAwayTeam ? game.homeAbbr : game.awayAbbr,
@@ -1509,6 +1511,7 @@ async function calculateHitsPropEdges(games, hitsOddsByEvent) {
       const oppOdds = overBetter ? propOdds.underOdds : propOdds.overOdds;
       out.push({
         gameId: game.id,
+        playerId: batter.id,
         player: propOdds.player,
         team: onAwayTeam ? game.awayAbbr : game.homeAbbr,
         opposingPitcher: opposingPitcherProbable?.name,
