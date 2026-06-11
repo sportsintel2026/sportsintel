@@ -11,8 +11,11 @@ const cache = new Map();
 const CACHE_TTL_MS = 30 * 60 * 1000;
 
 // Sportsbooks we accept odds from
-// Main markets (h2h, totals) — major US books
-const PREFERRED_BOOKS_MAIN = ["draftkings", "fanduel", "betmgm", "caesars", "espnbet", "fanatics", "betrivers", "hardrockbet"];
+// Main markets (h2h, totals) — major US books.
+// NOTE: The Odds API returns Caesars under key "williamhill_us" (Caesars acquired
+// William Hill US), so "caesars" alone silently dropped it. Both keys are kept for
+// robustness. "williamhill" (no _us) is UK William Hill and is intentionally NOT here.
+const PREFERRED_BOOKS_MAIN = ["draftkings", "fanduel", "betmgm", "caesars", "williamhill_us", "espnbet", "fanatics", "betrivers", "hardrockbet"];
 // HR props — broader list because major books often don't post HR props
 const PREFERRED_BOOKS_HR = [
   "draftkings", "fanduel", "betmgm", "caesars",
@@ -653,11 +656,11 @@ async function probeOddsCoverage({ regions = "us", markets = "h2h,totals", sport
 
 // ── READ-ONLY Pinnacle anchor comparison (measure BEFORE re-anchoring) ────────
 // Pulls today's slate with regions=us,eu, finds PINNACLE's moneyline, de-vigs it
-// with the SAME americanToImpliedProb the model already uses, and compares
-// Pinnacle's fair (no-vig) probability to the de-vigged CONSENSUS of the soft US
-// books the model currently anchors to (PREFERRED_BOOKS_MAIN). The per-game delta
-// = how far apart the two "markets" are, i.e. how much re-anchoring the edge engine
-// to Pinnacle would move the line the model measures itself against.
+// with the SAME americanToImpliedProb the model already uses, and compares Pinnacle's
+// fair (no-vig) probability to the EXACT line the live model anchors to: the de-vigged
+// BEST price on each side across PREFERRED_BOOKS_MAIN (getMLBMainOdds best-line method,
+// NOT an average consensus). The per-game delta = how far apart Pinnacle and the model's
+// real anchor are, i.e. how much re-anchoring to Pinnacle would move the model's market.
 // Writes NOTHING and re-anchors NOTHING. Costs ~2 credits (us+eu) per run.
 async function getPinnacleAnchorComparison({ sport = "baseball_mlb", regions = "us,eu" } = {}) {
   if (!ODDS_API_KEY) return { ok: false, error: "ODDS_API_KEY not configured" };
@@ -701,19 +704,30 @@ async function getPinnacleAnchorComparison({ sport = "baseball_mlb", regions = "
       const pin = pinBm ? h2hOf(pinBm) : null;
       const pinFairAway = pin ? fairProb(pin.awayOdds, pin.homeOdds) : null;
 
-      // Soft consensus = de-vig each PREFERRED_BOOKS_MAIN book, average the fair away probs.
-      const softFairAways = [];
-      const softBooksUsed = [];
+      // Soft "market line" — mirror the LIVE model EXACTLY (getMLBMainOdds h2h logic):
+      // take the BEST (highest) available price on each side across PREFERRED_BOOKS_MAIN,
+      // processed INDEPENDENTLY per side, with the same plausibleMlOdds guard, then de-vig
+      // that best-of pair. This is the precise line the model anchors its edge to — NOT an
+      // average. devigTwoWay(bestAway, bestHome) is exactly what edgesModel does at line ~1078.
+      let bestAway = null, bestAwayBook = null, bestHome = null, bestHomeBook = null;
+      const softBooksSeen = [];
       for (const bm of (g.bookmakers || [])) {
         if (!PREFERRED_BOOKS_MAIN.includes(bm.key)) continue;
-        const o = h2hOf(bm);
-        if (!o) continue;
-        const f = fairProb(o.awayOdds, o.homeOdds);
-        if (f != null) { softFairAways.push(f); softBooksUsed.push(bm.key); }
+        const m = (bm.markets || []).find(mk => mk.key === "h2h");
+        if (!m) continue;
+        const ao = (m.outcomes || []).find(o => o.name === away);
+        const ho = (m.outcomes || []).find(o => o.name === home);
+        let used = false;
+        if (ao && plausibleMlOdds(ao.price) && (bestAway == null || ao.price > bestAway)) {
+          bestAway = ao.price; bestAwayBook = bm.title || bm.key; used = true;
+        }
+        if (ho && plausibleMlOdds(ho.price) && (bestHome == null || ho.price > bestHome)) {
+          bestHome = ho.price; bestHomeBook = bm.title || bm.key; used = true;
+        }
+        if (used) softBooksSeen.push(bm.key);
       }
-      const softFairAway = softFairAways.length
-        ? softFairAways.reduce((s, x) => s + x, 0) / softFairAways.length
-        : null;
+      const softFairAway = (bestAway != null && bestHome != null)
+        ? fairProb(bestAway, bestHome) : null;
 
       const deltaAway = (pinFairAway != null && softFairAway != null)
         ? pinFairAway - softFairAway : null;
@@ -726,10 +740,11 @@ async function getPinnacleAnchorComparison({ sport = "baseball_mlb", regions = "
           fairAwayPct: pp(pinFairAway),
           fairHomePct: pinFairAway != null ? pp(1 - pinFairAway) : null,
         } : null,
-        softConsensus: softFairAway != null ? {
+        modelAnchor: softFairAway != null ? {
+          bestLine: `${away} ${bestAway} (${bestAwayBook}) / ${home} ${bestHome} (${bestHomeBook})`,
           fairAwayPct: pp(softFairAway),
           fairHomePct: pp(1 - softFairAway),
-          books: softBooksUsed,
+          books: softBooksSeen,
         } : null,
         deltaAwayPP: deltaAway != null ? Math.round(deltaAway * 1000) / 10 : null, // signed pp
       });
@@ -753,13 +768,13 @@ async function getPinnacleAnchorComparison({ sport = "baseball_mlb", regions = "
         gamesDivergingOver2PP: gt2,
         interpretation:
           mean == null ? "No comparable games (need both Pinnacle and >=1 soft book per game)."
-          : mean < 1 ? "Pinnacle and your soft-book consensus agree closely (mean <1pp). Re-anchoring would shift edges only slightly — your current de-vig is already near-sharp."
+          : mean < 1 ? "Pinnacle and the model's best-line anchor agree closely (mean <1pp). Re-anchoring would shift edges only slightly — the model's de-vig is already near-sharp."
           : mean < 2 ? "Mild divergence (mean 1-2pp). Re-anchoring to Pinnacle would trim some edges; worth a parallel CLV track to confirm direction."
-          : "Notable divergence (mean >2pp). Pinnacle regularly disagrees with the soft consensus — re-anchoring would materially change the edge board. Strong case to anchor on Pinnacle, after a parallel-track confirmation.",
+          : "Notable divergence (mean >2pp). Pinnacle regularly disagrees with the model's best-line anchor — re-anchoring would materially change the edge board. Strong case to anchor on Pinnacle, after a parallel-track confirmation.",
       },
       rows,
       credits: { thisCall: creditsLast, remaining: creditsRemaining },
-      note: "READ-ONLY. deltaAwayPP = Pinnacle fair away% minus soft-consensus fair away% (positive = Pinnacle rates the AWAY team more likely than the soft books do). Nothing was written or re-anchored — this only measures how far apart the two 'markets' are, so we can decide whether anchoring to Pinnacle is worth it.",
+      note: "READ-ONLY. deltaAwayPP = Pinnacle fair away% minus the MODEL'S anchor fair away% (positive = Pinnacle rates the AWAY team more likely than the model's best-line anchor does). 'modelAnchor' is built the exact way the live edge engine builds it: best price per side across PREFERRED_BOOKS_MAIN, de-vigged. Nothing was written or re-anchored — this only measures how far the model's real anchor sits from Pinnacle.",
     };
   } catch (e) {
     const status = e.response?.status;
