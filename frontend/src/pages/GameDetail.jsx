@@ -182,35 +182,57 @@ function GameDetail({ game, scoresId, hrProps, hasFullAccess, navigate }) {
     { type: "RL", side: "home", team: game.homeAbbr, line: rl.homeLine, prob: rl.homeCoverProb, odds: rl.homeOdds, book: rl.homeBook, edge: rl.homeEdge, confidence: rl.homeConfidence },
   ].filter(c => c.edge != null);
   const bestEdge = candidates.length > 0 ? candidates.reduce((a, b) => (a.edge > b.edge ? a : b)) : null;
-  return (
-    <div style={{ animation: "fadeIn .3s ease" }}>
-      <GameHeader game={game} isLive={isLive} isFinal={isFinal} />
-      {/* LIVE games: keep the live score + box score on top — mid-game that's what matters most. */}
-      <LiveScoreHeader gameId={scoresLookupId} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} league="mlb" />
-
-      {/* ── MATCHUP ── */}
-      <GroupLabel>Matchup</GroupLabel>
+  // Pre-game analysis cards (matchup + supporting detail). Shared between the
+  // expanded pre-game layout and the collapsed live-game section.
+  const matchupCards = (
+    <>
       <PitcherMatchup awayPitcher={awayP} homePitcher={homeP} hasFullAccess={hasFullAccess} navigate={navigate} />
       <HeadToHeadSection gameId={game.id} />
       <TeamForm gameId={scoresLookupId} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} awayName={game.away} homeName={game.home} league="mlb" />
       <BatterVsPitcherSection gameId={game.id} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} hasFullAccess={hasFullAccess} navigate={navigate} />
       <LineupBadge lineups={game.lineups} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} />
       <BattingOrderCard lineups={game.lineups} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} />
-
-      {/* ── BETTING ──
-          LIVE games → live-model edges (accurate in-game). Otherwise → pre-game model. */}
-      <GroupLabel>Betting</GroupLabel>
-      {isLive && <LiveEdgeCards gameId={game.id} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} />}
-      {!isLive && bestEdge && <BestEdgeCard edge={bestEdge} game={game} hasFullAccess={hasFullAccess} navigate={navigate} />}
-      {!isLive && <WinProbabilityCard awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} awayProb={ml.awayWinProb} homeProb={ml.homeWinProb} awayOdds={ml.awayOdds} homeOdds={ml.homeOdds} awayBook={ml.awayBook} homeBook={ml.homeBook} awayEdge={ml.awayEdge} homeEdge={ml.homeEdge} hasFullAccess={hasFullAccess} navigate={navigate} />}
-      {!isLive && <TotalsCard totals={totals} hasFullAccess={hasFullAccess} navigate={navigate} />}
-      {!isLive && <RunLineCard rl={rl} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} />}
-
-      {/* ── DETAILS ── */}
-      <GroupLabel>Details</GroupLabel>
+    </>
+  );
+  const detailCards = (
+    <>
       {game.weather && <WeatherCard weather={game.weather} />}
       <ContextCard game={game} />
       {hrProps.length > 0 && <HRPropsCard hrProps={hrProps} hasFullAccess={hasFullAccess} navigate={navigate} />}
+    </>
+  );
+  return (
+    <div style={{ animation: "fadeIn .3s ease" }}>
+      <GameHeader game={game} isLive={isLive} isFinal={isFinal} />
+      {/* Scoreboard + box score on top (only renders for live/final games). */}
+      <LiveScoreHeader gameId={scoresLookupId} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} league="mlb" />
+
+      {isLive ? (
+        /* LIVE: live edges right under the scoreboard; pre-game analysis collapsed below. */
+        <>
+          <LiveEdgeCards gameId={game.id} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} />
+          <CollapsibleSection title="Pre-game analysis" subtitle="matchup, form, lineups & more">
+            {matchupCards}
+            {detailCards}
+          </CollapsibleSection>
+        </>
+      ) : (
+        /* Upcoming / final: matchup-first, fully expanded. */
+        <>
+          <GroupLabel>Matchup</GroupLabel>
+          {matchupCards}
+
+          {/* BETTING — pre-game model (win prob / totals / run line). */}
+          <GroupLabel>Betting</GroupLabel>
+          {bestEdge && <BestEdgeCard edge={bestEdge} game={game} hasFullAccess={hasFullAccess} navigate={navigate} />}
+          <WinProbabilityCard awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} awayProb={ml.awayWinProb} homeProb={ml.homeWinProb} awayOdds={ml.awayOdds} homeOdds={ml.homeOdds} awayBook={ml.awayBook} homeBook={ml.homeBook} awayEdge={ml.awayEdge} homeEdge={ml.homeEdge} hasFullAccess={hasFullAccess} navigate={navigate} />
+          <TotalsCard totals={totals} hasFullAccess={hasFullAccess} navigate={navigate} />
+          <RunLineCard rl={rl} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} />
+
+          <GroupLabel>Details</GroupLabel>
+          {detailCards}
+        </>
+      )}
     </div>
   );
 }
@@ -220,6 +242,29 @@ function GroupLabel({ children }) {
   return (
     <div style={{ fontSize: 10, letterSpacing: "0.12em", color: "#4b5563", fontWeight: 600, textTransform: "uppercase", margin: "20px 4px 8px" }}>
       {children}
+    </div>
+  );
+}
+// Tappable collapsible section. Used on LIVE games to tuck the pre-game
+// analysis (matchup, form, lineups…) away below the score + live edges.
+function CollapsibleSection({ title, subtitle, defaultOpen = false, children }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div style={{ marginBottom: 10, marginTop: 10 }}>
+      <div
+        onClick={() => setOpen((o) => !o)}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen((o) => !o); } }}
+        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: "13px 16px", cursor: "pointer", userSelect: "none" }}
+      >
+        <div>
+          <span style={{ fontSize: 13, fontWeight: 700, color: "#e4e7eb" }}>📋 {title}</span>
+          {subtitle && <span style={{ fontSize: 11, color: "#6b7280", marginLeft: 8 }}>{subtitle}</span>}
+        </div>
+        <span style={{ fontSize: 12, color: "#9ca3af", whiteSpace: "nowrap" }}>{open ? "Hide ▾" : "Show ▸"}</span>
+      </div>
+      {open && <div style={{ marginTop: 10 }}>{children}</div>}
     </div>
   );
 }
@@ -434,8 +479,8 @@ function LiveScoreHeader({ gameId, awayAbbr, homeAbbr, league = "mlb" }) {
   if (h.logo) { if (h.abbrev) teamLogos[h.abbrev] = h.logo; if (homeAbbr) teamLogos[homeAbbr] = h.logo; }
   const accent = isLiveNow ? "#ef4444" : "#22c55e";
   return (
-    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: "16px 20px", marginBottom: 10 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: "13px 15px", marginBottom: 10 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
         {isLiveNow && <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#ef4444", animation: "pulse 1.2s infinite" }} />}
         <span style={{ fontSize: 11, fontWeight: 800, color: accent, letterSpacing: "0.06em" }}>{isLiveNow ? "LIVE" : "FINAL"}</span>
         <span style={{ fontSize: 11, color: "#9ca3af" }}>· {match.statusDetail || ""}</span>
@@ -447,7 +492,7 @@ function LiveScoreHeader({ gameId, awayAbbr, homeAbbr, league = "mlb" }) {
         <ScoreRow abbr={h.abbrev || homeAbbr} name={h.name} score={h.score} logo={h.logo} alignRight />
       </div>
       {/* Box score (innings/quarters line + player stats) — same component as the games list */}
-      <div style={{ marginTop: 16, borderTop: "1px solid #1f2937", paddingTop: 14 }}>
+      <div style={{ marginTop: 12, borderTop: "1px solid #1f2937", paddingTop: 12 }}>
         {box ? <BoxScore detail={box} logos={teamLogos} /> : boxLoading ? (
           <div style={{ fontSize: 12, color: "#6b7280" }}>Loading box score…</div>
         ) : (
