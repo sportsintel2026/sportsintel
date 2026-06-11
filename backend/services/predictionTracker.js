@@ -1026,4 +1026,35 @@ function gradeOne(p, g) {
   return null;
 }
 
-module.exports = { recordPredictions, recordNbaPropPredictions, recordNbaTeamPredictions, gradeFinishedGames, gradeNbaProp, captureClosingLines, captureNbaClosingLines };
+// ── Odds tick snapshots ───────────────────────────────────────────────────────
+// Saves a snapshot of every MLB ML/total price each run so the Home line-movement
+// chart and real Market Movers have intraday history. Cache-respecting fetch
+// (no forceFresh) → shares the 30-min odds cache, ~no extra API credits. Runs on
+// its own cron (independent of pending picks), so it captures all day.
+async function captureOddsTicks() {
+  const supabase = db();
+  let oddsEvents = [];
+  try { oddsEvents = await getMLBMainOdds(); }
+  catch (e) { console.error("[Ticks] odds fetch failed:", e.message); return 0; }
+  if (!oddsEvents || !oddsEvents.length) { console.log("[Ticks] no odds events"); return 0; }
+  const now = new Date().toISOString();
+  const rows = [];
+  for (const ev of oddsEvents) {
+    const away = ev.awayTeam, home = ev.homeTeam;
+    if (!away || !home) continue;
+    const base = { captured_at: now, away_team: away, home_team: home };
+    if (ev.h2h && ev.h2h.away != null)   rows.push({ ...base, market: "ml",    side: "away",  line: null,                 odds: ev.h2h.away });
+    if (ev.h2h && ev.h2h.home != null)   rows.push({ ...base, market: "ml",    side: "home",  line: null,                 odds: ev.h2h.home });
+    if (ev.totals && ev.totals.over != null)  rows.push({ ...base, market: "total", side: "over",  line: ev.totals.line ?? null, odds: ev.totals.over });
+    if (ev.totals && ev.totals.under != null) rows.push({ ...base, market: "total", side: "under", line: ev.totals.line ?? null, odds: ev.totals.under });
+  }
+  if (!rows.length) return 0;
+  const { error } = await supabase.from("odds_ticks").insert(rows);
+  if (error) { console.error("[Ticks] insert failed:", error.message); return 0; }
+  // Keep ~4 days of history so the table stays small.
+  try { await supabase.from("odds_ticks").delete().lt("captured_at", new Date(Date.now() - 4 * 864e5).toISOString()); } catch (_) {}
+  console.log(`[Ticks] saved ${rows.length} odds snapshots`);
+  return rows.length;
+}
+
+module.exports = { recordPredictions, recordNbaPropPredictions, recordNbaTeamPredictions, gradeFinishedGames, gradeNbaProp, captureClosingLines, captureNbaClosingLines, captureOddsTicks };
