@@ -265,8 +265,8 @@ export function BoxScore({ detail, logos }) {
   };
   const wanted = COLS[detail.league] || [];
 
-  const cellNum = { textAlign: "center", padding: "8px 10px", color: "#cbd5e1", fontSize: 14, fontWeight: 400, fontVariantNumeric: "tabular-nums" };
-  const headCell = { textAlign: "center", padding: "8px 10px", fontSize: 12, fontWeight: 600, color: "#ffffff", letterSpacing: "0.06em", textTransform: "uppercase" };
+  const cellNum = { textAlign: "center", padding: "5px 8px", color: "#cbd5e1", fontSize: 12.5, fontWeight: 400, fontVariantNumeric: "tabular-nums" };
+  const headCell = { textAlign: "center", padding: "5px 8px", fontSize: 11, fontWeight: 600, color: "#ffffff", letterSpacing: "0.06em", textTransform: "uppercase" };
 
   return (
     <div>
@@ -276,27 +276,27 @@ export function BoxScore({ detail, logos }) {
           <div style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 6 }}>
             {detail.league === "nba" ? "Quarters" : "Innings"}
           </div>
-          <table style={{ borderCollapse: "collapse", fontSize: 14, width: "100%", minWidth: 320 }}>
+          <table style={{ borderCollapse: "collapse", fontSize: 12.5, width: "100%", minWidth: 320 }}>
             <thead>
               <tr style={{ background: "#0a0e14" }}>
-                <th style={{ textAlign: "left", padding: "8px 10px", fontSize: 11, fontWeight: 600, color: "#9ca3af", letterSpacing: "0.06em", textTransform: "uppercase" }}>Team</th>
+                <th style={{ textAlign: "left", padding: "5px 8px", fontSize: 11, fontWeight: 600, color: "#9ca3af", letterSpacing: "0.06em", textTransform: "uppercase" }}>Team</th>
                 {Array.from({ length: maxPeriods }).map((_, i) => (
-                  <th key={i} style={{ textAlign: "center", padding: "8px 10px", fontSize: 12, fontWeight: 600, color: "#9ca3af" }}>{i + 1}</th>
+                  <th key={i} style={{ textAlign: "center", padding: "5px 8px", fontSize: 12, fontWeight: 600, color: "#9ca3af" }}>{i + 1}</th>
                 ))}
-                <th style={{ textAlign: "center", padding: "8px 10px", fontSize: 12, fontWeight: 600, color: "#9ca3af", borderLeft: "1px solid #3a4757" }}>T</th>
+                <th style={{ textAlign: "center", padding: "5px 8px", fontSize: 12, fontWeight: 600, color: "#9ca3af", borderLeft: "1px solid #3a4757" }}>T</th>
               </tr>
             </thead>
             <tbody>
               {orderedLs.map((r, idx) => (
                 <tr key={idx} style={{ borderTop: "1px solid #4b5563" }}>
-                  <td style={{ padding: "8px 10px", fontWeight: 800, color: "#fff", fontSize: 14 }}>
+                  <td style={{ padding: "5px 8px", fontWeight: 800, color: "#fff", fontSize: 13 }}>
                     {teamLogo(r.abbrev) && <img src={teamLogo(r.abbrev)} alt="" width="18" height="18" style={{ objectFit: "contain", verticalAlign: "middle", marginRight: 7 }} onError={(e) => { e.currentTarget.style.display = "none"; }} />}
                     <span style={{ verticalAlign: "middle" }}>{r.abbrev}</span>
                   </td>
                   {Array.from({ length: maxPeriods }).map((_, i) => (
-                    <td key={i} style={{ textAlign: "center", padding: "8px 10px", color: "#cbd5e1", fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>{r.periods[i] != null ? r.periods[i] : "·"}</td>
+                    <td key={i} style={{ textAlign: "center", padding: "5px 8px", color: "#cbd5e1", fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>{r.periods[i] != null ? r.periods[i] : "·"}</td>
                   ))}
-                  <td style={{ textAlign: "center", padding: "8px 10px", color: "#fff", fontWeight: 700, fontSize: 16, borderLeft: "1px solid #3a4757", fontVariantNumeric: "tabular-nums" }}>{r.total != null ? r.total : ""}</td>
+                  <td style={{ textAlign: "center", padding: "5px 8px", color: "#fff", fontWeight: 700, fontSize: 14, borderLeft: "1px solid #3a4757", fontVariantNumeric: "tabular-nums" }}>{r.total != null ? r.total : ""}</td>
                 </tr>
               ))}
             </tbody>
@@ -335,7 +335,7 @@ export function BoxScore({ detail, logos }) {
           const hot = bigLine(p);
           return (
             <tr key={`b${i}`} style={{ borderTop: "1px solid #4b5563" }}>
-              <td style={{ padding: "7px 10px", whiteSpace: "nowrap", color: "#e4e7eb", fontWeight: 600 }}>
+              <td style={{ padding: "5px 8px", whiteSpace: "nowrap", color: "#e4e7eb", fontWeight: 600 }}>
                 {p.shortName} {p.starter && <span style={{ color: "#22c55e", fontSize: 10 }}>•</span>} <span style={{ color: "#6b7280", fontSize: 11, fontWeight: 500 }}>{p.position}</span>
               </td>
               {batCols.map((c) => {
@@ -348,7 +348,7 @@ export function BoxScore({ detail, logos }) {
 
         const pitcherRows = pitchers.map((p, i) => (
           <tr key={`p${i}`} style={{ borderTop: "1px solid #4b5563" }}>
-            <td style={{ padding: "7px 10px", whiteSpace: "nowrap", color: "#e4e7eb", fontWeight: 600 }}>
+            <td style={{ padding: "5px 8px", whiteSpace: "nowrap", color: "#e4e7eb", fontWeight: 600 }}>
               {p.shortName} <span style={{ color: "#6b7280", fontSize: 11, fontWeight: 500 }}>{p.position}</span>
             </td>
             {pitCols.map((c) => <td key={c} style={cellNum}>{p.stats[c] ?? ""}</td>)}
@@ -364,7 +364,7 @@ export function BoxScore({ detail, logos }) {
 
             {/* Batters */}
             <div style={{ overflowX: "auto", marginBottom: pitchers.length ? 12 : 0 }}>
-              <table style={{ borderCollapse: "collapse", fontSize: 14, width: "100%", minWidth: 320 }}>
+              <table style={{ borderCollapse: "collapse", fontSize: 12.5, width: "100%", minWidth: 320 }}>
                 <thead>
                   <tr style={{ background: "#0a0e14" }}>
                     <th style={{ ...headCell, textAlign: "left" }}>Batters</th>
@@ -378,7 +378,7 @@ export function BoxScore({ detail, logos }) {
             {/* Pitchers — their own columns (IP H R ER BB K ERA) */}
             {pitchers.length > 0 && pitCols.length > 0 && (
               <div style={{ overflowX: "auto" }}>
-                <table style={{ borderCollapse: "collapse", fontSize: 14, width: "100%", minWidth: 320 }}>
+                <table style={{ borderCollapse: "collapse", fontSize: 12.5, width: "100%", minWidth: 320 }}>
                   <thead>
                     <tr style={{ background: "#0a0e14" }}>
                       <th style={{ ...headCell, textAlign: "left", color: "#9ca3af" }}>Pitchers</th>
