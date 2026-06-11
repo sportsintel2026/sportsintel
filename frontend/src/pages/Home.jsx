@@ -2,10 +2,10 @@
 // Blueprint structure (vertical scroll + swipe carousels) translated to inline styles, wired to real data.
 // Honest live: LIVE pulse reflects real game state; odds flash on real change; HR shows chance-to-homer,
 // not a fake +EV badge; the line-movement chart fills into a full curve once tick storage lands.
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, Children } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-import { edgesApi, subscriptionApi } from "../lib/api";
+import { edgesApi, subscriptionApi, supabase } from "../lib/api";
 
 function formatOdds(a){ if(a==null||isNaN(a))return "—"; const n=Math.round(Number(a)); return n>0?`+${n}`:`${n}`; }
 function impliedFromAmerican(a){ if(a==null||isNaN(a))return null; const n=Number(a); return n>0?100/(n+100):-n/(-n+100); }
@@ -18,9 +18,21 @@ const edgeLabel=(e)=>isTotal(e)?`${e.side==="over"?"Over":"Under"} ${e.line}`:`$
 const edgeTeam=(e)=>isTotal(e)?null:(e.teamAbbr||"");
 const pct1=(f)=>`${(f??0)>0?"+":""}${((f??0)*100).toFixed(1)}%`;
 
+function americanToDecimal(odds){const n=Number(odds);if(!n||Number.isNaN(n))return null;return n>0?n/100+1:100/Math.abs(n)+1;}
+function parlayDecimal(legs){if(!legs||legs.length===0)return null;let d=1;for(const leg of legs){const dec=americanToDecimal(leg.odds);if(dec==null)return null;d*=dec;}return d;}
+function computeRecord(rows){let wins=0,losses=0,pushes=0,units=0;for(const r of rows){for(const p of r.picks||[]){if(p.result==="win"){wins+=1;let dec;if(p.type==="parlay"){const cd=parlayDecimal(p.legs);dec=(p.combinedOdds!=null?americanToDecimal(p.combinedOdds):null)||cd;}else{dec=americanToDecimal(p.odds);}units+=dec?dec-1:0;}else if(p.result==="loss"){losses+=1;units-=1;}else if(p.result==="push"){pushes+=1;}}}return{wins,losses,pushes,units};}
+
 function Logo({ab,size=22}){ const [bad,setBad]=useState(false);
   if(bad||!ab) return <span style={{width:size,height:size,borderRadius:"50%",background:"#1c2730",display:"inline-flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:size*0.36,color:"#fff",fontFamily:"'Barlow Condensed',sans-serif"}}>{String(ab||"?").slice(0,3)}</span>;
   return <img src={ESPN(ab)} alt="" onError={()=>setBad(true)} style={{width:size,height:size,objectFit:"contain"}}/>;
+}
+
+function Carousel({children}){
+  const ref=useRef(null); const [active,setActive]=useState(0);
+  const items=Children.toArray(children);
+  const onScroll=()=>{const el=ref.current;if(!el)return;const f=el.firstChild;const w=f?f.offsetWidth+8:200;setActive(Math.max(0,Math.round(el.scrollLeft/w)));};
+  return (<><div className="rw" ref={ref} onScroll={onScroll}>{children}</div>
+    {items.length>1&&<div className="dots">{items.map((_,i)=><i key={i} className={i===active?"on":""}/>)}</div>}</>);
 }
 
 export default function HomePage(){
@@ -31,10 +43,16 @@ export default function HomePage(){
   const [plan,setPlan]=useState({tier:"free",isAdmin:false});
   const [board,setBoard]=useState("ml");
   const [propTab,setPropTab]=useState("hr");
+  const [wpRecord,setWpRecord]=useState(null);
   const prev=useRef({}); const [flash,setFlash]=useState({});
   const hasFull=plan.isAdmin===true||plan.tier==="pro"||plan.tier==="elite";
 
   useEffect(()=>{ subscriptionApi.getMyPlan().then(setPlan).catch(()=>{}); },[]);
+  useEffect(()=>{(async()=>{ try{
+    const { data }=await supabase.from("expert_picks").select("*").order("date",{ascending:false});
+    const rows=(data||[]).map(r=>{ let picks=[]; try{picks=r.picks?JSON.parse(r.picks):[];}catch(_){picks=[];} return {date:r.date,picks}; });
+    setWpRecord(computeRecord(rows));
+  }catch(_){ setWpRecord(null); } })();},[]);
   const load=useCallback(async()=>{ try{ const d=await edgesApi.getMLB();
     const f={}; [...(d.moneylineEdges||[]),...(d.totalsEdges||[])].forEach(e=>{ const k=e.gameId+e.side; if(prev.current[k]!=null&&prev.current[k]!==e.odds)f[k]=e.odds>prev.current[k]?"up":"dn"; prev.current[k]=e.odds; });
     setFlash(f); setEdges(d);
@@ -56,7 +74,7 @@ export default function HomePage(){
   const hrP=(e.hrPropEdges||[]).slice(0,6);
   const hitsP=(e.hitsPropEdges||[]).slice(0,6);
   const ksP=(e.kPropEdges||[]).slice(0,6);
-  const propArr=propTab==="hr"?hrP:propTab==="hits"?hitsP:ksP;
+  const propArr=propTab==="hr"?hrP:propTab==="hits"?hitsP:propTab==="ks"?ksP:[];
   const parks=games.filter(g=>g.parkRunFactor!=null).slice(0,8);
   const upcoming=games.filter(g=>g.status!=="final").slice(0,6);
 
@@ -99,36 +117,40 @@ export default function HomePage(){
       {/* MARKET MOVERS */}
       <section>
         <div className="sh"><div className="l"><span className="i">⚡</span>MARKET MOVERS <span className="s">{anyLive?"live odds":"current"}</span></div></div>
-        <div className="rw">
+        <Carousel>
           {movers.map(x=>{ const k=x.gameId+x.side;
             return (<div key={k} className={"mv"+(flash[k]?" fl-"+flash[k]:"")}><div className="mvk">{edgeLabel(x)}</div><div className="mvv">{formatOdds(x.odds)}</div><div className="mvm">{Math.round((x.modelProb||0)*100)}% model · {pct1(x.edge)}</div></div>);})}
-        </div>
+        </Carousel>
         <div className="note">Live prices now. True “last 15 min” moves switch on once tick history starts saving.</div>
       </section>
 
       {/* PROPS RADAR */}
       <section>
         <div className="sh"><div className="l"><span className="i">🎯</span>PROPS RADAR</div>
-          <div className="seg"><b className={propTab==="hr"?"on":""} onClick={()=>setPropTab("hr")}>HR</b><b className={propTab==="hits"?"on":""} onClick={()=>setPropTab("hits")}>Hits</b><b className={propTab==="ks"?"on":""} onClick={()=>setPropTab("ks")}>Ks</b></div></div>
-        <div className="rw">
-          {propArr.length===0&&<div className="muted">Board fills in closer to first pitch.</div>}
-          {propArr.map((p,i)=><PropCard key={(p.player||"")+i} p={p} type={propTab} rank={i+1} navigate={navigate}/>)}
-        </div>
+          <div className="seg"><b className={propTab==="hr"?"on":""} onClick={()=>setPropTab("hr")}>HR</b><b className={propTab==="hits"?"on":""} onClick={()=>setPropTab("hits")}>Hits</b><b className={propTab==="ks"?"on":""} onClick={()=>setPropTab("ks")}>Ks</b><b className={propTab==="bases"?"on":""} onClick={()=>setPropTab("bases")}>Bases</b></div></div>
+        {propArr.length===0
+          ?<div className="muted" style={{padding:"14px 2px"}}>{propTab==="bases"?"No total-bases props yet.":"Board fills in closer to first pitch."}</div>
+          :<Carousel>{propArr.map((p,i)=><PropCard key={(p.player||"")+i} p={p} type={propTab} rank={i+1} navigate={navigate}/>)}</Carousel>}
         <div className="pn">{propTab==="hr"
           ?"Ranked by the model's chance to homer — not a tracked +EV play (the HR market is efficient)."
+          :propTab==="bases"
+          ?"Total-bases props aren't in the model feed yet — coming soon."
           :"These props clear our +EV bar — the edge % is the model's price vs the book."}</div>
       </section>
 
       {/* PARK FACTORS */}
       {parks.length>0&&(<section>
         <div className="sh"><div className="l"><span className="i">🏟️</span>PARK FACTORS TODAY</div><span className="s2">swipe →</span></div>
-        <div className="rw">{parks.map((g,i)=><ParkCard key={i} g={g}/>)}</div>
+        <Carousel>{parks.map((g,i)=><ParkCard key={i} g={g}/>)}</Carousel>
       </section>)}
 
       {/* PROMOS */}
       <section>
         <div className="tw">
-          <div className="pr g" onClick={()=>navigate("/expert-picks")}><div className="h">⭐ WIZEPLAYS <span className="new">NEW</span></div><div className="d">Handpicked by our analysts after extra review. Every play tracked.</div><div className="cta">View WizePlays →</div></div>
+          <div className="pr g" onClick={()=>navigate("/expert-picks")}><div className="h">⭐ WIZEPLAYS <span className="new">NEW</span></div>
+            {wpRecord&&(wpRecord.wins+wpRecord.losses+wpRecord.pushes)>0&&(
+              <div className="wkbox"><div className="t">TRACKED</div><div className="r">{wpRecord.wins}-{wpRecord.losses}{wpRecord.pushes?`-${wpRecord.pushes}`:""}</div><div className={"u "+(wpRecord.units>=0?"pos":"neg")}>{wpRecord.units>=0?"+":""}{wpRecord.units.toFixed(2)}u</div></div>)}
+            <div className="d">Handpicked by our analysts after extra review. Every play tracked.</div><div className="cta">View WizePlays →</div></div>
           <div className="pr pp" onClick={()=>navigate("/daily-card")}><div className="h">✳️ WIZE SPIN <span className="new">NEW</span></div><div className="wh"/><div className="d">Need a play fast? Spin for model-qualified plays.</div><div className="cta">Spin the wheel →</div></div>
         </div>
       </section>
@@ -208,16 +230,19 @@ function PropCard({p,type,rank,navigate}){
 }
 
 function ParkCard({g}){
-  const f=g.parkRunFactor; const w=g.weather||{};
-  const hot=f>1.05,cold=f<0.95;
+  const f=g.parkRunFactor; const hf=g.parkHRFactor; const w=g.weather||{};
+  const hot=(hf??f)>1.05,cold=(hf??f)<0.95;
   const tag=hot?["🔥 HITTER","h"]:cold?["❄️ PITCHER","p"]:["⚖️ NEUTRAL","n"];
-  const pct=Math.round((f-1)*100);
+  const pct=Math.round((f-1)*100); const hpct=hf!=null?Math.round((hf-1)*100):null;
   const wx=w.indoor?"🏟️ Indoor":`${w.tempF!=null?w.tempF+"°":""}${w.windMph?" ⚡ "+w.windMph+"mph "+(w.windEffect||""):""}`;
   return (
     <div className={"pkc"+(hot?" hot":"")}>
       <div className="r1"><div><div className="n">{g.venue||g.park||(g.home||"")+" park"}</div><div className="c">{g.home||""}</div></div><Logo ab={shortTeam(g.home||"")} size={26}/></div>
       <span className={"tg "+tag[1]}>{tag[0]}</span>
-      <div className="bs"><div className="b"><div className="kk">RUN FACTOR</div><div className={"vv "+(hot?"u":cold?"dn2":"")}>{pct>0?"+":""}{pct}%</div></div></div>
+      <div className="bs">
+        {hpct!=null&&<div className="b"><div className="kk">HR BOOST</div><div className={"vv "+(hpct>0?"u":hpct<0?"dn2":"")}>{hpct>0?"+":""}{hpct}%</div></div>}
+        <div className="b"><div className="kk">RUN BOOST</div><div className={"vv "+(pct>0?"u":pct<0?"dn2":"")}>{pct>0?"+":""}{pct}%</div></div>
+      </div>
       <div className="wx">{wx}</div>
     </div>
   );
@@ -281,13 +306,15 @@ section{padding:0 12px;margin-top:12px}
 .cn2{text-align:center;margin:7px 0 2px}.cn2 .n{font-weight:800;font-size:30px;color:#33e991;line-height:1}.cn2 .l{font-size:8.5px;color:#8fd9c2;font-weight:800}
 .sg{display:flex;gap:7px;margin-top:7px}.sg .x{flex:1;border:1px solid #161e26;border-radius:8px;background:rgba(255,255,255,.012);padding:5px 7px}.sg .kk{font-size:8.5px;color:#8a99a2;font-weight:700;white-space:nowrap}.sg .vv{font-size:11px;font-weight:700;margin-top:1px}
 .vbk{margin-top:8px;border:1px solid rgba(155,123,255,.3);border-radius:8px;background:rgba(155,123,255,.07);text-align:center;padding:6px;font-size:11px;font-weight:800;color:#bba6ff}
-.pline{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:7px;border:1px solid #161e26;border-radius:8px;background:rgba(255,255,255,.018);padding:6px 9px;font-size:11px;font-weight:700;color:#dbe4e2}
+.pline{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:7px;border:1px solid rgba(155,123,255,.28);border-radius:8px;background:rgba(155,123,255,.07);padding:7px 9px;font-size:11px;font-weight:700;color:#cdbcff}
 .ebadge{font-size:9px;font-weight:800;color:#33e991;background:rgba(51,233,145,.12);border-radius:5px;padding:2px 5px;white-space:nowrap}
-.pkc{width:160px;border:1px solid #161e26;border-radius:13px;background:#0b0f14;padding:9px 11px}.pkc.hot{border-color:rgba(243,185,79,.4);background:linear-gradient(180deg,#12170d,#06090b);box-shadow:0 0 16px rgba(243,185,79,.06)}
+.pkc{width:172px;border:1px solid #161e26;border-radius:13px;background:#0b0f14;padding:9px 11px}.pkc.hot{border-color:rgba(243,185,79,.4);background:linear-gradient(180deg,#12170d,#06090b);box-shadow:0 0 16px rgba(243,185,79,.06)}
 .pkc .r1{display:flex;align-items:center;justify-content:space-between}.pkc .n{font-weight:700;font-size:13px}.pkc .c{font-size:10px;color:#8a99a2;font-weight:600}
 .pkc .tg{display:inline-flex;align-items:center;gap:4px;font-size:9px;font-weight:800;margin:7px 0;padding:2px 7px;border-radius:6px}.tg.h{color:#f3b94f;background:rgba(243,185,79,.1)}.tg.p{color:#5fb8ff;background:rgba(95,184,255,.1)}.tg.n{color:#8a99a2;background:rgba(130,145,154,.08)}
 .bs{display:flex;gap:10px}.bs .b{flex:1}.bs .kk{font-size:8.5px;color:#8a99a2;font-weight:800}.bs .vv{font-family:'Barlow Condensed';font-weight:800;font-size:18px}.vv.u{color:#33e991}.vv.dn2{color:#5fb8ff}
 .wx{display:flex;gap:10px;margin-top:7px;font-size:10px;color:#c0c9cd;font-weight:600}
+.dots{display:flex;justify-content:center;gap:5px;margin-top:8px}.dots i{width:5px;height:5px;border-radius:50%;background:#222c33;transition:.25s}.dots i.on{width:14px;border-radius:3px;background:#ff5d4d}
+.wkbox{position:absolute;top:11px;right:11px;border:1px solid rgba(243,185,79,.3);border-radius:9px;background:rgba(243,185,79,.06);padding:5px 9px;text-align:center}.wkbox .t{font-size:7px;letter-spacing:.4px;color:#f3b94f;font-weight:800}.wkbox .r{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:18px;color:#fff;line-height:1}.wkbox .u{font-size:9px;font-weight:700}.wkbox .u.pos{color:#33e991}.wkbox .u.neg{color:#ff5a5a}
 .tw{display:grid;grid-template-columns:1fr 1fr;gap:9px}
 .pr{border-radius:14px;padding:11px;border:1px solid #161e26;position:relative;min-height:104px}.pr.g{border-color:rgba(243,185,79,.3);background:linear-gradient(180deg,#14110a,#06090b)}.pr.pp{border-color:rgba(155,123,255,.3);background:linear-gradient(180deg,#110d20,#06090b)}
 .pr .h{font-weight:800;font-size:12px}.new{font-size:8px;font-weight:800;border-radius:4px;padding:1px 4px}.pr.g .new{background:#f3b94f;color:#1a1405}.pr.pp .new{background:#9b7bff;color:#0d0820}
