@@ -6,6 +6,7 @@ import LandingPage from "./pages/Landing";
 import { LoginPage } from "./pages/Login";
 import { SignupPage } from "./pages/Login";
 import DashboardPage from "./pages/Dashboard";
+import HomePage from "./pages/Home";
 import GameDetailPage from "./pages/GameDetail";
 import GamesPage from "./pages/Games";
 import PerformancePage from "./pages/Performance";
@@ -80,6 +81,11 @@ export default function App() {
           <Route path="/dashboard" element={
             <PrivateRoute>
               <DashboardPage />
+            </PrivateRoute>
+          } />
+          <Route path="/home" element={
+            <PrivateRoute>
+              <HomePage />
             </PrivateRoute>
           } />
           <Route path="/games" element={
