@@ -28,6 +28,7 @@ export const newsApi = {
 // NEW — edges API for MLB analytics dashboard
 export const edgesApi = {
   getMLB: () => apiFetch("/api/edges/mlb"),
+  getOddsHistory: () => apiFetch("/api/edges/odds-history/mlb"),
   clearCache: () => apiFetch("/api/edges/cache", { method: "DELETE" }),
 };
 // NEW — consensus (Best Bets ∩ model edges), read-only
