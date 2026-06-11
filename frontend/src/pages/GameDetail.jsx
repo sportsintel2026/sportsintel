@@ -662,12 +662,12 @@ function BvPTable({ teamAbbr, pitcherName, batters }) {
                   <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {notable && <span style={{ color: "#22c55e", marginRight: 4 }}>⭐</span>}
                     {b.batterName}
+                    {b.season && (b.season.avg != null || b.season.homeRuns != null) && (
+                      <span style={{ fontSize: 9.5, color: "#6b7280", fontWeight: 500, marginLeft: 6 }}>
+                        {b.season.avg != null ? b.season.avg.toFixed(3).replace(/^0/, "") : "—"}·{b.season.homeRuns ?? 0}HR·{b.season.ops != null ? b.season.ops.toFixed(3).replace(/^0/, "") : "—"}
+                      </span>
+                    )}
                   </div>
-                  {b.season && (b.season.avg != null || b.season.homeRuns != null) && (
-                    <div style={{ fontSize: 9.5, color: "#6b7280", fontWeight: 500, marginTop: 1, lineHeight: 1.3 }}>
-                      szn {b.season.avg != null ? b.season.avg.toFixed(3).replace(/^0/, "") : "—"} · {b.season.homeRuns ?? 0} HR · {b.season.ops != null ? b.season.ops.toFixed(3).replace(/^0/, "") : "—"} OPS
-                    </div>
-                  )}
                 </td>
                 <td style={bvpTd("right", "#9ca3af")}>{b.plateAppearances}</td>
                 <td style={bvpTd("right", "#e4e7eb")}>{b.hits}</td>
@@ -691,10 +691,10 @@ function BvPTable({ teamAbbr, pitcherName, batters }) {
   );
 }
 function bvpTh(align) {
-  return { padding: "6px 8px", textAlign: align, fontWeight: 500, fontSize: 9, letterSpacing: "0.05em", textTransform: "uppercase" };
+  return { padding: "5px 8px", textAlign: align, fontWeight: 500, fontSize: 9, letterSpacing: "0.05em", textTransform: "uppercase" };
 }
 function bvpTd(align, color = "#e4e7eb") {
-  return { padding: "6px 8px", textAlign: align, color, fontSize: 11, fontWeight: 600, fontVariantNumeric: "tabular-nums" };
+  return { padding: "5px 8px", textAlign: align, color, fontSize: 11, fontWeight: 600, fontVariantNumeric: "tabular-nums" };
 }
 function GameHeader({ game, isLive, isFinal }) {
   return (
@@ -903,13 +903,13 @@ function BattingOrderCard({ lineups, awayAbbr, homeAbbr }) {
         {order.length === 0
           ? <div style={{ fontSize: 12, color: "#6b7280", padding: "6px 0" }}>Not posted yet</div>
           : order.map((p, i) => (
-            <div key={i} style={{ display: "flex", alignItems: "center", gap: 9, padding: "5px 0", borderBottom: i < order.length - 1 ? "1px solid #14181f" : "none" }}>
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: 9, padding: "4px 0", borderBottom: i < order.length - 1 ? "1px solid #14181f" : "none" }}>
               <span style={{ flexShrink: 0, width: 18, height: 18, borderRadius: "50%", background: `${accent}1f`, color: accent, fontSize: 10, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center" }}>{i + 1}</span>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <span style={{ display: "block", fontSize: 12.5, color: "#e4e7eb", fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</span>
+              <div style={{ flex: 1, minWidth: 0, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>
+                <span style={{ fontSize: 12.5, color: "#e4e7eb", fontWeight: 600 }}>{p.name}</span>
                 {p.season && (p.season.avg != null || p.season.homeRuns != null) && (
-                  <span style={{ fontSize: 9.5, color: "#6b7280", fontWeight: 500 }}>
-                    {p.season.avg != null ? p.season.avg.toFixed(3).replace(/^0/, "") : "—"} · {p.season.homeRuns ?? 0} HR · {p.season.ops != null ? p.season.ops.toFixed(3).replace(/^0/, "") : "—"} OPS
+                  <span style={{ fontSize: 9.5, color: "#6b7280", fontWeight: 500, marginLeft: 6 }}>
+                    {p.season.avg != null ? p.season.avg.toFixed(3).replace(/^0/, "") : "—"}·{p.season.homeRuns ?? 0}HR·{p.season.ops != null ? p.season.ops.toFixed(3).replace(/^0/, "") : "—"}
                   </span>
                 )}
               </div>
@@ -1000,7 +1000,7 @@ function PitcherCard({ pitcher, label, compare, hasFullAccess, navigate }) {
     return (
       <div style={{ background: "#0a0e14", border: "1px solid #1f2937", borderRadius: 8, padding: 16, textAlign: "center" }}>
         <div style={{ fontSize: 10, color: "#6b7280", letterSpacing: "0.08em", marginBottom: 8, fontWeight: 600 }}>{label}</div>
-        <div style={{ width: 72, height: 72, borderRadius: "50%", background: "#0f1419", border: "1px solid #1f2937", margin: "8px auto", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28 }}>⚾</div>
+        <div style={{ width: 40, height: 40, borderRadius: "50%", background: "#0f1419", border: "1px solid #1f2937", margin: "6px auto", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>⚾</div>
         <div style={{ fontSize: 14, color: "#4b5563" }}>TBD</div>
       </div>
     );
@@ -1012,19 +1012,19 @@ function PitcherCard({ pitcher, label, compare, hasFullAccess, navigate }) {
   return (
     <div style={{ background: "#0a0e14", border: "1px solid #1f2937", borderRadius: 8, padding: 16, textAlign: "center" }}>
       <div style={{ fontSize: 10, color: "#6b7280", letterSpacing: "0.08em", marginBottom: 10, fontWeight: 600 }}>{label}</div>
-      {/* headshot on top (ESPN game-card style) */}
-      <div style={{ width: 80, height: 80, margin: "0 auto 10px", borderRadius: "50%", overflow: "hidden", background: "#0f1419", border: "2px solid #1f2937", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      {/* headshot on top (ESPN game-card style) — compact */}
+      <div style={{ width: 40, height: 40, margin: "0 auto 6px", borderRadius: "50%", overflow: "hidden", background: "#0f1419", border: "2px solid #1f2937", display: "flex", alignItems: "center", justifyContent: "center" }}>
         {photo && imgOk ? (
           <img
             src={photo}
             alt={pitcher.name}
-            width={80}
-            height={80}
+            width={40}
+            height={40}
             style={{ objectFit: "cover", objectPosition: "top center" }}
             onError={() => setImgOk(false)}
           />
         ) : (
-          <span style={{ fontSize: 30 }}>⚾</span>
+          <span style={{ fontSize: 16 }}>⚾</span>
         )}
       </div>
       <div style={{ fontSize: 15, fontWeight: 700, color: "#fff" }}>{pitcher.name}</div>
