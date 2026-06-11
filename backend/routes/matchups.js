@@ -204,13 +204,28 @@ router.get("/mlb/:gameId/h2h", async (req, res) => {
     else summary = `${game.homeAbbr} leads season series ${homeWins}-${awayWins}`;
 
     // Most recent up to 5 meetings, newest first.
-    const recent = [...h2h.meetings].reverse().slice(0, 5).map(m => ({
-      date: m.date,
-      away: m.awayAbbr,
-      home: m.homeAbbr,
-      score: `${m.awayScore}-${m.homeScore}`,
-      winner: m.winnerId === m.awayId ? m.awayAbbr : m.winnerId === m.homeId ? m.homeAbbr : null,
-    }));
+    // The schedule feed doesn't reliably include team abbreviations on each
+    // meeting, so resolve them by team id from the two teams in THIS game
+    // (every meeting is between exactly these two teams). Guarantees the
+    // recent-meetings rows show team names + the winning team.
+    const abbrById = {
+      [game.awayId]: game.awayAbbr,
+      [game.homeId]: game.homeAbbr,
+    };
+    const recent = [...h2h.meetings].reverse().slice(0, 5).map(m => {
+      const awayAbbr = abbrById[m.awayId] || m.awayAbbr || "";
+      const homeAbbr = abbrById[m.homeId] || m.homeAbbr || "";
+      const winner = m.winnerId === m.awayId ? awayAbbr
+        : m.winnerId === m.homeId ? homeAbbr
+        : null;
+      return {
+        date: m.date,
+        away: awayAbbr,
+        home: homeAbbr,
+        score: `${m.awayScore}-${m.homeScore}`,
+        winner,
+      };
+    });
 
     const result = {
       gameId,
