@@ -23,7 +23,7 @@ const consensusRoutes = require("./routes/consensus");
 const oddsRoutes = require("./routes/odds");
 
 const { refreshDailyGames } = require("./services/sportsData");
-const { gradeFinishedGames, captureClosingLines, captureNbaClosingLines } = require("./services/predictionTracker");
+const { gradeFinishedGames, captureClosingLines, captureNbaClosingLines, captureOddsTicks } = require("./services/predictionTracker");
 const { gradeExpertPicks } = require("./services/expertPicksGrader");
 const { gradeDailyCard } = require("./services/dailyCard");
 
@@ -129,6 +129,17 @@ cron.schedule("*/15 11-23,0-2 * * *", async () => {
     await captureNbaClosingLines();
   } catch (err) {
     console.error("[CRON] NBA closing-line capture failed:", err.message);
+  }
+}, { timezone: "America/New_York" });
+
+// Snapshot every MLB ML/total price every 15 min during game hours → powers the
+// Home line-movement chart + real Market Movers. Cache-respecting fetch (shares
+// the 30-min odds cache), so it adds ~no extra API credits, and runs all day.
+cron.schedule("*/15 11-23,0-2 * * *", async () => {
+  try {
+    await captureOddsTicks();
+  } catch (err) {
+    console.error("[CRON] Odds tick capture failed:", err.message);
   }
 }, { timezone: "America/New_York" });
 
