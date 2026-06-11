@@ -1,0 +1,279 @@
+// WizePicks Home — live dashboard hub. Reads the existing /api/edges/mlb feed (no extra Odds cost).
+// Blueprint structure (vertical scroll + swipe carousels) translated to inline styles, wired to real data.
+// Honest live: LIVE pulse reflects real game state; odds flash on real change; HR shows chance-to-homer,
+// not a fake +EV badge; the line-movement chart fills into a full curve once tick storage lands.
+import { useState, useEffect, useRef, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../hooks/useAuth";
+import { edgesApi, subscriptionApi } from "../lib/api";
+
+function formatOdds(a){ if(a==null||isNaN(a))return "—"; const n=Math.round(Number(a)); return n>0?`+${n}`:`${n}`; }
+function impliedFromAmerican(a){ if(a==null||isNaN(a))return null; const n=Number(a); return n>0?100/(n+100):-n/(-n+100); }
+const ESPN=(ab)=>`https://a.espncdn.com/i/teamlogos/mlb/500/${String(ab||"").toLowerCase()}.png`;
+function teams(m){ if(!m)return ["",""]; const p=String(m).split(/@|vs|·/i).map(s=>s.trim()).filter(Boolean); return [p[0]||"",p[1]||""]; }
+function shortTeam(t){ const m=String(t).match(/[A-Z]{2,3}/); return m?m[0]:String(t).slice(0,3).toUpperCase(); }
+function oneSidePerGame(arr){ const g=new Map(); for(const e of arr||[]){ const p=g.get(e.gameId); if(!p||(e.edge??-Infinity)>(p.edge??-Infinity))g.set(e.gameId,e);} return [...g.values()]; }
+const isTotal=(e)=>e.side==="over"||e.side==="under";
+const edgeLabel=(e)=>isTotal(e)?`${e.side==="over"?"Over":"Under"} ${e.line}`:`${e.teamAbbr||shortTeam(e.matchup)} ML`;
+const edgeTeam=(e)=>isTotal(e)?null:(e.teamAbbr||"");
+const pct1=(f)=>`${(f??0)>0?"+":""}${((f??0)*100).toFixed(1)}%`;
+
+function Logo({ab,size=22}){ const [bad,setBad]=useState(false);
+  if(bad||!ab) return <span style={{width:size,height:size,borderRadius:"50%",background:"#1c2730",display:"inline-flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:size*0.36,color:"#fff",fontFamily:"'Barlow Condensed',sans-serif"}}>{String(ab||"?").slice(0,3)}</span>;
+  return <img src={ESPN(ab)} alt="" onError={()=>setBad(true)} style={{width:size,height:size,objectFit:"contain"}}/>;
+}
+
+export default function HomePage(){
+  const navigate=useNavigate();
+  const { user }=useAuth();
+  const [edges,setEdges]=useState(null);
+  const [loading,setLoading]=useState(true);
+  const [plan,setPlan]=useState({tier:"free",isAdmin:false});
+  const [board,setBoard]=useState("ml");
+  const prev=useRef({}); const [flash,setFlash]=useState({});
+  const hasFull=plan.isAdmin===true||plan.tier==="pro"||plan.tier==="elite";
+
+  useEffect(()=>{ subscriptionApi.getMyPlan().then(setPlan).catch(()=>{}); },[]);
+  const load=useCallback(async()=>{ try{ const d=await edgesApi.getMLB();
+    const f={}; [...(d.moneylineEdges||[]),...(d.totalsEdges||[])].forEach(e=>{ const k=e.gameId+e.side; if(prev.current[k]!=null&&prev.current[k]!==e.odds)f[k]=e.odds>prev.current[k]?"up":"dn"; prev.current[k]=e.odds; });
+    setFlash(f); setEdges(d);
+  }catch(e){} setLoading(false); },[]);
+  useEffect(()=>{ load(); const id=setInterval(load,45000); return ()=>clearInterval(id); },[load]);
+
+  if(loading&&!edges) return <div style={S.shell}><style>{CSS}</style><div style={{padding:40,textAlign:"center",color:"#8a99a2"}}>Loading the board…</div></div>;
+  const e=edges||{}; const games=e.games||[];
+  const anyLive=games.some(g=>g.status==="live");
+  const allDone=games.length>0&&games.every(g=>g.status==="final");
+  const marketsLive=!allDone;
+
+  const pool=[...(e.moneylineEdges||[]),...(e.totalsEdges||[])].filter(x=>x.convictionScore!=null&&(x.conviction==="HIGH"||x.conviction==="MEDIUM")&&(x.edge??0)>0);
+  pool.sort((a,b)=>(b.convictionScore-a.convictionScore)||((b.edge??0)-(a.edge??0)));
+  const hero=pool[0]||null;
+  const boardArr=(board==="ml"?e.moneylineEdges:e.totalsEdges)||[];
+  const top4=oneSidePerGame(boardArr).filter(x=>(x.edge??0)>0).sort((a,b)=>(b.edge??0)-(a.edge??0)).slice(0,4);
+  const movers=[...(e.moneylineEdges||[]),...(e.totalsEdges||[])].sort((a,b)=>(b.edge??0)-(a.edge??0)).slice(0,6);
+  const hr=(e.hrPropEdges||[]).slice(0,6);
+  const parks=games.filter(g=>g.parkRunFactor!=null).slice(0,8);
+  const upcoming=games.filter(g=>g.status!=="final").slice(0,6);
+
+  return (
+    <div style={S.shell}><style>{CSS}</style>
+    <div className="wp">
+      {/* HEADER */}
+      <div className="top">
+        <div className="bgr" onClick={()=>navigate("/dashboard")}><span/><span/><span/></div>
+        <div className="logo"><span className="a">Wize</span><span className="b">Picks</span></div>
+        <span className={"pill"+(marketsLive?"":" off")}><span className={"dot"+(marketsLive?"":" grey")}/> {anyLive?"LIVE":marketsLive?"OPEN":"CLOSED"}</span>
+        <div className="mk"><span className={"dot"+(marketsLive?"":" grey")}/><span className="l">MARKETS {marketsLive?"LIVE":"CLOSED"}</span>
+          <svg className="sp" viewBox="0 0 46 14" id="hs"><polyline fill="none" stroke="#33e991" strokeWidth="1.5" points="0,10 6,8 12,9 18,5 24,7 30,3 36,5 46,2"/></svg></div>
+        <div className="bell" onClick={()=>navigate("/settings")}>🔔</div>
+      </div>
+      <div className="tabs">
+        {[["⚾","MLB",1],["🏀","NBA",0],["🏒","NHL",0],["🏈","NFL",0],["🏉","CFB",0]].map(([ic,lb,on])=>(
+          <div key={lb} className={"tab"+(on?" on":"")} onClick={()=>lb!=="MLB"&&navigate("/dashboard")}><span className="i">{ic}</span>{lb}</div>))}
+      </div>
+
+      {/* HERO */}
+      {hero?<Hero hero={hero} navigate={navigate} live={anyLive}/>:<div className="hero empty">No qualifying edge on the board yet — check back closer to first pitch.</div>}
+
+      {/* EDGE BOARD */}
+      <section>
+        <div className="sh"><div className="l"><span className="i">📊</span>TODAY'S EDGE BOARD</div>
+          <div className="seg"><b className={board==="ml"?"on":""} onClick={()=>setBoard("ml")}>ML</b><b className={board==="totals"?"on":""} onClick={()=>setBoard("totals")}>Totals</b></div></div>
+        <div className="eg">
+          {top4.length===0&&<div className="muted">No positive edges in this market yet.</div>}
+          {top4.map(x=>{ const k=x.gameId+x.side; const ab=edgeTeam(x);
+            return (<div key={k} className="ec" onClick={()=>x.gameId&&navigate(`/game/mlb/${x.gameId}`)}>
+              <div className="r1">{ab?<Logo ab={ab} size={22}/>:<span className="tot">📊</span>}<div><div className="nm">{edgeLabel(x)}</div><div className="vs">{x.matchup}</div></div></div>
+              <div className={"conv "+((x.conviction||"").toLowerCase())}>{x.conviction||"—"}</div>
+              <div className={"pc"+(flash[k]?" fl-"+flash[k]:"")}>{pct1(x.edge)}</div>
+              <div className="md">{Math.round((x.modelProb||0)*100)}% model</div>
+            </div>);})}
+        </div>
+      </section>
+
+      {/* MARKET MOVERS */}
+      <section>
+        <div className="sh"><div className="l"><span className="i">⚡</span>MARKET MOVERS <span className="s">{anyLive?"live odds":"current"}</span></div></div>
+        <div className="rw">
+          {movers.map(x=>{ const k=x.gameId+x.side;
+            return (<div key={k} className={"mv"+(flash[k]?" fl-"+flash[k]:"")}><div className="mvk">{edgeLabel(x)}</div><div className="mvv">{formatOdds(x.odds)}</div><div className="mvm">{Math.round((x.modelProb||0)*100)}% model · {pct1(x.edge)}</div></div>);})}
+        </div>
+        <div className="note">Live prices now. True “last 15 min” moves switch on once tick history starts saving.</div>
+      </section>
+
+      {/* HR TARGETS */}
+      <section>
+        <div className="sh"><div className="l"><span className="i">🎯</span>HR TARGETS TONIGHT</div></div>
+        <div className="rw">
+          {hr.length===0&&<div className="muted">HR board fills in closer to first pitch.</div>}
+          {hr.map((p,i)=><HRCard key={(p.player||"")+i} p={p} rank={i+1} navigate={navigate}/>)}
+        </div>
+        <div className="pn">Ranked by the model's chance to homer — not a tracked +EV play (the HR market is efficient).</div>
+      </section>
+
+      {/* PARK FACTORS */}
+      {parks.length>0&&(<section>
+        <div className="sh"><div className="l"><span className="i">🏟️</span>PARK FACTORS TODAY</div><span className="s2">swipe →</span></div>
+        <div className="rw">{parks.map((g,i)=><ParkCard key={i} g={g}/>)}</div>
+      </section>)}
+
+      {/* PROMOS */}
+      <section>
+        <div className="tw">
+          <div className="pr g" onClick={()=>navigate("/expert-picks")}><div className="h">⭐ WIZEPLAYS <span className="new">NEW</span></div><div className="d">Handpicked by our analysts after extra review. Every play tracked.</div><div className="cta">View WizePlays →</div></div>
+          <div className="pr pp" onClick={()=>navigate("/daily-card")}><div className="h">✳️ WIZE SPIN <span className="new">NEW</span></div><div className="wh"/><div className="d">Need a play fast? Spin for model-qualified plays.</div><div className="cta">Spin the wheel →</div></div>
+        </div>
+      </section>
+
+      {/* UPCOMING */}
+      {upcoming.length>0&&(<section>
+        <div className="sh"><div className="l"><span className="i">🗓️</span>UPCOMING GAMES</div><span className="s2" onClick={()=>navigate("/games")}>View all →</span></div>
+        <div className="rw">
+          {upcoming.map((g,i)=>{ const aw=g.away||g.awayAbbr||""; const hm=g.home||g.homeAbbr||"";
+            return (<div key={i} className="gm" onClick={()=>g.gameId&&navigate(`/game/mlb/${g.gameId}`)}>
+              <div className="gmm"><Logo ab={shortTeam(aw)} size={17}/> {shortTeam(aw)} <span className="x">v</span> <Logo ab={shortTeam(hm)} size={17}/> {shortTeam(hm)}</div>
+              <div className="gme">{g.time||"—"}{g.totals?.projected!=null?` · O/U ${g.totals.projected}`:""}</div>
+            </div>);})}
+        </div>
+      </section>)}
+    </div>
+
+    <nav className="nav">
+      <a className="on"><span className="i">🏠</span>Home</a>
+      <a onClick={()=>navigate("/dashboard")}><span className="i">⚡</span>Edges</a>
+      <a onClick={()=>navigate("/games")}><span className="i">🗓️</span>Games</a>
+      <a onClick={()=>navigate("/dashboard")}><span className="i">⚾</span>Props</a>
+      <a onClick={()=>navigate("/performance")}><span className="i">📈</span>Trends</a>
+      <a onClick={()=>navigate("/settings")}><span className="i">👤</span>Account</a>
+    </nav>
+    </div>
+  );
+}
+
+function Hero({hero,navigate,live}){
+  const modelPct=Math.round((hero.modelProb||0)*100);
+  const mktPct=Math.round((impliedFromAmerican(hero.odds)||0)*100);
+  return (
+    <div className="hero" onClick={()=>hero.gameId&&navigate(`/game/mlb/${hero.gameId}`)}>
+      <div className="hh"><div className="eb">🔥 BEST EDGE RIGHT NOW</div><span className="hot">🔥 HOT</span></div>
+      <div className="htop">
+        <div className="hL"><div className="pk">{edgeLabel(hero)}</div><div className="pg">{hero.matchup}</div>
+          <div className="ch"><div className="cc"><div className="k">ODDS</div><div className="v">{formatOdds(hero.odds)}</div></div><div className="cc"><div className="k">STARTS</div><div className="v">{hero.time||"—"}</div></div></div></div>
+        <div className="ebx"><div className="b">{pct1(hero.edge)}</div><div className="k">EDGE</div></div>
+        <div className="hR"><div className="ct">LINE MOVEMENT</div>
+          <div className="cwrap"><div className="livenum">{formatOdds(hero.odds)}<span className="livedot"/></div><div className="cap">model {modelPct}% vs mkt {mktPct}%</div></div></div>
+      </div>
+      <div className="cn">Movement chart fills in as today's odds ticks save. The model prices within a hair of the close — that's the real story to watch.</div>
+      <div className="hf"><span>⚡ Tap for the full matchup breakdown</span><span>›</span></div>
+    </div>
+  );
+}
+
+function HRCard({p,rank,navigate}){
+  const pct=Math.round((p.hrProb||0)*100);
+  const sig=[];
+  if(p.parkHRFactor!=null) sig.push(["🏟️ Park",`${p.parkHRFactor>1?"+":""}${Math.round((p.parkHRFactor-1)*100)}%`]);
+  else if(p.weatherEffect) sig.push(["💨 Wx",String(p.weatherEffect)]);
+  if(p.opposingPitcherHR9!=null) sig.push(["⚾ HR/9",Number(p.opposingPitcherHR9).toFixed(1)]);
+  else if(p.recent15?.hr!=null) sig.push(["🔥 Recent",`${p.recent15.hr} HR L15`]);
+  return (
+    <div className="pc2">
+      <div className="rk">{rank}</div>
+      <div className="hd"><div className="av">🧢</div><div><div className="nm">{p.player||"—"}</div><div className="mu">{p.game||p.team||""}</div></div></div>
+      <div className="cn2"><div className="n">{pct}%</div><div className="l">CHANCE TO HOMER</div></div>
+      <div className="sg">{sig.slice(0,2).map((s,i)=><div key={i} className="x"><div className="kk">{s[0]}</div><div className="vv">{s[1]}</div></div>)}</div>
+      <div className="vbk" onClick={(ev)=>{ev.stopPropagation();p.gameId&&navigate(`/game/mlb/${p.gameId}`);}}>View Breakdown</div>
+    </div>
+  );
+}
+
+function ParkCard({g}){
+  const f=g.parkRunFactor; const w=g.weather||{};
+  const hot=f>1.05,cold=f<0.95;
+  const tag=hot?["🔥 HITTER","h"]:cold?["❄️ PITCHER","p"]:["⚖️ NEUTRAL","n"];
+  const pct=Math.round((f-1)*100);
+  const wx=w.indoor?"🏟️ Indoor":`${w.tempF!=null?w.tempF+"°":""}${w.windMph?" ⚡ "+w.windMph+"mph "+(w.windEffect||""):""}`;
+  return (
+    <div className={"pkc"+(hot?" hot":"")}>
+      <div className="r1"><div><div className="n">{g.venue||g.park||(g.home||"")+" park"}</div><div className="c">{g.home||""}</div></div><Logo ab={shortTeam(g.home||"")} size={26}/></div>
+      <span className={"tg "+tag[1]}>{tag[0]}</span>
+      <div className="bs"><div className="b"><div className="kk">RUN FACTOR</div><div className={"vv "+(hot?"u":cold?"dn2":"")}>{pct>0?"+":""}{pct}%</div></div></div>
+      <div className="wx">{wx}</div>
+    </div>
+  );
+}
+
+const S={ shell:{minHeight:"100vh",background:"#000",color:"#f2f6f4",fontFamily:"'Inter',system-ui,sans-serif"} };
+
+const CSS=`
+@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&family=Inter:wght@400;500;600;700;800&display=swap');
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+.wp{max-width:480px;margin:0 auto;padding-bottom:70px}
+.logo,.pk,.nm,.pc,.b,.n,.mvk,.gmm,.rk,.cn2 .n{font-family:'Barlow Condensed',sans-serif}
+.top{display:flex;align-items:center;gap:8px;padding:11px 13px 8px}
+.bgr{width:19px;display:flex;flex-direction:column;gap:4px}.bgr span{height:2px;background:#c0c9cd;border-radius:2px}
+.logo{font-weight:800;font-size:23px}.logo .a{color:#fff}.logo .b{color:#ff5d4d}
+.pill{display:inline-flex;align-items:center;gap:5px;border:1px solid #1d2731;border-radius:999px;padding:3px 9px;font-size:10px;font-weight:800;letter-spacing:.4px;color:#d2ebe2}.pill.off{color:#8a99a2}
+.dot{width:6px;height:6px;border-radius:50%;background:#33e991;animation:pl 1.8s infinite}.dot.grey{background:#3a4650;animation:none}
+@keyframes pl{0%{box-shadow:0 0 0 0 rgba(51,233,145,.55)}70%{box-shadow:0 0 0 6px rgba(51,233,145,0)}100%{box-shadow:0 0 0 0 rgba(51,233,145,0)}}
+.mk{flex:1;display:flex;align-items:center;gap:6px;justify-content:center;border:1px solid #1d2731;border-radius:999px;padding:3px 10px}.mk .l{font-size:10px;font-weight:800;color:#d2ebe2}.sp{width:46px;height:14px}
+.bell{font-size:16px;color:#c0c9cd}
+.tabs{display:flex;justify-content:space-between;padding:0 14px;border-bottom:1px solid #0e151a}
+.tab{display:flex;align-items:center;gap:5px;padding:8px 3px;font-weight:700;font-size:13px;color:#8a99a2;border-bottom:2px solid transparent;margin-bottom:-1px}.tab.on{color:#fff;border-bottom-color:#ff5d4d}.tab .i{font-size:14px}
+section{padding:0 12px;margin-top:12px}
+.sh{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.sh .l{display:flex;align-items:center;gap:7px;font-family:'Barlow Condensed';font-weight:800;font-size:15px;letter-spacing:.4px;color:#dbe4e2}.sh .l .i{font-size:14px}.sh .l .s{font-family:'Inter';font-size:10px;color:#8a99a2;font-weight:600;margin-left:3px}
+.sh .s2{font-size:11px;color:#8a99a2;font-weight:600}
+.seg{display:flex;gap:2px;background:#0a0f13;border:1px solid #161e26;border-radius:8px;padding:2px}.seg b{color:#8a99a2;font-weight:800;font-size:11px;padding:4px 10px;border-radius:6px}.seg b.on{background:#141d24;color:#fff;box-shadow:inset 0 0 0 1px #ff5d4d}
+.muted,.note,.pn{color:#54616b;font-size:11px;font-weight:600}.note,.pn{margin-top:7px;line-height:1.35}
+.hero{border:1px solid rgba(243,185,79,.32);border-radius:16px;background:linear-gradient(180deg,#14110a,#06090b);overflow:hidden;margin:11px 12px 0}
+.hero.empty{padding:18px;color:#8a99a2;font-size:13px;font-weight:600}
+.hh{display:flex;align-items:center;justify-content:space-between;padding:11px 13px 2px}
+.eb{font-size:11px;font-weight:800;color:#f3b94f}.hot{border:1px solid rgba(243,185,79,.35);border-radius:999px;padding:2px 8px;font-size:10px;font-weight:800;color:#f3b94f;background:rgba(243,185,79,.08)}
+.htop{display:flex;gap:9px;padding:6px 13px 2px;align-items:stretch}
+.hL{flex:1.05;min-width:0}.pk{font-weight:800;font-size:32px;line-height:.88;color:#fff}.pg{font-size:12px;color:#8a99a2;font-weight:600;margin-top:3px}
+.ch{display:flex;gap:6px;margin-top:9px}.cc{border:1px solid #161e26;border-radius:9px;padding:5px 8px;flex:1}.cc .k{font-size:8px;color:#8a99a2;font-weight:800}.cc .v{font-size:12px;font-weight:700;white-space:nowrap;margin-top:1px}
+.ebx{flex:0 0 80px;border:1px solid rgba(51,233,145,.42);border-radius:13px;background:rgba(51,233,145,.07);padding:10px 4px;text-align:center;box-shadow:0 0 20px rgba(51,233,145,.1);display:flex;flex-direction:column;justify-content:center}
+.ebx .b{font-weight:800;font-size:26px;color:#33e991;line-height:1}.ebx .k{font-size:8px;color:#8fd9c2;font-weight:800;margin-top:2px}
+.hR{flex:1.05;min-width:0;display:flex;flex-direction:column}.ct{font-size:8px;letter-spacing:.4px;color:#8a99a2;font-weight:800;margin-bottom:3px}
+.cwrap{flex:1;display:flex;flex-direction:column;justify-content:center;border:1px solid #161e26;border-radius:9px;background:rgba(255,255,255,.012);padding:6px 8px}
+.livenum{font-family:'Barlow Condensed';font-weight:800;font-size:22px;color:#fff;display:flex;align-items:center;gap:7px}
+.livedot{width:7px;height:7px;border-radius:50%;background:#33e991;animation:pl 1.6s infinite}
+.cap{font-size:9px;color:#8a99a2;font-weight:600;margin-top:2px}
+.cn{font-size:9px;color:#54616b;font-weight:600;margin:6px 13px 0;line-height:1.35}
+.hf{display:flex;align-items:center;justify-content:space-between;border-top:1px solid rgba(243,185,79,.16);margin-top:7px;padding:9px 13px;color:#f3b94f;font-size:11px;font-weight:600}
+.eg{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.ec{border:1px solid #161e26;border-radius:12px;background:#0b0f14;padding:8px 6px}
+.ec .r1{display:flex;align-items:center;gap:4px}.ec .tot{font-size:18px}
+.ec .nm{font-family:'Barlow Condensed';font-weight:800;font-size:14px;line-height:.9}.ec .vs{font-size:8px;color:#8a99a2;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ec .conv{display:inline-block;margin:6px 0 4px;font-size:8px;font-weight:800;border-radius:5px;padding:2px 5px;color:#33e991;background:rgba(51,233,145,.12)}
+.ec .conv.medium{color:#f3b94f;background:rgba(243,185,79,.12)}
+.ec .pc{font-family:'Barlow Condensed';font-weight:800;font-size:22px;color:#33e991;line-height:1;transition:color .3s}.ec .pc.fl-up{color:#33e991}.ec .pc.fl-dn{color:#ff5a5a}
+.ec .md{font-size:8.5px;color:#8a99a2;font-weight:600;margin-top:1px}
+.rw{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;padding-bottom:2px}.rw::-webkit-scrollbar{display:none}.rw>*{scroll-snap-align:start;flex:0 0 auto}
+.mv{width:134px;border:1px solid #161e26;border-radius:11px;background:#0b0f14;padding:8px 11px}
+.mvk{font-weight:800;font-size:13px}.mvv{font-size:15px;font-weight:700;margin-top:4px;transition:color .3s}.mv.fl-up .mvv{color:#33e991}.mv.fl-dn .mvv{color:#ff5a5a}.mvm{font-size:9px;color:#8a99a2;font-weight:600;margin-top:2px}
+.pc2{width:230px;border:1px solid #161e26;border-radius:14px;background:linear-gradient(180deg,#110d1d,#06090b);padding:10px 11px;position:relative}
+.pc2 .rk{position:absolute;top:0;left:0;width:26px;height:26px;border-radius:14px 0 12px 0;background:rgba(155,123,255,.2);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;color:#b9a6ff}
+.pc2 .hd{display:flex;align-items:center;gap:9px;margin-left:22px}
+.av{width:42px;height:42px;border-radius:50%;background:linear-gradient(180deg,#26344f,#1a2335);display:flex;align-items:flex-end;justify-content:center;font-size:22px;flex:0 0 auto}
+.pc2 .nm{font-weight:700;font-size:13px;line-height:1.05}.pc2 .mu{font-size:10px;color:#8a99a2;margin-top:1px}
+.cn2{text-align:center;margin:7px 0 2px}.cn2 .n{font-weight:800;font-size:30px;color:#33e991;line-height:1}.cn2 .l{font-size:8.5px;color:#8fd9c2;font-weight:800}
+.sg{display:flex;gap:7px;margin-top:7px}.sg .x{flex:1;border:1px solid #161e26;border-radius:8px;background:rgba(255,255,255,.012);padding:5px 7px}.sg .kk{font-size:8.5px;color:#8a99a2;font-weight:700;white-space:nowrap}.sg .vv{font-size:11px;font-weight:700;margin-top:1px}
+.vbk{margin-top:8px;border:1px solid rgba(155,123,255,.3);border-radius:8px;background:rgba(155,123,255,.07);text-align:center;padding:6px;font-size:11px;font-weight:800;color:#bba6ff}
+.pkc{width:160px;border:1px solid #161e26;border-radius:13px;background:#0b0f14;padding:9px 11px}.pkc.hot{border-color:rgba(243,185,79,.4);background:linear-gradient(180deg,#12170d,#06090b);box-shadow:0 0 16px rgba(243,185,79,.06)}
+.pkc .r1{display:flex;align-items:center;justify-content:space-between}.pkc .n{font-weight:700;font-size:13px}.pkc .c{font-size:10px;color:#8a99a2;font-weight:600}
+.pkc .tg{display:inline-flex;align-items:center;gap:4px;font-size:9px;font-weight:800;margin:7px 0;padding:2px 7px;border-radius:6px}.tg.h{color:#f3b94f;background:rgba(243,185,79,.1)}.tg.p{color:#5fb8ff;background:rgba(95,184,255,.1)}.tg.n{color:#8a99a2;background:rgba(130,145,154,.08)}
+.bs{display:flex;gap:10px}.bs .b{flex:1}.bs .kk{font-size:8.5px;color:#8a99a2;font-weight:800}.bs .vv{font-family:'Barlow Condensed';font-weight:800;font-size:18px}.vv.u{color:#33e991}.vv.dn2{color:#5fb8ff}
+.wx{display:flex;gap:10px;margin-top:7px;font-size:10px;color:#c0c9cd;font-weight:600}
+.tw{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.pr{border-radius:14px;padding:11px;border:1px solid #161e26;position:relative;min-height:104px}.pr.g{border-color:rgba(243,185,79,.3);background:linear-gradient(180deg,#14110a,#06090b)}.pr.pp{border-color:rgba(155,123,255,.3);background:linear-gradient(180deg,#110d20,#06090b)}
+.pr .h{font-weight:800;font-size:12px}.new{font-size:8px;font-weight:800;border-radius:4px;padding:1px 4px}.pr.g .new{background:#f3b94f;color:#1a1405}.pr.pp .new{background:#9b7bff;color:#0d0820}
+.pr .d{font-size:10px;color:#8a99a2;margin:7px 0 0;line-height:1.4}.pr .cta{font-size:12px;font-weight:800;color:#f3b94f;margin-top:9px}.pr.pp .cta{color:#bba6ff}.pr.pp .d{max-width:60%}
+.wh{width:54px;height:54px;border-radius:50%;position:absolute;top:30px;right:10px;background:radial-gradient(circle,#2f2363,#110d20 72%);border:2px solid #4a3d86;animation:spin 7s linear infinite}.wh::before{content:"";position:absolute;inset:6px;border-radius:50%;border:1px dashed #6a58c0}
+@keyframes spin{to{transform:rotate(360deg)}}
+.gm{width:122px;border:1px solid #161e26;border-radius:11px;background:#0b0f14;padding:8px 10px}.gmm{display:flex;align-items:center;gap:4px;font-weight:800;font-size:14px}.gmm .x{color:#8a99a2}.gme{font-size:9px;color:#8a99a2;font-weight:600;margin-top:6px}
+.nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;display:flex;justify-content:space-around;padding:6px 4px calc(6px + env(safe-area-inset-bottom));background:rgba(0,0,0,.96);backdrop-filter:blur(14px);border-top:1px solid #161e26}
+.nav a{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:9px;font-weight:600;color:#8a99a2}.nav a.on{color:#ff5d4d}.nav .i{font-size:17px}
+`;
