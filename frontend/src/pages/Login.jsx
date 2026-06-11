@@ -49,7 +49,7 @@ export function LoginPage() {
     setLoading(true); setError("");
     try {
       await signIn(email, password);
-      navigate("/dashboard");
+      navigate("/home");
     } catch (err) {
       setError(err.message);
     }
@@ -119,7 +119,7 @@ export function SignupPage() {
     setLoading(true); setError("");
     try {
       await signUp(email, password, name);
-      navigate("/dashboard");
+      navigate("/home");
     } catch (err) {
       setError(err.message);
     }
