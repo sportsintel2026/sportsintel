@@ -72,6 +72,15 @@ function closingOddsForPick(pick, ev) {
       ? { thisOdds: over, oppOdds: under }
       : { thisOdds: under, oppOdds: over };
   }
+  if (pick.market === "run_line") {
+    // Run line closing price comes from the spreads market (±1.5). Same side mapping
+    // as moneyline; the ±1.5 line is captured at pick time and rarely moves off 1.5.
+    const away = ev.spreads?.away, home = ev.spreads?.home;
+    if (away == null || home == null) return null;
+    return pick.selection === "away"
+      ? { thisOdds: away, oppOdds: home }
+      : { thisOdds: home, oppOdds: away };
+  }
   return null; // props not tracked for CLV yet
 }
 
@@ -115,13 +124,13 @@ function nbaClosingOddsForPick(pick, lines) {
 async function captureClosingLines() {
   const supabase = db();
 
-  // Pending MLB ML/totals picks (re-checked every tick — NO closing-line filter,
-  // so we can ratchet toward the true close as the line moves).
+  // Pending MLB ML/totals/run-line picks (re-checked every tick — NO closing-line
+  // filter, so we can ratchet toward the true close as the line moves).
   const { data: pending, error } = await supabase
     .from("model_predictions")
     .select("*")
     .eq("league", "mlb")
-    .in("market", ["moneyline", "total"])
+    .in("market", ["moneyline", "total", "run_line"])
     .eq("result", "pending");
 
   if (error) { console.error("[CLV] fetch error:", error.message); return 0; }
@@ -133,7 +142,7 @@ async function captureClosingLines() {
   // ~3 cron ticks land per game, and because we overwrite on each tick (below),
   // the last pre-game price wins and a missed tick is recovered next tick.
   const dates = [...new Set(pending.map(p => p.game_date))];
-  const CLOSING_WINDOW_MS = 90 * 60 * 1000;
+  const CLOSING_WINDOW_MS = 120 * 60 * 1000;
   const now = Date.now();
   const closingWindowGameIds = new Set();
   const gameNames = {};
@@ -154,17 +163,28 @@ async function captureClosingLines() {
   const toCapture = pending.filter(p => closingWindowGameIds.has(String(p.game_id)));
   if (toCapture.length === 0) { console.log("[CLV] no games in pre-game closing window"); return 0; }
 
-  // One odds fetch for all of today's games (2 credits).
+  // One FRESH odds fetch (bypass the 30-min cache) so the captured price is the
+  // true current line, not an up-to-30-min-stale cached one. ~3 credits, and only
+  // when games are actually in the closing window (we returned above otherwise).
   let oddsEvents = [];
-  try { oddsEvents = await getMLBMainOdds(); }
+  try { oddsEvents = await getMLBMainOdds({ forceFresh: true }); }
   catch (e) { console.error("[CLV] odds fetch failed:", e.message); return 0; }
 
   let captured = 0;
+  // Miss instrumentation: when coverage is < 100%, these counters name the cause
+  // (in Railway logs) instead of leaving us to guess — noOddsEvent = pick's game
+  // didn't match an odds event; noClosingPrice = matched but no usable price.
+  const miss = { noOddsEvent: 0, noClosingPrice: 0, byMarket: {} };
+  const tallyMiss = (kind, market) => {
+    miss[kind]++;
+    miss.byMarket[market] = (miss.byMarket[market] || 0) + 1;
+  };
   for (const pick of toCapture) {
     const names = gameNames[String(pick.game_id)];
     const ev = matchPickToOddsEvent(names, oddsEvents);
+    if (!ev) { tallyMiss("noOddsEvent", pick.market); continue; }
     const closing = closingOddsForPick(pick, ev);
-    if (!closing) continue;
+    if (!closing) { tallyMiss("noClosingPrice", pick.market); continue; }
 
     // CLV = how much our SIDE's price improved from pick time to close.
     // We compare the implied probability of our side's price at each moment.
@@ -195,7 +215,8 @@ async function captureClosingLines() {
     if (!upErr) captured++;
   }
 
-  console.log(`[CLV] captured closing lines for ${captured}/${toCapture.length} picks`);
+  console.log(`[CLV] captured closing lines for ${captured}/${toCapture.length} picks`
+    + ` | misses: noOddsEvent=${miss.noOddsEvent} noClosingPrice=${miss.noClosingPrice} byMarket=${JSON.stringify(miss.byMarket)}`);
   return captured;
 }
 
