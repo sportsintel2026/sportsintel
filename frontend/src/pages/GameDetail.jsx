@@ -213,32 +213,19 @@ function GameDetail({ game, scoresId, hrProps, hasFullAccess, navigate }) {
       {/* Scoreboard + box score on top (only renders for live/final games). */}
       <LiveScoreHeader gameId={scoresLookupId} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} league="mlb" />
 
-      {isLive ? (
-        /* LIVE: live edges right under the scoreboard; pre-game analysis collapsed below. */
-        <>
-          <LiveEdgeCards gameId={game.id} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} />
-          <CollapsibleSection title="Pre-game analysis" subtitle="matchup, form, lineups & more">
-            {matchupCards}
-            {detailCards}
-          </CollapsibleSection>
-        </>
-      ) : (
-        /* Upcoming / final: matchup-first, fully expanded. */
-        <>
-          <GroupLabel>Matchup</GroupLabel>
-          {matchupCards}
+      {/* Pre-game model breakdown — shown for all states. Live in-game edges now live on the Home page. */}
+      <GroupLabel>Matchup</GroupLabel>
+      {matchupCards}
 
-          {/* BETTING — pre-game model (win prob / totals / run line). */}
-          <GroupLabel>Betting</GroupLabel>
-          {bestEdge && <BestEdgeCard edge={bestEdge} game={game} hasFullAccess={hasFullAccess} navigate={navigate} />}
-          <WinProbabilityCard awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} awayProb={ml.awayWinProb} homeProb={ml.homeWinProb} awayOdds={ml.awayOdds} homeOdds={ml.homeOdds} awayBook={ml.awayBook} homeBook={ml.homeBook} awayEdge={ml.awayEdge} homeEdge={ml.homeEdge} hasFullAccess={hasFullAccess} navigate={navigate} />
-          <TotalsCard totals={totals} hasFullAccess={hasFullAccess} navigate={navigate} />
-          <RunLineCard rl={rl} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} />
+      {/* BETTING — pre-game model (win prob / totals / run line). */}
+      <GroupLabel>Betting</GroupLabel>
+      {bestEdge && <BestEdgeCard edge={bestEdge} game={game} hasFullAccess={hasFullAccess} navigate={navigate} />}
+      <WinProbabilityCard awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} awayProb={ml.awayWinProb} homeProb={ml.homeWinProb} awayOdds={ml.awayOdds} homeOdds={ml.homeOdds} awayBook={ml.awayBook} homeBook={ml.homeBook} awayEdge={ml.awayEdge} homeEdge={ml.homeEdge} hasFullAccess={hasFullAccess} navigate={navigate} />
+      <TotalsCard totals={totals} hasFullAccess={hasFullAccess} navigate={navigate} />
+      <RunLineCard rl={rl} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} />
 
-          <GroupLabel>Details</GroupLabel>
-          {detailCards}
-        </>
-      )}
+      <GroupLabel>Details</GroupLabel>
+      {detailCards}
     </div>
   );
 }
