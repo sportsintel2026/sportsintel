@@ -185,24 +185,41 @@ function GameDetail({ game, scoresId, hrProps, hasFullAccess, navigate }) {
   return (
     <div style={{ animation: "fadeIn .3s ease" }}>
       <GameHeader game={game} isLive={isLive} isFinal={isFinal} />
+      {/* LIVE games: keep the live score + box score on top — mid-game that's what matters most. */}
       <LiveScoreHeader gameId={scoresLookupId} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} league="mlb" />
+
+      {/* ── MATCHUP ── */}
+      <GroupLabel>Matchup</GroupLabel>
+      <PitcherMatchup awayPitcher={awayP} homePitcher={homeP} hasFullAccess={hasFullAccess} navigate={navigate} />
+      <HeadToHeadSection gameId={game.id} />
       <TeamForm gameId={scoresLookupId} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} awayName={game.away} homeName={game.home} league="mlb" />
-      {/* Betting sections, grouped at top.
+      <BatterVsPitcherSection gameId={game.id} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} hasFullAccess={hasFullAccess} navigate={navigate} />
+
+      {/* ── BETTING ──
           LIVE games → live-model edges (accurate in-game). Otherwise → pre-game model. */}
+      <GroupLabel>Betting</GroupLabel>
       {isLive && <LiveEdgeCards gameId={game.id} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} />}
       {!isLive && bestEdge && <BestEdgeCard edge={bestEdge} game={game} hasFullAccess={hasFullAccess} navigate={navigate} />}
       {!isLive && <WinProbabilityCard awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} awayProb={ml.awayWinProb} homeProb={ml.homeWinProb} awayOdds={ml.awayOdds} homeOdds={ml.homeOdds} awayBook={ml.awayBook} homeBook={ml.homeBook} awayEdge={ml.awayEdge} homeEdge={ml.homeEdge} hasFullAccess={hasFullAccess} navigate={navigate} />}
       {!isLive && <TotalsCard totals={totals} hasFullAccess={hasFullAccess} navigate={navigate} />}
       {!isLive && <RunLineCard rl={rl} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} />}
-      {/* Supporting detail below. */}
+
+      {/* ── DETAILS ── */}
+      <GroupLabel>Details</GroupLabel>
       {game.weather && <WeatherCard weather={game.weather} />}
-      <PitcherMatchup awayPitcher={awayP} homePitcher={homeP} hasFullAccess={hasFullAccess} navigate={navigate} />
+      <ContextCard game={game} />
       <LineupBadge lineups={game.lineups} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} />
       <BattingOrderCard lineups={game.lineups} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} />
-      <BatterVsPitcherSection gameId={game.id} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} hasFullAccess={hasFullAccess} navigate={navigate} />
-      <HeadToHeadSection gameId={game.id} />
-      <ContextCard game={game} />
       {hrProps.length > 0 && <HRPropsCard hrProps={hrProps} hasFullAccess={hasFullAccess} navigate={navigate} />}
+    </div>
+  );
+}
+// Faint uppercase group label that introduces a section of the page
+// (Matchup / Betting / Details) so the long detail page has clear hierarchy.
+function GroupLabel({ children }) {
+  return (
+    <div style={{ fontSize: 10, letterSpacing: "0.12em", color: "#4b5563", fontWeight: 600, textTransform: "uppercase", margin: "20px 4px 8px" }}>
+      {children}
     </div>
   );
 }
@@ -308,14 +325,7 @@ function TeamForm({ gameId, awayAbbr, homeAbbr, awayName, homeName, league = "ml
   return (
     <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 20, marginBottom: 10 }}>
       <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 16 }}>📈 Team form</div>
-      {/* current series record */}
-      {series && series.summary && (
-        <div style={{ background: "#0a0e14", border: "1px solid #1f2937", borderRadius: 8, padding: "10px 14px", marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ fontSize: 14 }}>🆚</span>
-          <span style={{ fontSize: 13, fontWeight: 700, color: "#e4e7eb" }}>{series.summary}</span>
-          {series.totalGames ? <span style={{ fontSize: 11, color: "#6b7280" }}>· {series.totalGames}-game series</span> : null}
-        </div>
-      )}
+      {/* series record now lives in the merged Series card (HeadToHeadSection) above — removed here to de-dupe */}
       {/* home plate umpire (name only) */}
       {umpire && (
         <div style={{ background: "#0a0e14", border: "1px solid #1f2937", borderRadius: 8, padding: "10px 14px", marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}>
