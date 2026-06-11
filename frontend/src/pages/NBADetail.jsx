@@ -112,38 +112,67 @@ export default function NBADetailPage() {
 function Detail({ matchup, prediction, gameId }) {
   const m = matchup;
   const best = bestEdge(prediction);
-  return (
-    <div style={{ animation: "fadeIn .3s ease" }}>
-      <Header m={m} />
-      <NbaLiveHeader gameId={gameId} />
+  const [isLive, setIsLive] = useState(false);
 
-      {/* ── MATCHUP ── */}
-      <GroupLabel>Matchup</GroupLabel>
+  const analysisCards = (
+    <>
       <TeamComparison m={m} />
       <NbaSeriesCard series={m.series} h2h={m.headToHead} />
       <NbaTeamForm awayAbbr={m.away?.abbr} homeAbbr={m.home?.abbr} awayName={m.away?.displayName} homeName={m.home?.displayName} />
       <LeadersCard m={m} />
       <InjuriesCard m={m} />
-
-      {/* ── BETTING ── */}
-      <GroupLabel>Betting</GroupLabel>
+    </>
+  );
+  const bettingCards = (
+    <>
       {best && <BestEdgeCard best={best} />}
       <WinProbCard m={m} prediction={prediction} />
       {prediction?.predictions?.total && <TotalsCard prediction={prediction} />}
+    </>
+  );
+  const modelNote = (
+    <div style={{ fontSize: 11, color: "#6b7280", marginTop: 6, lineHeight: 1.5 }}>
+      Model v0.1 · ratings/pace from ESPN season data. Player figures are season averages.
+      Injuries shown but not yet weighted into the line (v0.2).
+    </div>
+  );
 
-      {/* ── DETAILS ── */}
-      <GroupLabel>Details</GroupLabel>
-      <div style={{ fontSize: 11, color: "#6b7280", marginTop: 6, lineHeight: 1.5 }}>
-        Model v0.1 · ratings/pace from ESPN season data. Player figures are season averages.
-        Injuries shown but not yet weighted into the line (v0.2).
-      </div>
+  return (
+    <div style={{ animation: "fadeIn .3s ease" }}>
+      <Header m={m} />
+      <NbaLiveHeader gameId={gameId} onLiveState={setIsLive} />
+
+      {isLive ? (
+        /* LIVE: only the scoreboard/box updates in-game for NBA — collapse all pre-game model + analysis below it. */
+        <>
+          <CollapsibleSection title="Pre-game model & analysis" subtitle="edges, matchup, form, leaders">
+            <GroupLabel>Betting</GroupLabel>
+            {bettingCards}
+            <GroupLabel>Matchup</GroupLabel>
+            {analysisCards}
+          </CollapsibleSection>
+          {modelNote}
+        </>
+      ) : (
+        /* Upcoming / final: matchup-first, fully expanded. */
+        <>
+          <GroupLabel>Matchup</GroupLabel>
+          {analysisCards}
+
+          <GroupLabel>Betting</GroupLabel>
+          {bettingCards}
+
+          <GroupLabel>Details</GroupLabel>
+          {modelNote}
+        </>
+      )}
     </div>
   );
 }
 
 // Live/final scoreboard + box score. For NBA the detail gameId IS the ESPN id,
 // so we can fetch the box score directly (no scores-feed matching dance like MLB).
-function NbaLiveHeader({ gameId }) {
+function NbaLiveHeader({ gameId, onLiveState }) {
   const [box, setBox] = useState(null);
   const [scoreLine, setScoreLine] = useState(null); // {state, statusDetail, away, home} from scores feed
   const [loading, setLoading] = useState(true);
@@ -172,6 +201,11 @@ function NbaLiveHeader({ gameId }) {
     pull();
     return () => { cancelled = true; if (timer) clearTimeout(timer); };
   }, [gameId]);
+
+  // Report live state up to the parent so it can collapse pre-game content on live games.
+  useEffect(() => {
+    if (onLiveState) onLiveState(scoreLine?.bucket === "live");
+  }, [scoreLine, onLiveState]);
 
   if (loading) return null;
   if (!scoreLine) return null; // not in scores feed → show nothing (rest of page unchanged)
@@ -603,6 +637,29 @@ function SectionLabel({ children }) {
 // Faint uppercase group label (Matchup / Betting / Details) for page hierarchy.
 function GroupLabel({ children }) {
   return <div style={{ fontSize: 10, letterSpacing: "0.12em", color: "#4b5563", fontWeight: 600, textTransform: "uppercase", margin: "20px 4px 8px" }}>{children}</div>;
+}
+// Tappable collapsible section. On LIVE games, tucks the pre-game model + analysis
+// away below the live scoreboard (the only part that updates in-game for NBA).
+function CollapsibleSection({ title, subtitle, defaultOpen = false, children }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div style={{ marginBottom: 18, marginTop: 10 }}>
+      <div
+        onClick={() => setOpen((o) => !o)}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen((o) => !o); } }}
+        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: "13px 16px", cursor: "pointer", userSelect: "none" }}
+      >
+        <div>
+          <span style={{ fontSize: 13, fontWeight: 700, color: "#e4e7eb" }}>📋 {title}</span>
+          {subtitle && <span style={{ fontSize: 11, color: "#6b7280", marginLeft: 8 }}>{subtitle}</span>}
+        </div>
+        <span style={{ fontSize: 12, color: "#9ca3af", whiteSpace: "nowrap" }}>{open ? "Hide ▾" : "Show ▸"}</span>
+      </div>
+      {open && <div style={{ marginTop: 10 }}>{children}</div>}
+    </div>
+  );
 }
 // Format an ISO date (YYYY-MM-DD) as M/D/YYYY, no leading zeros.
 function fmtMeetingDate(d) {
