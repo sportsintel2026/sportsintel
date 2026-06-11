@@ -17,6 +17,7 @@ const isTotal=(e)=>e.side==="over"||e.side==="under";
 const edgeLabel=(e)=>isTotal(e)?`${e.side==="over"?"Over":"Under"} ${e.line}`:`${e.teamAbbr||shortTeam(e.matchup)} ML`;
 const edgeTeam=(e)=>isTotal(e)?null:(e.teamAbbr||"");
 const pct1=(f)=>`${(f??0)>0?"+":""}${((f??0)*100).toFixed(1)}%`;
+const normName=(s)=>String(s||"").toLowerCase().replace(/[^a-z]/g,"");
 
 function americanToDecimal(odds){const n=Number(odds);if(!n||Number.isNaN(n))return null;return n>0?n/100+1:100/Math.abs(n)+1;}
 function parlayDecimal(legs){if(!legs||legs.length===0)return null;let d=1;for(const leg of legs){const dec=americanToDecimal(leg.odds);if(dec==null)return null;d*=dec;}return d;}
@@ -45,6 +46,7 @@ export default function HomePage(){
   const [propTab,setPropTab]=useState("hr");
   const [wpRecord,setWpRecord]=useState(null);
   const [live,setLive]=useState(null);
+  const [oddsHist,setOddsHist]=useState(null);
   const prev=useRef({}); const [flash,setFlash]=useState({});
   const hasFull=plan.isAdmin===true||plan.tier==="pro"||plan.tier==="elite";
 
@@ -60,9 +62,13 @@ export default function HomePage(){
   }catch(e){} setLoading(false); },[]);
   useEffect(()=>{ load(); const id=setInterval(load,45000); return ()=>clearInterval(id); },[load]);
   useEffect(()=>{ let t; const pull=async()=>{ try{ const d=await liveApi.getMLB(); setLive(d?.games||[]); }catch(_){ setLive([]); } t=setTimeout(pull,60000); }; pull(); return ()=>clearTimeout(t); },[]);
+  useEffect(()=>{ let t; const pull=async()=>{ try{ const d=await edgesApi.getOddsHistory(); setOddsHist(d?.games||[]); }catch(_){ setOddsHist([]); } t=setTimeout(pull,300000); }; pull(); return ()=>clearTimeout(t); },[]);
 
   if(loading&&!edges) return <div style={S.shell}><style>{CSS}</style><div style={{padding:40,textAlign:"center",color:"#8a99a2"}}>Loading the board…</div></div>;
   const e=edges||{}; const games=e.games||[];
+  const histByKey={}; (oddsHist||[]).forEach(g=>{ histByKey[normName(g.away_team)+"|"+normName(g.home_team)]=g; });
+  const findHist=(gm)=> gm?(histByKey[normName(gm.away)+"|"+normName(gm.home)]||null):null;
+  const seriesFor=(edge)=>{ const gm=games.find(x=>x.id===edge.gameId); const h=findHist(gm); if(!h)return null; return (isTotal(edge)?h.total[edge.side]:h.ml[edge.side])||null; };
   const anyLive=games.some(g=>g.status==="live");
   const allDone=games.length>0&&games.every(g=>g.status==="final");
   const marketsLive=!allDone;
@@ -72,7 +78,9 @@ export default function HomePage(){
   const hero=pool[0]||null;
   const boardArr=(board==="ml"?e.moneylineEdges:e.totalsEdges)||[];
   const top4=oneSidePerGame(boardArr).filter(x=>(x.edge??0)>0).sort((a,b)=>(b.edge??0)-(a.edge??0)).slice(0,4);
-  const movers=[...(e.moneylineEdges||[]),...(e.totalsEdges||[])].sort((a,b)=>(b.edge??0)-(a.edge??0)).slice(0,6);
+  const moverPool=[...(e.moneylineEdges||[]),...(e.totalsEdges||[])].map(x=>{ const ser=seriesFor(x); const open=(ser&&ser.length)?ser[0].o:null; const now=(ser&&ser.length)?ser[ser.length-1].o:x.odds; const delta=(open!=null&&ser&&ser.length>1)?now-open:null; return {...x,_open:open,_now:now,_delta:delta}; });
+  const movers=moverPool.sort((a,b)=>{ const ad=a._delta==null?-1:Math.abs(a._delta); const bd=b._delta==null?-1:Math.abs(b._delta); return (bd-ad)||((b.edge??0)-(a.edge??0)); }).slice(0,6);
+  const hasMoves=movers.some(m=>m._delta!=null);
   const allEdges=[...oneSidePerGame(e.moneylineEdges||[]),...oneSidePerGame(e.totalsEdges||[])].filter(x=>(x.edge??0)>0).sort((a,b)=>((b.convictionScore||0)-(a.convictionScore||0))||((b.edge||0)-(a.edge||0)));
   const hrP=(e.hrPropEdges||[]).slice(0,6);
   const hitsP=(e.hitsPropEdges||[]).slice(0,6);
@@ -101,7 +109,7 @@ export default function HomePage(){
       </div>
 
       {/* HERO */}
-      {hero?<Hero hero={hero} navigate={navigate} live={anyLive}/>:<div className="hero empty">No qualifying edge on the board yet — check back closer to first pitch.</div>}
+      {hero?<Hero hero={hero} navigate={navigate} live={anyLive} series={seriesFor(hero)}/>:<div className="hero empty">No qualifying edge on the board yet — check back closer to first pitch.</div>}
 
       {/* LIVE EDGES — in-game model edges, pulled from /api/live/mlb (moved off the game page) */}
       {liveGames.length>0&&(<section>
@@ -136,9 +144,14 @@ export default function HomePage(){
         <div className="sh"><div className="l"><span className="i">⚡</span>MARKET MOVERS <span className="s">{anyLive?"live odds":"current"}</span></div></div>
         <Carousel>
           {movers.map(x=>{ const k=x.gameId+x.side;
-            return (<div key={k} className={"mv"+(flash[k]?" fl-"+flash[k]:"")}><div className="mvk">{edgeLabel(x)}</div><div className="mvv">{formatOdds(x.odds)}</div><div className="mvm">{Math.round((x.modelProb||0)*100)}% model · {pct1(x.edge)}</div></div>);})}
+            const d=x._delta;
+            return (<div key={k} className={"mv"+(flash[k]?" fl-"+flash[k]:"")}><div className="mvk">{edgeLabel(x)}</div>
+              {d!=null
+                ?<><div className="mvv">{formatOdds(x._open)} <span className="mvarrow">{String.fromCharCode(8594)}</span> {formatOdds(x._now)}</div><div className={"mvmove "+(d>0?"up":d<0?"dn":"")}>{d>0?String.fromCharCode(9650):d<0?String.fromCharCode(9660):"•"} {Math.abs(d)} {Math.abs(d)===1?"cent":"cents"}</div></>
+                :<><div className="mvv">{formatOdds(x.odds)}</div><div className="mvm">{Math.round((x.modelProb||0)*100)}% model · {pct1(x.edge)}</div></>}
+            </div>);})}
         </Carousel>
-        <div className="note">Live prices now. True “last 15 min” moves switch on once tick history starts saving.</div>
+        <div className="note">{hasMoves?"Open to now, today’s line moves. Updates every 15 min.":"Live prices now. Moves fill in as ticks accumulate today."}</div>
       </section>
 
       {/* PROPS RADAR */}
@@ -197,9 +210,28 @@ export default function HomePage(){
   );
 }
 
-function Hero({hero,navigate,live}){
+function HeroChart({pts}){
+  const n=pts.length; const min=Math.min(...pts), max=Math.max(...pts);
+  const pad=(max-min)*0.18||5; const lo=min-pad, hi=max+pad;
+  const W=170,H=48; const X=i=>(i/(n-1))*W; const Y=v=>H-((v-lo)/(hi-lo))*H;
+  const line=pts.map((v,i)=>`${i?"L":"M"}${X(i).toFixed(1)} ${Y(v).toFixed(1)}`).join(" ");
+  const area=line+`L${W} ${H} L0 ${H} Z`;
+  const up=pts[n-1]>=pts[0]; const col=up?"#33e991":"#ff5a5a";
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height="48" preserveAspectRatio="none" style={{overflow:"visible"}}>
+      <defs><linearGradient id="hgrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={col} stopOpacity="0.3"/><stop offset="100%" stopColor={col} stopOpacity="0"/></linearGradient></defs>
+      <path d={area} fill="url(#hgrad)"/>
+      <path d={line} fill="none" stroke={col} strokeWidth="2" strokeLinejoin="round"/>
+      <circle cx={X(n-1)} cy={Y(pts[n-1])} r="3" fill={col}/>
+    </svg>
+  );
+}
+
+function Hero({hero,navigate,live,series}){
   const modelPct=Math.round((hero.modelProb||0)*100);
   const mktPct=Math.round((impliedFromAmerican(hero.odds)||0)*100);
+  const pts=(series||[]).map(p=>p.o);
+  const hasChart=pts.length>=2;
   return (
     <div className="hero" onClick={()=>hero.gameId&&navigate(`/game/mlb/${hero.gameId}`)}>
       <div className="hh"><div className="eb">🔥 BEST EDGE RIGHT NOW</div><span className="hot">🔥 HOT</span></div>
@@ -208,7 +240,9 @@ function Hero({hero,navigate,live}){
           <div className="ch"><div className="cc"><div className="k">ODDS</div><div className="v">{formatOdds(hero.odds)}</div></div><div className="cc"><div className="k">STARTS</div><div className="v">{hero.time||"—"}</div></div></div></div>
         <div className="ebx"><div className="b">{pct1(hero.edge)}</div><div className="k">EDGE</div></div>
         <div className="hR"><div className="ct">LINE MOVEMENT</div>
-          <div className="cwrap"><div className="livenum">{formatOdds(hero.odds)}<span className="livedot"/></div><div className="cap">model {modelPct}% vs mkt {mktPct}%</div></div></div>
+          <div className="cwrap">{hasChart
+            ?<><HeroChart pts={pts}/><div className="cap">{formatOdds(pts[0])} {String.fromCharCode(8594)} {formatOdds(pts[pts.length-1])} · since open</div></>
+            :<><div className="livenum">{formatOdds(hero.odds)}<span className="livedot"/></div><div className="cap">model {modelPct}% vs mkt {mktPct}%</div></>}</div></div>
       </div>
       <div className="cn">Movement chart fills in as today's odds ticks save. The model prices within a hair of the close — that's the real story to watch.</div>
       <div className="hf"><span>⚡ Tap for the full matchup breakdown</span><span>›</span></div>
@@ -375,7 +409,8 @@ section{padding:0 11px;margin-top:9px}
 .ereason{font-size:11px;color:#a8b4bd;font-weight:500;margin-top:5px;line-height:1.4}
 .rw{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;padding-bottom:2px}.rw::-webkit-scrollbar{display:none}.rw>*{scroll-snap-align:start;flex:0 0 auto}
 .mv{width:134px;border:1px solid #161e26;border-radius:11px;background:#0b0f14;padding:8px 11px}
-.mvk{font-weight:800;font-size:15px}.mvv{font-size:18px;font-weight:800;margin-top:4px;transition:color .3s}.mv.fl-up .mvv{color:#33e991}.mv.fl-dn .mvv{color:#ff5a5a}.mvm{font-size:10px;color:#8a99a2;font-weight:600;margin-top:2px}
+.mvk{font-weight:800;font-size:15px}
+.mvmove{font-size:11px;font-weight:800;margin-top:3px}.mvmove.up{color:#33e991}.mvmove.dn{color:#ff5a5a}.mvarrow{color:#8a99a2}.mvv{font-size:18px;font-weight:800;margin-top:4px;transition:color .3s}.mv.fl-up .mvv{color:#33e991}.mv.fl-dn .mvv{color:#ff5a5a}.mvm{font-size:10px;color:#8a99a2;font-weight:600;margin-top:2px}
 .pc2{width:230px;border:1px solid #161e26;border-radius:14px;background:linear-gradient(180deg,#110d1d,#06090b);padding:10px 11px;position:relative}
 .pc2 .rk{position:absolute;top:0;left:0;width:26px;height:26px;border-radius:14px 0 12px 0;background:rgba(155,123,255,.2);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;color:#b9a6ff}
 .pc2 .hd{display:flex;align-items:center;gap:9px;margin-left:22px}
