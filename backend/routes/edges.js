@@ -639,4 +639,33 @@ router.get("/blenddiag", async (req, res) => {
   }
 });
 
+// Intraday odds tick series for today's MLB games → powers the Home line-movement
+// chart + real Market Movers. Reads the odds_ticks table the cron writes (last ~20h).
+router.get("/odds-history/mlb", async (req, res) => {
+  try {
+    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) return res.json({ ok: false, games: [] });
+    const { createClient } = require("@supabase/supabase-js");
+    const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+    const sinceIso = new Date(Date.now() - 20 * 3600 * 1000).toISOString();
+    const { data, error } = await sb
+      .from("odds_ticks")
+      .select("away_team,home_team,market,side,line,odds,captured_at")
+      .gte("captured_at", sinceIso)
+      .order("captured_at", { ascending: true });
+    if (error) return res.json({ ok: false, games: [], error: error.message });
+    const games = {};
+    for (const r of data || []) {
+      const key = r.away_team + "|" + r.home_team;
+      if (!games[key]) games[key] = { away_team: r.away_team, home_team: r.home_team, ml: { away: [], home: [] }, total: { line: null, over: [], under: [] } };
+      const g = games[key];
+      const pt = { o: r.odds, t: r.captured_at };
+      if (r.market === "ml" && (r.side === "away" || r.side === "home")) g.ml[r.side].push(pt);
+      else if (r.market === "total" && (r.side === "over" || r.side === "under")) { g.total[r.side].push(pt); if (r.line != null) g.total.line = r.line; }
+    }
+    res.json({ ok: true, games: Object.values(games) });
+  } catch (e) {
+    res.json({ ok: false, games: [], error: e.message });
+  }
+});
+
 module.exports = router;
