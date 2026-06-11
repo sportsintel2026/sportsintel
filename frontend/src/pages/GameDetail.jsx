@@ -194,6 +194,8 @@ function GameDetail({ game, scoresId, hrProps, hasFullAccess, navigate }) {
       <HeadToHeadSection gameId={game.id} />
       <TeamForm gameId={scoresLookupId} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} awayName={game.away} homeName={game.home} league="mlb" />
       <BatterVsPitcherSection gameId={game.id} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} hasFullAccess={hasFullAccess} navigate={navigate} />
+      <LineupBadge lineups={game.lineups} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} />
+      <BattingOrderCard lineups={game.lineups} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} />
 
       {/* ── BETTING ──
           LIVE games → live-model edges (accurate in-game). Otherwise → pre-game model. */}
@@ -208,8 +210,6 @@ function GameDetail({ game, scoresId, hrProps, hasFullAccess, navigate }) {
       <GroupLabel>Details</GroupLabel>
       {game.weather && <WeatherCard weather={game.weather} />}
       <ContextCard game={game} />
-      <LineupBadge lineups={game.lineups} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} />
-      <BattingOrderCard lineups={game.lineups} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} />
       {hrProps.length > 0 && <HRPropsCard hrProps={hrProps} hasFullAccess={hasFullAccess} navigate={navigate} />}
     </div>
   );
@@ -222,6 +222,13 @@ function GroupLabel({ children }) {
       {children}
     </div>
   );
+}
+// Format an ISO date (YYYY-MM-DD) as M/D/YYYY for display, no leading zeros.
+function fmtMeetingDate(d) {
+  if (!d) return "";
+  const [y, mo, da] = String(d).split("-");
+  if (!y || !mo || !da) return d;
+  return `${Number(mo)}/${Number(da)}/${y}`;
 }
 // Season head-to-head: the series record between the two teams + recent
 // meetings with scores. Fetched lazily from /api/matchups/mlb/:gameId/h2h.
@@ -256,7 +263,7 @@ function HeadToHeadSection({ gameId }) {
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {h2h.recent.map((m, i) => (
               <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 10, alignItems: "center", padding: "8px 10px", background: "#0a0e14", borderRadius: 4 }}>
-                <div style={{ fontSize: 11, color: "#9ca3af" }}>{m.date}</div>
+                <div style={{ fontSize: 11, color: "#9ca3af" }}>{fmtMeetingDate(m.date)}</div>
                 <div style={{ fontSize: 12, fontWeight: 600, color: "#e4e7eb", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{m.away} {m.score} {m.home}</div>
                 <div style={{ fontSize: 11, color: "#22c55e", textAlign: "right" }}>{m.winner ? `${m.winner} won` : ""}</div>
               </div>
