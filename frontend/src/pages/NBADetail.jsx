@@ -116,15 +116,23 @@ function Detail({ matchup, prediction, gameId }) {
     <div style={{ animation: "fadeIn .3s ease" }}>
       <Header m={m} />
       <NbaLiveHeader gameId={gameId} />
-      <NbaTeamForm awayAbbr={m.away?.abbr} homeAbbr={m.home?.abbr} awayName={m.away?.displayName} homeName={m.home?.displayName} seriesSummary={m.series?.summary} />
-      {best && <BestEdgeCard best={best} />}
+
+      {/* ── MATCHUP ── */}
+      <GroupLabel>Matchup</GroupLabel>
       <TeamComparison m={m} />
-      <WinProbCard m={m} prediction={prediction} />
-      {prediction?.predictions?.total && <TotalsCard prediction={prediction} />}
+      <NbaSeriesCard series={m.series} h2h={m.headToHead} />
+      <NbaTeamForm awayAbbr={m.away?.abbr} homeAbbr={m.home?.abbr} awayName={m.away?.displayName} homeName={m.home?.displayName} />
       <LeadersCard m={m} />
       <InjuriesCard m={m} />
-      {m.series && <SeriesCard series={m.series} />}
-      {m.headToHead && <NbaHeadToHeadSection h2h={m.headToHead} />}
+
+      {/* ── BETTING ── */}
+      <GroupLabel>Betting</GroupLabel>
+      {best && <BestEdgeCard best={best} />}
+      <WinProbCard m={m} prediction={prediction} />
+      {prediction?.predictions?.total && <TotalsCard prediction={prediction} />}
+
+      {/* ── DETAILS ── */}
+      <GroupLabel>Details</GroupLabel>
       <div style={{ fontSize: 11, color: "#6b7280", marginTop: 6, lineHeight: 1.5 }}>
         Model v0.1 · ratings/pace from ESPN season data. Player figures are season averages.
         Injuries shown but not yet weighted into the line (v0.2).
@@ -213,7 +221,7 @@ function NbaLiveHeader({ gameId }) {
 
 // Team form: record / streak / last 10 for both teams, + playoff series line.
 // NBA abbreviations match ESPN standings directly (no AZ/ARI-style alias needed).
-function NbaTeamForm({ awayAbbr, homeAbbr, awayName, homeName, seriesSummary }) {
+function NbaTeamForm({ awayAbbr, homeAbbr, awayName, homeName }) {
   const [standings, setStandings] = useState(null);
   const [failed, setFailed] = useState(false);
 
@@ -228,18 +236,13 @@ function NbaTeamForm({ awayAbbr, homeAbbr, awayName, homeName, seriesSummary }) 
   if (failed) return null;
   const a = standings ? standings[String(awayAbbr).toUpperCase()] : null;
   const h = standings ? standings[String(homeAbbr).toUpperCase()] : null;
-  if (standings && !a && !h && !seriesSummary) return null;
+  if (standings && !a && !h) return null;
 
   return (
     <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 20, marginBottom: 18 }}>
       <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 16 }}>📈 Team form</div>
 
-      {seriesSummary && (
-        <div style={{ background: "#0a0e14", border: "1px solid #1f2937", borderRadius: 8, padding: "10px 14px", marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ fontSize: 14 }}>🏆</span>
-          <span style={{ fontSize: 13, fontWeight: 700, color: "#e4e7eb" }}>{seriesSummary}</span>
-        </div>
-      )}
+      {/* series record now lives in the merged Series card — removed here to de-dupe */}
 
       <div className="two-col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <NbaFormCard abbr={awayAbbr} name={awayName} side="AWAY" form={a} loading={!standings} />
@@ -474,8 +477,8 @@ function LeaderColumn({ team }) {
         {(team?.leaders || []).map((p, i) => (
           <div key={i} style={{ display: "flex", alignItems: "center", gap: 10 }}>
             {p.headshot
-              ? <img src={p.headshot} alt="" style={{ width: 38, height: 38, borderRadius: "50%", background: "#1f2937", objectFit: "cover" }} />
-              : <div style={{ width: 38, height: 38, borderRadius: "50%", background: "#1f2937" }} />}
+              ? <img src={p.headshot} alt="" style={{ width: 32, height: 32, borderRadius: "50%", background: "#1f2937", objectFit: "cover" }} />
+              : <div style={{ width: 32, height: 32, borderRadius: "50%", background: "#1f2937" }} />}
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: "#fff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</div>
               <div style={{ fontSize: 10, color: "#6b7280" }}>{p.position}{p.summary ? ` · ${p.summary}` : ""}</div>
@@ -525,40 +528,41 @@ function InjuryColumn({ team, list }) {
   );
 }
 
-function SeriesCard({ series }) {
+// Merged series card: the playoff/current series status (when present) plus the
+// season head-to-head with recent meetings and per-game winners. One card so the
+// series info isn't duplicated across the page.
+function NbaSeriesCard({ series, h2h }) {
+  if (!series?.summary && !h2h) return null;
   return (
     <div style={card()}>
-      <SectionLabel>🏆 {series.title}</SectionLabel>
-      <div style={{ fontSize: 15, fontWeight: 700, color: "#e4e7eb" }}>{series.summary || "—"}</div>
-    </div>
-  );
-}
-
-// Season head-to-head: regular-season series record + recent meetings.
-// Data comes pre-built on the matchup payload (matchup.headToHead); the section
-// is only rendered when meetings exist, so it stays hidden in the offseason / on
-// first meetings.
-function NbaHeadToHeadSection({ h2h }) {
-  return (
-    <div style={card()}>
-      <SectionLabel>🆚 Season series</SectionLabel>
-      <div style={{ fontSize: 15, fontWeight: 700, color: "#e4e7eb", marginBottom: 2 }}>{h2h.summary}</div>
-      <div style={{ fontSize: 11, color: "#6b7280", marginBottom: h2h.recent && h2h.recent.length ? 14 : 0 }}>
-        {h2h.played} game{h2h.played === 1 ? "" : "s"} played this season
-      </div>
-      {h2h.recent && h2h.recent.length > 0 && (
-        <div>
-          <div style={{ fontSize: 10, letterSpacing: "0.08em", color: "#6b7280", fontWeight: 600, textTransform: "uppercase", marginBottom: 8 }}>Recent meetings</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {h2h.recent.map((mtg, i) => (
-              <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 10, alignItems: "center", padding: "8px 10px", background: "#0a0e14", borderRadius: 4 }}>
-                <div style={{ fontSize: 11, color: "#9ca3af" }}>{mtg.date}</div>
-                <div style={{ fontSize: 12, fontWeight: 600, color: "#e4e7eb", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{mtg.away} {mtg.score} {mtg.home}</div>
-                <div style={{ fontSize: 11, color: "#22c55e", textAlign: "right" }}>{mtg.winner ? `${mtg.winner} won` : ""}</div>
-              </div>
-            ))}
-          </div>
+      <SectionLabel>🏆 Series</SectionLabel>
+      {series?.summary && (
+        <div style={{ fontSize: 15, fontWeight: 700, color: "#e4e7eb", marginBottom: h2h ? 12 : 0 }}>
+          {series.summary}
+          {series.title && <span style={{ fontSize: 11, color: "#6b7280", marginLeft: 8 }}>{series.title}</span>}
         </div>
+      )}
+      {h2h && (
+        <>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "#9ca3af", marginBottom: 2 }}>{h2h.summary}</div>
+          <div style={{ fontSize: 11, color: "#6b7280", marginBottom: h2h.recent && h2h.recent.length ? 12 : 0 }}>
+            {h2h.played} game{h2h.played === 1 ? "" : "s"} played this season
+          </div>
+          {h2h.recent && h2h.recent.length > 0 && (
+            <div>
+              <div style={{ fontSize: 10, letterSpacing: "0.08em", color: "#6b7280", fontWeight: 600, textTransform: "uppercase", marginBottom: 8 }}>Recent meetings</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {h2h.recent.map((mtg, i) => (
+                  <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 10, alignItems: "center", padding: "8px 10px", background: "#0a0e14", borderRadius: 4 }}>
+                    <div style={{ fontSize: 11, color: "#9ca3af" }}>{fmtMeetingDate(mtg.date)}</div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: "#e4e7eb", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{mtg.away} {mtg.score} {mtg.home}</div>
+                    <div style={{ fontSize: 11, color: "#22c55e", textAlign: "right" }}>{mtg.winner ? `${mtg.winner} won` : ""}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
@@ -595,6 +599,17 @@ function card() {
 }
 function SectionLabel({ children }) {
   return <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 16 }}>{children}</div>;
+}
+// Faint uppercase group label (Matchup / Betting / Details) for page hierarchy.
+function GroupLabel({ children }) {
+  return <div style={{ fontSize: 10, letterSpacing: "0.12em", color: "#4b5563", fontWeight: 600, textTransform: "uppercase", margin: "20px 4px 8px" }}>{children}</div>;
+}
+// Format an ISO date (YYYY-MM-DD) as M/D/YYYY, no leading zeros.
+function fmtMeetingDate(d) {
+  if (!d) return "";
+  const [y, mo, da] = String(d).split("-");
+  if (!y || !mo || !da) return d;
+  return `${Number(mo)}/${Number(da)}/${y}`;
 }
 function BigStat({ label, value, color }) {
   return (
