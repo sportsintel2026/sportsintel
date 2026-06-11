@@ -5,7 +5,7 @@
 import { useState, useEffect, useRef, useCallback, Children } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-import { edgesApi, subscriptionApi, supabase } from "../lib/api";
+import { edgesApi, subscriptionApi, liveApi, supabase } from "../lib/api";
 
 function formatOdds(a){ if(a==null||isNaN(a))return "—"; const n=Math.round(Number(a)); return n>0?`+${n}`:`${n}`; }
 function impliedFromAmerican(a){ if(a==null||isNaN(a))return null; const n=Number(a); return n>0?100/(n+100):-n/(-n+100); }
@@ -44,6 +44,7 @@ export default function HomePage(){
   const [board,setBoard]=useState("ml");
   const [propTab,setPropTab]=useState("hr");
   const [wpRecord,setWpRecord]=useState(null);
+  const [live,setLive]=useState(null);
   const prev=useRef({}); const [flash,setFlash]=useState({});
   const hasFull=plan.isAdmin===true||plan.tier==="pro"||plan.tier==="elite";
 
@@ -58,6 +59,7 @@ export default function HomePage(){
     setFlash(f); setEdges(d);
   }catch(e){} setLoading(false); },[]);
   useEffect(()=>{ load(); const id=setInterval(load,45000); return ()=>clearInterval(id); },[load]);
+  useEffect(()=>{ let t; const pull=async()=>{ try{ const d=await liveApi.getMLB(); setLive(d?.games||[]); }catch(_){ setLive([]); } t=setTimeout(pull,60000); }; pull(); return ()=>clearTimeout(t); },[]);
 
   if(loading&&!edges) return <div style={S.shell}><style>{CSS}</style><div style={{padding:40,textAlign:"center",color:"#8a99a2"}}>Loading the board…</div></div>;
   const e=edges||{}; const games=e.games||[];
@@ -78,6 +80,8 @@ export default function HomePage(){
   const propArr=propTab==="hr"?hrP:propTab==="hits"?hitsP:propTab==="ks"?ksP:[];
   const parks=games.filter(g=>g.parkRunFactor!=null).slice(0,8);
   const upcoming=games.filter(g=>g.status!=="final").slice(0,6);
+  const abbrById={}; games.forEach(g=>{ abbrById[g.id]={a:g.awayAbbr||shortTeam(g.away||""),h:g.homeAbbr||shortTeam(g.home||"")}; });
+  const liveGames=(live||[]).filter(g=>[g.awayEdge,g.homeEdge,g.overEdge,g.underEdge].some(x=>x!=null));
 
   return (
     <div style={S.shell}><style>{CSS}</style>
@@ -98,6 +102,12 @@ export default function HomePage(){
 
       {/* HERO */}
       {hero?<Hero hero={hero} navigate={navigate} live={anyLive}/>:<div className="hero empty">No qualifying edge on the board yet — check back closer to first pitch.</div>}
+
+      {/* LIVE EDGES — in-game model edges, pulled from /api/live/mlb (moved off the game page) */}
+      {liveGames.length>0&&(<section>
+        <div className="sh"><div className="l"><span className="i" style={{color:"#ff5a5a"}}>🔴</span>LIVE EDGES <span className="s">in-game · updates 60s</span></div></div>
+        <Carousel>{liveGames.map(g=><LiveGameCard key={g.gameId} g={g} info={abbrById[g.gameId]} navigate={navigate}/>)}</Carousel>
+      </section>)}
 
       {/* EDGE BOARD */}
       <section>
@@ -206,6 +216,29 @@ function Hero({hero,navigate,live}){
   );
 }
 
+function LiveGameCard({g,info,navigate}){
+  const a=info?.a||"AWY", h=info?.h||"HOM";
+  const half=g.half==="bottom"?"Bot":"Top";
+  const ml=(g.awayEdge??-9)>=(g.homeEdge??-9)
+    ?{lbl:`${a} ML`,prob:g.awayWinProb,edge:g.awayEdge,odds:g.awayOdds}
+    :{lbl:`${h} ML`,prob:g.homeWinProb,edge:g.homeEdge,odds:g.homeOdds};
+  const tot=g.totalLine!=null
+    ?((g.overEdge??-9)>=(g.underEdge??-9)
+      ?{lbl:`Over ${g.totalLine}`,prob:g.overProb,edge:g.overEdge,odds:g.overOdds}
+      :{lbl:`Under ${g.totalLine}`,prob:g.underProb,edge:g.underEdge,odds:g.underOdds})
+    :null;
+  const Row=({r})=> r&&r.edge!=null?(
+    <div className="lgrow"><span className="lglbl">{r.lbl}</span>
+      <span className="lgmeta">{r.prob!=null?Math.round(r.prob*100)+"%":"—"}{r.odds!=null?` · ${formatOdds(r.odds)}`:""}</span>
+      <span className={"lgedge "+(r.edge>=0?"pos":"neg")}>{r.edge>=0?"+":""}{(r.edge*100).toFixed(1)}%</span></div>):null;
+  return (
+    <div className="lgc" onClick={()=>g.gameId&&navigate(`/game/mlb/${g.gameId}`)}>
+      <div className="lgh"><span className="lgmatch">{a} @ {h}</span><span className="lglive"><span className="livedot"/>{half} {g.inning}{g.outs!=null?` · ${g.outs} out`:""}</span></div>
+      <Row r={ml}/><Row r={tot}/>
+    </div>
+  );
+}
+
 function EdgeRow({e,navigate}){
   const model=Math.round((e.modelProb||0)*100);
   const conv=(e.conviction||"").toLowerCase();
@@ -246,7 +279,7 @@ function PropCard({p,type,rank,navigate}){
   return (
     <div className="pc2">
       <div className="rk">{rank}</div>
-      <div className="hd"><div className="av">{type==="ks"?"⚾":"🧢"}</div><div><div className="nm">{p.player||"—"}</div><div className="mu">{p.game||p.team||""}</div></div></div>
+      <div className="hd"><div className="av">{p.playerId?<img src={`https://midfield.mlbstatic.com/v1/people/${p.playerId}/spots/120`} alt="" onError={(e)=>{e.currentTarget.style.display="none";}}/>:(type==="ks"?"⚾":"🧢")}</div><div><div className="nm">{p.player||"—"}</div><div className="mu">{p.game||p.team||""}</div></div></div>
       <div className="cn2"><div className="n">{big}</div><div className="l">{lbl}</div></div>
       <div className="pline">{line}{edgeBadge&&<span className="ebadge">{edgeBadge}</span>}</div>
       {sig.length>0&&<div className="sg">{sig.slice(0,2).map((s,i)=><div key={i} className="x"><div className="kk">{s[0]}</div><div className="vv">{s[1]}</div></div>)}</div>}
@@ -321,6 +354,14 @@ section{padding:0 11px;margin-top:9px}
 .ec .conv.medium{color:#f3b94f;background:rgba(243,185,79,.12)}
 .ec .pc{font-family:'Barlow Condensed';font-weight:800;font-size:26px;color:#33e991;line-height:1;transition:color .3s}.ec .pc.fl-up{color:#33e991}.ec .pc.fl-dn{color:#ff5a5a}
 .ec .md{font-size:10px;color:#9aa7b0;font-weight:600;margin-top:2px}
+.lgc{width:228px;border:1px solid rgba(255,90,90,.28);border-radius:13px;background:linear-gradient(180deg,#160d0e,#090d12);padding:10px 12px}
+.lgh{display:flex;align-items:center;justify-content:space-between;margin-bottom:7px}
+.lgmatch{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:16px;color:#fff}
+.lglive{display:flex;align-items:center;gap:5px;font-size:9px;font-weight:800;color:#ff8a8a;letter-spacing:.3px}
+.lgrow{display:flex;align-items:center;gap:8px;padding:5px 0;border-top:1px solid #161e26}
+.lglbl{font-weight:800;font-size:12px;color:#dbe4e2;flex:1;min-width:0}
+.lgmeta{font-size:10px;color:#9aa7b0;font-weight:600}
+.lgedge{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:16px;flex:0 0 auto}.lgedge.pos{color:#33e991}.lgedge.neg{color:#ff5a5a}
 .elist{display:flex;flex-direction:column;gap:7px}
 .erow{border:1px solid #1a232c;border-radius:12px;background:linear-gradient(180deg,#0d1218,#090d12);padding:10px 12px}
 .etop{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
@@ -338,7 +379,7 @@ section{padding:0 11px;margin-top:9px}
 .pc2{width:230px;border:1px solid #161e26;border-radius:14px;background:linear-gradient(180deg,#110d1d,#06090b);padding:10px 11px;position:relative}
 .pc2 .rk{position:absolute;top:0;left:0;width:26px;height:26px;border-radius:14px 0 12px 0;background:rgba(155,123,255,.2);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;color:#b9a6ff}
 .pc2 .hd{display:flex;align-items:center;gap:9px;margin-left:22px}
-.av{width:42px;height:42px;border-radius:50%;background:linear-gradient(180deg,#26344f,#1a2335);display:flex;align-items:flex-end;justify-content:center;font-size:22px;flex:0 0 auto}
+.av{width:42px;height:42px;border-radius:50%;background:linear-gradient(180deg,#26344f,#1a2335);display:flex;align-items:flex-end;justify-content:center;font-size:22px;flex:0 0 auto;position:relative;overflow:hidden}.av img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
 .pc2 .nm{font-weight:700;font-size:13px;line-height:1.05}.pc2 .mu{font-size:10px;color:#8a99a2;margin-top:1px}
 .cn2{text-align:center;margin:7px 0 2px}.cn2 .n{font-weight:800;font-size:33px;color:#33e991;line-height:1}.cn2 .l{font-size:8.5px;color:#8fd9c2;font-weight:800}
 .sg{display:flex;gap:7px;margin-top:7px}.sg .x{flex:1;border:1px solid #161e26;border-radius:8px;background:rgba(255,255,255,.012);padding:5px 7px}.sg .kk{font-size:8.5px;color:#8a99a2;font-weight:700;white-space:nowrap}.sg .vv{font-size:11px;font-weight:700;margin-top:1px}
