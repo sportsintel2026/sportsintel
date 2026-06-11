@@ -30,6 +30,7 @@ export default function HomePage(){
   const [loading,setLoading]=useState(true);
   const [plan,setPlan]=useState({tier:"free",isAdmin:false});
   const [board,setBoard]=useState("ml");
+  const [propTab,setPropTab]=useState("hr");
   const prev=useRef({}); const [flash,setFlash]=useState({});
   const hasFull=plan.isAdmin===true||plan.tier==="pro"||plan.tier==="elite";
 
@@ -52,7 +53,10 @@ export default function HomePage(){
   const boardArr=(board==="ml"?e.moneylineEdges:e.totalsEdges)||[];
   const top4=oneSidePerGame(boardArr).filter(x=>(x.edge??0)>0).sort((a,b)=>(b.edge??0)-(a.edge??0)).slice(0,4);
   const movers=[...(e.moneylineEdges||[]),...(e.totalsEdges||[])].sort((a,b)=>(b.edge??0)-(a.edge??0)).slice(0,6);
-  const hr=(e.hrPropEdges||[]).slice(0,6);
+  const hrP=(e.hrPropEdges||[]).slice(0,6);
+  const hitsP=(e.hitsPropEdges||[]).slice(0,6);
+  const ksP=(e.kPropEdges||[]).slice(0,6);
+  const propArr=propTab==="hr"?hrP:propTab==="hits"?hitsP:ksP;
   const parks=games.filter(g=>g.parkRunFactor!=null).slice(0,8);
   const upcoming=games.filter(g=>g.status!=="final").slice(0,6);
 
@@ -102,14 +106,17 @@ export default function HomePage(){
         <div className="note">Live prices now. True “last 15 min” moves switch on once tick history starts saving.</div>
       </section>
 
-      {/* HR TARGETS */}
+      {/* PROPS RADAR */}
       <section>
-        <div className="sh"><div className="l"><span className="i">🎯</span>HR TARGETS TONIGHT</div></div>
+        <div className="sh"><div className="l"><span className="i">🎯</span>PROPS RADAR</div>
+          <div className="seg"><b className={propTab==="hr"?"on":""} onClick={()=>setPropTab("hr")}>HR</b><b className={propTab==="hits"?"on":""} onClick={()=>setPropTab("hits")}>Hits</b><b className={propTab==="ks"?"on":""} onClick={()=>setPropTab("ks")}>Ks</b></div></div>
         <div className="rw">
-          {hr.length===0&&<div className="muted">HR board fills in closer to first pitch.</div>}
-          {hr.map((p,i)=><HRCard key={(p.player||"")+i} p={p} rank={i+1} navigate={navigate}/>)}
+          {propArr.length===0&&<div className="muted">Board fills in closer to first pitch.</div>}
+          {propArr.map((p,i)=><PropCard key={(p.player||"")+i} p={p} type={propTab} rank={i+1} navigate={navigate}/>)}
         </div>
-        <div className="pn">Ranked by the model's chance to homer — not a tracked +EV play (the HR market is efficient).</div>
+        <div className="pn">{propTab==="hr"
+          ?"Ranked by the model's chance to homer — not a tracked +EV play (the HR market is efficient)."
+          :"These props clear our +EV bar — the edge % is the model's price vs the book."}</div>
       </section>
 
       {/* PARK FACTORS */}
@@ -170,19 +177,31 @@ function Hero({hero,navigate,live}){
   );
 }
 
-function HRCard({p,rank,navigate}){
-  const pct=Math.round((p.hrProb||0)*100);
-  const sig=[];
-  if(p.parkHRFactor!=null) sig.push(["🏟️ Park",`${p.parkHRFactor>1?"+":""}${Math.round((p.parkHRFactor-1)*100)}%`]);
-  else if(p.weatherEffect) sig.push(["💨 Wx",String(p.weatherEffect)]);
-  if(p.opposingPitcherHR9!=null) sig.push(["⚾ HR/9",Number(p.opposingPitcherHR9).toFixed(1)]);
-  else if(p.recent15?.hr!=null) sig.push(["🔥 Recent",`${p.recent15.hr} HR L15`]);
+function PropCard({p,type,rank,navigate}){
+  let big,lbl,line,edgeBadge=null,sig=[];
+  if(type==="hr"){
+    big=Math.round((p.hrProb||0)*100)+"%"; lbl="CHANCE TO HOMER"; line=`O 0.5 HR · ${formatOdds(p.odds)}`;
+    if(p.parkHRFactor!=null) sig.push(["🏟️ Park",`${p.parkHRFactor>1?"+":""}${Math.round((p.parkHRFactor-1)*100)}%`]);
+    if(p.opposingPitcherHR9!=null) sig.push(["⚾ HR/9",Number(p.opposingPitcherHR9).toFixed(1)]);
+  } else if(type==="hits"){
+    big=Math.round((p.hitsProb||0)*100)+"%"; lbl="HIT PROBABILITY";
+    line=`${p.side==="over"?"O":"U"} ${p.line} Hits · ${formatOdds(p.odds)}`;
+    if((p.edge??0)>0) edgeBadge=`+${(p.edge*100).toFixed(1)}% EDGE`;
+    if(p.battingAvg!=null) sig.push(["📊 AVG",Number(p.battingAvg).toFixed(3).replace(/^0/,"")]);
+  } else {
+    big=Math.round((p.kProb||0)*100)+"%"; lbl="STRIKEOUT PROB";
+    line=`${p.side==="over"?"O":"U"} ${p.line} Ks · ${formatOdds(p.odds)}`;
+    if((p.edge??0)>0) edgeBadge=`+${(p.edge*100).toFixed(1)}% EDGE`;
+    if(p.expectedKs!=null) sig.push(["🎯 Proj Ks",Number(p.expectedKs).toFixed(1)]);
+    if(p.pitcherK9!=null) sig.push(["⚾ K/9",Number(p.pitcherK9).toFixed(1)]);
+  }
   return (
     <div className="pc2">
       <div className="rk">{rank}</div>
-      <div className="hd"><div className="av">🧢</div><div><div className="nm">{p.player||"—"}</div><div className="mu">{p.game||p.team||""}</div></div></div>
-      <div className="cn2"><div className="n">{pct}%</div><div className="l">CHANCE TO HOMER</div></div>
-      <div className="sg">{sig.slice(0,2).map((s,i)=><div key={i} className="x"><div className="kk">{s[0]}</div><div className="vv">{s[1]}</div></div>)}</div>
+      <div className="hd"><div className="av">{type==="ks"?"⚾":"🧢"}</div><div><div className="nm">{p.player||"—"}</div><div className="mu">{p.game||p.team||""}</div></div></div>
+      <div className="cn2"><div className="n">{big}</div><div className="l">{lbl}</div></div>
+      <div className="pline">{line}{edgeBadge&&<span className="ebadge">{edgeBadge}</span>}</div>
+      {sig.length>0&&<div className="sg">{sig.slice(0,2).map((s,i)=><div key={i} className="x"><div className="kk">{s[0]}</div><div className="vv">{s[1]}</div></div>)}</div>}
       <div className="vbk" onClick={(ev)=>{ev.stopPropagation();p.gameId&&navigate(`/game/mlb/${p.gameId}`);}}>View Breakdown</div>
     </div>
   );
@@ -262,6 +281,8 @@ section{padding:0 12px;margin-top:12px}
 .cn2{text-align:center;margin:7px 0 2px}.cn2 .n{font-weight:800;font-size:30px;color:#33e991;line-height:1}.cn2 .l{font-size:8.5px;color:#8fd9c2;font-weight:800}
 .sg{display:flex;gap:7px;margin-top:7px}.sg .x{flex:1;border:1px solid #161e26;border-radius:8px;background:rgba(255,255,255,.012);padding:5px 7px}.sg .kk{font-size:8.5px;color:#8a99a2;font-weight:700;white-space:nowrap}.sg .vv{font-size:11px;font-weight:700;margin-top:1px}
 .vbk{margin-top:8px;border:1px solid rgba(155,123,255,.3);border-radius:8px;background:rgba(155,123,255,.07);text-align:center;padding:6px;font-size:11px;font-weight:800;color:#bba6ff}
+.pline{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:7px;border:1px solid #161e26;border-radius:8px;background:rgba(255,255,255,.018);padding:6px 9px;font-size:11px;font-weight:700;color:#dbe4e2}
+.ebadge{font-size:9px;font-weight:800;color:#33e991;background:rgba(51,233,145,.12);border-radius:5px;padding:2px 5px;white-space:nowrap}
 .pkc{width:160px;border:1px solid #161e26;border-radius:13px;background:#0b0f14;padding:9px 11px}.pkc.hot{border-color:rgba(243,185,79,.4);background:linear-gradient(180deg,#12170d,#06090b);box-shadow:0 0 16px rgba(243,185,79,.06)}
 .pkc .r1{display:flex;align-items:center;justify-content:space-between}.pkc .n{font-weight:700;font-size:13px}.pkc .c{font-size:10px;color:#8a99a2;font-weight:600}
 .pkc .tg{display:inline-flex;align-items:center;gap:4px;font-size:9px;font-weight:800;margin:7px 0;padding:2px 7px;border-radius:6px}.tg.h{color:#f3b94f;background:rgba(243,185,79,.1)}.tg.p{color:#5fb8ff;background:rgba(95,184,255,.1)}.tg.n{color:#8a99a2;background:rgba(130,145,154,.08)}
