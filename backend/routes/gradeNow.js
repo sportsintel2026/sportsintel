@@ -911,7 +911,7 @@ async function clvAudit() {
       .from("model_predictions")
       .select("*")
       .eq("league", "mlb")
-      .in("market", ["moneyline", "total"])
+      .in("market", ["moneyline", "total", "run_line"])
       .in("result", ["win", "loss", "push"])
       .order("id")
       .range(from, from + PAGE - 1);
@@ -973,6 +973,7 @@ async function clvAudit() {
 
   const ml = view.filter(v => v.market === "moneyline");
   const tot = view.filter(v => v.market === "total");
+  const rl = view.filter(v => v.market === "run_line");
 
   // Coverage by game_date — the fast proof the capture fix is working. Pre-fix
   // dates stay ~50%; dates from the ratchet deploy (2026-06-09) forward should
@@ -1053,10 +1054,10 @@ async function clvAudit() {
   return {
     ok: true,
     league: "mlb",
-    markets: ["moneyline", "total"],
+    markets: ["moneyline", "total", "run_line"],
     graded,
     overall,
-    byMarket: { moneyline: summarize(ml), total: summarize(tot) },
+    byMarket: { moneyline: summarize(ml), total: summarize(tot), run_line: summarize(rl) },
     prePostCoverage,
     byDateCoverage,
     timing,
