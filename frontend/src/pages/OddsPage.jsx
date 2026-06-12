@@ -170,6 +170,7 @@ export default function OddsPage() {
 
       <div className="main-content" style={{ marginLeft: 200 }}>
         <div className="od-content" style={{ maxWidth: 860, margin: "0 auto", padding: "24px 24px 60px" }}>
+          <div onClick={() => navigate(-1)} style={{ color: "#6b7280", fontSize: 13, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6, marginBottom: 14, userSelect: "none" }}>← Back</div>
           <div style={{ marginBottom: 6 }}>
             <h1 style={{ margin: 0, fontSize: 26, fontWeight: 700 }}>💹 Market Price</h1>
           </div>
