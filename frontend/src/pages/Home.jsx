@@ -10,14 +10,28 @@ import Sidebar from "./Sidebar";
 
 function formatOdds(a){ if(a==null||isNaN(a))return "—"; const n=Math.round(Number(a)); return n>0?`+${n}`:`${n}`; }
 function impliedFromAmerican(a){ if(a==null||isNaN(a))return null; const n=Number(a); return n>0?100/(n+100):-n/(-n+100); }
-const ESPN=(ab)=>`https://a.espncdn.com/i/teamlogos/mlb/500/${String(ab||"").toLowerCase()}.png`;
+const ESPN=(ab,lg="mlb")=>`https://a.espncdn.com/i/teamlogos/${lg}/500/${String(ab||"").toLowerCase()}.png`;
 const TEAMCOL={ARI:"#A71930",ATL:"#CE1141",BAL:"#DF4601",BOS:"#BD3039",CHC:"#0E3386",CWS:"#C4CED4",CHW:"#C4CED4",CIN:"#C6011F",CLE:"#E31937",COL:"#5A4F9C",DET:"#FA4616",HOU:"#EB6E1F",KC:"#3E7DC4",KCR:"#3E7DC4",LAA:"#BA0021",LAD:"#3E7DC4",LOS:"#3E7DC4",MIA:"#00A3E0",MIL:"#FFC52F",MIN:"#D31145",NYM:"#FF5910",NYY:"#3A4F73",OAK:"#EFB21E",ATH:"#EFB21E",PHI:"#E81828",PIT:"#FDB827",SD:"#FFC425",SDP:"#FFC425",SEA:"#1B9A8E",SF:"#FD5A1E",SFG:"#FD5A1E",STL:"#C41E3A",TB:"#8FBCE6",TBR:"#8FBCE6",TEX:"#3E66B0",TOR:"#1D6FE0",WSH:"#E0263B",WAS:"#E0263B"};
+const NBACOL={ATL:"#E03A3E",BOS:"#007A33",BKN:"#777",CHA:"#1D1160",CHI:"#CE1141",CLE:"#860038",DAL:"#00538C",DEN:"#0E2240",DET:"#C8102E",GSW:"#1D428A",HOU:"#CE1141",IND:"#002D62",LAC:"#C8102E",LAL:"#552583",MEM:"#5D76A9",MIA:"#98002E",MIL:"#00471B",MIN:"#236192",NOP:"#85714D",NYK:"#006BB6",OKC:"#007AC1",ORL:"#0077C0",PHI:"#006BB6",PHX:"#E56020",POR:"#E03A3E",SAC:"#5A2D81",SAS:"#9AA7AE",TOR:"#CE1141",UTA:"#3E2680",WAS:"#002B5C"};
 const teamCol=(ab)=>TEAMCOL[String(ab||"").toUpperCase()]||"#3a4a57";
+const colFor=(ab,sport)=> sport==="nba" ? (NBACOL[String(ab||"").toUpperCase()]||"#3a4a57") : teamCol(ab);
+
+// Per-sport config. MLB is the original behavior; NBA reads the /api/edges/nba feed.
+// markets sets the board toggle; spread is NBA-only (MLB run line was cut for ROI).
+// hasLive/hasHist/hasParks gate MLB-only sections. hasProps gates the props CTA
+// (NBA props page lands in Phase 2, so its CTA is hidden until then).
+const SPORTS={
+  mlb:{ feed:()=>edgesApi.getMLB(), lg:"mlb", markets:[["ml","ML"],["totals","Totals"]], propsCopy:"Every prop with an edge — HR, hits & strikeouts", hasLive:true, hasHist:true, hasParks:true, hasProps:true },
+  nba:{ feed:()=>edgesApi.getNBA(), lg:"nba", markets:[["ml","ML"],["spread","Spread"],["totals","Totals"]], propsCopy:"", hasLive:false, hasHist:false, hasParks:false, hasProps:false },
+};
+// Edge display differs by sport: MLB edge is a fraction (×100 → %); NBA ML edge is
+// already a % figure, and NBA spread/totals edges are POINT projections.
+function fmtEdgeFor(e,sport){ const v=e.edge??0; const s=v>=0?"+":""; if(sport!=="nba") return pct1(v); if(isTotal(e)||e.line!=null) return `${s}${v.toFixed(1)}`; return `${s}${v.toFixed(1)}%`; }
 function teams(m){ if(!m)return ["",""]; const p=String(m).split(/@|vs|·/i).map(s=>s.trim()).filter(Boolean); return [p[0]||"",p[1]||""]; }
 function shortTeam(t){ const m=String(t).match(/[A-Z]{2,3}/); return m?m[0]:String(t).slice(0,3).toUpperCase(); }
 function oneSidePerGame(arr){ const g=new Map(); for(const e of arr||[]){ const p=g.get(e.gameId); if(!p||(e.edge??-Infinity)>(p.edge??-Infinity))g.set(e.gameId,e);} return [...g.values()]; }
 const isTotal=(e)=>e.side==="over"||e.side==="under";
-const edgeLabel=(e)=>isTotal(e)?`${e.side==="over"?"Over":"Under"} ${e.line}`:`${e.teamAbbr||shortTeam(e.matchup)} ML`;
+const edgeLabel=(e)=>isTotal(e)?`${e.side==="over"?"Over":"Under"} ${e.line}`:(e.line!=null?`${e.teamAbbr||shortTeam(e.matchup)} ${e.line>0?"+":""}${e.line}`:`${e.teamAbbr||shortTeam(e.matchup)} ML`);
 const edgeTeam=(e)=>isTotal(e)?null:(e.teamAbbr||"");
 const pct1=(f)=>`${(f??0)>0?"+":""}${((f??0)*100).toFixed(1)}%`;
 const normName=(s)=>String(s||"").toLowerCase().replace(/[^a-z]/g,"");
@@ -26,10 +40,10 @@ function americanToDecimal(odds){const n=Number(odds);if(!n||Number.isNaN(n))ret
 function parlayDecimal(legs){if(!legs||legs.length===0)return null;let d=1;for(const leg of legs){const dec=americanToDecimal(leg.odds);if(dec==null)return null;d*=dec;}return d;}
 function computeRecord(rows){let wins=0,losses=0,pushes=0,units=0;for(const r of rows){for(const p of r.picks||[]){if(p.result==="win"){wins+=1;let dec;if(p.type==="parlay"){const cd=parlayDecimal(p.legs);dec=(p.combinedOdds!=null?americanToDecimal(p.combinedOdds):null)||cd;}else{dec=americanToDecimal(p.odds);}units+=dec?dec-1:0;}else if(p.result==="loss"){losses+=1;units-=1;}else if(p.result==="push"){pushes+=1;}}}return{wins,losses,pushes,units};}
 
-function Logo({ab,size=22}){ const [bad,setBad]=useState(false);
+function Logo({ab,size=22,lg="mlb",col}){ const [bad,setBad]=useState(false);
   if(bad||!ab) return <span style={{width:size,height:size,borderRadius:"50%",background:"#1c2730",display:"inline-flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:size*0.36,color:"#fff",fontFamily:"'Barlow Condensed',sans-serif"}}>{String(ab||"?").slice(0,3)}</span>;
-  const col=teamCol(ab);
-  return <span style={{width:size,height:size,borderRadius:"50%",background:`radial-gradient(circle at 50% 32%, ${col}40, #090d11 80%)`,boxShadow:`inset 0 0 0 1px ${col}70`,display:"inline-flex",alignItems:"center",justifyContent:"center",flex:"0 0 auto"}}><img src={ESPN(ab)} alt="" onError={()=>setBad(true)} style={{width:size*0.84,height:size*0.84,objectFit:"contain"}}/></span>;
+  const c=col||teamCol(ab);
+  return <span style={{width:size,height:size,borderRadius:"50%",background:`radial-gradient(circle at 50% 32%, ${c}40, #090d11 80%)`,boxShadow:`inset 0 0 0 1px ${c}70`,display:"inline-flex",alignItems:"center",justifyContent:"center",flex:"0 0 auto"}}><img src={ESPN(ab,lg)} alt="" onError={()=>setBad(true)} style={{width:size*0.84,height:size*0.84,objectFit:"contain"}}/></span>;
 }
 
 function Carousel({children}){
@@ -46,6 +60,7 @@ export default function HomePage(){
   const [edges,setEdges]=useState(null);
   const [loading,setLoading]=useState(true);
   const [plan,setPlan]=useState({tier:"free",isAdmin:false});
+  const [sport,setSport]=useState("mlb");
   const [board,setBoard]=useState("ml");
   const [propTab,setPropTab]=useState("hr");
   const [wpRecord,setWpRecord]=useState(null);
@@ -53,6 +68,7 @@ export default function HomePage(){
   const [oddsHist,setOddsHist]=useState(null);
   const prev=useRef({}); const [flash,setFlash]=useState({});
   const hasFull=plan.isAdmin===true||plan.tier==="pro"||plan.tier==="elite";
+  const sp=SPORTS[sport]||SPORTS.mlb;
 
   useEffect(()=>{ subscriptionApi.getMyPlan().then(setPlan).catch(()=>{}); },[]);
   useEffect(()=>{(async()=>{ try{
@@ -60,13 +76,13 @@ export default function HomePage(){
     const rows=(data||[]).map(r=>{ let picks=[]; try{picks=r.picks?JSON.parse(r.picks):[];}catch(_){picks=[];} return {date:r.date,picks}; });
     setWpRecord(computeRecord(rows));
   }catch(_){ setWpRecord(null); } })();},[]);
-  const load=useCallback(async()=>{ try{ const d=await edgesApi.getMLB();
-    const f={}; [...(d.moneylineEdges||[]),...(d.totalsEdges||[])].forEach(e=>{ const k=e.gameId+e.side; if(prev.current[k]!=null&&prev.current[k]!==e.odds)f[k]=e.odds>prev.current[k]?"up":"dn"; prev.current[k]=e.odds; });
+  const load=useCallback(async()=>{ try{ const d=await SPORTS[sport].feed();
+    const f={}; [...(d.moneylineEdges||[]),...(d.totalsEdges||[]),...(d.spreadEdges||[])].forEach(e=>{ const k=e.gameId+e.side; if(prev.current[k]!=null&&prev.current[k]!==e.odds)f[k]=e.odds>prev.current[k]?"up":"dn"; prev.current[k]=e.odds; });
     setFlash(f); setEdges(d);
-  }catch(e){} setLoading(false); },[]);
-  useEffect(()=>{ load(); const id=setInterval(load,45000); return ()=>clearInterval(id); },[load]);
-  useEffect(()=>{ let t; const pull=async()=>{ try{ const d=await liveApi.getMLB(); setLive(d?.games||[]); }catch(_){ setLive([]); } t=setTimeout(pull,60000); }; pull(); return ()=>clearTimeout(t); },[]);
-  useEffect(()=>{ let t; const pull=async()=>{ try{ const d=await edgesApi.getOddsHistory(); setOddsHist(d?.games||[]); }catch(_){ setOddsHist([]); } t=setTimeout(pull,300000); }; pull(); return ()=>clearTimeout(t); },[]);
+  }catch(e){} setLoading(false); },[sport]);
+  useEffect(()=>{ setEdges(null); setLoading(true); prev.current={}; load(); const id=setInterval(load,45000); return ()=>clearInterval(id); },[load]);
+  useEffect(()=>{ if(!SPORTS[sport].hasLive){ setLive([]); return; } let t; const pull=async()=>{ try{ const d=await liveApi.getMLB(); setLive(d?.games||[]); }catch(_){ setLive([]); } t=setTimeout(pull,60000); }; pull(); return ()=>clearTimeout(t); },[sport]);
+  useEffect(()=>{ if(!SPORTS[sport].hasHist){ setOddsHist([]); return; } let t; const pull=async()=>{ try{ const d=await edgesApi.getOddsHistory(); setOddsHist(d?.games||[]); }catch(_){ setOddsHist([]); } t=setTimeout(pull,300000); }; pull(); return ()=>clearTimeout(t); },[sport]);
 
   if(loading&&!edges) return <div style={S.shell}><style>{CSS}</style><div style={{padding:40,textAlign:"center",color:"#8a99a2"}}>Loading the board…</div></div>;
   const e=edges||{}; const games=e.games||[];
@@ -77,11 +93,12 @@ export default function HomePage(){
   const allDone=games.length>0&&games.every(g=>g.status==="final");
   const marketsLive=!allDone;
 
-  const pool=[...(e.moneylineEdges||[]),...(e.totalsEdges||[])].filter(x=>x.convictionScore!=null&&(x.conviction==="HIGH"||x.conviction==="MEDIUM")&&(x.edge??0)>0);
+  const pool=[...(e.moneylineEdges||[]),...(e.totalsEdges||[]),...(e.spreadEdges||[])].filter(x=>x.convictionScore!=null&&(x.conviction==="HIGH"||x.conviction==="MEDIUM")&&(x.edge??0)>0);
   pool.sort((a,b)=>(b.convictionScore-a.convictionScore)||((b.edge??0)-(a.edge??0)));
   const hero=pool[0]||null;
-  const boardEdges=oneSidePerGame((board==="ml"?e.moneylineEdges:e.totalsEdges)||[]).filter(x=>(x.edge??0)>0).sort((a,b)=>((b.convictionScore||0)-(a.convictionScore||0))||((b.edge||0)-(a.edge||0)));
-  const moverPool=[...(e.moneylineEdges||[]),...(e.totalsEdges||[])].map(x=>{ const ser=seriesFor(x); const open=(ser&&ser.length)?ser[0].o:null; const now=(ser&&ser.length)?ser[ser.length-1].o:x.odds; const delta=(open!=null&&ser&&ser.length>1)?now-open:null; return {...x,_open:open,_now:now,_delta:delta}; });
+  const boardArr=board==="ml"?e.moneylineEdges:board==="spread"?e.spreadEdges:e.totalsEdges;
+  const boardEdges=oneSidePerGame(boardArr||[]).filter(x=>sport==="mlb"?(x.edge??0)>0:(x.edge??0)>=1).sort((a,b)=>((b.convictionScore||0)-(a.convictionScore||0))||((b.edge||0)-(a.edge||0)));
+  const moverPool=[...(e.moneylineEdges||[]),...(e.totalsEdges||[]),...(e.spreadEdges||[])].map(x=>{ const ser=seriesFor(x); const open=(ser&&ser.length)?ser[0].o:null; const now=(ser&&ser.length)?ser[ser.length-1].o:x.odds; const delta=(open!=null&&ser&&ser.length>1)?now-open:null; return {...x,_open:open,_now:now,_delta:delta}; });
   const movers=moverPool.sort((a,b)=>{ const ad=a._delta==null?-1:Math.abs(a._delta); const bd=b._delta==null?-1:Math.abs(b._delta); return (bd-ad)||((b.edge??0)-(a.edge??0)); }).slice(0,6);
   const hasMoves=movers.some(m=>m._delta!=null);
   const hrP=(e.hrPropEdges||[]).slice(0,6);
@@ -106,12 +123,15 @@ export default function HomePage(){
         <div className="bell" onClick={()=>navigate("/settings")}>🔔</div>
       </div>
       <div className="tabs">
-        {[["⚾","MLB",1],["🏀","NBA",0],["🏒","NHL",0],["🏈","NFL",0],["🏉","CFB",0]].map(([ic,lb,on])=>(
-          <div key={lb} className={"tab"+(on?" on":"")} onClick={()=>lb!=="MLB"&&navigate("/dashboard")}><span className="i">{ic}</span>{lb}</div>))}
+        {/* MLB + NBA have native edge boards → switch the board in-place. The others
+            don't have a board yet, so they route to that sport's live Games page
+            (Phase 3 gives each its own board). */}
+        {[["⚾","MLB","mlb"],["🏀","NBA","nba"],["🏒","NHL","nhl"],["🏈","NFL","nfl"],["🏉","CFB","cfb"]].map(([ic,lb,key])=>(
+          <div key={lb} className={"tab"+(sport===key?" on":"")} onClick={()=>{ if(key==="mlb"||key==="nba"){ if(key!==sport){ setSport(key); setBoard("ml"); } } else { navigate(`/${key}-games`); } }}><span className="i">{ic}</span>{lb}</div>))}
       </div>
 
       {/* HERO */}
-      {hero?<Hero hero={hero} navigate={navigate} live={anyLive} series={seriesFor(hero)}/>:<div className="hero empty">No qualifying edge on the board yet — check back closer to first pitch.</div>}
+      {hero?<Hero hero={hero} navigate={navigate} live={anyLive} series={seriesFor(hero)} sport={sport}/>:<div className="hero empty">No qualifying edge on the board yet — check back closer to game time.</div>}
       <div className="cols">
 
       {/* LIVE EDGES — in-game model edges, pulled from /api/live/mlb (moved off the game page) */}
@@ -123,11 +143,11 @@ export default function HomePage(){
       {/* EDGE BOARD — unified reasoned edges with a market toggle */}
       <section className="panel">
         <div className="sh"><div className="l"><span className="i">📊</span>TODAY'S EDGE BOARD <span className="s">ranked by conviction</span></div>
-          <div className="seg"><b className={board==="ml"?"on":""} onClick={()=>setBoard("ml")}>ML</b><b className={board==="totals"?"on":""} onClick={()=>setBoard("totals")}>Totals</b></div></div>
-        <div className="note" style={{marginTop:0,marginBottom:9}}>Today's top team plays — ML &amp; totals for every game, ranked by conviction. Player props live in the <span onClick={(ev)=>{ev.stopPropagation();navigate("/props");}} style={{color:"#ff7a6c",fontWeight:700,cursor:"pointer"}}>Props tab →</span></div>
+          <div className="seg">{sp.markets.map(([key,lb])=><b key={key} className={board===key?"on":""} onClick={()=>setBoard(key)}>{lb}</b>)}</div></div>
+        <div className="note" style={{marginTop:0,marginBottom:9}}>Today's top team plays for every game, ranked by conviction.{sp.hasProps?<> Player props live in the <span onClick={(ev)=>{ev.stopPropagation();navigate("/props");}} style={{color:"#ff7a6c",fontWeight:700,cursor:"pointer"}}>Props tab →</span></>:""}</div>
         {boardEdges.length===0
-          ?<div className="muted" style={{padding:"12px 2px"}}>No positive {board==="ml"?"moneyline":"totals"} edges on the board yet.</div>
-          :<div className="elist">{boardEdges.map((x,i)=><EdgeRow key={x.gameId+x.side+i} e={x} navigate={navigate}/>)}</div>}
+          ?<div className="muted" style={{padding:"12px 2px"}}>No {board==="ml"?"moneyline":board==="spread"?"spread":"totals"} edges on the board yet.</div>
+          :<div className="elist">{boardEdges.map((x,i)=><EdgeRow key={x.gameId+x.side+i} e={x} navigate={navigate} sport={sport}/>)}</div>}
       </section>
 
       {/* MARKET MOVERS */}
@@ -144,14 +164,14 @@ export default function HomePage(){
         <div className="note">{hasMoves?"Open to now, today’s line moves. Updates every 15 min.":"Live prices now. Moves fill in as ticks accumulate today."}</div>
       </section>
 
-      {/* PLAYER PROPS — full board lives in the Props tab */}
-      <section className="panel">
+      {/* PLAYER PROPS — full board lives in the Props tab (per sport) */}
+      {sp.hasProps&&(<section className="panel">
         <div className="sh"><div className="l"><span className="i">🎯</span>PLAYER PROPS</div></div>
         <div className="propscta" onClick={()=>navigate("/props")}>
-          <div><div className="pctah">Every prop with an edge — HR, hits &amp; strikeouts</div><div className="pctas">The full board lives in the Props tab — more options than before.</div></div>
+          <div><div className="pctah">{sp.propsCopy}</div><div className="pctas">The full board lives in the Props tab — more options than before.</div></div>
           <span className="pctaarrow">→</span>
         </div>
-      </section>
+      </section>)}
 
       {/* PARK FACTORS */}
       {parks.length>0&&(<section className="panel">
@@ -176,9 +196,9 @@ export default function HomePage(){
       {upcoming.length>0&&(<section className="panel">
         <div className="sh"><div className="l"><span className="i">🗓️</span>UPCOMING GAMES</div><span className="s2" onClick={()=>navigate("/games")}>View all →</span></div>
         <div className="rw">
-          {upcoming.map((g,i)=>{ const aw=g.away||g.awayAbbr||""; const hm=g.home||g.homeAbbr||"";
-            return (<div key={i} className="gm" onClick={()=>g.gameId&&navigate(`/game/mlb/${g.gameId}`)}>
-              <div className="gmm"><Logo ab={shortTeam(aw)} size={20}/> {shortTeam(aw)} <span className="x">v</span> <Logo ab={shortTeam(hm)} size={20}/> {shortTeam(hm)}</div>
+          {upcoming.map((g,i)=>{ const aAb=g.awayAbbr||shortTeam(g.away||""); const hAb=g.homeAbbr||shortTeam(g.home||""); const gid=g.id||g.gameId;
+            return (<div key={i} className="gm" onClick={()=>gid&&navigate(`/game/${sport}/${gid}`)}>
+              <div className="gmm"><Logo ab={aAb} size={20} lg={sp.lg} col={colFor(aAb,sport)}/> {aAb} <span className="x">v</span> <Logo ab={hAb} size={20} lg={sp.lg} col={colFor(hAb,sport)}/> {hAb}</div>
               <div className="gme">{g.time||"—"}{g.totals?.projected!=null?` · O/U ${g.totals.projected}`:""}</div>
             </div>);})}
         </div>
@@ -215,14 +235,14 @@ function HeroChart({pts}){
   );
 }
 
-function Hero({hero,navigate,live,series}){
+function Hero({hero,navigate,live,series,sport="mlb"}){
   const modelPct=Math.round((hero.modelProb||0)*100);
   const mktPct=Math.round((impliedFromAmerican(hero.odds)||0)*100);
   const pts=(series||[]).map(p=>p.o);
   const hasChart=pts.length>=2;
   const moved=hasChart&&pts[0]!==pts[pts.length-1];
   return (
-    <div className="hero" onClick={()=>hero.gameId&&navigate(`/game/mlb/${hero.gameId}`)}>
+    <div className="hero" onClick={()=>hero.gameId&&navigate(`/game/${sport}/${hero.gameId}`)}>
       <div className="hh"><div className="eb">🔥 BEST EDGE RIGHT NOW</div><span className="hot">🔥 HOT</span></div>
       <div className="htop">
         <div className="hL"><div className="pk">{edgeLabel(hero)}</div><div className="pg">{hero.matchup}</div>
@@ -230,10 +250,10 @@ function Hero({hero,navigate,live,series}){
             <div className="cc"><div className="k">{moved?"LINE MOVED":"ODDS"}</div><div className="v">{moved?<>{formatOdds(pts[0])}<span className="ar">{String.fromCharCode(8594)}</span><b className="gd">{formatOdds(pts[pts.length-1])}</b></>:formatOdds(hero.odds)}</div></div>
             <div className="cc"><div className="k">STARTS</div><div className="v">{hero.time||"—"}</div></div>
           </div></div>
-        <div className="ebx"><div className="b">{pct1(hero.edge)}</div><div className="k">EDGE</div></div>
+        <div className="ebx"><div className="b">{fmtEdgeFor(hero,sport)}</div><div className="k">EDGE</div></div>
         <div className="hR"><div className="ct">LINE MOVEMENT</div>
           <div className="cwrap">{hasChart?<HeroChart pts={pts}/>:<div className="livenum">{formatOdds(hero.odds)}<span className="livedot r"/></div>}
-            <div className="cap">{hasChart?<>{formatOdds(pts[0])} {String.fromCharCode(8594)} {formatOdds(pts[pts.length-1])} · since open</>:<>model {modelPct}% vs mkt {mktPct}%</>}</div></div></div>
+            <div className="cap">{hasChart?<>{formatOdds(pts[0])} {String.fromCharCode(8594)} {formatOdds(pts[pts.length-1])} · since open</>:(hero.modelProb!=null?<>model {modelPct}% vs mkt {mktPct}%</>:<>best price {formatOdds(hero.odds)}</>)}</div></div></div>
       </div>
       {moved
         ?<div className="hstrip"><span>⚡ Line moved {formatOdds(pts[0])} {String.fromCharCode(8594)} {formatOdds(pts[pts.length-1])} since open</span><span>›</span></div>
@@ -265,20 +285,21 @@ function LiveGameCard({g,info,navigate}){
   );
 }
 
-function EdgeRow({e,navigate}){
+function EdgeRow({e,navigate,sport="mlb"}){
   const model=Math.round((e.modelProb||0)*100);
   const conv=(e.conviction||"").toLowerCase();
   const ab=edgeTeam(e);
+  const lg=(SPORTS[sport]||SPORTS.mlb).lg;
   return (
-    <div className="erow" onClick={()=>e.gameId&&navigate(`/game/mlb/${e.gameId}`)}>
+    <div className="erow" onClick={()=>e.gameId&&navigate(`/game/${sport}/${e.gameId}`)}>
       <div className="etop">
-        <div className="eleft">{ab?<Logo ab={ab} size={30}/>:<span className="totg">O/U</span>}
+        <div className="eleft">{ab?<Logo ab={ab} size={30} lg={lg} col={colFor(ab,sport)}/>:<span className="totg">O/U</span>}
           <div className="elabel">{edgeLabel(e)} <span className="emu">{e.matchup}</span></div></div>
-        <div className={"epct "+((e.edge??0)>=0?"pos":"neg")}>{pct1(e.edge)}</div>
+        <div className={"epct "+((e.edge??0)>=0?"pos":"neg")}>{fmtEdgeFor(e,sport)}</div>
       </div>
       <div className="emid">
         <span className={"econv "+conv}>{e.conviction||"—"}</span>
-        <span className="emeta">{model}% model · {formatOdds(e.odds)}</span>
+        <span className="emeta">{e.modelProb!=null?`${model}% model · `:""}{formatOdds(e.odds)}</span>
         {e.inflation?.inflated&&<span className="einf">⚠ market inflated</span>}
       </div>
       {e.reason&&<div className="ereason">{e.reason}</div>}
