@@ -121,7 +121,7 @@ export default function HomePage(){
       <section className="panel">
         <div className="sh"><div className="l"><span className="i">📊</span>TODAY'S EDGE BOARD <span className="s">ranked by conviction</span></div>
           <div className="seg"><b className={board==="ml"?"on":""} onClick={()=>setBoard("ml")}>ML</b><b className={board==="totals"?"on":""} onClick={()=>setBoard("totals")}>Totals</b></div></div>
-        <div className="note" style={{marginTop:0,marginBottom:9}}>Today's top team plays — ML &amp; totals for every game, ranked by conviction. Player props live in the <span onClick={(ev)=>{ev.stopPropagation();navigate("/dashboard");}} style={{color:"#ff7a6c",fontWeight:700,cursor:"pointer"}}>Props tab →</span></div>
+        <div className="note" style={{marginTop:0,marginBottom:9}}>Today's top team plays — ML &amp; totals for every game, ranked by conviction. Player props live in the <span onClick={(ev)=>{ev.stopPropagation();navigate("/props");}} style={{color:"#ff7a6c",fontWeight:700,cursor:"pointer"}}>Props tab →</span></div>
         {boardEdges.length===0
           ?<div className="muted" style={{padding:"12px 2px"}}>No positive {board==="ml"?"moneyline":"totals"} edges on the board yet.</div>
           :<div className="elist">{boardEdges.map((x,i)=><EdgeRow key={x.gameId+x.side+i} e={x} navigate={navigate}/>)}</div>}
@@ -144,7 +144,7 @@ export default function HomePage(){
       {/* PLAYER PROPS — full board lives in the Props tab */}
       <section className="panel">
         <div className="sh"><div className="l"><span className="i">🎯</span>PLAYER PROPS</div></div>
-        <div className="propscta" onClick={()=>navigate("/dashboard")}>
+        <div className="propscta" onClick={()=>navigate("/props")}>
           <div><div className="pctah">Every prop with an edge — HR, hits &amp; strikeouts</div><div className="pctas">The full board lives in the Props tab — more options than before.</div></div>
           <span className="pctaarrow">→</span>
         </div>
@@ -185,7 +185,7 @@ export default function HomePage(){
     <nav className="nav">
       <a className="on"><span className="i">🏠</span>Home</a>
       <a onClick={()=>navigate("/games")}><span className="i">🗓️</span>Games</a>
-      <a onClick={()=>navigate("/dashboard")}><span className="i">⚾</span>Props</a>
+      <a onClick={()=>navigate("/props")}><span className="i">⚾</span>Props</a>
       <a onClick={()=>navigate("/odds")}><span className="i">💹</span>Market</a>
       <a onClick={()=>navigate("/performance")}><span className="i">📈</span>Performance</a>
       <a onClick={()=>navigate("/settings")}><span className="i">👤</span>Account</a>
