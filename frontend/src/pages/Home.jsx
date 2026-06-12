@@ -111,6 +111,12 @@ export default function HomePage(){
   const hitsP=(e.hitsPropEdges||[]).slice(0,6);
   const ksP=(e.kPropEdges||[]).slice(0,6);
   const propArr=propTab==="hr"?hrP:propTab==="hits"?hitsP:propTab==="ks"?ksP:[];
+  const mkProp=(p,kind)=>kind==="hr"
+    ?{k:"hr"+(p.playerId||p.player),name:p.player,tag:"HR",edge:p.edge??0}
+    :kind==="hits"
+    ?{k:"h"+(p.playerId||p.player),name:p.player,tag:(p.line===0.5?"1+ Hits":`Hits ${p.side==="under"?"U":"O"}${p.line}`),edge:p.edge??0}
+    :{k:"k"+(p.playerId||p.player),name:p.player,tag:`K ${p.side==="under"?"U":"O"}${p.line}`,edge:p.edge??0};
+  const topProps=[...hitsP.map(x=>mkProp(x,"hits")),...ksP.map(x=>mkProp(x,"ks")),...hrP.map(x=>mkProp(x,"hr"))].sort((a,b)=>(b.edge-a.edge)).slice(0,4);
   const parks=games.filter(g=>g.parkRunFactor!=null).slice(0,8);
   const upcoming=games.filter(g=>g.status!=="final").slice(0,6);
   const abbrById={}; games.forEach(g=>{ abbrById[g.id]={a:g.awayAbbr||shortTeam(g.away||""),h:g.homeAbbr||shortTeam(g.home||"")}; });
@@ -173,10 +179,23 @@ export default function HomePage(){
       {/* PLAYER PROPS — full board lives in the Props tab (per sport) */}
       {sp.hasProps&&(<section className="panel">
         <div className="sh"><div className="l"><span className="i">🎯</span>PLAYER PROPS</div></div>
-        <div className="propscta" onClick={()=>navigate("/props")}>
-          <div><div className="pctah">{sp.propsCopy}</div><div className="pctas">The full board lives in the Props tab — more options than before.</div></div>
-          <span className="pctaarrow">→</span>
-        </div>
+        {topProps.length>0?(
+          <div className="ppgrid">
+            {topProps.map(p=>(
+              <div key={p.k} className="ppgcard" onClick={()=>navigate("/props")}>
+                <div className="ppgname">{p.name}</div>
+                <div className="ppgtag">{p.tag}</div>
+                <div className="ppgedge" style={{color:p.edge>=0?"#33e991":"#ff5d4d"}}>{p.edge>=0?"+":""}{(p.edge*100).toFixed(1)}%</div>
+              </div>
+            ))}
+          </div>
+        ):(
+          <div className="propscta" onClick={()=>navigate("/props")}>
+            <div><div className="pctah">{sp.propsCopy}</div><div className="pctas">The full board lives in the Props tab — more options than before.</div></div>
+            <span className="pctaarrow">→</span>
+          </div>
+        )}
+        {topProps.length>0&&<div className="ppseeall" onClick={()=>navigate("/props")}>See all props →</div>}
       </section>)}
 
       {/* PARK FACTORS */}
@@ -236,7 +255,13 @@ function HeroChart({pts}){
       <defs><linearGradient id="hgrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={col} stopOpacity="0.3"/><stop offset="100%" stopColor={col} stopOpacity="0"/></linearGradient></defs>
       <path d={area} fill="url(#hgrad)"/>
       <path d={line} fill="none" stroke={col} strokeWidth="2" strokeLinejoin="round"/>
-      <circle cx={X(n-1)} cy={Y(pts[n-1])} r="3" fill={col}/>
+      <circle cx={X(n-1)} cy={Y(pts[n-1])} r="3" fill="none" stroke={col} strokeWidth="1.5" opacity="0.6">
+        <animate attributeName="r" values="3;9" dur="1.3s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="0.6;0" dur="1.3s" repeatCount="indefinite"/>
+      </circle>
+      <circle cx={X(n-1)} cy={Y(pts[n-1])} r="3" fill={col}>
+        <animate attributeName="opacity" values="1;0.35;1" dur="1.3s" repeatCount="indefinite"/>
+      </circle>
     </svg>
   );
 }
@@ -459,6 +484,14 @@ section{padding:13px 12px 2px;margin:0;border-top:1px solid #161d24}
 .wxrow{display:flex;align-items:center;gap:7px;margin-top:9px;padding-top:8px;border-top:1px solid rgba(255,255,255,.07);font-size:11.5px;color:#dbe4e2;font-weight:600}.wxrow .wi{font-size:14px}
 .propscta{display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid rgba(155,123,255,.28);border-radius:12px;background:rgba(155,123,255,.06);padding:12px 14px;cursor:pointer}
 .pctah{font-weight:800;font-size:13px;color:#eaf1ee}.pctas{font-size:10.5px;color:#8a99a2;font-weight:500;margin-top:3px;line-height:1.35}.pctaarrow{font-size:18px;color:#bba6ff;font-weight:800;flex:0 0 auto}
+.ppgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.ppgcard{border:1px solid rgba(155,123,255,.22);border-radius:11px;background:rgba(155,123,255,.05);padding:10px 11px;cursor:pointer;display:flex;flex-direction:column;gap:2px;min-width:0}
+.ppgcard:active{background:rgba(155,123,255,.12)}
+.ppgname{font-weight:800;font-size:12.5px;color:#eaf1ee;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ppgtag{font-size:10px;color:#8a99a2;font-weight:600}
+.ppgedge{font-size:14px;font-weight:900;margin-top:1px}
+.ppseeall{margin-top:9px;text-align:center;font-size:12px;font-weight:800;color:#bba6ff;cursor:pointer;border:1px solid rgba(155,123,255,.28);border-radius:10px;padding:9px;background:rgba(155,123,255,.06)}
+.ppseeall:active{background:rgba(155,123,255,.12)}
 .dots{display:flex;justify-content:center;gap:5px;margin-top:8px}.dots i{width:5px;height:5px;border-radius:50%;background:#222c33;transition:.25s}.dots i.on{width:14px;border-radius:3px;background:#ff5d4d}
 .prh{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}.wkbox{position:absolute;top:10px;right:10px;border:1px solid rgba(243,185,79,.3);border-radius:9px;background:rgba(243,185,79,.06);padding:4px 8px;text-align:center}.wkbox .t{font-size:7px;letter-spacing:.4px;color:#f3b94f;font-weight:800}.wkbox .r{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:18px;color:#fff;line-height:1.05}.wkbox .u{font-size:9px;font-weight:700;margin-top:1px}.wkbox .u.pos{color:#33e991}.wkbox .u.neg{color:#ff5a5a}
 .tw{display:grid;grid-template-columns:1fr 1fr;gap:9px}
