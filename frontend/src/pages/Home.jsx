@@ -79,12 +79,10 @@ export default function HomePage(){
   const pool=[...(e.moneylineEdges||[]),...(e.totalsEdges||[])].filter(x=>x.convictionScore!=null&&(x.conviction==="HIGH"||x.conviction==="MEDIUM")&&(x.edge??0)>0);
   pool.sort((a,b)=>(b.convictionScore-a.convictionScore)||((b.edge??0)-(a.edge??0)));
   const hero=pool[0]||null;
-  const boardArr=(board==="ml"?e.moneylineEdges:e.totalsEdges)||[];
-  const top4=oneSidePerGame(boardArr).filter(x=>(x.edge??0)>0).sort((a,b)=>(b.edge??0)-(a.edge??0)).slice(0,4);
+  const boardEdges=oneSidePerGame((board==="ml"?e.moneylineEdges:e.totalsEdges)||[]).filter(x=>(x.edge??0)>0).sort((a,b)=>((b.convictionScore||0)-(a.convictionScore||0))||((b.edge||0)-(a.edge||0)));
   const moverPool=[...(e.moneylineEdges||[]),...(e.totalsEdges||[])].map(x=>{ const ser=seriesFor(x); const open=(ser&&ser.length)?ser[0].o:null; const now=(ser&&ser.length)?ser[ser.length-1].o:x.odds; const delta=(open!=null&&ser&&ser.length>1)?now-open:null; return {...x,_open:open,_now:now,_delta:delta}; });
   const movers=moverPool.sort((a,b)=>{ const ad=a._delta==null?-1:Math.abs(a._delta); const bd=b._delta==null?-1:Math.abs(b._delta); return (bd-ad)||((b.edge??0)-(a.edge??0)); }).slice(0,6);
   const hasMoves=movers.some(m=>m._delta!=null);
-  const allEdges=[...oneSidePerGame(e.moneylineEdges||[]),...oneSidePerGame(e.totalsEdges||[])].filter(x=>(x.edge??0)>0).sort((a,b)=>((b.convictionScore||0)-(a.convictionScore||0))||((b.edge||0)-(a.edge||0)));
   const hrP=(e.hrPropEdges||[]).slice(0,6);
   const hitsP=(e.hitsPropEdges||[]).slice(0,6);
   const ksP=(e.kPropEdges||[]).slice(0,6);
@@ -120,27 +118,14 @@ export default function HomePage(){
         <Carousel>{liveGames.map(g=><LiveGameCard key={g.gameId} g={g} info={abbrById[g.gameId]} navigate={navigate}/>)}</Carousel>
       </section>)}
 
-      {/* EDGE BOARD */}
+      {/* EDGE BOARD — unified reasoned edges with a market toggle */}
       <section className="panel">
-        <div className="sh"><div className="l"><span className="i">📊</span>TODAY'S EDGE BOARD</div>
+        <div className="sh"><div className="l"><span className="i">📊</span>TODAY'S EDGE BOARD <span className="s">ranked by conviction</span></div>
           <div className="seg"><b className={board==="ml"?"on":""} onClick={()=>setBoard("ml")}>ML</b><b className={board==="totals"?"on":""} onClick={()=>setBoard("totals")}>Totals</b></div></div>
-        <div className="eg" style={{gridTemplateColumns:`repeat(${Math.min(Math.max(top4.length,2),4)},1fr)`}}>
-          {top4.length===0&&<div className="muted">No positive edges in this market yet.</div>}
-          {top4.map(x=>{ const k=x.gameId+x.side; const ab=edgeTeam(x);
-            return (<div key={k} className="ec" onClick={()=>x.gameId&&navigate(`/game/mlb/${x.gameId}`)}>
-              <div className="r1">{ab?<Logo ab={ab} size={30}/>:<span className="tot">📊</span>}<div><div className="nm">{edgeLabel(x)}</div><div className="vs">{x.matchup}</div></div></div>
-              <div className={"conv "+((x.conviction||"").toLowerCase())}>{x.conviction||"—"}</div>
-              <div className={"pc"+(flash[k]?" fl-"+flash[k]:"")}>{pct1(x.edge)}</div>
-              <div className="md">{Math.round((x.modelProb||0)*100)}% model</div>
-            </div>);})}
-        </div>
+        {boardEdges.length===0
+          ?<div className="muted" style={{padding:"12px 2px"}}>No positive {board==="ml"?"moneyline":"totals"} edges on the board yet.</div>
+          :<div className="elist">{boardEdges.map((x,i)=><EdgeRow key={x.gameId+x.side+i} e={x} navigate={navigate}/>)}</div>}
       </section>
-
-      {/* ALL EDGES — full reasoned list (the Top Plays experience, now on Home) */}
-      {allEdges.length>0&&(<section className="panel">
-        <div className="sh"><div className="l"><span className="i">📋</span>ALL EDGES <span className="s">ranked by conviction</span></div></div>
-        <div className="elist">{allEdges.map((x,i)=><EdgeRow key={x.gameId+x.side+i} e={x} navigate={navigate}/>)}</div>
-      </section>)}
 
       {/* MARKET MOVERS */}
       <section className="panel">
@@ -284,10 +269,12 @@ function LiveGameCard({g,info,navigate}){
 function EdgeRow({e,navigate}){
   const model=Math.round((e.modelProb||0)*100);
   const conv=(e.conviction||"").toLowerCase();
+  const ab=edgeTeam(e);
   return (
     <div className="erow" onClick={()=>e.gameId&&navigate(`/game/mlb/${e.gameId}`)}>
       <div className="etop">
-        <div className="elabel">{edgeLabel(e)} <span className="emu">{e.matchup}</span></div>
+        <div className="eleft">{ab?<Logo ab={ab} size={30}/>:<span className="totg">O/U</span>}
+          <div className="elabel">{edgeLabel(e)} <span className="emu">{e.matchup}</span></div></div>
         <div className={"epct "+((e.edge??0)>=0?"pos":"neg")}>{pct1(e.edge)}</div>
       </div>
       <div className="emid">
@@ -414,7 +401,9 @@ section{padding:13px 12px 2px;margin:0;border-top:1px solid #161d24}
 .lgedge{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:16px;flex:0 0 auto}.lgedge.pos{color:#33e991}.lgedge.neg{color:#ff5a5a}
 .elist{display:flex;flex-direction:column;gap:7px}
 .erow{border:1px solid #1a232c;border-radius:12px;background:linear-gradient(180deg,#0d1218,#090d12);padding:10px 12px}
-.etop{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.etop{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.eleft{display:flex;align-items:center;gap:9px;min-width:0;flex:1}
+.totg{width:30px;height:30px;border-radius:50%;background:rgba(155,123,255,.14);border:1px solid rgba(155,123,255,.32);display:inline-flex;align-items:center;justify-content:center;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:11px;color:#bba6ff;flex:0 0 auto}
 .elabel{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:17px;color:#fff;min-width:0}
 .elabel .emu{font-family:'Inter',sans-serif;font-weight:600;font-size:10px;color:#8a99a2;margin-left:6px}
 .epct{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:20px;line-height:1;flex:0 0 auto}.epct.pos{color:#33e991}.epct.neg{color:#ff5a5a}
