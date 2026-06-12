@@ -40,7 +40,8 @@ export default function PropsPage() {
   return (
     <div style={{ minHeight: "100vh", background: "#000", color: "#f2f6f4", fontFamily: "'Inter',system-ui,-apple-system,sans-serif" }}>
       <style>{CSS}</style>
-      <BottomNav desktop />
+      <BottomNav />
+      <div className="ppsb"><Sidebar user={user} plan={plan} signOut={signOut} navigate={navigate} /></div>
       <div className="ppwrap">
         <div className="pphead">
           <div className="pptitle"><span className="b">Player</span> Props</div>
@@ -140,4 +141,13 @@ const CSS = `
 .ppwarn{border:1px solid rgba(243,185,79,.32);background:rgba(243,185,79,.08);border-radius:10px;padding:10px 12px;font-size:11px;color:#f3c66b;font-weight:600;line-height:1.45;margin-bottom:12px}.ppwarn b{color:#ffd98a}
 .ppmuted{color:#6b7681;font-size:13px;font-weight:600;padding:24px 4px;text-align:center}
 .ppnote{font-size:10.5px;color:#54616b;font-weight:600;margin-top:14px;line-height:1.4}
+.ppsb{display:none}
+/* ---- DESKTOP: left sidebar shell (same as the Performance page) ---- */
+@media (min-width:769px){
+  .ppsb{display:block}
+  .ppwrap{margin-left:200px;max-width:1240px;padding:30px 26px 60px}
+  .pptitle{font-size:40px}
+  .pptabs{max-width:620px}
+  .pplist{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:10px}
+}
 `;
