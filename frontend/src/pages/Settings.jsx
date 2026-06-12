@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { subscriptionApi } from "../lib/api";
 import Sidebar from "./Sidebar";
+import BottomNav from "./BottomNav";
 
 export default function SettingsPage() {
   const { user, signOut } = useAuth();
@@ -49,6 +50,7 @@ export default function SettingsPage() {
       `}</style>
 
       {/* Desktop sidebar */}
+      <BottomNav />
       <div className="desktop-sidebar">
         <Sidebar user={user} plan={plan} signOut={signOut} navigate={navigate} />
       </div>
