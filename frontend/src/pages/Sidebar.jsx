@@ -12,7 +12,7 @@ export default function Sidebar({ user, plan, signOut, navigate }) {
     <div style={sidebarStyle}>
       {/* Logo — clickable, goes to dashboard and closes drawer */}
       <div
-        onClick={() => navigate("/dashboard")}
+        onClick={() => navigate("/home")}
         style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 24, padding: "4px 8px", cursor: "pointer" }}
       >
         <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#1D9E75", display: "inline-block", animation: "pulse 2s infinite" }} />
@@ -22,10 +22,16 @@ export default function Sidebar({ user, plan, signOut, navigate }) {
       </div>
       {/* Main — daily-use tools */}
       <NavLink
-        to="/dashboard"
-        active={isActive("/dashboard")}
-        icon="📊"
-        label="Edges"
+        to="/home"
+        active={isActive("/home")}
+        icon="🏠"
+        label="Home"
+      />
+      <NavLink
+        to="/props"
+        active={isActive("/props")}
+        icon="⚾"
+        label="Player Props"
       />
       <NavLink
         to="/odds"
