@@ -64,6 +64,7 @@ export default function PerformancePage() {
       </div>
       <div className="main-content" style={{ marginLeft: 200 }}>
         <div className="perf-content" style={{ maxWidth: 900, margin: "0 auto", padding: "32px 24px 80px", animation: "fadeIn .3s ease" }}>
+          <div onClick={() => navigate(-1)} style={{ color: "#6b7280", fontSize: 13, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6, marginBottom: 14, userSelect: "none" }}>← Back</div>
           <h1 style={{ margin: "0 0 8px", fontSize: 28, fontWeight: 700, letterSpacing: "-0.01em" }}>📈 Model Performance</h1>
           <p style={{ margin: "0 0 20px", fontSize: 13, color: "#9ca3af" }}>
             How the model's edges have actually performed · each sport tracked separately
