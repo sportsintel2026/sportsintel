@@ -175,7 +175,7 @@ function PropRow({ p, type, rank, navigate }) {
 function NbaPropRow({ p, market, rank, navigate }) {
   const ab = shortTeam(p.teamAbbr || p.game || ""); const col = nbaCol(ab);
   const over = p.side === "OVER";
-  const sideCol = over ? "#33e991" : "#5fb8ff";
+  const sideCol = over ? "#33e991" : "#ff5d52";
   const e = p.edge ?? 0;
   return (
     <div className="pprow" onClick={() => p.gameId && navigate(`/game/nba/${p.gameId}`)}>
@@ -193,7 +193,7 @@ function NbaPropRow({ p, market, rank, navigate }) {
       <div className="ppright">
         <div className="pppct" style={{ color: sideCol }}>{p.projection}</div>
         <div className="pplbl">proj {NBA_MK[market]}</div>
-        <div className="ppedge" style={{ color: sideCol, background: over ? "rgba(51,233,145,.12)" : "rgba(95,184,255,.12)" }}>{e >= 0 ? "+" : ""}{e}{p.flagged ? " ⚑" : ""}</div>
+        <div className="ppedge" style={{ color: sideCol, background: over ? "rgba(51,233,145,.12)" : "rgba(255,93,82,.12)" }}>{over ? "▲" : "▼"} {e >= 0 ? "+" : ""}{e}{p.flagged ? " ⚑" : ""}</div>
       </div>
     </div>
   );
