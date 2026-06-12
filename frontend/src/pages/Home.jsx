@@ -111,11 +111,12 @@ export default function HomePage(){
   const hitsP=(e.hitsPropEdges||[]).slice(0,6);
   const ksP=(e.kPropEdges||[]).slice(0,6);
   const propArr=propTab==="hr"?hrP:propTab==="hits"?hitsP:propTab==="ks"?ksP:[];
-  const mkProp=(p,kind)=>kind==="hr"
-    ?{k:"hr"+(p.playerId||p.player),id:p.playerId,name:p.player,tag:"HR",edge:p.edge??0}
-    :kind==="hits"
-    ?{k:"h"+(p.playerId||p.player),id:p.playerId,name:p.player,tag:(p.line===0.5?"1+ Hits":`Hits ${p.side==="under"?"U":"O"}${p.line}`),edge:p.edge??0}
-    :{k:"k"+(p.playerId||p.player),id:p.playerId,name:p.player,tag:`K ${p.side==="under"?"U":"O"}${p.line}`,edge:p.edge??0};
+  const mkProp=(p,kind)=>{
+    const b={k:kind+(p.playerId||p.player),id:p.playerId,name:p.player,team:p.team,game:p.game,edge:p.edge??0,odds:p.odds};
+    if(kind==="hr") return {...b,market:"HR",betSide:"O 0.5 HR"};
+    if(kind==="hits") return {...b,market:"HITS",betSide:(p.line===0.5?"1+ Hits":`${p.side==="under"?"U":"O"} ${p.line} Hits`)};
+    return {...b,market:"K",betSide:`K ${p.side==="under"?"U":"O"}${p.line}`};
+  };
   const topProps=[...hitsP.map(x=>mkProp(x,"hits")),...ksP.map(x=>mkProp(x,"ks")),...hrP.map(x=>mkProp(x,"hr"))].sort((a,b)=>(b.edge-a.edge)).slice(0,4);
   const parks=games.filter(g=>g.parkRunFactor!=null).slice(0,8);
   const upcoming=games.filter(g=>g.status!=="final").slice(0,6);
@@ -180,17 +181,30 @@ export default function HomePage(){
       {sp.hasProps&&(<section className="panel">
         <div className="sh"><div className="l"><span className="i">🎯</span>PLAYER PROPS</div></div>
         {topProps.length>0?(
-          <div className="ppgrid">
-            {topProps.map(p=>(
-              <div key={p.k} className="ppgcard" onClick={()=>navigate("/props")}>
-                <div className="ppgav">{p.id&&<img src={`https://midfield.mlbstatic.com/v1/people/${p.id}/spots/120`} alt="" onError={(ev)=>{ev.currentTarget.style.display="none";}}/>}</div>
-                <div className="ppgbody">
-                  <div className="ppgname">{p.name}</div>
-                  <div className="ppgtag">{p.tag}</div>
-                  <div className="ppgedge" style={{color:p.edge>=0?"#33e991":"#ff5d4d"}}>{p.edge>=0?"+":""}{(p.edge*100).toFixed(1)}%</div>
+          <div className="prgrid">
+            {topProps.map((p,i)=>{
+              const col=teamCol(shortTeam(p.team||p.game||""));
+              const pos=p.edge>=0;
+              return (
+                <div key={p.k} className="prcard" onClick={()=>navigate("/props")}>
+                  <div className="prrank">{i+1}</div>
+                  <div className="prhead">
+                    <div className="prav" style={{boxShadow:`0 0 0 2px ${col}`,background:`radial-gradient(circle at 50% 30%, ${col}55, #0c1018 82%)`}}>
+                      {p.id?<img src={`https://midfield.mlbstatic.com/v1/people/${p.id}/spots/120`} alt="" onError={(ev)=>{ev.currentTarget.style.display="none";}}/>:<span>{p.market==="K"?"⚾":"🧢"}</span>}
+                    </div>
+                    <div className="prmeta">
+                      <div className="prname">{p.name}</div>
+                      <div className="prmu">{p.game||p.team||""}</div>
+                    </div>
+                  </div>
+                  <div className="predgewrap">
+                    <span className="predge" style={{color:pos?"#33e991":"#ff5d4d"}}>{pos?"+":""}{(p.edge*100).toFixed(1)}%</span>
+                    <span className="prlbl">{p.market} EDGE</span>
+                  </div>
+                  <div className="prbet"><span className="prbetL">{p.betSide}</span><span className="prbetR">{formatOdds(p.odds)}</span></div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ):(
           <div className="propscta" onClick={()=>navigate("/props")}>
@@ -487,16 +501,23 @@ section{padding:13px 12px 2px;margin:0;border-top:1px solid #161d24}
 .wxrow{display:flex;align-items:center;gap:7px;margin-top:9px;padding-top:8px;border-top:1px solid rgba(255,255,255,.07);font-size:11.5px;color:#dbe4e2;font-weight:600}.wxrow .wi{font-size:14px}
 .propscta{display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid rgba(155,123,255,.28);border-radius:12px;background:rgba(155,123,255,.06);padding:12px 14px;cursor:pointer}
 .pctah{font-weight:800;font-size:13px;color:#eaf1ee}.pctas{font-size:10.5px;color:#8a99a2;font-weight:500;margin-top:3px;line-height:1.35}.pctaarrow{font-size:18px;color:#bba6ff;font-weight:800;flex:0 0 auto}
-.ppgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.ppgcard{border:1px solid rgba(155,123,255,.22);border-radius:11px;background:rgba(155,123,255,.05);padding:9px 10px;cursor:pointer;display:flex;align-items:center;gap:9px;min-width:0}
-.ppgcard:active{background:rgba(155,123,255,.12)}
-.ppgav{width:40px;height:40px;border-radius:50%;flex:0 0 auto;background:radial-gradient(circle at 50% 32%,#2a3647,#0c1018 80%);overflow:hidden;display:flex;align-items:flex-end;justify-content:center}
-.ppgav img{width:100%;height:100%;object-fit:cover;object-position:top center}
-.ppgbody{min-width:0;display:flex;flex-direction:column;gap:1px}
-.ppgname{font-weight:800;font-size:12.5px;color:#eaf1ee;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.ppgtag{font-size:10px;color:#8a99a2;font-weight:600}
-.ppgedge{font-size:14px;font-weight:900;margin-top:1px}
-.ppseeall{margin-top:9px;text-align:center;font-size:12px;font-weight:800;color:#bba6ff;cursor:pointer;border:1px solid rgba(155,123,255,.28);border-radius:10px;padding:9px;background:rgba(155,123,255,.06)}
+.prgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.prcard{position:relative;border:1px solid rgba(155,123,255,.22);border-radius:14px;background:linear-gradient(180deg,rgba(155,123,255,.08),rgba(155,123,255,.02));padding:12px 11px 10px;cursor:pointer;display:flex;flex-direction:column;gap:8px;min-width:0}
+.prcard:active{background:rgba(155,123,255,.13)}
+.prrank{position:absolute;top:9px;left:9px;width:19px;height:19px;border-radius:7px;background:rgba(155,123,255,.92);color:#fff;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center;line-height:1;z-index:1}
+.prhead{display:flex;align-items:center;gap:8px;padding-left:15px}
+.prav{width:44px;height:44px;border-radius:50%;flex:0 0 auto;overflow:hidden;display:flex;align-items:flex-end;justify-content:center;font-size:20px;position:relative}
+.prav img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:top center}
+.prmeta{min-width:0;flex:1}
+.prname{font-weight:800;font-size:13.5px;color:#eaf1ee;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prmu{font-size:10px;color:#8a99a2;font-weight:600;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.predgewrap{display:flex;align-items:baseline;gap:7px;padding-left:2px}
+.predge{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:26px;line-height:.9}
+.prlbl{font-size:8.5px;letter-spacing:.4px;color:#8a99a2;font-weight:800}
+.prbet{display:flex;align-items:center;justify-content:space-between;border:1px solid rgba(155,123,255,.3);border-radius:10px;background:rgba(155,123,255,.08);padding:8px 11px}
+.prbetL{font-weight:800;font-size:12px;color:#dbe4e2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prbetR{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:14px;color:#bba6ff;flex:0 0 auto;margin-left:8px}
+.ppseeall{margin-top:11px;text-align:center;font-size:12px;font-weight:800;color:#bba6ff;cursor:pointer;border:1px solid rgba(155,123,255,.28);border-radius:10px;padding:9px;background:rgba(155,123,255,.06)}
 .ppseeall:active{background:rgba(155,123,255,.12)}
 .dots{display:flex;justify-content:center;gap:5px;margin-top:8px}.dots i{width:5px;height:5px;border-radius:50%;background:#222c33;transition:.25s}.dots i.on{width:14px;border-radius:3px;background:#ff5d4d}
 .prh{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}.wkbox{position:absolute;top:10px;right:10px;border:1px solid rgba(243,185,79,.3);border-radius:9px;background:rgba(243,185,79,.06);padding:4px 8px;text-align:center}.wkbox .t{font-size:7px;letter-spacing:.4px;color:#f3b94f;font-weight:800}.wkbox .r{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:18px;color:#fff;line-height:1.05}.wkbox .u{font-size:9px;font-weight:700;margin-top:1px}.wkbox .u.pos{color:#33e991}.wkbox .u.neg{color:#ff5a5a}
