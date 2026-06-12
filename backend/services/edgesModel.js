@@ -264,7 +264,7 @@ function calculateTotalProjection(game, awayPitcher, homePitcher, awayTeamHit, h
 const HR_PERPA_CAP = 0.05;    // per-PA HR ceiling. Over ~4.3 PA → game-prob tops ~20% (realistic elite ceiling).
 const HR_FACTOR_DAMP = 0.5;   // pull the COMBINED env multiplier toward 1 (^0.5 = sqrt): still tilts, can't stack into a lock.
 const HR_PROB_SHRINK = 0.55;  // shrink the adjusted per-PA rate 45% back toward the batter's OWN base rate (tightened from 0.7 — the env stack was over-inflating).
-const HR_MIN_DISPLAY_PROB = 0.08; // HR picks are RANKED BY LIKELIHOOD, not a fake edge. Show only batters with ≥8% game HR chance (genuinely elevated power), top-N by hrProb.
+const HR_MIN_DISPLAY_PROB = 0.06; // HR picks are RANKED BY LIKELIHOOD, not a fake edge. Widened from 0.08 → 0.06 for a fuller props board; shows batters with ≥6% game HR chance, ranked by hrProb.
 
 // ── HR MODEL v2 INPUTS (2026-06-06) ───────────────────────────────────────────
 // Three new signals layered on the calibrated base. Each is bounded so it tilts
@@ -373,7 +373,7 @@ function marketCapMult(bvp, americanOdds) {
 // driver of the -7.2% HR ROI). 0.025 = the MEDIUM confidence tier (see
 // rateConfidence). Applies to HR / strikeouts / hits. Lower to 0.005 (LOW+) for
 // more volume, raise to 0.05 (HIGH-only) for fewer/stronger picks.
-const MIN_PROP_EDGE = 0.025;
+const MIN_PROP_EDGE = 0.015; // widened from 0.025 → 0.015 for a fuller props board; keeps a real ~1.5% edge floor (no coin-flips dressed up as edges).
 
 function calculateHRProbability(batterStats, opposingPitcherStats, game, weather, recent15, statcast, bvp, battingOrder) {
   if (!batterStats) return null;
@@ -756,7 +756,7 @@ function overreactionNote(modelProb, thisOdds, otherOdds) {
 }
 
 // ── ORCHESTRATION ─────────────────────────────────────────────────────────────
-const MAX_HR_GAMES = 5;
+const MAX_HR_GAMES = 20;   // process all games we have odds for. Actual coverage/cost is gated in edges.js (getMLBHRPropsForAllEvents maxEvents — currently 10). Keep this >= that.
 // ── CONVICTION (v0.6) ─────────────────────────────────────────────────────────
 // Conviction is ORTHOGONAL to edge. Edge = how much value vs the line; conviction
 // = how much we trust the projection behind it, 0–100, from three signals the
@@ -1379,7 +1379,7 @@ async function calculateHRPropEdges(games, hrOddsByEvent) {
     .sort((a, b) => (b.hrProb ?? -1) - (a.hrProb ?? -1)); // most likely to homer first
 }
 
-const MAX_K_GAMES = 8; // cap games we pull K props for (Odds API credit budget)
+const MAX_K_GAMES = 20; // process all games we have odds for. Coverage/cost gated in edges.js (getMLBStrikeoutPropsForAllEvents maxEvents — currently 10). Keep >= that.
 
 // Match a prop's pitcher name to one of the game's two probable starters.
 function findProbableStarter(playerName, game) {
@@ -1462,7 +1462,7 @@ async function calculateStrikeoutPropEdges(games, kOddsByEvent) {
     .sort((a, b) => (b.edge ?? -1) - (a.edge ?? -1));
 }
 
-const MAX_HITS_GAMES = 6; // cap games we pull hits props for (credit budget)
+const MAX_HITS_GAMES = 20; // process all games we have odds for. Coverage/cost gated in edges.js (getMLBHitsPropsForAllEvents maxEvents — currently 10). Keep >= that.
 
 // Batter hits prop edges. Two-sided market — de-vig and take the better side.
 // Mirrors calculateHRPropEdges (per batter) with the strikeout build's de-vig.
