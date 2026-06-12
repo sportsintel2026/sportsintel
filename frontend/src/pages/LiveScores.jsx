@@ -8,6 +8,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { subscriptionApi, scoresApi } from "../lib/api";
 import Sidebar from "./Sidebar";
+import BottomNav from "./BottomNav";
 
 const LEAGUE_META = {
   mlb: { icon: "⚾", title: "MLB Games", periodLabel: "Inn" },
@@ -18,7 +19,8 @@ const LEAGUE_META = {
 };
 
 export default function LiveScoresPage({ league = "mlb" }) {
-  const meta = LEAGUE_META[league] || LEAGUE_META.mlb;
+  const [activeLeague, setActiveLeague] = useState(league);
+  const meta = LEAGUE_META[activeLeague] || LEAGUE_META.mlb;
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const [plan, setPlan] = useState({ tier: "free", isAdmin: false });
@@ -35,7 +37,7 @@ export default function LiveScoresPage({ league = "mlb" }) {
     if (showSpinner) setLoading(true);
     setError(false);
     try {
-      const d = await scoresApi.getScores(league);
+      const d = await scoresApi.getScores(activeLeague);
       setData(d);
       setRefreshedAt(new Date());
     } catch (e) {
@@ -43,7 +45,7 @@ export default function LiveScoresPage({ league = "mlb" }) {
       if (showSpinner) setError(true);
     }
     if (showSpinner) setLoading(false);
-  }, [league]);
+  }, [activeLeague]);
 
   // initial load + 30s auto-refresh (silent)
   useEffect(() => {
@@ -81,6 +83,7 @@ export default function LiveScoresPage({ league = "mlb" }) {
         }
       `}</style>
 
+      <BottomNav />
       <div className="desktop-sidebar">
         <Sidebar user={user} plan={plan} signOut={signOut} navigate={navigate} />
       </div>
@@ -111,28 +114,47 @@ export default function LiveScoresPage({ league = "mlb" }) {
               </span>
             )}
           </div>
-          <p style={{ margin: "0 0 24px", fontSize: 13, color: "#9ca3af" }}>
+          <p style={{ margin: "0 0 14px", fontSize: 13, color: "#9ca3af" }}>
             Live scores · <span style={{ color: "#ef4444", fontWeight: 600 }}>tap a game</span> for the box score & full analysis
           </p>
 
+          <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4, marginBottom: 22, scrollbarWidth: "none" }}>
+            {Object.keys(LEAGUE_META).map((lg) => {
+              const m = LEAGUE_META[lg];
+              const on = lg === activeLeague;
+              return (
+                <button key={lg} onClick={() => setActiveLeague(lg)} style={{
+                  flex: "0 0 auto", display: "inline-flex", alignItems: "center", gap: 6,
+                  padding: "7px 15px", borderRadius: 999, cursor: "pointer", whiteSpace: "nowrap",
+                  fontSize: 13, fontWeight: 700, fontFamily: "inherit",
+                  border: on ? "1px solid #ef4444" : "1px solid #1f2937",
+                  background: on ? "rgba(239,68,68,0.12)" : "#0e131b",
+                  color: on ? "#fff" : "#9ca3af",
+                }}>
+                  <span style={{ fontSize: 15 }}>{m.icon}</span>{lg.toUpperCase()}
+                </button>
+              );
+            })}
+          </div>
+
           {loading && <Loader />}
           {!loading && error && <ErrorState onRetry={() => load(true)} />}
-          {!loading && !error && total === 0 && <EmptyState icon={meta.icon} league={league} />}
+          {!loading && !error && total === 0 && <EmptyState icon={meta.icon} league={activeLeague} />}
           {!loading && !error && total > 0 && (
             <>
               {live.length > 0 && (
                 <Section title="LIVE NOW" color="#ef4444" count={live.length} defaultOpen liveDot>
-                  {live.map((g) => <GameCard key={g.id} g={g} league={league} meta={meta} />)}
+                  {live.map((g) => <GameCard key={g.id} g={g} league={activeLeague} meta={meta} />)}
                 </Section>
               )}
               {upcoming.length > 0 && (
                 <Section title="UPCOMING" color="#9ca3af" count={upcoming.length} defaultOpen>
-                  {upcoming.map((g) => <GameCard key={g.id} g={g} league={league} meta={meta} />)}
+                  {upcoming.map((g) => <GameCard key={g.id} g={g} league={activeLeague} meta={meta} />)}
                 </Section>
               )}
               {final.length > 0 && (
                 <Section title="FINAL" color="#22c55e" count={final.length} defaultOpen={live.length === 0}>
-                  {final.map((g) => <GameCard key={g.id} g={g} league={league} meta={meta} />)}
+                  {final.map((g) => <GameCard key={g.id} g={g} league={activeLeague} meta={meta} />)}
                 </Section>
               )}
             </>
