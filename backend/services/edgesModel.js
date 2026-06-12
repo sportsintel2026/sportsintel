@@ -1107,7 +1107,13 @@ async function calculateGameEdges(game, oddsForGame) {
   const homeRLOdds = odds.spreads?.home ?? null;
   const awayRLOdds = odds.spreads?.away ?? null;
   let homeCoverProb = null, awayCoverProb = null, homeRLEdge = null, awayRLEdge = null;
-  if (homeRLLine != null && awayRLLine != null && homeRLOdds != null && awayRLOdds != null) {
+  // A valid run line is a matched pair: one side -1.5, the other +1.5. If the two
+  // lines aren't exact opposites (e.g. corrupt odds quoting BOTH teams at -1.5), the
+  // data is incoherent — skip the run line rather than price a phantom edge.
+  const validRunLine = homeRLLine != null && awayRLLine != null
+    && homeRLOdds != null && awayRLOdds != null
+    && homeRLLine === -awayRLLine;
+  if (validRunLine) {
     // Derive the margin from the market-BLENDED win prob — the same humility the
     // moneyline edge gets. Using the raw win prob lets an overconfident model
     // inflate the run line into implausible cover %s and edges.
