@@ -14,7 +14,9 @@ export default function SettingsPage() {
   const [portalLoading, setPortalLoading] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
-  const isAdmin = plan.isAdmin === true;
+  // Recognize the owner by email too (same gate as the /admin page), so the admin
+  // tools show even if the plan flag isn't set on the account.
+  const isAdmin = plan.isAdmin === true || user?.email === "r7002g@gmail.com";
   const isPro = plan.tier === "pro" || plan.tier === "elite";
   const hasFullAccess = isAdmin || isPro;
 
@@ -85,6 +87,18 @@ export default function SettingsPage() {
             <Row label="Account type" value={isAdmin ? "Admin (owner)" : isPro ? "Subscribed" : "Free"} valueColor={isAdmin ? "#a855f7" : isPro ? "#22c55e" : "#9ca3af"} />
             <Row label="Member since" value={user?.created_at ? new Date(user.created_at).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "—"} />
           </Section>
+
+          {isAdmin && (
+            <Section title="Admin">
+              <div style={infoBoxStyle("#a855f7")}>
+                <div style={{ fontSize: 13, color: "#e4e7eb", fontWeight: 600, marginBottom: 4 }}>Owner tools</div>
+                <div style={{ fontSize: 12, color: "#9ca3af", lineHeight: 1.6 }}>Create and grade today's WizePlays picks.</div>
+              </div>
+              <button onClick={() => navigate("/admin")} style={{ ...primaryBtnStyle, marginTop: 14, background: "#a855f7" }}>
+                🎯 Manage WizePlays →
+              </button>
+            </Section>
+          )}
 
           <Section title="Subscription">
             {isAdmin ? (
