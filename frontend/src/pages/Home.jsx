@@ -298,8 +298,8 @@ function EdgeRow({e,navigate,sport="mlb"}){
   return (
     <div className="erow" onClick={()=>e.gameId&&navigate(`/game/${sport}/${e.gameId}`)}>
       <div className="etop">
-        <div className="eleft">{ab?<Logo ab={ab} size={30} lg={lg} col={colFor(ab,sport)}/>:<span className="totg">O/U</span>}
-          <div className="elabel">{edgeLabel(e)} <span className="emu">{e.matchup}</span></div></div>
+        <div className="eleft">{ab?<Logo ab={ab} size={30} lg={lg} col={colFor(ab,sport)}/>:<span className={"totg "+(e.side==="over"?"ov":"un")}>O/U</span>}
+          <div className="elabel"><span className={isTotal(e)?"pkside "+(e.side==="over"?"ov":"un"):""}>{edgeLabel(e)}</span> <span className="emu">{e.matchup}</span></div></div>
         <div className={"epct "+((e.edge??0)>=0?"pos":"neg")}>{fmtEdgeFor(e,sport)}</div>
       </div>
       <div className="emid">
@@ -428,7 +428,7 @@ section{padding:13px 12px 2px;margin:0;border-top:1px solid #161d24}
 .erow{border:1px solid #1a232c;border-radius:12px;background:linear-gradient(180deg,#0d1218,#090d12);padding:10px 12px}
 .etop{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .eleft{display:flex;align-items:center;gap:9px;min-width:0;flex:1}
-.totg{width:30px;height:30px;border-radius:50%;background:rgba(155,123,255,.14);border:1px solid rgba(155,123,255,.32);display:inline-flex;align-items:center;justify-content:center;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:11px;color:#bba6ff;flex:0 0 auto}
+.totg{width:30px;height:30px;border-radius:50%;background:rgba(155,123,255,.14);border:1px solid rgba(155,123,255,.32);display:inline-flex;align-items:center;justify-content:center;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:11px;color:#bba6ff;flex:0 0 auto}.totg.ov{background:rgba(51,233,145,.12);border-color:rgba(51,233,145,.4);color:#33e991}.totg.un{background:rgba(255,93,82,.12);border-color:rgba(255,93,82,.4);color:#ff5d52}.pkside.ov{color:#33e991}.pkside.un{color:#ff5d52}
 .elabel{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:17px;color:#fff;min-width:0}
 .elabel .emu{font-family:'Inter',sans-serif;font-weight:600;font-size:10px;color:#8a99a2;margin-left:6px}
 .epct{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:20px;line-height:1;flex:0 0 auto}.epct.pos{color:#33e991}.epct.neg{color:#ff5a5a}
