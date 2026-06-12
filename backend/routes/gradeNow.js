@@ -43,7 +43,11 @@ router.get("/", async (req, res) => {
     if (req.query.pinnacle_anchor === "1" || req.query.pinnacle_anchor === "true") return res.json(await getPinnacleAnchorComparison({ sport: req.query.sport, regions: req.query.regions }));
     if (req.query.totals_audit === "1" || req.query.totals_audit === "true") return res.json(await totalsAudit());
     if (req.query.ml_backtest === "1" || req.query.ml_backtest === "true") return res.json(await mlBacktest());
-    if (req.query.k_backtest === "1" || req.query.k_backtest === "true") return res.json(await kBacktest());
+    if (req.query.k_backtest != null) {
+      const v = String(req.query.k_backtest);
+      const cutoff = /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null; // YYYY-MM-DD = v2.1-era split; 1/true = all-time
+      return res.json(await kBacktest(cutoff));
+    }
     if (req.query.clv_audit === "1" || req.query.clv_audit === "true") return res.json(await clvAudit());
     if (req.query.hr_split != null) {
       const v = String(req.query.hr_split);
@@ -341,7 +345,7 @@ async function propResults() {
 // 0.75 baked in), re-applies each candidate shrink, and scores it against the real
 // win/loss. Pages all graded K rows in 1,000-row chunks (Supabase caps select 1000).
 const K_CURRENT_SHRINK = 0.75; // MUST match PROP_PROB_SHRINK in edgesModel.js
-async function kBacktest() {
+async function kBacktest(cutoff = null) {
   const supabase = db();
   const amerToProfit = (o) => o == null ? null : (o > 0 ? o / 100 : 100 / Math.abs(o));
   const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
@@ -369,6 +373,13 @@ async function kBacktest() {
     return { side, line: r.line, sp: r.model_prob, odds: r.odds, edge: r.edge, result: r.result, actual: r.actual_value, date: r.game_date };
   }).filter(r => r.result === "win" || r.result === "loss"); // decisions only
 
+  // Era split: when a cutoff is given, analyze ONLY the v2.1-era picks (game_date >= cutoff),
+  // so the old pre-v2.1 K model can't contaminate the calibration/ROI we base K_ALLOW_OVERS on.
+  const cut = cutoff && /^\d{4}-\d{2}-\d{2}$/.test(cutoff) ? cutoff : null;
+  const before = cut ? parsed.filter(r => r.date && r.date < cut) : [];
+  const after = cut ? parsed.filter(r => r.date && r.date >= cut) : parsed;
+  const scope = after; // all detailed analysis below runs on this set
+
   const mean = (arr) => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null;
   function summarize(set) {
     const win = set.filter(r => r.result === "win").length;
@@ -393,7 +404,7 @@ async function kBacktest() {
   // calibration on the CURRENT stored prob (prob of taken side = P(win))
   const calBuckets = [[0, 0.5], [0.5, 0.55], [0.55, 0.6], [0.6, 0.65], [0.65, 0.7], [0.7, 1.01]];
   const calibration = calBuckets.map(([lo, hi]) => {
-    const set = parsed.filter(r => r.sp != null && r.sp >= lo && r.sp < hi);
+    const set = scope.filter(r => r.sp != null && r.sp >= lo && r.sp < hi);
     const win = set.filter(r => r.result === "win").length;
     return {
       bucket: `${lo}-${hi}`, n: set.length,
@@ -406,7 +417,7 @@ async function kBacktest() {
   const candidates = [0.30, 0.40, 0.50, 0.60, 0.75, 0.90, 1.00];
   const sweep = candidates.map(s => {
     let ll = 0, brier = 0, sumCand = 0, n = 0, win = 0;
-    for (const r of parsed) {
+    for (const r of scope) {
       if (r.sp == null) continue;
       const raw = clamp(0.5 + (r.sp - 0.5) / K_CURRENT_SHRINK, 0.001, 0.999);
       const cand = clamp(0.5 + s * (raw - 0.5), 1e-6, 1 - 1e-6);
@@ -429,14 +440,15 @@ async function kBacktest() {
 
   // edge-band ROI: does a tighter edge gate help? which side is the leak?
   const edgeBands = [[0, 0.02], [0.02, 0.05], [0.05, 0.1], [0.1, 1]].map(([lo, hi]) => ({
-    band: `${lo}-${hi}`, ...summarize(parsed.filter(r => (r.edge ?? 0) >= lo && (r.edge ?? 0) < hi)),
+    band: `${lo}-${hi}`, ...summarize(scope.filter(r => (r.edge ?? 0) >= lo && (r.edge ?? 0) < hi)),
   }));
 
   return {
     ok: true,
+    era: cut ? { cutoff: cut, note: `Detailed analysis below = v2.1-era only (game_date >= ${cut}). before/after = quick contrast.`, before: summarize(before), after: summarize(after) } : { cutoff: null, note: "No cutoff given (?k_backtest=1) = ALL strikeout picks pooled, including pre-v2.1. Pass ?k_backtest=YYYY-MM-DD to isolate v2.1." },
     method: "Decisions only (push/void excluded). model_prob = P(taken side) = P(win). ROI uses real American odds. Shrink sweep rebuilds the pre-shrink raw prob (current shrink 0.75), re-applies each candidate, scores by log-loss (lower=better) vs real win/loss.",
-    overall: summarize(parsed),
-    bySide: { OVER: summarize(parsed.filter(r => r.side === "OVER")), UNDER: summarize(parsed.filter(r => r.side === "UNDER")) },
+    overall: summarize(scope),
+    bySide: { OVER: summarize(scope.filter(r => r.side === "OVER")), UNDER: summarize(scope.filter(r => r.side === "UNDER")) },
     calibration,
     shrinkSweep: sweep,
     bestShrinkByLogLoss: best ? best.shrink : null,
