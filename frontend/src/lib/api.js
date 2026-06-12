@@ -29,6 +29,7 @@ export const newsApi = {
 export const edgesApi = {
   getMLB: () => apiFetch("/api/edges/mlb"),
   getNBA: () => apiFetch("/api/edges/nba"),
+  getNBAProps: () => apiFetch("/api/edges/nba/props"),
   getOddsHistory: () => apiFetch("/api/edges/odds-history/mlb"),
   clearCache: () => apiFetch("/api/edges/cache", { method: "DELETE" }),
 };
