@@ -4,6 +4,7 @@ import { useAuth } from "../hooks/useAuth";
 import { edgesApi, subscriptionApi, scoresApi, liveApi } from "../lib/api";
 import { BoxScore } from "./LiveScores";
 import Sidebar from "./Sidebar";
+import BottomNav from "./BottomNav";
 // last word of a team name, lowercased — used to match an ESPN game to a model
 // game when the backend didn't attach a detailId (same idea the backend uses).
 const nick = (s) => String(s || "").trim().split(/\s+/).pop().toLowerCase();
@@ -16,7 +17,6 @@ export default function GameDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [plan, setPlan] = useState({ tier: "free", isAdmin: false });
-  const [drawerOpen, setDrawerOpen] = useState(false);
   const isAdmin = plan.isAdmin === true;
   const isPro = plan.tier === "pro" || plan.tier === "elite";
   const hasFullAccess = isAdmin || isPro;
@@ -88,22 +88,7 @@ export default function GameDetailPage() {
       <div className="desktop-sidebar">
         <Sidebar user={user} plan={plan} signOut={signOut} navigate={navigate} />
       </div>
-      {drawerOpen && (
-        <>
-          <div onClick={() => setDrawerOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 49 }} />
-          <div style={{ position: "fixed", top: 0, left: 0, bottom: 0, animation: "slideIn .2s ease-out", zIndex: 51 }}>
-            <Sidebar user={user} plan={plan} signOut={signOut} navigate={(path) => { setDrawerOpen(false); navigate(path); }} />
-          </div>
-        </>
-      )}
-      <div className="mobile-only" style={{ display: "none", position: "sticky", top: 0, zIndex: 40, background: "#0a0e14", borderBottom: "1px solid #1a1f28", padding: "10px 14px", alignItems: "center", justifyContent: "space-between" }}>
-        <button onClick={() => setDrawerOpen(true)} style={{ background: "none", border: "none", color: "#e4e7eb", fontSize: 22, padding: 4, cursor: "pointer" }}>☰</button>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e", animation: "pulse 2s infinite" }} />
-          <span style={{ fontSize: 15, fontWeight: 800 }}>Wize<span style={{ color: "#ef4444" }}>Picks</span></span>
-        </div>
-        <div style={{ width: 30 }} />
-      </div>
+      <BottomNav />
       <div className="main-content" style={{ marginLeft: 200 }}>
         <div className="gd-content" style={{ maxWidth: 1100, margin: "0 auto", padding: "20px 24px 80px" }}>
           <Link to="/games" className="back-btn" style={{ color: "#6b7280", fontSize: 13, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
