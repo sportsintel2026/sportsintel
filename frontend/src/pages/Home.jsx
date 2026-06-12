@@ -121,6 +121,7 @@ export default function HomePage(){
       <section className="panel">
         <div className="sh"><div className="l"><span className="i">📊</span>TODAY'S EDGE BOARD <span className="s">ranked by conviction</span></div>
           <div className="seg"><b className={board==="ml"?"on":""} onClick={()=>setBoard("ml")}>ML</b><b className={board==="totals"?"on":""} onClick={()=>setBoard("totals")}>Totals</b></div></div>
+        <div className="note" style={{marginTop:0,marginBottom:9}}>Today's top team plays — ML &amp; totals for every game, ranked by conviction. Player props live in the <span onClick={(ev)=>{ev.stopPropagation();navigate("/dashboard");}} style={{color:"#ff7a6c",fontWeight:700,cursor:"pointer"}}>Props tab →</span></div>
         {boardEdges.length===0
           ?<div className="muted" style={{padding:"12px 2px"}}>No positive {board==="ml"?"moneyline":"totals"} edges on the board yet.</div>
           :<div className="elist">{boardEdges.map((x,i)=><EdgeRow key={x.gameId+x.side+i} e={x} navigate={navigate}/>)}</div>}
@@ -140,18 +141,13 @@ export default function HomePage(){
         <div className="note">{hasMoves?"Open to now, today’s line moves. Updates every 15 min.":"Live prices now. Moves fill in as ticks accumulate today."}</div>
       </section>
 
-      {/* PROPS RADAR */}
+      {/* PLAYER PROPS — full board lives in the Props tab */}
       <section className="panel">
-        <div className="sh"><div className="l"><span className="i">🎯</span>PROPS RADAR</div>
-          <div className="seg"><b className={propTab==="hr"?"on":""} onClick={()=>setPropTab("hr")}>HR</b><b className={propTab==="hits"?"on":""} onClick={()=>setPropTab("hits")}>Hits</b><b className={propTab==="ks"?"on":""} onClick={()=>setPropTab("ks")}>Ks</b><b className={propTab==="bases"?"on":""} onClick={()=>setPropTab("bases")}>Bases</b></div></div>
-        {propArr.length===0
-          ?<div className="muted" style={{padding:"14px 2px"}}>{propTab==="bases"?"No total-bases props yet.":"Board fills in closer to first pitch."}</div>
-          :<Carousel>{propArr.map((p,i)=><PropCard key={(p.player||"")+i} p={p} type={propTab} rank={i+1} navigate={navigate}/>)}</Carousel>}
-        <div className="pn">{propTab==="hr"
-          ?"Ranked by the model's chance to homer — not a tracked +EV play (the HR market is efficient)."
-          :propTab==="bases"
-          ?"Total-bases props aren't in the model feed yet — coming soon."
-          :"These props clear our +EV bar — the edge % is the model's price vs the book."}</div>
+        <div className="sh"><div className="l"><span className="i">🎯</span>PLAYER PROPS</div></div>
+        <div className="propscta" onClick={()=>navigate("/dashboard")}>
+          <div><div className="pctah">Every prop with an edge — HR, hits &amp; strikeouts</div><div className="pctas">The full board lives in the Props tab — more options than before.</div></div>
+          <span className="pctaarrow">→</span>
+        </div>
       </section>
 
       {/* PARK FACTORS */}
@@ -431,6 +427,8 @@ section{padding:13px 12px 2px;margin:0;border-top:1px solid #161d24}
 .bs{display:flex;gap:10px}.bs .b{flex:1}.bs .kk{font-size:8.5px;color:#8a99a2;font-weight:800}.bs .vv{font-family:'Barlow Condensed';font-weight:800;font-size:21px}.vv.u{color:#33e991}.vv.dn2{color:#5fb8ff}
 .wx{display:flex;gap:10px;margin-top:7px;font-size:10px;color:#c0c9cd;font-weight:600}
 .wxrow{display:flex;align-items:center;gap:7px;margin-top:9px;padding-top:8px;border-top:1px solid rgba(255,255,255,.07);font-size:11.5px;color:#dbe4e2;font-weight:600}.wxrow .wi{font-size:14px}
+.propscta{display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid rgba(155,123,255,.28);border-radius:12px;background:rgba(155,123,255,.06);padding:12px 14px;cursor:pointer}
+.pctah{font-weight:800;font-size:13px;color:#eaf1ee}.pctas{font-size:10.5px;color:#8a99a2;font-weight:500;margin-top:3px;line-height:1.35}.pctaarrow{font-size:18px;color:#bba6ff;font-weight:800;flex:0 0 auto}
 .dots{display:flex;justify-content:center;gap:5px;margin-top:8px}.dots i{width:5px;height:5px;border-radius:50%;background:#222c33;transition:.25s}.dots i.on{width:14px;border-radius:3px;background:#ff5d4d}
 .prh{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}.wkbox{position:absolute;top:10px;right:10px;border:1px solid rgba(243,185,79,.3);border-radius:9px;background:rgba(243,185,79,.06);padding:4px 8px;text-align:center}.wkbox .t{font-size:7px;letter-spacing:.4px;color:#f3b94f;font-weight:800}.wkbox .r{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:18px;color:#fff;line-height:1.05}.wkbox .u{font-size:9px;font-weight:700;margin-top:1px}.wkbox .u.pos{color:#33e991}.wkbox .u.neg{color:#ff5a5a}
 .tw{display:grid;grid-template-columns:1fr 1fr;gap:9px}
