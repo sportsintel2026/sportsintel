@@ -4,7 +4,9 @@
 import { Link, useLocation } from "react-router-dom";
 export default function Sidebar({ user, plan, signOut, navigate }) {
   const location = useLocation();
-  const isAdmin = plan.isAdmin === true;
+  // Show admin tools to the admin account. We check the email directly (same gate
+  // as the /admin page) so the link appears even if the plan flag isn't set.
+  const isAdmin = plan.isAdmin === true || user?.email === "r7002g@gmail.com";
   const isPro = plan.tier === "pro" || plan.tier === "elite";
   const hasFullAccess = isAdmin || isPro;
   const isActive = (path) => location.pathname === path || location.pathname.startsWith(path + "/");
