@@ -319,13 +319,12 @@ function PropCard({p,type,rank,navigate}){
     if(p.pitcherK9!=null) sig.push(["⚾ K/9",Number(p.pitcherK9).toFixed(1)]);
   }
   return (
-    <div className="pc2">
+    <div className="pc2" onClick={()=>p.gameId&&navigate(`/game/mlb/${p.gameId}`)}>
       <div className="rk">{rank}</div>
       <div className="hd"><div className="av" style={(()=>{const c=teamCol(shortTeam(p.team||p.game||""));return {background:`linear-gradient(180deg, ${c}, #0c1018 88%)`,boxShadow:`0 0 0 2px ${c}88`};})()}>{p.playerId?<img src={`https://midfield.mlbstatic.com/v1/people/${p.playerId}/spots/120`} alt="" onError={(e)=>{e.currentTarget.style.display="none";}}/>:(type==="ks"?"⚾":"🧢")}</div><div><div className="nm">{p.player||"—"}</div><div className="mu">{p.game||p.team||""}</div></div></div>
       <div className="cn2"><div className="n">{big}</div><div className="l">{lbl}</div></div>
-      <div className="pline">{line}{edgeBadge&&<span className="ebadge">{edgeBadge}</span>}</div>
       {sig.length>0&&<div className="sg">{sig.slice(0,2).map((s,i)=><div key={i} className="x"><div className="kk">{s[0]}</div><div className="vv">{s[1]}</div></div>)}</div>}
-      <div className="vbk" onClick={(ev)=>{ev.stopPropagation();p.gameId&&navigate(`/game/mlb/${p.gameId}`);}}>View Breakdown</div>
+      <div className="pline">{line}{edgeBadge&&<span className="ebadge">{edgeBadge}</span>}</div>
     </div>
   );
 }
@@ -428,15 +427,15 @@ section{padding:13px 12px 2px;margin:0;border-top:1px solid #161d24}
 .mv{width:152px;border:1px solid rgba(255,255,255,.06);border-radius:12px;background:#0b0f14;padding:9px 12px}
 .mvk{font-weight:800;font-size:15px;color:#eaf1ee}
 .mvv{font-size:14px;font-weight:800;margin-top:6px;color:#eaf1ee;transition:color .3s;white-space:nowrap}.mvv.up{color:#33e991}.mvv.dn{color:#ff5a5a}.mvv .ar{color:#8a99a2;font-weight:700}.mvv .amt{font-weight:800}.mvc{font-size:12px;font-weight:800;margin-top:4px}.mvc.up{color:#33e991}.mvc.dn{color:#ff5a5a}.mvm{font-size:10px;color:#8a99a2;font-weight:600;margin-top:3px}.mv.fl-up .mvv{color:#33e991}.mv.fl-dn .mvv{color:#ff5a5a}
-.pc2{width:230px;border:1px solid #161e26;border-radius:14px;background:linear-gradient(180deg,#110d1d,#06090b);padding:10px 11px;position:relative}
-.pc2 .rk{position:absolute;top:0;left:0;width:26px;height:26px;border-radius:14px 0 12px 0;background:rgba(155,123,255,.2);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;color:#b9a6ff}
-.pc2 .hd{display:flex;align-items:center;gap:9px;margin-left:22px}
-.av{width:58px;height:58px;border-radius:50%;background:linear-gradient(180deg,#26344f,#1a2335);display:flex;align-items:flex-end;justify-content:center;font-size:26px;flex:0 0 auto;position:relative;overflow:hidden;box-shadow:0 0 0 2px rgba(155,123,255,.28)}.av img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
-.pc2 .nm{font-weight:800;font-size:14px;line-height:1.05}.pc2 .mu{font-size:10px;color:#8a99a2;margin-top:2px}
-.cn2{text-align:center;margin:7px 0 2px}.cn2 .n{font-weight:800;font-size:33px;color:#33e991;line-height:1}.cn2 .l{font-size:8.5px;color:#8fd9c2;font-weight:800}
-.sg{display:flex;gap:7px;margin-top:7px}.sg .x{flex:1;border:1px solid #161e26;border-radius:8px;background:rgba(255,255,255,.012);padding:5px 7px}.sg .kk{font-size:8.5px;color:#8a99a2;font-weight:700;white-space:nowrap}.sg .vv{font-size:11px;font-weight:700;margin-top:1px}
+.pc2{width:186px;border:1px solid #1a212b;border-radius:12px;background:linear-gradient(180deg,#100d1a,#070a0d);padding:9px 10px;position:relative}
+.pc2 .rk{position:absolute;top:0;left:0;width:22px;height:22px;border-radius:12px 0 10px 0;background:rgba(155,123,255,.2);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;color:#b9a6ff}
+.pc2 .hd{display:flex;align-items:center;gap:8px;margin-left:18px}
+.av{width:44px;height:44px;border-radius:50%;background:linear-gradient(180deg,#26344f,#1a2335);display:flex;align-items:flex-end;justify-content:center;font-size:19px;flex:0 0 auto;position:relative;overflow:hidden;box-shadow:0 0 0 2px rgba(155,123,255,.28)}.av img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.pc2 .nm{font-family:'Inter',sans-serif;font-weight:800;font-size:12.5px;line-height:1.1}.pc2 .mu{font-family:'Inter',sans-serif;font-size:9.5px;color:#8a99a2;margin-top:2px}
+.cn2{text-align:center;margin:7px 0 1px}.cn2 .n{font-family:'Inter',sans-serif;font-weight:800;font-size:23px;color:#33e991;line-height:1;letter-spacing:-.5px}.cn2 .l{font-size:7.5px;color:#8fd9c2;font-weight:800;letter-spacing:.3px}
+.sg{display:flex;gap:6px;margin-top:6px}.sg .x{flex:1;border:1px solid #1a212b;border-radius:7px;background:rgba(255,255,255,.015);padding:4px 6px}.sg .kk{font-size:8px;color:#8a99a2;font-weight:700;white-space:nowrap}.sg .vv{font-family:'Inter',sans-serif;font-size:11px;font-weight:800;margin-top:1px}
 .vbk{margin-top:8px;border:1px solid rgba(155,123,255,.3);border-radius:8px;background:rgba(155,123,255,.07);text-align:center;padding:6px;font-size:11px;font-weight:800;color:#bba6ff}
-.pline{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:7px;border:1px solid rgba(155,123,255,.28);border-radius:8px;background:rgba(155,123,255,.07);padding:7px 9px;font-size:11px;font-weight:700;color:#cdbcff}
+.pline{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:6px;border:1px solid rgba(155,123,255,.26);border-radius:7px;background:rgba(155,123,255,.07);padding:6px 8px;font-size:10.5px;font-weight:800;color:#cdbcff}
 .ebadge{font-size:9px;font-weight:800;color:#33e991;background:rgba(51,233,145,.12);border-radius:5px;padding:2px 5px;white-space:nowrap}
 .pkc{width:186px;border:1px solid rgba(255,255,255,.07);border-radius:13px;background:#0b0f14;padding:10px 12px}.pkc.hot{border-color:rgba(243,185,79,.26);background:#0c1109}.pkc.cold{border-color:rgba(95,184,255,.16);background:#0b0f14}
 .pkc .r1{display:flex;align-items:center;justify-content:space-between}.pkc .n{font-weight:700;font-size:14px}.pkc .c{font-size:10px;color:#8a99a2;font-weight:600}
