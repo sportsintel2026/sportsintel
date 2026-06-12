@@ -95,6 +95,7 @@ export default function HomePage(){
 
   return (
     <div style={S.shell}><style>{CSS}</style>
+    <div className="wpsb"><Sidebar user={user} plan={plan} signOut={signOut} navigate={navigate} /></div>
     <div className="wp">
       {/* HEADER */}
       <div className="top">
@@ -443,4 +444,24 @@ section{padding:13px 12px 2px;margin:0;border-top:1px solid #161d24}
 .gm{width:122px;border:1px solid #161e26;border-radius:11px;background:#0b0f14;padding:8px 10px}.gmm{display:flex;align-items:center;gap:4px;font-weight:800;font-size:14px}.gmm .x{color:#8a99a2}.gme{font-size:9px;color:#8a99a2;font-weight:600;margin-top:6px}
 .nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;display:flex;justify-content:space-around;padding:6px 4px calc(6px + env(safe-area-inset-bottom));background:rgba(0,0,0,.96);backdrop-filter:blur(14px);border-top:1px solid #161e26}
 .nav a{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:8.5px;font-weight:600;color:#8a99a2;flex:1;min-width:0}.nav a.on{color:#ff5d4d}.nav .i{font-size:17px}
+
+.wpsb{display:none}
+
+/* ---- DESKTOP: left sidebar shell (same as the Performance page) ---- */
+@media (min-width:769px){
+  .wpsb{display:block}
+  .wp{margin-left:200px;max-width:1240px;padding:0 26px 40px}
+  .top{padding:18px 0 10px}
+  .top .logo{display:none}
+  .tabs{padding:0}
+  .hero{margin:12px 0 0}
+  .cols{padding:0;margin-top:4px}
+  .panel{padding-left:0;padding-right:0}
+  .elist{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:9px}
+  .rw{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:9px;overflow:visible}
+  .rw>*{flex:none;scroll-snap-align:none}
+  .lgc,.mv,.gm,.pkc{width:auto}
+  .dots{display:none}
+  .nav{display:none}
+}
 `;
