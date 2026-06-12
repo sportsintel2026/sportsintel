@@ -249,14 +249,13 @@ function Hero({hero,navigate,live,series,sport="mlb"}){
   const moved=hasChart&&pts[0]!==pts[pts.length-1];
   return (
     <div className="hero" onClick={()=>hero.gameId&&navigate(`/game/${sport}/${hero.gameId}`)}>
-      <div className="hh"><div className="eb">🔥 BEST EDGE RIGHT NOW</div><span className="hot">🔥 HOT</span></div>
+      <div className="hh"><div className="eb">🔥 BEST EDGE RIGHT NOW</div><div className="hhr"><span className="hedge">{fmtEdgeFor(hero,sport)} <i>EDGE</i></span><span className="hot">🔥 HOT</span></div></div>
       <div className="htop">
         <div className="hL"><div className="pk">{edgeLabel(hero)}</div><div className="pg">{hero.matchup}</div>
           <div className="ch">
             <div className="cc"><div className="k">{moved?"LINE MOVED":"ODDS"}</div><div className="v">{moved?<>{formatOdds(pts[0])}<span className="ar">{String.fromCharCode(8594)}</span><b className="gd">{formatOdds(pts[pts.length-1])}</b></>:formatOdds(hero.odds)}</div></div>
             <div className="cc"><div className="k">STARTS</div><div className="v">{fmtTime(hero.time)}</div></div>
           </div></div>
-        <div className="ebx"><div className="b">{fmtEdgeFor(hero,sport)}</div><div className="k">EDGE</div></div>
         <div className="hR"><div className="ct">LINE MOVEMENT</div>
           <div className="cwrap">{hasChart?<HeroChart pts={pts}/>:<div className="livenum">{formatOdds(hero.odds)}<span className="livedot r"/></div>}
             <div className="cap">{hasChart?<>{formatOdds(pts[0])} {String.fromCharCode(8594)} {formatOdds(pts[pts.length-1])} · since open</>:(hero.modelProb!=null?<>model {modelPct}% vs mkt {mktPct}%</>:<>best price {formatOdds(hero.odds)}</>)}</div></div></div>
@@ -391,7 +390,7 @@ section{padding:13px 12px 2px;margin:0;border-top:1px solid #161d24}
 .muted,.note,.pn{color:#54616b;font-size:11px;font-weight:600}.note,.pn{margin-top:7px;line-height:1.35}
 .hero{border:1px solid rgba(243,185,79,.32);border-radius:14px;background:linear-gradient(180deg,#14110a,#06090b);overflow:hidden;margin:11px 12px 0}
 .hero.empty{padding:18px;color:#8a99a2;font-size:13px;font-weight:600}
-.hh{display:flex;align-items:center;justify-content:space-between;padding:11px 13px 2px}
+.hh{display:flex;align-items:center;justify-content:space-between;padding:11px 13px 2px}.hhr{display:flex;align-items:center;gap:7px;flex:0 0 auto}.hedge{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:15px;color:#33e991;background:rgba(51,233,145,.1);border:1px solid rgba(51,233,145,.38);border-radius:8px;padding:3px 9px;display:inline-flex;align-items:center;gap:4px;line-height:1}.hedge i{font-style:normal;font-size:8px;color:#8fd9c2;font-weight:800}
 .eb{font-size:11px;font-weight:800;color:#f3b94f}.hot{border:1px solid rgba(243,185,79,.35);border-radius:999px;padding:2px 8px;font-size:10px;font-weight:800;color:#f3b94f;background:rgba(243,185,79,.08)}
 .htop{display:flex;gap:9px;padding:6px 13px 2px;align-items:stretch}
 .hL{flex:1.05;min-width:0}.pk{font-weight:800;font-size:36px;line-height:.86;color:#fff}.pg{font-size:12px;color:#8a99a2;font-weight:600;margin-top:3px}
