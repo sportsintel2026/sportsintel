@@ -470,14 +470,14 @@ router.get("/mlb", async (req, res) => {
       const eventIds = topGamesForHR.map(g => g._oddsEventId);
       console.log(`[Edges-HR] eligibleGames=${eligibleGamesForHR.length}, topGamesForHR=${topGamesForHR.length}, eventIds=${JSON.stringify(eventIds)}`);
       if (eventIds.length > 0) {
-        const hrOddsByEvent = await getMLBHRPropsForAllEvents(eventIds, 5);
+        const hrOddsByEvent = await getMLBHRPropsForAllEvents(eventIds, 10);
         hrPropEdges = await calculateHRPropEdges(topGamesForHR, hrOddsByEvent);
         if (req.query.hr_audit) {
           return res.json({ ok: true, slateDate, gamesUsed: topGamesForHR.map(g => `${g.awayAbbr}@${g.homeAbbr}`), ...summarizeHrFeeds(hrPropEdges) });
         }
-        const kOddsByEvent = await getMLBStrikeoutPropsForAllEvents(eventIds, 5);
+        const kOddsByEvent = await getMLBStrikeoutPropsForAllEvents(eventIds, 10);
         kPropEdges = await calculateStrikeoutPropEdges(topGamesForHR, kOddsByEvent);
-        const hitsOddsByEvent = await getMLBHitsPropsForAllEvents(eventIds, 5);
+        const hitsOddsByEvent = await getMLBHitsPropsForAllEvents(eventIds, 10);
         if (req.query.hits_debug) {
           const dbg = await debugHitsProps(topGamesForHR, hitsOddsByEvent);
           return res.json({ ok: true, slateDate, gamesUsed: topGamesForHR.map(g => `${g.awayAbbr}@${g.homeAbbr}`), count: dbg.length, hits_debug: dbg });
