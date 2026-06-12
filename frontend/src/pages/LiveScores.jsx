@@ -106,6 +106,9 @@ export default function LiveScoresPage({ league = "mlb" }) {
 
       <div className="main-content" style={{ marginLeft: 200 }}>
         <div className="scores-content" style={{ maxWidth: 900, margin: "0 auto", padding: "32px 24px 80px", animation: "fadeIn .3s ease" }}>
+          <div onClick={() => navigate(-1)} style={{ color: "#6b7280", fontSize: 13, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6, marginBottom: 14, userSelect: "none" }}>
+            ← Back
+          </div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
             <h1 style={{ margin: 0, fontSize: 28, fontWeight: 700, letterSpacing: "-0.01em" }}>{meta.icon} {meta.title}</h1>
             {refreshedAt && (
