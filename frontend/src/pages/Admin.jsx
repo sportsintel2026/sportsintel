@@ -123,7 +123,7 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (user && user.email !== ADMIN_EMAIL) {
-      navigate("/dashboard");
+      navigate("/home");
     }
   }, [user, navigate]);
 
@@ -145,7 +145,7 @@ export default function AdminPage() {
             <div style={{ fontSize: 11, color: "#475569", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.08em" }}>Admin Panel</div>
             <div style={{ fontSize: 22, fontWeight: 800, color: "#fff" }}>Best Bets Manager</div>
           </div>
-          <a href="/dashboard" style={{ color: "#475569", textDecoration: "none", fontSize: 13 }}>← Dashboard</a>
+          <a href="/home" style={{ color: "#475569", textDecoration: "none", fontSize: 13 }}>← Home</a>
         </div>
 
         <ExpertPicksManager />
