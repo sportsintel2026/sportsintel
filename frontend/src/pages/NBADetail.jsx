@@ -12,6 +12,7 @@ import { useAuth } from "../hooks/useAuth";
 import { subscriptionApi, scoresApi } from "../lib/api";
 import { BoxScore } from "./LiveScores";
 import Sidebar from "./Sidebar";
+import BottomNav from "./BottomNav";
 
 const API_BASE = import.meta.env.VITE_API_URL || "https://sportsintel-production.up.railway.app";
 
@@ -25,7 +26,6 @@ export default function NBADetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [plan, setPlan] = useState({ tier: "free", isAdmin: false });
-  const [drawerOpen, setDrawerOpen] = useState(false);
 
   useEffect(() => { subscriptionApi.getMyPlan().then(setPlan).catch(() => {}); }, []);
 
@@ -76,28 +76,12 @@ export default function NBADetailPage() {
         <Sidebar user={user} plan={plan} signOut={signOut} navigate={navigate} />
       </div>
 
-      {drawerOpen && (
-        <>
-          <div onClick={() => setDrawerOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 49 }} />
-          <div style={{ position: "fixed", top: 0, left: 0, bottom: 0, animation: "slideIn .2s ease-out", zIndex: 51 }}>
-            <Sidebar user={user} plan={plan} signOut={signOut} navigate={(path) => { setDrawerOpen(false); navigate(path); }} />
-          </div>
-        </>
-      )}
-
-      <div className="mobile-only" style={{ display: "none", position: "sticky", top: 0, zIndex: 40, background: "#0a0e14", borderBottom: "1px solid #1a1f28", padding: "10px 14px", alignItems: "center", justifyContent: "space-between" }}>
-        <button onClick={() => setDrawerOpen(true)} style={{ background: "none", border: "none", color: "#e4e7eb", fontSize: 22, padding: 4, cursor: "pointer" }}>☰</button>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e", animation: "pulse 2s infinite" }} />
-          <span style={{ fontSize: 15, fontWeight: 800 }}>Wize<span style={{ color: "#ef4444" }}>Picks</span></span>
-        </div>
-        <div style={{ width: 30 }} />
-      </div>
+      <BottomNav />
 
       <div className="main-content" style={{ marginLeft: 200 }}>
         <div className="gd-content" style={{ maxWidth: 1100, margin: "0 auto", padding: "20px 24px 80px" }}>
-          <Link to="/nba" className="back-btn" style={{ color: "#6b7280", fontSize: 13, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6, marginBottom: 18 }}>
-            ← Back to NBA Playoffs
+          <Link to="/nba-games" className="back-btn" style={{ color: "#6b7280", fontSize: 13, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6, marginBottom: 18 }}>
+            ← Back to NBA Games
           </Link>
 
           {loading && <Loader />}
@@ -693,7 +677,7 @@ function ErrorState() {
     <div style={{ textAlign: "center", padding: 64, background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10 }}>
       <div style={{ fontSize: 32, marginBottom: 12 }}>⚠️</div>
       <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>Could not load this matchup</div>
-      <Link to="/nba" style={{ fontSize: 12, color: "#ef4444", textDecoration: "none", fontWeight: 700 }}>← Back to NBA Playoffs</Link>
+      <Link to="/nba-games" style={{ fontSize: 12, color: "#ef4444", textDecoration: "none", fontWeight: 700 }}>← Back to NBA Games</Link>
     </div>
   );
 }
