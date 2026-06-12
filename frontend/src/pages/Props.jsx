@@ -145,7 +145,7 @@ const CSS = `
 /* ---- DESKTOP: left sidebar shell (same as the Performance page) ---- */
 @media (min-width:769px){
   .ppsb{display:block}
-  .ppwrap{margin-left:200px;max-width:1240px;padding:30px 26px 60px}
+  .ppwrap{margin-left:200px;max-width:none;padding:30px 30px 60px}
   .pptitle{font-size:40px}
   .pptabs{max-width:620px}
   .pplist{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:10px}
