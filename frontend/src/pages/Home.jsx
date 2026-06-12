@@ -11,7 +11,8 @@ import Sidebar from "./Sidebar";
 function formatOdds(a){ if(a==null||isNaN(a))return "—"; const n=Math.round(Number(a)); return n>0?`+${n}`:`${n}`; }
 function fmtTime(t,withDay){ if(!t)return "—"; const d=new Date(t); if(isNaN(d.getTime()))return t; const o={hour:"numeric",minute:"2-digit",timeZone:"America/New_York"}; if(withDay)o.weekday="short"; return d.toLocaleString("en-US",o)+" ET"; }
 function impliedFromAmerican(a){ if(a==null||isNaN(a))return null; const n=Number(a); return n>0?100/(n+100):-n/(-n+100); }
-const ESPN=(ab,lg="mlb")=>`https://a.espncdn.com/i/teamlogos/${lg}/500/${String(ab||"").toLowerCase()}.png`;
+const ESPN_ALIAS={az:"ari"};
+const ESPN=(ab,lg="mlb")=>{const a=String(ab||"").toLowerCase();const slug=(lg==="mlb"?(ESPN_ALIAS[a]||a):a);return `https://a.espncdn.com/i/teamlogos/${lg}/500/${slug}.png`;};
 const TEAMCOL={ARI:"#A71930",ATL:"#CE1141",BAL:"#DF4601",BOS:"#BD3039",CHC:"#0E3386",CWS:"#C4CED4",CHW:"#C4CED4",CIN:"#C6011F",CLE:"#E31937",COL:"#5A4F9C",DET:"#FA4616",HOU:"#EB6E1F",KC:"#3E7DC4",KCR:"#3E7DC4",LAA:"#BA0021",LAD:"#3E7DC4",LOS:"#3E7DC4",MIA:"#00A3E0",MIL:"#FFC52F",MIN:"#D31145",NYM:"#FF5910",NYY:"#3A4F73",OAK:"#EFB21E",ATH:"#EFB21E",PHI:"#E81828",PIT:"#FDB827",SD:"#FFC425",SDP:"#FFC425",SEA:"#1B9A8E",SF:"#FD5A1E",SFG:"#FD5A1E",STL:"#C41E3A",TB:"#8FBCE6",TBR:"#8FBCE6",TEX:"#3E66B0",TOR:"#1D6FE0",WSH:"#E0263B",WAS:"#E0263B"};
 const NBACOL={ATL:"#E03A3E",BOS:"#007A33",BKN:"#777",CHA:"#1D1160",CHI:"#CE1141",CLE:"#860038",DAL:"#00538C",DEN:"#0E2240",DET:"#C8102E",GSW:"#1D428A",HOU:"#CE1141",IND:"#002D62",LAC:"#C8102E",LAL:"#552583",MEM:"#5D76A9",MIA:"#98002E",MIL:"#00471B",MIN:"#236192",NOP:"#85714D",NYK:"#006BB6",OKC:"#007AC1",ORL:"#0077C0",PHI:"#006BB6",PHX:"#E56020",POR:"#E03A3E",SAC:"#5A2D81",SAS:"#9AA7AE",TOR:"#CE1141",UTA:"#3E2680",WAS:"#002B5C"};
 const teamCol=(ab)=>TEAMCOL[String(ab||"").toUpperCase()]||"#3a4a57";
@@ -395,8 +396,8 @@ section{padding:13px 12px 2px;margin:0;border-top:1px solid #161d24}
 .htop{display:flex;gap:9px;padding:6px 13px 2px;align-items:stretch}
 .hL{flex:1.05;min-width:0}.pk{font-weight:800;font-size:36px;line-height:.86;color:#fff}.pg{font-size:12px;color:#8a99a2;font-weight:600;margin-top:3px}
 .ch{display:flex;gap:6px;margin-top:9px}.cc{border:1px solid rgba(255,255,255,.07);border-radius:9px;padding:6px 9px;flex:1}.cc .k{font-size:8px;color:#8a99a2;font-weight:800}.cc .v{font-size:13px;font-weight:700;white-space:nowrap;margin-top:2px;display:flex;align-items:center;gap:3px}.cc .ar{color:#8a99a2;font-weight:700}.cc .gd{color:#33e991;font-weight:800}
-.ebx{flex:0 0 56px;border:1px solid rgba(51,233,145,.42);border-radius:10px;background:rgba(51,233,145,.07);padding:7px 3px;text-align:center;box-shadow:0 0 8px rgba(51,233,145,.07);display:flex;flex-direction:column;justify-content:center}
-.ebx .b{font-weight:800;font-size:18px;color:#33e991;line-height:1}.ebx .k{font-size:8px;color:#8fd9c2;font-weight:800;margin-top:2px}
+.ebx{flex:0 0 70px;align-self:center;border:1px solid rgba(51,233,145,.42);border-radius:12px;background:rgba(51,233,145,.07);padding:9px 5px;text-align:center;box-shadow:0 0 8px rgba(51,233,145,.07);display:flex;flex-direction:column;justify-content:center}
+.ebx .b{font-weight:800;font-size:25px;color:#33e991;line-height:1}.ebx .k{font-size:8px;color:#8fd9c2;font-weight:800;margin-top:2px}
 .hR{flex:1.05;min-width:0;display:flex;flex-direction:column}.ct{font-size:8px;letter-spacing:.4px;color:#8a99a2;font-weight:800;margin-bottom:3px}
 .cwrap{flex:1;display:flex;flex-direction:column;justify-content:center;border:1px solid rgba(255,255,255,.07);border-radius:9px;background:rgba(255,255,255,.015);padding:6px 8px}
 .livenum{font-family:'Barlow Condensed';font-weight:800;font-size:22px;color:#fff;display:flex;align-items:center;gap:7px}
