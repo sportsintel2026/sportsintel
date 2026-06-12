@@ -3,7 +3,9 @@
 // shared bottom nav. Reads the same /api/edges/mlb feed Home uses.
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { edgesApi } from "../lib/api";
+import { useAuth } from "../hooks/useAuth";
+import { edgesApi, subscriptionApi } from "../lib/api";
+import Sidebar from "./Sidebar";
 import BottomNav from "./BottomNav";
 
 const TEAMCOL = { ARI:"#A71930",ATL:"#CE1141",BAL:"#DF4601",BOS:"#BD3039",CHC:"#0E3386",CWS:"#C4CED4",CHW:"#C4CED4",CIN:"#C6011F",CLE:"#E31937",COL:"#5A4F9C",DET:"#FA4616",HOU:"#EB6E1F",KC:"#3E7DC4",KCR:"#3E7DC4",LAA:"#BA0021",LAD:"#3E7DC4",LOS:"#3E7DC4",MIA:"#00A3E0",MIL:"#FFC52F",MIN:"#D31145",NYM:"#FF5910",NYY:"#3A4F73",OAK:"#EFB21E",ATH:"#EFB21E",PHI:"#E81828",PIT:"#FDB827",SD:"#FFC425",SDP:"#FFC425",SEA:"#1B9A8E",SF:"#FD5A1E",SFG:"#FD5A1E",STL:"#C41E3A",TB:"#8FBCE6",TBR:"#8FBCE6",TEX:"#3E66B0",TOR:"#1D6FE0",WSH:"#E0263B",WAS:"#E0263B" };
@@ -15,9 +17,13 @@ const TABS = [["hr", "HR", "💣"], ["hits", "Hits", "🏏"], ["ks", "Ks", "🔥
 
 export default function PropsPage() {
   const navigate = useNavigate();
+  const { user, signOut } = useAuth();
+  const [plan, setPlan] = useState({ tier: "free", isAdmin: false });
   const [edges, setEdges] = useState(null);
   const [tab, setTab] = useState("hr");
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => { subscriptionApi.getMyPlan().then(setPlan).catch(() => {}); }, []);
 
   useEffect(() => {
     let on = true;
@@ -134,11 +140,4 @@ const CSS = `
 .ppwarn{border:1px solid rgba(243,185,79,.32);background:rgba(243,185,79,.08);border-radius:10px;padding:10px 12px;font-size:11px;color:#f3c66b;font-weight:600;line-height:1.45;margin-bottom:12px}.ppwarn b{color:#ffd98a}
 .ppmuted{color:#6b7681;font-size:13px;font-weight:600;padding:24px 4px;text-align:center}
 .ppnote{font-size:10.5px;color:#54616b;font-weight:600;margin-top:14px;line-height:1.4}
-/* ---- DESKTOP: same cards, stretched across to fill the page ---- */
-@media (min-width:769px){
-  .ppwrap{max-width:1340px;padding:30px 26px 104px}
-  .pptitle{font-size:40px}
-  .pptabs{max-width:620px}
-  .pplist{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:10px}
-}
 `;
