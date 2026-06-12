@@ -22,15 +22,8 @@ export default function BottomNav({ desktop = false }) {
     <>
       <style>{`
         .wpbn{display:none}
-        .wpback{display:none}
         @media (max-width: 768px){
           .mobile-only{display:none!important}
-          .wpback{position:fixed;top:10px;left:10px;z-index:55;display:flex;align-items:center;gap:5px;
-            padding:7px 12px;border-radius:20px;background:rgba(0,0,0,.72);backdrop-filter:blur(8px);
-            -webkit-backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.12);color:#cdd6da;
-            font-size:12px;font-weight:600;font-family:'Inter',system-ui,-apple-system,sans-serif;
-            cursor:pointer;-webkit-tap-highlight-color:transparent}
-          .wpback:active{transform:scale(.96)}
           .main-content{padding-bottom:76px!important}
           .wpbn{position:fixed;bottom:0;left:0;right:0;z-index:60;display:flex;justify-content:space-around;
             padding:6px 4px calc(6px + env(safe-area-inset-bottom));background:rgba(0,0,0,.96);
@@ -52,7 +45,6 @@ export default function BottomNav({ desktop = false }) {
           .wpbn .i{font-size:20px;line-height:1}
         }` : ""}
       `}</style>
-      <button className="wpback" onClick={() => navigate(-1)} aria-label="Go back">← Back</button>
       <nav className="wpbn">
         {TABS.map((t) => (
           <a key={t.label} className={t.match(pathname) ? "on" : ""} onClick={() => navigate(t.path)}>
