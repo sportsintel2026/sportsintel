@@ -7,6 +7,7 @@ import { LoginPage } from "./pages/Login";
 import { SignupPage } from "./pages/Login";
 import DashboardPage from "./pages/Dashboard";
 import HomePage from "./pages/Home";
+import PropsPage from "./pages/Props";
 import GameDetailPage from "./pages/GameDetail";
 import GamesPage from "./pages/Games";
 import PerformancePage from "./pages/Performance";
@@ -126,6 +127,11 @@ export default function App() {
           <Route path="/performance" element={
             <PrivateRoute>
               <PerformancePage />
+            </PrivateRoute>
+          } />
+          <Route path="/props" element={
+            <PrivateRoute>
+              <PropsPage />
             </PrivateRoute>
           } />
           <Route path="/game/mlb/:gameId" element={
