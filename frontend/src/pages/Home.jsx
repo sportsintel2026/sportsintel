@@ -450,7 +450,7 @@ section{padding:13px 12px 2px;margin:0;border-top:1px solid #161d24}
 /* ---- DESKTOP: left sidebar shell (same as the Performance page) ---- */
 @media (min-width:769px){
   .wpsb{display:block}
-  .wp{margin-left:200px;max-width:1240px;padding:0 26px 40px}
+  .wp{margin-left:200px;max-width:none;padding:0 30px 40px}
   .top{padding:18px 0 10px}
   .top .logo{display:none}
   .tabs{padding:0}
