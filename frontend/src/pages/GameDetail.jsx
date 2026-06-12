@@ -1163,16 +1163,20 @@ function FactorCard({ label, factor }) {
   );
 }
 function HRPropsCard({ hrProps, hasFullAccess, navigate }) {
+  const sorted = [...hrProps].sort((a, b) => (b.hrProb ?? b.prob ?? 0) - (a.hrProb ?? a.prob ?? 0));
   return (
     <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 20, marginBottom: 10 }}>
-      <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 16 }}>💣 Home run props</div>
+      <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 8 }}>💣 Home run props</div>
+      <div style={{ fontSize: 11, color: "#f3c66b", fontWeight: 600, lineHeight: 1.45, marginBottom: 16, background: "rgba(243,185,79,.08)", border: "1px solid rgba(243,185,79,.28)", borderRadius: 8, padding: "8px 10px" }}>
+        ⚠️ Longshots — ranked by the model's chance to homer, <b style={{ color: "#ffd98a" }}>not</b> a tracked +EV play. Even top names homer only about 1 game in 5. Bet small, if at all.
+      </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        {hrProps.slice(0, hasFullAccess ? 10 : 1).map((p, i) => (
+        {sorted.slice(0, hasFullAccess ? 10 : 1).map((p, i) => (
           <HRPropCard key={i} prop={p} />
         ))}
-        {!hasFullAccess && hrProps.length > 1 && (
+        {!hasFullAccess && sorted.length > 1 && (
           <div style={{ marginTop: 4, padding: 16, background: "#0a0e14", border: "1px solid #1f2937", borderRadius: 8, textAlign: "center" }}>
-            <div style={{ fontSize: 12, color: "#9ca3af", marginBottom: 10 }}>{hrProps.length - 1} more HR props</div>
+            <div style={{ fontSize: 12, color: "#9ca3af", marginBottom: 10 }}>{sorted.length - 1} more HR props</div>
             <button onClick={() => navigate("/pricing")} style={ctaBtnStyle}>🔒 Unlock all</button>
           </div>
         )}
@@ -1181,19 +1185,23 @@ function HRPropsCard({ hrProps, hasFullAccess, navigate }) {
   );
 }
 function HRPropCard({ prop }) {
-  const positive = prop.edge > 0;
+  // HR is a LONGSHOT market — we show the model's CHANCE TO HOMER (hrProb), never a
+  // market-edge % or a conviction badge. This matches the /props board and keeps us
+  // honest: HR is never presented as a tracked +EV play. (Edge is intentionally unused.)
+  const pct = Math.round((prop.hrProb ?? prop.prob ?? 0) * 100);
   return (
-    <div style={{ background: "#0a0e14", border: `1px solid ${prop.confidence === "HIGH" ? "#22c55e30" : "#1f2937"}`, borderRadius: 8, padding: 14 }}>
+    <div style={{ background: "#0a0e14", border: "1px solid #1f2937", borderRadius: 8, padding: 14 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, flexWrap: "wrap" }}>
         <div>
           <div style={{ fontSize: 15, fontWeight: 700, color: "#fff" }}>{prop.player}</div>
           <div style={{ fontSize: 11, color: "#9ca3af" }}>{prop.team} · facing {prop.opposingPitcher || "TBD"}</div>
+          <div style={{ fontSize: 11, color: "#b6c0c7", fontWeight: 600, marginTop: 4 }}>O 0.5 HR · {formatOdds(prop.odds)}</div>
         </div>
         <div style={{ textAlign: "right" }}>
-          <div style={{ fontSize: 22, fontWeight: 800, color: positive ? "#22c55e" : "#ef4444" }}>
-            {positive ? "+" : ""}{(prop.edge * 100).toFixed(1)}%
+          <div style={{ fontSize: 22, fontWeight: 800, color: "#33e991", lineHeight: 1 }}>
+            {pct}<span style={{ fontSize: 14 }}>%</span>
           </div>
-          <ConfidenceBadge conf={prop.confidence} />
+          <div style={{ fontSize: 8.5, color: "#7d8a93", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".3px", marginTop: 2 }}>to homer</div>
         </div>
       </div>
     </div>
