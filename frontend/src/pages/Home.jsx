@@ -10,6 +10,8 @@ import { edgesApi, subscriptionApi, liveApi, supabase } from "../lib/api";
 function formatOdds(a){ if(a==null||isNaN(a))return "—"; const n=Math.round(Number(a)); return n>0?`+${n}`:`${n}`; }
 function impliedFromAmerican(a){ if(a==null||isNaN(a))return null; const n=Number(a); return n>0?100/(n+100):-n/(-n+100); }
 const ESPN=(ab)=>`https://a.espncdn.com/i/teamlogos/mlb/500/${String(ab||"").toLowerCase()}.png`;
+const TEAMCOL={ARI:"#A71930",ATL:"#CE1141",BAL:"#DF4601",BOS:"#BD3039",CHC:"#0E3386",CWS:"#C4CED4",CHW:"#C4CED4",CIN:"#C6011F",CLE:"#E31937",COL:"#5A4F9C",DET:"#FA4616",HOU:"#EB6E1F",KC:"#3E7DC4",KCR:"#3E7DC4",LAA:"#BA0021",LAD:"#3E7DC4",LOS:"#3E7DC4",MIA:"#00A3E0",MIL:"#FFC52F",MIN:"#D31145",NYM:"#FF5910",NYY:"#3A4F73",OAK:"#EFB21E",ATH:"#EFB21E",PHI:"#E81828",PIT:"#FDB827",SD:"#FFC425",SDP:"#FFC425",SEA:"#1B9A8E",SF:"#FD5A1E",SFG:"#FD5A1E",STL:"#C41E3A",TB:"#8FBCE6",TBR:"#8FBCE6",TEX:"#3E66B0",TOR:"#1D6FE0",WSH:"#E0263B",WAS:"#E0263B"};
+const teamCol=(ab)=>TEAMCOL[String(ab||"").toUpperCase()]||"#3a4a57";
 function teams(m){ if(!m)return ["",""]; const p=String(m).split(/@|vs|·/i).map(s=>s.trim()).filter(Boolean); return [p[0]||"",p[1]||""]; }
 function shortTeam(t){ const m=String(t).match(/[A-Z]{2,3}/); return m?m[0]:String(t).slice(0,3).toUpperCase(); }
 function oneSidePerGame(arr){ const g=new Map(); for(const e of arr||[]){ const p=g.get(e.gameId); if(!p||(e.edge??-Infinity)>(p.edge??-Infinity))g.set(e.gameId,e);} return [...g.values()]; }
@@ -25,7 +27,8 @@ function computeRecord(rows){let wins=0,losses=0,pushes=0,units=0;for(const r of
 
 function Logo({ab,size=22}){ const [bad,setBad]=useState(false);
   if(bad||!ab) return <span style={{width:size,height:size,borderRadius:"50%",background:"#1c2730",display:"inline-flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:size*0.36,color:"#fff",fontFamily:"'Barlow Condensed',sans-serif"}}>{String(ab||"?").slice(0,3)}</span>;
-  return <img src={ESPN(ab)} alt="" onError={()=>setBad(true)} style={{width:size,height:size,objectFit:"contain"}}/>;
+  const col=teamCol(ab);
+  return <span style={{width:size,height:size,borderRadius:"50%",background:`radial-gradient(circle at 50% 32%, ${col}40, #090d11 80%)`,boxShadow:`inset 0 0 0 1px ${col}70`,display:"inline-flex",alignItems:"center",justifyContent:"center",flex:"0 0 auto"}}><img src={ESPN(ab)} alt="" onError={()=>setBad(true)} style={{width:size*0.84,height:size*0.84,objectFit:"contain"}}/></span>;
 }
 
 function Carousel({children}){
@@ -112,20 +115,20 @@ export default function HomePage(){
       {hero?<Hero hero={hero} navigate={navigate} live={anyLive} series={seriesFor(hero)}/>:<div className="hero empty">No qualifying edge on the board yet — check back closer to first pitch.</div>}
 
       {/* LIVE EDGES — in-game model edges, pulled from /api/live/mlb (moved off the game page) */}
-      {liveGames.length>0&&(<section>
-        <div className="sh"><div className="l"><span className="i" style={{color:"#ff5a5a"}}>🔴</span>LIVE EDGES <span className="s">in-game · updates 60s</span></div></div>
+      {liveGames.length>0&&(<section className="panel">
+        <div className="sh"><div className="l"><span className="rdot"/>LIVE EDGES <span className="s">in-game · updates 60s</span></div></div>
         <Carousel>{liveGames.map(g=><LiveGameCard key={g.gameId} g={g} info={abbrById[g.gameId]} navigate={navigate}/>)}</Carousel>
       </section>)}
 
       {/* EDGE BOARD */}
-      <section>
+      <section className="panel">
         <div className="sh"><div className="l"><span className="i">📊</span>TODAY'S EDGE BOARD</div>
           <div className="seg"><b className={board==="ml"?"on":""} onClick={()=>setBoard("ml")}>ML</b><b className={board==="totals"?"on":""} onClick={()=>setBoard("totals")}>Totals</b></div></div>
         <div className="eg" style={{gridTemplateColumns:`repeat(${Math.min(Math.max(top4.length,2),4)},1fr)`}}>
           {top4.length===0&&<div className="muted">No positive edges in this market yet.</div>}
           {top4.map(x=>{ const k=x.gameId+x.side; const ab=edgeTeam(x);
             return (<div key={k} className="ec" onClick={()=>x.gameId&&navigate(`/game/mlb/${x.gameId}`)}>
-              <div className="r1">{ab?<Logo ab={ab} size={22}/>:<span className="tot">📊</span>}<div><div className="nm">{edgeLabel(x)}</div><div className="vs">{x.matchup}</div></div></div>
+              <div className="r1">{ab?<Logo ab={ab} size={30}/>:<span className="tot">📊</span>}<div><div className="nm">{edgeLabel(x)}</div><div className="vs">{x.matchup}</div></div></div>
               <div className={"conv "+((x.conviction||"").toLowerCase())}>{x.conviction||"—"}</div>
               <div className={"pc"+(flash[k]?" fl-"+flash[k]:"")}>{pct1(x.edge)}</div>
               <div className="md">{Math.round((x.modelProb||0)*100)}% model</div>
@@ -134,28 +137,27 @@ export default function HomePage(){
       </section>
 
       {/* ALL EDGES — full reasoned list (the Top Plays experience, now on Home) */}
-      {allEdges.length>0&&(<section>
+      {allEdges.length>0&&(<section className="panel">
         <div className="sh"><div className="l"><span className="i">📋</span>ALL EDGES <span className="s">ranked by conviction</span></div></div>
         <div className="elist">{allEdges.map((x,i)=><EdgeRow key={x.gameId+x.side+i} e={x} navigate={navigate}/>)}</div>
       </section>)}
 
       {/* MARKET MOVERS */}
-      <section>
-        <div className="sh"><div className="l"><span className="i">⚡</span>MARKET MOVERS <span className="s">{anyLive?"live odds":"current"}</span></div></div>
+      <section className="panel">
+        <div className="sh"><div className="l"><span className="i">⚡</span>MARKET MOVERS <span className="s">biggest moves today</span></div><span className="s2">swipe →</span></div>
         <Carousel>
-          {movers.map(x=>{ const k=x.gameId+x.side;
-            const d=x._delta;
+          {movers.map(x=>{ const k=x.gameId+x.side; const d=x._delta;
             return (<div key={k} className={"mv"+(flash[k]?" fl-"+flash[k]:"")}><div className="mvk">{edgeLabel(x)}</div>
               {d!=null
-                ?<><div className="mvv">{formatOdds(x._open)} <span className="mvarrow">{String.fromCharCode(8594)}</span> {formatOdds(x._now)}</div><div className={"mvmove "+(d>0?"up":d<0?"dn":"")}>{d>0?String.fromCharCode(9650):d<0?String.fromCharCode(9660):"•"} {Math.abs(d)} {Math.abs(d)===1?"cent":"cents"}</div></>
-                :<><div className="mvv">{formatOdds(x.odds)}</div><div className="mvm">{Math.round((x.modelProb||0)*100)}% model · {pct1(x.edge)}</div></>}
+                ?<><div className={"mvv "+(d>0?"up":d<0?"dn":"")}>{formatOdds(x._open)} <span className="ar">{String.fromCharCode(8594)}</span> {formatOdds(x._now)} <span className="amt">{d>0?String.fromCharCode(9650):d<0?String.fromCharCode(9660):"•"}{Math.abs(d)}</span></div><div className={"mvc "+(d>0?"up":d<0?"dn":"")}>{d>0?"+":d<0?String.fromCharCode(8722):""}{Math.abs(d)} cents</div></>
+                :<><div className="mvv">{formatOdds(x.odds)}</div><div className="mvm">{Math.round((x.modelProb||0)*100)}% model</div></>}
             </div>);})}
         </Carousel>
         <div className="note">{hasMoves?"Open to now, today’s line moves. Updates every 15 min.":"Live prices now. Moves fill in as ticks accumulate today."}</div>
       </section>
 
       {/* PROPS RADAR */}
-      <section>
+      <section className="panel">
         <div className="sh"><div className="l"><span className="i">🎯</span>PROPS RADAR</div>
           <div className="seg"><b className={propTab==="hr"?"on":""} onClick={()=>setPropTab("hr")}>HR</b><b className={propTab==="hits"?"on":""} onClick={()=>setPropTab("hits")}>Hits</b><b className={propTab==="ks"?"on":""} onClick={()=>setPropTab("ks")}>Ks</b><b className={propTab==="bases"?"on":""} onClick={()=>setPropTab("bases")}>Bases</b></div></div>
         {propArr.length===0
@@ -169,7 +171,7 @@ export default function HomePage(){
       </section>
 
       {/* PARK FACTORS */}
-      {parks.length>0&&(<section>
+      {parks.length>0&&(<section className="panel">
         <div className="sh"><div className="l"><span className="i">🏟️</span>PARK FACTORS TODAY</div><span className="s2">swipe →</span></div>
         <Carousel>{parks.map((g,i)=><ParkCard key={i} g={g}/>)}</Carousel>
       </section>)}
@@ -177,21 +179,23 @@ export default function HomePage(){
       {/* PROMOS */}
       <section>
         <div className="tw">
-          <div className="pr g" onClick={()=>navigate("/expert-picks")}><div className="h">⭐ WIZEPLAYS <span className="new">NEW</span></div>
-            {wpRecord&&(wpRecord.wins+wpRecord.losses+wpRecord.pushes)>0&&(
-              <div className="wkbox"><div className="t">TRACKED</div><div className="r">{wpRecord.wins}-{wpRecord.losses}{wpRecord.pushes?`-${wpRecord.pushes}`:""}</div><div className={"u "+(wpRecord.units>=0?"pos":"neg")}>{wpRecord.units>=0?"+":""}{wpRecord.units.toFixed(2)}u</div></div>)}
-            <div className="d">Handpicked by our analysts after extra review. Every play tracked.</div><div className="cta">View WizePlays →</div></div>
+          <div className="pr g" onClick={()=>navigate("/expert-picks")}>
+            <div className="prh"><div className="h">⭐ WIZEPLAYS <span className="new">NEW</span></div>
+              {wpRecord&&(wpRecord.wins+wpRecord.losses+wpRecord.pushes)>0&&(
+                <div className="wkbox"><div className="t">THIS WEEK</div><div className="r">{wpRecord.wins}-{wpRecord.losses}{wpRecord.pushes?`-${wpRecord.pushes}`:""}</div><div className={"u "+(wpRecord.units>=0?"pos":"neg")}>{wpRecord.units>=0?"+":""}{wpRecord.units.toFixed(2)}u</div></div>)}
+            </div>
+            <div className="d">Handpicked by our analysts after extra review.</div><div className="cta">View WizePlays →</div></div>
           <div className="pr pp" onClick={()=>navigate("/daily-card")}><div className="h">✳️ WIZE SPIN <span className="new">NEW</span></div><div className="wh"/><div className="d">Need a play fast? Spin for model-qualified plays.</div><div className="cta">Spin the wheel →</div></div>
         </div>
       </section>
 
       {/* UPCOMING */}
-      {upcoming.length>0&&(<section>
+      {upcoming.length>0&&(<section className="panel">
         <div className="sh"><div className="l"><span className="i">🗓️</span>UPCOMING GAMES</div><span className="s2" onClick={()=>navigate("/games")}>View all →</span></div>
         <div className="rw">
           {upcoming.map((g,i)=>{ const aw=g.away||g.awayAbbr||""; const hm=g.home||g.homeAbbr||"";
             return (<div key={i} className="gm" onClick={()=>g.gameId&&navigate(`/game/mlb/${g.gameId}`)}>
-              <div className="gmm"><Logo ab={shortTeam(aw)} size={17}/> {shortTeam(aw)} <span className="x">v</span> <Logo ab={shortTeam(hm)} size={17}/> {shortTeam(hm)}</div>
+              <div className="gmm"><Logo ab={shortTeam(aw)} size={20}/> {shortTeam(aw)} <span className="x">v</span> <Logo ab={shortTeam(hm)} size={20}/> {shortTeam(hm)}</div>
               <div className="gme">{g.time||"—"}{g.totals?.projected!=null?` · O/U ${g.totals.projected}`:""}</div>
             </div>);})}
         </div>
@@ -232,20 +236,24 @@ function Hero({hero,navigate,live,series}){
   const mktPct=Math.round((impliedFromAmerican(hero.odds)||0)*100);
   const pts=(series||[]).map(p=>p.o);
   const hasChart=pts.length>=2;
+  const moved=hasChart&&pts[0]!==pts[pts.length-1];
   return (
     <div className="hero" onClick={()=>hero.gameId&&navigate(`/game/mlb/${hero.gameId}`)}>
       <div className="hh"><div className="eb">🔥 BEST EDGE RIGHT NOW</div><span className="hot">🔥 HOT</span></div>
       <div className="htop">
         <div className="hL"><div className="pk">{edgeLabel(hero)}</div><div className="pg">{hero.matchup}</div>
-          <div className="ch"><div className="cc"><div className="k">ODDS</div><div className="v">{formatOdds(hero.odds)}</div></div><div className="cc"><div className="k">STARTS</div><div className="v">{hero.time||"—"}</div></div></div></div>
+          <div className="ch">
+            <div className="cc"><div className="k">{moved?"LINE MOVED":"ODDS"}</div><div className="v">{moved?<>{formatOdds(pts[0])}<span className="ar">{String.fromCharCode(8594)}</span><b className="gd">{formatOdds(pts[pts.length-1])}</b></>:formatOdds(hero.odds)}</div></div>
+            <div className="cc"><div className="k">STARTS</div><div className="v">{hero.time||"—"}</div></div>
+          </div></div>
         <div className="ebx"><div className="b">{pct1(hero.edge)}</div><div className="k">EDGE</div></div>
         <div className="hR"><div className="ct">LINE MOVEMENT</div>
-          <div className="cwrap">{hasChart
-            ?<><HeroChart pts={pts}/><div className="cap">{formatOdds(pts[0])} {String.fromCharCode(8594)} {formatOdds(pts[pts.length-1])} · since open</div></>
-            :<><div className="livenum">{formatOdds(hero.odds)}<span className="livedot"/></div><div className="cap">model {modelPct}% vs mkt {mktPct}%</div></>}</div></div>
+          <div className="cwrap">{hasChart?<HeroChart pts={pts}/>:<div className="livenum">{formatOdds(hero.odds)}<span className="livedot r"/></div>}
+            <div className="cap">{hasChart?<>{formatOdds(pts[0])} {String.fromCharCode(8594)} {formatOdds(pts[pts.length-1])} · since open</>:<>model {modelPct}% vs mkt {mktPct}%</>}</div></div></div>
       </div>
-      <div className="cn">Movement chart fills in as today's odds ticks save. The model prices within a hair of the close — that's the real story to watch.</div>
-      <div className="hf"><span>⚡ Tap for the full matchup breakdown</span><span>›</span></div>
+      {moved
+        ?<div className="hstrip"><span>⚡ Line moved {formatOdds(pts[0])} {String.fromCharCode(8594)} {formatOdds(pts[pts.length-1])} since open</span><span>›</span></div>
+        :<div className="hf"><span>⚡ Tap for the full matchup breakdown</span><span>›</span></div>}
     </div>
   );
 }
@@ -267,7 +275,7 @@ function LiveGameCard({g,info,navigate}){
       <span className={"lgedge "+(r.edge>=0?"pos":"neg")}>{r.edge>=0?"+":""}{(r.edge*100).toFixed(1)}%</span></div>):null;
   return (
     <div className="lgc" onClick={()=>g.gameId&&navigate(`/game/mlb/${g.gameId}`)}>
-      <div className="lgh"><span className="lgmatch">{a} @ {h}</span><span className="lglive"><span className="livedot"/>{half} {g.inning}{g.outs!=null?` · ${g.outs} out`:""}</span></div>
+      <div className="lgh"><span className="lgmatch">{a} @ {h}</span><span className="lglive"><span className="livedot r"/>{half} {g.inning}{g.outs!=null?` · ${g.outs} out`:""}</span></div>
       <Row r={ml}/><Row r={tot}/>
     </div>
   );
@@ -313,7 +321,7 @@ function PropCard({p,type,rank,navigate}){
   return (
     <div className="pc2">
       <div className="rk">{rank}</div>
-      <div className="hd"><div className="av">{p.playerId?<img src={`https://midfield.mlbstatic.com/v1/people/${p.playerId}/spots/120`} alt="" onError={(e)=>{e.currentTarget.style.display="none";}}/>:(type==="ks"?"⚾":"🧢")}</div><div><div className="nm">{p.player||"—"}</div><div className="mu">{p.game||p.team||""}</div></div></div>
+      <div className="hd"><div className="av" style={(()=>{const c=teamCol(shortTeam(p.team||p.game||""));return {background:`linear-gradient(180deg, ${c}, #0c1018 88%)`,boxShadow:`0 0 0 2px ${c}88`};})()}>{p.playerId?<img src={`https://midfield.mlbstatic.com/v1/people/${p.playerId}/spots/120`} alt="" onError={(e)=>{e.currentTarget.style.display="none";}}/>:(type==="ks"?"⚾":"🧢")}</div><div><div className="nm">{p.player||"—"}</div><div className="mu">{p.game||p.team||""}</div></div></div>
       <div className="cn2"><div className="n">{big}</div><div className="l">{lbl}</div></div>
       <div className="pline">{line}{edgeBadge&&<span className="ebadge">{edgeBadge}</span>}</div>
       {sig.length>0&&<div className="sg">{sig.slice(0,2).map((s,i)=><div key={i} className="x"><div className="kk">{s[0]}</div><div className="vv">{s[1]}</div></div>)}</div>}
@@ -325,18 +333,21 @@ function PropCard({p,type,rank,navigate}){
 function ParkCard({g}){
   const f=g.parkRunFactor; const hf=g.parkHRFactor; const w=g.weather||{};
   const hot=(hf??f)>1.05,cold=(hf??f)<0.95;
-  const tag=hot?["🔥 HITTER","h"]:cold?["❄️ PITCHER","p"]:["⚖️ NEUTRAL","n"];
+  const tag=hot?["🔥 HITTER FRIENDLY","h"]:cold?["🧤 PITCHER FRIENDLY","p"]:["⚖️ NEUTRAL","n"];
   const pct=Math.round((f-1)*100); const hpct=hf!=null?Math.round((hf-1)*100):null;
-  const wx=w.indoor?"🏟️ Indoor":`${w.tempF!=null?w.tempF+"°":""}${w.windMph?" ⚡ "+w.windMph+"mph "+(w.windEffect||""):""}`;
+  const indoor=w.indoor; const t=w.tempF!=null?Math.round(w.tempF):null;
+  const wind=w.windMph?`${w.windMph} mph${w.windEffect?" "+w.windEffect:""}`:null;
+  const wxIcon=indoor?"🏟️":(t!=null&&t>=82?"☀️":t!=null&&t<=55?"🌥️":"⛅");
+  const wxText=indoor?"Indoor · roof closed":([t!=null?t+"°F":null,wind].filter(Boolean).join(" · ")||"Forecast pending");
   return (
-    <div className={"pkc"+(hot?" hot":"")}>
-      <div className="r1"><div><div className="n">{g.venue||g.park||(g.home||"")+" park"}</div><div className="c">{g.home||""}</div></div><Logo ab={shortTeam(g.home||"")} size={26}/></div>
+    <div className={"pkc"+(hot?" hot":cold?" cold":"")}>
+      <div className="r1"><div><div className="n">{g.venue||g.park||(g.home||"")+" Park"}</div><div className="c">{g.home||""}</div></div><Logo ab={shortTeam(g.home||"")} size={30}/></div>
       <span className={"tg "+tag[1]}>{tag[0]}</span>
       <div className="bs">
         {hpct!=null&&<div className="b"><div className="kk">HR BOOST</div><div className={"vv "+(hpct>0?"u":hpct<0?"dn2":"")}>{hpct>0?"+":""}{hpct}%</div></div>}
         <div className="b"><div className="kk">RUN BOOST</div><div className={"vv "+(pct>0?"u":pct<0?"dn2":"")}>{pct>0?"+":""}{pct}%</div></div>
       </div>
-      <div className="wx">{wx}</div>
+      <div className="wxrow"><span className="wi">{wxIcon}</span><span className="wt">{wxText}</span></div>
     </div>
   );
 }
@@ -358,31 +369,37 @@ const CSS=`
 .bell{font-size:16px;color:#c0c9cd}
 .tabs{display:flex;justify-content:space-between;padding:0 14px;border-bottom:1px solid #0e151a}
 .tab{display:flex;align-items:center;gap:5px;padding:8px 3px;font-weight:700;font-size:13px;color:#8a99a2;border-bottom:2px solid transparent;margin-bottom:-1px}.tab.on{color:#fff;border-bottom-color:#ff5d4d}.tab .i{font-size:14px}
-section{padding:0 11px;margin-top:9px}
+section{padding:13px 12px 2px;margin:0;border-top:1px solid #161d24}
+.panel{margin:0;padding:13px 12px 2px;border:0;border-radius:0;background:none;border-top:1px solid #161d24}
+.panel>.sh{margin-bottom:9px}
 .sh{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
-.sh .l{display:flex;align-items:center;gap:7px;font-family:'Barlow Condensed';font-weight:800;font-size:15px;letter-spacing:.4px;color:#dbe4e2}.sh .l .i{font-size:14px}.sh .l .s{font-family:'Inter';font-size:10px;color:#8a99a2;font-weight:600;margin-left:3px}
+.sh .l{display:flex;align-items:center;gap:7px;font-family:'Barlow Condensed';font-weight:800;font-size:14px;letter-spacing:.4px;color:#dbe4e2}.sh .l .i{font-size:14px}.sh .l .s{font-family:'Inter';font-size:10px;color:#8a99a2;font-weight:600;margin-left:3px}
 .sh .s2{font-size:11px;color:#8a99a2;font-weight:600}
 .seg{display:flex;gap:2px;background:#0a0f13;border:1px solid #161e26;border-radius:8px;padding:2px}.seg b{color:#8a99a2;font-weight:800;font-size:11px;padding:4px 10px;border-radius:6px}.seg b.on{background:#141d24;color:#fff;box-shadow:inset 0 0 0 1px #ff5d4d}
 .muted,.note,.pn{color:#54616b;font-size:11px;font-weight:600}.note,.pn{margin-top:7px;line-height:1.35}
-.hero{border:1px solid rgba(243,185,79,.32);border-radius:16px;background:linear-gradient(180deg,#14110a,#06090b);overflow:hidden;margin:11px 12px 0}
+.hero{border:1px solid rgba(243,185,79,.32);border-radius:14px;background:linear-gradient(180deg,#14110a,#06090b);overflow:hidden;margin:11px 12px 0}
 .hero.empty{padding:18px;color:#8a99a2;font-size:13px;font-weight:600}
 .hh{display:flex;align-items:center;justify-content:space-between;padding:11px 13px 2px}
 .eb{font-size:11px;font-weight:800;color:#f3b94f}.hot{border:1px solid rgba(243,185,79,.35);border-radius:999px;padding:2px 8px;font-size:10px;font-weight:800;color:#f3b94f;background:rgba(243,185,79,.08)}
 .htop{display:flex;gap:9px;padding:6px 13px 2px;align-items:stretch}
 .hL{flex:1.05;min-width:0}.pk{font-weight:800;font-size:36px;line-height:.86;color:#fff}.pg{font-size:12px;color:#8a99a2;font-weight:600;margin-top:3px}
-.ch{display:flex;gap:6px;margin-top:9px}.cc{border:1px solid #161e26;border-radius:9px;padding:5px 8px;flex:1}.cc .k{font-size:8px;color:#8a99a2;font-weight:800}.cc .v{font-size:12px;font-weight:700;white-space:nowrap;margin-top:1px}
+.ch{display:flex;gap:6px;margin-top:9px}.cc{border:1px solid rgba(255,255,255,.07);border-radius:9px;padding:6px 9px;flex:1}.cc .k{font-size:8px;color:#8a99a2;font-weight:800}.cc .v{font-size:13px;font-weight:700;white-space:nowrap;margin-top:2px;display:flex;align-items:center;gap:3px}.cc .ar{color:#8a99a2;font-weight:700}.cc .gd{color:#33e991;font-weight:800}
 .ebx{flex:0 0 80px;border:1px solid rgba(51,233,145,.42);border-radius:13px;background:rgba(51,233,145,.07);padding:10px 4px;text-align:center;box-shadow:0 0 20px rgba(51,233,145,.1);display:flex;flex-direction:column;justify-content:center}
 .ebx .b{font-weight:800;font-size:29px;color:#33e991;line-height:1}.ebx .k{font-size:8px;color:#8fd9c2;font-weight:800;margin-top:2px}
 .hR{flex:1.05;min-width:0;display:flex;flex-direction:column}.ct{font-size:8px;letter-spacing:.4px;color:#8a99a2;font-weight:800;margin-bottom:3px}
-.cwrap{flex:1;display:flex;flex-direction:column;justify-content:center;border:1px solid #161e26;border-radius:9px;background:rgba(255,255,255,.012);padding:6px 8px}
+.cwrap{flex:1;display:flex;flex-direction:column;justify-content:center;border:1px solid rgba(255,255,255,.07);border-radius:9px;background:rgba(255,255,255,.015);padding:6px 8px}
 .livenum{font-family:'Barlow Condensed';font-weight:800;font-size:22px;color:#fff;display:flex;align-items:center;gap:7px}
 .livedot{width:7px;height:7px;border-radius:50%;background:#33e991;animation:pl 1.6s infinite}
+.livedot.r{background:#ff5a5a;animation:plr 1.3s infinite}
+.rdot{width:8px;height:8px;border-radius:50%;background:#ff3b3b;display:inline-block;animation:plr 1.1s infinite}
+@keyframes plr{0%{opacity:1;box-shadow:0 0 0 0 rgba(255,59,59,.7)}50%{opacity:.32}70%{box-shadow:0 0 0 7px rgba(255,59,59,0)}100%{opacity:1;box-shadow:0 0 0 0 rgba(255,59,59,0)}}
 .cap{font-size:9px;color:#8a99a2;font-weight:600;margin-top:2px}
 .cn{font-size:9px;color:#54616b;font-weight:600;margin:6px 13px 0;line-height:1.35}
 .hf{display:flex;align-items:center;justify-content:space-between;border-top:1px solid rgba(243,185,79,.16);margin-top:7px;padding:9px 13px;color:#f3b94f;font-size:11px;font-weight:600}
+.hstrip{display:flex;align-items:center;justify-content:space-between;gap:8px;border-top:1px solid rgba(243,185,79,.2);margin-top:9px;padding:10px 13px;color:#f3b94f;font-size:11.5px;font-weight:700;background:rgba(243,185,79,.06)}
 .eg{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
-.ec{border:1px solid #1a232c;border-radius:13px;background:linear-gradient(180deg,#0d1218,#090d12);padding:9px 8px}
-.ec .r1{display:flex;align-items:center;gap:4px}.ec .tot{font-size:18px}
+.ec{border:1px solid rgba(255,255,255,.06);border-radius:13px;background:linear-gradient(180deg,#0d1218,#090d12);padding:10px 9px}
+.ec .r1{display:flex;align-items:center;gap:7px}.ec .tot{font-size:18px}
 .ec .nm{font-family:'Barlow Condensed';font-weight:800;font-size:17px;line-height:.9}.ec .vs{font-size:9.5px;color:#8a99a2;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ec .conv{display:inline-block;margin:6px 0 4px;font-size:8px;font-weight:800;border-radius:5px;padding:2px 5px;color:#33e991;background:rgba(51,233,145,.12)}
 .ec .conv.medium{color:#f3b94f;background:rgba(243,185,79,.12)}
@@ -408,30 +425,31 @@ section{padding:0 11px;margin-top:9px}
 .einf{font-size:9px;font-weight:700;color:#f3b94f;background:rgba(243,185,79,.1);border-radius:5px;padding:2px 5px}
 .ereason{font-size:11px;color:#a8b4bd;font-weight:500;margin-top:5px;line-height:1.4}
 .rw{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;padding-bottom:2px}.rw::-webkit-scrollbar{display:none}.rw>*{scroll-snap-align:start;flex:0 0 auto}
-.mv{width:134px;border:1px solid #161e26;border-radius:11px;background:#0b0f14;padding:8px 11px}
-.mvk{font-weight:800;font-size:15px}
-.mvmove{font-size:11px;font-weight:800;margin-top:3px}.mvmove.up{color:#33e991}.mvmove.dn{color:#ff5a5a}.mvarrow{color:#8a99a2}.mvv{font-size:18px;font-weight:800;margin-top:4px;transition:color .3s}.mv.fl-up .mvv{color:#33e991}.mv.fl-dn .mvv{color:#ff5a5a}.mvm{font-size:10px;color:#8a99a2;font-weight:600;margin-top:2px}
+.mv{width:152px;border:1px solid rgba(255,255,255,.06);border-radius:12px;background:#0b0f14;padding:9px 12px}
+.mvk{font-weight:800;font-size:15px;color:#eaf1ee}
+.mvv{font-size:14px;font-weight:800;margin-top:6px;color:#eaf1ee;transition:color .3s;white-space:nowrap}.mvv.up{color:#33e991}.mvv.dn{color:#ff5a5a}.mvv .ar{color:#8a99a2;font-weight:700}.mvv .amt{font-weight:800}.mvc{font-size:12px;font-weight:800;margin-top:4px}.mvc.up{color:#33e991}.mvc.dn{color:#ff5a5a}.mvm{font-size:10px;color:#8a99a2;font-weight:600;margin-top:3px}.mv.fl-up .mvv{color:#33e991}.mv.fl-dn .mvv{color:#ff5a5a}
 .pc2{width:230px;border:1px solid #161e26;border-radius:14px;background:linear-gradient(180deg,#110d1d,#06090b);padding:10px 11px;position:relative}
 .pc2 .rk{position:absolute;top:0;left:0;width:26px;height:26px;border-radius:14px 0 12px 0;background:rgba(155,123,255,.2);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;color:#b9a6ff}
 .pc2 .hd{display:flex;align-items:center;gap:9px;margin-left:22px}
-.av{width:42px;height:42px;border-radius:50%;background:linear-gradient(180deg,#26344f,#1a2335);display:flex;align-items:flex-end;justify-content:center;font-size:22px;flex:0 0 auto;position:relative;overflow:hidden}.av img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
-.pc2 .nm{font-weight:700;font-size:13px;line-height:1.05}.pc2 .mu{font-size:10px;color:#8a99a2;margin-top:1px}
+.av{width:58px;height:58px;border-radius:50%;background:linear-gradient(180deg,#26344f,#1a2335);display:flex;align-items:flex-end;justify-content:center;font-size:26px;flex:0 0 auto;position:relative;overflow:hidden;box-shadow:0 0 0 2px rgba(155,123,255,.28)}.av img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.pc2 .nm{font-weight:800;font-size:14px;line-height:1.05}.pc2 .mu{font-size:10px;color:#8a99a2;margin-top:2px}
 .cn2{text-align:center;margin:7px 0 2px}.cn2 .n{font-weight:800;font-size:33px;color:#33e991;line-height:1}.cn2 .l{font-size:8.5px;color:#8fd9c2;font-weight:800}
 .sg{display:flex;gap:7px;margin-top:7px}.sg .x{flex:1;border:1px solid #161e26;border-radius:8px;background:rgba(255,255,255,.012);padding:5px 7px}.sg .kk{font-size:8.5px;color:#8a99a2;font-weight:700;white-space:nowrap}.sg .vv{font-size:11px;font-weight:700;margin-top:1px}
 .vbk{margin-top:8px;border:1px solid rgba(155,123,255,.3);border-radius:8px;background:rgba(155,123,255,.07);text-align:center;padding:6px;font-size:11px;font-weight:800;color:#bba6ff}
 .pline{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:7px;border:1px solid rgba(155,123,255,.28);border-radius:8px;background:rgba(155,123,255,.07);padding:7px 9px;font-size:11px;font-weight:700;color:#cdbcff}
 .ebadge{font-size:9px;font-weight:800;color:#33e991;background:rgba(51,233,145,.12);border-radius:5px;padding:2px 5px;white-space:nowrap}
-.pkc{width:172px;border:1px solid #161e26;border-radius:13px;background:#0b0f14;padding:9px 11px}.pkc.hot{border-color:rgba(243,185,79,.4);background:linear-gradient(180deg,#12170d,#06090b);box-shadow:0 0 16px rgba(243,185,79,.06)}
+.pkc{width:186px;border:1px solid rgba(255,255,255,.07);border-radius:13px;background:#0b0f14;padding:10px 12px}.pkc.hot{border-color:rgba(243,185,79,.26);background:#0c1109}.pkc.cold{border-color:rgba(95,184,255,.16);background:#0b0f14}
 .pkc .r1{display:flex;align-items:center;justify-content:space-between}.pkc .n{font-weight:700;font-size:14px}.pkc .c{font-size:10px;color:#8a99a2;font-weight:600}
 .pkc .tg{display:inline-flex;align-items:center;gap:4px;font-size:9px;font-weight:800;margin:7px 0;padding:2px 7px;border-radius:6px}.tg.h{color:#f3b94f;background:rgba(243,185,79,.1)}.tg.p{color:#5fb8ff;background:rgba(95,184,255,.1)}.tg.n{color:#8a99a2;background:rgba(130,145,154,.08)}
 .bs{display:flex;gap:10px}.bs .b{flex:1}.bs .kk{font-size:8.5px;color:#8a99a2;font-weight:800}.bs .vv{font-family:'Barlow Condensed';font-weight:800;font-size:21px}.vv.u{color:#33e991}.vv.dn2{color:#5fb8ff}
 .wx{display:flex;gap:10px;margin-top:7px;font-size:10px;color:#c0c9cd;font-weight:600}
+.wxrow{display:flex;align-items:center;gap:7px;margin-top:9px;padding-top:8px;border-top:1px solid rgba(255,255,255,.07);font-size:11.5px;color:#dbe4e2;font-weight:600}.wxrow .wi{font-size:14px}
 .dots{display:flex;justify-content:center;gap:5px;margin-top:8px}.dots i{width:5px;height:5px;border-radius:50%;background:#222c33;transition:.25s}.dots i.on{width:14px;border-radius:3px;background:#ff5d4d}
-.wkbox{position:absolute;top:11px;right:11px;border:1px solid rgba(243,185,79,.3);border-radius:9px;background:rgba(243,185,79,.06);padding:5px 9px;text-align:center}.wkbox .t{font-size:7px;letter-spacing:.4px;color:#f3b94f;font-weight:800}.wkbox .r{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:18px;color:#fff;line-height:1}.wkbox .u{font-size:9px;font-weight:700}.wkbox .u.pos{color:#33e991}.wkbox .u.neg{color:#ff5a5a}
+.prh{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}.wkbox{position:absolute;top:10px;right:10px;border:1px solid rgba(243,185,79,.3);border-radius:9px;background:rgba(243,185,79,.06);padding:4px 8px;text-align:center}.wkbox .t{font-size:7px;letter-spacing:.4px;color:#f3b94f;font-weight:800}.wkbox .r{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:18px;color:#fff;line-height:1.05}.wkbox .u{font-size:9px;font-weight:700;margin-top:1px}.wkbox .u.pos{color:#33e991}.wkbox .u.neg{color:#ff5a5a}
 .tw{display:grid;grid-template-columns:1fr 1fr;gap:9px}
 .pr{border-radius:14px;padding:11px;border:1px solid #161e26;position:relative;min-height:104px}.pr.g{border-color:rgba(243,185,79,.3);background:linear-gradient(180deg,#14110a,#06090b)}.pr.pp{border-color:rgba(155,123,255,.3);background:linear-gradient(180deg,#110d20,#06090b)}
 .pr .h{font-weight:800;font-size:12px}.new{font-size:8px;font-weight:800;border-radius:4px;padding:1px 4px}.pr.g .new{background:#f3b94f;color:#1a1405}.pr.pp .new{background:#9b7bff;color:#0d0820}
-.pr .d{font-size:10px;color:#8a99a2;margin:7px 0 0;line-height:1.4}.pr .cta{font-size:12px;font-weight:800;color:#f3b94f;margin-top:9px}.pr.pp .cta{color:#bba6ff}.pr.pp .d{max-width:60%}
+.pr .d{font-size:10px;color:#8a99a2;margin:7px 0 0;line-height:1.4}.pr .cta{font-size:12px;font-weight:800;color:#f3b94f;margin-top:9px}.pr.pp .cta{color:#bba6ff}.pr.pp .d{max-width:60%}.pr.g .d{padding-right:84px}
 .wh{width:54px;height:54px;border-radius:50%;position:absolute;top:30px;right:10px;background:radial-gradient(circle,#2f2363,#110d20 72%);border:2px solid #4a3d86;animation:spin 7s linear infinite}.wh::before{content:"";position:absolute;inset:6px;border-radius:50%;border:1px dashed #6a58c0}
 @keyframes spin{to{transform:rotate(360deg)}}
 .gm{width:122px;border:1px solid #161e26;border-radius:11px;background:#0b0f14;padding:8px 10px}.gmm{display:flex;align-items:center;gap:4px;font-weight:800;font-size:14px}.gmm .x{color:#8a99a2}.gme{font-size:9px;color:#8a99a2;font-weight:600;margin-top:6px}
