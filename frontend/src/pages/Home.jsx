@@ -30,6 +30,10 @@ const SPORTS={
 function fmtEdgeFor(e,sport){ const v=e.edge??0; const s=v>=0?"+":""; if(sport!=="nba") return pct1(v); if(isTotal(e)||e.line!=null) return `${s}${v.toFixed(1)}`; return `${s}${v.toFixed(1)}%`; }
 function teams(m){ if(!m)return ["",""]; const p=String(m).split(/@|vs|·/i).map(s=>s.trim()).filter(Boolean); return [p[0]||"",p[1]||""]; }
 function shortTeam(t){ const m=String(t).match(/[A-Z]{2,3}/); return m?m[0]:String(t).slice(0,3).toUpperCase(); }
+// Resolve a full/partial MLB team name to its ESPN logo abbr. shortTeam() slices the
+// first 3 letters, which breaks on multi-word cities ("New York Mets" -> "NEW", no logo).
+const MLB_ABBR={diamondbacks:"ARI",braves:"ATL",orioles:"BAL","red sox":"BOS",cubs:"CHC","white sox":"CHW",reds:"CIN",guardians:"CLE",rockies:"COL",tigers:"DET",astros:"HOU",royals:"KC",angels:"LAA",dodgers:"LAD",marlins:"MIA",brewers:"MIL",twins:"MIN",mets:"NYM",yankees:"NYY",athletics:"OAK","a's":"OAK",phillies:"PHI",pirates:"PIT",padres:"SD",mariners:"SEA",giants:"SF",cardinals:"STL",rays:"TB",rangers:"TEX","blue jays":"TOR",nationals:"WSH"};
+function mlbAbbr(name){ const s=String(name||"").toLowerCase(); for(const k in MLB_ABBR){ if(s.includes(k)) return MLB_ABBR[k]; } return shortTeam(name); }
 function oneSidePerGame(arr){ const g=new Map(); for(const e of arr||[]){ const p=g.get(e.gameId); if(!p||(e.edge??-Infinity)>(p.edge??-Infinity))g.set(e.gameId,e);} return [...g.values()]; }
 const isTotal=(e)=>e.side==="over"||e.side==="under";
 const edgeLabel=(e)=>isTotal(e)?`${e.side==="over"?"Over":"Under"} ${e.line}`:(e.line!=null?`${e.teamAbbr||shortTeam(e.matchup)} ${e.line>0?"+":""}${e.line}`:`${e.teamAbbr||shortTeam(e.matchup)} ML`);
@@ -348,7 +352,7 @@ function ParkCard({g}){
   const wxText=indoor?"Indoor · roof closed":([t!=null?t+"°F":null,wind].filter(Boolean).join(" · ")||"Forecast pending");
   return (
     <div className={"pkc"+(hot?" hot":cold?" cold":"")}>
-      <div className="r1"><div><div className="n">{g.venue||g.park||(g.home||"")+" Park"}</div><div className="c">{g.home||""}</div></div><Logo ab={shortTeam(g.home||"")} size={30}/></div>
+      <div className="r1"><div><div className="n">{g.venue||g.park||(g.home||"")+" Park"}</div><div className="c">{g.home||""}</div></div><Logo ab={mlbAbbr(g.home||"")} size={30}/></div>
       <span className={"tg "+tag[1]}>{tag[0]}</span>
       <div className="bs">
         {hpct!=null&&<div className="b"><div className="kk">HR BOOST</div><div className={"vv "+(hpct>0?"u":hpct<0?"dn2":"")}>{hpct>0?"+":""}{hpct}%</div></div>}
@@ -388,12 +392,12 @@ section{padding:13px 12px 2px;margin:0;border-top:1px solid #161d24}
 .hero.empty{padding:18px;color:#8a99a2;font-size:13px;font-weight:600}
 .hh{display:flex;align-items:center;justify-content:space-between;padding:11px 13px 2px}
 .eb{font-size:11px;font-weight:800;color:#f3b94f}.hot{border:1px solid rgba(243,185,79,.35);border-radius:999px;padding:2px 8px;font-size:10px;font-weight:800;color:#f3b94f;background:rgba(243,185,79,.08)}
-.htop{display:flex;gap:9px;padding:6px 13px 2px;align-items:stretch}
-.hL{flex:1.05;min-width:0}.pk{font-weight:800;font-size:36px;line-height:.86;color:#fff}.pg{font-size:12px;color:#8a99a2;font-weight:600;margin-top:3px}
+.htop{display:flex;flex-wrap:wrap;gap:9px;padding:6px 13px 2px;align-items:stretch}
+.hL{flex:1 1 auto;min-width:0}.pk{font-weight:800;font-size:36px;line-height:.86;color:#fff}.pg{font-size:12px;color:#8a99a2;font-weight:600;margin-top:3px}
 .ch{display:flex;gap:6px;margin-top:9px}.cc{border:1px solid rgba(255,255,255,.07);border-radius:9px;padding:6px 9px;flex:1}.cc .k{font-size:8px;color:#8a99a2;font-weight:800}.cc .v{font-size:13px;font-weight:700;white-space:nowrap;margin-top:2px;display:flex;align-items:center;gap:3px}.cc .ar{color:#8a99a2;font-weight:700}.cc .gd{color:#33e991;font-weight:800}
 .ebx{flex:0 0 80px;border:1px solid rgba(51,233,145,.42);border-radius:13px;background:rgba(51,233,145,.07);padding:10px 4px;text-align:center;box-shadow:0 0 20px rgba(51,233,145,.1);display:flex;flex-direction:column;justify-content:center}
 .ebx .b{font-weight:800;font-size:29px;color:#33e991;line-height:1}.ebx .k{font-size:8px;color:#8fd9c2;font-weight:800;margin-top:2px}
-.hR{flex:1.05;min-width:0;display:flex;flex-direction:column}.ct{font-size:8px;letter-spacing:.4px;color:#8a99a2;font-weight:800;margin-bottom:3px}
+.hR{flex:1 1 100%;min-width:0;display:flex;flex-direction:column}.ct{font-size:8px;letter-spacing:.4px;color:#8a99a2;font-weight:800;margin-bottom:3px}
 .cwrap{flex:1;display:flex;flex-direction:column;justify-content:center;border:1px solid rgba(255,255,255,.07);border-radius:9px;background:rgba(255,255,255,.015);padding:6px 8px}
 .livenum{font-family:'Barlow Condensed';font-weight:800;font-size:22px;color:#fff;display:flex;align-items:center;gap:7px}
 .livedot{width:7px;height:7px;border-radius:50%;background:#33e991;animation:pl 1.6s infinite}
@@ -450,7 +454,7 @@ section{padding:13px 12px 2px;margin:0;border-top:1px solid #161d24}
 .pkc{width:186px;border:1px solid rgba(255,255,255,.07);border-radius:13px;background:#0b0f14;padding:10px 12px}.pkc.hot{border-color:rgba(243,185,79,.26);background:#0c1109}.pkc.cold{border-color:rgba(95,184,255,.16);background:#0b0f14}
 .pkc .r1{display:flex;align-items:center;justify-content:space-between}.pkc .n{font-weight:700;font-size:14px}.pkc .c{font-size:10px;color:#8a99a2;font-weight:600}
 .pkc .tg{display:inline-flex;align-items:center;gap:4px;font-size:9px;font-weight:800;margin:7px 0;padding:2px 7px;border-radius:6px}.tg.h{color:#f3b94f;background:rgba(243,185,79,.1)}.tg.p{color:#5fb8ff;background:rgba(95,184,255,.1)}.tg.n{color:#8a99a2;background:rgba(130,145,154,.08)}
-.bs{display:flex;gap:10px}.bs .b{flex:1}.bs .kk{font-size:8.5px;color:#8a99a2;font-weight:800}.bs .vv{font-family:'Barlow Condensed';font-weight:800;font-size:21px}.vv.u{color:#33e991}.vv.dn2{color:#5fb8ff}
+.bs{display:flex;gap:10px}.bs .b{flex:1}.bs .kk{font-size:8.5px;color:#8a99a2;font-weight:800}.bs .vv{font-family:'Barlow Condensed';font-weight:800;font-size:21px}.vv.u{color:#33e991}.vv.dn2{color:#ff5d52}
 .wx{display:flex;gap:10px;margin-top:7px;font-size:10px;color:#c0c9cd;font-weight:600}
 .wxrow{display:flex;align-items:center;gap:7px;margin-top:9px;padding-top:8px;border-top:1px solid rgba(255,255,255,.07);font-size:11.5px;color:#dbe4e2;font-weight:600}.wxrow .wi{font-size:14px}
 .propscta{display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid rgba(155,123,255,.28);border-radius:12px;background:rgba(155,123,255,.06);padding:12px 14px;cursor:pointer}
@@ -477,6 +481,8 @@ section{padding:13px 12px 2px;margin:0;border-top:1px solid #161d24}
   .top .logo{display:none}
   .tabs{padding:0}
   .hero{margin:12px 0 0}
+  .htop{flex-wrap:nowrap}
+  .hR{flex:1.05 1 0}
   .cols{padding:0;margin-top:4px}
   .panel{padding-left:0;padding-right:0}
   .elist{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:9px}
