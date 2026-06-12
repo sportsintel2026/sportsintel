@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { subscriptionApi, supabase } from "../lib/api";
 import Sidebar from "./Sidebar";
+import BottomNav from "./BottomNav";
 
 // The six sports the picks can be tagged with. Keyed by the short id we store
 // on each pick/leg; label + icon are for display. Matches the league style used
@@ -127,6 +128,7 @@ export default function ExpertPicksPage() {
       `}</style>
 
       {/* Desktop sidebar — fixed left */}
+      <BottomNav />
       <div className="desktop-sidebar">
         <Sidebar user={user} plan={plan} signOut={signOut} navigate={navigate} />
       </div>
