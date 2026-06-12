@@ -97,7 +97,6 @@ export default function HomePage(){
     <div className="wp">
       {/* HEADER */}
       <div className="top">
-        <div className="bgr" onClick={()=>navigate("/dashboard")}><span/><span/><span/></div>
         <div className="logo"><span className="a">Wize</span><span className="b">Picks</span></div>
         <span className={"pill"+(marketsLive?"":" off")}><span className={"dot"+(marketsLive?"":" grey")}/> {anyLive?"LIVE":marketsLive?"OPEN":"CLOSED"}</span>
         <div className="mk"><span className={"dot"+(marketsLive?"":" grey")}/><span className="l">MARKETS {marketsLive?"LIVE":"CLOSED"}</span>
@@ -189,10 +188,10 @@ export default function HomePage(){
 
     <nav className="nav">
       <a className="on"><span className="i">🏠</span>Home</a>
-      <a onClick={()=>navigate("/dashboard")}><span className="i">⚡</span>Edges</a>
       <a onClick={()=>navigate("/games")}><span className="i">🗓️</span>Games</a>
       <a onClick={()=>navigate("/dashboard")}><span className="i">⚾</span>Props</a>
-      <a onClick={()=>navigate("/performance")}><span className="i">📈</span>Trends</a>
+      <a onClick={()=>navigate("/odds")}><span className="i">💹</span>Market</a>
+      <a onClick={()=>navigate("/performance")}><span className="i">📈</span>Performance</a>
       <a onClick={()=>navigate("/settings")}><span className="i">👤</span>Account</a>
     </nav>
     </div>
@@ -442,5 +441,5 @@ section{padding:13px 12px 2px;margin:0;border-top:1px solid #161d24}
 @keyframes spin{to{transform:rotate(360deg)}}
 .gm{width:122px;border:1px solid #161e26;border-radius:11px;background:#0b0f14;padding:8px 10px}.gmm{display:flex;align-items:center;gap:4px;font-weight:800;font-size:14px}.gmm .x{color:#8a99a2}.gme{font-size:9px;color:#8a99a2;font-weight:600;margin-top:6px}
 .nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;display:flex;justify-content:space-around;padding:6px 4px calc(6px + env(safe-area-inset-bottom));background:rgba(0,0,0,.96);backdrop-filter:blur(14px);border-top:1px solid #161e26}
-.nav a{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:9px;font-weight:600;color:#8a99a2}.nav a.on{color:#ff5d4d}.nav .i{font-size:17px}
+.nav a{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:8.5px;font-weight:600;color:#8a99a2;flex:1;min-width:0}.nav a.on{color:#ff5d4d}.nav .i{font-size:17px}
 `;
