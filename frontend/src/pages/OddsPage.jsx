@@ -11,6 +11,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { oddsApi, subscriptionApi } from "../lib/api";
 import Sidebar from "./Sidebar";
+import BottomNav from "./BottomNav";
 
 const fmtOdds = (p) => (p == null ? "—" : p > 0 ? `+${p}` : `${p}`);
 const nick = (name) => {
@@ -144,6 +145,7 @@ export default function OddsPage() {
         }
       `}</style>
 
+      <BottomNav />
       <div className="desktop-sidebar">
         <Sidebar user={user} plan={plan} signOut={signOut} navigate={navigate} />
       </div>
