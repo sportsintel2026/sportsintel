@@ -15,7 +15,7 @@ const SPORTS = [
   { id: "ncaamb", label: "🎓 CBB" },
 ];
 
-// ── American odds helpers (match the Expert Picks page) ─────────────────────
+// ── American odds helpers (match the WizePlays page) ─────────────────────
 function americanToDecimal(odds) {
   const n = Number(odds);
   if (!n || Number.isNaN(n)) return null;
@@ -143,7 +143,7 @@ export default function AdminPage() {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
           <div>
             <div style={{ fontSize: 11, color: "#475569", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.08em" }}>Admin Panel</div>
-            <div style={{ fontSize: 22, fontWeight: 800, color: "#fff" }}>Best Bets Manager</div>
+            <div style={{ fontSize: 22, fontWeight: 800, color: "#fff" }}>WizePlays Manager</div>
           </div>
           <a href="/home" style={{ color: "#475569", textDecoration: "none", fontSize: 13 }}>← Home</a>
         </div>
@@ -156,7 +156,7 @@ export default function AdminPage() {
 
 
 // ============================================================================
-// EXPERT PICKS MANAGER — writes to expert_picks (the Expert picks page).
+// WIZEPLAYS MANAGER — writes to expert_picks (the WizePlays page).
 // Supports straight bets and parlays (any number of legs), each tagged by sport.
 // ============================================================================
 function ExpertPicksManager() {
@@ -165,7 +165,7 @@ function ExpertPicksManager() {
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // Use Eastern date so it matches what the Expert picks page reads.
+  // Use Eastern date so it matches what the WizePlays page reads.
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
 
   useEffect(() => {
@@ -232,7 +232,7 @@ function ExpertPicksManager() {
   return (
     <div>
       <div style={{ background: "#ef444415", border: "1px solid #ef444430", borderRadius: 12, padding: "12px 16px", marginBottom: 20, fontSize: 13, color: "#f87171" }}>
-        🎯 These show on the <strong>Expert picks</strong> page · editing today ({today})
+        🎯 These show on the <strong>WizePlays</strong> page · editing today ({today})
       </div>
 
       {items.length === 0 && (
@@ -256,12 +256,12 @@ function ExpertPicksManager() {
 
       <button onClick={save} disabled={saving}
         style={{ width: "100%", background: saved ? "#22c55e" : "#ef4444", color: "#fff", border: "none", borderRadius: 10, padding: "12px 32px", fontSize: 14, fontWeight: 700, cursor: saving ? "wait" : "pointer", fontFamily: "inherit", marginBottom: 28 }}>
-        {saving ? "Saving..." : (saved ? "✓ Saved!" : "Save & Publish Expert Picks")}
+        {saving ? "Saving..." : (saved ? "✓ Saved!" : "Save & Publish WizePlays")}
       </button>
 
       <div style={{ background: "#0a0a14", border: "1px solid #1a1a2e", borderRadius: 12, padding: 16, fontSize: 12, color: "#475569", lineHeight: 1.6 }}>
         <strong style={{ color: "#e2e8f0" }}>Grading:</strong> after a game finishes, set each pick's <strong style={{ color: "#e2e8f0" }}>Result</strong> to Won / Lost / Push and Save.
-        Your record and units on the Expert picks page update automatically — only graded picks count, so nothing is ever inflated.
+        Your record and units on the WizePlays page update automatically — only graded picks count, so nothing is ever inflated.
         <br /><br />
         <strong style={{ color: "#1D9E75" }}>Auto-grade (MLB/NBA):</strong> on a straight bet, link a game from the dropdown and choose the bet type + side. Picks linked this way are set up to grade themselves automatically once that feature is switched on. Leaving them blank still works — you just grade those by hand. (Parlays are always graded by hand.)
       </div>
