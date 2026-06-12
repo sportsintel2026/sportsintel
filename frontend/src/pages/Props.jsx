@@ -79,6 +79,7 @@ export default function PropsPage() {
       <BottomNav />
       <div className="ppsb"><Sidebar user={user} plan={plan} signOut={signOut} navigate={navigate} /></div>
       <div className="ppwrap">
+        <div onClick={() => navigate(-1)} style={{ color: "#6b7280", fontSize: 13, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6, marginBottom: 14, userSelect: "none" }}>← Back</div>
         <div className="pphead">
           <div className="pptitle"><span className="b">Player</span> Props</div>
           <div className="ppsub">Every prop the model flags with an edge — the full board, not just the top picks.</div>
