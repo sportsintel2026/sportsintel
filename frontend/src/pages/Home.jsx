@@ -9,6 +9,7 @@ import { edgesApi, subscriptionApi, liveApi, supabase } from "../lib/api";
 import Sidebar from "./Sidebar";
 
 function formatOdds(a){ if(a==null||isNaN(a))return "—"; const n=Math.round(Number(a)); return n>0?`+${n}`:`${n}`; }
+function fmtTime(t,withDay){ if(!t)return "—"; const d=new Date(t); if(isNaN(d.getTime()))return t; const o={hour:"numeric",minute:"2-digit",timeZone:"America/New_York"}; if(withDay)o.weekday="short"; return d.toLocaleString("en-US",o)+" ET"; }
 function impliedFromAmerican(a){ if(a==null||isNaN(a))return null; const n=Number(a); return n>0?100/(n+100):-n/(-n+100); }
 const ESPN=(ab,lg="mlb")=>`https://a.espncdn.com/i/teamlogos/${lg}/500/${String(ab||"").toLowerCase()}.png`;
 const TEAMCOL={ARI:"#A71930",ATL:"#CE1141",BAL:"#DF4601",BOS:"#BD3039",CHC:"#0E3386",CWS:"#C4CED4",CHW:"#C4CED4",CIN:"#C6011F",CLE:"#E31937",COL:"#5A4F9C",DET:"#FA4616",HOU:"#EB6E1F",KC:"#3E7DC4",KCR:"#3E7DC4",LAA:"#BA0021",LAD:"#3E7DC4",LOS:"#3E7DC4",MIA:"#00A3E0",MIL:"#FFC52F",MIN:"#D31145",NYM:"#FF5910",NYY:"#3A4F73",OAK:"#EFB21E",ATH:"#EFB21E",PHI:"#E81828",PIT:"#FDB827",SD:"#FFC425",SDP:"#FFC425",SEA:"#1B9A8E",SF:"#FD5A1E",SFG:"#FD5A1E",STL:"#C41E3A",TB:"#8FBCE6",TBR:"#8FBCE6",TEX:"#3E66B0",TOR:"#1D6FE0",WSH:"#E0263B",WAS:"#E0263B"};
@@ -199,7 +200,7 @@ export default function HomePage(){
           {upcoming.map((g,i)=>{ const aAb=g.awayAbbr||shortTeam(g.away||""); const hAb=g.homeAbbr||shortTeam(g.home||""); const gid=g.id||g.gameId;
             return (<div key={i} className="gm" onClick={()=>gid&&navigate(`/game/${sport}/${gid}`)}>
               <div className="gmm"><Logo ab={aAb} size={20} lg={sp.lg} col={colFor(aAb,sport)}/> {aAb} <span className="x">v</span> <Logo ab={hAb} size={20} lg={sp.lg} col={colFor(hAb,sport)}/> {hAb}</div>
-              <div className="gme">{g.time||"—"}{g.totals?.projected!=null?` · O/U ${g.totals.projected}`:""}</div>
+              <div className="gme">{fmtTime(g.time,true)}{g.totals?.projected!=null?` · O/U ${g.totals.projected}`:""}</div>
             </div>);})}
         </div>
       </section>)}
@@ -248,7 +249,7 @@ function Hero({hero,navigate,live,series,sport="mlb"}){
         <div className="hL"><div className="pk">{edgeLabel(hero)}</div><div className="pg">{hero.matchup}</div>
           <div className="ch">
             <div className="cc"><div className="k">{moved?"LINE MOVED":"ODDS"}</div><div className="v">{moved?<>{formatOdds(pts[0])}<span className="ar">{String.fromCharCode(8594)}</span><b className="gd">{formatOdds(pts[pts.length-1])}</b></>:formatOdds(hero.odds)}</div></div>
-            <div className="cc"><div className="k">STARTS</div><div className="v">{hero.time||"—"}</div></div>
+            <div className="cc"><div className="k">STARTS</div><div className="v">{fmtTime(hero.time)}</div></div>
           </div></div>
         <div className="ebx"><div className="b">{fmtEdgeFor(hero,sport)}</div><div className="k">EDGE</div></div>
         <div className="hR"><div className="ct">LINE MOVEMENT</div>
