@@ -339,12 +339,11 @@ async function propResults() {
 // READ-ONLY. Strikeout-prop calibration backtest. Answers what the blanket 0.75
 // shrink can't: (1) DIRECTIONAL bias — do OVER picks bleed while UNDERs hold (or
 // vice versa)? (2) is the stated confidence honest (does a claimed 65% win 65%)?
-// (3) what shrink best CALIBRATES the probs — an empirical sweep scored by log-loss
-// (lower=better) and Brier, exactly like the ML decompression sweep. Reconstructs
-// the pre-shrink raw prob from the stored model_prob (which already has the current
-// 0.75 baked in), re-applies each candidate shrink, and scores it against the real
-// win/loss. Pages all graded K rows in 1,000-row chunks (Supabase caps select 1000).
-const K_CURRENT_SHRINK = 0.75; // MUST match PROP_PROB_SHRINK in edgesModel.js
+// (3) is the model OVERCONFIDENT — a φ-aware temper sweep (pull the stored v2.1 prob
+// toward 0.5, score by log-loss/Brier) that maps qualitatively to K_DISPERSION_PHI.
+// v2.1 has NO post-hoc shrink (the negbin φ does the tempering), so the stored prob
+// is the model's own output — we do NOT un-shrink it. Pages all graded K rows in
+// 1,000-row chunks (Supabase caps select 1000).
 async function kBacktest(cutoff = null) {
   const supabase = db();
   const amerToProfit = (o) => o == null ? null : (o > 0 ? o / 100 : 100 / Math.abs(o));
@@ -413,27 +412,32 @@ async function kBacktest(cutoff = null) {
     };
   }).filter(b => b.n > 0);
 
-  // shrink sweep: reconstruct raw, re-shrink, score by log-loss + Brier vs win/loss
-  const candidates = [0.30, 0.40, 0.50, 0.60, 0.75, 0.90, 1.00];
-  const sweep = candidates.map(s => {
+  // TEMPER sweep (φ-aware): v2.1 ABANDONED the old 0.75 post-hoc shrink — the negbin
+  // dispersion (K_DISPERSION_PHI) now does the tempering. So we do NOT un-shrink the
+  // stored prob (it IS the model's own output). This sweep simply pulls the stored
+  // prob toward 0.5 by a factor t and scores log-loss, to measure IF / HOW MUCH the
+  // model is overconfident. t=1.0 = model as-is. The LIVE lever is K_DISPERSION_PHI
+  // (raising φ ≈ lowering t here); treat bestTemper as a DIRECTION signal only, never
+  // a value to paste — there is no post-hoc shrink knob in v2.1 anymore.
+  const tempers = [0.50, 0.60, 0.70, 0.80, 0.90, 1.00];
+  const sweep = tempers.map(t => {
     let ll = 0, brier = 0, sumCand = 0, n = 0, win = 0;
     for (const r of scope) {
       if (r.sp == null) continue;
-      const raw = clamp(0.5 + (r.sp - 0.5) / K_CURRENT_SHRINK, 0.001, 0.999);
-      const cand = clamp(0.5 + s * (raw - 0.5), 1e-6, 1 - 1e-6);
+      const cand = clamp(0.5 + t * (r.sp - 0.5), 1e-6, 1 - 1e-6);
       const y = r.result === "win" ? 1 : 0;
       ll += -(y * Math.log(cand) + (1 - y) * Math.log(1 - cand));
       brier += (cand - y) * (cand - y);
       sumCand += cand; win += y; n++;
     }
     return {
-      shrink: s,
+      temper: t,
       logLoss: n ? +(ll / n).toFixed(4) : null,
       brier: n ? +(brier / n).toFixed(4) : null,
       meanStatedProb: n ? +(sumCand / n).toFixed(3) : null,
       actualWinRate: n ? +(win / n).toFixed(3) : null,
       calibrationGap: n ? +((sumCand - win) / n).toFixed(3) : null, // + = overconfident
-      note: s === K_CURRENT_SHRINK ? "current" : (s === 1.00 ? "no shrink (raw Poisson)" : ""),
+      note: t === 1.00 ? "model as-is (v2.1 stored prob)" : "",
     };
   });
   const best = sweep.filter(x => x.logLoss != null).sort((a, b) => a.logLoss - b.logLoss)[0];
@@ -446,15 +450,15 @@ async function kBacktest(cutoff = null) {
   return {
     ok: true,
     era: cut ? { cutoff: cut, note: `Detailed analysis below = v2.1-era only (game_date >= ${cut}). before/after = quick contrast.`, before: summarize(before), after: summarize(after) } : { cutoff: null, note: "No cutoff given (?k_backtest=1) = ALL strikeout picks pooled, including pre-v2.1. Pass ?k_backtest=YYYY-MM-DD to isolate v2.1." },
-    method: "Decisions only (push/void excluded). model_prob = P(taken side) = P(win). ROI uses real American odds. Shrink sweep rebuilds the pre-shrink raw prob (current shrink 0.75), re-applies each candidate, scores by log-loss (lower=better) vs real win/loss.",
+    method: "Decisions only (push/void excluded). model_prob = P(taken side) = P(win). ROI uses real American odds. TEMPER sweep pulls the STORED v2.1 prob toward 0.5 by factor t (NO false un-shrink — v2.1 has no post-hoc shrink); t=1.0 is the model as-is. Scored by log-loss (lower=better) vs real win/loss.",
     overall: summarize(scope),
     bySide: { OVER: summarize(scope.filter(r => r.side === "OVER")), UNDER: summarize(scope.filter(r => r.side === "UNDER")) },
     calibration,
-    shrinkSweep: sweep,
-    bestShrinkByLogLoss: best ? best.shrink : null,
+    temperSweep: sweep,
+    bestTemperByLogLoss: best ? best.temper : null,
     baselineLogLoss: +(-Math.log(0.5)).toFixed(4), // 0.6931 = pure coin flip
     byEdgeBand: edgeBands,
-    verdictNote: "If bySide shows OVER deeply -EV but UNDER ~breakeven (or vice versa), the fix is a DIRECTIONAL gate (require more edge on the losing side), not just shrink. If both sides are overconfident symmetrically, lower PROP_PROB_SHRINK toward bestShrinkByLogLoss. Compare every sweep logLoss to baselineLogLoss (0.6931): if even the best barely beats a coin flip, the K model has little real signal and the honest move is a hard shrink + wider edge gate.",
+    verdictNote: "v2.1 tempering lever is K_DISPERSION_PHI (higher φ = wider tails = probs pulled toward 0.5), NOT a post-hoc shrink. If temperSweep's best t is well below 1.0 AND calibrationGap at t=1.0 is positive (overconfident) on a real sample (n>=70), RAISE φ (e.g. 1.5→2.0) and re-backtest — do not paste t anywhere. If bySide shows one side deeply -EV, that's a directional edge-gate problem, not φ. Compare every logLoss to baselineLogLoss (0.6931): if even t=1.0 can't beat a coin flip at real n, the K model lacks signal — hold overs OFF and widen the edge gate. NOTE: OVER picks stay suppressed (K_ALLOW_OVERS=false) so OVER n will be ~0 until overs are re-enabled; this sweep can only validate UNDER calibration until then.",
   };
 }
 
@@ -1042,7 +1046,7 @@ async function clvAudit() {
   const overall = summarize(view);
   const flags = [];
   if (overall.capturedPct != null && overall.capturedPct < 70)
-    flags.push(`LOW CAPTURE COVERAGE (${overall.capturedPct}% of graded picks got a closing line). A big chunk of "flat CLV" is actually MISSING closing lines — the 35-min window vs 30-min cron is dropping captures. Fix capture before judging edge.`);
+    flags.push(`LOW LIFETIME CAPTURE COVERAGE (${overall.capturedPct}% of all graded picks have a closing line). This is mostly the FROZEN pre-fix backlog (single-shot-capture era) dragging the lifetime average down — those games can't be recaptured. Judge capture health by prePostCoverage.postFix, not this lifetime number. The live ratchet uses a 120-min window with a 15-min cron (~8 ticks/game), so the mechanism is healthy; coverage converges up on its own as old picks age out.`);
   if (overall.zeroMovementPct != null && overall.zeroMovementPct >= 30)
     flags.push(`HIGH ZERO-MOVEMENT (${overall.zeroMovementPct}% of captured picks had ~no price change pick->close). Suggests we're pricing at/near the close (no room for CLV) or capturing a stale/identical line.`);
   if (overall.meanAbsMovePP != null && overall.meanAbsMovePP < 1.0)
