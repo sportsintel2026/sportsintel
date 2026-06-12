@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { edgesApi, subscriptionApi } from "../lib/api";
 import Sidebar from "./Sidebar";
+import BottomNav from "./BottomNav";
 import StartHereGuide from "./StartHereGuide";
 
 const LEAGUES = [
@@ -81,6 +82,7 @@ export default function DashboardPage() {
       `}</style>
 
       {/* Desktop sidebar — fixed left */}
+      <BottomNav />
       <div className="desktop-sidebar">
         <Sidebar user={user} plan={plan} signOut={signOut} navigate={navigate} />
       </div>
