@@ -134,6 +134,7 @@ function parseMainOddsEvent(ev) {
   // Collect every totals quote across books first, so we can pick the consensus
   // line and then the best price AT that line (keeps over/under on the same number).
   const totalsQuotes = []; // { line, over, overBook, under, underBook }
+  const spreadQuotes = []; // matched +/-1.5 run-line pairs: { awayLine, away, awayBook, homeLine, home, homeBook }
 
   for (const bm of ev.bookmakers || []) {
     if (!PREFERRED_BOOKS_MAIN.includes(bm.key)) continue;
@@ -175,18 +176,20 @@ function parseMainOddsEvent(ev) {
           }
         }
       } else if (m.key === "spreads" && m.outcomes?.length >= 2) {
-        // Run line: take the standard ±1.5 outcomes for each team, best price.
+        // Run line: a book quotes the two sides as a MATCHED PAIR — one team -1.5, the
+        // other +1.5. Only accept this book if both sides are present at ±1.5 AND they
+        // are exact opposites, then keep them TOGETHER. This prevents stitching a -1.5
+        // quote from one book onto a -1.5 quote from another (an impossible line where
+        // both teams are favored). Same discipline as the totals pairing above.
         const awayOutcome = m.outcomes.find(o => o.name === ev.away_team && Math.abs(o.point) === 1.5);
         const homeOutcome = m.outcomes.find(o => o.name === ev.home_team && Math.abs(o.point) === 1.5);
-        if (awayOutcome && plausibleMlOdds(awayOutcome.price) && (spreads.away == null || awayOutcome.price > spreads.away)) {
-          spreads.away = awayOutcome.price;
-          spreads.awayLine = awayOutcome.point;
-          spreads.awayBook = bm.title;
-        }
-        if (homeOutcome && plausibleMlOdds(homeOutcome.price) && (spreads.home == null || homeOutcome.price > spreads.home)) {
-          spreads.home = homeOutcome.price;
-          spreads.homeLine = homeOutcome.point;
-          spreads.homeBook = bm.title;
+        if (awayOutcome && homeOutcome
+            && awayOutcome.point === -homeOutcome.point
+            && plausibleMlOdds(awayOutcome.price) && plausibleMlOdds(homeOutcome.price)) {
+          spreadQuotes.push({
+            awayLine: awayOutcome.point, away: awayOutcome.price, awayBook: bm.title,
+            homeLine: homeOutcome.point, home: homeOutcome.price, homeBook: bm.title,
+          });
         }
       }
     }
@@ -206,6 +209,21 @@ function parseMainOddsEvent(ev) {
       if (q.line !== consensusLine) continue;
       if (totals.over == null || q.over > totals.over) { totals.over = q.over; totals.overBook = q.overBook; }
       if (totals.under == null || q.under > totals.under) { totals.under = q.under; totals.underBook = q.underBook; }
+    }
+  }
+
+  // Resolve the run line: pick a matched pair from a SINGLE book (sides already
+  // guaranteed opposite +/-1.5 above). Prefer the book with the best price on the
+  // -1.5 favorite side — that's the side that becomes an edge candidate.
+  if (spreadQuotes.length > 0) {
+    let best = null, bestFav = -Infinity;
+    for (const q of spreadQuotes) {
+      const favPrice = q.awayLine < 0 ? q.away : q.home;
+      if (favPrice > bestFav) { bestFav = favPrice; best = q; }
+    }
+    if (best) {
+      spreads.awayLine = best.awayLine; spreads.away = best.away; spreads.awayBook = best.awayBook;
+      spreads.homeLine = best.homeLine; spreads.home = best.home; spreads.homeBook = best.homeBook;
     }
   }
 
