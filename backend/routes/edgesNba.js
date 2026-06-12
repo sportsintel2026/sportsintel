@@ -12,6 +12,7 @@
 const express = require("express");
 const router = express.Router();
 const { generateNbaPredictions } = require("../services/nbaService");
+const { getNbaPropProjections } = require("../services/nbaProjectionService");
 
 // nickname (last word of displayName) → standard abbreviation
 const NBA_ABBR = {
@@ -175,6 +176,57 @@ router.get("/", async (req, res) => {
   } catch (err) {
     console.error("[edges/nba] failed:", err.message);
     res.status(500).json({ ok: false, error: "Failed to build NBA edges" });
+  }
+});
+
+// GET /api/edges/nba/props — aggregate today's per-game NBA projections into one
+// board, grouped by market (points / rebounds / assists / threes). These are
+// EXPERIMENTAL projections (proj vs line), not tracked +EV plays. Cached briefly
+// because each game does its own ESPN box-score + gamelog fetches.
+let _propsCache = { t: 0, data: null };
+const PROPS_TTL = 3 * 60 * 1000;
+const MKTS = ["points", "rebounds", "assists", "threes"];
+router.get("/props", async (req, res) => {
+  try {
+    if (!req.query.fresh && _propsCache.data && Date.now() - _propsCache.t < PROPS_TTL) {
+      return res.json(_propsCache.data);
+    }
+    const preds = await generateNbaPredictions(req.query.date ? { date: req.query.date } : {});
+    const board = { points: [], rebounds: [], assists: [], threes: [] };
+    let gamesUsed = 0;
+    for (const g of preds || []) {
+      if (!g || !g.gameId) continue;
+      let proj;
+      try { proj = await getNbaPropProjections(g.gameId); } catch (_) { continue; }
+      if (!proj || !proj.available) continue;
+      gamesUsed++;
+      const homeAbbr = abbrOf(g.home), awayAbbr = abbrOf(g.away);
+      const matchup = `${awayAbbr} @ ${homeAbbr}`;
+      for (const pl of proj.players || []) {
+        if (!pl || !pl.markets) continue;
+        const teamAbbr = pl.side === "home" ? homeAbbr : pl.side === "away" ? awayAbbr : "";
+        for (const key of MKTS) {
+          const m = pl.markets[key];
+          if (!m || m.projection == null || m.line == null || m.suspect) continue; // skip ineligible (too few games / no line) and suspect (line far from norm)
+          board[key].push({
+            player: pl.name, teamAbbr, game: matchup, gameId: String(g.gameId),
+            line: m.line, projection: m.projection, edge: m.edge, side: m.side,
+            flagged: !!m.flagged, games: m.games, athleteId: pl.athleteId || null,
+          });
+        }
+      }
+    }
+    for (const k of MKTS) board[k].sort((a, b) => Math.abs(b.edge ?? 0) - Math.abs(a.edge ?? 0));
+    const out = {
+      league: "nba", experimental: true, generatedAt: new Date().toISOString(), games: gamesUsed,
+      note: "Experimental projections — prop markets are sharp, so flagged edges are rare and informational, not betting advice.",
+      pointsProps: board.points, reboundsProps: board.rebounds, assistsProps: board.assists, threesProps: board.threes,
+    };
+    _propsCache = { t: Date.now(), data: out };
+    res.json(out);
+  } catch (err) {
+    console.error("[edges/nba/props] failed:", err.message);
+    res.status(500).json({ ok: false, error: "Failed to build NBA props board" });
   }
 });
 
