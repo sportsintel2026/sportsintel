@@ -110,6 +110,7 @@ export default function HomePage(){
 
       {/* HERO */}
       {hero?<Hero hero={hero} navigate={navigate} live={anyLive} series={seriesFor(hero)}/>:<div className="hero empty">No qualifying edge on the board yet — check back closer to first pitch.</div>}
+      <div className="cols">
 
       {/* LIVE EDGES — in-game model edges, pulled from /api/live/mlb (moved off the game page) */}
       {liveGames.length>0&&(<section className="panel">
@@ -180,6 +181,7 @@ export default function HomePage(){
             </div>);})}
         </div>
       </section>)}
+      </div>
     </div>
 
     <nav className="nav">
@@ -440,4 +442,18 @@ section{padding:13px 12px 2px;margin:0;border-top:1px solid #161d24}
 .gm{width:122px;border:1px solid #161e26;border-radius:11px;background:#0b0f14;padding:8px 10px}.gmm{display:flex;align-items:center;gap:4px;font-weight:800;font-size:14px}.gmm .x{color:#8a99a2}.gme{font-size:9px;color:#8a99a2;font-weight:600;margin-top:6px}
 .nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;display:flex;justify-content:space-around;padding:6px 4px calc(6px + env(safe-area-inset-bottom));background:rgba(0,0,0,.96);backdrop-filter:blur(14px);border-top:1px solid #161e26}
 .nav a{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:8.5px;font-weight:600;color:#8a99a2;flex:1;min-width:0}.nav a.on{color:#ff5d4d}.nav .i{font-size:17px}
+
+/* ---- DESKTOP: same mobile cards, spread wide multi-column ---- */
+@media (min-width:769px){
+  .wp{max-width:1180px;padding-bottom:88px}
+  .top{padding:14px 22px 10px}
+  .tabs{padding:0 22px}
+  .hero{max-width:840px;margin-left:auto;margin-right:auto}
+  .cols{column-count:2;column-gap:18px;margin-top:6px;padding:0 8px}
+  .cols>section{break-inside:avoid;-webkit-column-break-inside:avoid}
+  .nav{max-width:none;left:0;right:0;transform:none;justify-content:center;gap:46px;padding:9px 4px}
+  .nav a{flex:0 0 auto;font-size:11px}
+  .nav a:hover{color:#cdd6da}
+  .nav .i{font-size:20px}
+}
 `;
