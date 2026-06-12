@@ -13,13 +13,31 @@ const isTotal=(e)=>e.side==="over"||e.side==="under";
 function edgeLabel(e){ if(isTotal(e)) return `${e.side==="over"?"Over":"Under"} ${e.line}`; const ab=e.teamAbbr||shortTeam(e.matchup); return e.line!=null?`${ab} ${e.line>0?"+":""}${e.line}`:`${ab} ML`; }
 function oneSidePerGame(arr){ const g=new Map(); for(const e of arr||[]){ const p=g.get(e.gameId); if(!p||(e.edge??-Infinity)>(p.edge??-Infinity)) g.set(e.gameId,e); } return [...g.values()]; }
 const MLB_HEAD=(id)=>`https://midfield.mlbstatic.com/v1/people/${id}/spots/120`;
+const NBA_HEAD=(id)=>`https://a.espncdn.com/i/headshots/nba/players/full/${id}.png`;
+const NBACOL={ATL:"#E03A3E",BOS:"#007A33",BKN:"#777",CHA:"#1D1160",CHI:"#CE1141",CLE:"#860038",DAL:"#00538C",DEN:"#0E2240",DET:"#C8102E",GSW:"#1D428A",HOU:"#CE1141",IND:"#002D62",LAC:"#C8102E",LAL:"#552583",MEM:"#5D76A9",MIA:"#98002E",MIL:"#00471B",MIN:"#236192",NOP:"#85714D",NYK:"#006BB6",OKC:"#007AC1",ORL:"#0077C0",PHI:"#006BB6",PHX:"#E56020",POR:"#E03A3E",SAC:"#5A2D81",SAS:"#9AA7AE",TOR:"#CE1141",UTA:"#3E2680",WAS:"#002B5C"};
+const nbaCol=(ab)=>NBACOL[String(ab||"").toUpperCase()]||"#3a4a57";
+const NBA_MK={points:"PTS",rebounds:"REB",assists:"AST",threes:"3PM"};
+const NFL_HEAD=(id)=>`https://a.espncdn.com/i/headshots/nfl/players/full/${id}.png`;
 const initials=(n)=>String(n||"").split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase();
 
 /* static, clearly-labeled example for the line-shopping explainer (not on the public feed) */
 const SHOP=[["BetMGM","−130",false],["Caesars","−128",false],["DraftKings","−125",false],["FanDuel","−120 ✓ best",true]];
 
+/* curated showcase of recognizable players across sports — illustrative sample, NOT live picks.
+   real live edges live inside the app; this section just shows the kind of props we cover. */
+const SPOT_EX=[
+  {sport:"⚾ MLB",img:MLB_HEAD(592450),ring:teamCol("NYY"),nm:"Aaron Judge",mu:"NYY vs BOS",prop:"O 0.5 HR",odds:"+265",sub:"Home Runs",sc:"#f0a93c",sbg:"rgba(240,169,60,.10)",sbd:"rgba(240,169,60,.28)"},
+  {sport:"🏀 NBA",img:NBA_HEAD(3112335),ring:nbaCol("DEN"),nm:"Nikola Jokić",mu:"DEN vs MIN",prop:"O 25.5 Pts",odds:"−115",sub:"Points",sc:"#bba6ff",sbg:"rgba(155,123,255,.10)",sbd:"rgba(155,123,255,.28)"},
+  {sport:"⚾ MLB",img:MLB_HEAD(660271),ring:teamCol("LAD"),nm:"Shohei Ohtani",mu:"LAD vs SD",prop:"O 1.5 Hits",odds:"+135",sub:"Hits",sc:"#33e991",sbg:"rgba(51,233,145,.10)",sbd:"rgba(51,233,145,.28)"},
+  {sport:"🏈 NFL",img:NFL_HEAD(3139477),ring:"#E31837",nm:"Patrick Mahomes",mu:"KC vs BUF",prop:"O 1.5 Pass TD",odds:"+120",sub:"Passing TDs",sc:"#bba6ff",sbg:"rgba(155,123,255,.10)",sbd:"rgba(155,123,255,.28)"},
+  {sport:"🏀 NBA",img:NBA_HEAD(3945274),ring:nbaCol("LAL"),nm:"Luka Dončić",mu:"LAL vs GSW",prop:"O 8.5 Ast",odds:"+105",sub:"Assists",sc:"#bba6ff",sbg:"rgba(155,123,255,.10)",sbd:"rgba(155,123,255,.28)"},
+  {sport:"⚾ MLB",img:MLB_HEAD(656941),ring:teamCol("PHI"),nm:"Kyle Schwarber",mu:"PHI vs MIL",prop:"O 0.5 HR",odds:"+210",sub:"Home Runs",sc:"#f0a93c",sbg:"rgba(240,169,60,.10)",sbd:"rgba(240,169,60,.28)"},
+];
+
 export default function LandingPage(){
   const [edges,setEdges]=useState(null);
+  const [nba,setNba]=useState({});
+  const [nbaProps,setNbaProps]=useState({});
   const [loading,setLoading]=useState(true);
   const [failed,setFailed]=useState(false);
   const prev=useRef({});
@@ -28,16 +46,18 @@ export default function LandingPage(){
   const [spotAnim,setSpotAnim]=useState("in");
 
   const load=useCallback(async()=>{
-    try{
-      const d=await edgesApi.getMLB();
-      const f={};
+    const [rMlb,rNbaE,rNbaP]=await Promise.allSettled([edgesApi.getMLB(),edgesApi.getNBA(),edgesApi.getNBAProps()]);
+    if(rMlb.status==="fulfilled" && rMlb.value){
+      const d=rMlb.value; const f={};
       [...(d.moneylineEdges||[]),...(d.totalsEdges||[])].forEach(e=>{
         const k=e.gameId+e.side;
         if(prev.current[k]!=null && prev.current[k]!==e.odds) f[k]=e.odds>prev.current[k]?"up":"dn";
         prev.current[k]=e.odds;
       });
       setFlash(f); setEdges(d); setFailed(false);
-    }catch(_){ setFailed(true); }
+    }else{ setFailed(true); }
+    setNba(rNbaE.status==="fulfilled" ? (rNbaE.value||{}) : {});
+    setNbaProps(rNbaP.status==="fulfilled" ? (rNbaP.value||{}) : {});
     setLoading(false);
   },[]);
   useEffect(()=>{ load(); const id=setInterval(load,45000); return ()=>clearInterval(id); },[load]);
@@ -60,35 +80,27 @@ export default function LandingPage(){
   const hits=(e.hitsPropEdges||[]);
   const ks=(e.kPropEdges||[]);
 
-  /* spotlight: real props, mixed, honest sub-labels */
-  const spotItems=[];
-  hits.slice(0,3).forEach(p=>spotItems.push({sport:"⚾ MLB",id:p.playerId,nm:p.player,team:p.team,mu:p.game,
-    prop:(p.line===0.5?"1+ Hits":`${p.side==="under"?"U":"O"} ${p.line} Hits`),odds:fmtOdds(p.odds),
-    sub:`⚡ ${pct1(p.edge)} model edge`,sc:"#33e991",sbg:"rgba(51,233,145,.10)",sbd:"rgba(51,233,145,.28)"}));
-  ks.slice(0,3).forEach(p=>spotItems.push({sport:"⚾ MLB",id:p.playerId,nm:p.player,team:p.team,mu:p.game,
-    prop:`K ${p.side==="under"?"U":"O"}${p.line}`,odds:fmtOdds(p.odds),
-    sub:`⚡ ${pct1(p.edge)} model edge`,sc:"#33e991",sbg:"rgba(51,233,145,.10)",sbd:"rgba(51,233,145,.28)"}));
-  hr.slice(0,2).forEach(p=>spotItems.push({sport:"⚾ MLB",id:p.playerId,nm:p.player,team:p.team,mu:p.game,
-    prop:"O 0.5 HR",odds:fmtOdds(p.odds),
-    sub:"🔥 Longshot · bet small",sc:"#f0a93c",sbg:"rgba(240,169,60,.10)",sbd:"rgba(240,169,60,.28)"}));
+  /* NBA: ML edges are tracked model output (edge is already a %); props are experimental projections */
+  const nbaMl=oneSidePerGame((nba.moneylineEdges||[]).filter(x=>(x.edge??0)>0)).sort((a,b)=>(b.edge||0)-(a.edge||0));
+  const nbaPropCount=(nbaProps.pointsProps||[]).length+(nbaProps.assistsProps||[]).length+(nbaProps.threesProps||[]).length+(nbaProps.reboundsProps||[]).length;
+
+  /* spotlight: curated example stars (a sample of coverage — real live edges are inside the app) */
+  const spotItems=SPOT_EX;
   const spotLen=spotItems.length;
 
   /* rotate spotlight */
   useEffect(()=>{ if(spotLen<2) return; const id=setInterval(()=>{
     setSpotAnim("out");
-    setTimeout(()=>{ setSpotIdx(i=>(i+1)%spotLen); setSpotAnim("in"); },340);
-  },2800); return ()=>clearInterval(id); },[spotLen]);
+    setTimeout(()=>{ setSpotIdx(i=>(i+1)%spotLen); setSpotAnim("in"); },300);
+  },2400); return ()=>clearInterval(id); },[spotLen]);
   const spot=spotLen?spotItems[spotIdx%spotLen]:null;
 
-  /* going yard: real HR longshots */
-  const yard=hr.slice(0,3).map(p=>{ const imp=impliedFromAmerican(p.odds); const pctN=imp!=null?Math.round(imp*100):null;
-    return {id:p.playerId,nm:p.player,mu:p.game,odds:fmtOdds(p.odds),pct:pctN}; });
-
-  const lockedCount=Math.max(0,(posBoard.length-tickerRows.length))+hits.length+ks.length+hr.length;
+  const lockedCount=Math.max(0,(posBoard.length-tickerRows.length))+hits.length+ks.length+hr.length+nbaPropCount+nbaMl.length;
 
   /* marquee items from live board + a couple props */
   const mq=[];
-  posBoard.slice(0,7).forEach(x=>mq.push({i:"⚾",t:edgeLabel(x),v:pct1(x.edge),up:(x.edge??0)>=0}));
+  posBoard.slice(0,6).forEach(x=>mq.push({i:"⚾",t:edgeLabel(x),v:pct1(x.edge),up:(x.edge??0)>=0}));
+  nbaMl.slice(0,4).forEach(x=>mq.push({i:"🏀",t:`${x.teamAbbr||shortTeam(x.matchup)} ML`,v:`+${Number(x.edge).toFixed(1)}%`,up:true}));
   hr.slice(0,2).forEach(p=>mq.push({i:"💥",t:`${p.player} HR`,v:fmtOdds(p.odds),up:true}));
   const mqLoop=mq.length?[...mq,...mq]:[];
 
@@ -208,11 +220,11 @@ export default function LandingPage(){
       {spot &&
       <div className="wrap spotwrap">
         <div className="spot">
-          <div className="spot-tag">🎯 TODAY'S PROP SPOTLIGHT</div>
+          <div className="spot-tag">🎯 PLAYER PROP SPOTLIGHT</div>
           <div className={"spot-card "+(spotAnim==="out"?"sc-out":"sc-in")}>
-            <div className="spot-av" style={{boxShadow:`0 0 0 2.5px ${teamCol(spot.team)}`}}>
+            <div className="spot-av" style={{boxShadow:`0 0 0 2.5px ${spot.ring||"#3a4a57"}`}}>
               {initials(spot.nm)}
-              {spot.id && <img src={MLB_HEAD(spot.id)} alt="" onError={(ev)=>{ev.target.style.display="none";}}/>}
+              {spot.img && <img src={spot.img} alt="" onError={(ev)=>{ev.target.style.display="none";}}/>}
             </div>
             <div className="spot-info">
               <div className="spot-sport">{spot.sport}</div>
@@ -228,34 +240,8 @@ export default function LandingPage(){
           <div className="spot-dots">
             {spotItems.map((_,i)=><i key={i} className={i===(spotIdx%spotLen)?"on":""}/>)}
           </div>
+          <div className="spot-note">Sample of the players &amp; props we cover · your live edges are inside</div>
         </div>
-      </div>}
-
-      {/* GOING YARD (real HR longshots) */}
-      {yard.length>0 &&
-      <div className="wrap">
-        <section className="sec" style={{borderTop:"none",paddingTop:6}}>
-          <div className="kick" style={{color:"#f0a93c"}}>🔥 Going yard tonight</div>
-          <h2>Who's launching one?</h2>
-          <p>The model's home-run longshots, ranked by the book's implied chance to homer. Even the hottest bats go yard about <strong>one game in five</strong> — this is the fun lottery ticket, not a lock. Bet small.</p>
-          <div className="yard">
-            {yard.map((y,i)=>(
-              <div className="yc" key={i}>
-                <span className="rank">{i+1}</span><span className="fire">🔥</span>
-                <div className="yav">{initials(y.nm)}{y.id && <img src={MLB_HEAD(y.id)} alt="" onError={(ev)=>{ev.target.style.display="none";}}/>}</div>
-                <div className="ynm">{y.nm}</div>
-                <div className="ymu">{y.mu}</div>
-                <div className="yodds">{y.odds}<span className="l">TO HOMER</span></div>
-                {y.pct!=null && <><div className="ybar"><i style={{width:`${Math.min(45,y.pct)}%`}}/></div>
-                <div className="ypct">Implied to homer · {y.pct}%</div></>}
-              </div>
-            ))}
-          </div>
-          <div className="gate" style={{maxWidth:"none",marginTop:14}}>
-            <div className="h">🔒 HR, hits &amp; strikeout props on every slate</div>
-            <div className="s">All-Access opens the full props board with park &amp; pitcher factors</div>
-          </div>
-        </section>
       </div>}
 
       <div className="wrap">
@@ -415,6 +401,7 @@ footer{border-top:1px solid #11111e;padding:24px 0;text-align:center;color:var(-
 .spot-dots{display:flex;gap:5px;justify-content:center;margin-top:14px}
 .spot-dots i{width:5px;height:5px;border-radius:50%;background:#2a2a3d;transition:.25s}
 .spot-dots i.on{width:16px;border-radius:3px;background:var(--plight)}
+.spot-note{font-size:10px;color:var(--t3);text-align:center;margin-top:9px;font-weight:600}
 .yard{display:grid;grid-template-columns:1fr;gap:11px}
 @media(min-width:680px){.yard{grid-template-columns:repeat(3,1fr)}}
 .yc{position:relative;background:linear-gradient(180deg,rgba(240,169,60,.06),rgba(10,10,20,.4));border:1px solid rgba(240,169,60,.28);border-radius:15px;padding:15px 13px;text-align:center;overflow:hidden}
