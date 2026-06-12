@@ -50,6 +50,9 @@ export default function PropsPage() {
           ))}
         </div>
 
+        {tab === "hr" && !loading && (
+          <div className="ppwarn">⚠️ Longshots — not guaranteed. Even the top names homer only about 1 game in 5. These are ranked by the model's chance to homer (a speculative lottery-ticket bet), <b>not</b> a tracked +EV play. Bet small, if at all.</div>
+        )}
         {loading
           ? <div className="ppmuted">Loading the board…</div>
           : sorted.length === 0
@@ -70,7 +73,10 @@ function PropRow({ p, type, rank, navigate }) {
     pct = Math.round((p.hrProb || 0) * 100); lbl = "to homer"; line = `O 0.5 HR · ${formatOdds(p.odds)}`;
   } else if (type === "hits") {
     pct = Math.round((p.hitsProb || 0) * 100); lbl = "hit prob";
-    line = `${p.side === "over" ? "O" : "U"} ${p.line} Hits · ${formatOdds(p.odds)}`;
+    const needH = Math.floor(p.line) + 1; // over 0.5 → 1+, over 1.5 → 2+
+    line = p.side === "over"
+      ? `${needH}+ Hits · ${formatOdds(p.odds)}`
+      : (p.line <= 0.5 ? `0 Hits · ${formatOdds(p.odds)}` : `Under ${p.line} Hits · ${formatOdds(p.odds)}`);
     if ((p.edge ?? 0) > 0) edgeBadge = `+${(p.edge * 100).toFixed(1)}%`;
   } else {
     pct = Math.round((p.kProb || 0) * 100); lbl = "K prob";
@@ -125,6 +131,7 @@ const CSS = `
 .pppct{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:26px;color:#33e991;line-height:1}.pppct .pc{font-size:15px;margin-left:1px}
 .pplbl{font-size:8.5px;color:#7d8a93;font-weight:700;text-transform:uppercase;letter-spacing:.3px;margin-top:1px}
 .ppedge{margin-top:5px;font-size:9px;font-weight:800;color:#33e991;background:rgba(51,233,145,.12);border-radius:5px;padding:2px 6px;white-space:nowrap}
+.ppwarn{border:1px solid rgba(243,185,79,.32);background:rgba(243,185,79,.08);border-radius:10px;padding:10px 12px;font-size:11px;color:#f3c66b;font-weight:600;line-height:1.45;margin-bottom:12px}.ppwarn b{color:#ffd98a}
 .ppmuted{color:#6b7681;font-size:13px;font-weight:600;padding:24px 4px;text-align:center}
 .ppnote{font-size:10.5px;color:#54616b;font-weight:600;margin-top:14px;line-height:1.4}
 `;
