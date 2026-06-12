@@ -1,6 +1,9 @@
-// Props.jsx — the full player-props board. Shows EVERY prop the model flags
-// (no top-N cut), filterable by HR / Hits / Ks, in the dark Home style with the
-// shared bottom nav. Reads the same /api/edges/mlb feed Home uses.
+// Props.jsx — the full player-props board, now sport-aware.
+// SPORT selector (Games-page pill style) switches the feed + category tabs:
+//   MLB → HR / Hits / Ks  (from /api/edges/mlb)
+//   NBA → Points / Rebounds / Assists / Threes (from /api/edges/nba/props — EXPERIMENTAL projections)
+// MLB rendering is unchanged. NBA props are projections (proj vs line), shown with an
+// experimental disclaimer — sharp markets, flagged edges are rare and informational.
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
@@ -8,34 +11,67 @@ import { edgesApi, subscriptionApi } from "../lib/api";
 import Sidebar from "./Sidebar";
 import BottomNav from "./BottomNav";
 
-const TEAMCOL = { ARI:"#A71930",ATL:"#CE1141",BAL:"#DF4601",BOS:"#BD3039",CHC:"#0E3386",CWS:"#C4CED4",CHW:"#C4CED4",CIN:"#C6011F",CLE:"#E31937",COL:"#5A4F9C",DET:"#FA4616",HOU:"#EB6E1F",KC:"#3E7DC4",KCR:"#3E7DC4",LAA:"#BA0021",LAD:"#3E7DC4",LOS:"#3E7DC4",MIA:"#00A3E0",MIL:"#FFC52F",MIN:"#D31145",NYM:"#FF5910",NYY:"#3A4F73",OAK:"#EFB21E",ATH:"#EFB21E",PHI:"#E81828",PIT:"#FDB827",SD:"#FFC425",SDP:"#FFC425",SEA:"#1B9A8E",SF:"#FD5A1E",SFG:"#FD5A1E",STL:"#C41E3A",TB:"#8FBCE6",TBR:"#8FBCE6",TEX:"#3E66B0",TOR:"#1D6FE0",WSH:"#E0263B",WAS:"#E0263B" };
+const TEAMCOL = { ARI:"#A71930",ATL:"#CE1141",BAL:"#DF4601",BOS:"#BD3039",CHC:"#0E3386",CWS:"#C4CED4",CHW:"#C4CED4",CIN:"#C6011F",CLE:"#E31937",COL:"#5A4F9C",DET:"#FA4616",HOU:"#EB6E1F",KC:"#3E7DC4",KCR:"#3E7DC4",LAA:"#BA0021",LAD:"#3E7DC4",LOS:"#3E7DC4",MIA:"#00A3E0",MIL:"#FFC52F",MIN:"#D31145",NYM:"#FF5910",NYY:"#3A4F73",OAK:"#EFB21E",ATH:"#EFB21E",PHI:"#E81828",PIT:"#FDB827",SD:"#FFC425",SDP:"#FFC425",SEA:"#1B9A8E",SF:"#FD5A1E",SFG:"#FD5A1E",STL:"#C41E3A",TB:"#8FBCE6",TBR:"#8FBCE6",TEX:"#3E66B0",TOR:"#1D6FE0",WSH:"#E0263B",WAS:"#E0263B",
+  // NBA
+  NBA_BOS:"#007A33" };
+const NBACOL = { ATL:"#E03A3E",BOS:"#007A33",BKN:"#777",CHA:"#1D1160",CHI:"#CE1141",CLE:"#860038",DAL:"#00538C",DEN:"#0E2240",DET:"#C8102E",GSW:"#1D428A",HOU:"#CE1141",IND:"#002D62",LAC:"#C8102E",LAL:"#552583",MEM:"#5D76A9",MIA:"#98002E",MIL:"#00471B",MIN:"#236192",NOP:"#85714D",NYK:"#006BB6",OKC:"#007AC1",ORL:"#0077C0",PHI:"#006BB6",PHX:"#E56020",POR:"#E03A3E",SAC:"#5A2D81",SAS:"#9AA7AE",TOR:"#CE1141",UTA:"#3E2680",WAS:"#002B5C" };
 const teamCol = (ab) => TEAMCOL[String(ab || "").toUpperCase()] || "#3a4a57";
+const nbaCol = (ab) => NBACOL[String(ab || "").toUpperCase()] || "#3a4a57";
 const shortTeam = (t) => { const m = String(t).match(/[A-Z]{2,3}/); return m ? m[0] : String(t).slice(0, 3).toUpperCase(); };
 const formatOdds = (o) => { if (o == null || o === "") return "—"; const n = Number(o); return n > 0 ? `+${n}` : `${n}`; };
 
-const TABS = [["hr", "HR", "💣"], ["hits", "Hits", "🏏"], ["ks", "Ks", "🔥"]];
+const SPORT_TABS = [["mlb","MLB","⚾"],["nba","NBA","🏀"],["nfl","NFL","🏈"],["cfb","CFB","🏟️"],["nhl","NHL","🏒"]];
+const MLB_CATS = [["hr","HR","💣"],["hits","Hits","🏏"],["ks","Ks","🔥"]];
+const NBA_CATS = [["points","Points","🟠"],["rebounds","Rebounds","🛟"],["assists","Assists","🎯"],["threes","Threes","🎲"]];
+const HAS_PROPS = { mlb:true, nba:true }; // sports with a prop model wired
+const NBA_MK = { points:"PTS", rebounds:"REB", assists:"AST", threes:"3PM" };
 
 export default function PropsPage() {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
   const [plan, setPlan] = useState({ tier: "free", isAdmin: false });
-  const [edges, setEdges] = useState(null);
+  const [sport, setSport] = useState("mlb");
   const [tab, setTab] = useState("hr");
+  const [mlb, setMlb] = useState(null);
+  const [nba, setNba] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => { subscriptionApi.getMyPlan().then(setPlan).catch(() => {}); }, []);
 
   useEffect(() => {
-    let on = true;
-    edgesApi.getMLB()
-      .then((d) => { if (on) { setEdges(d || {}); setLoading(false); } })
-      .catch(() => { if (on) { setEdges({}); setLoading(false); } });
+    let on = true; setLoading(true);
+    if (sport === "mlb") {
+      edgesApi.getMLB().then((d) => { if (on) { setMlb(d || {}); setLoading(false); } }).catch(() => { if (on) { setMlb({}); setLoading(false); } });
+    } else if (sport === "nba") {
+      edgesApi.getNBAProps().then((d) => { if (on) { setNba(d || {}); setLoading(false); } }).catch(() => { if (on) { setNba({}); setLoading(false); } });
+    } else { setLoading(false); }
     return () => { on = false; };
-  }, []);
+  }, [sport]);
 
-  const e = edges || {};
-  const arr = tab === "hr" ? (e.hrPropEdges || []) : tab === "hits" ? (e.hitsPropEdges || []) : (e.kPropEdges || []);
-  const sorted = [...arr].sort((a, b) => tab === "hr" ? ((b.hrProb || 0) - (a.hrProb || 0)) : ((b.edge || 0) - (a.edge || 0)));
+  const cats = sport === "mlb" ? MLB_CATS : sport === "nba" ? NBA_CATS : [];
+  const hasProps = !!HAS_PROPS[sport];
+
+  // resolve the active list for the current sport+tab
+  let list = [];
+  if (sport === "mlb") {
+    const e = mlb || {};
+    list = tab === "hr" ? (e.hrPropEdges || []) : tab === "hits" ? (e.hitsPropEdges || []) : (e.kPropEdges || []);
+    list = [...list].sort((a, b) => tab === "hr" ? ((b.hrProb || 0) - (a.hrProb || 0)) : ((b.edge || 0) - (a.edge || 0)));
+  } else if (sport === "nba") {
+    const e = nba || {};
+    list = tab === "points" ? (e.pointsProps || []) : tab === "rebounds" ? (e.reboundsProps || []) : tab === "assists" ? (e.assistsProps || []) : (e.threesProps || []);
+    // already sorted by |edge| server-side
+  }
+
+  const catCount = (id) => {
+    if (sport === "mlb") { const e = mlb || {}; return (id === "hr" ? (e.hrPropEdges || []) : id === "hits" ? (e.hitsPropEdges || []) : (e.kPropEdges || [])).length || ""; }
+    if (sport === "nba") { const e = nba || {}; return (id === "points" ? (e.pointsProps || []) : id === "rebounds" ? (e.reboundsProps || []) : id === "assists" ? (e.assistsProps || []) : (e.threesProps || [])).length || ""; }
+    return "";
+  };
+
+  const emptyLabel = sport === "mlb"
+    ? (tab === "hr" ? "home run" : tab === "hits" ? "hits" : "strikeout")
+    : (NBA_MK[tab] ? NBA_MK[tab].toLowerCase() : "");
 
   return (
     <div style={{ minHeight: "100vh", background: "#000", color: "#f2f6f4", fontFamily: "'Inter',system-ui,-apple-system,sans-serif" }}>
@@ -48,39 +84,61 @@ export default function PropsPage() {
           <div className="ppsub">Every prop the model flags with an edge — the full board, not just the top picks.</div>
         </div>
 
-        <div className="pptabs">
-          {TABS.map(([id, lb, ic]) => (
-            <button key={id} className={"pptab" + (tab === id ? " on" : "")} onClick={() => setTab(id)}>
+        {/* SPORT SELECTOR — same pill style as the Games page */}
+        <div className="ppsports">
+          {SPORT_TABS.map(([id, lb, ic]) => (
+            <button key={id} className={"ppsport" + (sport === id ? " on" : "")} onClick={() => { setSport(id); setTab(id === "mlb" ? "hr" : "points"); }}>
               <span className="ic">{ic}</span>{lb}
-              <span className="ct">{(id === "hr" ? (e.hrPropEdges || []) : id === "hits" ? (e.hitsPropEdges || []) : (e.kPropEdges || [])).length || ""}</span>
             </button>
           ))}
         </div>
 
-        {tab === "hr" && !loading && (
-          <div className="ppwarn">⚠️ Longshots — not guaranteed. Even the top names homer only about 1 game in 5. These are ranked by the model's chance to homer (a speculative lottery-ticket bet), <b>not</b> a tracked +EV play. Bet small, if at all.</div>
-        )}
-        {loading
-          ? <div className="ppmuted">Loading the board…</div>
-          : sorted.length === 0
-            ? <div className="ppmuted">No {tab === "hr" ? "home run" : tab === "hits" ? "hits" : "strikeout"} props on the board yet — fills in closer to first pitch.</div>
-            : <div className="pplist">{sorted.map((p, i) => <PropRow key={(p.player || "") + i} p={p} type={tab} rank={i + 1} navigate={navigate} />)}</div>}
+        {!hasProps ? (
+          <div className="ppmuted" style={{ padding: "44px 8px" }}>Player props aren’t available for {sport.toUpperCase()} yet — they come online as each sport’s model does.</div>
+        ) : (<>
+          <div className="pptabs">
+            {cats.map(([id, lb, ic]) => (
+              <button key={id} className={"pptab" + (tab === id ? " on" : "")} onClick={() => setTab(id)}>
+                <span className="ic">{ic}</span>{lb}
+                <span className="ct">{catCount(id)}</span>
+              </button>
+            ))}
+          </div>
 
-        <div className="ppnote">{tab === "hr"
-          ? "HR props are ranked by the model's chance to homer. The HR market is efficient — these are options to consider, not tracked +EV plays."
-          : "Sorted by model edge — the % is the model's price vs the book's. These clear our positive-EV bar."}</div>
+          {sport === "mlb" && tab === "hr" && !loading && (
+            <div className="ppwarn">⚠️ Longshots — not guaranteed. Even the top names homer only about 1 game in 5. These are ranked by the model's chance to homer (a speculative lottery-ticket bet), <b>not</b> a tracked +EV play. Bet small, if at all.</div>
+          )}
+          {sport === "nba" && !loading && (
+            <div className="ppwarn">⚠️ Experimental projections. Prop markets are sharp, so flagged edges are rare and <b>informational, not betting advice</b>. Shown as the model's projection vs the book line.</div>
+          )}
+
+          {loading
+            ? <div className="ppmuted">Loading the board…</div>
+            : list.length === 0
+              ? <div className="ppmuted">No {emptyLabel} props on the board yet{sport === "nba" ? " — projections need ≥8 recent games per player and fill in closer to tip" : " — fills in closer to first pitch"}.</div>
+              : <div className="pplist">{list.map((p, i) => sport === "nba"
+                  ? <NbaPropRow key={(p.player || "") + i} p={p} market={tab} rank={i + 1} navigate={navigate} />
+                  : <PropRow key={(p.player || "") + i} p={p} type={tab} rank={i + 1} navigate={navigate} />)}</div>}
+
+          <div className="ppnote">{sport === "nba"
+            ? "NBA props are experimental projections (model vs line), not tracked +EV plays. Flagged means the model's lean cleared its stability + hit-rate gates."
+            : tab === "hr"
+              ? "HR props are ranked by the model's chance to homer. The HR market is efficient — these are options to consider, not tracked +EV plays."
+              : "Sorted by model edge — the % is the model's price vs the book's. These clear our positive-EV bar."}</div>
+        </>)}
       </div>
     </div>
   );
 }
 
+// ---- MLB prop row (unchanged behavior) ----
 function PropRow({ p, type, rank, navigate }) {
   let pct, lbl, line, edgeBadge = null;
   if (type === "hr") {
     pct = Math.round((p.hrProb || 0) * 100); lbl = "to homer"; line = `O 0.5 HR · ${formatOdds(p.odds)}`;
   } else if (type === "hits") {
     pct = Math.round((p.hitsProb || 0) * 100); lbl = "hit prob";
-    const needH = Math.floor(p.line) + 1; // over 0.5 → 1+, over 1.5 → 2+
+    const needH = Math.floor(p.line) + 1;
     line = p.side === "over"
       ? `${needH}+ Hits · ${formatOdds(p.odds)}`
       : (p.line <= 0.5 ? `0 Hits · ${formatOdds(p.odds)}` : `Under ${p.line} Hits · ${formatOdds(p.odds)}`);
@@ -113,6 +171,34 @@ function PropRow({ p, type, rank, navigate }) {
   );
 }
 
+// ---- NBA prop row: matches the MLB card — big projection number + label + edge badge ----
+function NbaPropRow({ p, market, rank, navigate }) {
+  const ab = shortTeam(p.teamAbbr || p.game || ""); const col = nbaCol(ab);
+  const over = p.side === "OVER";
+  const sideCol = over ? "#33e991" : "#5fb8ff";
+  const e = p.edge ?? 0;
+  return (
+    <div className="pprow" onClick={() => p.gameId && navigate(`/game/nba/${p.gameId}`)}>
+      <div className="rkn">{rank}</div>
+      <div className="ppav" style={{ background: `linear-gradient(180deg, ${col}, #0c1018 88%)`, boxShadow: `0 0 0 2px ${col}88` }}>
+        {p.athleteId
+          ? <img src={`https://a.espncdn.com/i/headshots/nba/players/full/${p.athleteId}.png`} alt="" onError={(ev) => { ev.currentTarget.style.display = "none"; }} />
+          : "🏀"}
+      </div>
+      <div className="ppinfo">
+        <div className="ppname">{p.player || "—"}</div>
+        <div className="ppgame">{p.game || p.teamAbbr || ""}</div>
+        <div className="ppline">{over ? "Over" : "Under"} {p.line} {NBA_MK[market]}</div>
+      </div>
+      <div className="ppright">
+        <div className="pppct" style={{ color: sideCol }}>{p.projection}</div>
+        <div className="pplbl">proj {NBA_MK[market]}</div>
+        <div className="ppedge" style={{ color: sideCol, background: over ? "rgba(51,233,145,.12)" : "rgba(95,184,255,.12)" }}>{e >= 0 ? "+" : ""}{e}{p.flagged ? " ⚑" : ""}</div>
+      </div>
+    </div>
+  );
+}
+
 const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&family=Inter:wght@400;500;600;700;800&display=swap');
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -120,8 +206,15 @@ const CSS = `
 .pphead{margin-bottom:14px}
 .pptitle{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:30px;line-height:1;letter-spacing:-.01em}.pptitle .b{color:#ff5d4d}
 .ppsub{font-size:12px;color:#8a99a2;font-weight:500;margin-top:6px;line-height:1.4}
-.pptabs{display:flex;gap:8px;margin-bottom:14px}
-.pptab{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:9px 8px;border-radius:10px;cursor:pointer;
+.ppsports{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding-bottom:4px;margin-bottom:14px}
+.ppsports::-webkit-scrollbar{display:none}
+.ppsport{flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;padding:7px 15px;border-radius:999px;cursor:pointer;white-space:nowrap;
+  font-size:13px;font-weight:700;font-family:inherit;border:1px solid #1f2937;background:#0e131b;color:#9ca3af}
+.ppsport.on{border-color:#ef4444;background:rgba(239,68,68,.12);color:#fff}
+.ppsport .ic{font-size:15px}
+.pptabs{display:flex;gap:8px;margin-bottom:14px;overflow-x:auto;scrollbar-width:none}
+.pptabs::-webkit-scrollbar{display:none}
+.pptab{flex:1 0 auto;display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:9px 8px;border-radius:10px;cursor:pointer;
   font-family:inherit;font-size:13px;font-weight:800;white-space:nowrap;border:1px solid #1a212b;background:#0b0f14;color:#9aa7b0}
 .pptab.on{border-color:#ff5d4d;background:rgba(255,93,77,.1);color:#fff}
 .pptab .ic{font-size:14px}.pptab .ct{font-size:10px;font-weight:700;color:#6b7681}.pptab.on .ct{color:#ffb3aa}
@@ -147,7 +240,7 @@ const CSS = `
   .ppsb{display:block}
   .ppwrap{margin-left:200px;max-width:none;padding:30px 30px 60px}
   .pptitle{font-size:40px}
-  .pptabs{max-width:620px}
+  .ppsports,.pptabs{max-width:760px}
   .pplist{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:10px}
 }
 `;
