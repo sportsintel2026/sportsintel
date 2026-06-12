@@ -443,14 +443,22 @@ section{padding:13px 12px 2px;margin:0;border-top:1px solid #161d24}
 .nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;display:flex;justify-content:space-around;padding:6px 4px calc(6px + env(safe-area-inset-bottom));background:rgba(0,0,0,.96);backdrop-filter:blur(14px);border-top:1px solid #161e26}
 .nav a{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:8.5px;font-weight:600;color:#8a99a2;flex:1;min-width:0}.nav a.on{color:#ff5d4d}.nav .i{font-size:17px}
 
-/* ---- DESKTOP: same mobile cards, spread wide multi-column ---- */
+/* ---- DESKTOP: full-width sections, items stretched across to fill the page ---- */
 @media (min-width:769px){
-  .wp{max-width:1180px;padding-bottom:88px}
-  .top{padding:14px 22px 10px}
-  .tabs{padding:0 22px}
-  .hero{max-width:840px;margin-left:auto;margin-right:auto}
-  .cols{column-count:2;column-gap:18px;margin-top:6px;padding:0 8px}
-  .cols>section{break-inside:avoid;-webkit-column-break-inside:avoid}
+  .wp{max-width:1340px;padding-bottom:88px}
+  .top{padding:14px 26px 10px}
+  .tabs{padding:0 26px}
+  .hero{margin:12px 22px 0}
+  .cols{padding:0 22px;margin-top:2px}
+  .panel{padding-left:0;padding-right:0}
+  /* edge board rows spread into a grid that fills the width */
+  .elist{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:9px}
+  /* carousels become full-width grids so cards stretch across the page */
+  .rw{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:9px;overflow:visible}
+  .rw>*{flex:none;scroll-snap-align:none}
+  .lgc,.mv,.gm,.pkc{width:auto}
+  .dots{display:none}
+  /* full-width bottom nav */
   .nav{max-width:none;left:0;right:0;transform:none;justify-content:center;gap:46px;padding:9px 4px}
   .nav a{flex:0 0 auto;font-size:11px}
   .nav a:hover{color:#cdd6da}
