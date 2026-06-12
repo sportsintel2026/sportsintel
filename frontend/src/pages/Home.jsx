@@ -112,10 +112,10 @@ export default function HomePage(){
   const ksP=(e.kPropEdges||[]).slice(0,6);
   const propArr=propTab==="hr"?hrP:propTab==="hits"?hitsP:propTab==="ks"?ksP:[];
   const mkProp=(p,kind)=>kind==="hr"
-    ?{k:"hr"+(p.playerId||p.player),name:p.player,tag:"HR",edge:p.edge??0}
+    ?{k:"hr"+(p.playerId||p.player),id:p.playerId,name:p.player,tag:"HR",edge:p.edge??0}
     :kind==="hits"
-    ?{k:"h"+(p.playerId||p.player),name:p.player,tag:(p.line===0.5?"1+ Hits":`Hits ${p.side==="under"?"U":"O"}${p.line}`),edge:p.edge??0}
-    :{k:"k"+(p.playerId||p.player),name:p.player,tag:`K ${p.side==="under"?"U":"O"}${p.line}`,edge:p.edge??0};
+    ?{k:"h"+(p.playerId||p.player),id:p.playerId,name:p.player,tag:(p.line===0.5?"1+ Hits":`Hits ${p.side==="under"?"U":"O"}${p.line}`),edge:p.edge??0}
+    :{k:"k"+(p.playerId||p.player),id:p.playerId,name:p.player,tag:`K ${p.side==="under"?"U":"O"}${p.line}`,edge:p.edge??0};
   const topProps=[...hitsP.map(x=>mkProp(x,"hits")),...ksP.map(x=>mkProp(x,"ks")),...hrP.map(x=>mkProp(x,"hr"))].sort((a,b)=>(b.edge-a.edge)).slice(0,4);
   const parks=games.filter(g=>g.parkRunFactor!=null).slice(0,8);
   const upcoming=games.filter(g=>g.status!=="final").slice(0,6);
@@ -183,9 +183,12 @@ export default function HomePage(){
           <div className="ppgrid">
             {topProps.map(p=>(
               <div key={p.k} className="ppgcard" onClick={()=>navigate("/props")}>
-                <div className="ppgname">{p.name}</div>
-                <div className="ppgtag">{p.tag}</div>
-                <div className="ppgedge" style={{color:p.edge>=0?"#33e991":"#ff5d4d"}}>{p.edge>=0?"+":""}{(p.edge*100).toFixed(1)}%</div>
+                <div className="ppgav">{p.id&&<img src={`https://midfield.mlbstatic.com/v1/people/${p.id}/spots/120`} alt="" onError={(ev)=>{ev.currentTarget.style.display="none";}}/>}</div>
+                <div className="ppgbody">
+                  <div className="ppgname">{p.name}</div>
+                  <div className="ppgtag">{p.tag}</div>
+                  <div className="ppgedge" style={{color:p.edge>=0?"#33e991":"#ff5d4d"}}>{p.edge>=0?"+":""}{(p.edge*100).toFixed(1)}%</div>
+                </div>
               </div>
             ))}
           </div>
@@ -485,8 +488,11 @@ section{padding:13px 12px 2px;margin:0;border-top:1px solid #161d24}
 .propscta{display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid rgba(155,123,255,.28);border-radius:12px;background:rgba(155,123,255,.06);padding:12px 14px;cursor:pointer}
 .pctah{font-weight:800;font-size:13px;color:#eaf1ee}.pctas{font-size:10.5px;color:#8a99a2;font-weight:500;margin-top:3px;line-height:1.35}.pctaarrow{font-size:18px;color:#bba6ff;font-weight:800;flex:0 0 auto}
 .ppgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.ppgcard{border:1px solid rgba(155,123,255,.22);border-radius:11px;background:rgba(155,123,255,.05);padding:10px 11px;cursor:pointer;display:flex;flex-direction:column;gap:2px;min-width:0}
+.ppgcard{border:1px solid rgba(155,123,255,.22);border-radius:11px;background:rgba(155,123,255,.05);padding:9px 10px;cursor:pointer;display:flex;align-items:center;gap:9px;min-width:0}
 .ppgcard:active{background:rgba(155,123,255,.12)}
+.ppgav{width:40px;height:40px;border-radius:50%;flex:0 0 auto;background:radial-gradient(circle at 50% 32%,#2a3647,#0c1018 80%);overflow:hidden;display:flex;align-items:flex-end;justify-content:center}
+.ppgav img{width:100%;height:100%;object-fit:cover;object-position:top center}
+.ppgbody{min-width:0;display:flex;flex-direction:column;gap:1px}
 .ppgname{font-weight:800;font-size:12.5px;color:#eaf1ee;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ppgtag{font-size:10px;color:#8a99a2;font-weight:600}
 .ppgedge{font-size:14px;font-weight:900;margin-top:1px}
