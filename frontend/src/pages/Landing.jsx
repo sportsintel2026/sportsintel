@@ -19,6 +19,15 @@ const nbaCol=(ab)=>NBACOL[String(ab||"").toUpperCase()]||"#3a4a57";
 const NBA_MK={points:"PTS",rebounds:"REB",assists:"AST",threes:"3PM"};
 const NFL_HEAD=(id)=>`https://a.espncdn.com/i/headshots/nfl/players/full/${id}.png`;
 const initials=(n)=>String(n||"").split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase();
+const MLB_LOGO=(ab)=>`https://a.espncdn.com/i/teamlogos/mlb/500/${String(ab||"").toLowerCase()}.png`;
+function TeamLogo({ab,col}){
+  return (
+    <div className="tl">
+      <img src={MLB_LOGO(ab)} alt="" onError={(e)=>{e.currentTarget.style.display="none"; const s=e.currentTarget.nextElementSibling; if(s)s.style.display="flex";}}/>
+      <span className="tlf" style={{background:col||"#3a4a57"}}>{String(ab||"").toUpperCase()}</span>
+    </div>
+  );
+}
 
 /* static, clearly-labeled example for the line-shopping explainer (not on the public feed) */
 const SHOP=[["BetMGM","−130",false],["Caesars","−128",false],["DraftKings","−125",false],["FanDuel","−120 ✓ best",true]];
@@ -77,7 +86,7 @@ function SimBoard(){
     <div>
       {rows.map((r,i)=>(
         <div className={"erow"+(flash[i]==="up"?" gu":flash[i]==="dn"?" gd":"")} key={i}>
-          <div className="tcol" style={{background:r.col}}>{r.ab}</div>
+          <TeamLogo ab={r.ab} col={r.col}/>
           <div className="ename"><div className="t">{r.t}</div><div className="m">{r.mu}</div></div>
           <div className={"eodds"+(flash[i]==="up"?" flash-up":flash[i]==="dn"?" flash-dn":"")}>{fmtOdds(r.odds)}</div>
           <div className="eedge pos">{pct1(r.edge)}</div>
@@ -249,7 +258,7 @@ export default function LandingPage(){
                 {tickerRows.map((r,i)=>{ const k=r.gameId+r.side; const fl=flash[k];
                   return (
                   <div className="erow" key={k}>
-                    <div className="tcol" style={{background:teamCol(r.teamAbbr||shortTeam(r.matchup))}}>{r.teamAbbr||shortTeam(r.matchup)}</div>
+                    <TeamLogo ab={r.teamAbbr||shortTeam(r.matchup)} col={teamCol(r.teamAbbr||shortTeam(r.matchup))}/>
                     <div className="ename"><div className="t">{edgeLabel(r)}</div><div className="m">{muFor(r)}</div></div>
                     <div className={"eodds"+(fl==="up"?" flash-up":fl==="dn"?" flash-dn":"")}>{fmtOdds(r.odds)}</div>
                     <div className={"eedge "+((r.edge??0)>=0?"pos":"neg")}>{pct1(r.edge)}</div>
@@ -378,7 +387,7 @@ h1{font-size:clamp(34px,7vw,56px);font-weight:900;line-height:1.04;letter-spacin
 .trust .rec{display:flex;align-items:baseline;gap:7px}
 .trust .num{font-family:'Barlow Condensed';font-weight:800;font-size:24px}
 .trust .lab{font-size:11px;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;font-weight:700}
-.live{background:linear-gradient(180deg,#0e0e1c,#0a0a14);border:1px solid var(--line2);border-radius:18px;
+.live{background:linear-gradient(180deg,#0e0e1c,#0a0a14);border-radius:18px;
   padding:16px;box-shadow:0 30px 80px -40px rgba(123,90,255,.5);position:relative;overflow:hidden}
 .live::before{content:"";position:absolute;inset:0;background:radial-gradient(400px 120px at 80% 0%,rgba(51,233,145,.07),transparent 70%);pointer-events:none}
 .live-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:13px}
@@ -424,6 +433,9 @@ h1{font-size:clamp(34px,7vw,56px);font-weight:900;line-height:1.04;letter-spacin
 .erow:hover{background:rgba(155,123,255,.05)}
 .tcol{width:30px;height:30px;border-radius:50%;flex:0 0 auto;display:flex;align-items:center;justify-content:center;
   font-family:'Barlow Condensed';font-weight:800;font-size:11px;color:#fff}
+.tl{width:34px;height:34px;border-radius:50%;flex:0 0 auto;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.05);position:relative;overflow:hidden}
+.tl img{width:26px;height:26px;object-fit:contain}
+.tlf{position:absolute;inset:0;display:none;align-items:center;justify-content:center;font-family:'Barlow Condensed';font-weight:800;font-size:11px;color:#fff}
 .ename{flex:1;min-width:0}
 .ename .t{font-weight:800;font-size:13px;color:var(--t1)}
 .ename .m{font-size:10px;color:var(--t3);font-weight:600;margin-top:1px}
@@ -461,7 +473,7 @@ footer{padding:24px 0;text-align:center;color:var(--t3);font-size:12px}
 .mq-item .tm{color:#fff} .mq-item .up{color:#33e991} .mq-item .dn{color:#ff5a5a}
 @keyframes mqscroll{from{transform:translateX(0)}to{transform:translateX(-50%)}}
 .spotwrap{padding:22px 0 6px}
-.spot{background:linear-gradient(110deg,rgba(155,123,255,.09),rgba(51,233,145,.05));border:1px solid var(--line2);border-radius:16px;padding:16px;overflow:hidden}
+.spot{background:linear-gradient(110deg,rgba(155,123,255,.09),rgba(51,233,145,.05));border-radius:16px;padding:16px;overflow:hidden}
 .spot-tag{font-size:10px;font-weight:800;letter-spacing:.12em;color:var(--plight);margin-bottom:13px;display:flex;align-items:center;gap:7px}
 .spot-card{display:flex;align-items:center;gap:14px;transition:opacity .34s ease,transform .34s ease}
 .sc-in{opacity:1;transform:translateX(0)} .sc-out{opacity:0;transform:translateX(16px)}
