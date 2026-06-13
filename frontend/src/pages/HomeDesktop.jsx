@@ -56,11 +56,31 @@ export default function HomeDesktop(props) {
 
   const e = edges || {};
   const arrFor = (m) => m === "ml" ? e.moneylineEdges : m === "spread" ? e.spreadEdges : e.totalsEdges;
-  let rows = oneSidePerGame(arrFor(market) || []).filter((x) => x.edge != null);
+  // Build one row per GAME from the game's own moneyline/totals so the board shows the whole slate,
+  // not just the handful the backend pre-flagged. NBA still uses its edges feed.
+  const mkRow = (g) => {
+    const A = g.awayAbbr || shortTeam(g.away || ""); const H = g.homeAbbr || shortTeam(g.home || "");
+    const base = { gameId: g.id, _a: A, _h: H, matchup: `${A} @ ${H}` };
+    if (market === "totals") {
+      const t = g.totals || {}; if (t.line == null && t.overOdds == null) return null;
+      const ov = { side: "over", edge: t.overEdge, odds: t.overOdds, book: t.overBook, modelProb: t.overProb, conviction: t.overConfidence, convictionScore: t.overConfidenceScore, line: t.line };
+      const un = { side: "under", edge: t.underEdge, odds: t.underOdds, book: t.underBook, modelProb: t.underProb, conviction: t.underConfidence, convictionScore: t.underConfidenceScore, line: t.line };
+      const best = ((ov.edge ?? -9) >= (un.edge ?? -9)) ? ov : un;
+      return { ...base, ...best };
+    }
+    const m = g.moneyline || {}; if (m.awayOdds == null && m.homeOdds == null) return null;
+    const aw = { side: "away", edge: m.awayEdge, odds: m.awayOdds, book: m.awayBook, modelProb: m.awayWinProb, conviction: m.awayConfidence, convictionScore: m.awayConfidenceScore, teamAbbr: A, line: null };
+    const hm = { side: "home", edge: m.homeEdge, odds: m.homeOdds, book: m.homeBook, modelProb: m.homeWinProb, conviction: m.homeConfidence, convictionScore: m.homeConfidenceScore, teamAbbr: H, line: null };
+    const best = ((aw.edge ?? -9) >= (hm.edge ?? -9)) ? aw : hm;
+    return { ...base, ...best };
+  };
+  let rows = sport === "mlb"
+    ? games.map(mkRow).filter(Boolean)
+    : oneSidePerGame(arrFor(market) || []).filter((x) => x.edge != null);
   rows = [...rows].sort((a, b) => {
     if (sortKey === "model") return ((a.modelProb || 0) - (b.modelProb || 0)) * sortDir;
-    if (sortKey === "conv") return ((a.convictionScore || 0) - (b.convictionScore || 0)) * sortDir;
-    return ((a.edge ?? 0) - (b.edge ?? 0)) * sortDir;
+    if (sortKey === "conv") { const r = { HIGH: 3, MEDIUM: 2, LOW: 1 }; return (((r[a.conviction] || a.convictionScore || 0)) - ((r[b.conviction] || b.convictionScore || 0))) * sortDir; }
+    return ((a.edge ?? -9) - (b.edge ?? -9)) * sortDir;
   });
   const allPos = [...(e.moneylineEdges || []), ...(e.totalsEdges || []), ...(e.spreadEdges || [])].filter((x) => (x.edge ?? 0) > 0);
   const edgeCount = allPos.length;
@@ -170,8 +190,8 @@ export default function HomeDesktop(props) {
                     </tr></thead>
                     <tbody>
                       {rows.map((x, i) => {
-                        const ab = abbrById[x.gameId] || {}; const a = ab.a || x.teamAbbr || shortTeam(x.matchup); const h = ab.h || "";
-                        const ep = edgePct(x, sport); const pos = ep >= 0;
+                        const ab = abbrById[x.gameId] || {}; const a = x._a || ab.a || x.teamAbbr || shortTeam(x.matchup); const h = x._h || ab.h || "";
+                        const ep = edgePct(x, sport); const pos = ep >= 0; const hasE = x.edge != null;
                         return (
                           <tr key={x.gameId + x.side + i} className="click" onClick={() => navigate(`/game/${lg}/${x.gameId}`)}>
                             <td><div className="matchup"><span className="logos"><TLogo ab={a} lg={lg} />{h && <TLogo ab={h} lg={lg} />}</span>
@@ -180,7 +200,7 @@ export default function HomeDesktop(props) {
                             <td className="model-p">{x.modelProb != null ? `${Math.round(x.modelProb * 100)}%` : "—"}</td>
                             <td className="book">{formatOdds(x.odds)}{x.book ? <><br /><span className="bk">{x.book}</span></> : ""}</td>
                             <td className="c">{(() => { const s = lineSeries[x.gameId + x.side]; return s && s.length > 1 ? <span dangerouslySetInnerHTML={{ __html: miniSpark(s) }} /> : <span className="nomove">—</span>; })()}</td>
-                            <td className="edge-cell"><div className={"edge-v " + (pos ? "up" : "dn")}>{fmtEdge(x, sport)}</div><div className="edge-bar"><i style={{ width: Math.min(100, Math.abs(ep) * 12 + 8) + "%" }} /></div></td>
+                            <td className="edge-cell">{hasE ? <><div className={"edge-v " + (pos ? "up" : "dn")}>{fmtEdge(x, sport)}</div><div className="edge-bar"><i style={{ width: Math.min(100, Math.abs(ep) * 12 + 8) + "%" }} /></div></> : <span className="nomove">no edge</span>}</td>
                             <td className="c"><span className={"conv " + convClass(x.conviction)}>{(x.conviction || "—")}</span></td>
                           </tr>
                         );
@@ -233,7 +253,7 @@ export default function HomeDesktop(props) {
                     const ml = g.moneyline || {}; const to = g.totals || {};
                     const px = (odds, book) => odds != null ? <div className="mpx2"><span className="o num">{formatOdds(odds)}</span>{book ? <span className="bk">{book}</span> : null}</div> : <span className="nomove">—</span>;
                     return (
-                      <tr key={g.id || i} className="click" onClick={() => navigate("/odds")}>
+                      <tr key={g.id || i}>
                         <td><div className="matchup"><span className="logos"><TLogo ab={a} /><TLogo ab={h} /></span><span className="mu"><span className="mua">{a}<span className="at"> @ </span>{h}</span></span></div></td>
                         <td className="c">{px(ml.awayOdds, ml.awayBook)}</td>
                         <td className="c">{px(ml.homeOdds, ml.homeBook)}</td>
@@ -291,7 +311,7 @@ export default function HomeDesktop(props) {
                 </div>}
           </div>
 
-          <div className="panel">
+          <div className="panel grow">
             <div className="phead"><div className="t">✨ Prop Spotlight</div><div className="right">top edges</div></div>
             {!planLoaded
               ? <div className="empty">Loading…</div>
@@ -317,10 +337,10 @@ export default function HomeDesktop(props) {
 
 const TCSS = `
 .wpterm{--ink:#06080d;--panel:#0b0e16;--line:#1a2030;--line2:#232c3d;--teal:#1D9E75;--up:#2bd47d;--dn:#ff5247;--model:#9b7bff;--amber:#f3b94f;--cold:#5aa9ff;--tx:#e8edf4;--mut:#6b7888;--mut2:#485364;--mono:'IBM Plex Mono',ui-monospace,monospace;--disp:'Barlow Condensed',sans-serif;
-  position:fixed;inset:0;background:var(--ink);color:var(--tx);font-family:'Inter',system-ui,sans-serif;display:grid;grid-template-rows:auto 1fr;overflow:hidden;
+  position:fixed;inset:0;background:var(--ink);color:var(--tx);font-family:'Inter',system-ui,sans-serif;display:flex;flex-direction:column;overflow:hidden;
   background-image:radial-gradient(1200px 600px at 80% -10%,rgba(155,123,255,.06),transparent 60%),radial-gradient(900px 500px at 0% 110%,rgba(29,158,117,.06),transparent 55%)}
 .wpterm .num{font-family:var(--mono);font-variant-numeric:tabular-nums}
-.wpterm .status{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:18px;height:52px;padding:0 18px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,#0a0d15,#080a11)}
+.wpterm .status{flex:0 0 52px;display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:18px;height:52px;padding:0 18px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,#0a0d15,#080a11)}
 .wpterm .brand{display:flex;align-items:center;gap:9px}
 .wpterm .logo{font-family:var(--disp);font-weight:800;font-size:23px}.wpterm .logo .b{color:var(--dn)}
 .wpterm .tag{font-size:9px;font-weight:700;letter-spacing:1.5px;color:var(--mut);border:1px solid var(--line2);border-radius:4px;padding:2px 6px}
@@ -341,8 +361,8 @@ const TCSS = `
 @keyframes wppulse{0%{box-shadow:0 0 0 0 rgba(43,212,125,.5)}70%{box-shadow:0 0 0 7px rgba(43,212,125,0)}100%{box-shadow:0 0 0 0 rgba(43,212,125,0)}}
 .wpterm .clock{font-family:var(--mono);font-size:12px;color:var(--mut)}
 .wpterm .avatar{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,#1b2740,#0e1422);border:1px solid var(--line2);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;color:#9fb0c4;cursor:pointer}
-.wpterm .body{display:grid;grid-template-columns:210px minmax(0,1fr) clamp(300px,22vw,360px);height:100%;min-height:0}
-.wpterm .nav{border-right:1px solid var(--line);background:#080a11;display:flex;flex-direction:column;padding:12px 10px;gap:3px;overflow:auto}
+.wpterm .body{flex:1 1 auto;display:grid;grid-template-columns:210px minmax(0,1fr) clamp(300px,22vw,360px);min-height:0;overflow:hidden}
+.wpterm .nav{border-right:1px solid var(--line);background:#080a11;display:flex;flex-direction:column;padding:12px 10px;gap:3px;overflow:auto;min-height:0}
 .wpterm .nav .grp{font-size:9.5px;font-weight:800;letter-spacing:1.4px;color:var(--mut2);padding:12px 10px 5px}
 .wpterm .nav a{display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:9px;color:#aeb9c8;font-size:13px;font-weight:600;cursor:pointer;border:1px solid transparent;position:relative}
 .wpterm .nav a .i{width:17px;text-align:center;font-size:14px}
@@ -423,6 +443,8 @@ const TCSS = `
 .wpterm .pinfo{flex:1;min-width:0;display:flex;flex-direction:column}.wpterm .pnm{font-size:12.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .wpterm .pmk{font-size:10px;color:var(--mut);font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .wpterm .pod{font-family:var(--mono);font-size:12.5px;color:#5fd6a0;font-weight:600;flex:0 0 auto}
+.wpterm .rail .panel.grow{flex:1 1 auto;min-height:160px;display:flex;flex-direction:column}
+.wpterm .rail .panel.grow .plist{overflow:auto;min-height:0;flex:1 1 auto}
 .wpterm .book{font-size:12px;color:#c4cdd9;font-family:var(--mono);text-align:center}.wpterm .book .bk{font-size:10px;color:var(--mut);font-family:'Inter'}
 .wpterm .edge-cell{text-align:right;white-space:nowrap}
 .wpterm .edge-v{font-family:var(--mono);font-size:14px;font-weight:600}.wpterm .edge-v.up{color:var(--up)}.wpterm .edge-v.dn{color:var(--dn)}
