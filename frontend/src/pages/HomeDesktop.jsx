@@ -368,10 +368,10 @@ export default function HomeDesktop(props) {
 
 const TCSS = `
 .wpterm{--ink:#06080d;--panel:#0b0e16;--line:#1a2030;--line2:#232c3d;--teal:#1D9E75;--up:#2bd47d;--dn:#ff5247;--model:#9b7bff;--amber:#f3b94f;--cold:#5aa9ff;--tx:#e8edf4;--mut:#6b7888;--mut2:#485364;--mono:'IBM Plex Mono',ui-monospace,monospace;--disp:'Barlow Condensed',sans-serif;
-  position:fixed;top:0;left:0;height:100vh;width:100vw;background:var(--ink);color:var(--tx);font-family:'Inter',system-ui,sans-serif;display:flex;flex-direction:column;overflow:hidden;
+  position:relative;min-height:100vh;width:100%;background:var(--ink);color:var(--tx);font-family:'Inter',system-ui,sans-serif;display:flex;flex-direction:column;
   background-image:radial-gradient(1200px 600px at 80% -10%,rgba(155,123,255,.06),transparent 60%),radial-gradient(900px 500px at 0% 110%,rgba(29,158,117,.06),transparent 55%)}
 .wpterm .num{font-family:var(--mono);font-variant-numeric:tabular-nums}
-.wpterm .status{flex:0 0 52px;display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:18px;height:52px;padding:0 18px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,#0a0d15,#080a11)}
+.wpterm .status{position:sticky;top:0;z-index:30;flex:0 0 52px;display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:18px;height:52px;padding:0 18px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,#0a0d15,#080a11)}
 .wpterm .brand{display:flex;align-items:center;gap:9px}
 .wpterm .logo{font-family:var(--disp);font-weight:800;font-size:23px}.wpterm .logo .b{color:var(--dn)}
 .wpterm .tag{font-size:9px;font-weight:700;letter-spacing:1.5px;color:var(--mut);border:1px solid var(--line2);border-radius:4px;padding:2px 6px}
@@ -392,8 +392,8 @@ const TCSS = `
 @keyframes wppulse{0%{box-shadow:0 0 0 0 rgba(43,212,125,.5)}70%{box-shadow:0 0 0 7px rgba(43,212,125,0)}100%{box-shadow:0 0 0 0 rgba(43,212,125,0)}}
 .wpterm .clock{font-family:var(--mono);font-size:12px;color:var(--mut)}
 .wpterm .avatar{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,#1b2740,#0e1422);border:1px solid var(--line2);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;color:#9fb0c4;cursor:pointer}
-.wpterm .body{flex:1 1 auto;display:grid;grid-template-columns:210px minmax(0,1fr) clamp(300px,22vw,360px);grid-template-rows:minmax(0,1fr);min-height:0;overflow:hidden}
-.wpterm .nav{border-right:1px solid var(--line);background:#080a11;display:flex;flex-direction:column;padding:12px 10px;gap:3px;overflow:auto;min-height:0}
+.wpterm .body{flex:1 0 auto;display:grid;grid-template-columns:210px minmax(0,1fr) clamp(300px,22vw,360px);align-items:start}
+.wpterm .nav{position:sticky;top:52px;align-self:start;height:calc(100vh - 52px);border-right:1px solid var(--line);background:#080a11;display:flex;flex-direction:column;padding:12px 10px;gap:3px;overflow:auto}
 .wpterm .nav .grp{font-size:9.5px;font-weight:800;letter-spacing:1.4px;color:var(--mut2);padding:12px 10px 5px}
 .wpterm .nav a{display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:9px;color:#aeb9c8;font-size:13px;font-weight:600;cursor:pointer;border:1px solid transparent;position:relative}
 .wpterm .nav a .i{width:17px;text-align:center;font-size:14px}
@@ -405,7 +405,7 @@ const TCSS = `
 .wpterm .nav .upsell .h{font-family:var(--disp);font-weight:800;font-size:16px;color:#cdbcff}
 .wpterm .nav .upsell .d{font-size:10.5px;color:var(--mut);margin:4px 0 9px;line-height:1.4}
 .wpterm .nav .upsell button{width:100%;border:0;border-radius:8px;background:var(--teal);color:#04130d;font-weight:800;font-size:12px;padding:8px;cursor:pointer;font-family:inherit}
-.wpterm .content{overflow:auto;padding:15px 18px 30px;display:flex;flex-direction:column;gap:13px;min-width:0;min-height:0}
+.wpterm .content{padding:15px 18px 30px;display:flex;flex-direction:column;gap:13px;min-width:0}
 .wpterm .content::-webkit-scrollbar,.wpterm .nav::-webkit-scrollbar,.wpterm .strip::-webkit-scrollbar,.wpterm .mvstrip::-webkit-scrollbar{width:9px;height:8px}
 .wpterm .content::-webkit-scrollbar-thumb,.wpterm .nav::-webkit-scrollbar-thumb,.wpterm .strip::-webkit-scrollbar-thumb,.wpterm .mvstrip::-webkit-scrollbar-thumb{background:#1a2233;border-radius:6px}
 .wpterm .maintop{display:flex;align-items:flex-end;justify-content:space-between}
@@ -515,10 +515,9 @@ const TCSS = `
   .wpterm .content{padding:12px 12px 26px}
 }
 @media (max-width:1080px){
-  .wpterm .body{display:flex;flex-direction:column;overflow-y:auto;overflow-x:hidden}
   .wpterm .nav{display:none}
-  .wpterm .content,.wpterm .rail{overflow:visible;min-height:0;border-left:0;border-right:0;width:100%}
-  .wpterm .rail{border-top:1px solid var(--line)}
+  .wpterm .body{grid-template-columns:1fr}
+  .wpterm .rail{position:static;height:auto;overflow:visible;border-left:0;border-top:1px solid var(--line);width:100%}
   .wpterm .rail .panel.grow{flex:none;min-height:0}
 }
 .wpterm .book{font-size:12px;color:#c4cdd9;font-family:var(--mono);text-align:center}.wpterm .book .bk{font-size:10px;color:var(--mut);font-family:'Inter'}
@@ -561,7 +560,7 @@ const TCSS = `
 .wpterm .lockcard .ls{font-size:12px;color:#9aa6b2;line-height:1.5;max-width:300px;margin-bottom:14px}.wpterm .lockcard .ls b{color:var(--up);font-weight:800}
 .wpterm .lockcard button{background:var(--teal);color:#04130d;border:0;font-weight:800;font-size:13px;padding:11px 22px;border-radius:11px;cursor:pointer;font-family:inherit}
 .wpterm .footnote{font-size:10.5px;color:var(--mut2);text-align:center;padding:6px}
-.wpterm .rail{border-left:1px solid var(--line);background:#080a11;overflow:auto;padding:14px 12px;display:flex;flex-direction:column;gap:13px;min-height:0}
+.wpterm .rail{position:sticky;top:52px;align-self:start;height:calc(100vh - 52px);border-left:1px solid var(--line);background:#080a11;overflow:auto;padding:14px 12px;display:flex;flex-direction:column;gap:13px}
 .wpterm .rail::-webkit-scrollbar{width:8px}.wpterm .rail::-webkit-scrollbar-thumb{background:#1a2233;border-radius:6px}
 .wpterm .rlive .rlg{padding:9px 12px;border-bottom:1px solid #11151f;cursor:pointer}
 .wpterm .rlive .rlg:last-child{border-bottom:0}.wpterm .rlive .rlg:hover{background:rgba(255,255,255,.02)}
