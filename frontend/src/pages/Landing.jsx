@@ -162,6 +162,7 @@ function QuickSpin(){
   return (
     <div className="qscard">
       <div className="qsh"><div className="qstitle"><span style={{fontSize:16}}>🎰</span>Quick Spin</div><span className="qstag" ref={modeRef}>SINGLE PLAY</span></div>
+      <div className="qshook">Can't decide on a play? Hit spin and we'll generate a quick pick for you.</div>
       <div className="qsreels">
         <div className="qsreel"><span className="qsrv emoji" ref={r0}>⚾</span></div>
         <div className="qsreel"><span className="qsrv" ref={r1}>LAD</span></div>
@@ -169,7 +170,22 @@ function QuickSpin(){
       </div>
       <div className="qsres"><span className="qspill" ref={resRef}>🎯 LAD ML · +4.1% edge</span></div>
       <Link className="qsbtn" to="/signup">SPIN A PICK<span className="qssh"/></Link>
-      <div className="qscap">Spin up a single play <b>or a full parlay</b> — pick a sport or mix, then tap.</div>
+      <div className="qscap">Single plays or full parlays · pick a sport, or mix them.</div>
+      <div className="qsdisc">🎲 <span><b>Just for fun</b> — Quick Spin is a bit of entertainment, not betting advice. If you do play, only bet what you can afford and keep it small.</span></div>
+    </div>
+  );
+}
+
+/* ---- WizePlays: handpicked plays ---- */
+function WizePlays(){
+  return (
+    <div className="wpcard">
+      <div className="wph"><div className="wpt"><span style={{fontSize:16}}>⭐</span>WizePlays</div><span className="wpbadge">HANDPICKED<span className="wpsh"/></span></div>
+      <div className="wpsub">Our analysts' handpicked plays — the highest-conviction edges we back with real confidence.</div>
+      <div className="wpplay"><div className="wpck">✓</div><div className="wppi"><div className="wppn">Yankees ML</div><div className="wppm">NYY vs BOS · model + sharp lean</div></div><span className="wpconv hi">HIGH</span><span className="wpod">−130</span></div>
+      <div className="wpplay"><div className="wpck">✓</div><div className="wppi"><div className="wppn">Rockies / Padres Under 8.5</div><div className="wppm">COL @ SD · pitching edge</div></div><span className="wpconv md">MED</span><span className="wpod">−108</span></div>
+      <Link className="wptrack" to="/performance"><span className="wpic">🔒</span><span className="wptx">Our system <b>auto-records and tracks every pick</b> — and once it's in, <b>it's locked and can't be changed.</b> Win or lose, the full record's on the board.</span><span className="wpgo">View →</span></Link>
+      <div className="wpnote">A fresh hand-curated slate every day · sample shown, today's plays are inside</div>
     </div>
   );
 }
@@ -293,9 +309,27 @@ export default function LandingPage(){
               <div className="rec"><span className="num barlow" style={{color:"#f0a93c"}}>100s</span><span className="lab">Edges daily</span></div>
             </div>
           </div>
+        </section>
+      </div>
 
-          {/* RIGHT: live signature panel */}
-          <div className="live fade2">
+      {/* MARKET PRICE — repositioned just above the live board */}
+      <div className="wrap">
+        <section className="sec">
+          <div className="kick teal">💹 Market Price · every book, one screen</div>
+          <h2>Shop every book. Take the best price. Every time.</h2>
+          <p>The same bet pays differently at different books. We put <strong>every major US book side by side</strong>, best price highlighted — so you always grab the better number. That edge has nothing to do with luck.</p>
+          <div className="shop">
+            <div className="h">Example · same bet, four books</div>
+            {SHOP.map(([bk,pr,best],i)=>(
+              <div className="b" key={i}><span className={"bk"+(best?" best":"")}>{bk}</span><span className={"pr"+(best?" best":"")}>{pr}</span></div>
+            ))}
+          </div>
+        </section>
+      </div>
+
+      {/* MARKETS PREVIEW — its own full-width block */}
+      <div className="wrap">
+        <div className="live fade2">
             <div className="live-top">
               <span className={"live-badge"+(boardEmpty?" prev":"")}><span className="dot"/>MARKETS {boardEmpty?"PREVIEW":"LIVE"}</span>
               {boardEmpty ? <span className="feat-demo">DEMO</span> : (
@@ -354,7 +388,6 @@ export default function LandingPage(){
               </div>}
             </>)}
           </div>
-        </section>
       </div>
 
       {/* PROP SPOTLIGHT (rotates through real props) */}
@@ -392,23 +425,11 @@ export default function LandingPage(){
             <LiveScores/>
             <QuickSpin/>
           </div>
+          <div style={{marginTop:16}}><WizePlays/></div>
         </section>
       </div>
 
       <div className="wrap">
-        {/* line shopping */}
-        <section className="sec">
-          <div className="kick teal">💹 Market Price · every book, one screen</div>
-          <h2>Shop every book. Take the best price. Every time.</h2>
-          <p>The same bet pays differently at different books. We put <strong>every major US book side by side</strong>, best price highlighted — so you always grab the better number. That edge has nothing to do with luck.</p>
-          <div className="shop">
-            <div className="h">Example · same bet, four books</div>
-            {SHOP.map(([bk,pr,best],i)=>(
-              <div className="b" key={i}><span className={"bk"+(best?" best":"")}>{bk}</span><span className={"pr"+(best?" best":"")}>{pr}</span></div>
-            ))}
-          </div>
-        </section>
-
         {/* pitch */}
         <section className="sec">
           <div className="kick purple">Why WizePicks</div>
@@ -458,7 +479,7 @@ nav{position:sticky;top:0;z-index:50;background:rgba(7,7,14,.72);backdrop-filter
 .btn-ghost{background:transparent;color:var(--t2);border:1px solid #23233a;padding:8px 16px;font-size:13px}
 .btn-ghost:hover{color:var(--t1);border-color:#33334d}
 .hero{display:grid;grid-template-columns:1fr;gap:34px;padding:34px 0 26px}
-@media(min-width:860px){.hero{grid-template-columns:1.02fr .98fr;gap:40px;padding:64px 0 50px;align-items:center}}
+@media(min-width:860px){.hero{padding:60px 0 30px}}
 .ebadge{display:flex;align-items:flex-start;gap:11px;max-width:360px;margin-bottom:20px}
 .ebar{width:3px;align-self:stretch;border-radius:2px;background:linear-gradient(#9b7bff,#f0a93c);flex:0 0 auto;min-height:38px}
 .eb-k{display:block;font-size:10.5px;font-weight:800;letter-spacing:.14em;color:#fff;margin-bottom:4px}
@@ -621,6 +642,34 @@ footer{padding:24px 0;text-align:center;color:var(--t3);font-size:12px}
 .qssh{position:absolute;top:0;left:-60%;width:50%;height:100%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.25),transparent);animation:shine 2.6s linear infinite}
 .qscap{font-size:11px;color:var(--t3);text-align:center;margin-top:11px;font-weight:600}
 .qscap b{color:var(--t2)}
+.qsh{margin-bottom:6px!important}
+.qshook{font-size:13px;color:#cdd6df;font-weight:600;line-height:1.5;margin-bottom:13px}
+.qsdisc{display:flex;align-items:flex-start;gap:7px;margin-top:12px;padding:9px 11px;background:rgba(255,255,255,.025);border-radius:10px;font-size:10.5px;color:#8a98a4;line-height:1.5;font-weight:500}
+.qsdisc b{color:#cdd6df;font-weight:700}
+.wpcard{position:relative;background:linear-gradient(165deg,rgba(29,158,117,.16),rgba(51,233,145,.05),rgba(8,10,16,.6));border-radius:18px;padding:16px;overflow:hidden;box-shadow:0 20px 50px -30px rgba(29,158,117,.5)}
+.wpcard::before{content:"";position:absolute;top:-40px;left:-30px;width:150px;height:150px;background:radial-gradient(circle,rgba(51,233,145,.14),transparent 70%);pointer-events:none}
+.wph{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.wpt{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:800;color:#fff}
+.wpbadge{position:relative;font-size:9px;font-weight:800;letter-spacing:.1em;color:#04130d;background:linear-gradient(90deg,#33e991,#1fd6a0);border-radius:20px;padding:3px 10px;overflow:hidden}
+.wpsh{position:absolute;top:0;left:-60%;width:45%;height:100%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.5),transparent);animation:shine 2.8s linear infinite}
+.wpsub{font-size:13px;color:#cdd6df;font-weight:600;line-height:1.5;margin-bottom:14px}
+.wpplay{display:flex;align-items:center;gap:11px;padding:11px 12px;border-radius:12px;background:rgba(255,255,255,.025);margin-bottom:8px;border:1px solid rgba(51,233,145,.12)}
+.wpplay:last-of-type{margin-bottom:0}
+.wpck{width:24px;height:24px;border-radius:50%;flex:0 0 auto;display:flex;align-items:center;justify-content:center;background:rgba(51,233,145,.15);border:1px solid rgba(51,233,145,.4);color:var(--green);font-size:13px;font-weight:900}
+.wppi{flex:1;min-width:0}
+.wppn{font-weight:800;font-size:14px;color:#fff}
+.wppm{font-size:10.5px;color:#7d8b96;font-weight:600;margin-top:1px}
+.wpconv{font-size:9px;font-weight:800;letter-spacing:.05em;padding:3px 8px;border-radius:7px;flex:0 0 auto}
+.wpconv.hi{color:var(--green);background:rgba(51,233,145,.12);border:1px solid rgba(51,233,145,.3)}
+.wpconv.md{color:#f0a93c;background:rgba(240,169,60,.12);border:1px solid rgba(240,169,60,.3)}
+.wpod{font-family:'Barlow Condensed';font-weight:800;font-size:17px;color:#cdd6df;flex:0 0 auto;min-width:42px;text-align:right}
+.wptrack{display:flex;align-items:flex-start;gap:10px;margin-top:13px;padding:12px;border-radius:12px;background:rgba(51,233,145,.06);border:1px solid rgba(51,233,145,.18)}
+.wptrack:hover{background:rgba(51,233,145,.1)}
+.wpic{font-size:16px;margin-top:1px}
+.wptx{flex:1;font-size:12px;color:#cdd6df;font-weight:600;line-height:1.55}
+.wptx b{color:#fff;font-weight:800}
+.wpgo{font-size:11px;color:var(--green);font-weight:800;white-space:nowrap;margin-top:1px}
+.wpnote{font-size:10px;color:var(--t3);text-align:center;margin-top:11px;font-weight:600}
 @keyframes rspin{0%{transform:translateY(-2px)}50%{transform:translateY(2px)}100%{transform:translateY(-2px)}}
 @keyframes respop{0%{opacity:0;transform:scale(.9)}60%{opacity:1;transform:scale(1.05)}100%{opacity:1;transform:scale(1)}}
 @keyframes shine{0%{left:-60%}100%{left:160%}}
