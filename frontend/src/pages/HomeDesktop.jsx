@@ -392,7 +392,7 @@ const TCSS = `
 @keyframes wppulse{0%{box-shadow:0 0 0 0 rgba(43,212,125,.5)}70%{box-shadow:0 0 0 7px rgba(43,212,125,0)}100%{box-shadow:0 0 0 0 rgba(43,212,125,0)}}
 .wpterm .clock{font-family:var(--mono);font-size:12px;color:var(--mut)}
 .wpterm .avatar{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,#1b2740,#0e1422);border:1px solid var(--line2);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;color:#9fb0c4;cursor:pointer}
-.wpterm .body{flex:1 1 auto;display:grid;grid-template-columns:210px minmax(0,1fr) clamp(300px,22vw,360px);min-height:0;overflow:hidden}
+.wpterm .body{flex:1 1 auto;display:grid;grid-template-columns:210px minmax(0,1fr) clamp(300px,22vw,360px);grid-template-rows:minmax(0,1fr);min-height:0;overflow:hidden}
 .wpterm .nav{border-right:1px solid var(--line);background:#080a11;display:flex;flex-direction:column;padding:12px 10px;gap:3px;overflow:auto;min-height:0}
 .wpterm .nav .grp{font-size:9.5px;font-weight:800;letter-spacing:1.4px;color:var(--mut2);padding:12px 10px 5px}
 .wpterm .nav a{display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:9px;color:#aeb9c8;font-size:13px;font-weight:600;cursor:pointer;border:1px solid transparent;position:relative}
