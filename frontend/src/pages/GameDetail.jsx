@@ -402,7 +402,7 @@ function FormCard({ abbr, name, side, form, loading }) {
 }
 function FormStat({ label, value, color }) {
   return (
-    <div style={{ background: "#0f1419", border: "1px solid #1a1f28", borderRadius: 6, padding: "8px 10px", textAlign: "center" }}>
+    <div style={{ background: "#0f1419", border: "1px solid #1a1f28", borderRadius: 6, padding: "8px 6px", textAlign: "center", minWidth: 0, overflow: "hidden" }}>
       <div style={{ fontSize: 9, color: "#6b7280", letterSpacing: "0.08em", fontWeight: 600, textTransform: "uppercase", marginBottom: 4 }}>{label}</div>
       <div style={{ fontSize: 16, fontWeight: 800, color, lineHeight: 1 }}>{value}</div>
     </div>
@@ -980,9 +980,9 @@ function PitcherMatchup({ awayPitcher, homePitcher, hasFullAccess, navigate }) {
     else verdict = { text: "Even matchup by the numbers", detail: `${cmp.awayWins} key categories each`, color: "#9ca3af" };
   }
   return (
-    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 20, marginBottom: 10 }}>
+    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 10, marginBottom: 10 }}>
       <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 16 }}>⚾ Starting pitcher matchup</div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+      <div className="pitcher-grid" style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", gap: 8 }}>
         <PitcherCard pitcher={awayPitcher} label="AWAY" compare={cmp?.away} hasFullAccess={hasFullAccess} navigate={navigate} />
         <PitcherCard pitcher={homePitcher} label="HOME" compare={cmp?.home} hasFullAccess={hasFullAccess} navigate={navigate} />
       </div>
@@ -1016,7 +1016,7 @@ function PitcherCard({ pitcher, label, compare, hasFullAccess, navigate }) {
   const record = stats && (stats.wins != null || stats.losses != null)
     ? `${stats.wins ?? 0}-${stats.losses ?? 0}` : null;
   return (
-    <div style={{ background: "#0a0e14", border: "1px solid #1f2937", borderRadius: 8, padding: 16, textAlign: "center" }}>
+    <div style={{ background: "#0a0e14", border: "1px solid #1f2937", borderRadius: 8, padding: 8, textAlign: "center", minWidth: 0, overflow: "hidden" }}>
       <div style={{ fontSize: 10, color: "#6b7280", letterSpacing: "0.08em", marginBottom: 10, fontWeight: 600 }}>{label}</div>
       {/* headshot on top (ESPN game-card style) — compact */}
       <div style={{ width: 40, height: 40, margin: "0 auto 6px", borderRadius: "50%", overflow: "hidden", background: "#0f1419", border: "2px solid #1f2937", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -1039,13 +1039,13 @@ function PitcherCard({ pitcher, label, compare, hasFullAccess, navigate }) {
       </div>
       {stats && (
         <>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, fontSize: 12, textAlign: "left" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, fontSize: 12, textAlign: "left" }}>
             <StatBlock label="ERA" value={stats.era?.toFixed(2)} status={compare?.era} />
             <StatBlock label="WHIP" value={stats.whip?.toFixed(2)} status={compare?.whip} />
             <StatBlock label="K/9" value={stats.strikeoutsPer9?.toFixed(1)} status={compare?.k9} />
             <StatBlock label="HR/9" value={stats.homeRunsPer9?.toFixed(2)} status={compare?.hr9} />
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, fontSize: 12, textAlign: "left", marginTop: 8 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 4, fontSize: 12, textAlign: "left", marginTop: 6 }}>
             <StatBlock label="IP" value={stats.inningsPitched != null ? stats.inningsPitched : "—"} status={compare?.ip} />
             <StatBlock label="H" value={stats.hits != null ? stats.hits : "—"} status={compare?.h} />
             <StatBlock label="BB" value={stats.walks != null ? stats.walks : "—"} status={compare?.bb} />
@@ -1061,9 +1061,9 @@ function StatBlock({ label, value, status }) {
   const valueColor = status === "win" ? "#22c55e" : status === "lose" ? "#ef4444" : "#e4e7eb";
   const borderColor = status === "win" ? "#22c55e44" : status === "lose" ? "#ef444444" : "#1a1f28";
   return (
-    <div style={{ background: "#0f1419", border: `1px solid ${borderColor}`, borderRadius: 6, padding: "6px 10px" }}>
-      <div style={{ fontSize: 9, color: "#6b7280", letterSpacing: "0.08em", fontWeight: 600, textTransform: "uppercase" }}>{label}</div>
-      <div style={{ fontSize: 14, fontWeight: 700, color: valueColor, marginTop: 2 }}>{value ?? "—"}</div>
+    <div style={{ background: "#0f1419", border: `1px solid ${borderColor}`, borderRadius: 6, padding: "4px 5px", minWidth: 0, overflow: "hidden" }}>
+      <div style={{ fontSize: 9, color: "#6b7280", letterSpacing: "0.04em", fontWeight: 600, textTransform: "uppercase" }}>{label}</div>
+      <div style={{ fontSize: 12, fontWeight: 700, color: valueColor, marginTop: 2, whiteSpace: "nowrap" }}>{value ?? "—"}</div>
     </div>
   );
 }
@@ -1148,7 +1148,7 @@ function TotalsCard({ totals }) {
 }
 function BigStat({ label, value, color }) {
   return (
-    <div style={{ background: "#0a0e14", border: "1px solid #1f2937", borderRadius: 8, padding: 14, textAlign: "center" }}>
+    <div style={{ background: "#0a0e14", border: "1px solid #1f2937", borderRadius: 8, padding: "14px 8px", textAlign: "center", minWidth: 0, overflow: "hidden" }}>
       <div style={{ fontSize: 10, color: "#6b7280", letterSpacing: "0.08em", fontWeight: 600, textTransform: "uppercase", marginBottom: 4 }}>{label}</div>
       <div style={{ fontSize: 28, fontWeight: 800, color, lineHeight: 1.1 }}>{value}</div>
     </div>
