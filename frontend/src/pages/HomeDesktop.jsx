@@ -368,7 +368,7 @@ export default function HomeDesktop(props) {
 
 const TCSS = `
 .wpterm{--ink:#06080d;--panel:#0b0e16;--line:#1a2030;--line2:#232c3d;--teal:#1D9E75;--up:#2bd47d;--dn:#ff5247;--model:#9b7bff;--amber:#f3b94f;--cold:#5aa9ff;--tx:#e8edf4;--mut:#6b7888;--mut2:#485364;--mono:'IBM Plex Mono',ui-monospace,monospace;--disp:'Barlow Condensed',sans-serif;
-  position:fixed;inset:0;background:var(--ink);color:var(--tx);font-family:'Inter',system-ui,sans-serif;display:flex;flex-direction:column;overflow:hidden;
+  position:fixed;top:0;left:0;height:100vh;width:100vw;background:var(--ink);color:var(--tx);font-family:'Inter',system-ui,sans-serif;display:flex;flex-direction:column;overflow:hidden;
   background-image:radial-gradient(1200px 600px at 80% -10%,rgba(155,123,255,.06),transparent 60%),radial-gradient(900px 500px at 0% 110%,rgba(29,158,117,.06),transparent 55%)}
 .wpterm .num{font-family:var(--mono);font-variant-numeric:tabular-nums}
 .wpterm .status{flex:0 0 52px;display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:18px;height:52px;padding:0 18px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,#0a0d15,#080a11)}
