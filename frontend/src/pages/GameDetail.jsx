@@ -204,10 +204,16 @@ function GameDetail({ game, scoresId, hrProps, hasFullAccess, navigate }) {
 
       {/* BETTING — pre-game model (win prob / totals / run line). */}
       <GroupLabel>Betting</GroupLabel>
-      {bestEdge && <BestEdgeCard edge={bestEdge} game={game} hasFullAccess={hasFullAccess} navigate={navigate} />}
-      <WinProbabilityCard awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} awayProb={ml.awayWinProb} homeProb={ml.homeWinProb} awayOdds={ml.awayOdds} homeOdds={ml.homeOdds} awayBook={ml.awayBook} homeBook={ml.homeBook} awayEdge={ml.awayEdge} homeEdge={ml.homeEdge} hasFullAccess={hasFullAccess} navigate={navigate} />
-      <TotalsCard totals={totals} hasFullAccess={hasFullAccess} navigate={navigate} />
-      <RunLineCard rl={rl} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} />
+      {hasFullAccess ? (
+        <>
+          {bestEdge && <BestEdgeCard edge={bestEdge} game={game} hasFullAccess={hasFullAccess} navigate={navigate} />}
+          <WinProbabilityCard awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} awayProb={ml.awayWinProb} homeProb={ml.homeWinProb} awayOdds={ml.awayOdds} homeOdds={ml.homeOdds} awayBook={ml.awayBook} homeBook={ml.homeBook} awayEdge={ml.awayEdge} homeEdge={ml.homeEdge} hasFullAccess={hasFullAccess} navigate={navigate} />
+          <TotalsCard totals={totals} hasFullAccess={hasFullAccess} navigate={navigate} />
+          <RunLineCard rl={rl} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} />
+        </>
+      ) : (
+        <EdgeLock navigate={navigate} />
+      )}
 
       <GroupLabel>Details</GroupLabel>
       {detailCards}
@@ -730,6 +736,28 @@ function WeatherStat({ icon, label, value, color, subtitle }) {
       <div style={{ fontSize: 10, color: "#6b7280", letterSpacing: "0.08em", fontWeight: 600, textTransform: "uppercase", marginBottom: 6 }}>{icon} {label}</div>
       <div style={{ fontSize: 18, fontWeight: 700, color, lineHeight: 1.1 }}>{value}</div>
       {subtitle && <div style={{ fontSize: 11, color: "#6b7280", marginTop: 4 }}>{subtitle}</div>}
+    </div>
+  );
+}
+function EdgeLock({ navigate }) {
+  const sk = { background: "#1f2937", borderRadius: 5 };
+  return (
+    <div style={{ position: "relative", borderRadius: 10, overflow: "hidden", marginBottom: 18 }}>
+      <div style={{ filter: "blur(7px)", opacity: 0.5, pointerEvents: "none", userSelect: "none" }}>
+        <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 20 }}>
+          <div style={{ ...sk, height: 14, width: "45%", marginBottom: 14 }} />
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <div style={{ ...sk, height: 70 }} /><div style={{ ...sk, height: 70 }} />
+          </div>
+          <div style={{ ...sk, height: 54, marginTop: 12 }} />
+        </div>
+      </div>
+      <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", padding: 18, background: "radial-gradient(circle at 50% 40%, rgba(8,10,16,.5), rgba(10,14,20,.9))" }}>
+        <div style={{ width: 42, height: 42, borderRadius: 13, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, background: "rgba(155,123,255,.14)", border: "1px solid rgba(155,123,255,.4)", marginBottom: 11 }}>🔒</div>
+        <div style={{ fontSize: 15, fontWeight: 800, color: "#fff", marginBottom: 4 }}>Model edges are locked</div>
+        <div style={{ fontSize: 11.5, color: "#9aa6b2", lineHeight: 1.5, maxWidth: 250, marginBottom: 13 }}>Win probability, totals, run line &amp; the biggest edge — all inside <b style={{ color: "#33e991" }}>All-Access · $7/mo</b></div>
+        <button onClick={() => navigate("/pricing")} style={{ background: "#1D9E75", color: "#04130d", border: "none", fontWeight: 800, fontSize: 13, padding: "11px 20px", borderRadius: 11, cursor: "pointer", fontFamily: "inherit" }}>Unlock All-Access →</button>
+      </div>
     </div>
   );
 }
