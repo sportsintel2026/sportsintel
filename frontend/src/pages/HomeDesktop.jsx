@@ -392,7 +392,7 @@ const TCSS = `
 @keyframes wppulse{0%{box-shadow:0 0 0 0 rgba(43,212,125,.5)}70%{box-shadow:0 0 0 7px rgba(43,212,125,0)}100%{box-shadow:0 0 0 0 rgba(43,212,125,0)}}
 .wpterm .clock{font-family:var(--mono);font-size:12px;color:var(--mut)}
 .wpterm .avatar{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,#1b2740,#0e1422);border:1px solid var(--line2);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;color:#9fb0c4;cursor:pointer}
-.wpterm .body{flex:1 0 auto;display:grid;grid-template-columns:210px minmax(0,1fr) clamp(300px,22vw,360px);align-items:start}
+.wpterm .body{flex:1 0 auto;display:grid;grid-template-columns:clamp(176px,11vw,210px) minmax(0,1fr) clamp(286px,22vw,360px);align-items:start}
 .wpterm .nav{position:sticky;top:52px;align-self:start;height:calc(100vh - 52px);border-right:1px solid var(--line);background:#080a11;display:flex;flex-direction:column;padding:12px 10px;gap:3px;overflow:auto}
 .wpterm .nav .grp{font-size:9.5px;font-weight:800;letter-spacing:1.4px;color:var(--mut2);padding:12px 10px 5px}
 .wpterm .nav a{display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:9px;color:#aeb9c8;font-size:13px;font-weight:600;cursor:pointer;border:1px solid transparent;position:relative}
@@ -405,11 +405,11 @@ const TCSS = `
 .wpterm .nav .upsell .h{font-family:var(--disp);font-weight:800;font-size:16px;color:#cdbcff}
 .wpterm .nav .upsell .d{font-size:10.5px;color:var(--mut);margin:4px 0 9px;line-height:1.4}
 .wpterm .nav .upsell button{width:100%;border:0;border-radius:8px;background:var(--teal);color:#04130d;font-weight:800;font-size:12px;padding:8px;cursor:pointer;font-family:inherit}
-.wpterm .content{padding:15px 18px 30px;display:flex;flex-direction:column;gap:13px;min-width:0}
+.wpterm .content{padding:clamp(11px,0.95vw,15px) clamp(12px,1.2vw,18px) 40px;display:flex;flex-direction:column;gap:clamp(10px,0.9vw,13px);min-width:0}
 .wpterm .content::-webkit-scrollbar,.wpterm .nav::-webkit-scrollbar,.wpterm .strip::-webkit-scrollbar,.wpterm .mvstrip::-webkit-scrollbar{width:9px;height:8px}
 .wpterm .content::-webkit-scrollbar-thumb,.wpterm .nav::-webkit-scrollbar-thumb,.wpterm .strip::-webkit-scrollbar-thumb,.wpterm .mvstrip::-webkit-scrollbar-thumb{background:#1a2233;border-radius:6px}
 .wpterm .maintop{display:flex;align-items:flex-end;justify-content:space-between}
-.wpterm .maintop h1{font-family:var(--disp);font-weight:800;font-size:26px}
+.wpterm .maintop h1{font-family:var(--disp);font-weight:800;font-size:clamp(20px,1.7vw,26px)}
 .wpterm .maintop .sub{font-size:12px;color:var(--mut);margin-top:1px}
 .wpterm .sportbar{display:flex;gap:5px}
 .wpterm .sportbar .sp{display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;color:var(--mut);padding:7px 12px;border:1px solid var(--line);border-radius:9px;background:var(--panel);cursor:pointer}
@@ -418,13 +418,13 @@ const TCSS = `
 .wpterm .indices{display:grid;grid-template-columns:repeat(4,1fr);gap:11px}
 .wpterm .idx{border:1px solid var(--line);border-radius:13px;background:linear-gradient(180deg,var(--panel),#080b12);padding:12px 14px}
 .wpterm .idx .k{font-size:10px;font-weight:800;letter-spacing:.8px;color:var(--mut);text-transform:uppercase}
-.wpterm .idx .v{font-family:var(--disp);font-weight:800;font-size:29px;line-height:1.05;margin-top:4px}
+.wpterm .idx .v{font-family:var(--disp);font-weight:800;font-size:clamp(22px,1.95vw,29px);line-height:1.05;margin-top:4px}
 .wpterm .idx .v.lockv{font-size:22px}
 .wpterm .idx .chg{font-family:var(--mono);font-size:11px;font-weight:600;margin-top:3px;color:var(--mut)}
 .wpterm .idx.teal .v{color:#7af0c4}.wpterm .idx.green .v{color:#7af0c4}.wpterm .idx.amber .v{color:#ffd584}.wpterm .idx.purple .v{color:#7af0c4}
 .wpterm .panel{border:1px solid var(--line);border-radius:14px;background:var(--panel);overflow:hidden}
 .wpterm .phead{display:flex;align-items:center;gap:12px;padding:11px 15px;border-bottom:1px solid var(--line)}
-.wpterm .phead .t{font-family:var(--disp);font-weight:800;font-size:15.5px;letter-spacing:.4px;display:flex;align-items:center;gap:8px}
+.wpterm .phead .t{font-family:var(--disp);font-weight:800;font-size:clamp(13px,1vw,15.5px);letter-spacing:.4px;display:flex;align-items:center;gap:8px}
 .wpterm .phead .seg{display:flex;gap:2px;background:#080b12;border:1px solid var(--line);border-radius:9px;padding:3px;margin-left:6px}
 .wpterm .phead .seg b{font-size:11.5px;font-weight:700;color:var(--mut);padding:5px 12px;border-radius:6px;cursor:pointer}
 .wpterm .phead .seg b.on{background:#16203a;color:#fff;box-shadow:inset 0 0 0 1px rgba(155,123,255,.35)}
@@ -446,7 +446,7 @@ const TCSS = `
 .wpterm .tlogo img{width:18px;height:18px;object-fit:contain}
 .wpterm .tlogo.fb{font-family:var(--disp);font-weight:700;font-size:9px;color:#8fa0b3}
 .wpterm .tbl{width:100%;border-collapse:collapse}
-.wpterm .tbl thead th{font-size:10px;font-weight:800;letter-spacing:.6px;color:var(--mut);text-transform:uppercase;text-align:left;padding:9px 14px;border-bottom:1px solid var(--line);background:#0a0d15;white-space:nowrap}
+.wpterm .tbl thead th{font-size:10px;font-weight:800;letter-spacing:.6px;color:var(--mut);text-transform:uppercase;text-align:left;padding:9px clamp(8px,0.95vw,14px);border-bottom:1px solid var(--line);background:#0a0d15;white-space:nowrap}
 .wpterm .tbl thead th.r{text-align:right}.wpterm .tbl thead th.c{text-align:center}
 .wpterm .tbl thead th.sortable{cursor:pointer;user-select:none}.wpterm .tbl thead th.sortable:hover{color:#aeb9c8}
 .wpterm .tbl thead th .ca{font-family:var(--mono);font-size:9px;color:var(--teal);margin-left:3px}
@@ -454,7 +454,7 @@ const TCSS = `
 .wpterm .tbl tbody tr.click{cursor:pointer;transition:background .12s}
 .wpterm .tbl tbody tr.click:hover{background:linear-gradient(90deg,rgba(29,158,117,.08),transparent)}
 .wpterm .tbl tbody tr.click:hover td:first-child{box-shadow:inset 3px 0 0 var(--teal)}
-.wpterm .tbl td{padding:10px 14px;font-size:13px;vertical-align:middle}.wpterm .tbl td.c{text-align:center}.wpterm .tbl td.r{text-align:right}
+.wpterm .tbl td{padding:10px clamp(8px,0.95vw,14px);font-size:clamp(11.5px,0.78vw,13px);vertical-align:middle}.wpterm .tbl td.c{text-align:center}.wpterm .tbl td.r{text-align:right}
 .wpterm .matchup{display:flex;align-items:center;gap:9px}
 .wpterm .logos{display:flex;align-items:center}.wpterm .logos .tlogo:last-child{margin-left:-7px}
 .wpterm .mua{font-family:var(--disp);font-weight:700;font-size:15px}.wpterm .mua .at{color:var(--mut2)}
@@ -502,24 +502,16 @@ const TCSS = `
 .wpterm .mpp{display:flex;align-items:center;justify-content:space-between;background:#0a0e16;border:1px solid var(--line);border-radius:6px;padding:5px 8px}
 .wpterm .mpp .lbl{font-size:10px;color:var(--mut);font-weight:700}.wpterm .mpp .num{font-family:var(--mono);font-size:12px;color:#c4cdd9}
 /* responsive — auto-fit screen sizes */
-@media (max-width:1440px){
-  .wpterm .body{grid-template-columns:196px minmax(0,1fr) clamp(282px,22vw,332px)}
-  .wpterm .idx .v{font-size:30px}
-  .wpterm .content{padding:14px 15px 28px;gap:12px}
-}
-@media (max-width:1240px){
-  .wpterm .body{grid-template-columns:174px minmax(0,1fr) 264px}
-  .wpterm .indices{grid-template-columns:repeat(2,1fr)}
-  .wpterm .idx .v{font-size:27px}
-  .wpterm .tbl th,.wpterm .tbl td{padding:9px 8px;font-size:12px}
-  .wpterm .content{padding:12px 12px 26px}
-}
+/* fluid clamp() handles sizing smoothly; these only reflow layout */
+@media (max-width:1320px){ .wpterm .indices{grid-template-columns:repeat(2,1fr)} }
 @media (max-width:1080px){
   .wpterm .nav{display:none}
   .wpterm .body{grid-template-columns:1fr}
+  .wpterm .indices{grid-template-columns:repeat(4,1fr)}
   .wpterm .rail{position:static;height:auto;overflow:visible;border-left:0;border-top:1px solid var(--line);width:100%}
   .wpterm .rail .panel.grow{flex:none;min-height:0}
 }
+@media (max-width:680px){ .wpterm .indices{grid-template-columns:repeat(2,1fr)} }
 .wpterm .book{font-size:12px;color:#c4cdd9;font-family:var(--mono);text-align:center}.wpterm .book .bk{font-size:10px;color:var(--mut);font-family:'Inter'}
 .wpterm .edge-cell{text-align:right;white-space:nowrap}
 .wpterm .edge-v{font-family:var(--mono);font-size:14px;font-weight:600}.wpterm .edge-v.up{color:var(--up)}.wpterm .edge-v.dn{color:var(--dn)}
