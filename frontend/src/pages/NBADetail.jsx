@@ -300,7 +300,7 @@ function NbaFormCard({ abbr, name, side, form, loading }) {
 
 function NbaFormStat({ label, value, color }) {
   return (
-    <div style={{ background: "#0f1419", border: "1px solid #1a1f28", borderRadius: 6, padding: "8px 10px", textAlign: "center" }}>
+    <div style={{ background: "#0f1419", border: "1px solid #1a1f28", borderRadius: 6, padding: "8px 6px", textAlign: "center", minWidth: 0, overflow: "hidden" }}>
       <div style={{ fontSize: 9, color: "#6b7280", letterSpacing: "0.08em", fontWeight: 600, textTransform: "uppercase", marginBottom: 4 }}>{label}</div>
       <div style={{ fontSize: 16, fontWeight: 800, color, lineHeight: 1 }}>{value}</div>
     </div>
@@ -679,7 +679,7 @@ function fmtMeetingDate(d) {
 }
 function BigStat({ label, value, color }) {
   return (
-    <div style={{ background: "#0a0e14", border: "1px solid #1f2937", borderRadius: 8, padding: 14, textAlign: "center" }}>
+    <div style={{ background: "#0a0e14", border: "1px solid #1f2937", borderRadius: 8, padding: "14px 8px", textAlign: "center", minWidth: 0, overflow: "hidden" }}>
       <div style={{ fontSize: 10, color: "#6b7280", letterSpacing: "0.08em", fontWeight: 600, textTransform: "uppercase", marginBottom: 4 }}>{label}</div>
       <div style={{ fontSize: 28, fontWeight: 800, color, lineHeight: 1.1 }}>{value}</div>
     </div>
