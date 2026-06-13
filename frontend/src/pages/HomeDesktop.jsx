@@ -42,10 +42,12 @@ function Lock({ title, sub, navigate }) {
 }
 
 export default function HomeDesktop(props) {
-  const { edges, games = [], movers = [], live = [], abbrById = {}, topProps = [], propList = [], hero, hasFull, planLoaded = true, lineSeries = {},
+  const { edges, games = [], movers = [], live = [], abbrById = {}, topProps = [], propList = [], propsByType = {}, hero, hasFull, planLoaded = true, lineSeries = {},
     wpRecord, navigate, plan = {}, sport = "mlb", setSport, marketsLive, anyLive } = props;
   const lg = sport === "nba" ? "nba" : "mlb";
   const [market, setMarket] = useState("ml");
+  const [propTab, setPropTab] = useState("hits");
+  const [propSort, setPropSort] = useState({ key: "edge", dir: -1 });
   const [sortKey, setSortKey] = useState("edge");
   const [sortDir, setSortDir] = useState(-1);
   const [si, setSi] = useState(0);
@@ -89,6 +91,14 @@ export default function HomeDesktop(props) {
   const wx = games.filter((g) => g.weather && sport === "mlb");
   const pt = games.filter((g) => g.pitchers && (g.pitchers.away || g.pitchers.home) && sport === "mlb");
   const mp = games.filter((g) => g.moneyline && (g.moneyline.awayOdds != null || g.moneyline.homeOdds != null));
+  const propActive = propsByType[propTab] || [];
+  let propRows = [...propActive].sort((a, b) => {
+    if (propSort.key === "model") return ((a.prob || 0) - (b.prob || 0)) * propSort.dir;
+    if (propSort.key === "odds") return ((Number(a.odds) || 0) - (Number(b.odds) || 0)) * propSort.dir;
+    return ((a.edge ?? -9) - (b.edge ?? -9)) * propSort.dir;
+  });
+  const setPS = (k) => setPropSort((s) => s.key === k ? { key: k, dir: -s.dir } : { key: k, dir: -1 });
+  const pcaret = (k) => propSort.key === k ? (propSort.dir < 0 ? " ▾" : " ▴") : "";
   const wl = wpRecord ? `${wpRecord.wins}-${wpRecord.losses}${wpRecord.pushes ? `-${wpRecord.pushes}` : ""}` : "—";
   const winPct = wpRecord && (wpRecord.wins + wpRecord.losses) > 0 ? Math.round((wpRecord.wins / (wpRecord.wins + wpRecord.losses)) * 100) : null;
   const units = wpRecord ? wpRecord.units : null;
@@ -241,32 +251,50 @@ export default function HomeDesktop(props) {
             </div>
           )}
 
-          {/* STARTING PITCHERS */}
-          {mp.length > 0 && (
-            <div className="panel">
-              <div className="phead"><div className="t">💹 Market Price</div><div className="right">best available price · moneyline &amp; total</div></div>
-              <table className="tbl">
-                <thead><tr><th>Matchup</th><th className="c">Away ML</th><th className="c">Home ML</th><th className="c">Total</th><th className="c">Over</th><th className="c">Under</th></tr></thead>
-                <tbody>
-                  {mp.map((g, i) => {
-                    const a = g.awayAbbr || shortTeam(g.away); const h = g.homeAbbr || shortTeam(g.home);
-                    const ml = g.moneyline || {}; const to = g.totals || {};
-                    const px = (odds, book) => odds != null ? <div className="mpx2"><span className="o num">{formatOdds(odds)}</span>{book ? <span className="bk">{book}</span> : null}</div> : <span className="nomove">—</span>;
-                    return (
-                      <tr key={g.id || i}>
-                        <td><div className="matchup"><span className="logos"><TLogo ab={a} /><TLogo ab={h} /></span><span className="mu"><span className="mua">{a}<span className="at"> @ </span>{h}</span></span></div></td>
-                        <td className="c">{px(ml.awayOdds, ml.awayBook)}</td>
-                        <td className="c">{px(ml.homeOdds, ml.homeBook)}</td>
-                        <td className="c">{to.line != null ? <span className="tln num">{to.line}</span> : <span className="nomove">—</span>}</td>
-                        <td className="c">{px(to.overOdds, to.overBook)}</td>
-                        <td className="c">{px(to.underOdds, to.underBook)}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+          {/* PLAYER PROPS */}
+          <div className="panel">
+            <div className="phead">
+              <div className="t">🎯 Player Props</div>
+              <div className="ptabs">
+                {[["hits", "Hits"], ["ks", "Strikeouts"], ["hr", "Home Runs"]].map(([k, lb]) => (
+                  <button key={k} className={"ptab" + (propTab === k ? " on" : "")} onClick={() => setPropTab(k)}>{lb}</button>
+                ))}
+              </div>
             </div>
-          )}
+            {!planLoaded
+              ? <div className="empty">Loading…</div>
+              : !hasFull
+              ? <Lock title="Player props are an All-Access feature" sub={<>Model probabilities on every batter &amp; pitcher prop. <b>$7/mo</b></>} navigate={navigate} />
+              : propRows.length === 0
+              ? <div className="empty">No {propTab === "hr" ? "home run" : propTab === "ks" ? "strikeout" : "hits"} props posted yet — they fill in closer to first pitch.</div>
+              : <>
+                {propTab === "hr" && <div className="pnote">⚠️ Home run props are longshots — ranked by model chance to homer, not +EV. Bet small.</div>}
+                <table className="tbl">
+                  <thead><tr>
+                    <th>Player</th><th>Matchup</th><th>Prop</th>
+                    <th className="r sortable" onClick={() => setPS("model")}>{propTab === "hr" ? "To Homer" : "Model %"}{pcaret("model")}</th>
+                    <th className="r sortable" onClick={() => setPS("odds")}>Odds{pcaret("odds")}</th>
+                    {propTab !== "hr" && <th className="r sortable" onClick={() => setPS("edge")}>Edge{pcaret("edge")}</th>}
+                  </tr></thead>
+                  <tbody>
+                    {propRows.map((p, i) => {
+                      const over = !p.side || /over|^o/i.test(String(p.side));
+                      const ev = sport === "mlb" ? (p.edge ?? 0) * 100 : (p.edge ?? 0);
+                      return (
+                        <tr key={p.k || i} className="click" onClick={() => navigate("/props")}>
+                          <td><div className="pp"><span className="pph">{p.id ? <img src={`https://midfield.mlbstatic.com/v1/people/${p.id}/spots/120`} alt="" onError={(ev2) => { ev2.currentTarget.style.display = "none"; }} /> : "🧢"}</span><span className="ppn">{p.name}</span></div></td>
+                          <td className="dim">{p.game || p.team || "—"}</td>
+                          <td><span className={"ptag " + (over ? "ov" : "un")}>{p.betSide || p.market}</span></td>
+                          <td className="model-p">{p.prob != null ? `${Math.round(p.prob * 100)}%` : "—"}</td>
+                          <td className="book">{formatOdds(p.odds)}</td>
+                          {propTab !== "hr" && <td className="edge-cell"><div className={"edge-v " + (ev >= 0 ? "up" : "dn")}>{ev >= 0 ? "+" : ""}{ev.toFixed(1)}%</div><div className="edge-bar"><i style={{ width: Math.min(100, Math.abs(ev) * 12 + 8) + "%" }} /></div></td>}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </>}
+          </div>
 
           <div className="footnote">Sample of the desktop terminal · all figures live from your models. Mobile layout unchanged.</div>
         </div>
@@ -312,22 +340,25 @@ export default function HomeDesktop(props) {
           </div>
 
           <div className="panel grow">
-            <div className="phead"><div className="t">✨ Prop Spotlight</div><div className="right">top edges</div></div>
-            {!planLoaded
-              ? <div className="empty">Loading…</div>
-              : !hasFull
-              ? <Lock title="Props locked" sub={<><b>$7/mo</b></>} navigate={navigate} />
-              : (propList.length ? propList : topProps).length === 0
-                ? <div className="empty">Props fill in closer to first pitch.</div>
-                : <div className="plist">
-                  {(propList.length ? propList : topProps).map((s, i) => (
-                    <div key={s.k || i} className="prow" onClick={() => navigate("/props")}>
-                      <span className="pph">{s.id ? <img src={`https://midfield.mlbstatic.com/v1/people/${s.id}/spots/120`} alt="" onError={(ev) => { ev.currentTarget.style.display = "none"; }} /> : "🧢"}</span>
-                      <span className="pinfo"><span className="pnm">{s.name}</span><span className="pmk">{s.betSide} · {s.game || s.team}</span></span>
-                      <span className="pod num">{formatOdds(s.odds)}</span>
+            <div className="phead"><div className="t">💹 Market Price</div><div className="right">best price</div></div>
+            {mp.length === 0
+              ? <div className="empty">Prices fill in as books post.</div>
+              : <div className="mplist">
+                {mp.map((g, i) => {
+                  const a = g.awayAbbr || shortTeam(g.away); const h = g.homeAbbr || shortTeam(g.home);
+                  const ml = g.moneyline || {}; const to = g.totals || {};
+                  return (
+                    <div key={g.id || i} className="mprow" onClick={() => navigate("/odds")}>
+                      <div className="mptop"><span className="mpteams"><TLogo ab={a} /><TLogo ab={h} /><span className="mpmu">{a} <span className="at">@</span> {h}</span></span>
+                        {to.line != null && <span className="mptot">O/U {to.line}</span>}</div>
+                      <div className="mpprices">
+                        <span className="mpp"><span className="lbl">{a}</span><span className="num">{ml.awayOdds != null ? formatOdds(ml.awayOdds) : "—"}</span></span>
+                        <span className="mpp"><span className="lbl">{h}</span><span className="num">{ml.homeOdds != null ? formatOdds(ml.homeOdds) : "—"}</span></span>
+                      </div>
                     </div>
-                  ))}
-                </div>}
+                  );
+                })}
+              </div>}
           </div>
         </aside>
       </div>
@@ -444,7 +475,52 @@ const TCSS = `
 .wpterm .pmk{font-size:10px;color:var(--mut);font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .wpterm .pod{font-family:var(--mono);font-size:12.5px;color:#5fd6a0;font-weight:600;flex:0 0 auto}
 .wpterm .rail .panel.grow{flex:1 1 auto;min-height:160px;display:flex;flex-direction:column}
-.wpterm .rail .panel.grow .plist{overflow:auto;min-height:0;flex:1 1 auto}
+.wpterm .rail .panel.grow .plist,.wpterm .rail .panel.grow .mplist{overflow:auto;min-height:0;flex:1 1 auto}
+/* prop tabs */
+.wpterm .ptabs{display:flex;gap:4px}
+.wpterm .ptab{font-family:var(--ui);font-size:11px;font-weight:700;letter-spacing:.3px;color:var(--mut);background:transparent;border:1px solid var(--line2);border-radius:6px;padding:4px 10px;cursor:pointer}
+.wpterm .ptab:hover{color:var(--tx);border-color:#36425a}
+.wpterm .ptab.on{color:#06241a;background:var(--up);border-color:var(--up)}
+.wpterm .pnote{font-size:11.5px;color:#f3b94f;background:rgba(243,185,79,.07);border-bottom:1px solid var(--line);padding:8px 14px}
+/* player cell */
+.wpterm .pp{display:flex;align-items:center;gap:9px}
+.wpterm .pph{width:28px;height:28px;border-radius:50%;background:radial-gradient(circle at 50% 30%,#2a3550,#0c1018);border:1.5px solid rgba(155,123,255,.4);overflow:hidden;position:relative;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:13px}
+.wpterm .pph img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center top}
+.wpterm .ppn{font-weight:700;font-size:13px;white-space:nowrap}
+.wpterm td.dim{color:var(--mut);font-family:var(--mono);font-size:12px}
+.wpterm .ptag{font-family:var(--mono);font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:5px;white-space:nowrap}
+.wpterm .ptag.ov{color:#bff3da;background:rgba(43,212,125,.12);border:1px solid rgba(43,212,125,.3)}
+.wpterm .ptag.un{color:#ffd3cf;background:rgba(255,82,71,.1);border:1px solid rgba(255,82,71,.3)}
+/* rail market price */
+.wpterm .mplist{display:flex;flex-direction:column}
+.wpterm .mprow{padding:9px 12px;border-bottom:1px solid #11151f;cursor:pointer}.wpterm .mprow:hover{background:rgba(255,255,255,.02)}
+.wpterm .mptop{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.wpterm .mpteams{display:flex;align-items:center;gap:5px}.wpterm .mpteams .tlogo{width:18px;height:18px}
+.wpterm .mpmu{font-size:11.5px;font-weight:700;margin-left:3px}.wpterm .mpmu .at{color:var(--mut2)}
+.wpterm .mptot{font-family:var(--mono);font-size:10.5px;color:var(--mut)}
+.wpterm .mpprices{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.wpterm .mpp{display:flex;align-items:center;justify-content:space-between;background:#0a0e16;border:1px solid var(--line);border-radius:6px;padding:5px 8px}
+.wpterm .mpp .lbl{font-size:10px;color:var(--mut);font-weight:700}.wpterm .mpp .num{font-family:var(--mono);font-size:12px;color:#c4cdd9}
+/* responsive — auto-fit screen sizes */
+@media (max-width:1440px){
+  .wpterm .body{grid-template-columns:196px minmax(0,1fr) clamp(282px,22vw,332px)}
+  .wpterm .idx .v{font-size:30px}
+  .wpterm .content{padding:14px 15px 28px;gap:12px}
+}
+@media (max-width:1240px){
+  .wpterm .body{grid-template-columns:174px minmax(0,1fr) 264px}
+  .wpterm .indices{grid-template-columns:repeat(2,1fr)}
+  .wpterm .idx .v{font-size:27px}
+  .wpterm .tbl th,.wpterm .tbl td{padding:9px 8px;font-size:12px}
+  .wpterm .content{padding:12px 12px 26px}
+}
+@media (max-width:1080px){
+  .wpterm .body{display:flex;flex-direction:column;overflow-y:auto;overflow-x:hidden}
+  .wpterm .nav{display:none}
+  .wpterm .content,.wpterm .rail{overflow:visible;min-height:0;border-left:0;border-right:0;width:100%}
+  .wpterm .rail{border-top:1px solid var(--line)}
+  .wpterm .rail .panel.grow{flex:none;min-height:0}
+}
 .wpterm .book{font-size:12px;color:#c4cdd9;font-family:var(--mono);text-align:center}.wpterm .book .bk{font-size:10px;color:var(--mut);font-family:'Inter'}
 .wpterm .edge-cell{text-align:right;white-space:nowrap}
 .wpterm .edge-v{font-family:var(--mono);font-size:14px;font-weight:600}.wpterm .edge-v.up{color:var(--up)}.wpterm .edge-v.dn{color:var(--dn)}
