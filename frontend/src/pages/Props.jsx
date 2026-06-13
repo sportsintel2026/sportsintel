@@ -30,6 +30,7 @@ export default function PropsPage() {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
   const [plan, setPlan] = useState({ tier: "free", isAdmin: false });
+  const hasFull = plan.isAdmin === true || plan.tier === "pro" || plan.tier === "elite";
   const [sport, setSport] = useState("mlb");
   const [tab, setTab] = useState("hr");
   const [mlb, setMlb] = useState(null);
@@ -106,27 +107,61 @@ export default function PropsPage() {
             ))}
           </div>
 
-          {sport === "mlb" && tab === "hr" && !loading && (
+          {hasFull && sport === "mlb" && tab === "hr" && !loading && (
             <div className="ppwarn">⚠️ Longshots — not guaranteed. Even the top names homer only about 1 game in 5. These are ranked by the model's chance to homer (a speculative lottery-ticket bet), <b>not</b> a tracked +EV play. Bet small, if at all.</div>
           )}
-          {sport === "nba" && !loading && (
+          {hasFull && sport === "nba" && !loading && (
             <div className="ppwarn">⚠️ Experimental projections. Prop markets are sharp, so flagged edges are rare and <b>informational, not betting advice</b>. Shown as the model's projection vs the book line.</div>
           )}
 
           {loading
             ? <div className="ppmuted">Loading the board…</div>
-            : list.length === 0
+            : !hasFull
+              ? <PropsLock navigate={navigate} />
+              : list.length === 0
               ? <div className="ppmuted">No {emptyLabel} props on the board yet{sport === "nba" ? " — projections need ≥8 recent games per player and fill in closer to tip" : " — fills in closer to first pitch"}.</div>
               : <div className="pplist">{list.map((p, i) => sport === "nba"
                   ? <NbaPropRow key={(p.player || "") + i} p={p} market={tab} rank={i + 1} navigate={navigate} />
                   : <PropRow key={(p.player || "") + i} p={p} type={tab} rank={i + 1} navigate={navigate} />)}</div>}
 
-          <div className="ppnote">{sport === "nba"
+          {hasFull && <div className="ppnote">{sport === "nba"
             ? "NBA props are experimental projections (model vs line), not tracked +EV plays. Flagged means the model's lean cleared its stability + hit-rate gates."
             : tab === "hr"
               ? "HR props are ranked by the model's chance to homer. The HR market is efficient — these are options to consider, not tracked +EV plays."
-              : "Sorted by model edge — the % is the model's price vs the book's. These clear our positive-EV bar."}</div>
+              : "Sorted by model edge — the % is the model's price vs the book's. These clear our positive-EV bar."}</div>}
         </>)}
+      </div>
+    </div>
+  );
+}
+
+// ---- Free-tier lock: blurred board + unlock card ----
+function PropsLock({ navigate }) {
+  const sk = (w, h) => ({ background: "#1f2937", borderRadius: 5, width: w, height: h });
+  return (
+    <div style={{ position: "relative", borderRadius: 14, overflow: "hidden" }}>
+      <div className="pplist" style={{ filter: "blur(7px)", opacity: 0.5, pointerEvents: "none", userSelect: "none" }}>
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="pprow">
+            <div className="rkn" style={{ color: "transparent" }}>{i + 1}</div>
+            <div className="ppav" style={{ background: "#1f2937", boxShadow: "none" }} />
+            <div className="ppinfo">
+              <div style={{ ...sk("60%", 12), marginBottom: 6 }} />
+              <div style={{ ...sk("40%", 9), marginBottom: 6 }} />
+              <div style={sk("50%", 10)} />
+            </div>
+            <div className="ppright">
+              <div style={{ ...sk(42, 22), marginLeft: "auto" }} />
+              <div style={{ ...sk(30, 8), marginTop: 6, marginLeft: "auto" }} />
+            </div>
+          </div>
+        ))}
+      </div>
+      <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", padding: 20, background: "radial-gradient(circle at 50% 35%, rgba(0,0,0,.45), rgba(0,0,0,.9))" }}>
+        <div style={{ width: 46, height: 46, borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, background: "rgba(155,123,255,.14)", border: "1px solid rgba(155,123,255,.4)", marginBottom: 13 }}>🔒</div>
+        <div style={{ fontSize: 16, fontWeight: 800, color: "#fff", marginBottom: 5 }}>The full prop board is locked</div>
+        <div style={{ fontSize: 12, color: "#9aa6b2", lineHeight: 1.5, maxWidth: 270, marginBottom: 15 }}>Every flagged prop — HR, hits, K, points, rebounds, assists &amp; threes — across every game. <b style={{ color: "#33e991" }}>$7/mo</b> · cancel anytime.</div>
+        <button onClick={() => navigate("/pricing")} style={{ background: "#1D9E75", color: "#04130d", border: "none", fontWeight: 800, fontSize: 14, padding: "12px 22px", borderRadius: 11, cursor: "pointer", fontFamily: "inherit" }}>Unlock All-Access →</button>
       </div>
     </div>
   );
