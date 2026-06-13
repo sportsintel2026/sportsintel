@@ -67,6 +67,7 @@ export default function HomePage(){
   const [edges,setEdges]=useState(null);
   const [loading,setLoading]=useState(true);
   const [plan,setPlan]=useState({tier:"free",isAdmin:false});
+  const [planLoaded,setPlanLoaded]=useState(false);
   const [sport,setSport]=useState("mlb");
   const [board,setBoard]=useState("ml");
   const [propTab,setPropTab]=useState("hr");
@@ -79,7 +80,7 @@ export default function HomePage(){
   const [isDesktop,setIsDesktop]=useState(typeof window!=="undefined"&&window.innerWidth>=1024);
   useEffect(()=>{ const on=()=>setIsDesktop(window.innerWidth>=1024); window.addEventListener("resize",on); return ()=>window.removeEventListener("resize",on); },[]);
 
-  useEffect(()=>{ subscriptionApi.getMyPlan().then(setPlan).catch(()=>{}); },[]);
+  useEffect(()=>{ subscriptionApi.getMyPlan().then(setPlan).catch(()=>{}).finally(()=>setPlanLoaded(true)); },[]);
   useEffect(()=>{(async()=>{ try{
     const { data }=await supabase.from("expert_picks").select("*").order("date",{ascending:false});
     const rows=(data||[]).map(r=>{ let picks=[]; try{picks=r.picks?JSON.parse(r.picks):[];}catch(_){picks=[];} return {date:r.date,picks}; });
@@ -126,7 +127,10 @@ export default function HomePage(){
   const abbrById={}; games.forEach(g=>{ abbrById[g.id]={a:g.awayAbbr||shortTeam(g.away||""),h:g.homeAbbr||shortTeam(g.home||"")}; });
   const liveGames=(live||[]).filter(g=>[g.awayEdge,g.homeEdge,g.overEdge,g.underEdge].some(x=>x!=null));
 
-  if(isDesktop) return <HomeDesktop edges={edges} games={games} movers={movers} live={live||[]} abbrById={abbrById} topProps={topProps} hero={hero} hasFull={hasFull} wpRecord={wpRecord} navigate={navigate} plan={plan} sport={sport} setSport={(k)=>{setSport(k);setBoard("ml");}} marketsLive={marketsLive} anyLive={anyLive} />;
+  const lineSeries={};
+  [...(e.moneylineEdges||[]),...(e.totalsEdges||[]),...(e.spreadEdges||[])].forEach(x=>{ const s=seriesFor(x); if(s&&s.length>1) lineSeries[x.gameId+x.side]=s.map(p=>p.o).filter(o=>o!=null); });
+
+  if(isDesktop) return <HomeDesktop edges={edges} games={games} movers={movers} live={live||[]} abbrById={abbrById} topProps={topProps} hero={hero} hasFull={hasFull} planLoaded={planLoaded} lineSeries={lineSeries} wpRecord={wpRecord} navigate={navigate} plan={plan} sport={sport} setSport={(k)=>{setSport(k);setBoard("ml");}} marketsLive={marketsLive} anyLive={anyLive} />;
 
   return (
     <div style={S.shell}><style>{CSS}</style>
