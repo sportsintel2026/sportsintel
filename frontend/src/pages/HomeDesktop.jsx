@@ -18,6 +18,8 @@ const convClass = (c) => c === "HIGH" ? "high" : c === "MEDIUM" ? "med" : "low";
 // MLB edge is a fraction (→ %); NBA ML already a %, NBA spread/totals are points.
 function fmtEdge(e, sport) { const v = e.edge ?? 0; const s = v >= 0 ? "+" : ""; if (sport !== "nba") return `${s}${(v * 100).toFixed(1)}%`; if (isTotal(e) || e.line != null) return `${s}${v.toFixed(1)}`; return `${s}${v.toFixed(1)}%`; }
 function edgePct(e, sport) { const v = e.edge ?? 0; return sport !== "nba" ? v * 100 : v; }
+function sparkPath(vals, w, h, pad = 2) { const min = Math.min(...vals), max = Math.max(...vals), rng = (max - min) || 1; return vals.map((v, i) => { const x = pad + i * ((w - 2 * pad) / (vals.length - 1)); const y = h - pad - ((v - min) / rng) * (h - 2 * pad); return `${i ? "L" : "M"}${x.toFixed(1)},${y.toFixed(1)}`; }).join(" "); }
+function miniSpark(vals) { const w = 54, h = 20, up = vals[vals.length - 1] >= vals[0], col = up ? "#2bd47d" : "#ff5247"; return `<svg class="spark-mini" viewBox="0 0 ${w} ${h}"><path d="${sparkPath(vals, w, h)}" fill="none" stroke="${col}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`; }
 
 function TLogo({ ab, lg = "mlb" }) {
   const [bad, setBad] = useState(false);
@@ -40,7 +42,7 @@ function Lock({ title, sub, navigate }) {
 }
 
 export default function HomeDesktop(props) {
-  const { edges, games = [], movers = [], live = [], abbrById = {}, topProps = [], hero, hasFull,
+  const { edges, games = [], movers = [], live = [], abbrById = {}, topProps = [], hero, hasFull, planLoaded = true, lineSeries = {},
     wpRecord, navigate, plan = {}, sport = "mlb", setSport, marketsLive, anyLive } = props;
   const lg = sport === "nba" ? "nba" : "mlb";
   const [market, setMarket] = useState("ml");
@@ -131,7 +133,8 @@ export default function HomeDesktop(props) {
           <div className="indices">
             <div className="idx teal"><div className="k">Edges Today</div><div className="v num">{edgeCount}</div><div className="chg">{market.toUpperCase()} board · {rows.length} shown</div></div>
             <div className="idx green"><div className="k">Best Edge</div>
-              {hasFull ? <><div className="v num">{bestEdge}</div><div className="chg">{hero ? `${edgeLabel(hero)} · ${hero.conviction || ""}` : "top of the board"}</div></>
+              {!planLoaded ? <><div className="v num">…</div><div className="chg">loading</div></>
+                : hasFull ? <><div className="v num">{bestEdge}</div><div className="chg">{hero ? `${edgeLabel(hero)} · ${hero.conviction || ""}` : "top of the board"}</div></>
                 : <><div className="v num lockv">🔒</div><div className="chg">All-Access</div></>}
             </div>
             <div className="idx amber"><div className="k">Live Now</div><div className="v num">{liveStrip.length}</div><div className="chg">{anyLive ? "in-game models running" : "no games live"}</div></div>
@@ -141,27 +144,6 @@ export default function HomeDesktop(props) {
             </div>
           </div>
 
-          {/* LIVE STRIP */}
-          {liveStrip.length > 0 && (
-            <div className="panel">
-              <div className="phead"><div className="t">🟢 Live Games</div><div className="right"><span className="ldot" />scores update live · tap for in-game</div></div>
-              <div className="strip">
-                {liveStrip.map((g, i) => {
-                  const info = abbrById[g.gameId] || {}; const a = info.a || shortTeam(g.away || ""); const h = info.h || shortTeam(g.home || "");
-                  const half = g.half || g.topBottom || ""; const inn = g.inning != null ? `${half} ${g.inning}${g.outs != null ? ` · ${g.outs} out` : ""}` : (g.statusDetail || "Live");
-                  return (
-                    <div key={g.gameId || i} className="lgc" onClick={() => navigate(hasFull && g.gameId ? `/game/mlb/${g.gameId}` : "/pricing")}>
-                      <div className="lgtop"><div className="lst"><span className="rd" />LIVE</div><div className="linn">{inn}</div></div>
-                      <div className="ltm"><div className="ln"><TLogo ab={a} />{a}</div><div className="lsc">{g.awayScore != null ? g.awayScore : ""}</div></div>
-                      <div className="ltm"><div className="ln"><TLogo ab={h} />{h}</div><div className="lsc">{g.homeScore != null ? g.homeScore : ""}</div></div>
-                      {!hasFull && <div className="llock">🔒 In-game edges — All-Access</div>}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
           {/* EDGE BOARD */}
           <div className="panel">
             <div className="phead"><div className="t">🎯 Edge Board</div>
@@ -169,7 +151,9 @@ export default function HomeDesktop(props) {
                 <b key={m} className={market === m ? "on" : ""} onClick={() => setMarket(m)}>{lb}</b>))}</div>
               <div className="right"><span className="ldot" />click a column to sort</div>
             </div>
-            {!hasFull
+            {!planLoaded
+              ? <div className="empty">Loading the board…</div>
+              : !hasFull
               ? <Lock title="Edges are an All-Access feature" sub={<>Every edge across the slate, ranked by conviction. <b>$7/mo</b></>} navigate={navigate} />
               : rows.length === 0
                 ? <div className="empty">No {market === "ml" ? "moneyline" : market === "spread" ? "spread" : "totals"} edges on the board yet — fills in closer to first pitch.</div>
@@ -179,6 +163,7 @@ export default function HomeDesktop(props) {
                       <th>Matchup</th><th>Model Pick</th>
                       <th className="r sortable" onClick={() => setSort("model")}>Model %{caret("model")}</th>
                       <th className="c">Best Book</th>
+                      <th className="c">Line Move</th>
                       <th className="r sortable" onClick={() => setSort("edge")}>Edge{caret("edge")}</th>
                       <th className="c sortable" onClick={() => setSort("conv")}>Conviction{caret("conv")}</th>
                     </tr></thead>
@@ -193,6 +178,7 @@ export default function HomeDesktop(props) {
                             <td><div className="pick" dangerouslySetInnerHTML={{ __html: sideTag(x) + edgeLabel(x) }} /></td>
                             <td className="model-p">{x.modelProb != null ? `${Math.round(x.modelProb * 100)}%` : "—"}</td>
                             <td className="book">{formatOdds(x.odds)}{x.book ? <><br /><span className="bk">{x.book}</span></> : ""}</td>
+                            <td className="c">{(() => { const s = lineSeries[x.gameId + x.side]; return s && s.length > 1 ? <span dangerouslySetInnerHTML={{ __html: miniSpark(s) }} /> : <span className="nomove">—</span>; })()}</td>
                             <td className="edge-cell"><div className={"edge-v " + (pos ? "up" : "dn")}>{fmtEdge(x, sport)}</div><div className="edge-bar"><i style={{ width: Math.min(100, Math.abs(ep) * 12 + 8) + "%" }} /></div></td>
                             <td className="c"><span className={"conv " + convClass(x.conviction)}>{(x.conviction || "—")}</span></td>
                           </tr>
@@ -259,41 +245,67 @@ export default function HomeDesktop(props) {
             </div>
           )}
 
-          {/* MOVERS + SPOTLIGHT */}
-          <div className="botrow">
-            <div className="panel">
-              <div className="phead"><div className="t">⚡ Market Movers</div><div className="right">biggest line moves</div></div>
-              {!hasFull
-                ? <Lock title="Line moves are locked" sub={<>See where the market's moving with <b>All-Access</b></>} navigate={navigate} />
-                : movers.filter((m) => m._delta != null).length === 0
-                  ? <div className="empty">Line-movement tracking fills in as books post and move.</div>
-                  : <div className="mvstrip">
-                    {movers.filter((m) => m._delta != null).map((m, i) => { const up = m._delta > 0; return (
-                      <div key={i} className={"mvc " + (up ? "up" : "dn")}><div className="mar">{up ? "▲" : "▼"}</div>
-                        <div className="minfo"><div className="ml">{edgeLabel(m)}</div><div className="mg">{m.matchup || ""}</div></div>
-                        <div className="mchg"><div className="mpx">{formatOdds(m._now)}</div><div className="md">{up ? "+" : "−"}{Math.abs(m._delta)}¢</div></div></div>
-                    ); })}
-                  </div>}
-            </div>
-            <div className="panel">
-              <div className="phead"><div className="t">✨ Prop Spotlight</div></div>
-              {!hasFull
-                ? <Lock title="Props locked" sub={<><b>$7/mo</b></>} navigate={navigate} />
-                : topProps.length === 0
-                  ? <div className="empty">Props fill in closer to first pitch.</div>
-                  : (() => { const s = topProps[si % topProps.length]; const pos = (s.edge ?? 0) >= 0; return (
-                    <div className="spot" onClick={() => navigate("/props")}>
-                      <div className="who"><span className="ph">{s.id ? <img src={`https://midfield.mlbstatic.com/v1/people/${s.id}/spots/120`} alt="" onError={(ev) => { ev.currentTarget.style.display = "none"; }} /> : "🧢"}</span>
-                        <div><div className="nm">{s.name}</div><div className="mk">{s.game || s.team} · {s.market}</div></div></div>
-                      <div className="sline"><div className="pl">{s.betSide}</div><div className="od">{formatOdds(s.odds)}</div></div>
-                      <div className="dots">{topProps.slice(0, 6).map((_, i) => <i key={i} className={i === (si % topProps.length) ? "on" : ""} />)}</div>
-                    </div>
-                  ); })()}
-            </div>
-          </div>
-
           <div className="footnote">Sample of the desktop terminal · all figures live from your models. Mobile layout unchanged.</div>
         </div>
+
+        {/* RIGHT RAIL — live, movers, spotlight, conviction mix */}
+        <aside className="rail">
+          {liveStrip.length > 0 && (
+            <div className="panel">
+              <div className="phead"><div className="t">🟢 Live</div><div className="right"><span className="ldot" />{liveStrip.length} now</div></div>
+              <div className="rlive">
+                {liveStrip.map((g, i) => {
+                  const info = abbrById[g.gameId] || {}; const a = info.a || shortTeam(g.away || ""); const h = info.h || shortTeam(g.home || "");
+                  const half = g.half || g.topBottom || ""; const inn = g.inning != null ? `${half} ${g.inning}${g.outs != null ? ` · ${g.outs}o` : ""}` : (g.statusDetail || "Live");
+                  return (
+                    <div key={g.gameId || i} className="rlg" onClick={() => navigate(hasFull && g.gameId ? `/game/mlb/${g.gameId}` : "/pricing")}>
+                      <div className="rlgh"><span className="lst"><span className="rd" />LIVE</span><span className="linn">{inn}</span></div>
+                      <div className="ltm"><div className="ln"><TLogo ab={a} />{a}</div><div className="lsc">{g.awayScore != null ? g.awayScore : "·"}</div></div>
+                      <div className="ltm"><div className="ln"><TLogo ab={h} />{h}</div><div className="lsc">{g.homeScore != null ? g.homeScore : "·"}</div></div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <div className="panel">
+            <div className="phead"><div className="t">⚡ Market Movers</div></div>
+            {!planLoaded
+              ? <div className="empty">Loading…</div>
+              : !hasFull
+              ? <Lock title="Movers locked" sub={<><b>$7/mo</b></>} navigate={navigate} />
+              : movers.filter((m) => m._delta != null).length === 0
+                ? <div className="empty">Line moves fill in as books post.</div>
+                : <div className="rmv">
+                  {movers.filter((m) => m._delta != null).slice(0, 7).map((m, i) => { const up = m._delta > 0; return (
+                    <div key={i} className={"rmvr " + (up ? "up" : "dn")}>
+                      <div className="mar">{up ? "▲" : "▼"}</div>
+                      <div className="minfo"><div className="ml">{edgeLabel(m)}</div><div className="mg">{m.matchup || ""}</div></div>
+                      <div className="mchg"><div className="mpx">{formatOdds(m._now)}</div><div className="md">{up ? "+" : "−"}{Math.abs(m._delta)}¢</div></div>
+                    </div>
+                  ); })}
+                </div>}
+          </div>
+
+          <div className="panel">
+            <div className="phead"><div className="t">✨ Prop Spotlight</div></div>
+            {!planLoaded
+              ? <div className="empty">Loading…</div>
+              : !hasFull
+              ? <Lock title="Props locked" sub={<><b>$7/mo</b></>} navigate={navigate} />
+              : topProps.length === 0
+                ? <div className="empty">Props fill in closer to first pitch.</div>
+                : (() => { const s = topProps[si % topProps.length]; return (
+                  <div className="spot" onClick={() => navigate("/props")}>
+                    <div className="who"><span className="ph">{s.id ? <img src={`https://midfield.mlbstatic.com/v1/people/${s.id}/spots/120`} alt="" onError={(ev) => { ev.currentTarget.style.display = "none"; }} /> : "🧢"}</span>
+                      <div><div className="nm">{s.name}</div><div className="mk">{s.game || s.team} · {s.market}</div></div></div>
+                    <div className="sline"><div className="pl">{s.betSide}</div><div className="od">{formatOdds(s.odds)}</div></div>
+                    <div className="dots">{topProps.slice(0, 6).map((_, i) => <i key={i} className={i === (si % topProps.length) ? "on" : ""} />)}</div>
+                  </div>
+                ); })()}
+          </div>
+        </aside>
       </div>
     </div>
   );
@@ -325,7 +337,7 @@ const TCSS = `
 @keyframes wppulse{0%{box-shadow:0 0 0 0 rgba(43,212,125,.5)}70%{box-shadow:0 0 0 7px rgba(43,212,125,0)}100%{box-shadow:0 0 0 0 rgba(43,212,125,0)}}
 .wpterm .clock{font-family:var(--mono);font-size:12px;color:var(--mut)}
 .wpterm .avatar{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,#1b2740,#0e1422);border:1px solid var(--line2);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;color:#9fb0c4;cursor:pointer}
-.wpterm .body{display:grid;grid-template-columns:210px 1fr;height:100%;min-height:0}
+.wpterm .body{display:grid;grid-template-columns:210px minmax(0,1fr) clamp(300px,22vw,360px);height:100%;min-height:0}
 .wpterm .nav{border-right:1px solid var(--line);background:#080a11;display:flex;flex-direction:column;padding:12px 10px;gap:3px;overflow:auto}
 .wpterm .nav .grp{font-size:9.5px;font-weight:800;letter-spacing:1.4px;color:var(--mut2);padding:12px 10px 5px}
 .wpterm .nav a{display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:9px;color:#aeb9c8;font-size:13px;font-weight:600;cursor:pointer;border:1px solid transparent;position:relative}
@@ -395,6 +407,9 @@ const TCSS = `
 .wpterm .pick .side{font-size:10px;font-weight:800;border-radius:4px;padding:1px 5px;margin-right:6px;font-family:'Inter',sans-serif}
 .wpterm .side.ov{color:var(--up);background:rgba(43,212,125,.12)}.wpterm .side.un{color:var(--dn);background:rgba(255,82,71,.12)}.wpterm .side.ml{color:var(--model);background:rgba(155,123,255,.14)}
 .wpterm .model-p{font-family:var(--mono);font-size:12.5px;color:#c3b1ff;text-align:right}
+.wpterm .book-p{font-family:var(--mono);font-size:12.5px;color:var(--mut);text-align:right}
+.wpterm .spark-mini{width:54px;height:20px;vertical-align:middle}
+.wpterm .nomove{color:var(--mut2);font-family:var(--mono);font-size:12px}
 .wpterm .book{font-size:12px;color:#c4cdd9;font-family:var(--mono);text-align:center}.wpterm .book .bk{font-size:10px;color:var(--mut);font-family:'Inter'}
 .wpterm .edge-cell{text-align:right;white-space:nowrap}
 .wpterm .edge-v{font-family:var(--mono);font-size:14px;font-weight:600}.wpterm .edge-v.up{color:var(--up)}.wpterm .edge-v.dn{color:var(--dn)}
@@ -435,4 +450,17 @@ const TCSS = `
 .wpterm .lockcard .ls{font-size:12px;color:#9aa6b2;line-height:1.5;max-width:300px;margin-bottom:14px}.wpterm .lockcard .ls b{color:var(--up);font-weight:800}
 .wpterm .lockcard button{background:var(--teal);color:#04130d;border:0;font-weight:800;font-size:13px;padding:11px 22px;border-radius:11px;cursor:pointer;font-family:inherit}
 .wpterm .footnote{font-size:10.5px;color:var(--mut2);text-align:center;padding:6px}
+.wpterm .rail{border-left:1px solid var(--line);background:#080a11;overflow:auto;padding:14px 12px;display:flex;flex-direction:column;gap:13px}
+.wpterm .rail::-webkit-scrollbar{width:8px}.wpterm .rail::-webkit-scrollbar-thumb{background:#1a2233;border-radius:6px}
+.wpterm .rlive .rlg{padding:9px 12px;border-bottom:1px solid #11151f;cursor:pointer}
+.wpterm .rlive .rlg:last-child{border-bottom:0}.wpterm .rlive .rlg:hover{background:rgba(255,255,255,.02)}
+.wpterm .rlgh{display:flex;align-items:center;justify-content:space-between;margin-bottom:5px}
+.wpterm .rmv .rmvr{display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid #11151f}
+.wpterm .rmv .rmvr:last-child{border-bottom:0}
+.wpterm .cmix{padding:13px}
+.wpterm .cbar{display:flex;height:12px;border-radius:6px;overflow:hidden;background:#0a0d14;border:1px solid var(--line)}
+.wpterm .cbar i{display:block}.wpterm .cbar .ch{background:var(--amber)}.wpterm .cbar .cm{background:var(--up)}.wpterm .cbar .cl{background:var(--mut2)}
+.wpterm .cleg{display:flex;justify-content:space-between;margin-top:10px;font-size:11px;color:var(--mut)}
+.wpterm .cleg span{display:inline-flex;align-items:center;gap:5px}.wpterm .cleg b{color:#c4cdd9;font-weight:700}
+.wpterm .cleg i{width:8px;height:8px;border-radius:2px}.wpterm .cleg .dh{background:var(--amber)}.wpterm .cleg .dm{background:var(--up)}.wpterm .cleg .dl{background:var(--mut2)}
 `;
