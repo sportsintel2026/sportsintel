@@ -26,6 +26,7 @@ export default function NBADetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [plan, setPlan] = useState({ tier: "free", isAdmin: false });
+  const hasFull = plan.isAdmin === true || plan.tier === "pro" || plan.tier === "elite";
 
   useEffect(() => { subscriptionApi.getMyPlan().then(setPlan).catch(() => {}); }, []);
 
@@ -86,16 +87,17 @@ export default function NBADetailPage() {
 
           {loading && <Loader />}
           {!loading && error && <ErrorState />}
-          {!loading && !error && matchup && <Detail matchup={matchup} prediction={prediction} gameId={gameId} />}
+          {!loading && !error && matchup && <Detail matchup={matchup} prediction={prediction} gameId={gameId} hasFull={hasFull} />}
         </div>
       </div>
     </div>
   );
 }
 
-function Detail({ matchup, prediction, gameId }) {
+function Detail({ matchup, prediction, gameId, hasFull }) {
   const m = matchup;
   const best = bestEdge(prediction);
+  const navigate = useNavigate();
   const [isLive, setIsLive] = useState(false);
 
   const analysisCards = (
@@ -107,12 +109,14 @@ function Detail({ matchup, prediction, gameId }) {
       <InjuriesCard m={m} />
     </>
   );
-  const bettingCards = (
+  const bettingCards = hasFull ? (
     <>
       {best && <BestEdgeCard best={best} />}
       <WinProbCard m={m} prediction={prediction} />
       {prediction?.predictions?.total && <TotalsCard prediction={prediction} />}
     </>
+  ) : (
+    <EdgeLock navigate={navigate} />
   );
   const modelNote = (
     <div style={{ fontSize: 11, color: "#6b7280", marginTop: 6, lineHeight: 1.5 }}>
@@ -320,6 +324,27 @@ function Header({ m }) {
   );
 }
 
+function EdgeLock({ navigate }) {
+  return (
+    <div style={{ position: "relative", borderRadius: 10, overflow: "hidden", marginBottom: 18 }}>
+      <div style={{ filter: "blur(7px)", opacity: 0.5, pointerEvents: "none", userSelect: "none" }}>
+        <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 20 }}>
+          <div style={{ background: "#1f2937", borderRadius: 5, height: 14, width: "45%", marginBottom: 14 }} />
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <div style={{ background: "#1f2937", borderRadius: 5, height: 70 }} /><div style={{ background: "#1f2937", borderRadius: 5, height: 70 }} />
+          </div>
+          <div style={{ background: "#1f2937", borderRadius: 5, height: 54, marginTop: 12 }} />
+        </div>
+      </div>
+      <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", padding: 18, background: "radial-gradient(circle at 50% 40%, rgba(8,10,16,.5), rgba(10,14,20,.9))" }}>
+        <div style={{ width: 42, height: 42, borderRadius: 13, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, background: "rgba(155,123,255,.14)", border: "1px solid rgba(155,123,255,.4)", marginBottom: 11 }}>🔒</div>
+        <div style={{ fontSize: 15, fontWeight: 800, color: "#fff", marginBottom: 4 }}>Model edges are locked</div>
+        <div style={{ fontSize: 11.5, color: "#9aa6b2", lineHeight: 1.5, maxWidth: 250, marginBottom: 13 }}>Win probability, totals &amp; the biggest edge — all inside <b style={{ color: "#33e991" }}>All-Access · $7/mo</b></div>
+        <button onClick={() => navigate("/pricing")} style={{ background: "#1D9E75", color: "#04130d", border: "none", fontWeight: 800, fontSize: 13, padding: "11px 20px", borderRadius: 11, cursor: "pointer", fontFamily: "inherit" }}>Unlock All-Access →</button>
+      </div>
+    </div>
+  );
+}
 function BestEdgeCard({ best }) {
   const positive = best.edge > 0;
   return (
