@@ -34,6 +34,60 @@ const SPOT_EX=[
   {sport:"⚾ MLB",img:MLB_HEAD(656941),ring:teamCol("PHI"),nm:"Kyle Schwarber",mu:"PHI vs MIL",prop:"O 0.5 HR",odds:"+210",sub:"Home Runs",sc:"#f0a93c",sbg:"rgba(240,169,60,.10)",sbd:"rgba(240,169,60,.28)"},
 ];
 
+/* simulated live board — shown only when there are no real edges, so the panel never looks dead.
+   clearly badged DEMO; the moment real edges exist, the real board replaces this. */
+const SIM_HEROES=[["TEX ML","TEX @ HOU",6.8],["Under 8.5","COL @ SD",5.2],["NYK ML","NYK @ BOS",3.4],["Over 220.5","DEN @ MIN",4.6],["LAD ML","LAD @ ARI",4.1]];
+function SimBoard(){
+  const seed=[
+    {ab:"TEX",col:"#3E66B0",t:"TEX ML",mu:"TEX @ HOU",odds:-118,edge:0.068,band:[-150,-102]},
+    {ab:"SD", col:"#FFC425",t:"Under 8.5",mu:"COL @ SD",odds:-106,edge:0.052,band:[-130,-101]},
+    {ab:"LAD",col:"#3E7DC4",t:"LAD ML",mu:"LAD @ ARI",odds:-138,edge:0.041,band:[-165,-120]},
+    {ab:"NYY",col:"#3A4F73",t:"Over 9.5",mu:"BOS @ NYY",odds:104,edge:0.033,band:[101,135]},
+  ];
+  const [hi,setHi]=useState(0);
+  const [disp,setDisp]=useState(SIM_HEROES[0][2]);
+  const [rows,setRows]=useState(seed);
+  const [flash,setFlash]=useState({});
+  const h=SIM_HEROES[hi%SIM_HEROES.length];
+
+  useEffect(()=>{ const id=setInterval(()=>setHi(i=>i+1),3600); return ()=>clearInterval(id); },[]);
+  useEffect(()=>{ const target=h[2]; let cur=0; setDisp(0);
+    const t=setInterval(()=>{ cur+=target/14; if(cur>=target){cur=target;clearInterval(t);} setDisp(cur); },26);
+    return ()=>clearInterval(t);
+  },[hi]);  // eslint-disable-line
+  useEffect(()=>{ const id=setInterval(()=>{
+    setRows(prev=>{ const f={};
+      const next=prev.map((r,i)=>{ if(Math.random()<0.7){ const d=Math.round(Math.random()*14-7); let o=r.odds+d; if(o<r.band[0])o=r.band[0]; if(o>r.band[1])o=r.band[1]; if(o!==r.odds)f[i]=o>r.odds?"up":"dn"; let e=r.edge+(Math.random()*0.006-0.003); e=Math.max(0.012,Math.min(0.094,e)); return {...r,odds:o,edge:e}; } return r; });
+      setFlash(f); return next;
+    });
+  },1800); return ()=>clearInterval(id); },[]);
+
+  const barW=Math.min(92,h[2]*11);
+  return (<>
+    <div className="scan"/>
+    <div className="feat featpop" key={hi}>
+      <div className="feat-h"><span className="feat-t">🔥 BEST EDGE RIGHT NOW <span className="newp">⚡ NEW</span></span></div>
+      <div className="feat-body">
+        <div><div className="feat-pick">{h[0]}</div><div className="feat-mu">{h[1]}</div></div>
+        <div className="feat-edge">+{disp.toFixed(1)}<span className="e">% EDGE</span></div>
+      </div>
+      <div className="ebarwrap"><i style={{width:`${barW}%`}}/></div>
+    </div>
+    <div className="rowlab simrl"><span>Live board</span><span className="liv"><i/>UPDATING</span></div>
+    <div>
+      {rows.map((r,i)=>(
+        <div className={"erow"+(flash[i]==="up"?" gu":flash[i]==="dn"?" gd":"")} key={i}>
+          <div className="tcol" style={{background:r.col}}>{r.ab}</div>
+          <div className="ename"><div className="t">{r.t}</div><div className="m">{r.mu}</div></div>
+          <div className={"eodds"+(flash[i]==="up"?" flash-up":flash[i]==="dn"?" flash-dn":"")}>{fmtOdds(r.odds)}</div>
+          <div className="eedge pos">{pct1(r.edge)}</div>
+        </div>
+      ))}
+    </div>
+    <div className="simfoot">Scanning 12 books <span className="scn"><i/><i/><i/><i/></span></div>
+  </>);
+}
+
 export default function LandingPage(){
   const [edges,setEdges]=useState(null);
   const [nba,setNba]=useState({});
@@ -139,7 +193,7 @@ export default function LandingPage(){
                 <span className="eb-s">The model, the edge, and a guide to bet smarter.</span>
               </span>
             </div>
-            <h1>Bet <span style={{color:"#33e991"}}>smarter,</span><br/>not <span style={{color:"#ef4444"}}>harder.</span></h1>
+            <h1>Bet smarter,<br/>not <span style={{color:"#ef4444"}}>harder.</span></h1>
             <p className="lede">A real model versus the live market — every game, every book, one screen.</p>
             <p className="sub">We find where our projections disagree with the price the books are offering, and show you the reasoning. No locks, no hype — just the edge.</p>
             <div className="cta-row">
@@ -157,16 +211,17 @@ export default function LandingPage(){
           {/* RIGHT: live signature panel */}
           <div className="live fade2">
             <div className="live-top">
-              <span className="live-badge"><span className="dot"/>MARKETS {boardEmpty?"CLOSED":"LIVE"}</span>
+              <span className={"live-badge"+(boardEmpty?" prev":"")}><span className="dot"/>MARKETS {boardEmpty?"PREVIEW":"LIVE"}</span>
+              {boardEmpty ? <span className="feat-demo">DEMO</span> : (
               <span className="live-tick">UPDATES 45s
                 <svg className="ekg" viewBox="0 0 34 12"><polyline points="0,6 6,6 9,2 13,10 17,4 21,7 26,6 34,6" fill="none" stroke="#33e991" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              </span>
+              </span>)}
             </div>
 
             {loading && !edges ? (
               <div className="lp-load">Loading today's board…</div>
             ) : boardEmpty ? (
-              <div className="lp-load">No open edges right now — markets quiet.<br/><span style={{color:"var(--t3)",fontSize:11}}>Check back near game time.</span></div>
+              <SimBoard/>
             ) : (<>
               {hero &&
               <div className="feat">
@@ -310,9 +365,9 @@ nav{position:sticky;top:0;z-index:50;background:rgba(7,7,14,.72);backdrop-filter
 @media(min-width:860px){.hero{grid-template-columns:1.02fr .98fr;gap:40px;padding:64px 0 50px;align-items:center}}
 .ebadge{display:flex;align-items:flex-start;gap:11px;max-width:360px;margin-bottom:20px}
 .ebar{width:3px;align-self:stretch;border-radius:2px;background:linear-gradient(#9b7bff,#f0a93c);flex:0 0 auto;min-height:38px}
-.eb-k{display:block;font-size:10.5px;font-weight:800;letter-spacing:.14em;color:#bba6ff;margin-bottom:4px}
+.eb-k{display:block;font-size:10.5px;font-weight:800;letter-spacing:.14em;color:#fff;margin-bottom:4px}
 .eb-s{display:block;font-size:13px;font-weight:600;color:#f0a93c;line-height:1.5}
-h1{font-size:clamp(34px,7vw,56px);font-weight:900;line-height:1.04;letter-spacing:-.02em;margin-bottom:18px}
+h1{font-size:clamp(34px,7vw,56px);font-weight:900;line-height:1.04;letter-spacing:-.02em;margin-bottom:18px;color:#fff}
 .lede{font-size:16px;color:var(--t1);font-weight:600;line-height:1.6;margin-bottom:10px;max-width:480px}
 .sub{font-size:14.5px;color:var(--t2);line-height:1.7;margin-bottom:26px;max-width:470px}
 .cta-row{display:flex;gap:11px;flex-wrap:wrap;align-items:center}
@@ -336,6 +391,28 @@ h1{font-size:clamp(34px,7vw,56px);font-weight:900;line-height:1.04;letter-spacin
 .feat-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
 .feat-t{font-size:9.5px;letter-spacing:.1em;font-weight:800;color:#f0a93c;display:flex;align-items:center;gap:5px}
 .feat-hot{font-size:9px;font-weight:800;color:#f0a93c;background:rgba(240,169,60,.12);border:1px solid rgba(240,169,60,.4);border-radius:7px;padding:2px 7px}
+.feat-demo{font-size:9px;font-weight:800;letter-spacing:.1em;color:#f0a93c;background:rgba(240,169,60,.12);border:1px solid rgba(240,169,60,.4);border-radius:7px;padding:2px 8px}
+.live-badge.prev{color:#f0a93c}
+.live-badge.prev .dot{background:#f0a93c;box-shadow:0 0 8px #f0a93c}
+.sim-note{font-size:10px;color:var(--t3);text-align:center;margin-top:11px;font-weight:600}
+.scan{position:absolute;top:0;left:-40%;width:40%;height:2px;background:linear-gradient(90deg,transparent,rgba(51,233,145,.8),transparent);animation:scan 3.2s linear infinite;pointer-events:none}
+.featpop{animation:fpop .5s ease}
+.newp{font-size:8.5px;font-weight:900;letter-spacing:.1em;color:#04130d;background:var(--green);border-radius:6px;padding:2px 6px;margin-left:6px;display:inline-block;opacity:0;animation:newpop 1.7s ease}
+.ebarwrap{height:5px;border-radius:4px;background:rgba(255,255,255,.06);margin-top:11px;overflow:hidden}
+.ebarwrap i{display:block;height:100%;background:linear-gradient(90deg,var(--teal),var(--green));border-radius:4px;transition:width .7s cubic-bezier(.3,1.2,.5,1);box-shadow:0 0 10px rgba(51,233,145,.5)}
+.simrl{display:flex;align-items:center;justify-content:space-between}
+.simrl .liv{color:var(--green);display:inline-flex;align-items:center;gap:5px;letter-spacing:.1em}
+.simrl .liv i{width:5px;height:5px;border-radius:50%;background:var(--green);animation:pulse 1.4s infinite}
+.erow.gu{border-left-color:var(--green);background:rgba(51,233,145,.06)}
+.erow.gd{border-left-color:var(--rsoft);background:rgba(255,90,90,.06)}
+.simfoot{display:flex;align-items:center;justify-content:center;gap:7px;font-size:10px;color:var(--t3);font-weight:600;margin-top:11px}
+.scn{display:inline-flex;gap:3px}
+.scn i{width:4px;height:4px;border-radius:50%;background:#2a6b52;animation:blink 1.1s infinite}
+.scn i:nth-child(2){animation-delay:.18s}.scn i:nth-child(3){animation-delay:.36s}.scn i:nth-child(4){animation-delay:.54s}
+@keyframes scan{0%{left:-40%}100%{left:110%}}
+@keyframes fpop{0%{transform:scale(.985);box-shadow:0 0 0 0 rgba(51,233,145,.4)}40%{box-shadow:0 0 0 6px rgba(51,233,145,0)}100%{transform:scale(1)}}
+@keyframes newpop{0%{opacity:0;transform:translateY(-3px) scale(.9)}15%{opacity:1;transform:none}80%{opacity:1}100%{opacity:0}}
+@keyframes blink{0%,100%{background:#2a6b52}50%{background:var(--green)}}
 .feat-body{display:flex;align-items:flex-end;justify-content:space-between;gap:10px}
 .feat-pick{font-family:'Barlow Condensed';font-weight:800;font-size:30px;line-height:.9;color:#fff}
 .feat-mu{font-size:11px;color:var(--t2);font-weight:600;margin-top:3px}
@@ -343,7 +420,7 @@ h1{font-size:clamp(34px,7vw,56px);font-weight:900;line-height:1.04;letter-spacin
 .feat-edge .e{font-size:9px;font-style:normal;color:#8fd9c2;font-weight:800;display:block;letter-spacing:.08em}
 .spark{width:100%;height:34px;margin-top:9px;display:block}
 .rowlab{font-size:9.5px;letter-spacing:.1em;font-weight:800;color:var(--t3);margin:4px 2px 8px;text-transform:uppercase}
-.erow{display:flex;align-items:center;gap:11px;padding:9px 10px;border-radius:11px;background:rgba(255,255,255,.012);margin-bottom:7px}
+.erow{display:flex;align-items:center;gap:11px;padding:9px 10px;border-radius:11px;background:rgba(255,255,255,.012);margin-bottom:7px;border-left:2px solid transparent;transition:border-color .5s,background .5s}
 .erow:hover{background:rgba(155,123,255,.05)}
 .tcol{width:30px;height:30px;border-radius:50%;flex:0 0 auto;display:flex;align-items:center;justify-content:center;
   font-family:'Barlow Condensed';font-weight:800;font-size:11px;color:#fff}
@@ -360,10 +437,10 @@ h1{font-size:clamp(34px,7vw,56px);font-weight:900;line-height:1.04;letter-spacin
 .gate .s{font-size:10.5px;color:var(--t3);margin-top:3px}
 .gate .blur{filter:blur(5px);opacity:.6;pointer-events:none;margin-top:9px;display:flex;flex-direction:column;gap:6px}
 .gate .blur .r{display:flex;justify-content:space-between;font-size:12px}
-.sec{padding:30px 0;border-top:1px solid #11111e}
+.sec{padding:30px 0}
 .kick{font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;margin-bottom:9px;display:flex;gap:6px}
 .kick.teal{color:var(--teal)} .kick.purple{color:var(--plight)} .kick.red{color:var(--rsoft)}
-h2{font-size:clamp(22px,4.4vw,32px);font-weight:800;letter-spacing:-.01em;margin-bottom:10px}
+h2{font-size:clamp(22px,4.4vw,32px);font-weight:800;letter-spacing:-.01em;margin-bottom:10px;color:#fff}
 .sec p{font-size:14px;color:var(--t2);line-height:1.75;max-width:600px;margin-bottom:14px}
 .sec p strong{color:var(--t1)}
 .shop{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;max-width:430px}
@@ -376,7 +453,7 @@ h2{font-size:clamp(22px,4.4vw,32px);font-weight:800;letter-spacing:-.01em;margin
 .finalcta{text-align:center;padding:56px 0 26px}
 .finalcta h2{margin-bottom:10px}
 .finalcta .sm{font-family:'Barlow Condensed';font-weight:800;font-size:20px;color:var(--teal);margin-top:16px;letter-spacing:-.01em}
-footer{border-top:1px solid #11111e;padding:24px 0;text-align:center;color:var(--t3);font-size:12px}
+footer{padding:24px 0;text-align:center;color:var(--t3);font-size:12px}
 .marquee{position:sticky;top:60px;z-index:40;overflow:hidden;background:#090912;border-bottom:1px solid #12121e;white-space:nowrap}
 .mq-track{display:inline-flex;animation:mqscroll 38s linear infinite;will-change:transform}
 .marquee:hover .mq-track{animation-play-state:paused}
