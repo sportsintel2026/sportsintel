@@ -97,6 +97,83 @@ function SimBoard(){
   </>);
 }
 
+/* ---- live scores mini-scoreboard ---- */
+function LiveScores(){
+  const init=[["⚾","NYY","#3A4F73",4,"BOS","#BD3039",2,"Top 7th"],["🏀","DEN","#0E2240",88,"MIN","#236192",83,"Q3 4:12"],["⚾","LAD","#3E7DC4",3,"ARI","#A71930",1,"Bot 5th"]];
+  const [games,setGames]=useState(init);
+  const [hit,setHit]=useState(-1);
+  useEffect(()=>{ const id=setInterval(()=>{
+    setGames(prev=>{ const i=Math.floor(Math.random()*prev.length); const which=Math.random()<0.5?3:6; const next=prev.map(g=>g.slice()); next[i][which]+=(next[i][0]==="🏀"?(Math.random()<0.5?2:3):1); setHit(i); return next; });
+    setTimeout(()=>setHit(-1),700);
+  },2600); return ()=>clearInterval(id); },[]);
+  return (
+    <div className="lscard">
+      <div className="lsh"><div className="lstitle"><span style={{fontSize:16}}>📊</span>Live scores, every game</div><span className="lslive"><i/>LIVE</span></div>
+      {games.map((g,i)=>(
+        <div className="lsrow" key={i}>
+          <div className="lssp">{g[0]}</div>
+          <div className="lsgm">
+            <div className="lstm"><span className="lsdot" style={{background:g[2]}}/><span className="lsab">{g[1]}</span></div>
+            <span className={"lsscr"+(hit===i?" hit":"")}>{g[3]}</span><span className="lsvs">–</span><span className="lsscr">{g[6]}</span>
+            <div className="lstm r"><span className="lsab">{g[4]}</span><span className="lsdot" style={{background:g[5]}}/></div>
+          </div>
+          <div className="lsst">{g[7]}</div>
+        </div>
+      ))}
+      <div className="lscap">Every league — MLB · NBA · NFL · CFB · NHL — updating in real time.</div>
+    </div>
+  );
+}
+
+/* ---- quick spin slot machine (single + parlay) ---- */
+function QuickSpin(){
+  const r0=useRef(),r1=useRef(),r2=useRef(),resRef=useRef(),modeRef=useRef();
+  useEffect(()=>{
+    const RESULTS=[
+      {mode:"SINGLE",reels:["⚾","LAD","ML"],pill:"🎯 LAD ML · +4.1% edge"},
+      {mode:"SINGLE",reels:["🏀","DEN","-4.5"],pill:"🎯 DEN -4.5 · +4.4% edge"},
+      {mode:"PARLAY",reels:["TEX","DEN","NYY"],pill:"🎯 3-leg parlay · +540"},
+      {mode:"SINGLE",reels:["⚾","ATL","O 8.5"],pill:"🎯 ATL Over 8.5 · +5.0% edge"},
+      {mode:"SINGLE",reels:["🏀","NYK","ML"],pill:"🎯 NYK ML · +3.1% edge"},
+      {mode:"PARLAY",reels:["LAD","BOS","MIL"],pill:"🎯 3-leg parlay · +410"},
+      {mode:"SINGLE",reels:["⚾","PHI","ML"],pill:"🎯 PHI ML · +3.9% edge"},
+    ];
+    const POOL=[["⚾","🏀","🏈"],["TEX","LAD","NYK","BOS","ATL","DEN","PHI","HOU","SF","MIL"],["ML","O 8.5","-3.5","U 220","O 25.5","-4.5"]];
+    const reels=[r0,r1,r2];
+    let ri=0, cyc=null, timers=[];
+    const rnd=a=>a[Math.floor(Math.random()*a.length)];
+    const par=el=>el.current&&el.current.parentElement;
+    function spin(){
+      const r=RESULTS[ri%RESULTS.length];ri++;const isP=r.mode==="PARLAY";
+      if(modeRef.current){modeRef.current.textContent=isP?"PARLAY":"SINGLE PLAY";modeRef.current.className="qstag"+(isP?" par":"");}
+      if(resRef.current){resRef.current.classList.remove("show");resRef.current.style.opacity="0";resRef.current.className="qspill"+(isP?" par":"");}
+      reels.forEach(el=>{const p=par(el); if(p){p.classList.add("spin");p.classList.remove("land");}});
+      cyc=setInterval(()=>{reels.forEach((el,k)=>{const p=par(el); if(p&&p.classList.contains("spin")&&el.current){el.current.textContent=isP?rnd(POOL[1]):rnd(POOL[k]); el.current.className="qsrv"+((!isP&&k===0)?" emoji":"");}});},80);
+      const stop=(k,val,em)=>{const p=par(reels[k]); if(p)p.classList.remove("spin"); if(reels[k].current){reels[k].current.textContent=val;reels[k].current.className="qsrv"+(em?" emoji":"");} if(p)p.classList.add("land");};
+      timers.push(setTimeout(()=>stop(0,r.reels[0],!isP),650));
+      timers.push(setTimeout(()=>stop(1,r.reels[1],false),900));
+      timers.push(setTimeout(()=>{clearInterval(cyc);stop(2,r.reels[2],false); if(resRef.current){resRef.current.textContent=r.pill;resRef.current.classList.add("show");}},1180));
+      timers.push(setTimeout(()=>{reels.forEach(el=>{const p=par(el); if(p)p.classList.remove("land");});},2700));
+    }
+    spin();
+    const loop=setInterval(spin,3800);
+    return ()=>{clearInterval(loop);clearInterval(cyc);timers.forEach(clearTimeout);};
+  },[]);
+  return (
+    <div className="qscard">
+      <div className="qsh"><div className="qstitle"><span style={{fontSize:16}}>🎰</span>Quick Spin</div><span className="qstag" ref={modeRef}>SINGLE PLAY</span></div>
+      <div className="qsreels">
+        <div className="qsreel"><span className="qsrv emoji" ref={r0}>⚾</span></div>
+        <div className="qsreel"><span className="qsrv" ref={r1}>LAD</span></div>
+        <div className="qsreel"><span className="qsrv" ref={r2}>ML</span></div>
+      </div>
+      <div className="qsres"><span className="qspill" ref={resRef}>🎯 LAD ML · +4.1% edge</span></div>
+      <Link className="qsbtn" to="/signup">SPIN A PICK<span className="qssh"/></Link>
+      <div className="qscap">Spin up a single play <b>or a full parlay</b> — pick a sport or mix, then tap.</div>
+    </div>
+  );
+}
+
 export default function LandingPage(){
   const [edges,setEdges]=useState(null);
   const [nba,setNba]=useState({});
@@ -309,6 +386,16 @@ export default function LandingPage(){
       </div>}
 
       <div className="wrap">
+        <section className="sec">
+          <div className="kick" style={{color:"var(--t3)"}}>More in every account</div>
+          <div className="feat2grid">
+            <LiveScores/>
+            <QuickSpin/>
+          </div>
+        </section>
+      </div>
+
+      <div className="wrap">
         {/* line shopping */}
         <section className="sec">
           <div className="kick teal">💹 Market Price · every book, one screen</div>
@@ -491,6 +578,52 @@ footer{padding:24px 0;text-align:center;color:var(--t3);font-size:12px}
 .spot-dots i{width:5px;height:5px;border-radius:50%;background:#2a2a3d;transition:.25s}
 .spot-dots i.on{width:16px;border-radius:3px;background:var(--plight)}
 .spot-note{font-size:10px;color:var(--t3);text-align:center;margin-top:9px;font-weight:600}
+.feat2grid{display:grid;grid-template-columns:1fr;gap:16px}
+@media(min-width:860px){.feat2grid{grid-template-columns:1fr 1fr;align-items:start}}
+.lscard{position:relative;background:linear-gradient(165deg,rgba(51,233,145,.10),rgba(8,10,16,.6));border-radius:18px;padding:16px;overflow:hidden;box-shadow:0 20px 50px -30px rgba(51,233,145,.4)}
+.lscard::before{content:"";position:absolute;top:-40px;right:-40px;width:140px;height:140px;background:radial-gradient(circle,rgba(51,233,145,.16),transparent 70%);pointer-events:none}
+.lsh{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.lstitle{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:800;color:#fff}
+.lslive{display:inline-flex;align-items:center;gap:5px;font-size:9px;font-weight:800;letter-spacing:.1em;color:var(--green);background:rgba(51,233,145,.1);border:1px solid rgba(51,233,145,.3);border-radius:20px;padding:3px 9px}
+.lslive i{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 1.4s infinite}
+.lsrow{display:flex;align-items:center;gap:10px;padding:10px 8px;border-radius:11px;background:rgba(255,255,255,.02);margin-bottom:7px}
+.lsrow:last-of-type{margin-bottom:0}
+.lssp{font-size:15px;flex:0 0 auto;width:20px;text-align:center}
+.lsgm{flex:1;display:flex;align-items:center;gap:8px;min-width:0}
+.lstm{display:flex;align-items:center;gap:6px;flex:1;min-width:0}
+.lstm.r{justify-content:flex-end}
+.lsab{font-weight:800;font-size:12px;color:#cdd6df}
+.lsdot{width:9px;height:9px;border-radius:50%;flex:0 0 auto}
+.lsscr{font-family:'Barlow Condensed';font-weight:800;font-size:21px;color:#fff;min-width:20px;text-align:center;border-radius:5px;padding:0 4px;transition:background .5s,color .5s}
+.lsscr.hit{background:rgba(51,233,145,.22);color:var(--green)}
+.lsvs{color:#3a4452;font-size:10px;font-weight:700}
+.lsst{flex:0 0 auto;font-size:9.5px;font-weight:800;color:var(--green);text-align:right;width:46px}
+.lscap{font-size:11px;color:#7d8b96;margin-top:10px;font-weight:600}
+.qscard{position:relative;background:linear-gradient(165deg,rgba(155,123,255,.12),rgba(240,169,60,.05),rgba(8,10,16,.6));border-radius:18px;padding:16px;overflow:hidden;box-shadow:0 20px 50px -30px rgba(155,123,255,.5)}
+.qsh{display:flex;align-items:center;justify-content:space-between;margin-bottom:13px}
+.qstitle{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:800;color:#fff}
+.qstag{font-size:9px;font-weight:800;letter-spacing:.1em;color:var(--plight);background:rgba(155,123,255,.12);border:1px solid rgba(155,123,255,.3);border-radius:20px;padding:3px 9px;transition:.3s}
+.qstag.par{color:#f0a93c;background:rgba(240,169,60,.13);border-color:rgba(240,169,60,.35)}
+.qsreels{display:flex;gap:8px;background:linear-gradient(180deg,#0a0a14,#06060c);border:1px solid rgba(240,169,60,.22);border-radius:13px;padding:11px;box-shadow:inset 0 2px 14px rgba(0,0,0,.6)}
+.qsreel{flex:1;height:54px;border-radius:9px;background:linear-gradient(180deg,#13131f,#0c0c16);display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;border:1px solid #1d1d2c}
+.qsreel::before,.qsreel::after{content:"";position:absolute;left:0;right:0;height:14px;z-index:2;pointer-events:none}
+.qsreel::before{top:0;background:linear-gradient(#0c0c16,transparent)}
+.qsreel::after{bottom:0;background:linear-gradient(transparent,#0c0c16)}
+.qsrv{font-family:'Barlow Condensed';font-weight:800;font-size:21px;color:#fff;line-height:1}
+.qsrv.emoji{font-family:'Inter';font-size:22px}
+.qsreel.spin .qsrv{filter:blur(1.2px);opacity:.85;animation:rspin .09s linear infinite}
+.qsreel.land{box-shadow:0 0 0 1.5px rgba(51,233,145,.5),0 0 16px rgba(51,233,145,.25);border-color:rgba(51,233,145,.5)}
+.qsres{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:12px;min-height:30px}
+.qspill{font-size:13px;font-weight:800;color:#04130d;background:linear-gradient(90deg,#33e991,#1fd6a0);border-radius:9px;padding:6px 14px;opacity:0;transform:scale(.9);white-space:nowrap}
+.qspill.show{animation:respop .5s ease forwards}
+.qspill.par{background:linear-gradient(90deg,#f0a93c,#ffce6b);color:#1a1206}
+.qsbtn{display:block;width:100%;margin-top:12px;text-align:center;background:linear-gradient(90deg,#9b7bff,#7d5cff);color:#fff;font-weight:800;font-size:14px;padding:12px;border-radius:11px;box-shadow:0 8px 22px -8px rgba(155,123,255,.7);position:relative;overflow:hidden}
+.qssh{position:absolute;top:0;left:-60%;width:50%;height:100%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.25),transparent);animation:shine 2.6s linear infinite}
+.qscap{font-size:11px;color:var(--t3);text-align:center;margin-top:11px;font-weight:600}
+.qscap b{color:var(--t2)}
+@keyframes rspin{0%{transform:translateY(-2px)}50%{transform:translateY(2px)}100%{transform:translateY(-2px)}}
+@keyframes respop{0%{opacity:0;transform:scale(.9)}60%{opacity:1;transform:scale(1.05)}100%{opacity:1;transform:scale(1)}}
+@keyframes shine{0%{left:-60%}100%{left:160%}}
 .yard{display:grid;grid-template-columns:1fr;gap:11px}
 @media(min-width:680px){.yard{grid-template-columns:repeat(3,1fr)}}
 .yc{position:relative;background:linear-gradient(180deg,rgba(240,169,60,.06),rgba(10,10,20,.4));border:1px solid rgba(240,169,60,.28);border-radius:15px;padding:15px 13px;text-align:center;overflow:hidden}
