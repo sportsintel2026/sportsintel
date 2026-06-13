@@ -144,13 +144,15 @@ export default function HomePage(){
       </div>
 
       {/* HERO */}
-      {hero?<Hero hero={hero} navigate={navigate} live={anyLive} series={seriesFor(hero)} sport={sport}/>:<div className="hero empty">No qualifying edge on the board yet — check back closer to game time.</div>}
+      {!hasFull
+        ? <div style={{margin:"11px 12px 0"}}><Gate kind="hero" title="Today's top edge is locked" sub={<>Unlock every edge with <b>All-Access · $7/mo</b></>} navigate={navigate}/></div>
+        : (hero?<Hero hero={hero} navigate={navigate} live={anyLive} series={seriesFor(hero)} sport={sport}/>:<div className="hero empty">No qualifying edge on the board yet — check back closer to game time.</div>)}
       <div className="cols">
 
       {/* LIVE EDGES — in-game model edges, pulled from /api/live/mlb (moved off the game page) */}
       {liveGames.length>0&&(<section className="panel">
-        <div className="sh"><div className="l"><span className="rdot"/>LIVE EDGES <span className="s">in-game · updates 60s</span></div></div>
-        <Carousel>{liveGames.map(g=><LiveGameCard key={g.gameId} g={g} info={abbrById[g.gameId]} navigate={navigate}/>)}</Carousel>
+        <div className="sh"><div className="l"><span className="rdot"/>{hasFull?"LIVE EDGES":"LIVE GAMES"} <span className="s">{hasFull?"in-game · updates 60s":"scores · in-game edges locked"}</span></div></div>
+        <Carousel>{liveGames.map(g=><LiveGameCard key={g.gameId} g={g} info={abbrById[g.gameId]} navigate={navigate} locked={!hasFull}/>)}</Carousel>
       </section>)}
 
       {/* EDGE BOARD — unified reasoned edges with a market toggle */}
@@ -158,7 +160,9 @@ export default function HomePage(){
         <div className="sh"><div className="l"><span className="i">📊</span>TODAY'S EDGE BOARD <span className="s">ranked by conviction</span></div>
           <div className="seg">{sp.markets.map(([key,lb])=><b key={key} className={board===key?"on":""} onClick={()=>setBoard(key)}>{lb}</b>)}</div></div>
         <div className="note" style={{marginTop:0,marginBottom:9}}>Today's top team plays for every game, ranked by conviction.{sp.hasProps?<> Player props live in the <span onClick={(ev)=>{ev.stopPropagation();navigate("/props");}} style={{color:"#ff7a6c",fontWeight:700,cursor:"pointer"}}>Props tab →</span></>:""}</div>
-        {boardEdges.length===0
+        {!hasFull
+          ?<Gate kind="edges" title="Edges are an All-Access feature" sub={<>Every edge, prop &amp; live play. <b>$7/mo</b> · cancel anytime.</>} navigate={navigate}/>
+          :boardEdges.length===0
           ?<div className="muted" style={{padding:"12px 2px"}}>No {board==="ml"?"moneyline":board==="spread"?"spread":"totals"} edges on the board yet.</div>
           :<div className="elist">{boardEdges.map((x,i)=><EdgeRow key={x.gameId+x.side+i} e={x} navigate={navigate} sport={sport}/>)}</div>}
       </section>
@@ -166,20 +170,25 @@ export default function HomePage(){
       {/* MARKET MOVERS */}
       <section className="panel">
         <div className="sh"><div className="l"><span className="i">⚡</span>MARKET MOVERS <span className="s">biggest moves today</span></div><span className="s2">swipe →</span></div>
-        <Carousel>
+        {!hasFull
+          ?<Gate kind="movers" title="Line moves are locked" sub={<>See where the market's moving with <b>All-Access</b></>} navigate={navigate}/>
+          :<Carousel>
           {movers.map(x=>{ const k=x.gameId+x.side; const d=x._delta;
             return (<div key={k} className={"mv"+(flash[k]?" fl-"+flash[k]:"")}><div className="mvk">{edgeLabel(x)}</div>
               {d!=null
                 ?<><div className={"mvv "+(d>0?"up":d<0?"dn":"")}>{formatOdds(x._open)} <span className="ar">{String.fromCharCode(8594)}</span> {formatOdds(x._now)} <span className="amt">{d>0?String.fromCharCode(9650):d<0?String.fromCharCode(9660):"•"}{Math.abs(d)}</span></div><div className={"mvc "+(d>0?"up":d<0?"dn":"")}>{d>0?"+":d<0?String.fromCharCode(8722):""}{Math.abs(d)} cents</div></>
                 :<><div className="mvv">{formatOdds(x.odds)}</div><div className="mvm">{Math.round((x.modelProb||0)*100)}% model</div></>}
             </div>);})}
-        </Carousel>
+        </Carousel>}
         <div className="note">{hasMoves?"Open to now, today’s line moves. Updates every 15 min.":"Live prices now. Moves fill in as ticks accumulate today."}</div>
       </section>
 
       {/* PLAYER PROPS — full board lives in the Props tab (per sport) */}
       {sp.hasProps&&(<section className="panel">
         <div className="sh"><div className="l"><span className="i">🎯</span>PLAYER PROPS</div></div>
+        {!hasFull
+          ?<Gate kind="props" title="Player props are locked" sub={<>HR, hits, K &amp; more — every game. <b>$7/mo</b></>} navigate={navigate}/>
+          :<>
         {topProps.length>0?(
           <div className="prrow">
             {topProps.slice(0,3).map((p,i)=>{
@@ -207,6 +216,7 @@ export default function HomePage(){
           </div>
         )}
         {topProps.length>0&&<div className="ppseeall" onClick={()=>navigate("/props")}>See all props →</div>}
+        </>}
       </section>)}
 
       {/* PARK FACTORS */}
@@ -245,7 +255,7 @@ export default function HomePage(){
     <nav className="nav">
       <a className="on"><span className="i">🏠</span>Home</a>
       <a onClick={()=>navigate("/games")}><span className="i">🗓️</span>Games</a>
-      <a onClick={()=>navigate("/props")}><span className="i">⚾</span>Props</a>
+      {hasFull?<a onClick={()=>navigate("/props")}><span className="i">⚾</span>Props</a>:<a className="up" onClick={()=>navigate("/pricing")}><span className="i">🔓</span>Unlock</a>}
       <a onClick={()=>navigate("/odds")}><span className="i">💹</span>Market</a>
       <a onClick={()=>navigate("/performance")}><span className="i">📈</span>Performance</a>
       <a onClick={()=>navigate("/settings")}><span className="i">👤</span>Account</a>
@@ -303,7 +313,34 @@ function Hero({hero,navigate,live,series,sport="mlb"}){
   );
 }
 
-function LiveGameCard({g,info,navigate}){
+function Gate({title,sub,kind,navigate}){
+  const box=(w,h,bg,mt)=>({width:w,height:h,background:bg,borderRadius:5,marginTop:mt||0});
+  let sk;
+  if(kind==="hero"){
+    sk=<div style={{border:"1px solid rgba(243,185,79,.32)",borderRadius:14,background:"linear-gradient(180deg,#14110a,#06090b)",padding:14}}>
+      <div style={box("55%",38,"#39424f")}/><div style={box("40%",12,"#2a3340",8)}/><div style={{...box(64,48,"#2f6b54"),float:"right",marginTop:-46}}/></div>;
+  }else if(kind==="props"){
+    sk=<div className="prrow">{[0,1,2].map(i=><div key={i} className="prc">
+      <div style={{width:56,height:56,borderRadius:"50%",background:"#2a3340"}}/><div style={box("70%",10,"#39424f",10)}/><div style={box("50%",20,"#2f6b54",8)}/></div>)}</div>;
+  }else if(kind==="movers"){
+    sk=<div className="rw">{[0,1,2].map(i=><div key={i} className="mv">
+      <div style={box("60%",13,"#39424f")}/><div style={box("75%",10,"#2a3340",8)}/></div>)}</div>;
+  }else{
+    sk=<div className="elist">{[0,1,2,3].map(i=><div key={i} className="erow" style={{display:"flex",alignItems:"center",gap:9}}>
+      <div style={{width:30,height:30,borderRadius:"50%",background:"#2a3340",flexShrink:0}}/>
+      <div style={{flex:1}}><div style={box("65%",13,"#39424f")}/><div style={box("42%",8,"#2a3340",6)}/></div>
+      <div style={box(48,18,"#2f6b54")}/></div>)}</div>;
+  }
+  return (
+    <div className="gatewrap">
+      <div className="blurlayer">{sk}</div>
+      <div className="gate"><div className="lock">🔒</div><div className="gt">{title}</div><div className="gs">{sub}</div>
+        <div className="gbtn" onClick={()=>navigate("/pricing")}>Unlock All-Access →</div></div>
+    </div>
+  );
+}
+
+function LiveGameCard({g,info,navigate,locked}){
   const a=info?.a||"AWY", h=info?.h||"HOM";
   const half=g.half==="bottom"?"Bot":"Top";
   const ml=(g.awayEdge??-9)>=(g.homeEdge??-9)
@@ -319,9 +356,9 @@ function LiveGameCard({g,info,navigate}){
       <span className="lgmeta">{r.prob!=null?Math.round(r.prob*100)+"%":"—"}{r.odds!=null?` · ${formatOdds(r.odds)}`:""}</span>
       <span className={"lgedge "+(r.edge>=0?"pos":"neg")}>{r.edge>=0?"+":""}{(r.edge*100).toFixed(1)}%</span></div>):null;
   return (
-    <div className="lgc" onClick={()=>g.gameId&&navigate(`/game/mlb/${g.gameId}`)}>
+    <div className="lgc" onClick={()=>g.gameId&&navigate(locked?"/pricing":`/game/mlb/${g.gameId}`)}>
       <div className="lgh"><span className="lgmatch">{a} @ {h}</span><span className="lglive"><span className="livedot r"/>{half} {g.inning}{g.outs!=null?` · ${g.outs} out`:""}</span></div>
-      <Row r={ml}/><Row r={tot}/>
+      {locked ? <div className="lglock">🔒 In-game edges — All-Access</div> : <><Row r={ml}/><Row r={tot}/></>}
     </div>
   );
 }
@@ -520,7 +557,15 @@ section{padding:13px 12px 2px;margin:0;border-top:1px solid #161d24}
 @keyframes spin{to{transform:rotate(360deg)}}
 .gm{width:122px;border:1px solid #161e26;border-radius:11px;background:#0b0f14;padding:8px 10px}.gmm{display:flex;align-items:center;gap:4px;font-weight:800;font-size:14px}.gmm .x{color:#8a99a2}.gme{font-size:9px;color:#8a99a2;font-weight:600;margin-top:6px}
 .nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;display:flex;justify-content:space-around;padding:6px 4px calc(6px + env(safe-area-inset-bottom));background:rgba(0,0,0,.96);backdrop-filter:blur(14px);border-top:1px solid #161e26}
-.nav a{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:8.5px;font-weight:600;color:#8a99a2;flex:1;min-width:0}.nav a.on{color:#ff5d4d}.nav .i{font-size:17px}
+.nav a{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:8.5px;font-weight:600;color:#8a99a2;flex:1;min-width:0}.nav a.on{color:#ff5d4d}.nav a.up{color:#33e991}.nav .i{font-size:17px}
+.gatewrap{position:relative;border-radius:14px;overflow:hidden}
+.blurlayer{filter:blur(7px);opacity:.5;pointer-events:none;user-select:none}
+.gate{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:18px;background:radial-gradient(circle at 50% 40%,rgba(8,10,16,.5),rgba(6,9,11,.9))}
+.gate .lock{width:42px;height:42px;border-radius:13px;display:flex;align-items:center;justify-content:center;font-size:20px;background:rgba(155,123,255,.14);border:1px solid rgba(155,123,255,.4);margin-bottom:11px}
+.gate .gt{font-size:15px;font-weight:800;color:#fff;margin-bottom:4px}
+.gate .gs{font-size:11.5px;color:#9aa6b2;line-height:1.5;max-width:250px;margin-bottom:13px}.gate .gs b{color:#33e991;font-weight:800}
+.gate .gbtn{display:inline-flex;align-items:center;gap:7px;background:#1D9E75;color:#04130d;font-weight:800;font-size:13px;padding:11px 20px;border-radius:11px;cursor:pointer}
+.lglock{display:flex;align-items:center;gap:6px;margin-top:9px;padding-top:8px;border-top:1px solid #1e2730;font-size:10px;color:#7d8b96;font-weight:700}
 
 .wpsb{display:none}
 
