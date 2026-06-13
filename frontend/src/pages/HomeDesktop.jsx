@@ -42,7 +42,7 @@ function Lock({ title, sub, navigate }) {
 }
 
 export default function HomeDesktop(props) {
-  const { edges, games = [], movers = [], live = [], abbrById = {}, topProps = [], hero, hasFull, planLoaded = true, lineSeries = {},
+  const { edges, games = [], movers = [], live = [], abbrById = {}, topProps = [], propList = [], hero, hasFull, planLoaded = true, lineSeries = {},
     wpRecord, navigate, plan = {}, sport = "mlb", setSport, marketsLive, anyLive } = props;
   const lg = sport === "nba" ? "nba" : "mlb";
   const [market, setMarket] = useState("ml");
@@ -56,7 +56,7 @@ export default function HomeDesktop(props) {
 
   const e = edges || {};
   const arrFor = (m) => m === "ml" ? e.moneylineEdges : m === "spread" ? e.spreadEdges : e.totalsEdges;
-  let rows = oneSidePerGame(arrFor(market) || []).filter((x) => sport === "mlb" ? (x.edge ?? 0) > 0 : (x.edge ?? 0) >= 1);
+  let rows = oneSidePerGame(arrFor(market) || []).filter((x) => x.edge != null);
   rows = [...rows].sort((a, b) => {
     if (sortKey === "model") return ((a.modelProb || 0) - (b.modelProb || 0)) * sortDir;
     if (sortKey === "conv") return ((a.convictionScore || 0) - (b.convictionScore || 0)) * sortDir;
@@ -68,6 +68,7 @@ export default function HomeDesktop(props) {
   const liveStrip = (live || []);
   const wx = games.filter((g) => g.weather && sport === "mlb");
   const pt = games.filter((g) => g.pitchers && (g.pitchers.away || g.pitchers.home) && sport === "mlb");
+  const mp = games.filter((g) => g.moneyline && (g.moneyline.awayOdds != null || g.moneyline.homeOdds != null));
   const wl = wpRecord ? `${wpRecord.wins}-${wpRecord.losses}${wpRecord.pushes ? `-${wpRecord.pushes}` : ""}` : "—";
   const winPct = wpRecord && (wpRecord.wins + wpRecord.losses) > 0 ? Math.round((wpRecord.wins / (wpRecord.wins + wpRecord.losses)) * 100) : null;
   const units = wpRecord ? wpRecord.units : null;
@@ -90,7 +91,7 @@ export default function HomeDesktop(props) {
     ["⭐", "WizePlays", "/expert-picks"],
     ["🎰", "Wize Spin", "/daily-card"],
     ["SCORES", null],
-    ["🟢", "Live & Final", "/games"],
+    ["🟢", "Games & Scores", "/games"],
   ];
 
   return (
@@ -123,8 +124,8 @@ export default function HomeDesktop(props) {
           <div className="maintop">
             <div><h1>Today's Board</h1><div className="sub">{games.length} games · {sport.toUpperCase()} · model live</div></div>
             <div className="sportbar">
-              {[["⚾", "MLB", "mlb"], ["🏀", "NBA", "nba"]].map(([ic, lb, k]) => (
-                <div key={k} className={"sp" + (sport === k ? " on" : "")} onClick={() => setSport && setSport(k)}><span className="d" />{ic} {lb}</div>
+              {[["⚾", "MLB", "mlb"], ["🏀", "NBA", "nba"], ["🏈", "NFL", "nfl"], ["🏒", "NHL", "nhl"], ["🏉", "CFB", "cfb"]].map(([ic, lb, k]) => (
+                <div key={k} className={"sp" + (sport === k ? " on" : "")} onClick={() => (k === "mlb" || k === "nba") ? (setSport && setSport(k)) : navigate(`/${k}-games`)}><span className="d" />{ic} {lb}</div>
               ))}
             </div>
           </div>
@@ -221,22 +222,24 @@ export default function HomeDesktop(props) {
           )}
 
           {/* STARTING PITCHERS */}
-          {pt.length > 0 && (
+          {mp.length > 0 && (
             <div className="panel">
-              <div className="phead"><div className="t">⚾ Starting Pitchers</div><div className="right">ERA · K/9 · WHIP</div></div>
+              <div className="phead"><div className="t">💹 Market Price</div><div className="right">best available price · moneyline &amp; total</div></div>
               <table className="tbl">
-                <thead><tr><th>Matchup</th><th>Away Starter</th><th>Home Starter</th></tr></thead>
+                <thead><tr><th>Matchup</th><th className="c">Away ML</th><th className="c">Home ML</th><th className="c">Total</th><th className="c">Over</th><th className="c">Under</th></tr></thead>
                 <tbody>
-                  {pt.map((g, i) => {
+                  {mp.map((g, i) => {
                     const a = g.awayAbbr || shortTeam(g.away); const h = g.homeAbbr || shortTeam(g.home);
-                    const sp = (p) => { if (!p) return <span className="tbd">TBD</span>; const s = p.stats || {}; return (
-                      <div className="spc"><div className="spn">{p.name || "TBD"}{p.hand ? <span className="hd">{p.hand}HP</span> : ""}</div>
-                        <div className="sps">{s.era != null && <span>ERA <b>{s.era.toFixed(2)}</b></span>}{s.strikeoutsPer9 != null && <span>K/9 <b>{s.strikeoutsPer9.toFixed(1)}</b></span>}{s.whip != null && <span>WHIP <b>{s.whip.toFixed(2)}</b></span>}</div></div>
-                    ); };
+                    const ml = g.moneyline || {}; const to = g.totals || {};
+                    const px = (odds, book) => odds != null ? <div className="mpx2"><span className="o num">{formatOdds(odds)}</span>{book ? <span className="bk">{book}</span> : null}</div> : <span className="nomove">—</span>;
                     return (
-                      <tr key={g.id || i}>
+                      <tr key={g.id || i} className="click" onClick={() => navigate("/odds")}>
                         <td><div className="matchup"><span className="logos"><TLogo ab={a} /><TLogo ab={h} /></span><span className="mu"><span className="mua">{a}<span className="at"> @ </span>{h}</span></span></div></td>
-                        <td>{sp(g.pitchers?.away)}</td><td>{sp(g.pitchers?.home)}</td>
+                        <td className="c">{px(ml.awayOdds, ml.awayBook)}</td>
+                        <td className="c">{px(ml.homeOdds, ml.homeBook)}</td>
+                        <td className="c">{to.line != null ? <span className="tln num">{to.line}</span> : <span className="nomove">—</span>}</td>
+                        <td className="c">{px(to.overOdds, to.overBook)}</td>
+                        <td className="c">{px(to.underOdds, to.underBook)}</td>
                       </tr>
                     );
                   })}
@@ -289,21 +292,22 @@ export default function HomeDesktop(props) {
           </div>
 
           <div className="panel">
-            <div className="phead"><div className="t">✨ Prop Spotlight</div></div>
+            <div className="phead"><div className="t">✨ Prop Spotlight</div><div className="right">top edges</div></div>
             {!planLoaded
               ? <div className="empty">Loading…</div>
               : !hasFull
               ? <Lock title="Props locked" sub={<><b>$7/mo</b></>} navigate={navigate} />
-              : topProps.length === 0
+              : (propList.length ? propList : topProps).length === 0
                 ? <div className="empty">Props fill in closer to first pitch.</div>
-                : (() => { const s = topProps[si % topProps.length]; return (
-                  <div className="spot" onClick={() => navigate("/props")}>
-                    <div className="who"><span className="ph">{s.id ? <img src={`https://midfield.mlbstatic.com/v1/people/${s.id}/spots/120`} alt="" onError={(ev) => { ev.currentTarget.style.display = "none"; }} /> : "🧢"}</span>
-                      <div><div className="nm">{s.name}</div><div className="mk">{s.game || s.team} · {s.market}</div></div></div>
-                    <div className="sline"><div className="pl">{s.betSide}</div><div className="od">{formatOdds(s.odds)}</div></div>
-                    <div className="dots">{topProps.slice(0, 6).map((_, i) => <i key={i} className={i === (si % topProps.length) ? "on" : ""} />)}</div>
-                  </div>
-                ); })()}
+                : <div className="plist">
+                  {(propList.length ? propList : topProps).map((s, i) => (
+                    <div key={s.k || i} className="prow" onClick={() => navigate("/props")}>
+                      <span className="pph">{s.id ? <img src={`https://midfield.mlbstatic.com/v1/people/${s.id}/spots/120`} alt="" onError={(ev) => { ev.currentTarget.style.display = "none"; }} /> : "🧢"}</span>
+                      <span className="pinfo"><span className="pnm">{s.name}</span><span className="pmk">{s.betSide} · {s.game || s.team}</span></span>
+                      <span className="pod num">{formatOdds(s.odds)}</span>
+                    </div>
+                  ))}
+                </div>}
           </div>
         </aside>
       </div>
@@ -350,7 +354,7 @@ const TCSS = `
 .wpterm .nav .upsell .h{font-family:var(--disp);font-weight:800;font-size:16px;color:#cdbcff}
 .wpterm .nav .upsell .d{font-size:10.5px;color:var(--mut);margin:4px 0 9px;line-height:1.4}
 .wpterm .nav .upsell button{width:100%;border:0;border-radius:8px;background:var(--teal);color:#04130d;font-weight:800;font-size:12px;padding:8px;cursor:pointer;font-family:inherit}
-.wpterm .content{overflow:auto;padding:15px 18px 30px;display:flex;flex-direction:column;gap:13px;min-width:0}
+.wpterm .content{overflow:auto;padding:15px 18px 30px;display:flex;flex-direction:column;gap:13px;min-width:0;min-height:0}
 .wpterm .content::-webkit-scrollbar,.wpterm .nav::-webkit-scrollbar,.wpterm .strip::-webkit-scrollbar,.wpterm .mvstrip::-webkit-scrollbar{width:9px;height:8px}
 .wpterm .content::-webkit-scrollbar-thumb,.wpterm .nav::-webkit-scrollbar-thumb,.wpterm .strip::-webkit-scrollbar-thumb,.wpterm .mvstrip::-webkit-scrollbar-thumb{background:#1a2233;border-radius:6px}
 .wpterm .maintop{display:flex;align-items:flex-end;justify-content:space-between}
@@ -366,7 +370,7 @@ const TCSS = `
 .wpterm .idx .v{font-family:var(--disp);font-weight:800;font-size:29px;line-height:1.05;margin-top:4px}
 .wpterm .idx .v.lockv{font-size:22px}
 .wpterm .idx .chg{font-family:var(--mono);font-size:11px;font-weight:600;margin-top:3px;color:var(--mut)}
-.wpterm .idx.teal .v{color:#7af0c4}.wpterm .idx.purple .v{color:#c3b1ff}.wpterm .idx.amber .v{color:#ffd584}.wpterm .idx.green .v{color:#7af0c4}
+.wpterm .idx.teal .v{color:#7af0c4}.wpterm .idx.green .v{color:#7af0c4}.wpterm .idx.amber .v{color:#ffd584}.wpterm .idx.purple .v{color:#7af0c4}
 .wpterm .panel{border:1px solid var(--line);border-radius:14px;background:var(--panel);overflow:hidden}
 .wpterm .phead{display:flex;align-items:center;gap:12px;padding:11px 15px;border-bottom:1px solid var(--line)}
 .wpterm .phead .t{font-family:var(--disp);font-weight:800;font-size:15.5px;letter-spacing:.4px;display:flex;align-items:center;gap:8px}
@@ -406,10 +410,19 @@ const TCSS = `
 .wpterm .pick{font-family:var(--disp);font-weight:700;font-size:15px}
 .wpterm .pick .side{font-size:10px;font-weight:800;border-radius:4px;padding:1px 5px;margin-right:6px;font-family:'Inter',sans-serif}
 .wpterm .side.ov{color:var(--up);background:rgba(43,212,125,.12)}.wpterm .side.un{color:var(--dn);background:rgba(255,82,71,.12)}.wpterm .side.ml{color:var(--model);background:rgba(155,123,255,.14)}
-.wpterm .model-p{font-family:var(--mono);font-size:12.5px;color:#c3b1ff;text-align:right}
+.wpterm .model-p{font-family:var(--mono);font-size:12.5px;color:#5fd6a0;text-align:right}
 .wpterm .book-p{font-family:var(--mono);font-size:12.5px;color:var(--mut);text-align:right}
 .wpterm .spark-mini{width:54px;height:20px;vertical-align:middle}
 .wpterm .nomove{color:var(--mut2);font-family:var(--mono);font-size:12px}
+.wpterm .mpx2{display:flex;flex-direction:column;align-items:center;gap:1px}.wpterm .mpx2 .o{font-family:var(--mono);font-size:12.5px;color:#c4cdd9}.wpterm .mpx2 .bk{font-size:9px;color:var(--mut);font-family:var(--ui)}
+.wpterm .tln{font-family:var(--mono);font-size:13px;color:#e8edf4;font-weight:600}
+.wpterm .plist{display:flex;flex-direction:column}
+.wpterm .prow{display:flex;align-items:center;gap:9px;padding:8px 12px;border-bottom:1px solid #11151f;cursor:pointer}.wpterm .prow:last-child{border-bottom:0}.wpterm .prow:hover{background:rgba(255,255,255,.02)}
+.wpterm .pph{width:30px;height:30px;border-radius:50%;background:radial-gradient(circle at 50% 30%,#2a3550,#0c1018);border:1.5px solid rgba(155,123,255,.45);overflow:hidden;position:relative;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:13px}
+.wpterm .pph img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center top}
+.wpterm .pinfo{flex:1;min-width:0;display:flex;flex-direction:column}.wpterm .pnm{font-size:12.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wpterm .pmk{font-size:10px;color:var(--mut);font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wpterm .pod{font-family:var(--mono);font-size:12.5px;color:#5fd6a0;font-weight:600;flex:0 0 auto}
 .wpterm .book{font-size:12px;color:#c4cdd9;font-family:var(--mono);text-align:center}.wpterm .book .bk{font-size:10px;color:var(--mut);font-family:'Inter'}
 .wpterm .edge-cell{text-align:right;white-space:nowrap}
 .wpterm .edge-v{font-family:var(--mono);font-size:14px;font-weight:600}.wpterm .edge-v.up{color:var(--up)}.wpterm .edge-v.dn{color:var(--dn)}
@@ -450,7 +463,7 @@ const TCSS = `
 .wpterm .lockcard .ls{font-size:12px;color:#9aa6b2;line-height:1.5;max-width:300px;margin-bottom:14px}.wpterm .lockcard .ls b{color:var(--up);font-weight:800}
 .wpterm .lockcard button{background:var(--teal);color:#04130d;border:0;font-weight:800;font-size:13px;padding:11px 22px;border-radius:11px;cursor:pointer;font-family:inherit}
 .wpterm .footnote{font-size:10.5px;color:var(--mut2);text-align:center;padding:6px}
-.wpterm .rail{border-left:1px solid var(--line);background:#080a11;overflow:auto;padding:14px 12px;display:flex;flex-direction:column;gap:13px}
+.wpterm .rail{border-left:1px solid var(--line);background:#080a11;overflow:auto;padding:14px 12px;display:flex;flex-direction:column;gap:13px;min-height:0}
 .wpterm .rail::-webkit-scrollbar{width:8px}.wpterm .rail::-webkit-scrollbar-thumb{background:#1a2233;border-radius:6px}
 .wpterm .rlive .rlg{padding:9px 12px;border-bottom:1px solid #11151f;cursor:pointer}
 .wpterm .rlive .rlg:last-child{border-bottom:0}.wpterm .rlive .rlg:hover{background:rgba(255,255,255,.02)}
