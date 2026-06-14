@@ -129,7 +129,7 @@ export default function HomePage(){
     if(kind==="hits") return {...b,market:"HITS",betSide:(p.line===0.5?"1+ Hits":`${p.side==="under"?"U":"O"} ${p.line} Hits`)};
     return {...b,market:"K",betSide:`K ${p.side==="under"?"U":"O"}${p.line}`};
   };
-  const topProps=[...hitsP.map(x=>mkProp(x,"hits")),...ksP.map(x=>mkProp(x,"ks")),...hrP.map(x=>mkProp(x,"hr"))].sort((a,b)=>(b.edge-a.edge)).slice(0,4);
+  const topProps=[...hitsP.map(x=>mkProp(x,"hits")),...ksP.map(x=>mkProp(x,"ks")),...hrP.map(x=>mkProp(x,"hr"))].sort((a,b)=>(b.edge-a.edge)).slice(0,7);
   const propList=[...hitsP.map(x=>mkProp(x,"hits")),...ksP.map(x=>mkProp(x,"ks")),...hrP.map(x=>mkProp(x,"hr"))].sort((a,b)=>(b.edge-a.edge)).slice(0,12);
   const mkPropFull=(p,kind)=>{ const prob=kind==="hr"?p.hrProb:kind==="hits"?p.hitsProb:p.kProb; return {...mkProp(p,kind),prob,line:p.line,side:p.side}; };
   const propsByType={
@@ -210,13 +210,13 @@ export default function HomePage(){
 
       {/* PLAYER PROPS — full board lives in the Props tab (per sport) */}
       {sp.hasProps&&(<section className="panel">
-        <div className="sh"><div className="l"><span className="i">🎯</span>PLAYER PROPS</div></div>
+        <div className="sh"><div className="l"><span className="i">🎯</span>PLAYER PROPS</div>{hasFull&&topProps.length>3&&<span className="ppswipe">swipe →</span>}</div>
         {!hasFull
           ?<Gate kind="props" title="Player props are locked" sub={<>HR, hits, K &amp; more — every game. <b>$7/mo</b></>} navigate={navigate}/>
           :<>
         {topProps.length>0?(
           <div className="prrow">
-            {topProps.slice(0,3).map((p,i)=>{
+            {topProps.slice(0,7).map((p,i)=>{
               const col=teamCol(shortTeam(p.team||p.game||""));
               const pos=p.edge>=0;
               return (
@@ -496,7 +496,10 @@ section{padding:13px 12px 2px;margin:0;border-top:1px solid #161d24}
 .ebx{flex:0 0 70px;align-self:center;border:1px solid rgba(51,233,145,.42);border-radius:12px;background:rgba(51,233,145,.07);padding:9px 5px;text-align:center;box-shadow:0 0 8px rgba(51,233,145,.07);display:flex;flex-direction:column;justify-content:center}
 .ebx .b{font-weight:800;font-size:25px;color:#33e991;line-height:1}.ebx .k{font-size:8px;color:#8fd9c2;font-weight:800;margin-top:2px}
 .hR{flex:1.05;min-width:0;display:flex;flex-direction:column}.ct{font-size:8px;letter-spacing:.4px;color:#8a99a2;font-weight:800;margin-bottom:3px}
-.cwrap{flex:1;display:flex;flex-direction:column;justify-content:center;border:1px solid rgba(255,255,255,.07);border-radius:9px;background:rgba(255,255,255,.015);padding:6px 8px}
+.cwrap{flex:1;display:flex;flex-direction:column;justify-content:center;border:1px solid rgba(255,255,255,.07);border-radius:9px;background:rgba(255,255,255,.015);padding:6px 8px;position:relative;overflow:hidden}
+.cwrap::before{content:"";position:absolute;inset:0;background:radial-gradient(120% 80% at 72% 50%,rgba(51,233,145,.18),transparent 70%);opacity:.3;animation:cpulse 2.8s ease-in-out infinite;pointer-events:none;z-index:0}
+.cwrap>*{position:relative;z-index:1}
+@keyframes cpulse{0%,100%{opacity:.22}50%{opacity:.66}}
 .livenum{font-family:'Barlow Condensed';font-weight:800;font-size:22px;color:#fff;display:flex;align-items:center;gap:7px}
 .livedot{width:7px;height:7px;border-radius:50%;background:#33e991;animation:pl 1.6s infinite}
 .livedot.r{background:#ff5a5a;animation:plr 1.3s infinite}
@@ -557,8 +560,10 @@ section{padding:13px 12px 2px;margin:0;border-top:1px solid #161d24}
 .wxrow{display:flex;align-items:center;gap:7px;margin-top:9px;padding-top:8px;border-top:1px solid rgba(255,255,255,.07);font-size:11.5px;color:#dbe4e2;font-weight:600}.wxrow .wi{font-size:14px}
 .propscta{display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid rgba(155,123,255,.28);border-radius:12px;background:rgba(155,123,255,.06);padding:12px 14px;cursor:pointer}
 .pctah{font-weight:800;font-size:13px;color:#eaf1ee}.pctas{font-size:10.5px;color:#8a99a2;font-weight:500;margin-top:3px;line-height:1.35}.pctaarrow{font-size:18px;color:#bba6ff;font-weight:800;flex:0 0 auto}
-.prrow{display:flex;gap:8px;align-items:stretch}
-.prc{flex:1 1 0;min-width:0;position:relative;border:1px solid rgba(155,123,255,.22);border-radius:13px;background:linear-gradient(180deg,rgba(155,123,255,.08),rgba(155,123,255,.02));padding:12px 7px 10px;cursor:pointer;display:flex;flex-direction:column;align-items:center;text-align:center}
+.prrow{display:flex;gap:8px;align-items:stretch;overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;padding-bottom:4px;scrollbar-width:none;scroll-padding-left:2px}
+.prrow::-webkit-scrollbar{display:none}
+.ppswipe{font-size:11px;font-weight:700;color:#8a99a2}
+.prc{flex:0 0 auto;width:118px;scroll-snap-align:start;min-width:0;position:relative;border:1px solid rgba(155,123,255,.22);border-radius:13px;background:linear-gradient(180deg,rgba(155,123,255,.08),rgba(155,123,255,.02));padding:12px 7px 10px;cursor:pointer;display:flex;flex-direction:column;align-items:center;text-align:center}
 .prc:active{background:rgba(155,123,255,.13)}
 .prcrank{position:absolute;top:6px;left:6px;width:18px;height:18px;border-radius:6px;background:rgba(155,123,255,.92);color:#fff;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:11px;display:flex;align-items:center;justify-content:center;line-height:1;z-index:2}
 .prcav{width:60px;height:60px;border-radius:50%;overflow:hidden;position:relative;display:flex;align-items:flex-end;justify-content:center;font-size:25px;margin-top:6px}
