@@ -359,17 +359,38 @@ export default function LandingPage(){
         </section>
       </div>
 
+      {/* THE LOOP — edge / props / price */}
+      <div className="wrap">
+        <section className="sec">
+          <div className="kick" style={{color:"var(--plight)"}}>⚡ The model · the edge · the best price</div>
+          <h2>Stop guessing. Start seeing the edge.</h2>
+          <p>Every team bet and player prop, run through the model against the live market — so you see exactly where the book is wrong, and grab the best number on it.</p>
+          <div className="loop">
+            <div className="loop-step"><span className="loop-n" style={{background:"#bba6ff"}}>1</span><span className="loop-t"><b>The edge</b> — the model prices every game &amp; prop, then flags where it disagrees with the book.<span className="loop-tag" style={{color:"#04130d",background:"#33e991"}}>YOUR EDGE</span></span></div>
+            <div className="loop-step"><span className="loop-n" style={{background:"#f0a93c"}}>2</span><span className="loop-t"><b>The props</b> — HRs, strikeouts, points, passing TDs, hits, assists. 100s a day, ranked by conviction.<span className="loop-tag" style={{color:"#3a2a00",background:"#f0a93c"}}>100s DAILY</span></span></div>
+            <div className="loop-step"><span className="loop-n" style={{background:"#33e991"}}>3</span><span className="loop-t"><b>The best price</b> — all 12 books side by side, so you never take a worse number than you had to.<span className="loop-tag" style={{color:"#04130d",background:"#5dcaa5"}}>EVERY BOOK</span></span></div>
+          </div>
+        </section>
+      </div>
+
       {/* MARKET PRICE — repositioned just above the live board */}
       <div className="wrap">
         <section className="sec">
-          <div className="kick teal">💹 Market Price · every book, one screen</div>
-          <h2>Shop every book. Take the best price. Every time.</h2>
-          <p>The same bet pays differently at different books. We put <strong>every major US book side by side</strong>, best price highlighted — so you always grab the better number. That edge has nothing to do with luck.</p>
+          <div className="kick teal">💹 Line shopping · every book, one screen</div>
+          <h2>Same bet. Better number. Every time.</h2>
+          <p>The exact same bet pays <strong>differently at every book</strong>. Take the wrong one and you've lost before the game starts — no bad beat, no variance, just money you handed back.</p>
+          <div className="leak">
+            <div className="leak-n">−$420</div>
+            <div className="leak-t"><b>A typical year</b> of taking "good enough" prices on $50 bets. The sharps shop every book — now you can too. <span style={{color:"var(--t3)"}}>Illustrative.</span></div>
+          </div>
           <div className="shop">
-            <div className="h">Example · same bet, four books</div>
-            {SHOP.map(([bk,pr,best],i)=>(
-              <div className="b" key={i}><span className={"bk"+(best?" best":"")}>{bk}</span><span className={"pr"+(best?" best":"")}>{pr}</span></div>
-            ))}
+            <div className="h">Example · same bet, all 12 books</div>
+            <div className="b worst"><span><span className="shop-tag w">YOU'D OVERPAY</span><span className="bk">BetMGM</span></span><span className="pr worst">+108</span></div>
+            <div className="b"><span className="bk">DraftKings</span><span className="pr">+115</span></div>
+            <div className="b"><span className="bk">Caesars</span><span className="pr">+120</span></div>
+            <div className="b"><span><span className="shop-tag b">BEST 🏆</span><span className="bk best">FanDuel</span></span><span className="pr best">+130</span></div>
+            <div className="payoff"><div className="payoff-n">+$11</div><div className="payoff-t">more on a <b>$50 bet</b> — same exact wager, just the better book. Do that all season and it's hundreds.</div></div>
+            <div className="shop-mem"><b>Members get this on every bet</b> — all 12 books side by side, best price flagged, plus the model edges nobody else is showing you.</div>
           </div>
         </section>
       </div>
@@ -687,6 +708,26 @@ h2{font-size:clamp(22px,4.4vw,32px);font-weight:800;letter-spacing:-.01em;margin
 .shop .bk{font-size:13px;color:var(--t2)} .shop .bk.best{color:#fff;font-weight:700}
 .shop .pr{font-family:'Barlow Condensed';font-weight:700;font-size:15px;color:var(--t2)}
 .shop .pr.best{color:var(--green);background:rgba(29,158,117,.12);border-radius:5px;padding:1px 9px}
+.loop{display:flex;flex-direction:column;gap:9px;margin-top:14px;max-width:560px}
+.loop-step{display:flex;gap:11px;align-items:flex-start;padding:12px 13px;border-radius:13px;border:1px solid var(--line);background:rgba(255,255,255,.015)}
+.loop-n{width:25px;height:25px;border-radius:7px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed';font-weight:800;font-size:15px;color:#04130d}
+.loop-t{font-size:13px;color:var(--t1);font-weight:600;line-height:1.45}
+.loop-t b{color:#fff;font-weight:800}
+.loop-tag{font-size:8.5px;font-weight:900;letter-spacing:.05em;padding:2px 6px;border-radius:5px;margin-left:6px;vertical-align:middle;white-space:nowrap;display:inline-block}
+.leak{display:flex;align-items:center;gap:12px;padding:13px 14px;border-radius:13px;background:rgba(239,68,68,.07);border:1px solid rgba(239,68,68,.2);margin:14px 0;max-width:460px}
+.leak-n{font-family:'Barlow Condensed';font-weight:800;font-size:31px;color:#ff7a6c;line-height:1;flex:0 0 auto}
+.leak-t{font-size:12px;color:#e7c3bd;font-weight:600;line-height:1.45}
+.leak-t b{color:#fff;font-weight:800}
+.shop .b.worst .bk{color:#ff8f82}
+.shop .pr.worst{color:#ff7a6c;background:rgba(239,68,68,.1);border-radius:5px;padding:1px 9px}
+.shop-tag{font-size:8px;font-weight:900;letter-spacing:.04em;border-radius:5px;padding:2px 6px;margin-right:8px;display:inline-block}
+.shop-tag.w{color:#ff7a6c;background:rgba(239,68,68,.14)} .shop-tag.b{color:#04130d;background:#33e991}
+.payoff{display:flex;align-items:center;gap:11px;margin-top:11px;padding:11px;border-radius:11px;background:rgba(51,233,145,.06);border:1px solid rgba(51,233,145,.18)}
+.payoff-n{font-family:'Barlow Condensed';font-weight:800;font-size:26px;color:var(--green);line-height:1;flex:0 0 auto}
+.payoff-t{font-size:11px;color:#bfe6d6;font-weight:600;line-height:1.4}
+.payoff-t b{color:#fff;font-weight:800}
+.shop-mem{font-size:11.5px;color:var(--t2);line-height:1.5;margin-top:11px;padding-top:11px;border-top:1px solid #16161f}
+.shop-mem b{color:#fff;font-weight:800}
 .finalcta{text-align:center;padding:56px 0 26px}
 .finalcta h2{margin-bottom:10px}
 .finalcta .sm{font-family:'Barlow Condensed';font-weight:800;font-size:20px;color:var(--teal);margin-top:16px;letter-spacing:-.01em}
