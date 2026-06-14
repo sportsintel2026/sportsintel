@@ -1,4 +1,17 @@
 require("dotenv").config();
+
+// ── Error tracking (Sentry) — initialise BEFORE other imports ──────────────────
+// Completely inert until SENTRY_DSN is set. Error tracking only (no perf tracing),
+// so it stays light and well within the free tier.
+const Sentry = require("@sentry/node");
+if (process.env.SENTRY_DSN) {
+  Sentry.init({
+    dsn: process.env.SENTRY_DSN,
+    environment: process.env.NODE_ENV || "production",
+    tracesSampleRate: 0,
+  });
+}
+
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
@@ -109,6 +122,12 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
+// TEMPORARY: Sentry verification route. Hit this once in the browser to confirm
+// errors reach Sentry, then it can be removed.
+app.get("/api/__sentry_test__", (req, res) => {
+  throw new Error("WizePicks Sentry test error — safe to ignore");
+});
+
 // ── Scheduled Jobs ────────────────────────────────────────────────────────────
 // Refresh game data every 5 minutes during peak hours (noon–midnight ET)
 cron.schedule("*/5 12-23 * * *", async () => {
@@ -178,6 +197,11 @@ cron.schedule("0 * * * *", async () => {
     pingHC(process.env.HC_PING_GRADE, false);
   }
 }, { timezone: "America/New_York" });
+
+// ── Sentry Express error handler — must come AFTER routes, BEFORE our handler ───
+if (process.env.SENTRY_DSN) {
+  Sentry.setupExpressErrorHandler(app);
+}
 
 // ── Error handler ─────────────────────────────────────────────────────────────
 app.use((err, req, res, next) => {
