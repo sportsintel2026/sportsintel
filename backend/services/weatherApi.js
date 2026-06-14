@@ -11,6 +11,7 @@ const VENUE_COORDS = {
   "Progressive Field": { lat: 41.4962, lon: -81.6852, orientation: 0 },
   "American Family Field": { lat: 43.0280, lon: -87.9712, orientation: 135, indoor: true },
   "Sutter Health Park": { lat: 38.5805, lon: -121.5135, orientation: 30 },
+  "Las Vegas Ballpark": { lat: 36.1641, lon: -115.3293, orientation: 30 },
   "Oracle Park": { lat: 37.7786, lon: -122.3893, orientation: 90 },
   "Petco Park": { lat: 32.7073, lon: -117.1566, orientation: 0 },
   "Oriole Park at Camden Yards": { lat: 39.2839, lon: -76.6217, orientation: 33 },
@@ -44,9 +45,13 @@ const VENUE_COORDS = {
 
 const cache = new Map();
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour — weather doesn't change that fast
+const FAIL_TTL_MS = 5 * 60 * 1000;   // 5 min — negative cache: remember a failed/empty
+                                     // fetch briefly so a rate-limit (429) burst backs
+                                     // off instead of re-hammering the API every run.
 
 function isCacheValid(entry) {
-  return entry && (Date.now() - entry.fetchedAt) < CACHE_TTL_MS;
+  if (!entry || entry.promise) return false;
+  return (Date.now() - entry.fetchedAt) < (entry.ttl || CACHE_TTL_MS);
 }
 
 // Get weather for a venue (returns null if indoor or unknown venue)
@@ -66,13 +71,21 @@ async function getWeatherForVenue(venueName, gameTimeISO) {
 
   const cacheKey = `${venueName}_${gameTimeISO || "now"}`;
   const cached = cache.get(cacheKey);
-  if (isCacheValid(cached)) return cached.data;
+  if (cached) {
+    if (cached.promise) return cached.promise;      // a request is already in flight → wait on it (dedup)
+    if (isCacheValid(cached)) return cached.data;   // fresh result (success OR recent failure) → reuse
+  }
 
-  try {
-    const wantHourly = !!gameTimeISO;
-    const res = await axios.get("https://api.open-meteo.com/v1/forecast", {
-      params: {
-        latitude: venue.lat,
+  // Fire exactly ONE request per key; concurrent callers coalesce onto this promise
+  // and the outcome is ALWAYS cached (success for 1h, failure for 5m) so a 429 burst
+  // can't spiral into endless retries.
+  const runner = (async () => {
+    let result = null;
+    try {
+      const wantHourly = !!gameTimeISO;
+      const res = await axios.get("https://api.open-meteo.com/v1/forecast", {
+        params: {
+          latitude: venue.lat,
         longitude: venue.lon,
         current: "temperature_2m,wind_speed_10m,wind_direction_10m,precipitation,weather_code",
         ...(wantHourly ? { hourly: "temperature_2m,wind_speed_10m,wind_direction_10m,precipitation,weather_code", forecast_days: 2 } : {}),
@@ -112,64 +125,74 @@ async function getWeatherForVenue(venueName, gameTimeISO) {
         }
       }
     }
-    if (!src || src.temperature_2m == null) return null;
+    if (src && src.temperature_2m != null) {
+      const tempF = Math.round(src.temperature_2m);
+      const windMph = Math.round(src.wind_speed_10m);
+      const windDir = src.wind_direction_10m; // degrees from N
+      const precip = src.precipitation;
+      const code = src.weather_code;
 
-    const tempF = Math.round(src.temperature_2m);
-    const windMph = Math.round(src.wind_speed_10m);
-    const windDir = src.wind_direction_10m; // degrees from N
-    const precip = src.precipitation;
-    const code = src.weather_code;
+      // Calculate wind direction relative to home plate → CF
+      // If wind direction matches venue orientation (±45deg), wind is "out to CF"
+      // If wind direction is 180° opposite, wind is "in from CF" (suppresses HRs)
+      const relativeAngle = Math.abs(((windDir - venue.orientation + 540) % 360) - 180);
+      let windEffect;
+      let windLabel;
+      if (windMph < 5) {
+        windEffect = "calm";
+        windLabel = "Calm winds";
+      } else if (relativeAngle < 45) {
+        windEffect = "in"; // blowing toward home plate from CF — suppresses
+        windLabel = `Wind blowing IN ${windMph} mph`;
+      } else if (relativeAngle > 135) {
+        windEffect = "out"; // blowing out to CF — boosts HRs
+        windLabel = `Wind blowing OUT ${windMph} mph`;
+      } else {
+        windEffect = "cross";
+        windLabel = `Cross wind ${windMph} mph`;
+      }
 
-    // Calculate wind direction relative to home plate → CF
-    // If wind direction matches venue orientation (±45deg), wind is "out to CF"
-    // If wind direction is 180° opposite, wind is "in from CF" (suppresses HRs)
-    const relativeAngle = Math.abs(((windDir - venue.orientation + 540) % 360) - 180);
-    let windEffect;
-    let windLabel;
-    if (windMph < 5) {
-      windEffect = "calm";
-      windLabel = "Calm winds";
-    } else if (relativeAngle < 45) {
-      windEffect = "in"; // blowing toward home plate from CF — suppresses
-      windLabel = `Wind blowing IN ${windMph} mph`;
-    } else if (relativeAngle > 135) {
-      windEffect = "out"; // blowing out to CF — boosts HRs
-      windLabel = `Wind blowing OUT ${windMph} mph`;
-    } else {
-      windEffect = "cross";
-      windLabel = `Cross wind ${windMph} mph`;
+      // Temperature effect: warm air = ball flies farther
+      let tempEffect;
+      if (tempF > 80) tempEffect = "hot"; // boosts offense
+      else if (tempF < 55) tempEffect = "cold"; // suppresses
+      else tempEffect = "neutral";
+
+      const conditions = describeWeatherCode(code);
+      const isRaining = precip > 0.1;
+
+      result = {
+        indoor: false,
+        venue: venueName,
+        tempF,
+        windMph,
+        windDir,
+        windEffect, // "in" | "out" | "cross" | "calm"
+        windLabel,
+        tempEffect, // "hot" | "cold" | "neutral"
+        conditions,
+        isRaining,
+        forecastAtGameTime,
+        summary: buildSummary({ tempF, windEffect, windMph, tempEffect, conditions, isRaining }),
+      };
     }
-
-    // Temperature effect: warm air = ball flies farther
-    let tempEffect;
-    if (tempF > 80) tempEffect = "hot"; // boosts offense
-    else if (tempF < 55) tempEffect = "cold"; // suppresses
-    else tempEffect = "neutral";
-
-    const conditions = describeWeatherCode(code);
-    const isRaining = precip > 0.1;
-
-    const result = {
-      indoor: false,
-      venue: venueName,
-      tempF,
-      windMph,
-      windDir,
-      windEffect, // "in" | "out" | "cross" | "calm"
-      windLabel,
-      tempEffect, // "hot" | "cold" | "neutral"
-      conditions,
-      isRaining,
-      forecastAtGameTime,
-      summary: buildSummary({ tempF, windEffect, windMph, tempEffect, conditions, isRaining }),
-    };
-
-    cache.set(cacheKey, { data: result, fetchedAt: Date.now() });
-    return result;
   } catch (e) {
     console.error(`[Weather] Error for ${venueName}:`, e.message);
-    return null;
+    result = null;
   }
+
+  // Cache the outcome exactly once: a real result for an hour, a failure/empty for
+  // 5 minutes (negative cache) so we stop hammering a rate-limited API.
+  cache.set(cacheKey, {
+    data: result,
+    fetchedAt: Date.now(),
+    ttl: result ? CACHE_TTL_MS : FAIL_TTL_MS,
+  });
+  return result;
+  })();
+
+  cache.set(cacheKey, { promise: runner }); // mark in-flight so concurrent calls coalesce
+  return runner;
 }
 
 function describeWeatherCode(code) {
