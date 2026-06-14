@@ -96,6 +96,10 @@ export default function HomePage(){
 
   if(loading&&!edges) return <div style={S.shell}><style>{CSS}</style><div style={{padding:40,textAlign:"center",color:"#8a99a2"}}>Loading the board…</div></div>;
   const e=edges||{}; const games=e.games||[];
+  // When the board has rolled forward (today's slate all started), label it
+  // "Tomorrow's" so it's clear these are next-day plays; flips back automatically.
+  const slateUpper=e.rolledToNextDay?"TOMORROW'S":"TODAY'S";
+  const slateLower=e.rolledToNextDay?"Tomorrow's":"Today's";
   const histByKey={}; (oddsHist||[]).forEach(g=>{ histByKey[normName(g.away_team)+"|"+normName(g.home_team)]=g; });
   const findHist=(gm)=> gm?(histByKey[normName(gm.away)+"|"+normName(gm.home)]||null):null;
   const seriesFor=(edge)=>{ const gm=games.find(x=>x.id===edge.gameId); const h=findHist(gm); if(!h)return null; return (isTotal(edge)?h.total[edge.side]:h.ml[edge.side])||null; };
@@ -162,7 +166,7 @@ export default function HomePage(){
       {/* HERO */}
       {!hasFull
         ? <div style={{margin:"11px 12px 0"}}><Gate kind="hero" title="Today's top edge is locked" sub={<>Unlock every edge with <b>All-Access · $7/mo</b></>} navigate={navigate}/></div>
-        : (hero?<Hero hero={hero} navigate={navigate} live={anyLive} series={seriesFor(hero)} sport={sport}/>:<div className="hero empty">No qualifying edge on the board yet — check back closer to game time.</div>)}
+        : (hero?<Hero hero={hero} navigate={navigate} live={anyLive} series={seriesFor(hero)} sport={sport} rolled={e.rolledToNextDay}/>:<div className="hero empty">No qualifying edge on the board yet — check back closer to game time.</div>)}
       <div className="cols">
 
       {/* LIVE EDGES — in-game model edges, pulled from /api/live/mlb (moved off the game page) */}
@@ -173,9 +177,9 @@ export default function HomePage(){
 
       {/* EDGE BOARD — unified reasoned edges with a market toggle */}
       <section className="panel">
-        <div className="sh"><div className="l"><span className="i">📊</span>TODAY'S EDGE BOARD <span className="s">ranked by conviction</span></div>
+        <div className="sh"><div className="l"><span className="i">📊</span>{slateUpper} EDGE BOARD <span className="s">ranked by conviction</span></div>
           <div className="seg">{sp.markets.map(([key,lb])=><b key={key} className={board===key?"on":""} onClick={()=>setBoard(key)}>{lb}</b>)}</div></div>
-        <div className="note" style={{marginTop:0,marginBottom:9}}>Today's top team plays for every game, ranked by conviction.{sp.hasProps?<> Player props live in the <span onClick={(ev)=>{ev.stopPropagation();navigate("/props");}} style={{color:"#ff7a6c",fontWeight:700,cursor:"pointer"}}>Props tab →</span></>:""}</div>
+        <div className="note" style={{marginTop:0,marginBottom:9}}>{slateLower} top team plays for every game, ranked by conviction.{sp.hasProps?<> Player props live in the <span onClick={(ev)=>{ev.stopPropagation();navigate("/props");}} style={{color:"#ff7a6c",fontWeight:700,cursor:"pointer"}}>Props tab →</span></>:""}</div>
         {!hasFull
           ?<Gate kind="edges" title="Edges are an All-Access feature" sub={<>Every edge, prop &amp; live play. <b>$7/mo</b> · cancel anytime.</>} navigate={navigate}/>
           :boardEdges.length===0
@@ -303,7 +307,7 @@ function HeroChart({pts}){
   );
 }
 
-function Hero({hero,navigate,live,series,sport="mlb"}){
+function Hero({hero,navigate,live,series,sport="mlb",rolled}){
   const modelPct=Math.round((hero.modelProb||0)*100);
   const mktPct=Math.round((impliedFromAmerican(hero.odds)||0)*100);
   const pts=(series||[]).map(p=>p.o);
@@ -311,7 +315,7 @@ function Hero({hero,navigate,live,series,sport="mlb"}){
   const moved=hasChart&&pts[0]!==pts[pts.length-1];
   return (
     <div className="hero" onClick={()=>hero.gameId&&navigate(`/game/${sport}/${hero.gameId}`)}>
-      <div className="hh"><div className="eb">🔥 BEST EDGE RIGHT NOW</div><div className="hhr"><span className="hedge">{fmtEdgeFor(hero,sport)} <i>EDGE</i></span><span className="hot">🔥 HOT</span></div></div>
+      <div className="hh"><div className="eb">{rolled?"🔥 TOMORROW'S BEST EDGE":"🔥 BEST EDGE RIGHT NOW"}</div><div className="hhr"><span className="hedge">{fmtEdgeFor(hero,sport)} <i>EDGE</i></span><span className="hot">🔥 HOT</span></div></div>
       <div className="htop">
         <div className="hL"><div className="pk">{edgeLabel(hero)}</div><div className="pg">{hero.matchup}</div>
           <div className="ch">
@@ -357,7 +361,7 @@ function Gate({title,sub,kind,navigate}){
 }
 
 function LiveGameCard({g,info,navigate,locked}){
-  const a=info?.a||"AWY", h=info?.h||"HOM";
+  const a=g.awayAbbr||info?.a||shortTeam(g.away||"")||"AWY", h=g.homeAbbr||info?.h||shortTeam(g.home||"")||"HOM";
   const half=g.half==="bottom"?"Bot":"Top";
   const ml=(g.awayEdge??-9)>=(g.homeEdge??-9)
     ?{lbl:`${a} ML`,prob:g.awayWinProb,edge:g.awayEdge,odds:g.awayOdds}
