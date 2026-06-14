@@ -708,8 +708,12 @@ h2{font-size:clamp(22px,4.4vw,32px);font-weight:800;letter-spacing:-.01em;margin
 .shop .bk{font-size:13px;color:var(--t2)} .shop .bk.best{color:#fff;font-weight:700}
 .shop .pr{font-family:'Barlow Condensed';font-weight:700;font-size:15px;color:var(--t2)}
 .shop .pr.best{color:var(--green);background:rgba(29,158,117,.12);border-radius:5px;padding:1px 9px}
-.loop{display:flex;flex-direction:column;gap:9px;margin-top:14px;max-width:560px}
-.loop-step{display:flex;gap:11px;align-items:flex-start;padding:12px 13px;border-radius:13px;border:1px solid var(--line);background:rgba(255,255,255,.015)}
+.loop{display:flex;flex-direction:column;gap:12px;margin-top:16px;max-width:600px}
+.loop-step{width:87%;display:flex;gap:11px;align-items:flex-start;padding:13px 14px;border-radius:14px;border:1px solid var(--line);background:rgba(255,255,255,.02);transition:transform .2s}
+.loop-step:nth-child(1){align-self:flex-start}
+.loop-step:nth-child(2){align-self:flex-end}
+.loop-step:nth-child(3){align-self:flex-start}
+.loop-step:hover{transform:translateY(-2px)}
 .loop-n{width:25px;height:25px;border-radius:7px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed';font-weight:800;font-size:15px;color:#04130d}
 .loop-t{font-size:13px;color:var(--t1);font-weight:600;line-height:1.45}
 .loop-t b{color:#fff;font-weight:800}
