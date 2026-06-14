@@ -161,13 +161,28 @@ async function getScores(league) {
     const edges = await fetchEdgesMLB();
     const idMap = buildIdMap(edges);
     const modelDateStr = edges && edges.date ? String(edges.date).replace(/-/g, "") : null;
+    const todayStr = espnDateStr(0);
 
-    if (modelDateStr) {
-      try {
-        games = attachDetailIds(league, await fetchScoreboardRaw(league, modelDateStr), idMap);
-      } catch (_) { games = []; }
-      rolled = modelDateStr !== espnDateStr(0);
+    // ALWAYS pull TODAY's scoreboard so LIVE and FINAL games keep showing on the
+    // Games page, even after the model's PRE-GAME board has rolled forward to
+    // tomorrow. (The model rolls once today's games have all started; without
+    // this, the scores list followed the model to tomorrow and dropped today's
+    // live/final games.) Cards whose model detailId is missing still navigate via
+    // their ESPN id, so links stay intact.
+    let todayGames = [];
+    try { todayGames = attachDetailIds(league, await fetchScoreboardRaw(league, todayStr), idMap); } catch (_) { todayGames = []; }
+
+    // When the model has rolled to a later day, pull that day too — that's where
+    // the UPCOMING games come from. (Same day as today → nothing extra to merge.)
+    let modelGames = [];
+    if (modelDateStr && modelDateStr !== todayStr) {
+      try { modelGames = attachDetailIds(league, await fetchScoreboardRaw(league, modelDateStr), idMap); } catch (_) { modelGames = []; }
     }
+
+    // Merge: today's live/final/scheduled + the rolled day's scheduled (deduped).
+    const seen = new Set(todayGames.map((g) => g.id));
+    games = [...todayGames, ...modelGames.filter((g) => !seen.has(g.id))];
+    rolled = !!(modelDateStr && modelDateStr !== todayStr);
 
     // Fallback (no model date, or ESPN had nothing for that day): default day,
     // then step forward from TODAY until we find a playable slate.
