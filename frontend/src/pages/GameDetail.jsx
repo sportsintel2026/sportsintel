@@ -290,13 +290,24 @@ function HeadToHeadSection({ gameId }) {
         <div>
           <div style={{ fontSize: 10, letterSpacing: "0.08em", color: "#6b7280", fontWeight: 600, textTransform: "uppercase", marginBottom: 8 }}>Recent meetings</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {h2h.recent.map((m, i) => (
-              <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 10, alignItems: "center", padding: "8px 10px", background: "#0a0e14", borderRadius: 4 }}>
-                <div style={{ fontSize: 11, color: "#9ca3af" }}>{fmtMeetingDate(m.date)}</div>
-                <div style={{ fontSize: 12, fontWeight: 600, color: "#e4e7eb", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{m.away} {m.score} {m.home}</div>
-                <div style={{ fontSize: 11, color: "#22c55e", textAlign: "right" }}>{m.winner ? `${m.winner} won` : ""}</div>
-              </div>
-            ))}
+            {h2h.recent.map((m, i) => {
+              const parts = String(m.score || "").split(/[-–—]/);
+              const aS = (parts[0] || "").trim();
+              const hS = (parts[1] || "").trim();
+              const awayWon = m.winner && m.winner === m.away;
+              const homeWon = m.winner && m.winner === m.home;
+              return (
+                <div key={i} style={{ display: "grid", gridTemplateColumns: "auto 1fr auto", gap: 10, alignItems: "center", padding: "10px 12px", background: "#0a0e14", borderRadius: 6 }}>
+                  <div style={{ fontSize: 11, color: "#9ca3af", whiteSpace: "nowrap" }}>{fmtMeetingDate(m.date)}</div>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
+                    <span style={{ fontSize: 13, fontWeight: awayWon ? 800 : 600, color: awayWon ? "#22c55e" : "#9ca3af" }}>{m.away} {aS}</span>
+                    <span style={{ fontSize: 11, color: "#4b5563" }}>–</span>
+                    <span style={{ fontSize: 13, fontWeight: homeWon ? 800 : 600, color: homeWon ? "#22c55e" : "#9ca3af" }}>{hS} {m.home}</span>
+                  </div>
+                  <div style={{ fontSize: 10, color: "#6b7280", textAlign: "right", whiteSpace: "nowrap" }}>{m.winner ? `${m.winner} won` : "—"}</div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -1019,18 +1030,18 @@ function PitcherCard({ pitcher, label, compare, hasFullAccess, navigate }) {
     <div style={{ background: "#0a0e14", border: "1px solid #1f2937", borderRadius: 8, padding: 8, textAlign: "center", minWidth: 0, overflow: "hidden" }}>
       <div style={{ fontSize: 10, color: "#6b7280", letterSpacing: "0.08em", marginBottom: 10, fontWeight: 600 }}>{label}</div>
       {/* headshot on top (ESPN game-card style) — compact */}
-      <div style={{ width: 40, height: 40, margin: "0 auto 6px", borderRadius: "50%", overflow: "hidden", background: "#0f1419", border: "2px solid #1f2937", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ width: 72, height: 72, margin: "0 auto 8px", borderRadius: "50%", overflow: "hidden", background: "#0f1419", border: "2px solid #1f2937", display: "flex", alignItems: "center", justifyContent: "center" }}>
         {photo && imgOk ? (
           <img
             src={photo}
             alt={pitcher.name}
-            width={40}
-            height={40}
+            width={72}
+            height={72}
             style={{ objectFit: "cover", objectPosition: "top center" }}
             onError={() => setImgOk(false)}
           />
         ) : (
-          <span style={{ fontSize: 16 }}>⚾</span>
+          <span style={{ fontSize: 28 }}>⚾</span>
         )}
       </div>
       <div style={{ fontSize: 15, fontWeight: 700, color: "#fff" }}>{pitcher.name}</div>
