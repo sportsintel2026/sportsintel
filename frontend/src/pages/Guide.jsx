@@ -60,7 +60,7 @@ export default function GuidePage() {
       <div className="main-content" style={{ marginLeft: 200 }}>
         <div style={{ maxWidth: 760, margin: "0 auto", padding: "32px 24px 80px", animation: "fadeIn .3s ease" }}>
 
-          <button onClick={() => navigate("/dashboard")} style={{ background: "transparent", border: "1px solid #1f2937", color: "#9ca3af", fontSize: 13, fontWeight: 600, padding: "7px 14px", borderRadius: 8, cursor: "pointer", marginBottom: 20, fontFamily: "inherit" }}>← Back to Edges</button>
+          <button onClick={() => navigate("/home")} style={{ background: "transparent", border: "1px solid #1f2937", color: "#9ca3af", fontSize: 13, fontWeight: 600, padding: "7px 14px", borderRadius: 8, cursor: "pointer", marginBottom: 20, fontFamily: "inherit" }}>← Back to Edges</button>
 
           {/* Header */}
           <h1 style={{ margin: "0 0 8px", fontSize: 28, fontWeight: 800, letterSpacing: "-0.01em" }}>How WizePicks Works</h1>
