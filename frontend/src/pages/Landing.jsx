@@ -304,7 +304,7 @@ export default function LandingPage(){
                 <span className="eb-s">The model, the edge, and a guide to bet smarter.</span>
               </span>
             </div>
-            <h1>Bet smarter,<br/>not <span style={{color:"#ef4444"}}>harder.</span></h1>
+            <h1>Bet smarter,<br/>not <span className="hl-r">harder.</span></h1>
             <p className="lede">A real model versus the live market — every game, every book, one screen.</p>
             <p className="sub">We find where our projections disagree with the price the books are offering, and show you the reasoning. No locks, no hype — just the edge.</p>
             <div className="cta-row">
@@ -344,11 +344,10 @@ export default function LandingPage(){
               </div>
               <div className="spot-note">Illustrative example — not a live pick</div>
             </div>}
-            <div className="hero-rail">
-              <div className="hero-stack">
-                {spotItems.slice(0,5).map((p,i)=><span key={i} style={{background:p.ring||"#3a4a57"}}>{initials(p.nm)}</span>)}
-              </div>
-              <div className="hero-railt"><b>Stars across every league</b> — props priced daily. <span className="ex">Examples shown.</span></div>
+            <div className="hero-scan">
+              <div className="hs-pulse"><i/><i/><i/><i/><i/></div>
+              <div className="hs-txt"><b>Scanning 12 books</b> across every game — finding edges as the lines move.</div>
+              <span className="hs-live"><span className="hs-dot"/>LIVE</span>
             </div>
           </div>
         </section>
@@ -407,16 +406,18 @@ export default function LandingPage(){
               </div>}
 
               <div className="rowlab">Today's edge board · live</div>
-              <div>
-                {tickerRows.map((r,i)=>{ const k=r.gameId+r.side; const fl=flash[k];
+              <div className={"eb-scroll"+(tickerRows.length>=4?" on":"")}>
+                <div className="eb-track">
+                {[...tickerRows,...tickerRows].map((r,idx)=>{ const k=r.gameId+r.side; const fl=flash[k];
                   return (
-                  <div className="erow" key={k}>
+                  <div className="erow" key={k+"-"+idx}>
                     <TeamLogo ab={r.teamAbbr||shortTeam(r.matchup)} col={teamCol(r.teamAbbr||shortTeam(r.matchup))}/>
                     <div className="ename"><div className="t">{edgeLabel(r)}</div><div className="m">{muFor(r)}</div></div>
                     <div className={"eodds"+(fl==="up"?" flash-up":fl==="dn"?" flash-dn":"")}>{fmtOdds(r.odds)}</div>
                     <div className={"eedge "+((r.edge??0)>=0?"pos":"neg")}>{pct1(r.edge)}</div>
                   </div>);
                 })}
+                </div>
               </div>
 
               {lockedCount>0 &&
@@ -462,14 +463,10 @@ export default function LandingPage(){
 
       <div className="wrap">
         <section className="sec">
-          <div className="kick" style={{color:"var(--t3)"}}>More in every account</div>
-          <h2 style={{fontSize:22,marginBottom:6}}>Two extras you won't find everywhere.</h2>
-          <p className="feat-note"><b>WizePlays</b> — our analysts' handpicked plays. A tight, conviction-ranked shortlist each week, tracked openly so you can see exactly how they land. <b>Quick Spin</b> — a fast, just-for-fun way to surface a model-qualified play when you can't decide. Spin it and go.</p>
-          <div className="feat2grid">
-            <LiveScores/>
-            <QuickSpin/>
-          </div>
-          <div style={{marginTop:16}}><WizePlays/></div>
+          <div className="kick" style={{color:"var(--t3)"}}>Live in every account</div>
+          <h2 style={{fontSize:22,marginBottom:6}}>Every game, every league — live.</h2>
+          <p className="feat-note">Follow <b>real-time scores</b> across MLB, NBA, NFL, CFB and NHL right next to the model — the moment a game turns, you see it. No tab-hopping, no stale numbers.</p>
+          <div style={{marginTop:8}}><LiveScores/></div>
         </section>
       </div>
 
@@ -483,13 +480,14 @@ export default function LandingPage(){
         </section>
 
         <section className="finalcta">
-          <div className="kick red" style={{justifyContent:"center"}}>Ready when you are</div>
-          <h2>Your edge on every game.</h2>
-          <p style={{margin:"0 auto"}}>Free to start. No card. Cancel anytime.</p>
-          <div className="cta-row" style={{justifyContent:"center",marginTop:20}}>
-            <Link className="btn btn-hero" to="/signup">Start free →</Link>
+          <div className="lights" aria-hidden="true"><span/><span/><span/></div>
+          <div className="fin-in">
+            <h2 className="fin-h">Your edge <span style={{color:"var(--green)"}}>never</span><br/>goes off season.</h2>
+            <div className="fin-leagues"><span>⚾ MLB</span><span>🏀 NBA</span><span>🏈 NFL</span><span>🏈 CFB</span><span>🏀 NHL</span></div>
+            <Link className="btn fin-go" to="/signup">Start free →</Link>
+            <div className="fin-checks"><span>✓ Free to start</span><span>✓ No card</span><span>✓ Cancel anytime</span></div>
+            <div className="sm">Bet smarter. Bet Wize.</div>
           </div>
-          <div className="sm">Bet smarter. Bet Wize.</div>
         </section>
       </div>
 
@@ -561,6 +559,33 @@ h1{font-size:clamp(34px,7vw,56px);font-weight:900;line-height:1.04;letter-spacin
 .hero-stack span:first-child{margin-left:0}
 .hero-railt{font-size:11.5px;color:var(--t2);font-weight:600;line-height:1.4}
 .hero-railt b{color:#fff;font-weight:800}.hero-railt .ex{color:var(--t3)}
+.hero-scan{display:flex;align-items:center;gap:11px;margin-top:14px;padding:12px 13px;border:1px solid var(--line);border-radius:13px;background:linear-gradient(90deg,rgba(51,233,145,.05),rgba(255,255,255,.012));position:relative;overflow:hidden}
+.hero-scan::after{content:"";position:absolute;top:0;left:-45%;width:45%;height:100%;background:linear-gradient(90deg,transparent,rgba(51,233,145,.07),transparent);animation:scan 3s linear infinite}
+.hs-pulse{display:flex;align-items:flex-end;gap:3px;height:24px;flex:0 0 auto;position:relative;z-index:1}
+.hs-pulse i{width:4px;border-radius:2px;background:linear-gradient(var(--green),var(--teal));transform-origin:bottom;animation:eq 1.1s ease-in-out infinite}
+.hs-pulse i:nth-child(1){height:40%}
+.hs-pulse i:nth-child(2){height:80%;animation-delay:.15s}
+.hs-pulse i:nth-child(3){height:55%;animation-delay:.3s}
+.hs-pulse i:nth-child(4){height:95%;animation-delay:.45s}
+.hs-pulse i:nth-child(5){height:65%;animation-delay:.6s}
+@keyframes eq{0%,100%{transform:scaleY(.45)}50%{transform:scaleY(1)}}
+.hs-txt{flex:1;font-size:11.5px;color:var(--t2);font-weight:600;line-height:1.4;position:relative;z-index:1}
+.hs-txt b{color:#fff;font-weight:800}
+.hs-live{flex:0 0 auto;font-size:9px;font-weight:900;letter-spacing:.1em;color:var(--green);display:inline-flex;align-items:center;gap:5px;position:relative;z-index:1}
+.hs-dot{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 7px var(--green);animation:pulse 1.5s infinite}
+.hl-r{color:#ef4444;position:relative;display:inline-block}
+.hl-r::after{content:"";position:absolute;left:0;right:0;bottom:1px;height:3px;border-radius:2px;background:linear-gradient(90deg,#ef4444,#ff7a6c);transform:scaleX(0);transform-origin:left;animation:undsweep 3.4s ease infinite}
+@keyframes undsweep{0%,18%{transform:scaleX(0)}48%,68%{transform:scaleX(1)}100%{transform:scaleX(0)}}
+.btn-hero{animation:rpulse 2.8s ease-in-out infinite}
+@keyframes rpulse{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.4)}50%{box-shadow:0 0 22px 2px rgba(239,68,68,.32)}}
+.finalcta{position:relative;overflow:hidden}
+.fin-in{position:relative;z-index:1}
+.fin-h{font-size:clamp(26px,6vw,40px);font-weight:900;line-height:1.06;letter-spacing:-.02em;color:#fff;margin-bottom:14px}
+.fin-leagues{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;font-size:12px;color:var(--t2);font-weight:700;margin-bottom:18px}
+.fin-go{background:var(--green);color:#04130d;font-weight:800;font-size:15px;padding:14px 32px;border-radius:12px;box-shadow:0 0 24px rgba(51,233,145,.4);animation:gpulse 2.6s ease-in-out infinite}
+.fin-go:hover{background:#2bd47f;transform:translateY(-1px)}
+@keyframes gpulse{0%,100%{box-shadow:0 0 18px rgba(51,233,145,.35)}50%{box-shadow:0 0 32px 4px rgba(51,233,145,.5)}}
+.fin-checks{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;font-size:11px;color:var(--t2);font-weight:600;margin-top:16px}
 .sport-tabs{display:flex;gap:6px;max-width:1120px;margin:0 auto;padding:8px 20px 10px;overflow-x:auto;border-bottom:1px solid #11111e}
 .sport-tabs .st{flex:0 0 auto;font-size:12px;font-weight:700;color:var(--t2);padding:6px 12px;border-radius:9px;border:1px solid transparent;white-space:nowrap}
 .sport-tabs .st.on{color:#fff;background:rgba(51,233,145,.08);border-color:rgba(51,233,145,.3)}
@@ -609,6 +634,11 @@ h1{font-size:clamp(34px,7vw,56px);font-weight:900;line-height:1.04;letter-spacin
 .feat-edge .e{font-size:9px;font-style:normal;color:#8fd9c2;font-weight:800;display:block;letter-spacing:.08em}
 .spark{width:100%;height:34px;margin-top:9px;display:block}
 .rowlab{font-size:9.5px;letter-spacing:.1em;font-weight:800;color:var(--t3);margin:4px 2px 8px;text-transform:uppercase}
+.eb-scroll{position:relative}
+.eb-scroll.on{max-height:228px;overflow:hidden;-webkit-mask-image:linear-gradient(180deg,transparent,#000 11%,#000 89%,transparent);mask-image:linear-gradient(180deg,transparent,#000 11%,#000 89%,transparent)}
+.eb-scroll.on .eb-track{animation:ebscroll 15s linear infinite}
+.eb-scroll.on:hover .eb-track{animation-play-state:paused}
+@keyframes ebscroll{0%{transform:translateY(0)}100%{transform:translateY(-50%)}}
 .erow{display:flex;align-items:center;gap:11px;padding:9px 10px;border-radius:11px;background:rgba(255,255,255,.012);margin-bottom:7px;border-left:2px solid transparent;transition:border-color .5s,background .5s}
 .erow:hover{background:rgba(155,123,255,.05)}
 .tcol{width:30px;height:30px;border-radius:50%;flex:0 0 auto;display:flex;align-items:center;justify-content:center;
