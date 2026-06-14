@@ -82,6 +82,7 @@ export default function HomePage(){
   const hasFull=plan.isAdmin===true||plan.tier==="pro"||plan.tier==="elite"||user?.email==="r7002g@gmail.com";
   const sp=SPORTS[sport]||SPORTS.mlb;
   const [isDesktop,setIsDesktop]=useState(typeof window!=="undefined"&&window.innerWidth>=1024);
+  const [heroIdx,setHeroIdx]=useState(0);
   useEffect(()=>{ const on=()=>setIsDesktop(window.innerWidth>=1024); window.addEventListener("resize",on); return ()=>window.removeEventListener("resize",on); },[]);
 
   useEffect(()=>{ subscriptionApi.getMyPlan().then(setPlan).catch(()=>{}).finally(()=>setPlanLoaded(true)); },[]);
@@ -114,6 +115,7 @@ export default function HomePage(){
   const pool=[...(e.moneylineEdges||[]),...(e.totalsEdges||[]),...(e.spreadEdges||[])].filter(x=>x.convictionScore!=null&&(x.conviction==="HIGH"||x.conviction==="MEDIUM")&&(x.edge??0)>0);
   pool.sort((a,b)=>(b.convictionScore-a.convictionScore)||((b.edge??0)-(a.edge??0)));
   const hero=pool[0]||null;
+  const topHeroes=pool.slice(0,5);
   const boardArr=board==="ml"?e.moneylineEdges:board==="spread"?e.spreadEdges:e.totalsEdges;
   const boardEdges=oneSidePerGame(boardArr||[]).filter(x=>sport==="mlb"?(x.edge??0)>0:(x.edge??0)>=1).sort((a,b)=>((b.convictionScore||0)-(a.convictionScore||0))||((b.edge||0)-(a.edge||0)));
   const moverPool=[...(e.moneylineEdges||[]),...(e.totalsEdges||[]),...(e.spreadEdges||[])].map(x=>{ const ser=seriesFor(x); const open=(ser&&ser.length)?ser[0].o:null; const now=(ser&&ser.length)?ser[ser.length-1].o:x.odds; const delta=(open!=null&&ser&&ser.length>1)?(amCents(now)-amCents(open)):null; return {...x,_open:open,_now:now,_delta:delta}; });
@@ -170,7 +172,18 @@ export default function HomePage(){
       {/* HERO */}
       {!hasFull
         ? <div style={{margin:"11px 12px 0"}}><Gate kind="hero" title="Today's top edge is locked" sub={<>Unlock every edge with <b>All-Access · $7/mo</b></>} navigate={navigate}/></div>
-        : (hero?<Hero hero={hero} navigate={navigate} live={anyLive} series={seriesFor(hero)} sport={sport} rolled={e.rolledToNextDay}/>:<div className="hero empty">No qualifying edge on the board yet — check back closer to game time.</div>)}
+        : (topHeroes.length>0
+            ? <>
+                <div className="herocar" onScroll={(ev)=>{const w=ev.currentTarget.clientWidth||1; setHeroIdx(Math.round(ev.currentTarget.scrollLeft/w));}}>
+                  {topHeroes.map((h,i)=>(
+                    <div className="heroslide" key={(h.gameId||"")+(h.side||"")+i}>
+                      <Hero hero={h} navigate={navigate} live={anyLive} series={seriesFor(h)} sport={sport} rolled={e.rolledToNextDay}/>
+                    </div>
+                  ))}
+                </div>
+                {topHeroes.length>1&&<div className="herodots">{topHeroes.map((_,i)=><span key={i} className={"hd"+(i===heroIdx?" on":"")}/>)}</div>}
+              </>
+            : <div className="hero empty">No qualifying edge on the board yet — check back closer to game time.</div>)}
       <div className="cols">
 
       {/* LIVE EDGES — in-game model edges, pulled from /api/live/mlb (moved off the game page) */}
@@ -499,6 +512,12 @@ section{padding:13px 12px 2px;margin:0;border-top:1px solid #161d24}
 .seg{display:flex;gap:2px;background:#0a0f13;border:1px solid #161e26;border-radius:8px;padding:2px}.seg b{color:#8a99a2;font-weight:800;font-size:11px;padding:4px 10px;border-radius:6px}.seg b.on{background:#141d24;color:#fff;box-shadow:inset 0 0 0 1px #ff5d4d}
 .muted,.note,.pn{color:#54616b;font-size:11px;font-weight:600}.note,.pn{margin-top:7px;line-height:1.35}
 .hero{border:1px solid rgba(243,185,79,.32);border-radius:14px;background:linear-gradient(180deg,#14110a,#06090b);overflow:hidden;margin:11px 12px 0}
+.herocar{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.herocar::-webkit-scrollbar{display:none}
+.heroslide{flex:0 0 100%;scroll-snap-align:start;box-sizing:border-box}
+.herodots{display:flex;gap:6px;justify-content:center;margin-top:9px}
+.herodots .hd{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.22);transition:all .2s}
+.herodots .hd.on{background:#f3b94f;width:18px;border-radius:3px}
 .hero.empty{padding:18px;color:#8a99a2;font-size:13px;font-weight:600}
 .hh{display:flex;align-items:center;justify-content:space-between;padding:11px 13px 2px}.hhr{display:flex;align-items:center;gap:7px;flex:0 0 auto}.hedge{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:15px;color:#33e991;background:rgba(51,233,145,.1);border:1px solid rgba(51,233,145,.38);border-radius:8px;padding:3px 9px;display:inline-flex;align-items:center;gap:4px;line-height:1}.hedge i{font-style:normal;font-size:8px;color:#8fd9c2;font-weight:800}
 .eb{font-size:11px;font-weight:800;color:#f3b94f}.hot{border:1px solid rgba(243,185,79,.35);border-radius:999px;padding:2px 8px;font-size:10px;font-weight:800;color:#f3b94f;background:rgba(243,185,79,.08)}
