@@ -690,4 +690,70 @@ router.get("/odds-history/mlb", async (req, res) => {
   }
 });
 
+// ── Data health check ─────────────────────────────────────────────────────────
+// Read-only. Unlike /api/health (which only says "the process is up"), this says
+// "the data PIPELINES are actually producing fresh data." Point a second
+// UptimeRobot monitor at /api/edges/health-data; it returns HTTP 503 the moment
+// a pipeline goes stale, so you get an email instead of finding it days later.
+//
+//   • oddsTicks  — newest odds_ticks row must be recent during the capture
+//                  window (this is the exact signal that went dark this session).
+//   • edgeBoard  — resolveSlateDate + schedule fetch must run without erroring;
+//                  reports which slate is being served and the game count so the
+//                  board state is visible at a glance (does NOT hard-fail on a
+//                  legitimate no-games day — only on an actual pipeline error).
+const TICK_STALE_MIN = 45; // ~3 missed 15-min capture cycles before we alarm
+router.get("/health-data", async (req, res) => {
+  const checks = {};
+  let healthy = true;
+
+  // Are we inside the odds-tick capture window (11:00–02:59 ET)? Stale ticks
+  // outside the window are expected and must NOT trigger a false alarm.
+  const etHour = Number(
+    new Date().toLocaleString("en-US", { timeZone: "America/New_York", hour: "2-digit", hour12: false })
+  );
+  const inCaptureWindow = etHour >= 11 || etHour <= 2;
+
+  // 1) Odds-tick freshness.
+  try {
+    const { createClient } = require("@supabase/supabase-js");
+    const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+    const { data, error } = await sb
+      .from("odds_ticks")
+      .select("captured_at")
+      .order("captured_at", { ascending: false })
+      .limit(1);
+    if (error) throw new Error(error.message);
+    const newestMs = data && data[0] ? new Date(data[0].captured_at).getTime() : null;
+    const ageMin = newestMs != null ? Math.round((Date.now() - newestMs) / 60000) : null;
+    const stale = ageMin == null || ageMin > TICK_STALE_MIN;
+    const ok = !(inCaptureWindow && stale); // only a failure if stale DURING the window
+    checks.oddsTicks = {
+      ok,
+      newest: newestMs != null ? new Date(newestMs).toISOString() : null,
+      ageMinutes: ageMin,
+      inCaptureWindow,
+      staleThresholdMin: TICK_STALE_MIN,
+    };
+    if (!ok) healthy = false;
+  } catch (e) {
+    checks.oddsTicks = { ok: false, error: e.message };
+    healthy = false;
+  }
+
+  // 2) Edge-board pipeline. Hard-fail only if it ERRORS; a real no-games day
+  //    (e.g. All-Star break) legitimately returns 0 and must not alarm.
+  try {
+    const { date, rolled } = await resolveSlateDate();
+    const games = await getScheduleForDate(date);
+    const gameCount = Array.isArray(games) ? games.length : 0;
+    checks.edgeBoard = { ok: true, slateDate: date, rolledToTomorrow: rolled, gameCount };
+  } catch (e) {
+    checks.edgeBoard = { ok: false, error: e.message };
+    healthy = false;
+  }
+
+  res.status(healthy ? 200 : 503).json({ ok: healthy, checkedAt: new Date().toISOString(), checks });
+});
+
 module.exports = router;
