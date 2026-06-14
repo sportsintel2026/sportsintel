@@ -9,12 +9,43 @@ const supabase = createClient(
 const SR_KEY = process.env.SPORTRADAR_API_KEY;
 const SR_BASE = "https://api.sportradar.com";
 
-async function srGet(path) {
-  const res = await axios.get(`${SR_BASE}${path}`, {
-    params: { api_key: SR_KEY },
-    timeout: 10000,
-  });
-  return res.data;
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+// SportRadar standard keys throttle at ~1 request/sec. We fire schedule calls
+// back-to-back, so without spacing + retry the later leagues get 429'd and
+// silently fail — leaving the edge board and scores empty. This wrapper retries
+// on 429 and transient network/5xx errors with exponential backoff, honoring
+// SportRadar's Retry-After header when present.
+async function srGet(path, attempt = 0) {
+  const MAX_ATTEMPTS = 4;
+  try {
+    const res = await axios.get(`${SR_BASE}${path}`, {
+      params: { api_key: SR_KEY },
+      timeout: 10000,
+    });
+    return res.data;
+  } catch (err) {
+    const status = err.response?.status;
+    const transient =
+      status === 429 ||
+      (typeof status === "number" && status >= 500 && status <= 599) ||
+      err.code === "ECONNABORTED" ||
+      err.code === "ECONNRESET" ||
+      err.code === "ETIMEDOUT";
+    if (!transient || attempt >= MAX_ATTEMPTS - 1) throw err;
+
+    const retryAfter = parseInt(err.response?.headers?.["retry-after"], 10);
+    const backoff = Number.isFinite(retryAfter)
+      ? retryAfter * 1000
+      : Math.min(8000, 1500 * Math.pow(2, attempt)) + Math.floor(Math.random() * 400);
+    console.warn(
+      `[Sports] srGet ${status || err.code} on ${path} — retry ${attempt + 1}/${MAX_ATTEMPTS - 1} in ${backoff}ms`
+    );
+    await sleep(backoff);
+    return srGet(path, attempt + 1);
+  }
 }
 
 function parseMLBGame(g) {
@@ -270,7 +301,9 @@ async function refreshDailyGames() {
     {league:"mma",fn:fetchMMASchedule},
     {league:"golf",fn:fetchGolfSchedule},
   ];
-  for (const {league,fn} of fetchers) {
+  for (let i = 0; i < fetchers.length; i++) {
+    const { league, fn } = fetchers[i];
+    if (i > 0) await sleep(1200); // stay under SportRadar's ~1 req/sec ceiling
     try {
       const games = await fn();
       await cacheGames(league, today, games);
