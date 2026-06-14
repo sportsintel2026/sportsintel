@@ -1,17 +1,21 @@
 import { Link } from "react-router-dom";
 
+/* headshot sources (graceful fallback to initials on error) */
+const MLB_HEAD=(id)=>`https://midfield.mlbstatic.com/v1/people/${id}/spots/120`;
+const ESPN_HEAD=(sport,id)=>`https://a.espncdn.com/i/headshots/${sport}/players/full/${id}.png`;
+
 /* illustrative prop examples for the auto-scrolling banner — NOT live picks.
    NFL entries are marked soon:true until football props are wired in. */
 const PROPS_EX = [
-  {sp:"⚾ MLB", ini:"AJ", ring:"#3A4F73", nm:"Aaron Judge",    mu:"NYY vs BOS", tag:"HOME RUNS",  tc:"#F5A524", tb:"rgba(245,165,36,.1)",  td:"rgba(245,165,36,.28)",  prop:"O 0.5 HR",   odds:"+265", edge:"+6.2%"},
-  {sp:"⚾ MLB", ini:"SO", ring:"#3E7DC4", nm:"Shohei Ohtani",  mu:"LAD vs SD",  tag:"HITS",       tc:"#38E1A0", tb:"rgba(56,225,160,.1)",  td:"rgba(56,225,160,.28)",  prop:"O 1.5 Hits", odds:"+135", edge:"+5.5%"},
-  {sp:"⚾ MLB", ini:"TS", ring:"#FA4616", nm:"Tarik Skubal",   mu:"DET vs CLE", tag:"STRIKEOUTS", tc:"#7fd0ff", tb:"rgba(120,200,255,.1)", td:"rgba(120,200,255,.28)", prop:"O 7.5 K",    odds:"-120", edge:"+4.4%"},
-  {sp:"🏀 NBA", ini:"NJ", ring:"#0E2240", nm:"Nikola Jokić",   mu:"DEN vs MIN", tag:"POINTS",     tc:"#9b7bff", tb:"rgba(155,123,255,.1)", td:"rgba(155,123,255,.28)", prop:"O 25.5 Pts", odds:"-115", edge:"+4.8%"},
-  {sp:"🏀 NBA", ini:"LD", ring:"#00538C", nm:"Luka Dončić",    mu:"DAL vs PHX", tag:"ASSISTS",    tc:"#9b7bff", tb:"rgba(155,123,255,.1)", td:"rgba(155,123,255,.28)", prop:"O 8.5 Ast",  odds:"-110", edge:"+3.9%"},
-  {sp:"🏀 NBA", ini:"SC", ring:"#1D428A", nm:"Stephen Curry",  mu:"GSW vs LAL", tag:"THREES",     tc:"#38E1A0", tb:"rgba(56,225,160,.1)",  td:"rgba(56,225,160,.28)",  prop:"O 4.5 3PM",  odds:"+105", edge:"+5.1%"},
-  {sp:"🏈 NFL", ini:"PM", ring:"#E31837", nm:"Patrick Mahomes",mu:"KC vs BUF",  tag:"PASS YDS",   tc:"#F5A524", tb:"rgba(245,165,36,.1)",  td:"rgba(245,165,36,.28)",  prop:"O 274.5",    odds:"-112", edge:"+4.2%", soon:true},
-  {sp:"🏈 NFL", ini:"CM", ring:"#AA0000", nm:"C. McCaffrey",   mu:"SF vs SEA",  tag:"RUSH YDS",   tc:"#ff9e6b", tb:"rgba(255,140,80,.1)",  td:"rgba(255,140,80,.28)",  prop:"O 89.5",     odds:"-115", edge:"+3.7%", soon:true},
-  {sp:"🏈 NFL", ini:"TH", ring:"#008E97", nm:"Tyreek Hill",    mu:"MIA vs NYJ", tag:"ANYTIME TD", tc:"#38E1A0", tb:"rgba(56,225,160,.1)",  td:"rgba(56,225,160,.28)",  prop:"Anytime TD", odds:"+135", edge:"+4.6%", soon:true},
+  {sp:"⚾ MLB", ini:"AJ", img:MLB_HEAD(592450),  ring:"#3A4F73", nm:"Aaron Judge",    mu:"NYY vs BOS", tag:"HOME RUNS",  tc:"#F5A524", tb:"rgba(245,165,36,.1)",  td:"rgba(245,165,36,.28)",  prop:"O 0.5 HR",   odds:"+265", edge:"+6.2%"},
+  {sp:"⚾ MLB", ini:"SO", img:MLB_HEAD(660271),  ring:"#3E7DC4", nm:"Shohei Ohtani",  mu:"LAD vs SD",  tag:"HITS",       tc:"#38E1A0", tb:"rgba(56,225,160,.1)",  td:"rgba(56,225,160,.28)",  prop:"O 1.5 Hits", odds:"+135", edge:"+5.5%"},
+  {sp:"⚾ MLB", ini:"TS", img:MLB_HEAD(669373),  ring:"#FA4616", nm:"Tarik Skubal",   mu:"DET vs CLE", tag:"STRIKEOUTS", tc:"#7fd0ff", tb:"rgba(120,200,255,.1)", td:"rgba(120,200,255,.28)", prop:"O 7.5 K",    odds:"-120", edge:"+4.4%"},
+  {sp:"🏀 NBA", ini:"NJ", img:ESPN_HEAD("nba",3112335), ring:"#0E2240", nm:"Nikola Jokić",   mu:"DEN vs MIN", tag:"POINTS",     tc:"#9b7bff", tb:"rgba(155,123,255,.1)", td:"rgba(155,123,255,.28)", prop:"O 25.5 Pts", odds:"-115", edge:"+4.8%"},
+  {sp:"🏀 NBA", ini:"LD", img:ESPN_HEAD("nba",3945274), ring:"#00538C", nm:"Luka Dončić",    mu:"DAL vs PHX", tag:"ASSISTS",    tc:"#9b7bff", tb:"rgba(155,123,255,.1)", td:"rgba(155,123,255,.28)", prop:"O 8.5 Ast",  odds:"-110", edge:"+3.9%"},
+  {sp:"🏀 NBA", ini:"SC", img:ESPN_HEAD("nba",3975),    ring:"#1D428A", nm:"Stephen Curry",  mu:"GSW vs LAL", tag:"THREES",     tc:"#38E1A0", tb:"rgba(56,225,160,.1)",  td:"rgba(56,225,160,.28)",  prop:"O 4.5 3PM",  odds:"+105", edge:"+5.1%"},
+  {sp:"🏈 NFL", ini:"PM", img:ESPN_HEAD("nfl",3139477), ring:"#E31837", nm:"Patrick Mahomes",mu:"KC vs BUF",  tag:"PASS YDS",   tc:"#F5A524", tb:"rgba(245,165,36,.1)",  td:"rgba(245,165,36,.28)",  prop:"O 274.5",    odds:"-112", edge:"+4.2%", soon:true},
+  {sp:"🏈 NFL", ini:"CM", img:ESPN_HEAD("nfl",3117251), ring:"#AA0000", nm:"C. McCaffrey",   mu:"SF vs SEA",  tag:"RUSH YDS",   tc:"#ff9e6b", tb:"rgba(255,140,80,.1)",  td:"rgba(255,140,80,.28)",  prop:"O 89.5",     odds:"-115", edge:"+3.7%", soon:true},
+  {sp:"🏈 NFL", ini:"TH", img:ESPN_HEAD("nfl",3116406), ring:"#008E97", nm:"Tyreek Hill",    mu:"MIA vs NYJ", tag:"ANYTIME TD", tc:"#38E1A0", tb:"rgba(56,225,160,.1)",  td:"rgba(56,225,160,.28)",  prop:"Anytime TD", odds:"+135", edge:"+4.6%", soon:true},
 ];
 
 
@@ -148,7 +152,10 @@ export default function LandingPage(){
                 <div className="pcard" key={i}>
                   {p.soon && <span className="pc-soon">soon</span>}
                   <div className="pc-top">
-                    <div className="pc-av" style={{boxShadow:`0 0 0 2px ${p.ring}`}}>{p.ini}</div>
+                    <div className="pc-av" style={{boxShadow:`0 0 0 2px ${p.ring}`}}>
+                      {p.ini}
+                      {p.img && <img src={p.img} alt="" loading="lazy" onError={(e)=>{e.currentTarget.style.display="none";}}/>}
+                    </div>
                     <div><div className="pc-sport">{p.sp}</div><div className="pc-nm">{p.nm}</div><div className="pc-mu">{p.mu}</div></div>
                   </div>
                   <span className="pc-tag" style={{color:p.tc,background:p.tb,border:`1px solid ${p.td}`}}>{p.tag}</span>
@@ -357,7 +364,8 @@ const CSS = `
 @media(prefers-reduced-motion:reduce){.lpwrap .track{animation:none}}
 .lpwrap .pcard{flex:0 0 220px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:15px;padding:14px;text-align:left}
 .lpwrap .pc-top{display:flex;align-items:center;gap:10px;margin-bottom:11px}
-.lpwrap .pc-av{width:38px;height:38px;border-radius:50%;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-family:var(--disp);font-weight:700;font-size:12px;color:#fff;background:#1a2b24}
+.lpwrap .pc-av{position:relative;overflow:hidden;width:38px;height:38px;border-radius:50%;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-family:var(--disp);font-weight:700;font-size:12px;color:#fff;background:#1a2b24}
+.lpwrap .pc-av img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%}
 .lpwrap .pc-sport{font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;color:#7F9C90}
 .lpwrap .pc-nm{font-family:var(--disp);font-weight:600;font-size:14px;line-height:1.15}
 .lpwrap .pc-mu{font-family:var(--mono);font-size:9.5px;color:#7F9C90;margin-top:1px}
