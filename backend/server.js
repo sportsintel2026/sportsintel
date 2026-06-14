@@ -122,12 +122,6 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
-// TEMPORARY: Sentry verification route. Hit this once in the browser to confirm
-// errors reach Sentry, then it can be removed.
-app.get("/api/__sentry_test__", (req, res) => {
-  throw new Error("WizePicks Sentry test error — safe to ignore");
-});
-
 // ── Scheduled Jobs ────────────────────────────────────────────────────────────
 // Refresh game data every 5 minutes during peak hours (noon–midnight ET)
 cron.schedule("*/5 12-23 * * *", async () => {
@@ -150,85 +144,4 @@ cron.schedule("0 8 * * *", async () => {
   }
 }, { timezone: "America/New_York" });
 
-// Capture CLOSING LINES every 30 min during game hours (noon–2am ET). Each run
-// snapshots the closing price for any pending MLB ML/totals pick whose game has
-// just started, then computes CLV. One odds fetch per run (~2 credits) covers
-// all of today's games, so this is cheap on the API budget.
-cron.schedule("*/15 11-23,0-2 * * *", async () => {
-  console.log("[CRON] Capturing closing lines (CLV)...");
-  let clvOk = true;
-  try {
-    await captureClosingLines();
-  } catch (err) {
-    clvOk = false;
-    console.error("[CRON] Closing-line capture failed:", err.message);
-  }
-  try {
-    await captureNbaClosingLines();
-  } catch (err) {
-    clvOk = false;
-    console.error("[CRON] NBA closing-line capture failed:", err.message);
-  }
-  pingHC(process.env.HC_PING_CLV, clvOk);
-}, { timezone: "America/New_York" });
-
-// Snapshot every MLB ML/total price every 15 min during game hours → powers the
-// Home line-movement chart + real Market Movers. Cache-respecting fetch (shares
-// the 30-min odds cache), so it adds ~no extra API credits, and runs all day.
-cron.schedule("*/15 11-23,0-2 * * *", async () => {
-  try {
-    await captureOddsTicks();
-  } catch (err) {
-    console.error("[CRON] Odds tick capture failed:", err.message);
-  }
-}, { timezone: "America/New_York" });
-
-// Grade finished-game predictions — runs hourly, and a final sweep at 3am ET
-cron.schedule("0 * * * *", async () => {
-  console.log("[CRON] Grading finished-game predictions...");
-  try {
-    await gradeFinishedGames();
-    await gradeExpertPicks({ dryRun: false });
-    await gradeDailyCard();
-    console.log("[CRON] Expert picks graded.");
-    pingHC(process.env.HC_PING_GRADE, true);
-  } catch (err) {
-    console.error("[CRON] Grading failed:", err.message);
-    pingHC(process.env.HC_PING_GRADE, false);
-  }
-}, { timezone: "America/New_York" });
-
-// ── Sentry Express error handler — must come AFTER routes, BEFORE our handler ───
-if (process.env.SENTRY_DSN) {
-  Sentry.setupExpressErrorHandler(app);
-}
-
-// ── Error handler ─────────────────────────────────────────────────────────────
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  // Explicitly report server errors to Sentry (guaranteed capture, no-op without DSN)
-  if (process.env.SENTRY_DSN && (err.status || 500) >= 500) {
-    Sentry.captureException(err);
-  }
-  res.status(err.status || 500).json({
-    error: err.message || "Internal server error",
-  });
-});
-
-app.listen(PORT, () => {
-  console.log(`🚀 WizePicks API running on port ${PORT}`);
-});
-
-module.exports = app;
-
-// Clear cache endpoint
-app.delete('/api/cache', async (req, res) => {
-  try {
-    const { createClient } = require('@supabase/supabase-js');
-    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
-    await supabase.from('games_cache').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-    res.json({ success: true, message: 'Cache cleared' });
-  } catch(e) {
-    res.status(500).json({ error: e.message });
-  }
-});
+// Capture CLOSING LINES every 30 min
