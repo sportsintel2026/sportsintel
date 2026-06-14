@@ -513,11 +513,19 @@ export default function LandingPage(){
         <section className="finalcta">
           <div className="lights" aria-hidden="true"><span/><span/><span/></div>
           <div className="fin-in">
+            <div className="fin-panel">
+            <div className="fin-recap">
+              <div className="fin-tile"><div className="i">⚡</div><div className="t">Model edges</div><div className="d">Where the book is wrong — every game &amp; prop.</div></div>
+              <div className="fin-tile"><div className="i">🎯</div><div className="t">100s of props</div><div className="d">HRs, K's, points, TDs — ranked by conviction.</div></div>
+              <div className="fin-tile"><div className="i">💹</div><div className="t">12 books shopped</div><div className="d">Best price flagged on every single bet.</div></div>
+              <div className="fin-tile"><div className="i">📊</div><div className="t">Live scores</div><div className="d">Every league, updating in real time.</div></div>
+            </div>
             <h2 className="fin-h">Your edge <span style={{color:"var(--green)"}}>never</span><br/>goes off season.</h2>
             <div className="fin-leagues"><span>⚾ MLB</span><span>🏀 NBA</span><span>🏈 NFL</span><span>🏈 CFB</span><span>🏀 NHL</span></div>
             <Link className="btn fin-go" to="/signup">Start free →</Link>
             <div className="fin-checks"><span>✓ Free to start</span><span>✓ No card</span><span>✓ Cancel anytime</span></div>
             <div className="sm">Bet smarter. Bet Wize.</div>
+            </div>
           </div>
         </section>
       </div>
@@ -622,7 +630,18 @@ h1.rh{position:relative;min-height:118px}
 @keyframes rpulse{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.4)}50%{box-shadow:0 0 22px 2px rgba(239,68,68,.32)}}
 .finalcta{position:relative;overflow:hidden}
 .fin-in{position:relative;z-index:1}
-.fin-h{font-size:clamp(26px,6vw,40px);font-weight:900;line-height:1.06;letter-spacing:-.02em;color:#fff;margin-bottom:14px}
+.fin-h{font-size:clamp(28px,6vw,52px);font-weight:900;line-height:1.06;letter-spacing:-.02em;color:#fff;margin-bottom:14px}
+.fin-panel{position:relative;z-index:1}
+.fin-recap{display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:560px;margin:0 auto 28px;text-align:left}
+.fin-tile{border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.02);padding:15px 14px}
+.fin-tile .i{font-size:20px;margin-bottom:8px}
+.fin-tile .t{font-size:14px;font-weight:800;color:#fff;margin-bottom:4px}
+.fin-tile .d{font-size:11.5px;color:var(--t2);line-height:1.45}
+@media(min-width:880px){
+  .fin-panel{border:1px solid var(--line2);border-radius:26px;background:linear-gradient(180deg,rgba(22,19,46,.45),rgba(11,11,22,.2));padding:54px 44px;max-width:1200px;margin:0 auto}
+  .fin-recap{grid-template-columns:repeat(4,1fr);max-width:none;gap:16px;margin-bottom:38px}
+  .fin-tile{padding:18px 16px}
+}
 .fin-leagues{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;font-size:12px;color:var(--t2);font-weight:700;margin-bottom:18px}
 .fin-go{background:var(--green);color:#04130d;font-weight:800;font-size:15px;padding:14px 32px;border-radius:12px;box-shadow:0 0 24px rgba(51,233,145,.4);animation:gpulse 2.6s ease-in-out infinite}
 .fin-go:hover{background:#2bd47f;transform:translateY(-1px)}
