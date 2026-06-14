@@ -376,21 +376,25 @@ export default function LandingPage(){
       {/* MARKET PRICE — repositioned just above the live board */}
       <div className="wrap">
         <section className="sec">
-          <div className="kick teal">💹 Line shopping · every book, one screen</div>
-          <h2>Same bet. Better number. Every time.</h2>
-          <p>The exact same bet pays <strong>differently at every book</strong>. Take the wrong one and you've lost before the game starts — no bad beat, no variance, just money you handed back.</p>
-          <div className="leak">
-            <div className="leak-n">−$420</div>
-            <div className="leak-t"><b>A typical year</b> of taking "good enough" prices on $50 bets. The sharps shop every book — now you can too. <span style={{color:"var(--t3)"}}>Illustrative.</span></div>
-          </div>
-          <div className="shop">
-            <div className="h">Example · same bet, all 12 books</div>
-            <div className="b worst"><span><span className="shop-tag w">YOU'D OVERPAY</span><span className="bk">BetMGM</span></span><span className="pr worst">+108</span></div>
-            <div className="b"><span className="bk">DraftKings</span><span className="pr">+115</span></div>
-            <div className="b"><span className="bk">Caesars</span><span className="pr">+120</span></div>
-            <div className="b"><span><span className="shop-tag b">BEST 🏆</span><span className="bk best">FanDuel</span></span><span className="pr best">+130</span></div>
-            <div className="payoff"><div className="payoff-n">+$11</div><div className="payoff-t">more on a <b>$50 bet</b> — same exact wager, just the better book. Do that all season and it's hundreds.</div></div>
-            <div className="shop-mem"><b>Members get this on every bet</b> — all 12 books side by side, best price flagged, plus the model edges nobody else is showing you.</div>
+          <div className="mp-grid">
+           <div className="mp-left">
+            <div className="kick teal">💹 Line shopping · every book, one screen</div>
+            <h2>Same bet. Better number. Every time.</h2>
+            <p>The exact same bet pays <strong>differently at every book</strong>. Take the wrong one and you've lost before the game starts — no bad beat, no variance, just money you handed back.</p>
+            <div className="leak">
+              <div className="leak-n">−$420</div>
+              <div className="leak-t"><b>A typical year</b> of taking "good enough" prices on $50 bets. The sharps shop every book — now you can too. <span style={{color:"var(--t3)"}}>Illustrative.</span></div>
+            </div>
+           </div>
+            <div className="shop">
+              <div className="h">Example · same bet, all 12 books</div>
+              <div className="b worst"><span><span className="shop-tag w">YOU'D OVERPAY</span><span className="bk">BetMGM</span></span><span className="pr worst">+108</span></div>
+              <div className="b"><span className="bk">DraftKings</span><span className="pr">+115</span></div>
+              <div className="b"><span className="bk">Caesars</span><span className="pr">+120</span></div>
+              <div className="b"><span><span className="shop-tag b">BEST 🏆</span><span className="bk best">FanDuel</span></span><span className="pr best">+130</span></div>
+              <div className="payoff"><div className="payoff-n">+$11</div><div className="payoff-t">more on a <b>$50 bet</b> — same exact wager, just the better book. Do that all season and it's hundreds.</div></div>
+              <div className="shop-mem"><b>Members get this on every bet</b> — all 12 books side by side, best price flagged, plus the model edges nobody else is showing you.</div>
+            </div>
           </div>
         </section>
       </div>
@@ -756,6 +760,18 @@ h2{font-size:clamp(22px,4.4vw,32px);font-weight:800;letter-spacing:-.01em;margin
 .payoff-t b{color:#fff;font-weight:800}
 .shop-mem{font-size:11.5px;color:var(--t2);line-height:1.5;margin-top:11px;padding-top:11px;border-top:1px solid #16161f}
 .shop-mem b{color:#fff;font-weight:800}
+.mp-grid{display:flex;flex-direction:column;gap:0}
+@media(min-width:880px){
+  .loop{flex-direction:row;max-width:none;gap:14px;margin-top:22px}
+  .loop-step{width:auto;flex:1 1 0;flex-direction:column;padding:18px 17px}
+  .loop-step:nth-child(1),.loop-step:nth-child(2),.loop-step:nth-child(3){align-self:stretch}
+  .loop-n{margin-bottom:4px}
+  .loop-t{font-size:13.5px;line-height:1.5}
+  .mp-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:36px;align-items:center}
+  .mp-left{min-width:0}
+  .mp-left .leak{max-width:none}
+  .mp-grid .shop{max-width:none}
+}
 .finalcta{text-align:center;padding:56px 0 26px}
 .finalcta h2{margin-bottom:10px}
 .finalcta .sm{font-family:'Barlow Condensed';font-weight:800;font-size:20px;color:var(--teal);margin-top:16px;letter-spacing:-.01em}
