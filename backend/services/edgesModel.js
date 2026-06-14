@@ -193,6 +193,50 @@ function calculateMoneylineProjection(game, awayPitcher, homePitcher, awayTeamHi
 }
 
 // ── TOTALS MODEL ──────────────────────────────────────────────────────────────
+// Starter-depth-aware bullpen exposure + elite-starter run suppression.
+// Rationale (bettor logic): a worn-down bullpen can't inflate runs it never
+// pitches. When two aces are likely to go 6-7, the pen throws ~2 innings — so the
+// bullpen-quality term AND the fatigue bump scale by EXPECTED bullpen innings
+// (driven by starter quality), not a flat 3 IP. And genuinely elite starters
+// suppress runs MORE than the linear ERA term credits. Both are bounded and only
+// bite in strong-starter games, so average-starter totals (the profitable core)
+// are left alone. All tunable / reversible.
+const ACE_ERA_THRESHOLD = LEAGUE_AVG.era - 0.6; // only starters clearly better than league get extra credit
+const ACE_SUPPRESS_PER = 0.35;   // extra runs suppressed per run of ERA below the threshold
+const ACE_SUPPRESS_MAX = 0.6;    // hard cap on extra suppression per starter (runs)
+// Expected starter innings, anchored on the pitcher's REAL avg innings/start when
+// the sample is real (else ERA-derived). EXCEPTION (Roland's rule): a bad starter
+// — high ERA AND high WHIP — facing a strong-hitting lineup gets pulled EARLIER
+// than his season average, which hands more innings to the bullpen. That extra
+// bullpen exposure then amplifies the bullpen-quality + fatigue terms below, so a
+// worn/weak pen behind a bad starter vs good offense leans the total OVER.
+function expectedStarterIP(pitcher, oppTeamHit) {
+  let ip;
+  if (pitcher && pitcher.gamesStarted >= 3 && pitcher.inningsPitched > 0) {
+    ip = pitcher.inningsPitched / pitcher.gamesStarted;          // real avg IP/start
+  } else {
+    const era0 = effectiveERA(pitcher) ?? LEAGUE_AVG.era;
+    ip = DEFAULT_START_IP + (LEAGUE_AVG.era - era0) * 0.9;        // thin sample → ERA-derived
+  }
+  const era = effectiveERA(pitcher) ?? LEAGUE_AVG.era;
+  const whip = (pitcher && pitcher.whip != null) ? pitcher.whip : LEAGUE_RATE.whip;
+  const oppFactor = oppTeamHit?.ops ? (oppTeamHit.ops / LEAGUE_AVG.ops)
+    : ((oppTeamHit?.runsPerGame ?? LEAGUE_AVG.runsPerGame) / LEAGUE_AVG.runsPerGame);
+  // short hook only for a genuinely bad starter vs an above-average offense
+  if (era > LEAGUE_AVG.era + 0.5 && whip > LEAGUE_RATE.whip + 0.10 && oppFactor > 1.0) {
+    const hook = Math.min(1.3, (era - (LEAGUE_AVG.era + 0.5)) * 0.40 + (oppFactor - 1.0) * 3.0);
+    ip -= hook;
+  }
+  return Math.max(3.3, Math.min(7.2, ip));
+}
+function expectedBullpenIP(pitcher, oppTeamHit) {
+  return Math.max(1.5, Math.min(5.5, 9 - expectedStarterIP(pitcher, oppTeamHit)));
+}
+function aceSuppression(era) {
+  if (era == null || era >= ACE_ERA_THRESHOLD) return 0;
+  return -Math.min(ACE_SUPPRESS_MAX, (ACE_ERA_THRESHOLD - era) * ACE_SUPPRESS_PER);
+}
+
 function calculateTotalProjection(game, awayPitcher, homePitcher, awayTeamHit, homeTeamHit, weather, awayBullpen, homeBullpen, awayHandMult, homeHandMult, awayFatigue, homeFatigue) {
   // Offense scaled by handedness vs the opposing starter
   const awayRPG = (awayTeamHit?.runsPerGame ?? LEAGUE_AVG.runsPerGame) * (awayHandMult || 1.0);
@@ -201,7 +245,9 @@ function calculateTotalProjection(game, awayPitcher, homePitcher, awayTeamHit, h
 
   const awayPitcherERA = effectiveERA(awayPitcher) ?? LEAGUE_AVG.era;
   const homePitcherERA = effectiveERA(homePitcher) ?? LEAGUE_AVG.era;
-  const pitcherAdj = ((awayPitcherERA + homePitcherERA) / 2 - LEAGUE_AVG.era) * 0.40;
+  const linPitcherAdj = ((awayPitcherERA + homePitcherERA) / 2 - LEAGUE_AVG.era) * 0.40;
+  const aceAdj = aceSuppression(awayPitcherERA) + aceSuppression(homePitcherERA);
+  const pitcherAdj = linPitcherAdj + aceAdj;
 
   const parkAdj = (game.parkRunFactor - 1.0) * baseTotal;
 
@@ -213,15 +259,21 @@ function calculateTotalProjection(game, awayPitcher, homePitcher, awayTeamHit, h
     if (weather.tempEffect === "cold") weatherAdj -= 0.3;
   }
 
-  // Bullpen adjustment: both pens pitch ~3 innings/game. A good pen suppresses
+  // Bullpen adjustment: scale by EXPECTED bullpen innings (9 minus the starter's
+  // expected workload) instead of a flat 3 IP — an ace going deep means its pen
+  // barely pitches, so a good/bad pen moves the total less. A good pen suppresses
   // late runs; a bad pen inflates them. Compare each pen to league avg.
   let bullpenAdj = 0;
   const awayPenEra = awayBullpen?.era;
   const homePenEra = homeBullpen?.era;
-  if (awayPenEra) bullpenAdj += ((awayPenEra - LEAGUE_AVG.bullpenEra) / 9) * 3.0;
-  if (homePenEra) bullpenAdj += ((homePenEra - LEAGUE_AVG.bullpenEra) / 9) * 3.0;
+  const awayPenIP = expectedBullpenIP(awayPitcher, homeTeamHit);
+  const homePenIP = expectedBullpenIP(homePitcher, awayTeamHit);
+  if (awayPenEra) bullpenAdj += ((awayPenEra - LEAGUE_AVG.bullpenEra) / 9) * awayPenIP;
+  if (homePenEra) bullpenAdj += ((homePenEra - LEAGUE_AVG.bullpenEra) / 9) * homePenIP;
 
-  const fatigueAdj = fatigueRunAdj(awayFatigue, homeFatigue);
+  // Fatigue (worn-down bullpen) bump, scaled by each pen's expected exposure vs the
+  // 3-IP baseline — a worn pen behind an ace barely pitches, so it inflates little.
+  const fatigueAdj = fatigueRunAdj(awayFatigue, homeFatigue, awayPenIP / 3.0, homePenIP / 3.0);
 
   const projected = baseTotal + pitcherAdj + parkAdj + weatherAdj + bullpenAdj + fatigueAdj;
   return {
@@ -229,6 +281,7 @@ function calculateTotalProjection(game, awayPitcher, homePitcher, awayTeamHit, h
     breakdown: {
       base: round2(baseTotal),
       pitcherAdj: round2(pitcherAdj),
+      aceAdj: round2(aceAdj),
       parkAdj: round2(parkAdj),
       weatherAdj: round2(weatherAdj),
       bullpenAdj: round2(bullpenAdj),
@@ -972,10 +1025,10 @@ function describeFatigue(u) {
 
 // Capped run adjustment from both pens' fatigue. Heavy → more runs (over), light
 // → fewer. Small by design; never larger than FATIGUE_MAX in either direction.
-function fatigueRunAdj(awayF, homeF) {
+function fatigueRunAdj(awayF, homeF, awayExp = 1, homeExp = 1) {
   if (!FATIGUE_ENABLED) return 0;
-  const a = awayF ? (FATIGUE_PER_TEAM[awayF.level] || 0) : 0;
-  const h = homeF ? (FATIGUE_PER_TEAM[homeF.level] || 0) : 0;
+  const a = (awayF ? (FATIGUE_PER_TEAM[awayF.level] || 0) : 0) * awayExp;
+  const h = (homeF ? (FATIGUE_PER_TEAM[homeF.level] || 0) : 0) * homeExp;
   let adj = a + h;
   if (adj > FATIGUE_MAX) adj = FATIGUE_MAX;
   if (adj < -FATIGUE_MAX) adj = -FATIGUE_MAX;
