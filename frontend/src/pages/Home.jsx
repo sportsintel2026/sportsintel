@@ -10,6 +10,10 @@ import Sidebar from "./Sidebar";
 import HomeDesktop from "./HomeDesktop";
 
 function formatOdds(a){ if(a==null||isNaN(a))return "—"; const n=Math.round(Number(a)); return n>0?`+${n}`:`${n}`; }
+// American odds are discontinuous at the +100/-100 line (-101 and +101 are
+// adjacent in reality but 202 apart numerically). Map to a continuous "cents from
+// even" scale so a move like -110 -> +105 reads as ~15 cents, not 215.
+function amCents(o){ if(o==null||isNaN(o))return null; const n=Number(o); return n>=100?n-100:n<=-100?n+100:0; }
 function fmtTime(t,withDay){ if(!t)return "—"; const d=new Date(t); if(isNaN(d.getTime()))return t; const o={hour:"numeric",minute:"2-digit",timeZone:"America/New_York"}; if(withDay)o.weekday="short"; return d.toLocaleString("en-US",o)+" ET"; }
 function impliedFromAmerican(a){ if(a==null||isNaN(a))return null; const n=Number(a); return n>0?100/(n+100):-n/(-n+100); }
 const ESPN_ALIAS={az:"ari"};
@@ -112,7 +116,7 @@ export default function HomePage(){
   const hero=pool[0]||null;
   const boardArr=board==="ml"?e.moneylineEdges:board==="spread"?e.spreadEdges:e.totalsEdges;
   const boardEdges=oneSidePerGame(boardArr||[]).filter(x=>sport==="mlb"?(x.edge??0)>0:(x.edge??0)>=1).sort((a,b)=>((b.convictionScore||0)-(a.convictionScore||0))||((b.edge||0)-(a.edge||0)));
-  const moverPool=[...(e.moneylineEdges||[]),...(e.totalsEdges||[]),...(e.spreadEdges||[])].map(x=>{ const ser=seriesFor(x); const open=(ser&&ser.length)?ser[0].o:null; const now=(ser&&ser.length)?ser[ser.length-1].o:x.odds; const delta=(open!=null&&ser&&ser.length>1)?now-open:null; return {...x,_open:open,_now:now,_delta:delta}; });
+  const moverPool=[...(e.moneylineEdges||[]),...(e.totalsEdges||[]),...(e.spreadEdges||[])].map(x=>{ const ser=seriesFor(x); const open=(ser&&ser.length)?ser[0].o:null; const now=(ser&&ser.length)?ser[ser.length-1].o:x.odds; const delta=(open!=null&&ser&&ser.length>1)?(amCents(now)-amCents(open)):null; return {...x,_open:open,_now:now,_delta:delta}; });
   const movers=moverPool.sort((a,b)=>{ const ad=a._delta==null?-1:Math.abs(a._delta); const bd=b._delta==null?-1:Math.abs(b._delta); return (bd-ad)||((b.edge??0)-(a.edge??0)); }).slice(0,6);
   const hasMoves=movers.some(m=>m._delta!=null);
   const hrP=(e.hrPropEdges||[]).slice(0,6);
@@ -193,8 +197,9 @@ export default function HomePage(){
         {!hasFull
           ?<Gate kind="movers" title="Line moves are locked" sub={<>See where the market's moving with <b>All-Access</b></>} navigate={navigate}/>
           :<Carousel>
-          {movers.map(x=>{ const k=x.gameId+x.side; const d=x._delta;
+          {movers.map(x=>{ const k=x.gameId+x.side; const d=x._delta; const mg=abbrById[x.gameId]; const matchup=mg?`${mg.a} @ ${mg.h}`:"";
             return (<div key={k} className={"mv"+(flash[k]?" fl-"+flash[k]:"")}><div className="mvk">{edgeLabel(x)}</div>
+              {matchup&&<div style={{fontSize:11,color:"#6b7280",fontWeight:600,marginTop:1,marginBottom:3}}>{matchup}</div>}
               {d!=null
                 ?<><div className={"mvv "+(d>0?"up":d<0?"dn":"")}>{formatOdds(x._open)} <span className="ar">{String.fromCharCode(8594)}</span> {formatOdds(x._now)} <span className="amt">{d>0?String.fromCharCode(9650):d<0?String.fromCharCode(9660):"•"}{Math.abs(d)}</span></div><div className={"mvc "+(d>0?"up":d<0?"dn":"")}>{d>0?"+":d<0?String.fromCharCode(8722):""}{Math.abs(d)} cents</div></>
                 :<><div className="mvv">{formatOdds(x.odds)}</div><div className="mvm">{Math.round((x.modelProb||0)*100)}% model</div></>}
