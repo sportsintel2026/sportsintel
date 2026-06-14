@@ -163,14 +163,24 @@ async function getScores(league) {
     const modelDateStr = edges && edges.date ? String(edges.date).replace(/-/g, "") : null;
     const todayStr = espnDateStr(0);
 
-    // ALWAYS pull TODAY's scoreboard so LIVE and FINAL games keep showing on the
-    // Games page, even after the model's PRE-GAME board has rolled forward to
-    // tomorrow. (The model rolls once today's games have all started; without
-    // this, the scores list followed the model to tomorrow and dropped today's
-    // live/final games.) Cards whose model detailId is missing still navigate via
-    // their ESPN id, so links stay intact.
+    // Pull TODAY's scoreboard (live + final + scheduled for the current ET day).
     let todayGames = [];
     try { todayGames = attachDetailIds(league, await fetchScoreboardRaw(league, todayStr), idMap); } catch (_) { todayGames = []; }
+
+    // A game that starts before midnight ET can still be LIVE — or only just
+    // FINAL — after midnight, but ESPN files it under YESTERDAY's date. So once
+    // it's past midnight ET, "today" has flipped to the new slate (which hasn't
+    // started) and yesterday's games are the ones actually playing/finishing.
+    // When today has produced no live/final games yet, pull yesterday so those
+    // late live games and just-completed finals keep showing. Once today's slate
+    // starts producing live/final games, we stop pulling yesterday (no stale
+    // finals lingering into the afternoon).
+    const yestStr = espnDateStr(-1);
+    const todayHasActivity = todayGames.some((g) => g.bucket === "live" || g.bucket === "final");
+    let yestGames = [];
+    if (!todayHasActivity) {
+      try { yestGames = attachDetailIds(league, await fetchScoreboardRaw(league, yestStr), idMap); } catch (_) { yestGames = []; }
+    }
 
     // When the model has rolled to a later day, pull that day too — that's where
     // the UPCOMING games come from. (Same day as today → nothing extra to merge.)
@@ -179,9 +189,23 @@ async function getScores(league) {
       try { modelGames = attachDetailIds(league, await fetchScoreboardRaw(league, modelDateStr), idMap); } catch (_) { modelGames = []; }
     }
 
-    // Merge: today's live/final/scheduled + the rolled day's scheduled (deduped).
-    const seen = new Set(todayGames.map((g) => g.id));
-    games = [...todayGames, ...modelGames.filter((g) => !seen.has(g.id))];
+    // Merge, deduped by id. From yesterday we only keep LIVE/FINAL games (its
+    // scheduled/upcoming games are not relevant); from today and the model day we
+    // keep everything.
+    const merged = [];
+    const seen = new Set();
+    const addGames = (arr, onlyLiveFinal) => {
+      for (const g of arr) {
+        if (seen.has(g.id)) continue;
+        if (onlyLiveFinal && g.bucket !== "live" && g.bucket !== "final") continue;
+        seen.add(g.id);
+        merged.push(g);
+      }
+    };
+    addGames(todayGames, false);
+    addGames(yestGames, true);
+    addGames(modelGames, false);
+    games = merged;
     rolled = !!(modelDateStr && modelDateStr !== todayStr);
 
     // Fallback (no model date, or ESPN had nothing for that day): default day,
