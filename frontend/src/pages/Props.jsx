@@ -83,7 +83,7 @@ export default function PropsPage() {
         <div onClick={() => navigate(-1)} style={{ color: "#6b7280", fontSize: 13, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6, marginBottom: 14, userSelect: "none" }}>← Back</div>
         <div className="pphead">
           <div className="pptitle"><span className="b">Player</span> Props</div>
-          <div className="ppsub">Every prop the model flags with an edge — the full board, not just the top picks.</div>
+          <div className="ppsub">{sport === "mlb" && mlb?.rolledToNextDay ? <><b style={{ color: "#ff7a6c" }}>Tomorrow's board</b> — </> : ""}Every prop the model flags with an edge — the full board, not just the top picks.</div>
         </div>
 
         {/* SPORT SELECTOR — same pill style as the Games page */}
