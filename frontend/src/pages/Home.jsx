@@ -292,7 +292,7 @@ export default function HomePage(){
     <nav className="nav">
       <a className="on"><span className="i">🏠</span>Home</a>
       <a onClick={()=>navigate("/games")}><span className="i">🗓️</span>Games</a>
-      {hasFull?<a onClick={()=>navigate("/props")}><span className="i">⚾</span>Props</a>:<a className="up" onClick={()=>navigate("/pricing")}><span className="i">🔓</span>Unlock</a>}
+      {hasFull?<a onClick={()=>navigate("/props")}><span className="i">🔥</span>Props</a>:<a className="up" onClick={()=>navigate("/pricing")}><span className="i">🔓</span>Unlock</a>}
       <a onClick={()=>navigate("/odds")}><span className="i">💹</span>Market</a>
       <a onClick={()=>navigate("/performance")}><span className="i">📈</span>Performance</a>
       <a onClick={()=>navigate("/settings")}><span className="i">👤</span>Account</a>
