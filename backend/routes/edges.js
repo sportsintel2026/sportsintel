@@ -105,13 +105,20 @@ async function resolveSlateDate() {
   try { todayGames = await getScheduleForDate(today); } catch (e) { todayGames = []; }
 
   const playable = todayGames.filter(g => g.status !== "postponed" && g.status !== "cancelled");
-  const anyNotFinal = playable.some(g => g.status !== "final");
 
-  // If there are playable games today and at least one isn't final yet, stay on today.
-  if (playable.length > 0 && anyNotFinal) {
+  // This board shows PRE-GAME edges/props, which only exist for not-yet-started
+  // ("scheduled") games. So stay on today only while today still has a game that
+  // hasn't started. The moment today's last game first-pitches, there are no
+  // pre-game plays left today — roll forward to tomorrow's slate so the board,
+  // the top edge, and the prop board keep showing upcoming opportunities instead
+  // of sitting empty until the last out. Today's live/finished games are handled
+  // separately by the in-game Live Edges section, so rolling here doesn't hide them.
+  const anyPreGameToday = playable.some(g => g.status === "scheduled");
+
+  if (anyPreGameToday) {
     return { date: today, rolled: false };
   }
-  // Otherwise (all final, or nothing playable today) → roll to tomorrow.
+  // No more pre-game games today (all started or finished) → roll to tomorrow.
   const tomorrow = getEasternDate(1);
   return { date: tomorrow, rolled: true };
 }
