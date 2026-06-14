@@ -266,25 +266,26 @@ const CSS = `
 .lpwrap .fdisc{font-family:var(--mono);font-size:11px;color:#5f776c;margin-top:28px;line-height:1.6;border-top:1px solid rgba(255,255,255,.06);padding-top:18px}
 
 @media(max-width:859px){
+  .lpwrap .wrap{padding:0 16px}
   .lpwrap .tnav{display:none}
-  .lpwrap .feat{gap:14px;padding:30px 0}
-  .lpwrap .feat .eyebrow{margin-bottom:8px;font-size:9.5px;letter-spacing:.12em}
-  .lpwrap .feat .eyebrow::before{width:14px}
-  .lpwrap .feat h3{font-size:16px;line-height:1.18;margin-bottom:8px}
-  .lpwrap .feat p{font-size:12px;line-height:1.45;margin-bottom:11px}
-  .lpwrap .lk{font-size:11px}
-  .lpwrap .panel{padding:11px;border-radius:13px;min-height:0}
-  .lpwrap .pbar{font-size:8px;letter-spacing:.05em;margin-bottom:9px}
-  .lpwrap .prow{padding:7px 8px;margin-bottom:6px;border-radius:8px}
-  .lpwrap .prow .t{font-size:11px}
-  .lpwrap .prow .m{font-size:8.5px}
-  .lpwrap .pill{font-size:9px;padding:2px 5px;border-radius:5px}
-  .lpwrap .barwrap{height:78px;gap:5px}
-  .lpwrap .sech{font-size:21px;padding:36px 0 4px}
-  .lpwrap .stats3{gap:9px;margin-top:22px}
-  .lpwrap .stat{padding:13px 9px}
-  .lpwrap .stat .n{font-size:20px}
-  .lpwrap .stat .l{font-size:9.5px}
+  .lpwrap .feat{gap:16px;padding:42px 0}
+  .lpwrap .feat .eyebrow{margin-bottom:9px;font-size:10.5px;letter-spacing:.12em}
+  .lpwrap .feat .eyebrow::before{width:16px}
+  .lpwrap .feat h3{font-size:20px;line-height:1.16;margin-bottom:10px}
+  .lpwrap .feat p{font-size:14px;line-height:1.5;margin-bottom:14px}
+  .lpwrap .lk{font-size:13px}
+  .lpwrap .panel{padding:15px;border-radius:15px;min-height:0}
+  .lpwrap .pbar{font-size:9.5px;letter-spacing:.05em;margin-bottom:12px}
+  .lpwrap .prow{padding:11px 12px;margin-bottom:8px;border-radius:10px}
+  .lpwrap .prow .t{font-size:13.5px}
+  .lpwrap .prow .m{font-size:10px}
+  .lpwrap .pill{font-size:11px;padding:3px 8px;border-radius:6px}
+  .lpwrap .barwrap{height:104px;gap:6px}
+  .lpwrap .sech{font-size:25px;padding:44px 0 4px}
+  .lpwrap .stats3{gap:11px;margin-top:28px}
+  .lpwrap .stat{padding:18px 12px}
+  .lpwrap .stat .n{font-size:25px}
+  .lpwrap .stat .l{font-size:11px}
 }
 @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(56,225,160,.5)}70%{box-shadow:0 0 0 9px rgba(56,225,160,0)}100%{box-shadow:0 0 0 0 rgba(56,225,160,0)}}
 `;
