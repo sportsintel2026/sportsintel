@@ -9,7 +9,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 const TABS = [
   { label: "Home",        icon: "🏠", path: "/home",        match: (p) => p === "/" || p === "/home" },
   { label: "Games",       icon: "🗓️", path: "/games",       match: (p) => p.includes("games") },
-  { label: "Props",       icon: "⚾", path: "/props",       match: (p) => p === "/props" },
+  { label: "Props",       icon: "🔥", path: "/props",       match: (p) => p === "/props" },
   { label: "Market",      icon: "💹", path: "/odds",        match: (p) => p === "/odds" },
   { label: "Performance", icon: "📈", path: "/performance", match: (p) => p === "/performance" },
   { label: "Account",     icon: "👤", path: "/settings",    match: (p) => p === "/settings" },
