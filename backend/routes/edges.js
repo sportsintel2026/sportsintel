@@ -654,14 +654,29 @@ router.get("/odds-history/mlb", async (req, res) => {
     const { createClient } = require("@supabase/supabase-js");
     const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
     const sinceIso = new Date(Date.now() - 20 * 3600 * 1000).toISOString();
-    const { data, error } = await sb
-      .from("odds_ticks")
-      .select("away_team,home_team,market,side,line,odds,captured_at")
-      .gte("captured_at", sinceIso)
-      .order("captured_at", { ascending: true });
-    if (error) return res.json({ ok: false, games: [], error: error.message });
+    // Supabase/PostgREST caps a single .select() at 1000 rows and silently
+    // returns only that many. A busy slate puts well over 1000 tick rows in a
+    // 20h window, and because we order ASCENDING (oldest first), the cap drops
+    // the NEWEST ticks — which freezes Market Movers and the line chart at
+    // whatever time the 1000th-oldest row landed. (It looks like the capture
+    // died, but the recent rows just never get returned.) Page through the whole
+    // window so every recent tick is included.
+    const PAGE = 1000;
+    let rows = [];
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await sb
+        .from("odds_ticks")
+        .select("away_team,home_team,market,side,line,odds,captured_at")
+        .gte("captured_at", sinceIso)
+        .order("captured_at", { ascending: true })
+        .range(from, from + PAGE - 1);
+      if (error) return res.json({ ok: false, games: [], error: error.message });
+      if (!data || data.length === 0) break;
+      rows = rows.concat(data);
+      if (data.length < PAGE) break;
+    }
     const games = {};
-    for (const r of data || []) {
+    for (const r of rows) {
       const key = r.away_team + "|" + r.home_team;
       if (!games[key]) games[key] = { away_team: r.away_team, home_team: r.home_team, ml: { away: [], home: [] }, total: { line: null, over: [], under: [] } };
       const g = games[key];
