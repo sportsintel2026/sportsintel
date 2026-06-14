@@ -342,6 +342,7 @@ async function recordPredictions(result) {
   // Build a quick lookup of game status by id (skip finals)
   const statusById = {};
   const fatigueById = {};
+  const shadowById = {};
   for (const g of result.games) {
     statusById[g.id] = g.status;
     const b = g.totals && g.totals.breakdown;
@@ -350,6 +351,7 @@ async function recordPredictions(result) {
       const h = (b.homeBullpenFatigue && b.homeBullpenFatigue.level) || "?";
       fatigueById[g.id] = `away=${a},home=${h},adj=${b.fatigueAdj}`;
     }
+    if (g.totals && g.totals.shadow != null) shadowById[g.id] = g.totals.shadow;
   }
 
   // Moneyline — record ONLY the side the model likes (positive edge). The two
@@ -378,6 +380,7 @@ async function recordPredictions(result) {
       model_prob: e.modelProb, odds: e.odds, edge: e.edge,
       confidence: e.confidence, conviction: e.conviction ?? null, conviction_score: e.convictionScore ?? null, line: e.line,
       bullpen_fatigue: fatigueById[e.gameId] || null,
+      shadow_total: shadowById[e.gameId] ?? null,
     });
   }
 
