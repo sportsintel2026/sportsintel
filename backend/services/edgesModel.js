@@ -557,6 +557,11 @@ const DEFAULT_AB_PER_GAME = 3.78;  // fallback effective AB when lineup spot unk
 const HITS_MARKET_WEIGHT = 0.65;   // anchor weight on the sharp de-vigged market (0=pure model, 1=pure market)
 const HITS_XBA_BLEND = 0.70;       // weight on Savant xBA vs season AVG when xBA present
 const HITS_REGRESS_K = 160;        // AB-equivalent prior weight: regress per-AB rate toward league (kills small-sample noise)
+// Selection floors specific to hits (stricter than the global MIN_PROP_EDGE=0.015).
+// The lowered global floor admitted too many marginal hits plays that bled ROI at
+// juiced prices (winning ~53% but losing money = taking overs too heavily juiced).
+const HITS_MIN_EDGE = 0.03;        // hits-only edge floor — only the strongest signals make the tracked board
+const HITS_MAX_JUICE = -160;       // skip hits plays priced worse than -160 (need >61.5% to profit) — kills the deep-juice overs
 
 // Effective AB per game by batting-order spot (1..9). Discounted below full-game
 // starter AB to reflect walks, early exits, and game-to-game usage variance — the
@@ -1535,7 +1540,7 @@ async function calculateHitsPropEdges(games, hitsOddsByEvent) {
     }
   }
   return out
-    .filter(p => p.edge != null && p.edge >= MIN_PROP_EDGE)
+    .filter(p => p.edge != null && p.edge >= HITS_MIN_EDGE && (p.odds == null || p.odds >= HITS_MAX_JUICE))
     .sort((a, b) => (b.edge ?? -1) - (a.edge ?? -1));
 }
 
