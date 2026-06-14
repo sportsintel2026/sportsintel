@@ -363,20 +363,12 @@ export default function LandingPage(){
       <div className="wrap">
         <section className="sec">
           <div className="kick" style={{color:"var(--plight)"}}>⚡ The model · the edge · the best price</div>
-          <div className="bento">
-            <div className="tile t-head"><div className="t-htitle">Stop guessing.<br/>Start seeing the <span className="g">edge.</span></div><div className="t-hsub">Every game &amp; prop, run against the live market.</div></div>
-            {spot &&
-            <div className="tile t-prop">
-              <span className="t-extag">🎯 PROP SPOTLIGHT · EXAMPLE</span>
-              <div className="t-av" style={{boxShadow:`0 0 0 2.5px ${spot.ring||"#3a4a57"}`}}>{initials(spot.nm)}{spot.img && <img src={spot.img} alt="" onError={(ev)=>{ev.target.style.display="none";}}/>}</div>
-              <div className="t-pnm">{spot.nm}</div>
-              <div className="t-pmu">{spot.mu} · {spot.sub}</div>
-              <span className="t-pprop" style={{color:spot.sc,background:spot.sbg,border:`1px solid ${spot.sbd}`}}>{spot.prop} · {spot.odds}</span>
-              <div className="t-pe">{spot.edge}<span className="e">% EDGE</span></div>
-            </div>}
-            <div className="tile t-pill"><div className="t-picon">⚡</div><div className="t-pt">The edge</div><div className="t-ps">Where the book is wrong.</div><span className="t-tag" style={{color:"#04130d",background:"#33e991"}}>YOUR EDGE</span></div>
-            <div className="tile t-pill"><div className="t-picon">🔥</div><div className="t-pt">100s of props</div><div className="t-ps">Ranked by conviction, daily.</div><span className="t-tag" style={{color:"#3a2a00",background:"#f0a93c"}}>100s DAILY</span></div>
-            <div className="tile t-price"><div className="t-prow"><div className="t-pricet">Best price, every book <span>· same bet, 12 books</span></div><span className="t-book">FD +130 🏆</span></div></div>
+          <h2>Stop guessing. Start seeing the edge.</h2>
+          <p>Every team bet and player prop, run through the model against the live market — so you see exactly where the book is wrong, and grab the best number on it.</p>
+          <div className="loop">
+            <div className="loop-step"><span className="loop-n" style={{background:"#bba6ff"}}>1</span><span className="loop-t"><b>The edge</b> — the model prices every game &amp; prop, then flags where it disagrees with the book.<span className="loop-tag" style={{color:"#04130d",background:"#33e991"}}>YOUR EDGE</span></span></div>
+            <div className="loop-step"><span className="loop-n" style={{background:"#f0a93c"}}>2</span><span className="loop-t"><b>The props</b> — HRs, strikeouts, points, passing TDs, hits, assists. 100s a day, ranked by conviction.<span className="loop-tag" style={{color:"#3a2a00",background:"#f0a93c"}}>100s DAILY</span></span></div>
+            <div className="loop-step"><span className="loop-n" style={{background:"#33e991"}}>3</span><span className="loop-t"><b>The best price</b> — all 12 books side by side, so you never take a worse number than you had to.<span className="loop-tag" style={{color:"#04130d",background:"#5dcaa5"}}>EVERY BOOK</span></span></div>
           </div>
         </section>
       </div>
