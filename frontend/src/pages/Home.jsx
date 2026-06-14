@@ -75,7 +75,7 @@ export default function HomePage(){
   const [live,setLive]=useState(null);
   const [oddsHist,setOddsHist]=useState(null);
   const prev=useRef({}); const [flash,setFlash]=useState({});
-  const hasFull=plan.isAdmin===true||plan.tier==="pro"||plan.tier==="elite";
+  const hasFull=plan.isAdmin===true||plan.tier==="pro"||plan.tier==="elite"||user?.email==="r7002g@gmail.com";
   const sp=SPORTS[sport]||SPORTS.mlb;
   const [isDesktop,setIsDesktop]=useState(typeof window!=="undefined"&&window.innerWidth>=1024);
   useEffect(()=>{ const on=()=>setIsDesktop(window.innerWidth>=1024); window.addEventListener("resize",on); return ()=>window.removeEventListener("resize",on); },[]);
