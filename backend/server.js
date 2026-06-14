@@ -1,17 +1,5 @@
 require("dotenv").config();
 
-// ── Error tracking (Sentry) — initialise BEFORE other imports ──────────────────
-// Completely inert until SENTRY_DSN is set. Error tracking only (no perf tracing),
-// so it stays light and well within the free tier.
-const Sentry = require("@sentry/node");
-if (process.env.SENTRY_DSN) {
-  Sentry.init({
-    dsn: process.env.SENTRY_DSN,
-    environment: process.env.NODE_ENV || "production",
-    tracesSampleRate: 0,
-  });
-}
-
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
@@ -144,4 +132,76 @@ cron.schedule("0 8 * * *", async () => {
   }
 }, { timezone: "America/New_York" });
 
-// Capture CLOSING LINES every 30 min
+// Capture CLOSING LINES every 30 min during game hours (noon–2am ET). Each run
+// snapshots the closing price for any pending MLB ML/totals pick whose game has
+// just started, then computes CLV. One odds fetch per run (~2 credits) covers
+// all of today's games, so this is cheap on the API budget.
+cron.schedule("*/15 11-23,0-2 * * *", async () => {
+  console.log("[CRON] Capturing closing lines (CLV)...");
+  let clvOk = true;
+  try {
+    await captureClosingLines();
+  } catch (err) {
+    clvOk = false;
+    console.error("[CRON] Closing-line capture failed:", err.message);
+  }
+  try {
+    await captureNbaClosingLines();
+  } catch (err) {
+    clvOk = false;
+    console.error("[CRON] NBA closing-line capture failed:", err.message);
+  }
+  pingHC(process.env.HC_PING_CLV, clvOk);
+}, { timezone: "America/New_York" });
+
+// Snapshot every MLB ML/total price every 15 min during game hours → powers the
+// Home line-movement chart + real Market Movers. Cache-respecting fetch (shares
+// the 30-min odds cache), so it adds ~no extra API credits, and runs all day.
+cron.schedule("*/15 11-23,0-2 * * *", async () => {
+  try {
+    await captureOddsTicks();
+  } catch (err) {
+    console.error("[CRON] Odds tick capture failed:", err.message);
+  }
+}, { timezone: "America/New_York" });
+
+// Grade finished-game predictions — runs hourly, and a final sweep at 3am ET
+cron.schedule("0 * * * *", async () => {
+  console.log("[CRON] Grading finished-game predictions...");
+  try {
+    await gradeFinishedGames();
+    await gradeExpertPicks({ dryRun: false });
+    await gradeDailyCard();
+    console.log("[CRON] Expert picks graded.");
+    pingHC(process.env.HC_PING_GRADE, true);
+  } catch (err) {
+    console.error("[CRON] Grading failed:", err.message);
+    pingHC(process.env.HC_PING_GRADE, false);
+  }
+}, { timezone: "America/New_York" });
+
+// ── Error handler ─────────────────────────────────────────────────────────────
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(err.status || 500).json({
+    error: err.message || "Internal server error",
+  });
+});
+
+app.listen(PORT, () => {
+  console.log(`🚀 WizePicks API running on port ${PORT}`);
+});
+
+module.exports = app;
+
+// Clear cache endpoint
+app.delete('/api/cache', async (req, res) => {
+  try {
+    const { createClient } = require('@supabase/supabase-js');
+    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+    await supabase.from('games_cache').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    res.json({ success: true, message: 'Cache cleared' });
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
+});
