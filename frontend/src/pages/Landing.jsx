@@ -503,7 +503,7 @@ export default function LandingPage(){
 
       <div className="wrap">
         {/* pitch */}
-        <section className="sec">
+        <section className="sec centered">
           <div className="kick purple">Why WizePicks</div>
           <h2>Don't bet blind.</h2>
           <p>Everyone wants winners. Smart bettors want winners <strong>at the best price</strong> — because price matters too. We break down the full market, show the reasoning behind every number, and put every book side by side so you take the best one.</p>
@@ -539,7 +539,7 @@ const CSS = `
 .lpwrap *{box-sizing:border-box;margin:0;padding:0}
 .lpwrap a{text-decoration:none;color:inherit}
 .barlow{font-family:'Barlow Condensed',sans-serif}
-.wrap{max-width:1120px;margin:0 auto;padding:0 20px}
+.wrap{max-width:1480px;margin:0 auto;padding:0 24px}
 nav{position:sticky;top:0;z-index:50;background:rgba(7,7,14,.72);backdrop-filter:blur(10px);border-bottom:1px solid #11111e}
 .nav{display:flex;align-items:center;justify-content:space-between;height:60px}
 .logo{display:flex;align-items:center;gap:9px;font-weight:800;font-size:18px;letter-spacing:.01em}
@@ -561,7 +561,7 @@ nav{position:sticky;top:0;z-index:50;background:rgba(7,7,14,.72);backdrop-filter
 .eb-s{display:block;font-size:13px;font-weight:600;color:#f0a93c;line-height:1.5}
 h1{font-size:clamp(34px,7vw,56px);font-weight:900;line-height:1.04;letter-spacing:-.02em;margin-bottom:18px;color:#fff}
 h1.rh{position:relative;min-height:118px}
-@media(min-width:880px){h1.rh{min-height:150px}}
+@media(min-width:880px){h1.rh{min-height:180px}}
 .rh-l{position:absolute;top:0;left:0;width:100%;opacity:0;animation:rhcycle 14s infinite}
 .rh-l:nth-child(1){animation-delay:0s}
 .rh-l:nth-child(2){animation-delay:2.8s}
@@ -580,7 +580,9 @@ h1.rh{position:relative;min-height:118px}
 .trust .num{font-family:'Barlow Condensed';font-weight:800;font-size:24px}
 .trust .lab{font-size:11px;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;font-weight:700}
 .hero{position:relative}
-@media(min-width:880px){.hero{grid-template-columns:1.02fr .98fr;align-items:center}}
+@media(min-width:880px){.hero{grid-template-columns:1.1fr .9fr;align-items:center}}
+@media(min-width:880px){.herofig{max-width:480px;width:100%;justify-self:end}}
+@media(min-width:880px){.sec.centered{text-align:center}.sec.centered p{margin-left:auto;margin-right:auto}}
 .lights{position:absolute;inset:-40px -10px auto -10px;height:380px;pointer-events:none;z-index:0}
 .lights span{position:absolute;border-radius:50%;filter:blur(2px);opacity:.12;background:radial-gradient(circle,rgba(255,255,255,.95),rgba(120,180,255,.4) 30%,transparent 70%);animation:flare 5.5s ease-in-out infinite}
 .lights span:nth-child(1){width:80px;height:80px;top:-6px;left:6%}
@@ -626,10 +628,10 @@ h1.rh{position:relative;min-height:118px}
 .fin-go:hover{background:#2bd47f;transform:translateY(-1px)}
 @keyframes gpulse{0%,100%{box-shadow:0 0 18px rgba(51,233,145,.35)}50%{box-shadow:0 0 32px 4px rgba(51,233,145,.5)}}
 .fin-checks{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;font-size:11px;color:var(--t2);font-weight:600;margin-top:16px}
-.sport-tabs{display:flex;gap:6px;max-width:1120px;margin:0 auto;padding:8px 20px 10px;overflow-x:auto;border-bottom:1px solid #11111e}
+.sport-tabs{display:flex;gap:6px;max-width:1480px;margin:0 auto;padding:8px 20px 10px;overflow-x:auto;border-bottom:1px solid #11111e}
 .sport-tabs .st{flex:0 0 auto;font-size:12px;font-weight:700;color:var(--t2);padding:6px 12px;border-radius:9px;border:1px solid transparent;white-space:nowrap}
 .sport-tabs .st.on{color:#fff;background:rgba(51,233,145,.08);border-color:rgba(51,233,145,.3)}
-.ldisc{max-width:1120px;margin:0 auto;padding:6px 20px 18px;font-size:9.5px;color:var(--t3);text-align:center;line-height:1.6}
+.ldisc{max-width:1480px;margin:0 auto;padding:6px 20px 18px;font-size:9.5px;color:var(--t3);text-align:center;line-height:1.6}
 .feat-note{font-size:13px;color:var(--t2);line-height:1.6;margin:6px 0 10px;max-width:600px}
 .feat-note b{color:var(--t1);font-weight:800}
 .live{background:linear-gradient(180deg,#0e0e1c,#0a0a14);border-radius:18px;
