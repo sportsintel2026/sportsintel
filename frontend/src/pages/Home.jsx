@@ -511,7 +511,11 @@ section{padding:13px 12px 2px;margin:0;border-top:1px solid #161d24}
 .sh .s2{font-size:11px;color:#8a99a2;font-weight:600}
 .seg{display:flex;gap:2px;background:#0a0f13;border:1px solid #161e26;border-radius:8px;padding:2px}.seg b{color:#8a99a2;font-weight:800;font-size:11px;padding:4px 10px;border-radius:6px}.seg b.on{background:#141d24;color:#fff;box-shadow:inset 0 0 0 1px #ff5d4d}
 .muted,.note,.pn{color:#54616b;font-size:11px;font-weight:600}.note,.pn{margin-top:7px;line-height:1.35}
-.hero{border:1px solid rgba(243,185,79,.32);border-radius:14px;background:linear-gradient(180deg,#14110a,#06090b);overflow:hidden;margin:11px 12px 0}
+.hero{position:relative;border:1px solid rgba(243,185,79,.32);border-radius:14px;background:linear-gradient(180deg,#14110a,#06090b);overflow:hidden;margin:11px 12px 0;animation:herolight 3.6s ease-in-out infinite}
+.hero::before{content:"";position:absolute;inset:0;background:radial-gradient(150% 120% at 50% -12%,rgba(243,185,79,.20),transparent 55%);opacity:.45;animation:heroglow 3.6s ease-in-out infinite;pointer-events:none;z-index:0}
+.hero>*{position:relative;z-index:1}
+@keyframes heroglow{0%,100%{opacity:.3}50%{opacity:.82}}
+@keyframes herolight{0%,100%{box-shadow:inset 0 0 22px rgba(243,185,79,.07);border-color:rgba(243,185,79,.30)}50%{box-shadow:inset 0 0 42px rgba(243,185,79,.22);border-color:rgba(243,185,79,.58)}}
 .herocar{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;-webkit-overflow-scrolling:touch}
 .herocar::-webkit-scrollbar{display:none}
 .heroslide{flex:0 0 100%;scroll-snap-align:start;box-sizing:border-box}
