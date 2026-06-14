@@ -35,12 +35,12 @@ const SHOP=[["BetMGM","−130",false],["Caesars","−128",false],["DraftKings","
 /* curated showcase of recognizable players across sports — illustrative sample, NOT live picks.
    real live edges live inside the app; this section just shows the kind of props we cover. */
 const SPOT_EX=[
-  {sport:"⚾ MLB",img:MLB_HEAD(592450),ring:teamCol("NYY"),nm:"Aaron Judge",mu:"NYY vs BOS",prop:"O 0.5 HR",odds:"+265",sub:"Home Runs",sc:"#f0a93c",sbg:"rgba(240,169,60,.10)",sbd:"rgba(240,169,60,.28)"},
-  {sport:"🏀 NBA",img:NBA_HEAD(3112335),ring:nbaCol("DEN"),nm:"Nikola Jokić",mu:"DEN vs MIN",prop:"O 25.5 Pts",odds:"−115",sub:"Points",sc:"#bba6ff",sbg:"rgba(155,123,255,.10)",sbd:"rgba(155,123,255,.28)"},
-  {sport:"⚾ MLB",img:MLB_HEAD(660271),ring:teamCol("LAD"),nm:"Shohei Ohtani",mu:"LAD vs SD",prop:"O 1.5 Hits",odds:"+135",sub:"Hits",sc:"#33e991",sbg:"rgba(51,233,145,.10)",sbd:"rgba(51,233,145,.28)"},
-  {sport:"🏈 NFL",img:NFL_HEAD(3139477),ring:"#E31837",nm:"Patrick Mahomes",mu:"KC vs BUF",prop:"O 1.5 Pass TD",odds:"+120",sub:"Passing TDs",sc:"#bba6ff",sbg:"rgba(155,123,255,.10)",sbd:"rgba(155,123,255,.28)"},
-  {sport:"🏀 NBA",img:NBA_HEAD(3945274),ring:nbaCol("LAL"),nm:"Luka Dončić",mu:"LAL vs GSW",prop:"O 8.5 Ast",odds:"+105",sub:"Assists",sc:"#bba6ff",sbg:"rgba(155,123,255,.10)",sbd:"rgba(155,123,255,.28)"},
-  {sport:"⚾ MLB",img:MLB_HEAD(656941),ring:teamCol("PHI"),nm:"Kyle Schwarber",mu:"PHI vs MIL",prop:"O 0.5 HR",odds:"+210",sub:"Home Runs",sc:"#f0a93c",sbg:"rgba(240,169,60,.10)",sbd:"rgba(240,169,60,.28)"},
+  {sport:"⚾ MLB",img:MLB_HEAD(592450),ring:teamCol("NYY"),nm:"Aaron Judge",mu:"NYY vs BOS",prop:"O 0.5 HR",odds:"+265",edge:"+6.2",sub:"Home Runs",sc:"#f0a93c",sbg:"rgba(240,169,60,.10)",sbd:"rgba(240,169,60,.28)"},
+  {sport:"🏀 NBA",img:NBA_HEAD(3112335),ring:nbaCol("DEN"),nm:"Nikola Jokić",mu:"DEN vs MIN",prop:"O 25.5 Pts",odds:"−115",edge:"+4.8",sub:"Points",sc:"#bba6ff",sbg:"rgba(155,123,255,.10)",sbd:"rgba(155,123,255,.28)"},
+  {sport:"⚾ MLB",img:MLB_HEAD(660271),ring:teamCol("LAD"),nm:"Shohei Ohtani",mu:"LAD vs SD",prop:"O 1.5 Hits",odds:"+135",edge:"+5.5",sub:"Hits",sc:"#33e991",sbg:"rgba(51,233,145,.10)",sbd:"rgba(51,233,145,.28)"},
+  {sport:"🏈 NFL",img:NFL_HEAD(3139477),ring:"#E31837",nm:"Patrick Mahomes",mu:"KC vs BUF",prop:"O 1.5 Pass TD",odds:"+120",edge:"+3.9",sub:"Passing TDs",sc:"#bba6ff",sbg:"rgba(155,123,255,.10)",sbd:"rgba(155,123,255,.28)"},
+  {sport:"🏀 NBA",img:NBA_HEAD(3945274),ring:nbaCol("LAL"),nm:"Luka Dončić",mu:"LAL vs GSW",prop:"O 8.5 Ast",odds:"+105",edge:"+4.1",sub:"Assists",sc:"#bba6ff",sbg:"rgba(155,123,255,.10)",sbd:"rgba(155,123,255,.28)"},
+  {sport:"⚾ MLB",img:MLB_HEAD(656941),ring:teamCol("PHI"),nm:"Kyle Schwarber",mu:"PHI vs MIL",prop:"O 0.5 HR",odds:"+210",edge:"+5.7",sub:"Home Runs",sc:"#f0a93c",sbg:"rgba(240,169,60,.10)",sbd:"rgba(240,169,60,.28)"},
 ];
 
 /* simulated live board — shown only when there are no real edges, so the panel never looks dead.
@@ -363,12 +363,20 @@ export default function LandingPage(){
       <div className="wrap">
         <section className="sec">
           <div className="kick" style={{color:"var(--plight)"}}>⚡ The model · the edge · the best price</div>
-          <h2>Stop guessing. Start seeing the edge.</h2>
-          <p>Every team bet and player prop, run through the model against the live market — so you see exactly where the book is wrong, and grab the best number on it.</p>
-          <div className="loop">
-            <div className="loop-step"><span className="loop-n" style={{background:"#bba6ff"}}>1</span><span className="loop-t"><b>The edge</b> — the model prices every game &amp; prop, then flags where it disagrees with the book.<span className="loop-tag" style={{color:"#04130d",background:"#33e991"}}>YOUR EDGE</span></span></div>
-            <div className="loop-step"><span className="loop-n" style={{background:"#f0a93c"}}>2</span><span className="loop-t"><b>The props</b> — HRs, strikeouts, points, passing TDs, hits, assists. 100s a day, ranked by conviction.<span className="loop-tag" style={{color:"#3a2a00",background:"#f0a93c"}}>100s DAILY</span></span></div>
-            <div className="loop-step"><span className="loop-n" style={{background:"#33e991"}}>3</span><span className="loop-t"><b>The best price</b> — all 12 books side by side, so you never take a worse number than you had to.<span className="loop-tag" style={{color:"#04130d",background:"#5dcaa5"}}>EVERY BOOK</span></span></div>
+          <div className="bento">
+            <div className="tile t-head"><div className="t-htitle">Stop guessing.<br/>Start seeing the <span className="g">edge.</span></div><div className="t-hsub">Every game &amp; prop, run against the live market.</div></div>
+            {spot &&
+            <div className="tile t-prop">
+              <span className="t-extag">🎯 PROP SPOTLIGHT · EXAMPLE</span>
+              <div className="t-av" style={{boxShadow:`0 0 0 2.5px ${spot.ring||"#3a4a57"}`}}>{initials(spot.nm)}{spot.img && <img src={spot.img} alt="" onError={(ev)=>{ev.target.style.display="none";}}/>}</div>
+              <div className="t-pnm">{spot.nm}</div>
+              <div className="t-pmu">{spot.mu} · {spot.sub}</div>
+              <span className="t-pprop" style={{color:spot.sc,background:spot.sbg,border:`1px solid ${spot.sbd}`}}>{spot.prop} · {spot.odds}</span>
+              <div className="t-pe">{spot.edge}<span className="e">% EDGE</span></div>
+            </div>}
+            <div className="tile t-pill"><div className="t-picon">⚡</div><div className="t-pt">The edge</div><div className="t-ps">Where the book is wrong.</div><span className="t-tag" style={{color:"#04130d",background:"#33e991"}}>YOUR EDGE</span></div>
+            <div className="tile t-pill"><div className="t-picon">🔥</div><div className="t-pt">100s of props</div><div className="t-ps">Ranked by conviction, daily.</div><span className="t-tag" style={{color:"#3a2a00",background:"#f0a93c"}}>100s DAILY</span></div>
+            <div className="tile t-price"><div className="t-prow"><div className="t-pricet">Best price, every book <span>· same bet, 12 books</span></div><span className="t-book">FD +130 🏆</span></div></div>
           </div>
         </section>
       </div>
@@ -714,6 +722,30 @@ h2{font-size:clamp(22px,4.4vw,32px);font-weight:800;letter-spacing:-.01em;margin
 .loop-step:nth-child(2){align-self:flex-end}
 .loop-step:nth-child(3){align-self:flex-start}
 .loop-step:hover{transform:translateY(-2px)}
+.bento{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px;max-width:600px}
+.tile{border-radius:15px;border:1px solid var(--line);background:linear-gradient(180deg,#11111c,#0a0a13);padding:13px;position:relative;overflow:hidden}
+.t-head{grid-column:span 2;background:radial-gradient(220px 120px at 80% 0,rgba(51,233,145,.12),transparent 70%),linear-gradient(180deg,#11111c,#0a0a13)}
+.t-htitle{font-size:22px;font-weight:900;line-height:1.05;letter-spacing:-.02em;color:#fff}
+.t-htitle .g{color:var(--green)}
+.t-hsub{font-size:11.5px;color:var(--t2);font-weight:600;line-height:1.4;margin-top:6px}
+.t-prop{grid-row:span 2;border-color:rgba(240,169,60,.26);display:flex;flex-direction:column}
+.t-extag{font-size:8px;font-weight:900;letter-spacing:.07em;color:#f0c98a;display:block;margin-bottom:9px}
+.t-av{width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed';font-weight:800;font-size:17px;color:#fff;background:#27324a;margin-bottom:8px;position:relative;overflow:hidden}
+.t-av img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.t-pnm{font-size:14px;font-weight:800;color:#fff;line-height:1.1}
+.t-pmu{font-size:9px;color:var(--t3);margin:2px 0 7px}
+.t-pprop{font-size:9px;font-weight:800;border-radius:6px;padding:3px 7px;display:inline-block;align-self:flex-start}
+.t-pe{font-family:'Barlow Condensed';font-weight:800;font-size:30px;color:var(--green);line-height:.9;margin-top:auto;padding-top:10px}
+.t-pe .e{font-size:7px;color:#8fd9c2;display:block;letter-spacing:.08em}
+.t-pill{display:flex;flex-direction:column;justify-content:center}
+.t-picon{font-size:17px;margin-bottom:6px}
+.t-pt{font-size:13px;font-weight:800;color:#fff}
+.t-ps{font-size:10px;color:var(--t3);margin-top:3px;line-height:1.4}
+.t-tag{font-size:8px;font-weight:900;letter-spacing:.05em;padding:2px 6px;border-radius:5px;margin-top:8px;align-self:flex-start}
+.t-price{grid-column:span 2;border-color:rgba(51,233,145,.22)}
+.t-prow{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.t-pricet{font-size:13px;font-weight:800;color:#fff}.t-pricet span{font-size:10px;color:var(--t3);font-weight:600}
+.t-book{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:800;color:var(--green);background:rgba(51,233,145,.08);border:1px solid rgba(51,233,145,.35);border-radius:9px;padding:7px 11px;white-space:nowrap}
 .loop-n{width:25px;height:25px;border-radius:7px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed';font-weight:800;font-size:15px;color:#04130d}
 .loop-t{font-size:13px;color:var(--t1);font-weight:600;line-height:1.45}
 .loop-t b{color:#fff;font-weight:800}
