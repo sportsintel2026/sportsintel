@@ -4,6 +4,7 @@ const cors = require("cors");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
 const cron = require("node-cron");
+const axios = require("axios");
 
 const authRoutes = require("./routes/auth");
 const gamesRoutes = require("./routes/games");
@@ -27,6 +28,20 @@ const { refreshDailyGames } = require("./services/sportsData");
 const { gradeFinishedGames, captureClosingLines, captureNbaClosingLines, captureOddsTicks } = require("./services/predictionTracker");
 const { gradeExpertPicks } = require("./services/expertPicksGrader");
 const { gradeDailyCard } = require("./services/dailyCard");
+
+// ── Cron heartbeat monitoring (Healthchecks.io) ────────────────────────────────
+// Fire-and-forget ping so we get alerted the instant a cron silently stops.
+// Completely inert until the matching env var is set, and can never throw into
+// or slow down the job it monitors (all errors are swallowed).
+async function pingHC(baseUrl, ok = true) {
+  if (!baseUrl) return;
+  try {
+    const clean = baseUrl.replace(/\/+$/, "");
+    await axios.get(ok ? clean : clean + "/fail", { timeout: 8000 });
+  } catch (_) {
+    // monitoring must never break the job
+  }
+}
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -122,16 +137,20 @@ cron.schedule("0 8 * * *", async () => {
 // all of today's games, so this is cheap on the API budget.
 cron.schedule("*/15 11-23,0-2 * * *", async () => {
   console.log("[CRON] Capturing closing lines (CLV)...");
+  let clvOk = true;
   try {
     await captureClosingLines();
   } catch (err) {
+    clvOk = false;
     console.error("[CRON] Closing-line capture failed:", err.message);
   }
   try {
     await captureNbaClosingLines();
   } catch (err) {
+    clvOk = false;
     console.error("[CRON] NBA closing-line capture failed:", err.message);
   }
+  pingHC(process.env.HC_PING_CLV, clvOk);
 }, { timezone: "America/New_York" });
 
 // Snapshot every MLB ML/total price every 15 min during game hours → powers the
@@ -153,8 +172,10 @@ cron.schedule("0 * * * *", async () => {
     await gradeExpertPicks({ dryRun: false });
     await gradeDailyCard();
     console.log("[CRON] Expert picks graded.");
+    pingHC(process.env.HC_PING_GRADE, true);
   } catch (err) {
     console.error("[CRON] Grading failed:", err.message);
+    pingHC(process.env.HC_PING_GRADE, false);
   }
 }, { timezone: "America/New_York" });
 
