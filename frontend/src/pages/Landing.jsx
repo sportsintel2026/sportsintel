@@ -277,6 +277,14 @@ export default function LandingPage(){
         </div>
       </nav>
 
+      <div className="sport-tabs">
+        <span className="st on">⚾ MLB</span>
+        <span className="st">🏀 NBA</span>
+        <span className="st">🏈 NFL</span>
+        <span className="st">🏈 CFB</span>
+        <span className="st">🏀 NCAAB</span>
+      </div>
+
       {mqLoop.length>0 &&
       <div className="marquee" aria-hidden="true"><div className="mq-track">
         {mqLoop.map((m,i)=>(
@@ -286,6 +294,7 @@ export default function LandingPage(){
 
       <div className="wrap">
         <section className="hero">
+          <div className="lights" aria-hidden="true"><span/><span/><span/><span/><span/></div>
           {/* LEFT: pitch */}
           <div className="fade">
             <div className="ebadge">
@@ -307,6 +316,39 @@ export default function LandingPage(){
               <div className="rec"><span className="num barlow" style={{color:"var(--plight)"}}>12</span><span className="lab">Books shopped</span></div>
               <div className="rec"><span className="num barlow" style={{color:"var(--green)"}}>5</span><span className="lab">Sports</span></div>
               <div className="rec"><span className="num barlow" style={{color:"#f0a93c"}}>100s</span><span className="lab">Edges daily</span></div>
+            </div>
+          </div>
+          {/* RIGHT: featured player prop (example) */}
+          <div className="herofig">
+            {spot &&
+            <div className="spot">
+              <div className="spot-tag">🎯 PROP SPOTLIGHT <span className="ex-chip">EXAMPLE</span></div>
+              <div className={"spot-card "+(spotAnim==="out"?"sc-out":"sc-in")}>
+                <div className="spot-av" style={{boxShadow:`0 0 0 2.5px ${spot.ring||"#3a4a57"}`}}>
+                  {initials(spot.nm)}
+                  {spot.img && <img src={spot.img} alt="" onError={(ev)=>{ev.target.style.display="none";}}/>}
+                </div>
+                <div className="spot-info">
+                  <div className="spot-sport">{spot.sport}</div>
+                  <div className="spot-nm">{spot.nm}</div>
+                  <div className="spot-mu">{spot.mu}</div>
+                  <div className="spot-sub" style={{color:spot.sc,background:spot.sbg,border:`1px solid ${spot.sbd}`}}>{spot.sub}</div>
+                </div>
+                <div className="spot-bet">
+                  <div className="spot-prop">{spot.prop}</div>
+                  <div className="spot-odds">{spot.odds}</div>
+                </div>
+              </div>
+              <div className="spot-dots">
+                {spotItems.map((_,i)=><i key={i} className={i===(spotIdx%spotLen)?"on":""}/>)}
+              </div>
+              <div className="spot-note">Illustrative example — not a live pick</div>
+            </div>}
+            <div className="hero-rail">
+              <div className="hero-stack">
+                {spotItems.slice(0,5).map((p,i)=><span key={i} style={{background:p.ring||"#3a4a57"}}>{initials(p.nm)}</span>)}
+              </div>
+              <div className="hero-railt"><b>Stars across every league</b> — props priced daily. <span className="ex">Examples shown.</span></div>
             </div>
           </div>
         </section>
@@ -392,7 +434,7 @@ export default function LandingPage(){
 
       {/* PROP SPOTLIGHT (rotates through real props) */}
       {spot &&
-      <div className="wrap spotwrap">
+      <div className="wrap spotwrap" style={{display:"none"}}>
         <div className="spot">
           <div className="spot-tag">🎯 PLAYER PROP SPOTLIGHT</div>
           <div className={"spot-card "+(spotAnim==="out"?"sc-out":"sc-in")}>
@@ -421,6 +463,8 @@ export default function LandingPage(){
       <div className="wrap">
         <section className="sec">
           <div className="kick" style={{color:"var(--t3)"}}>More in every account</div>
+          <h2 style={{fontSize:22,marginBottom:6}}>Two extras you won't find everywhere.</h2>
+          <p className="feat-note"><b>WizePlays</b> — our analysts' handpicked plays. A tight, conviction-ranked shortlist each week, tracked openly so you can see exactly how they land. <b>Quick Spin</b> — a fast, just-for-fun way to surface a model-qualified play when you can't decide. Spin it and go.</p>
           <div className="feat2grid">
             <LiveScores/>
             <QuickSpin/>
@@ -448,6 +492,8 @@ export default function LandingPage(){
           <div className="sm">Bet smarter. Bet Wize.</div>
         </section>
       </div>
+
+      <div className="ldisc">All players, props, edges and prices shown on this page are simulated examples for illustration only — not live picks, odds, or performance claims. Your real, live edges are inside the app.</div>
 
       <footer>WizePicks · Live model edges from real sportsbook lines · Bet responsibly</footer>
     </div>
@@ -495,6 +541,32 @@ h1{font-size:clamp(34px,7vw,56px);font-weight:900;line-height:1.04;letter-spacin
 .trust .rec{display:flex;align-items:baseline;gap:7px}
 .trust .num{font-family:'Barlow Condensed';font-weight:800;font-size:24px}
 .trust .lab{font-size:11px;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;font-weight:700}
+.hero{position:relative}
+@media(min-width:880px){.hero{grid-template-columns:1.02fr .98fr;align-items:center}}
+.lights{position:absolute;inset:-40px -10px auto -10px;height:380px;pointer-events:none;z-index:0}
+.lights span{position:absolute;border-radius:50%;filter:blur(2px);opacity:.12;background:radial-gradient(circle,rgba(255,255,255,.95),rgba(120,180,255,.4) 30%,transparent 70%);animation:flare 5.5s ease-in-out infinite}
+.lights span:nth-child(1){width:80px;height:80px;top:-6px;left:6%}
+.lights span:nth-child(2){width:46px;height:46px;top:38px;left:28%;animation-delay:1s}
+.lights span:nth-child(3){width:110px;height:110px;top:-26px;right:7%;animation-delay:.5s;background:radial-gradient(circle,rgba(180,255,220,.9),rgba(51,233,145,.36) 32%,transparent 70%)}
+.lights span:nth-child(4){width:34px;height:34px;top:70px;right:30%;animation-delay:2s}
+.lights span:nth-child(5){width:58px;height:58px;top:6px;left:50%;animation-delay:1.6s}
+@keyframes flare{0%,100%{opacity:.10;transform:scale(.9)}50%{opacity:.5;transform:scale(1.12)}}
+.fade,.herofig{position:relative;z-index:1}
+.herofig{animation:figIn .9s cubic-bezier(.2,.7,.3,1) .12s both}
+@keyframes figIn{0%{opacity:0;transform:translateY(22px) scale(.99)}100%{opacity:1;transform:none}}
+.ex-chip{font-size:8px;font-weight:900;letter-spacing:.1em;color:#0b0b14;background:#8a93a0;border-radius:5px;padding:2px 6px;margin-left:7px;vertical-align:middle}
+.hero-rail{display:flex;align-items:center;gap:11px;margin-top:14px;padding:11px 12px;border:1px solid var(--line);border-radius:13px;background:rgba(255,255,255,.015)}
+.hero-stack{display:flex;flex:0 0 auto}
+.hero-stack span{width:33px;height:33px;border-radius:50%;margin-left:-9px;border:2px solid var(--bg);display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed';font-weight:800;font-size:12px;color:#fff}
+.hero-stack span:first-child{margin-left:0}
+.hero-railt{font-size:11.5px;color:var(--t2);font-weight:600;line-height:1.4}
+.hero-railt b{color:#fff;font-weight:800}.hero-railt .ex{color:var(--t3)}
+.sport-tabs{display:flex;gap:6px;max-width:1120px;margin:0 auto;padding:8px 20px 10px;overflow-x:auto;border-bottom:1px solid #11111e}
+.sport-tabs .st{flex:0 0 auto;font-size:12px;font-weight:700;color:var(--t2);padding:6px 12px;border-radius:9px;border:1px solid transparent;white-space:nowrap}
+.sport-tabs .st.on{color:#fff;background:rgba(51,233,145,.08);border-color:rgba(51,233,145,.3)}
+.ldisc{max-width:1120px;margin:0 auto;padding:6px 20px 18px;font-size:9.5px;color:var(--t3);text-align:center;line-height:1.6}
+.feat-note{font-size:13px;color:var(--t2);line-height:1.6;margin:6px 0 10px;max-width:600px}
+.feat-note b{color:var(--t1);font-weight:800}
 .live{background:linear-gradient(180deg,#0e0e1c,#0a0a14);border-radius:18px;
   padding:16px;box-shadow:0 30px 80px -40px rgba(123,90,255,.5);position:relative;overflow:hidden}
 .live::before{content:"";position:absolute;inset:0;background:radial-gradient(400px 120px at 80% 0%,rgba(51,233,145,.07),transparent 70%);pointer-events:none}
