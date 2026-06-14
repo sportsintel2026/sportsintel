@@ -36,10 +36,10 @@ const SHOP=[["BetMGM","−130",false],["Caesars","−128",false],["DraftKings","
    real live edges live inside the app; this section just shows the kind of props we cover. */
 const SPOT_EX=[
   {sport:"⚾ MLB",img:MLB_HEAD(592450),ring:teamCol("NYY"),nm:"Aaron Judge",mu:"NYY vs BOS",prop:"O 0.5 HR",odds:"+265",edge:"+6.2",sub:"Home Runs",sc:"#f0a93c",sbg:"rgba(240,169,60,.10)",sbd:"rgba(240,169,60,.28)"},
-  {sport:"🏀 NBA",img:NBA_HEAD(3112335),ring:nbaCol("DEN"),nm:"Nikola Jokić",mu:"DEN vs MIN",prop:"O 25.5 Pts",odds:"−115",edge:"+4.8",sub:"Points",sc:"#bba6ff",sbg:"rgba(155,123,255,.10)",sbd:"rgba(155,123,255,.28)"},
+  {sport:"🏀 NBA",img:NBA_HEAD(3112335),ring:nbaCol("DEN"),nm:"Nikola Jokić",mu:"DEN vs MIN",prop:"O 25.5 Pts",odds:"−115",edge:"+4.8",sub:"Points",sc:"#5fd6c4",sbg:"rgba(56,225,160,.10)",sbd:"rgba(56,225,160,.28)"},
   {sport:"⚾ MLB",img:MLB_HEAD(660271),ring:teamCol("LAD"),nm:"Shohei Ohtani",mu:"LAD vs SD",prop:"O 1.5 Hits",odds:"+135",edge:"+5.5",sub:"Hits",sc:"#33e991",sbg:"rgba(51,233,145,.10)",sbd:"rgba(51,233,145,.28)"},
-  {sport:"🏈 NFL",img:NFL_HEAD(3139477),ring:"#E31837",nm:"Patrick Mahomes",mu:"KC vs BUF",prop:"O 1.5 Pass TD",odds:"+120",edge:"+3.9",sub:"Passing TDs",sc:"#bba6ff",sbg:"rgba(155,123,255,.10)",sbd:"rgba(155,123,255,.28)"},
-  {sport:"🏀 NBA",img:NBA_HEAD(3945274),ring:nbaCol("LAL"),nm:"Luka Dončić",mu:"LAL vs GSW",prop:"O 8.5 Ast",odds:"+105",edge:"+4.1",sub:"Assists",sc:"#bba6ff",sbg:"rgba(155,123,255,.10)",sbd:"rgba(155,123,255,.28)"},
+  {sport:"🏈 NFL",img:NFL_HEAD(3139477),ring:"#E31837",nm:"Patrick Mahomes",mu:"KC vs BUF",prop:"O 1.5 Pass TD",odds:"+120",edge:"+3.9",sub:"Passing TDs",sc:"#5fd6c4",sbg:"rgba(56,225,160,.10)",sbd:"rgba(56,225,160,.28)"},
+  {sport:"🏀 NBA",img:NBA_HEAD(3945274),ring:nbaCol("LAL"),nm:"Luka Dončić",mu:"LAL vs GSW",prop:"O 8.5 Ast",odds:"+105",edge:"+4.1",sub:"Assists",sc:"#5fd6c4",sbg:"rgba(56,225,160,.10)",sbd:"rgba(56,225,160,.28)"},
   {sport:"⚾ MLB",img:MLB_HEAD(656941),ring:teamCol("PHI"),nm:"Kyle Schwarber",mu:"PHI vs MIL",prop:"O 0.5 HR",odds:"+210",edge:"+5.7",sub:"Home Runs",sc:"#f0a93c",sbg:"rgba(240,169,60,.10)",sbd:"rgba(240,169,60,.28)"},
 ];
 
@@ -359,6 +359,25 @@ export default function LandingPage(){
         </section>
       </div>
 
+      {/* COMMERCIAL VIDEO — drop the finished clip into .vidframe (see comment) */}
+      <div className="wrap">
+        <section className="vidsec">
+          <div className="vid-eyebrow">▶ WATCH · 30 SECONDS</div>
+          <h2 className="vid-h">This is what betting blind looks like.</h2>
+          <div className="vidframe">
+            {/* ↓↓↓ When your commercial is ready, replace this placeholder block with ONE of: ↓↓↓
+                <video src="/wizepicks-commercial.mp4" poster="/commercial-poster.jpg" controls playsInline/>
+                — or a YouTube embed —
+                <iframe src="https://www.youtube.com/embed/YOUR_VIDEO_ID" title="WizePicks" allowFullScreen/>
+            */}
+            <div className="vid-ph">
+              <div className="vid-play"/>
+              <div className="vid-cap">Commercial coming soon</div>
+            </div>
+          </div>
+        </section>
+      </div>
+
       {/* THE LOOP — edge / props / price */}
       <div className="wrap">
         <section className="sec">
@@ -366,7 +385,7 @@ export default function LandingPage(){
           <h2>Stop guessing. Start seeing the edge.</h2>
           <p>Every team bet and player prop, run through the model against the live market — so you see exactly where the book is wrong, and grab the best number on it.</p>
           <div className="loop">
-            <div className="loop-step"><span className="loop-n" style={{background:"#bba6ff"}}>1</span><span className="loop-t"><b>The edge</b> — the model prices every game &amp; prop, then flags where it disagrees with the book.<span className="loop-tag" style={{color:"#04130d",background:"#33e991"}}>YOUR EDGE</span></span></div>
+            <div className="loop-step"><span className="loop-n" style={{background:"#5fd6c4"}}>1</span><span className="loop-t"><b>The edge</b> — the model prices every game &amp; prop, then flags where it disagrees with the book.<span className="loop-tag" style={{color:"#04130d",background:"#33e991"}}>YOUR EDGE</span></span></div>
             <div className="loop-step"><span className="loop-n" style={{background:"#f0a93c"}}>2</span><span className="loop-t"><b>The props</b> — HRs, strikeouts, points, passing TDs, hits, assists. 100s a day, ranked by conviction.<span className="loop-tag" style={{color:"#3a2a00",background:"#f0a93c"}}>100s DAILY</span></span></div>
             <div className="loop-step"><span className="loop-n" style={{background:"#33e991"}}>3</span><span className="loop-t"><b>The best price</b> — all 12 books side by side, so you never take a worse number than you had to.<span className="loop-tag" style={{color:"#04130d",background:"#5dcaa5"}}>EVERY BOOK</span></span></div>
           </div>
@@ -539,16 +558,16 @@ export default function LandingPage(){
 
 const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Barlow+Condensed:wght@600;700;800&display=swap');
-.lpwrap{--bg:#07070e;--bg2:#0b0b16;--card:#0d0d1a;--line:#191929;--line2:rgba(155,123,255,.20);
-  --teal:#1D9E75;--green:#33e991;--purple:#9b7bff;--plight:#bba6ff;--red:#ef4444;--rsoft:#ff5d4d;
-  --white:#fff;--t1:#e7ebf0;--t2:#9aa6b2;--t3:#5f6b7a;
-  background:radial-gradient(1200px 600px at 70% -8%, #15122b 0%, var(--bg) 55%);color:var(--t1);
+.lpwrap{--bg:#07140f;--bg2:#0b1f18;--card:#0e1b16;--line:#16241f;--line2:rgba(56,225,160,.18);
+  --teal:#1D9E75;--green:#33e991;--purple:#16b8a6;--plight:#5fd6c4;--red:#ef4444;--rsoft:#ff5d4d;
+  --white:#fff;--t1:#e7f1ec;--t2:#9ab2a8;--t3:#5f7a70;
+  background:radial-gradient(1200px 620px at 72% -8%, #11352a 0%, var(--bg) 58%);color:var(--t1);
   font-family:'Inter',system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased;min-height:100vh;overflow-x:hidden}
 .lpwrap *{box-sizing:border-box;margin:0;padding:0}
 .lpwrap a{text-decoration:none;color:inherit}
 .barlow{font-family:'Barlow Condensed',sans-serif}
 .wrap{max-width:1480px;margin:0 auto;padding:0 24px}
-nav{position:sticky;top:0;z-index:50;background:rgba(7,7,14,.72);backdrop-filter:blur(10px);border-bottom:1px solid #11111e}
+nav{position:sticky;top:0;z-index:50;background:rgba(7,20,15,.72);backdrop-filter:blur(10px);border-bottom:1px solid #122019}
 .nav{display:flex;align-items:center;justify-content:space-between;height:60px}
 .logo{display:flex;align-items:center;gap:9px;font-weight:800;font-size:18px;letter-spacing:.01em}
 .logo .p{color:var(--teal)}
@@ -564,7 +583,7 @@ nav{position:sticky;top:0;z-index:50;background:rgba(7,7,14,.72);backdrop-filter
 .hero{display:grid;grid-template-columns:1fr;gap:34px;padding:34px 0 26px}
 @media(min-width:860px){.hero{padding:60px 0 30px}}
 .ebadge{display:flex;align-items:flex-start;gap:11px;max-width:360px;margin-bottom:20px}
-.ebar{width:3px;align-self:stretch;border-radius:2px;background:linear-gradient(#9b7bff,#f0a93c);flex:0 0 auto;min-height:38px}
+.ebar{width:3px;align-self:stretch;border-radius:2px;background:linear-gradient(#16b8a6,#f0a93c);flex:0 0 auto;min-height:38px}
 .eb-k{display:block;font-size:10.5px;font-weight:800;letter-spacing:.14em;color:#fff;margin-bottom:4px}
 .eb-s{display:block;font-size:13px;font-weight:600;color:#f0a93c;line-height:1.5}
 h1{font-size:clamp(34px,7vw,56px);font-weight:900;line-height:1.04;letter-spacing:-.02em;margin-bottom:18px;color:#fff}
@@ -602,7 +621,7 @@ h1.rh{position:relative;min-height:118px}
 .fade,.herofig{position:relative;z-index:1}
 .herofig{animation:figIn .9s cubic-bezier(.2,.7,.3,1) .12s both}
 @keyframes figIn{0%{opacity:0;transform:translateY(22px) scale(.99)}100%{opacity:1;transform:none}}
-.ex-chip{font-size:8px;font-weight:900;letter-spacing:.1em;color:#0b0b14;background:#8a93a0;border-radius:5px;padding:2px 6px;margin-left:7px;vertical-align:middle}
+.ex-chip{font-size:8px;font-weight:900;letter-spacing:.1em;color:#0a1a14;background:#8a93a0;border-radius:5px;padding:2px 6px;margin-left:7px;vertical-align:middle}
 .hero-rail{display:flex;align-items:center;gap:11px;margin-top:14px;padding:11px 12px;border:1px solid var(--line);border-radius:13px;background:rgba(255,255,255,.015)}
 .hero-stack{display:flex;flex:0 0 auto}
 .hero-stack span{width:33px;height:33px;border-radius:50%;margin-left:-9px;border:2px solid var(--bg);display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed';font-weight:800;font-size:12px;color:#fff}
@@ -647,7 +666,7 @@ h1.rh{position:relative;min-height:118px}
 .fin-go:hover{background:#2bd47f;transform:translateY(-1px)}
 @keyframes gpulse{0%,100%{box-shadow:0 0 18px rgba(51,233,145,.35)}50%{box-shadow:0 0 32px 4px rgba(51,233,145,.5)}}
 .fin-checks{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;font-size:11px;color:var(--t2);font-weight:600;margin-top:16px}
-.sport-tabs{display:flex;gap:6px;max-width:1480px;margin:0 auto;padding:8px 20px 10px;overflow-x:auto;border-bottom:1px solid #11111e}
+.sport-tabs{display:flex;gap:6px;max-width:1480px;margin:0 auto;padding:8px 20px 10px;overflow-x:auto;border-bottom:1px solid #122019}
 .sport-tabs .st{flex:0 0 auto;font-size:12px;font-weight:700;color:var(--t2);padding:6px 12px;border-radius:9px;border:1px solid transparent;white-space:nowrap}
 .sport-tabs .st.on{color:#fff;background:rgba(51,233,145,.08);border-color:rgba(51,233,145,.3)}
 .ldisc{max-width:1480px;margin:0 auto;padding:6px 20px 18px;font-size:9.5px;color:var(--t3);text-align:center;line-height:1.6}
@@ -701,7 +720,7 @@ h1.rh{position:relative;min-height:118px}
 .eb-scroll.on:hover .eb-track{animation-play-state:paused}
 @keyframes ebscroll{0%{transform:translateY(0)}100%{transform:translateY(-50%)}}
 .erow{display:flex;align-items:center;gap:11px;padding:9px 10px;border-radius:11px;background:rgba(255,255,255,.012);margin-bottom:7px;border-left:2px solid transparent;transition:border-color .5s,background .5s}
-.erow:hover{background:rgba(155,123,255,.05)}
+.erow:hover{background:rgba(56,225,160,.05)}
 .tcol{width:30px;height:30px;border-radius:50%;flex:0 0 auto;display:flex;align-items:center;justify-content:center;
   font-family:'Barlow Condensed';font-weight:800;font-size:11px;color:#fff}
 .tl{width:34px;height:34px;border-radius:50%;flex:0 0 auto;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.05);position:relative;overflow:hidden}
@@ -715,7 +734,7 @@ h1.rh{position:relative;min-height:118px}
 .eedge.pos{color:var(--green)} .eedge.neg{color:var(--rsoft)}
 .flash-up{background:rgba(51,233,145,.16)!important;color:var(--green)!important}
 .flash-dn{background:rgba(255,90,90,.16)!important;color:var(--rsoft)!important}
-.gate{margin-top:11px;border:1px dashed var(--line2);border-radius:12px;padding:13px;text-align:center;background:rgba(155,123,255,.04)}
+.gate{margin-top:11px;border:1px dashed var(--line2);border-radius:12px;padding:13px;text-align:center;background:rgba(56,225,160,.04)}
 .gate .h{font-size:12.5px;font-weight:800;color:var(--plight)}
 .gate .s{font-size:10.5px;color:var(--t3);margin-top:3px}
 .gate .blur{filter:blur(5px);opacity:.6;pointer-events:none;margin-top:9px;display:flex;flex-direction:column;gap:6px}
@@ -797,14 +816,14 @@ h2{font-size:clamp(22px,4.4vw,32px);font-weight:800;letter-spacing:-.01em;margin
 .finalcta h2{margin-bottom:10px}
 .finalcta .sm{font-family:'Barlow Condensed';font-weight:800;font-size:20px;color:var(--teal);margin-top:16px;letter-spacing:-.01em}
 footer{padding:24px 0;text-align:center;color:var(--t3);font-size:12px}
-.marquee{position:sticky;top:60px;z-index:40;overflow:hidden;background:#090912;border-bottom:1px solid #12121e;white-space:nowrap}
+.marquee{position:sticky;top:60px;z-index:40;overflow:hidden;background:#08130e;border-bottom:1px solid #12121e;white-space:nowrap}
 .mq-track{display:inline-flex;animation:mqscroll 38s linear infinite;will-change:transform}
 .marquee:hover .mq-track{animation-play-state:paused}
 .mq-item{display:inline-flex;align-items:center;gap:7px;padding:9px 18px;font-size:12px;font-weight:700;color:#9aa6b2;border-right:1px solid #14141f;flex:0 0 auto}
 .mq-item .tm{color:#fff} .mq-item .up{color:#33e991} .mq-item .dn{color:#ff5a5a}
 @keyframes mqscroll{from{transform:translateX(0)}to{transform:translateX(-50%)}}
 .spotwrap{padding:22px 0 6px}
-.spot{background:linear-gradient(110deg,rgba(155,123,255,.09),rgba(51,233,145,.05));border-radius:16px;padding:16px;overflow:hidden}
+.spot{background:linear-gradient(110deg,rgba(56,225,160,.09),rgba(51,233,145,.05));border-radius:16px;padding:16px;overflow:hidden}
 .spot-tag{font-size:10px;font-weight:800;letter-spacing:.12em;color:var(--plight);margin-bottom:13px;display:flex;align-items:center;gap:7px}
 .spot-card{display:flex;align-items:center;gap:14px;transition:opacity .34s ease,transform .34s ease}
 .sc-in{opacity:1;transform:translateX(0)} .sc-out{opacity:0;transform:translateX(16px)}
@@ -843,10 +862,10 @@ footer{padding:24px 0;text-align:center;color:var(--t3);font-size:12px}
 .lsvs{color:#3a4452;font-size:10px;font-weight:700}
 .lsst{flex:0 0 auto;font-size:9.5px;font-weight:800;color:var(--green);text-align:right;width:46px}
 .lscap{font-size:11px;color:#7d8b96;margin-top:10px;font-weight:600}
-.qscard{position:relative;background:linear-gradient(165deg,rgba(155,123,255,.12),rgba(240,169,60,.05),rgba(8,10,16,.6));border-radius:18px;padding:16px;overflow:hidden;box-shadow:0 20px 50px -30px rgba(155,123,255,.5)}
+.qscard{position:relative;background:linear-gradient(165deg,rgba(56,225,160,.12),rgba(240,169,60,.05),rgba(8,10,16,.6));border-radius:18px;padding:16px;overflow:hidden;box-shadow:0 20px 50px -30px rgba(56,225,160,.5)}
 .qsh{display:flex;align-items:center;justify-content:space-between;margin-bottom:13px}
 .qstitle{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:800;color:#fff}
-.qstag{font-size:9px;font-weight:800;letter-spacing:.1em;color:var(--plight);background:rgba(155,123,255,.12);border:1px solid rgba(155,123,255,.3);border-radius:20px;padding:3px 9px;transition:.3s}
+.qstag{font-size:9px;font-weight:800;letter-spacing:.1em;color:var(--plight);background:rgba(56,225,160,.12);border:1px solid rgba(56,225,160,.3);border-radius:20px;padding:3px 9px;transition:.3s}
 .qstag.par{color:#f0a93c;background:rgba(240,169,60,.13);border-color:rgba(240,169,60,.35)}
 .qsreels{display:flex;gap:8px;background:linear-gradient(180deg,#0a0a14,#06060c);border:1px solid rgba(240,169,60,.22);border-radius:13px;padding:11px;box-shadow:inset 0 2px 14px rgba(0,0,0,.6)}
 .qsreel{flex:1;height:54px;border-radius:9px;background:linear-gradient(180deg,#13131f,#0c0c16);display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;border:1px solid #1d1d2c}
@@ -861,7 +880,7 @@ footer{padding:24px 0;text-align:center;color:var(--t3);font-size:12px}
 .qspill{font-size:13px;font-weight:800;color:#04130d;background:linear-gradient(90deg,#33e991,#1fd6a0);border-radius:9px;padding:6px 14px;opacity:0;transform:scale(.9);white-space:nowrap}
 .qspill.show{animation:respop .5s ease forwards}
 .qspill.par{background:linear-gradient(90deg,#f0a93c,#ffce6b);color:#1a1206}
-.qsbtn{display:block;width:100%;margin-top:12px;text-align:center;background:linear-gradient(90deg,#9b7bff,#7d5cff);color:#fff;font-weight:800;font-size:14px;padding:12px;border-radius:11px;box-shadow:0 8px 22px -8px rgba(155,123,255,.7);position:relative;overflow:hidden}
+.qsbtn{display:block;width:100%;margin-top:12px;text-align:center;background:linear-gradient(90deg,#16b8a6,#7d5cff);color:#fff;font-weight:800;font-size:14px;padding:12px;border-radius:11px;box-shadow:0 8px 22px -8px rgba(56,225,160,.7);position:relative;overflow:hidden}
 .qssh{position:absolute;top:0;left:-60%;width:50%;height:100%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.25),transparent);animation:shine 2.6s linear infinite}
 .qscap{font-size:11px;color:var(--t3);text-align:center;margin-top:11px;font-weight:600}
 .qscap b{color:var(--t2)}
@@ -915,4 +934,17 @@ footer{padding:24px 0;text-align:center;color:var(--t3);font-size:12px}
 @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(51,233,145,.55)}70%{box-shadow:0 0 0 7px rgba(51,233,145,0)}100%{box-shadow:0 0 0 0 rgba(51,233,145,0)}}
 @keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
 @keyframes flick{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.55;transform:scale(.88)}}
+/* ---- commercial video section ---- */
+.vidsec{padding:26px 0 6px;text-align:center}
+.vid-eyebrow{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:.22em;color:var(--green);margin-bottom:11px}
+.vid-h{font-size:clamp(23px,3.3vw,34px);font-weight:900;letter-spacing:-.02em;color:#fff;margin-bottom:20px}
+.vidframe{position:relative;max-width:920px;margin:0 auto;aspect-ratio:16/9;border-radius:18px;overflow:hidden;
+  border:1px solid var(--line2);box-shadow:0 40px 90px -50px #000,0 0 60px -30px rgba(56,225,160,.25);
+  background:linear-gradient(135deg,#0c241c,#08130e)}
+.vidframe video,.vidframe iframe{width:100%;height:100%;display:block;border:0;object-fit:cover}
+.vid-ph{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:15px}
+.vid-play{width:64px;height:64px;border-radius:50%;background:rgba(255,255,255,.92);position:relative;animation:pulse 2s infinite}
+.vid-play::after{content:"";position:absolute;top:50%;left:54%;transform:translate(-50%,-50%);
+  border-left:20px solid #07140f;border-top:12px solid transparent;border-bottom:12px solid transparent}
+.vid-cap{font-family:'Barlow Condensed',sans-serif;font-size:12.5px;color:var(--t2);letter-spacing:.14em;text-transform:uppercase}
 `;
