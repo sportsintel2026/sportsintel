@@ -304,7 +304,13 @@ export default function LandingPage(){
                 <span className="eb-s">The model, the edge, and a guide to bet smarter.</span>
               </span>
             </div>
-            <h1>Bet smarter,<br/>not <span className="hl-r">harder.</span></h1>
+            <h1 className="rh">
+              <span className="rh-l">The book already beat you.<br/><span style={{color:"var(--green)"}}>Now beat it back.</span></span>
+              <span className="rh-l">See the edge they<br/>don't want you to <span style={{color:"var(--green)"}}>see.</span></span>
+              <span className="rh-l">Every game has an edge.<br/><span style={{color:"#ff6b5b"}}>You're missing it.</span></span>
+              <span className="rh-l">Bet the <span style={{color:"var(--green)"}}>number</span><br/>the sharps bet.</span>
+              <span className="rh-l">Stop betting <span style={{color:"var(--green)"}}>blind.</span></span>
+            </h1>
             <p className="lede">A real model versus the live market — every game, every book, one screen.</p>
             <p className="sub">We find where our projections disagree with the price the books are offering, and show you the reasoning. No locks, no hype — just the edge.</p>
             <div className="cta-row">
@@ -529,6 +535,15 @@ nav{position:sticky;top:0;z-index:50;background:rgba(7,7,14,.72);backdrop-filter
 .eb-k{display:block;font-size:10.5px;font-weight:800;letter-spacing:.14em;color:#fff;margin-bottom:4px}
 .eb-s{display:block;font-size:13px;font-weight:600;color:#f0a93c;line-height:1.5}
 h1{font-size:clamp(34px,7vw,56px);font-weight:900;line-height:1.04;letter-spacing:-.02em;margin-bottom:18px;color:#fff}
+h1.rh{position:relative;min-height:118px}
+@media(min-width:880px){h1.rh{min-height:150px}}
+.rh-l{position:absolute;top:0;left:0;width:100%;opacity:0;animation:rhcycle 14s infinite}
+.rh-l:nth-child(1){animation-delay:0s}
+.rh-l:nth-child(2){animation-delay:2.8s}
+.rh-l:nth-child(3){animation-delay:5.6s}
+.rh-l:nth-child(4){animation-delay:8.4s}
+.rh-l:nth-child(5){animation-delay:11.2s}
+@keyframes rhcycle{0%{opacity:0;transform:translateY(12px)}3%{opacity:1;transform:none}17%{opacity:1;transform:none}21%{opacity:0;transform:translateY(-12px)}100%{opacity:0}}
 .lede{font-size:16px;color:var(--t1);font-weight:600;line-height:1.6;margin-bottom:10px;max-width:480px}
 .sub{font-size:14.5px;color:var(--t2);line-height:1.7;margin-bottom:26px;max-width:470px}
 .cta-row{display:flex;gap:11px;flex-wrap:wrap;align-items:center}
