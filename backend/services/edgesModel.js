@@ -292,6 +292,94 @@ function calculateTotalProjection(game, awayPitcher, homePitcher, awayTeamHit, h
   };
 }
 
+// ── SHADOW TOTALS MODEL (2026-06-14) ──────────────────────────────────────────
+// Roland's pitching-built, MULTIPLICATIVE alternative to the live additive model.
+// Computed ALONGSIDE the live projection (it never drives a pick, never grades a
+// bet) so we can score the two side-by-side for a few weeks and switch only with
+// evidence. Shape per staff:
+//
+//   runs allowed = (starterERA × starterIP)/9 × envˢ  +  (bullpenERA × bullpenIP)/9 × env
+//   where env = opposing-offense adj × park factor × weather factor
+//
+// Offense/park/weather scale the WHOLE projection (both starter and bullpen runs).
+// The bullpen takes the full env multiplier; the STARTER takes a damped one — a
+// starter suppresses runs more independently of the environment, the bullpen is
+// fully exposed. "envˢ" above = env pulled toward 1.0 by SHADOW_STARTER_ENV_SCALE.
+//
+// Two-sided & symmetric (same formula each staff): away staff is faced by the HOME
+// bats, home staff by the AWAY bats; the two halves are summed into the game total.
+// Faithful to the drawn formula with two principled hardenings agreed up front:
+//   • ERA uses effectiveERA (60% FIP + 40% raw ERA), NOT raw ERA — raw ERA is noisy
+//     and chases luck/defense; effectiveERA is more predictive of next-start runs.
+//   • offense stays a REAL input (each team's runsPerGame × handedness vs the
+//     league, clamped 0.75–1.30), not a throwaway multiplier.
+// NOTE: ERA is EARNED runs only, so this should sit a touch under actual totals; if
+// the shadow diagnostic later shows a steady under-bias, a ~1.07 unearned-run
+// constant is the principled place to add it.
+const SHADOW_STARTER_ENV_SCALE = 0.4; // starter feels ~40% of the env swing the bullpen feels ("slightly")
+function shadowOffAdj(teamHit, handMult) {
+  const rpg = (teamHit?.runsPerGame ?? LEAGUE_AVG.runsPerGame) * (handMult || 1.0);
+  return Math.max(0.75, Math.min(1.30, rpg / LEAGUE_AVG.runsPerGame));
+}
+function shadowWeatherFactor(weather) {
+  if (!weather || weather.indoor) return 1.0;
+  let f = 1.0;
+  if (weather.windEffect === "out") f += 0.04;
+  if (weather.windEffect === "in")  f -= 0.04;
+  if (weather.tempEffect === "hot") f += 0.03;
+  if (weather.tempEffect === "cold") f -= 0.03;
+  return f;
+}
+function shadowStaffRunsAllowed(starterERA, starterIP, penERA, penIP, offAdj, park, wx) {
+  const starterRuns = (starterERA * starterIP) / 9;
+  const penRuns = (penERA * penIP) / 9;
+  // Offense/park/weather scale the WHOLE projection (starter AND bullpen runs), but
+  // the STARTER is damped: a starter suppresses runs more independently of the
+  // environment, while the bullpen is fully exposed to it. The bullpen takes the
+  // full combined multiplier; the starter takes one pulled most of the way back
+  // toward 1.0 (feels ~SHADOW_STARTER_ENV_SCALE of the swing the bullpen feels).
+  const mult = offAdj * park * wx;
+  const starterMult = 1 + (mult - 1) * SHADOW_STARTER_ENV_SCALE;
+  return starterRuns * starterMult + penRuns * mult;
+}
+function calculateTotalProjectionShadow(game, awayPitcher, homePitcher, awayTeamHit, homeTeamHit, weather, awayBullpen, homeBullpen, awayHandMult, homeHandMult) {
+  const awayStarterERA = effectiveERA(awayPitcher) ?? LEAGUE_AVG.era;
+  const homeStarterERA = effectiveERA(homePitcher) ?? LEAGUE_AVG.era;
+  const awayStarterIP = expectedStarterIP(awayPitcher, homeTeamHit);
+  const homeStarterIP = expectedStarterIP(homePitcher, awayTeamHit);
+  const awayPenIP = expectedBullpenIP(awayPitcher, homeTeamHit);
+  const homePenIP = expectedBullpenIP(homePitcher, awayTeamHit);
+  const awayPenERA = awayBullpen?.era ?? LEAGUE_AVG.bullpenEra;
+  const homePenERA = homeBullpen?.era ?? LEAGUE_AVG.bullpenEra;
+
+  const park = (game.parkRunFactor != null) ? game.parkRunFactor : 1.0;
+  const wx = shadowWeatherFactor(weather);
+
+  // away staff faces the HOME bats; home staff faces the AWAY bats
+  const homeOffAdj = shadowOffAdj(homeTeamHit, homeHandMult);
+  const awayOffAdj = shadowOffAdj(awayTeamHit, awayHandMult);
+
+  const awayStaffRA = shadowStaffRunsAllowed(awayStarterERA, awayStarterIP, awayPenERA, awayPenIP, homeOffAdj, park, wx);
+  const homeStaffRA = shadowStaffRunsAllowed(homeStarterERA, homeStarterIP, homePenERA, homePenIP, awayOffAdj, park, wx);
+
+  const projected = awayStaffRA + homeStaffRA;
+  return {
+    projectedTotal: round2(projected),
+    breakdown: {
+      awayStaffRA: round2(awayStaffRA),   // runs the home bats put up
+      homeStaffRA: round2(homeStaffRA),   // runs the away bats put up
+      awayStarterIP: round2(awayStarterIP),
+      homeStarterIP: round2(homeStarterIP),
+      awayPenIP: round2(awayPenIP),
+      homePenIP: round2(homePenIP),
+      park: round2(park),
+      wx: round2(wx),
+      homeOffAdj: round2(homeOffAdj),
+      awayOffAdj: round2(awayOffAdj),
+    },
+  };
+}
+
 // ── HR PROP MODEL ─────────────────────────────────────────────────────────────
 // recent15 (last-15-day stats) is now an INPUT, not just display: a hitter on a
 // genuine power surge (or slump) gets nudged off their season HR rate. Kept
@@ -1123,6 +1211,9 @@ async function calculateGameEdges(game, oddsForGame) {
   const awayFatigue = describeFatigue(awayBullpenUsage);
   const homeFatigue = describeFatigue(homeBullpenUsage);
   const totals = calculateTotalProjection(game, awayPitcherForm, homePitcherForm, awayHit, homeHit, weather, awayBullpen, homeBullpen, awayHandMult, homeHandMult, awayFatigue, homeFatigue);
+  // SHADOW: pitching-built multiplicative projection computed in parallel, stored
+  // for grading, never used to price a pick (see calculateTotalProjectionShadow).
+  const totalsShadow = calculateTotalProjectionShadow(game, awayPitcherForm, homePitcherForm, awayHit, homeHit, weather, awayBullpen, homeBullpen, awayHandMult, homeHandMult);
 
   const odds = oddsForGame || { h2h: {}, totals: {} };
   const awayML = odds.h2h?.away;
@@ -1130,6 +1221,7 @@ async function calculateGameEdges(game, oddsForGame) {
   const totalLine = odds.totals?.line;
   const overOdds = odds.totals?.over;
   const underOdds = odds.totals?.under;
+  console.log(`[SHADOW] ${game.awayAbbr}@${game.homeAbbr} | live=${totals.projectedTotal} shadow=${totalsShadow.projectedTotal} line=${totalLine ?? "n/a"} | shadowSplit a/h=${totalsShadow.breakdown.homeStaffRA}/${totalsShadow.breakdown.awayStaffRA}`);
 
   // Every edge is blended toward the de-vigged market line (v0.5) then passed
   // through sanitizeEdge() so an implausible number can never surface.
@@ -1289,6 +1381,8 @@ async function calculateGameEdges(game, oddsForGame) {
     totals: {
       projected: totals.projectedTotal,
       breakdown: totals.breakdown,
+      shadow: totalsShadow.projectedTotal,
+      shadowBreakdown: totalsShadow.breakdown,
       line: totalLine,
       overOdds,
       underOdds,
