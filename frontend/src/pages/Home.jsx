@@ -263,6 +263,18 @@ export default function HomePage(){
         </div>
       </section>
 
+      {/* HOW TO USE GUIDE */}
+      <section>
+        <div className="guideb" onClick={()=>navigate("/guide")}>
+          <div className="guideb-ic">📘</div>
+          <div className="guideb-tx">
+            <div className="guideb-h">New here? How to use WizePicks</div>
+            <div className="guideb-s">Edges, props, line shopping &amp; the full board — a quick walkthrough of everything inside.</div>
+          </div>
+          <span className="guideb-ar">→</span>
+        </div>
+      </section>
+
       {/* UPCOMING */}
       {upcoming.length>0&&(<section className="panel">
         <div className="sh"><div className="l"><span className="i">🗓️</span>UPCOMING GAMES</div><span className="s2" onClick={()=>navigate("/games")}>View all →</span></div>
@@ -563,6 +575,13 @@ section{padding:13px 12px 2px;margin:0;border-top:1px solid #161d24}
 .prrow{display:flex;gap:8px;align-items:stretch;overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;padding-bottom:4px;scrollbar-width:none;scroll-padding-left:2px}
 .prrow::-webkit-scrollbar{display:none}
 .ppswipe{font-size:11px;font-weight:700;color:#8a99a2}
+.guideb{display:flex;align-items:center;gap:13px;padding:15px 16px;border-radius:14px;cursor:pointer;border:1px solid rgba(51,233,145,.28);background:linear-gradient(180deg,rgba(51,233,145,.09),rgba(51,233,145,.02))}
+.guideb:active{transform:scale(.99)}
+.guideb-ic{font-size:23px;flex:0 0 auto;width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;background:rgba(51,233,145,.12);border:1px solid rgba(51,233,145,.25)}
+.guideb-tx{flex:1;min-width:0}
+.guideb-h{font-size:14px;font-weight:800;color:#fff;line-height:1.25}
+.guideb-s{font-size:11.5px;color:#9aa6b2;line-height:1.4;margin-top:3px}
+.guideb-ar{font-size:18px;color:#33e991;font-weight:800;flex:0 0 auto}
 .prc{flex:0 0 auto;width:118px;scroll-snap-align:start;min-width:0;position:relative;border:1px solid rgba(155,123,255,.22);border-radius:13px;background:linear-gradient(180deg,rgba(155,123,255,.08),rgba(155,123,255,.02));padding:12px 7px 10px;cursor:pointer;display:flex;flex-direction:column;align-items:center;text-align:center}
 .prc:active{background:rgba(155,123,255,.13)}
 .prcrank{position:absolute;top:6px;left:6px;width:18px;height:18px;border-radius:6px;background:rgba(155,123,255,.92);color:#fff;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:11px;display:flex;align-items:center;justify-content:center;line-height:1;z-index:2}
