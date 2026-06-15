@@ -118,6 +118,7 @@ async function getPitcherSeasonStats(playerId, season) {
       strikeoutsPer9: parseFloat(s.strikeoutsPer9Inn) || null, walksPer9: parseFloat(s.walksPer9Inn) || null,
       homeRunsPer9: parseFloat(s.homeRunsPer9) || null, strikeoutWalkRatio: parseFloat(s.strikeoutWalkRatio) || null,
       battingAvgAgainst: parseFloat(s.avg) || null,
+      sluggingAgainst: parseFloat(s.slg) || null,
       wins: parseIntSafe(s.wins), losses: parseIntSafe(s.losses), hits: parseIntSafe(s.hits),
       earnedRuns: parseIntSafe(s.earnedRuns), homeRuns: parseIntSafe(s.homeRuns),
       strikeouts: parseIntSafe(s.strikeOuts), walks: parseIntSafe(s.baseOnBalls),
