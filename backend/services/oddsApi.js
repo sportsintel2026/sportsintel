@@ -433,6 +433,75 @@ async function getMLBHitsPropsForAllEvents(eventIds, maxEvents = 5) {
   return results;
 }
 
+// ── TOTAL BASES props (SHADOW) ────────────────────────────────────────────────
+// Batter total-bases O/U. Mirrors the hits fetch exactly. Unlike hits (single
+// 0.5 line), total_bases books quote several lines (1.5 / 2.5 / 3.5); we keep the
+// player's PRIMARY line — the lowest line that has both Over+Under priced, which
+// is the most-liquid one (almost always 1.5). First book to provide it wins.
+async function getMLBTotalBasesPropsForEvent(eventId) {
+  const cacheKey = `mlb_tb_${eventId}`;
+  const cached = cache.get(cacheKey);
+  if (isCacheValid(cached)) return cached.data;
+  try {
+    const data = await oddsGet(`/sports/baseball_mlb/events/${eventId}/odds`, {
+      regions: "us",
+      markets: "batter_total_bases",
+      oddsFormat: "american",
+    });
+    const props = parseTotalBasesProps(data);
+    console.log(`[OddsAPI-TB] Parsed ${props.length} total-bases props from event ${eventId}`);
+    cache.set(cacheKey, { data: props, fetchedAt: Date.now() });
+    return props;
+  } catch (e) {
+    console.error(`[OddsAPI] Total-bases props error for ${eventId}:`, e.message);
+    if (cached) return cached.data;
+    return [];
+  }
+}
+
+function parseTotalBasesProps(ev) {
+  const out = new Map();
+  for (const bm of (ev.bookmakers || [])) {
+    for (const m of (bm.markets || [])) {
+      if (m.key !== "batter_total_bases") continue;
+      // player -> { line -> {over, under} }
+      const byPlayer = new Map();
+      for (const o of (m.outcomes || [])) {
+        const player = o.description;
+        const line = o.point;
+        if (!player || line == null || o.price == null) continue;
+        const side = (o.name || "").toLowerCase();
+        const lines = byPlayer.get(player) || new Map();
+        const rec = lines.get(line) || { line };
+        if (side === "over") rec.over = o.price;
+        else if (side === "under") rec.under = o.price;
+        lines.set(line, rec);
+        byPlayer.set(player, lines);
+      }
+      for (const [player, lines] of byPlayer) {
+        if (out.has(player)) continue; // first book wins
+        // pick the lowest line that has BOTH sides priced (most liquid; usually 1.5)
+        const priced = Array.from(lines.values())
+          .filter((r) => r.over != null && r.under != null)
+          .sort((a, b) => a.line - b.line);
+        if (priced.length === 0) continue;
+        const rec = priced[0];
+        out.set(player, { player, line: rec.line, overOdds: rec.over, underOdds: rec.under, book: bm.title });
+      }
+    }
+  }
+  return Array.from(out.values());
+}
+
+async function getMLBTotalBasesPropsForAllEvents(eventIds, maxEvents = 5) {
+  const targets = eventIds.slice(0, maxEvents);
+  const results = {};
+  for (const id of targets) {
+    results[id] = await getMLBTotalBasesPropsForEvent(id);
+  }
+  return results;
+}
+
 // ── Convert American odds to implied probability ──────────────────────────────
 
 function americanToImpliedProb(american) {
@@ -817,6 +886,8 @@ module.exports = {
   getMLBStrikeoutPropsForAllEvents,
   getMLBHitsPropsForEvent,
   getMLBHitsPropsForAllEvents,
+  getMLBTotalBasesPropsForEvent,
+  getMLBTotalBasesPropsForAllEvents,
   americanToImpliedProb,
   getRawTotalsDebug,
   probeOddsCoverage,
