@@ -138,13 +138,13 @@ export default function LandingPage(){
       </section>
 
       {/* VIDEO SECTION */}
-      <div className="wrap">
-        <section className="vidsec">
+      <section className="vidsec">
+        <div className="wrap">
           <div className="vid-eyebrow">▶ WATCH · 30 SECONDS</div>
           <div className="vid-h">This is what betting blind looks like.</div>
-          <CommercialVideo />
-        </section>
-      </div>
+        </div>
+        <CommercialVideo />
+      </section>
 
       {/* PAGE SYSTEM */}
       <div className="sech" id="how">Everything the sharps do — done for you</div>
@@ -334,8 +334,8 @@ const CSS = `
 .lpwrap .vidsec{padding:64px 0 40px;text-align:center}
 .lpwrap .vid-eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:var(--mint);margin-bottom:12px}
 .lpwrap .vid-h{font-family:var(--disp);font-weight:700;font-size:clamp(24px,3.3vw,36px);letter-spacing:-.02em;margin-bottom:22px}
-.lpwrap .vidframe{position:relative;max-width:880px;margin:0 auto;aspect-ratio:16/9;border-radius:18px;overflow:hidden;
-  border:1px solid rgba(56,225,160,.22);box-shadow:0 40px 90px -50px #000,0 0 60px -30px rgba(56,225,160,.25);
+.lpwrap .vidframe{position:relative;width:100vw;left:50%;right:50%;margin-left:-50vw;margin-right:-50vw;max-width:100vw;aspect-ratio:16/9;border-radius:0;overflow:hidden;
+  border:0;border-top:1px solid rgba(56,225,160,.18);border-bottom:1px solid rgba(56,225,160,.18);box-shadow:0 40px 90px -50px #000;
   background:linear-gradient(135deg,#0c241c,#08130e);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:15px}
 .lpwrap .vidframe video,.lpwrap .vidframe iframe{position:absolute;inset:0;width:100%;height:100%;display:block;border:0;object-fit:cover}
 .lpwrap .vidyt{position:absolute;inset:0;width:100%;height:100%}
