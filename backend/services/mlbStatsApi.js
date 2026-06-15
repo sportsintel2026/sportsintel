@@ -381,6 +381,52 @@ async function getTeamHandednessSplits(teamId, season) {
   } catch (e) { return null; }
 }
 
+// ── Batter-level platoon splits (vs LHP / vs RHP) ────────────────────────────
+// Per-batter version of getTeamHandednessSplits — far sharper for props than the
+// team aggregate. Same statSplits/sitCodes call, on /people/{id} instead of /teams.
+// Cached per player per day (splits move slowly) so calling it across the HR/hits/TB
+// models for the same batter is one network call, not three.
+const _batterSplitsCache = new Map(); // `${id}:${date}` -> splits | null
+async function getBatterHandednessSplits(playerId, season) {
+  if (!playerId) return null;
+  const yr = season || new Date().getFullYear();
+  const ck = `${playerId}:${getEasternDate(0)}`;
+  if (_batterSplitsCache.has(ck)) return _batterSplitsCache.get(ck);
+  try {
+    const data = await mlbGet(`/people/${playerId}/stats`, {
+      stats: "statSplits", group: "hitting", season: yr, sitCodes: "vl,vr",
+    });
+    const splits = data.stats?.[0]?.splits || [];
+    if (!splits.length) { _batterSplitsCache.set(ck, null); return null; }
+    let vsLHP = null, vsRHP = null;
+    for (const sp of splits) {
+      const code = sp.split?.code;
+      const desc = (sp.split?.description || "").toLowerCase();
+      const s = sp.stat || {};
+      const parsed = {
+        avg: parseFloat(s.avg) || null, obp: parseFloat(s.obp) || null,
+        slg: parseFloat(s.slg) || null, ops: parseFloat(s.ops) || null,
+        atBats: parseIntSafe(s.atBats), homeRuns: parseIntSafe(s.homeRuns),
+      };
+      if (code === "vl" || desc.includes("left")) vsLHP = parsed;
+      else if (code === "vr" || desc.includes("right")) vsRHP = parsed;
+    }
+    const result = (!vsLHP && !vsRHP) ? null : { vsLHP, vsRHP };
+    _batterSplitsCache.set(ck, result);
+    return result;
+  } catch (e) { _batterSplitsCache.set(ck, null); return null; }
+}
+
+// Batter's handedness (L/R/S) — sibling of getPitcherHand, same /people endpoint.
+async function getBatterHand(batterId) {
+  if (!batterId) return null;
+  try {
+    const data = await mlbGet(`/people/${batterId}`);
+    const person = data.people?.[0] || {};
+    return person.batSide?.code || null;
+  } catch (e) { return null; }
+}
+
 // ── Team bullpen (reliever-only) stats ───────────────────────────────────────
 async function getTeamBullpenStats(teamId, season) {
   if (!teamId) return null;
@@ -495,12 +541,16 @@ async function getTeamBullpenUsage(teamId, days = 3) {
 }
 
 // ── Pitcher throwing hand ("L" or "R") ──────────────────────────────────────
+const _pitcherHandCache = new Map(); // id -> code (handedness never changes)
 async function getPitcherHand(pitcherId) {
   if (!pitcherId) return null;
+  if (_pitcherHandCache.has(pitcherId)) return _pitcherHandCache.get(pitcherId);
   try {
     const data = await mlbGet(`/people/${pitcherId}`);
     const person = data.people?.[0] || {};
-    return person.pitchHand?.code || null;
+    const code = person.pitchHand?.code || null;
+    _pitcherHandCache.set(pitcherId, code);
+    return code;
   } catch (e) { return null; }
 }
 
@@ -869,5 +919,6 @@ module.exports = {
   getLiveGameState,
   getGameStatusAndScore,
   getTeamHandednessSplits, getTeamBullpenStats, getTeamBullpenUsage, getPitcherHand,
+  getBatterHandednessSplits, getBatterHand,
   getSeasonHeadToHead,
 };
