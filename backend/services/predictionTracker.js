@@ -5,7 +5,7 @@
 // gradeFinishedGames()  → cron: grades pending MLB (team scores) and NBA (player gamelog).
 
 const { createClient } = require("@supabase/supabase-js");
-const { getEasternDate, getScheduleForDate, getGameHRHitters, getGamePitcherStrikeouts, getGameBatterHits, getLinescore, getGameStatusAndScore, normPlayerName } = require("./mlbStatsApi");
+const { getEasternDate, getScheduleForDate, getGameHRHitters, getGamePitcherStrikeouts, getGameBatterHits, getGameBatterTotalBases, getLinescore, getGameStatusAndScore, normPlayerName } = require("./mlbStatsApi");
 const { fetchGamelog } = require("./nbaGamelog");
 const { fetchScoreboard } = require("./nbaDataSource");
 const { getMLBMainOdds } = require("./oddsApi");
@@ -529,7 +529,7 @@ async function recordTotalBasesShadow(tbShadow, gameIso) {
     rows.push({
       game_id: String(p.gameId), game_date: gameDate, league: "mlb",
       matchup: p.game, market: "player_total_bases_shadow",
-      selection: `${p.playerId}:OVER`,
+      selection: `${p.player}:OVER`,
       description: `${p.player} total_bases OVER ${p.line} (expTB ${p.expTB})`,
       model_prob: p.overProb, odds: -110,
       edge: p.edgeOverShadow ?? null, confidence: p.overProb, line: p.line,
@@ -786,6 +786,7 @@ async function gradeMlb(supabase, pending) {
   const hrCache = new Map(); // game_id -> { ok, hr }
   const kCache = new Map(); // game_id -> { ok, ks }
   const hitsCache = new Map(); // game_id -> { ok, hits }
+  const tbCache = new Map(); // game_id -> { ok, tb }
   const scoreCache = new Map(); // game_id -> { awayScore, homeScore } | null (linescore fallback)
   const statusCache = new Map(); // game_id -> authoritative feed status+score
 
@@ -868,6 +869,23 @@ async function gradeMlb(supabase, pending) {
         const pname = ci >= 0 ? p.selection.slice(0, ci) : p.selection;
         const side = (ci >= 0 ? p.selection.slice(ci + 1) : "OVER").toUpperCase();
         const { found, value } = resolvePlayerStat(box.hits, pname);
+        if (!found) continue;                          // batter not located → never false-loss
+        if (p.line != null && value === p.line) outcome = { result: "push", actual: value };
+        else {
+          const over = value > (p.line ?? 0);
+          const win = side === "OVER" ? over : !over;
+          outcome = { result: win ? "win" : "loss", actual: value };
+        }
+      } else if (p.market === "player_total_bases_shadow") {
+        if (!tbCache.has(p.game_id)) {
+          tbCache.set(p.game_id, await getGameBatterTotalBases(p.game_id));
+        }
+        const box = tbCache.get(p.game_id);
+        if (!box || !box.ok) continue;                 // couldn't read → retry later
+        const ci = p.selection.lastIndexOf(":");
+        const pname = ci >= 0 ? p.selection.slice(0, ci) : p.selection;
+        const side = (ci >= 0 ? p.selection.slice(ci + 1) : "OVER").toUpperCase();
+        const { found, value } = resolvePlayerStat(box.tb, pname);
         if (!found) continue;                          // batter not located → never false-loss
         if (p.line != null && value === p.line) outcome = { result: "push", actual: value };
         else {
