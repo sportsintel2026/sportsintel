@@ -33,6 +33,11 @@ router.get("/", async (req, res) => {
     if (req.query.void_unmatched === "1" || req.query.void_unmatched === "true") return res.json(await voidUnmatched());
     if (req.query.counts === "1" || req.query.counts === "true") return res.json(await countsReport());
     if (req.query.prop_results === "1" || req.query.prop_results === "true") return res.json(await propResults());
+    if (req.query.tb_grade != null) {
+      const v = String(req.query.tb_grade);
+      const cutoff = /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null;
+      return res.json(await tbGrade(cutoff));
+    }
     if (req.query.hr_tiers === "1" || req.query.hr_tiers === "true") return res.json(await hrTiers());
     if (req.query.savant_probe === "1" || req.query.savant_probe === "true") return res.json(await probeExpectedStats());
     if (req.query.barrel_probe === "1" || req.query.barrel_probe === "true") return res.json(await probeBarrels());
@@ -289,6 +294,86 @@ async function countsReport() {
 
 // READ-ONLY. Every graded K / hits pick with projection vs actual, plus per-side
 // aggregates — the raw material for calibrating the projections.
+// READ-ONLY. Total-Bases SHADOW calibration report. Reads graded TB shadow rows
+// and answers: (1) is the model's Over probability calibrated (does 60% actually
+// hit 60%)?, (2) what's the Over-bet ROI at -110-equivalent?, (3) is there a
+// systematic Over bias, broken out BY LINE (0.5 vs 1.5+) — the suspected leak.
+// Optional ?tb_grade=YYYY-MM-DD cutoff to restrict to rows on/after a date.
+async function tbGrade(cutoff = null) {
+  const supabase = db();
+  let q = supabase
+    .from("model_predictions")
+    .select("selection,line,model_prob,edge,result,actual_value,game_date")
+    .eq("league", "mlb")
+    .eq("market", "player_total_bases_shadow")
+    .neq("result", "pending")
+    .limit(5000);
+  if (cutoff) q = q.gte("game_date", cutoff);
+  const { data, error } = await q;
+  if (error) return { ok: false, error: error.message };
+
+  const rows = (data || [])
+    .map(r => {
+      const ci = (r.selection || "").lastIndexOf(":");
+      const player = ci >= 0 ? r.selection.slice(0, ci) : r.selection;
+      return { player, line: r.line, modelProb: r.model_prob, edge: r.edge, result: r.result, actual: r.actual_value, date: r.game_date };
+    })
+    .filter(r => r.result === "win" || r.result === "loss"); // decisions only (drop pushes)
+
+  const n = rows.length;
+  if (!n) return { ok: true, note: "no graded TB shadow rows yet — give it a day after a slate completes", n: 0 };
+
+  const amerToProfit = (o) => o == null ? null : (o > 0 ? o / 100 : 100 / Math.abs(o));
+  const PROFIT_110 = amerToProfit(-110); // shadow rows store -110
+
+  // All rows are modeled as the OVER side (selection is :OVER, model_prob = P(over)).
+  function summarize(set) {
+    const m = set.length;
+    if (!m) return { n: 0 };
+    const wins = set.filter(r => r.result === "win").length;
+    const losses = m - wins;
+    const mean = (arr) => arr.reduce((a, b) => a + b, 0) / (arr.length || 1);
+    // ROI if we'd bet every OVER at -110.
+    let profit = 0;
+    for (const r of set) profit += r.result === "win" ? PROFIT_110 : -1;
+    return {
+      n: m, wins, losses,
+      overHitRatePct: Math.round((wins / m) * 100),     // how often Over actually cashed
+      meanModelOverProb: +mean(set.map(r => r.modelProb)).toFixed(3), // what the model claimed
+      meanActualTB: +mean(set.map(r => r.actual)).toFixed(2),
+      meanLine: +mean(set.map(r => r.line)).toFixed(2),
+      roiPctAt110: +((profit / m) * 100).toFixed(1),
+    };
+  }
+
+  // Calibration buckets on the model's Over prob vs the realized Over rate.
+  const calBuckets = [[0, 0.45], [0.45, 0.5], [0.5, 0.55], [0.55, 0.6], [0.6, 0.7], [0.7, 1.01]];
+  const calibration = calBuckets.map(([lo, hi]) => {
+    const set = rows.filter(r => r.modelProb >= lo && r.modelProb < hi);
+    const m = set.length;
+    const actualOver = set.filter(r => r.result === "win").length; // win == Over hit
+    return {
+      bucket: `${lo.toFixed(2)}-${hi.toFixed(2)}`,
+      n: m,
+      claimedOverProb: m ? +((lo + hi) / 2).toFixed(2) : null,
+      actualOverRatePct: m ? Math.round((actualOver / m) * 100) : null,
+    };
+  });
+
+  return {
+    ok: true,
+    n,
+    overall: summarize(rows),
+    byLine: {
+      "0.5": summarize(rows.filter(r => r.line === 0.5)),
+      "1.5": summarize(rows.filter(r => r.line === 1.5)),
+      "2.5+": summarize(rows.filter(r => r.line >= 2.5)),
+    },
+    calibration,
+    interpretation: "If actualOverRatePct < claimedOverProb across buckets, the model is OVER-biased (projections too high). Compare byLine['0.5'] vs ['1.5'] to locate where the bias lives.",
+  };
+}
+
 async function propResults() {
   const supabase = db();
   const { data, error } = await supabase
