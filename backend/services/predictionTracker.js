@@ -513,7 +513,39 @@ async function recordNbaPropPredictions(proj, gameIso) {
   }
 }
 
-// ── RECORD (NBA team markets: ML / spread / total) ──────────────────────────────
+// ── RECORD (Total Bases SHADOW) ─────────────────────────────────────────────────
+// Persists shadow TB projections so they accumulate per slate and can be graded
+// later. Log-only model: these rows never price a pick anywhere. selection is
+// "{playerId}:OVER" so it's unique per player and carries the id for grading.
+// Idempotent via the (game_id, market, selection, game_date) unique constraint —
+// safe to call repeatedly for the same slate.
+async function recordTotalBasesShadow(tbShadow, gameIso) {
+  if (!Array.isArray(tbShadow) || tbShadow.length === 0) return;
+  const supabase = db();
+  const gameDate = etDate(gameIso) || getEasternDate(0);
+  const rows = [];
+  for (const p of tbShadow) {
+    if (!p.playerId || p.line == null || p.overProb == null) continue;
+    rows.push({
+      game_id: String(p.gameId), game_date: gameDate, league: "mlb",
+      matchup: p.game, market: "player_total_bases_shadow",
+      selection: `${p.playerId}:OVER`,
+      description: `${p.player} total_bases OVER ${p.line} (expTB ${p.expTB})`,
+      model_prob: p.overProb, odds: -110,
+      edge: p.edgeOverShadow ?? null, confidence: p.overProb, line: p.line,
+    });
+  }
+  if (rows.length === 0) return;
+  try {
+    const { error } = await supabase
+      .from("model_predictions")
+      .upsert(rows, { onConflict: "game_id,market,selection,game_date", ignoreDuplicates: true });
+    if (error) console.error("[Tracker] TB-shadow record error:", error.message);
+    else console.log(`[Tracker] Snapshotted ${rows.length} TB-shadow projections for ${gameDate} (dups ignored)`);
+  } catch (e) {
+    console.error("[Tracker] TB-shadow record exception:", e.message);
+  }
+}
 // Snapshots PRE-GAME NBA team-market edges so Quick Picks can use them. The NBA
 // model emits its spread/total edges in POINTS (not probabilities), so here we
 // convert all three markets to the same currency as everything else — a
@@ -1060,4 +1092,4 @@ async function captureOddsTicks() {
   return rows.length;
 }
 
-module.exports = { recordPredictions, recordNbaPropPredictions, recordNbaTeamPredictions, gradeFinishedGames, gradeNbaProp, captureClosingLines, captureNbaClosingLines, captureOddsTicks };
+module.exports = { recordPredictions, recordTotalBasesShadow, recordNbaPropPredictions, recordNbaTeamPredictions, gradeFinishedGames, gradeNbaProp, captureClosingLines, captureNbaClosingLines, captureOddsTicks };
