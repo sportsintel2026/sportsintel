@@ -16,12 +16,14 @@ const {
   getMLBHRPropsForAllEvents,
   getMLBStrikeoutPropsForAllEvents,
   getMLBHitsPropsForAllEvents,
+  getMLBTotalBasesPropsForAllEvents,
 } = require("../services/oddsApi");
 const {
   calculateGameEdges,
   calculateHRPropEdges,
   calculateStrikeoutPropEdges,
   calculateHitsPropEdges,
+  calculateTotalBasesShadow,
   debugHitsProps,
 } = require("../services/edgesModel");
 const { recordPredictions } = require("../services/predictionTracker");
@@ -490,6 +492,19 @@ router.get("/mlb", async (req, res) => {
           return res.json({ ok: true, slateDate, gamesUsed: topGamesForHR.map(g => `${g.awayAbbr}@${g.homeAbbr}`), count: dbg.length, hits_debug: dbg });
         }
         hitsPropEdges = await calculateHitsPropEdges(topGamesForHR, hitsOddsByEvent);
+        // ── TOTAL BASES SHADOW (read-only, opt-in via ?tb_shadow=1) ──────────
+        // Fetches TB odds + runs the logged-only projection model. Returns the
+        // projections as JSON and does NOT alter the normal edges response. Safe
+        // to run on a live slate — prices nothing.
+        if (req.query.tb_shadow) {
+          const tbOddsByEvent = await getMLBTotalBasesPropsForAllEvents(eventIds, 10);
+          const tbShadow = await calculateTotalBasesShadow(topGamesForHR, tbOddsByEvent);
+          return res.json({
+            ok: true, slateDate, mode: "tb_shadow_readonly",
+            gamesUsed: topGamesForHR.map(g => `${g.awayAbbr}@${g.homeAbbr}`),
+            count: tbShadow.length, tb_shadow: tbShadow,
+          });
+        }
       } else {
         console.log("[Edges-HR] NO eventIds — HR props skipped");
         if (req.query.hits_debug) return res.json({ ok: true, slateDate, note: "no pre-game games with odds right now — try when tonight's slate is upcoming", hits_debug: [] });
