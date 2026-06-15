@@ -494,8 +494,8 @@ const BVP_MIN_AB = 20;     // below this many career AB vs the pitcher → ignor
 const BVP_FULL_AB = 60;    // weight ramps to ~full here (HR-vs-pitcher rarely exceeds this)
 const BVP_MAX_TILT = 0.12; // max ± influence on the projection
 function bvpNudge(bvp) {
-  if (!bvp || (bvp.atBats || 0) < BVP_MIN_AB || bvp.hr == null) return 1.0;
-  const bvpRate = bvp.hr / bvp.atBats;             // HR per AB vs this pitcher
+  if (!bvp || (bvp.atBats || 0) < BVP_MIN_AB || bvp.homeRuns == null) return 1.0;
+  const bvpRate = bvp.homeRuns / bvp.atBats;       // HR per AB vs this pitcher
   const w = Math.min(1, bvp.atBats / BVP_FULL_AB); // sample weight
   const ratio = bvpRate / LEAGUE_AVG.hrPerPA;      // vs league HR rate
   const tilt = BVP_MAX_TILT * w * clampHR(ratio - 1, -1, 1);
@@ -531,7 +531,7 @@ const BVP_EXC_MIN_ODDS = 400;    // only for longshots (the +450–+1000 band)
 function marketCapMult(bvp, americanOdds) {
   const qualifies =
     americanOdds != null && americanOdds >= BVP_EXC_MIN_ODDS &&
-    bvp && (bvp.atBats || 0) >= BVP_EXC_MIN_AB && (bvp.hr || 0) >= BVP_EXC_MIN_HR;
+    bvp && (bvp.atBats || 0) >= BVP_EXC_MIN_AB && (bvp.homeRuns || 0) >= BVP_EXC_MIN_HR;
   return qualifies ? MAX_OVER_MARKET_BVP : MAX_OVER_MARKET;
 }
 
@@ -565,8 +565,12 @@ function calculateHRProbability(batterStats, opposingPitcherStats, game, weather
   const powFactor = powerFactor(batterStats, statcast); // (a) Statcast-preferred power
   let weatherFactor = 1.0;
   if (weather && !weather.indoor) {
-    if (weather.windEffect === "out") weatherFactor *= 1.15;
-    if (weather.windEffect === "in") weatherFactor *= 0.85;
+    // Scale wind effect by MAGNITUDE (we have windMph) instead of a flat binary.
+    // Ramp from 1.0 at calm to full effect at ~15 mph, capped beyond that.
+    const mph = typeof weather.windMph === "number" ? weather.windMph : 8; // sane default
+    const windScale = Math.max(0, Math.min(1, mph / 15));
+    if (weather.windEffect === "out") weatherFactor *= 1 + 0.15 * windScale;
+    if (weather.windEffect === "in") weatherFactor *= 1 - 0.15 * windScale;
     if (weather.tempEffect === "hot") weatherFactor *= 1.08;
     if (weather.tempEffect === "cold") weatherFactor *= 0.92;
   }
@@ -772,6 +776,15 @@ function hitsOverProb(batterStats, oppPitcherStats, line, opts = {}) {
   let base;
   if (xBA != null) base = (avg != null && avg > 0) ? (HITS_XBA_BLEND * xBA + (1 - HITS_XBA_BLEND) * avg) : xBA;
   else base = avg;
+
+  // 1a) Recent-form nudge: blend in last-15-day AVG (needs a real sample), capped so
+  //     one hot/cold streak can't dominate. Mirrors the HR model's recency logic.
+  const recAvg = opts.recentAvg, recAB = opts.recentAB;
+  if (recAvg != null && recAvg > 0 && recAB != null && recAB >= 25) {
+    const wRec = Math.min(0.30, recAB / 200); // up to 30% weight on recent
+    const blended = (1 - wRec) * base + wRec * recAvg;
+    base = Math.max(base * 0.80, Math.min(base * 1.20, blended)); // ±20% cap
+  }
 
   // 1b) Regress toward league by sample size — small samples (noisy xBA/AVG) pull
   //     hard toward league, killing fake edges on 14-AB hitters.
@@ -1675,6 +1688,7 @@ async function calculateHitsPropEdges(games, hitsOddsByEvent) {
         ? regressThinSample(await getPitcherSeasonStats(opposingPitcherProbable.id))
         : null;
       const batterStats = await getBatterSeasonStats(batter.id);
+      const recent15 = await getBatterRecentStats(batter.id, 15).catch(() => null);
       const fairOver = devigTwoWay(propOdds.overOdds, propOdds.underOdds);
       const lineupRes = onAwayTeam ? awayLineupRes : homeLineupRes;
       const myLineup = (lineupRes && lineupRes.lineup) || [];
@@ -1683,6 +1697,7 @@ async function calculateHitsPropEdges(games, hitsOddsByEvent) {
       const savantXBA = savantMap ? (savantMap.get(batter.id)?.xBA ?? null) : null;
       const overProb = hitsOverProb(batterStats, oppPitcherStats, propOdds.line, {
         xBA: savantXBA, expAB, marketFairOver: fairOver, sampleAB: batterStats?.atBats ?? null,
+        recentAvg: recent15?.avg ?? null, recentAB: recent15?.atBats ?? null,
       });
       if (overProb == null) continue;
       const underProb = round3(1 - overProb);
@@ -1942,13 +1957,29 @@ const TB_MARKET_WEIGHT = 0.45;    // weight on de-vigged market mean vs model me
 const TB_DISPERSION_PHI = 1.35;   // negative-binomial overdispersion (variance/mean) for TB count
 const TB_SLG_MIN = 0.230;         // clamp regressed SLG to sane range
 const TB_SLG_MAX = 0.720;
+const TB_XSLG_BLEND = 0.65;       // weight on Savant xSLG vs season SLG when xSLG present (luck-stripped power)
 
 function tbExpectedAndOverProb(batterStats, oppPitcherStats, line, opts = {}) {
   if (line == null) return null;
-  const slg = batterStats && batterStats.slg != null && batterStats.slg > 0 ? batterStats.slg : null;
-  if (slg == null) return null; // no usable power signal → skip (shadow only)
+  const seasonSlg = batterStats && batterStats.slg != null && batterStats.slg > 0 ? batterStats.slg : null;
+  const xSLG = opts.xSLG != null && opts.xSLG > 0 ? opts.xSLG : null;
+  if (seasonSlg == null && xSLG == null) return null; // no usable power signal → skip
 
-  // 1) Regress SLG toward league by AB sample size.
+  // 1) Base bases-per-AB: prefer Savant xSLG (luck-stripped expected slugging),
+  //    blend with season SLG for stability. Falls back cleanly to whichever exists.
+  let slg;
+  if (xSLG != null && seasonSlg != null) slg = TB_XSLG_BLEND * xSLG + (1 - TB_XSLG_BLEND) * seasonSlg;
+  else slg = xSLG != null ? xSLG : seasonSlg;
+
+  // 1a) Recent-form nudge: blend in last-15-day SLG (needs a real sample), capped.
+  const recSlg = opts.recentSlg, recAB = opts.recentAB;
+  if (recSlg != null && recSlg > 0 && recAB != null && recAB >= 25) {
+    const wRec = Math.min(0.30, recAB / 200);
+    const blended = (1 - wRec) * slg + wRec * recSlg;
+    slg = Math.max(slg * 0.80, Math.min(slg * 1.20, blended)); // ±20% cap
+  }
+
+  // 1b) Regress toward league by AB sample size.
   const nAB = opts.sampleAB != null && opts.sampleAB > 0 ? opts.sampleAB : 80;
   let slgTrue = (slg * nAB + TB_LEAGUE_SLG * TB_REGRESS_K) / (nAB + TB_REGRESS_K);
 
@@ -2006,14 +2037,17 @@ async function calculateTotalBasesShadow(games, tbOddsByEvent) {
         ? regressThinSample(await getPitcherSeasonStats(opposingPitcherProbable.id))
         : null;
       const batterStats = await getBatterSeasonStats(batter.id);
+      const recent15 = await getBatterRecentStats(batter.id, 15).catch(() => null);
       const fairOver = devigTwoWay(propOdds.overOdds, propOdds.underOdds);
       const lineupRes = onAwayTeam ? awayLineupRes : homeLineupRes;
       const myLineup = (lineupRes && lineupRes.lineup) || [];
       const spotIdx = myLineup.findIndex(p => p.id === batter.id);
       const expAB = expABForSpot(spotIdx >= 0 ? spotIdx + 1 : null);
       const xwOBA = savantMap ? (savantMap.get(batter.id)?.xwOBA ?? null) : null;
+      const xSLG = savantMap ? (savantMap.get(batter.id)?.xSLG ?? null) : null;
       const proj = tbExpectedAndOverProb(batterStats, oppPitcherStats, propOdds.line, {
-        expAB, xwOBA, sampleAB: batterStats?.atBats ?? null,
+        expAB, xwOBA, xSLG, sampleAB: batterStats?.atBats ?? null,
+        recentSlg: recent15?.slg ?? null, recentAB: recent15?.atBats ?? null,
       });
       if (proj == null) continue;
       const modelOver = proj.overProb;
@@ -2032,6 +2066,8 @@ async function calculateTotalBasesShadow(games, tbOddsByEvent) {
         marketFairOver: fairOver,
         edgeOverShadow,
         seasonSlg: batterStats?.slg ?? null,
+        xSLG: xSLG ?? null,
+        slgSource: xSLG != null ? "xSLG_blend" : "season_only",
         book: propOdds.book,
       };
       out.push(rec);
