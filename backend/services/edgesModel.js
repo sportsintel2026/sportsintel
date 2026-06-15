@@ -405,6 +405,32 @@ function calculateTotalProjectionShadow(game, awayPitcher, homePitcher, awayTeam
 const HR_PERPA_CAP = 0.05;    // per-PA HR ceiling. Over ~4.3 PA → game-prob tops ~20% (realistic elite ceiling).
 const HR_FACTOR_DAMP = 0.5;   // pull the COMBINED env multiplier toward 1 (^0.5 = sqrt): still tilts, can't stack into a lock.
 const HR_PROB_SHRINK = 0.55;  // shrink the adjusted per-PA rate 45% back toward the batter's OWN base rate (tightened from 0.7 — the env stack was over-inflating).
+
+// ── SLG-AGAINST FACTOR (2026-06-15) ───────────────────────────────────────────
+// A mild, clamped opposing-pitcher power factor derived from how hard the pitcher
+// gets hit (true SLG-against from the feed; BAA-derived proxy if SLG is missing so
+// the mound is never ignored). Applied to HR, hits, and TB. Env-toggleable and
+// conservative by default so it nudges rather than swings live pricing.
+const SLG_FACTOR_ENABLED = process.env.SLG_FACTOR_ENABLED !== "false"; // default on; set "false" to disable
+const SLG_FACTOR_STRENGTH = parseFloat(process.env.SLG_FACTOR_STRENGTH || "0.5"); // 0=off, 1=full; 0.5 = half-weight (mild)
+const SLG_FACTOR_CLAMP = parseFloat(process.env.SLG_FACTOR_CLAMP || "0.10");      // max ±10% swing by default
+const LEAGUE_SLG_AGAINST = 0.405; // league-average slugging allowed (≈ league SLG)
+// Returns a multiplier ~1.0 (e.g. 1.06 vs a hittable arm, 0.95 vs a tough one) or
+// exactly 1.0 when disabled / no data — so callers can multiply unconditionally.
+function slgAgainstFactor(oppPitcherStats) {
+  if (!SLG_FACTOR_ENABLED) return 1.0;
+  let ratio = null;
+  const sa = oppPitcherStats && oppPitcherStats.sluggingAgainst;
+  if (sa != null && sa > 0) ratio = sa / LEAGUE_SLG_AGAINST;
+  else {
+    const baa = oppPitcherStats && oppPitcherStats.battingAvgAgainst;
+    if (baa != null && baa > 0) ratio = baa / LEAGUE_BAA; // proxy
+  }
+  if (ratio == null) return 1.0;
+  // Apply strength (pull toward 1) then clamp the total swing.
+  const adj = 1 + SLG_FACTOR_STRENGTH * (ratio - 1);
+  return Math.max(1 - SLG_FACTOR_CLAMP, Math.min(1 + SLG_FACTOR_CLAMP, adj));
+}
 const HR_MIN_DISPLAY_PROB = 0.06; // HR picks are RANKED BY LIKELIHOOD, not a fake edge. Widened from 0.08 → 0.06 for a fuller props board; shows batters with ≥6% game HR chance, ranked by hrProb.
 
 // ── HR MODEL v2 INPUTS (2026-06-06) ───────────────────────────────────────────
@@ -547,7 +573,7 @@ function calculateHRProbability(batterStats, opposingPitcherStats, game, weather
   // Environmental adjustment: dampened so good-in-everything tilts the
   // projection without compounding into a lock (see HR_FACTOR_DAMP note above).
   const envMult = Math.pow(
-    pitcherFactor * parkFactor * powFactor * weatherFactor,
+    pitcherFactor * parkFactor * powFactor * weatherFactor * slgAgainstFactor(opposingPitcherStats),
     HR_FACTOR_DAMP
   );
   // (b) BvP applied as a small bounded nudge OUTSIDE the dampened stack.
@@ -756,6 +782,7 @@ function hitsOverProb(batterStats, oppPitcherStats, line, opts = {}) {
   let perAB = base;
   const baa = oppPitcherStats && oppPitcherStats.battingAvgAgainst;
   if (baa != null && baa > 0) perAB = base * Math.max(0.85, Math.min(1.15, baa / LEAGUE_BAA));
+  perAB *= slgAgainstFactor(oppPitcherStats); // mild SLG-against nudge (clamped, env-toggleable)
   perAB = Math.max(0.10, Math.min(0.45, perAB));
 
   // 3) Lineup-based expected at-bats.
@@ -1925,17 +1952,9 @@ function tbExpectedAndOverProb(batterStats, oppPitcherStats, line, opts = {}) {
   const nAB = opts.sampleAB != null && opts.sampleAB > 0 ? opts.sampleAB : 80;
   let slgTrue = (slg * nAB + TB_LEAGUE_SLG * TB_REGRESS_K) / (nAB + TB_REGRESS_K);
 
-  // 2) Opposing-pitcher adjustment. Prefer true SLG-against; if absent, derive a
-  //    proxy from BAA (how hard the pitcher gets hit) so the mound is never ignored.
-  let pitcherFactor = null;
-  const sa = oppPitcherStats && oppPitcherStats.sluggingAgainst;
-  if (sa != null && sa > 0) {
-    pitcherFactor = sa / TB_LEAGUE_SLG;
-  } else {
-    const baa = oppPitcherStats && oppPitcherStats.battingAvgAgainst;
-    if (baa != null && baa > 0) pitcherFactor = baa / LEAGUE_BAA; // proxy: contact-allowed ratio
-  }
-  if (pitcherFactor != null) slgTrue *= Math.max(0.85, Math.min(1.15, pitcherFactor));
+  // 2) Opposing-pitcher adjustment via the shared SLG-against factor (true
+  //    SLG-against, BAA proxy fallback, clamped + env-toggleable).
+  slgTrue *= slgAgainstFactor(oppPitcherStats);
 
   // 3) Tiny power nudge from Savant xwOBA (sanity only, ±6%).
   const xw = opts.xwOBA;
