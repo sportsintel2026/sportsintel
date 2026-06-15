@@ -1925,9 +1925,17 @@ function tbExpectedAndOverProb(batterStats, oppPitcherStats, line, opts = {}) {
   const nAB = opts.sampleAB != null && opts.sampleAB > 0 ? opts.sampleAB : 80;
   let slgTrue = (slg * nAB + TB_LEAGUE_SLG * TB_REGRESS_K) / (nAB + TB_REGRESS_K);
 
-  // 2) Soft opposing-pitcher adjustment when SLG-against is available (tight clamp).
-  const sa = oppPitcherStats && oppPitcherStats.slgAgainst;
-  if (sa != null && sa > 0) slgTrue *= Math.max(0.88, Math.min(1.12, sa / TB_LEAGUE_SLG));
+  // 2) Opposing-pitcher adjustment. Prefer true SLG-against; if absent, derive a
+  //    proxy from BAA (how hard the pitcher gets hit) so the mound is never ignored.
+  let pitcherFactor = null;
+  const sa = oppPitcherStats && oppPitcherStats.sluggingAgainst;
+  if (sa != null && sa > 0) {
+    pitcherFactor = sa / TB_LEAGUE_SLG;
+  } else {
+    const baa = oppPitcherStats && oppPitcherStats.battingAvgAgainst;
+    if (baa != null && baa > 0) pitcherFactor = baa / LEAGUE_BAA; // proxy: contact-allowed ratio
+  }
+  if (pitcherFactor != null) slgTrue *= Math.max(0.85, Math.min(1.15, pitcherFactor));
 
   // 3) Tiny power nudge from Savant xwOBA (sanity only, ±6%).
   const xw = opts.xwOBA;
