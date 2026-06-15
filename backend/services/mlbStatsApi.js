@@ -833,6 +833,46 @@ async function getGamePitcherStrikeouts(gamePk) {
   }
 }
 
+// Per-batter TOTAL BASES from a finished game's box score — grades total-bases props.
+// Prefers the boxscore's own totalBases; falls back to 1B+2*2B+3*3B+4*HR from hits+
+// doubles+triples+homeRuns. Mirrors getGameBatterHits' structure/guards.
+async function getGameBatterTotalBases(gamePk) {
+  try {
+    const data = await mlbGet(`/game/${gamePk}/boxscore`);
+    const teams = data && data.teams;
+    if (!teams || !teams.home || !teams.away) return { ok: false, tb: null };
+    const tb = new Map();
+    let seen = 0;
+    for (const side of ["home", "away"]) {
+      const players = teams[side] && teams[side].players;
+      if (!players) continue;
+      for (const key of Object.keys(players)) {
+        const pl = players[key];
+        const name = pl && pl.person && pl.person.fullName;
+        const b = pl && pl.stats && pl.stats.batting;
+        if (!name || !b || typeof b !== "object" || b.hits == null) continue;
+        seen++;
+        let bases;
+        if (b.totalBases != null) {
+          bases = parseIntSafe(b.totalBases) || 0;
+        } else {
+          const h = parseIntSafe(b.hits) || 0;
+          const d = parseIntSafe(b.doubles) || 0;
+          const t = parseIntSafe(b.triples) || 0;
+          const hr = parseIntSafe(b.homeRuns) || 0;
+          const singles = Math.max(0, h - d - t - hr);
+          bases = singles + 2 * d + 3 * t + 4 * hr;
+        }
+        tb.set(normPlayerName(name), bases);
+      }
+    }
+    if (seen === 0) return { ok: false, tb: null };
+    return { ok: true, tb };
+  } catch (e) {
+    return { ok: false, tb: null };
+  }
+}
+
 // Per-batter hits from a finished game's box score — grades hits props.
 // Mirrors getGameHRHitters but reads batting.hits.
 async function getGameBatterHits(gamePk) {
@@ -920,5 +960,6 @@ module.exports = {
   getGameStatusAndScore,
   getTeamHandednessSplits, getTeamBullpenStats, getTeamBullpenUsage, getPitcherHand,
   getBatterHandednessSplits, getBatterHand,
+  getGameBatterTotalBases,
   getSeasonHeadToHead,
 };
