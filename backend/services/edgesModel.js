@@ -648,6 +648,8 @@ function kNegBinomCdf(k, mu, phi) {
 // gracefully (never a silent break). Savant k% is regressed to league for thin PA.
 const BF_PER_IP = 4.3;       // league avg batters faced per inning
 const LEAGUE_K_PCT = 0.22;   // league avg strikeout rate per plate appearance
+const K_WHIFF_WEIGHT = 0.20; // weight on the whiff%-implied K rate vs raw k% (mild)
+const K_WHIFF_TO_KPCT = 1.85; // empirical scaler: whiff% (swstr) × this ≈ k% (e.g. 0.12 whiff → ~0.22 k%)
 
 // Recent-aware K projection. expIP from recent starts + season; strikeout RATE from
 // Savant k% (preferred) blended with recent form; opponent-adjusted. savantK is the
@@ -675,7 +677,14 @@ function kProjection(pitcherStats, recentStarts, oppTeamStats, savantK) {
   // strikeout RATE per batter faced. Prefer Savant k%; else derive from K/9 (the
   // (k9/9)/BF_PER_IP identity makes the no-Savant path collapse exactly to v2).
   const haveSavant = !!(savantK && Number.isFinite(savantK.kPct) && savantK.kPct > 0);
-  const baseKPct = haveSavant ? savantK.kPct : (seasonK9 / 9) / BF_PER_IP;
+  let baseKPct = haveSavant ? savantK.kPct : (seasonK9 / 9) / BF_PER_IP;
+  // whiff% refinement: whiff rate (swinging-strike%) is a cleaner bat-missing signal
+  // than k% (which is contaminated by called strikes / umpiring). Nudge the base rate
+  // toward what the pitcher's whiff% implies, lightly and clamped, when available.
+  if (haveSavant && savantK.whiffPct != null && savantK.whiffPct > 0) {
+    const whiffImplied = savantK.whiffPct * K_WHIFF_TO_KPCT; // empirical whiff→k% scaler
+    baseKPct = (1 - K_WHIFF_WEIGHT) * baseKPct + K_WHIFF_WEIGHT * whiffImplied;
+  }
   // recent-form nudge: recent K over estimated recent batters faced
   const recentKPct = recentIPsum > 0 ? recentKsum / (recentIPsum * BF_PER_IP) : null;
   const wRecentK = recentKPct != null ? Math.min(0.3, n * 0.1) : 0; // up to 0.3 at 3+ starts
@@ -1991,6 +2000,23 @@ function tbExpectedAndOverProb(batterStats, oppPitcherStats, line, opts = {}) {
   const xw = opts.xwOBA;
   if (xw != null && xw > 0) slgTrue *= Math.max(0.94, Math.min(1.06, 1 + (xw - LEAGUE_XWOBA) * 0.5));
 
+  // 3b) Park factor: extra-base output is park-sensitive (Coors vs Petco). Use the
+  //     park HR factor as a proxy for XBH-friendliness, dampened + clamped.
+  const park = opts.parkFactor;
+  if (park != null && park > 0) slgTrue *= Math.max(0.93, Math.min(1.07, 1 + (park - 1) * 0.5));
+
+  // 3c) Weather: wind/temp affect carry on extra-base hits. Scaled by magnitude,
+  //     clamped, indoor = no effect.
+  const wx = opts.weather;
+  if (wx && !wx.indoor) {
+    const mph = typeof wx.windMph === "number" ? wx.windMph : 8;
+    const windScale = Math.max(0, Math.min(1, mph / 15));
+    if (wx.windEffect === "out") slgTrue *= 1 + 0.06 * windScale;
+    if (wx.windEffect === "in") slgTrue *= 1 - 0.06 * windScale;
+    if (wx.tempEffect === "hot") slgTrue *= 1.03;
+    if (wx.tempEffect === "cold") slgTrue *= 0.97;
+  }
+
   slgTrue = Math.max(TB_SLG_MIN, Math.min(TB_SLG_MAX, slgTrue));
 
   // 4) Expected total bases = expected AB × bases-per-AB (SLG).
@@ -2028,6 +2054,7 @@ async function calculateTotalBasesShadow(games, tbOddsByEvent) {
       getTeamLineup(game.awayId, game.id),
       getTeamLineup(game.homeId, game.id),
     ]);
+    const gameWeather = await getWeatherForVenue(game.venue, game.startTimeUTC).catch(() => null);
     for (const propOdds of tbOdds) {
       const batter = await findPlayerByName(propOdds.player, [game.awayId, game.homeId]);
       if (!batter) continue;
@@ -2048,6 +2075,7 @@ async function calculateTotalBasesShadow(games, tbOddsByEvent) {
       const proj = tbExpectedAndOverProb(batterStats, oppPitcherStats, propOdds.line, {
         expAB, xwOBA, xSLG, sampleAB: batterStats?.atBats ?? null,
         recentSlg: recent15?.slg ?? null, recentAB: recent15?.atBats ?? null,
+        parkFactor: game.parkHRFactor ?? null, weather: gameWeather,
       });
       if (proj == null) continue;
       const modelOver = proj.overProb;
@@ -2068,6 +2096,8 @@ async function calculateTotalBasesShadow(games, tbOddsByEvent) {
         seasonSlg: batterStats?.slg ?? null,
         xSLG: xSLG ?? null,
         slgSource: xSLG != null ? "xSLG_blend" : "season_only",
+        parkFactor: game.parkHRFactor ?? null,
+        weatherApplied: !!(gameWeather && !gameWeather.indoor && (gameWeather.windEffect === "out" || gameWeather.windEffect === "in" || gameWeather.tempEffect === "hot" || gameWeather.tempEffect === "cold")),
         book: propOdds.book,
       };
       out.push(rec);
