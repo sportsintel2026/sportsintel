@@ -26,7 +26,7 @@ const {
   calculateTotalBasesShadow,
   debugHitsProps,
 } = require("../services/edgesModel");
-const { recordPredictions } = require("../services/predictionTracker");
+const { recordPredictions, recordTotalBasesShadow } = require("../services/predictionTracker");
 // In-memory cache
 let edgesCache = null;
 let edgesCacheAt = 0;
@@ -469,6 +469,8 @@ router.get("/mlb", async (req, res) => {
     let hrPropEdges = [];
     let kPropEdges = [];
     let hitsPropEdges = [];
+    let tbAutoEventIds = [];
+    let tbAutoGames = [];
     try {
       // Take the first 5 not-yet-started games WITH ODDS for HR props.
       // Skip live/final games (sportsbooks pull or re-price HR props once underway).
@@ -477,6 +479,8 @@ router.get("/mlb", async (req, res) => {
         .filter(g => isPreGame(g.status));
       const topGamesForHR = eligibleGamesForHR.slice(0, 5);
       const eventIds = topGamesForHR.map(g => g._oddsEventId);
+      tbAutoEventIds = eventIds;
+      tbAutoGames = topGamesForHR;
       console.log(`[Edges-HR] eligibleGames=${eligibleGamesForHR.length}, topGamesForHR=${topGamesForHR.length}, eventIds=${JSON.stringify(eventIds)}`);
       if (eventIds.length > 0) {
         const hrOddsByEvent = await getMLBHRPropsForAllEvents(eventIds, 10);
@@ -548,6 +552,22 @@ router.get("/mlb", async (req, res) => {
     // Snapshot predictions for performance tracking (fire-and-forget; deduped by
     // unique constraint so repeated computes during the day are no-ops).
     recordPredictions(result).catch(e => console.error("[Edges] recordPredictions failed:", e.message));
+
+    // Total Bases SHADOW (log-only): auto-compute + persist once per fresh slate
+    // so projections accumulate for grading without manually hitting ?tb_shadow=1.
+    // Fully fire-and-forget and self-contained — never blocks or breaks the
+    // response, and prices nothing. Deduped by the unique constraint.
+    if (typeof tbAutoEventIds !== "undefined" && tbAutoEventIds.length > 0) {
+      (async () => {
+        try {
+          const tbOddsByEvent = await getMLBTotalBasesPropsForAllEvents(tbAutoEventIds, 10);
+          const tbShadow = await calculateTotalBasesShadow(tbAutoGames, tbOddsByEvent);
+          await recordTotalBasesShadow(tbShadow, slateDate);
+        } catch (e) {
+          console.error("[Edges] TB-shadow auto-run failed:", e.message);
+        }
+      })();
+    }
 
     res.json(result);
   } catch (err) {
