@@ -14,6 +14,7 @@ const {
   getBatterRecentStats,
   getBatterStatcast,
   getTeamHandednessSplits,
+  getBatterHandednessSplits,
   getTeamBullpenStats,
   getTeamBullpenUsage,
   getPitcherHand,
@@ -431,6 +432,34 @@ function slgAgainstFactor(oppPitcherStats) {
   const adj = 1 + SLG_FACTOR_STRENGTH * (ratio - 1);
   return Math.max(1 - SLG_FACTOR_CLAMP, Math.min(1 + SLG_FACTOR_CLAMP, adj));
 }
+
+// ── PLATOON FACTOR (2026-06-15) ───────────────────────────────────────────────
+// How a batter performs vs the OPPOSING PITCHER'S HAND relative to their overall.
+// Uses per-batter vs-LHP/vs-RHP OPS splits when available. Returns ~1.0 (e.g. 1.08
+// for a platoon-advantage matchup, 0.93 for the wrong side), or exactly 1.0 when
+// disabled / no usable split. Env-toggleable + clamped, mild by default.
+// `metric` selects which split stat anchors the ratio: "ops" (hits-ish/overall) or
+// "slg" (power/total-bases). Falls back to ops.
+const PLATOON_ENABLED = process.env.PLATOON_ENABLED !== "false"; // default on
+const PLATOON_STRENGTH = parseFloat(process.env.PLATOON_STRENGTH || "0.5"); // half-weight (mild)
+const PLATOON_CLAMP = parseFloat(process.env.PLATOON_CLAMP || "0.10");      // ±10% max
+const PLATOON_MIN_AB = 40; // need a real split sample before trusting it
+function platoonFactor(splits, pitcherHand, metric = "ops") {
+  if (!PLATOON_ENABLED || !splits || !pitcherHand) return 1.0;
+  // Pitcher throws L → batter's vs-LHP split applies; R → vs-RHP.
+  const facing = pitcherHand === "L" ? splits.vsLHP : splits.vsRHP;
+  const other = pitcherHand === "L" ? splits.vsRHP : splits.vsLHP;
+  if (!facing || (facing.atBats || 0) < PLATOON_MIN_AB) return 1.0;
+  const f = facing[metric], o = other && other[metric];
+  if (f == null || f <= 0) return 1.0;
+  // Anchor: batter's vs-this-hand stat relative to their combined baseline.
+  // Use the average of the two sides as the baseline when both exist, else league-ish.
+  const baseline = (o != null && o > 0) ? (f + o) / 2 : f;
+  if (!(baseline > 0)) return 1.0;
+  const ratio = f / baseline;
+  const adj = 1 + PLATOON_STRENGTH * (ratio - 1);
+  return Math.max(1 - PLATOON_CLAMP, Math.min(1 + PLATOON_CLAMP, adj));
+}
 const HR_MIN_DISPLAY_PROB = 0.06; // HR picks are RANKED BY LIKELIHOOD, not a fake edge. Widened from 0.08 → 0.06 for a fuller props board; shows batters with ≥6% game HR chance, ranked by hrProb.
 
 // ── HR MODEL v2 INPUTS (2026-06-06) ───────────────────────────────────────────
@@ -542,7 +571,7 @@ function marketCapMult(bvp, americanOdds) {
 // more volume, raise to 0.05 (HIGH-only) for fewer/stronger picks.
 const MIN_PROP_EDGE = 0.015; // widened from 0.025 → 0.015 for a fuller props board; keeps a real ~1.5% edge floor (no coin-flips dressed up as edges).
 
-function calculateHRProbability(batterStats, opposingPitcherStats, game, weather, recent15, statcast, bvp, battingOrder) {
+function calculateHRProbability(batterStats, opposingPitcherStats, game, weather, recent15, statcast, bvp, battingOrder, batterSplits, pitcherHand) {
   if (!batterStats) return null;
   const seasonRate = batterStats.hrPerPA ?? LEAGUE_AVG.hrPerPA;
   if (seasonRate === 0) return null;
@@ -577,7 +606,7 @@ function calculateHRProbability(batterStats, opposingPitcherStats, game, weather
   // Environmental adjustment: dampened so good-in-everything tilts the
   // projection without compounding into a lock (see HR_FACTOR_DAMP note above).
   const envMult = Math.pow(
-    pitcherFactor * parkFactor * powFactor * weatherFactor * slgAgainstFactor(opposingPitcherStats),
+    pitcherFactor * parkFactor * powFactor * weatherFactor * slgAgainstFactor(opposingPitcherStats) * platoonFactor(batterSplits, pitcherHand, "slg"),
     HR_FACTOR_DAMP
   );
   // (b) BvP applied as a small bounded nudge OUTSIDE the dampened stack.
@@ -648,6 +677,8 @@ function kNegBinomCdf(k, mu, phi) {
 // gracefully (never a silent break). Savant k% is regressed to league for thin PA.
 const BF_PER_IP = 4.3;       // league avg batters faced per inning
 const LEAGUE_K_PCT = 0.22;   // league avg strikeout rate per plate appearance
+const LEAGUE_BB_PCT = 0.085; // league avg pitcher walk rate (per PA)
+const LEAGUE_BATTER_K_PCT = 0.225; // league avg batter strikeout rate (per PA)
 const K_WHIFF_WEIGHT = 0.20; // weight on the whiff%-implied K rate vs raw k% (mild)
 const K_WHIFF_TO_KPCT = 1.85; // empirical scaler: whiff% (swstr) × this ≈ k% (e.g. 0.12 whiff → ~0.22 k%)
 
@@ -805,6 +836,30 @@ function hitsOverProb(batterStats, oppPitcherStats, line, opts = {}) {
   const baa = oppPitcherStats && oppPitcherStats.battingAvgAgainst;
   if (baa != null && baa > 0) perAB = base * Math.max(0.85, Math.min(1.15, baa / LEAGUE_BAA));
   perAB *= slgAgainstFactor(oppPitcherStats); // mild SLG-against nudge (clamped, env-toggleable)
+
+  // 2a) Platoon: batter vs the opposing pitcher's hand (per-batter splits, OPS-anchored).
+  perAB *= platoonFactor(opts.batterSplits, opts.pitcherHand, "ops");
+
+  // 2b) Pitcher control: high walk-rate pitchers put fewer balls in play (more walks =
+  //     fewer ABs that can become hits). Mild, clamped. Savant pitcher bb% when present.
+  const pbb = opts.pitcherBbPct;
+  if (pbb != null && pbb > 0) perAB *= Math.max(0.95, Math.min(1.05, 1 - (pbb - LEAGUE_BB_PCT) * 0.8));
+
+  // 2c) Batter's own contact: high-K batters put fewer balls in play → fewer hits.
+  const bK = opts.batterKPct;
+  if (bK != null && bK > 0) perAB *= Math.max(0.92, Math.min(1.08, 1 - (bK - LEAGUE_BATTER_K_PCT) * 0.6));
+
+  // 2d) Park + weather (BABIP/carry). Mild, clamped, indoor = no weather effect.
+  const park = opts.parkFactor;
+  if (park != null && park > 0) perAB *= Math.max(0.96, Math.min(1.04, 1 + (park - 1) * 0.3));
+  const wx = opts.weather;
+  if (wx && !wx.indoor) {
+    const mph = typeof wx.windMph === "number" ? wx.windMph : 8;
+    const windScale = Math.max(0, Math.min(1, mph / 15));
+    if (wx.windEffect === "out") perAB *= 1 + 0.03 * windScale;
+    if (wx.windEffect === "in") perAB *= 1 - 0.03 * windScale;
+  }
+
   perAB = Math.max(0.10, Math.min(0.45, perAB));
 
   // 3) Lineup-based expected at-bats.
@@ -1512,13 +1567,18 @@ async function calculateHRPropEdges(games, hrOddsByEvent) {
         opposingPitcherProbable ? getBatterVsPitcherHistory(batter.id, opposingPitcherProbable.id) : null,
         getBatterStatcast(batter.id),
       ]);
+      // Platoon: per-batter splits + opposing pitcher hand.
+      const [batterSplitsHr, pitcherHandHr] = await Promise.all([
+        getBatterHandednessSplits(batter.id).catch(() => null),
+        opposingPitcherProbable ? getPitcherHand(opposingPitcherProbable.id).catch(() => null) : null,
+      ]);
       // Fill xwOBA + barrel rate from Savant when live Statcast is empty (it always is).
       const sc = effectiveStatcast(
         statcast,
         savantMap ? savantMap.get(batter.id) : null,
         barrelMap ? barrelMap.get(batter.id) : null
       );
-      const hrProbRaw = calculateHRProbability(batterStats, opposingPitcherStats, game, weather, recent15, sc, bvp, battingOrder);
+      const hrProbRaw = calculateHRProbability(batterStats, opposingPitcherStats, game, weather, recent15, sc, bvp, battingOrder, batterSplitsHr, pitcherHandHr);
       if (hrProbRaw == null) continue;
       // (d) Market cap: don't let the model sit more than the cap multiple above
       // the book's implied prob. Default 1.5×; a longshot with a genuine record vs
@@ -1679,6 +1739,9 @@ async function calculateHitsPropEdges(games, hitsOddsByEvent) {
   // Savant xBA map once (cached); null-safe — model falls back to season AVG if absent.
   let savantMap = null;
   try { savantMap = await getBatterExpectedStats(); } catch (e) { savantMap = null; }
+  // Savant pitcher whiff/bb map once (for pitcher walk-rate); null-safe.
+  let whiffMap = null;
+  try { whiffMap = await getPitcherWhiffStats(); } catch (e) { whiffMap = null; }
   for (const game of targetGames) {
     const eventId = findEventIdForGame(game, hitsOddsByEvent);
     const hitsOdds = eventId ? hitsOddsByEvent[eventId] : null;
@@ -1687,6 +1750,12 @@ async function calculateHitsPropEdges(games, hitsOddsByEvent) {
     const [awayLineupRes, homeLineupRes] = await Promise.all([
       getTeamLineup(game.awayId, game.id),
       getTeamLineup(game.homeId, game.id),
+    ]);
+    // Per-game (fetched once): opposing pitcher hands + weather.
+    const [awayPHand, homePHand, hitsWeather] = await Promise.all([
+      game.awayProbable ? getPitcherHand(game.awayProbable.id).catch(() => null) : null,
+      game.homeProbable ? getPitcherHand(game.homeProbable.id).catch(() => null) : null,
+      getWeatherForVenue(game.venue, game.startTimeUTC).catch(() => null),
     ]);
     for (const propOdds of hitsOdds) {
       const batter = await findPlayerByName(propOdds.player, [game.awayId, game.homeId]);
@@ -1704,9 +1773,19 @@ async function calculateHitsPropEdges(games, hitsOddsByEvent) {
       const spotIdx = myLineup.findIndex(p => p.id === batter.id);
       const expAB = expABForSpot(spotIdx >= 0 ? spotIdx + 1 : null);
       const savantXBA = savantMap ? (savantMap.get(batter.id)?.xBA ?? null) : null;
+      // Platoon: batter's per-batter splits vs the opposing pitcher's hand.
+      const batterSplits = await getBatterHandednessSplits(batter.id).catch(() => null);
+      const pitcherHand = onAwayTeam ? homePHand : awayPHand;
+      // Pitcher walk rate (Savant bb%), batter's own K rate (season K/PA).
+      const oppId = opposingPitcherProbable?.id;
+      const pitcherBbPct = (whiffMap && oppId) ? (whiffMap.get(Number(oppId))?.bbPct ?? null) : null;
+      const batterKPct = (batterStats && batterStats.strikeouts != null && batterStats.plateAppearances > 0)
+        ? batterStats.strikeouts / batterStats.plateAppearances : null;
       const overProb = hitsOverProb(batterStats, oppPitcherStats, propOdds.line, {
         xBA: savantXBA, expAB, marketFairOver: fairOver, sampleAB: batterStats?.atBats ?? null,
         recentAvg: recent15?.avg ?? null, recentAB: recent15?.atBats ?? null,
+        batterSplits, pitcherHand, pitcherBbPct, batterKPct,
+        parkFactor: game.parkHRFactor ?? null, weather: hitsWeather,
       });
       if (overProb == null) continue;
       const underProb = round3(1 - overProb);
@@ -2017,6 +2096,13 @@ function tbExpectedAndOverProb(batterStats, oppPitcherStats, line, opts = {}) {
     if (wx.tempEffect === "cold") slgTrue *= 0.97;
   }
 
+  // 3d) Platoon: batter vs opposing pitcher's hand, SLG-anchored (power split).
+  slgTrue *= platoonFactor(opts.batterSplits, opts.pitcherHand, "slg");
+
+  // 3e) Batter's own contact: high-K batters reach base for extra bases less often.
+  const bK = opts.batterKPct;
+  if (bK != null && bK > 0) slgTrue *= Math.max(0.94, Math.min(1.06, 1 - (bK - LEAGUE_BATTER_K_PCT) * 0.4));
+
   slgTrue = Math.max(TB_SLG_MIN, Math.min(TB_SLG_MAX, slgTrue));
 
   // 4) Expected total bases = expected AB × bases-per-AB (SLG).
@@ -2055,6 +2141,10 @@ async function calculateTotalBasesShadow(games, tbOddsByEvent) {
       getTeamLineup(game.homeId, game.id),
     ]);
     const gameWeather = await getWeatherForVenue(game.venue, game.startTimeUTC).catch(() => null);
+    const [awayPHandTb, homePHandTb] = await Promise.all([
+      game.awayProbable ? getPitcherHand(game.awayProbable.id).catch(() => null) : null,
+      game.homeProbable ? getPitcherHand(game.homeProbable.id).catch(() => null) : null,
+    ]);
     for (const propOdds of tbOdds) {
       const batter = await findPlayerByName(propOdds.player, [game.awayId, game.homeId]);
       if (!batter) continue;
@@ -2072,10 +2162,15 @@ async function calculateTotalBasesShadow(games, tbOddsByEvent) {
       const expAB = expABForSpot(spotIdx >= 0 ? spotIdx + 1 : null);
       const xwOBA = savantMap ? (savantMap.get(batter.id)?.xwOBA ?? null) : null;
       const xSLG = savantMap ? (savantMap.get(batter.id)?.xSLG ?? null) : null;
+      const batterSplitsTb = await getBatterHandednessSplits(batter.id).catch(() => null);
+      const pitcherHandTb = onAwayTeam ? homePHandTb : awayPHandTb;
+      const batterKPctTb = (batterStats && batterStats.strikeouts != null && batterStats.plateAppearances > 0)
+        ? batterStats.strikeouts / batterStats.plateAppearances : null;
       const proj = tbExpectedAndOverProb(batterStats, oppPitcherStats, propOdds.line, {
         expAB, xwOBA, xSLG, sampleAB: batterStats?.atBats ?? null,
         recentSlg: recent15?.slg ?? null, recentAB: recent15?.atBats ?? null,
         parkFactor: game.parkHRFactor ?? null, weather: gameWeather,
+        batterSplits: batterSplitsTb, pitcherHand: pitcherHandTb, batterKPct: batterKPctTb,
       });
       if (proj == null) continue;
       const modelOver = proj.overProb;
@@ -2098,6 +2193,8 @@ async function calculateTotalBasesShadow(games, tbOddsByEvent) {
         slgSource: xSLG != null ? "xSLG_blend" : "season_only",
         parkFactor: game.parkHRFactor ?? null,
         weatherApplied: !!(gameWeather && !gameWeather.indoor && (gameWeather.windEffect === "out" || gameWeather.windEffect === "in" || gameWeather.tempEffect === "hot" || gameWeather.tempEffect === "cold")),
+        platoonApplied: !!(batterSplitsTb && pitcherHandTb),
+        pitcherHand: pitcherHandTb ?? null,
         book: propOdds.book,
       };
       out.push(rec);
