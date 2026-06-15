@@ -269,7 +269,7 @@ router.get("/mlb", async (req, res) => {
     const { date: slateDate, rolled } = await resolveSlateDate();
 
     // Cache is valid only if it's fresh AND for the same date we now want to serve.
-    if (!req.query.hits_debug && !req.query.edges_debug && !req.query.hr_audit && edgesCache && edgesCacheDate === slateDate && (Date.now() - edgesCacheAt) < CACHE_TTL_MS) {
+    if (!req.query.hits_debug && !req.query.edges_debug && !req.query.hr_audit && !req.query.tb_shadow && edgesCache && edgesCacheDate === slateDate && (Date.now() - edgesCacheAt) < CACHE_TTL_MS) {
       console.log(`[Edges] Returning cached results for ${slateDate}`);
       return res.json({ ...edgesCache, cached: true });
     }
