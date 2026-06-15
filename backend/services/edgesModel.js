@@ -1894,11 +1894,133 @@ function invNorm(p) {
 function round2(n) { return Math.round(n * 100) / 100; }
 function round3(n) { return Math.round(n * 1000) / 1000; }
 
+// ════════════════════════════════════════════════════════════════════════════
+// TOTAL BASES — SHADOW MODEL (2026-06-15). READ-ONLY / LOG-ONLY.
+// Does NOT price any pick, surface any edge, or touch the live props path. It
+// computes an expected-total-bases projection for batters who have a TB prop line
+// today and logs it (with a negative-binomial Over prob vs the line) so we can
+// grade it later and decide whether to promote it to a live prop.
+//
+// Model: total bases per AB is exactly SLG (by definition). So expTB = expAB ×
+// SLG_regressed, where SLG is regressed toward league by sample size to kill fake
+// reads on tiny samples — same philosophy as the hits model. We anchor lightly to
+// the de-vigged market (the book's line is a sharp prior) and wrap the mean in a
+// negative-binomial for the Over probability. Inputs we actually have: season SLG,
+// AB sample, lineup-spot expected AB, Savant xwOBA (used only as a soft sanity
+// multiplier on power), opposing-pitcher SLG-against when present.
+// Tunables (shadow-only; safe to change, nothing live depends on them):
+const TB_LEAGUE_SLG = 0.405;      // league-average slugging
+const TB_REGRESS_K = 110;         // AB-equivalent pull toward league for small samples
+const TB_MARKET_WEIGHT = 0.45;    // weight on de-vigged market mean vs model mean
+const TB_DISPERSION_PHI = 1.35;   // negative-binomial overdispersion (variance/mean) for TB count
+const TB_SLG_MIN = 0.230;         // clamp regressed SLG to sane range
+const TB_SLG_MAX = 0.720;
+
+function tbExpectedAndOverProb(batterStats, oppPitcherStats, line, opts = {}) {
+  if (line == null) return null;
+  const slg = batterStats && batterStats.slg != null && batterStats.slg > 0 ? batterStats.slg : null;
+  if (slg == null) return null; // no usable power signal → skip (shadow only)
+
+  // 1) Regress SLG toward league by AB sample size.
+  const nAB = opts.sampleAB != null && opts.sampleAB > 0 ? opts.sampleAB : 80;
+  let slgTrue = (slg * nAB + TB_LEAGUE_SLG * TB_REGRESS_K) / (nAB + TB_REGRESS_K);
+
+  // 2) Soft opposing-pitcher adjustment when SLG-against is available (tight clamp).
+  const sa = oppPitcherStats && oppPitcherStats.slgAgainst;
+  if (sa != null && sa > 0) slgTrue *= Math.max(0.88, Math.min(1.12, sa / TB_LEAGUE_SLG));
+
+  // 3) Tiny power nudge from Savant xwOBA (sanity only, ±6%).
+  const xw = opts.xwOBA;
+  if (xw != null && xw > 0) slgTrue *= Math.max(0.94, Math.min(1.06, 1 + (xw - LEAGUE_XWOBA) * 0.5));
+
+  slgTrue = Math.max(TB_SLG_MIN, Math.min(TB_SLG_MAX, slgTrue));
+
+  // 4) Expected total bases = expected AB × bases-per-AB (SLG).
+  const expAB = opts.expAB != null && opts.expAB > 0 ? opts.expAB : DEFAULT_AB_PER_GAME;
+  let muModel = expAB * slgTrue;
+
+  // 5) Light anchor to the de-vigged market mean implied by the line (if provided).
+  //    We approximate the market's implied mean as the line itself nudged by which
+  //    side is favored — handled by the caller passing marketFairOver; here we just
+  //    blend means if a market mean estimate is available.
+  const mMean = opts.marketMean;
+  let mu = muModel;
+  if (mMean != null && mMean > 0) mu = TB_MARKET_WEIGHT * mMean + (1 - TB_MARKET_WEIGHT) * muModel;
+
+  // 6) Over probability via negative-binomial CDF around mu (overdispersed Poisson).
+  //    P(TB > line) = 1 - P(TB <= floor(line)).
+  const k = Math.floor(line);
+  const pOver = 1 - kNegBinomCdf(k, mu, TB_DISPERSION_PHI);
+  if (!(pOver >= 0)) return null;
+  return { expTB: round3(mu), slgTrue: round3(slgTrue), expAB: round2(expAB), overProb: round3(Math.max(0.02, Math.min(0.98, pOver))) };
+}
+
+// SHADOW orchestration: logs per-batter projections vs the TB line. Prices nothing.
+// Call signature mirrors calculateHitsPropEdges so wiring is trivial when promoted.
+async function calculateTotalBasesShadow(games, tbOddsByEvent) {
+  const targetGames = games.slice(0, MAX_HITS_GAMES);
+  const out = [];
+  let savantMap = null;
+  try { savantMap = await getBatterExpectedStats(); } catch (e) { savantMap = null; }
+  for (const game of targetGames) {
+    const eventId = findEventIdForGame(game, tbOddsByEvent);
+    const tbOdds = eventId ? tbOddsByEvent[eventId] : null;
+    if (!tbOdds || tbOdds.length === 0) continue;
+    const [awayLineupRes, homeLineupRes] = await Promise.all([
+      getTeamLineup(game.awayId, game.id),
+      getTeamLineup(game.homeId, game.id),
+    ]);
+    for (const propOdds of tbOdds) {
+      const batter = await findPlayerByName(propOdds.player, [game.awayId, game.homeId]);
+      if (!batter) continue;
+      const onAwayTeam = batter.teamId === game.awayId;
+      const opposingPitcherProbable = onAwayTeam ? game.homeProbable : game.awayProbable;
+      const oppPitcherStats = opposingPitcherProbable
+        ? regressThinSample(await getPitcherSeasonStats(opposingPitcherProbable.id))
+        : null;
+      const batterStats = await getBatterSeasonStats(batter.id);
+      const fairOver = devigTwoWay(propOdds.overOdds, propOdds.underOdds);
+      const lineupRes = onAwayTeam ? awayLineupRes : homeLineupRes;
+      const myLineup = (lineupRes && lineupRes.lineup) || [];
+      const spotIdx = myLineup.findIndex(p => p.id === batter.id);
+      const expAB = expABForSpot(spotIdx >= 0 ? spotIdx + 1 : null);
+      const xwOBA = savantMap ? (savantMap.get(batter.id)?.xwOBA ?? null) : null;
+      const proj = tbExpectedAndOverProb(batterStats, oppPitcherStats, propOdds.line, {
+        expAB, xwOBA, sampleAB: batterStats?.atBats ?? null,
+      });
+      if (proj == null) continue;
+      const modelOver = proj.overProb;
+      const edgeOverShadow = fairOver != null ? round3(modelOver - fairOver) : null;
+      const rec = {
+        gameId: game.id,
+        playerId: batter.id,
+        player: propOdds.player,
+        team: onAwayTeam ? game.awayAbbr : game.homeAbbr,
+        game: `${game.awayAbbr} @ ${game.homeAbbr}`,
+        line: propOdds.line,
+        expTB: proj.expTB,
+        slgTrue: proj.slgTrue,
+        expAB: proj.expAB,
+        overProb: modelOver,
+        marketFairOver: fairOver,
+        edgeOverShadow,
+        seasonSlg: batterStats?.slg ?? null,
+        book: propOdds.book,
+      };
+      out.push(rec);
+      console.log(`[TB-SHADOW] ${rec.game} | ${rec.player} O/U ${rec.line} TB | expTB=${rec.expTB} (SLG~${rec.slgTrue}, AB~${rec.expAB}) modelOver=${rec.overProb} fairOver=${fairOver ?? "—"} edge=${edgeOverShadow ?? "—"}`);
+    }
+  }
+  console.log(`[TB-SHADOW] computed ${out.length} total-bases projections (logged only — not priced)`);
+  return out;
+}
+
 module.exports = {
   calculateGameEdges,
   calculateHRPropEdges,
   calculateStrikeoutPropEdges,
   calculateHitsPropEdges,
+  calculateTotalBasesShadow,
   debugHitsProps,
   rateConfidence,
   calculateEdge,
