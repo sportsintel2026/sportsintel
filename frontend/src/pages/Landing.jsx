@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
 
 /* headshot sources (graceful fallback to initials on error) */
 const MLB_HEAD=(id)=>`https://midfield.mlbstatic.com/v1/people/${id}/spots/120`;
@@ -18,6 +19,76 @@ const PROPS_EX = [
   {sp:"🏈 NFL", ini:"TH", img:ESPN_HEAD("nfl",3116406), ring:"#008E97", nm:"Tyreek Hill",    mu:"MIA vs NYJ", tag:"ANYTIME TD", tc:"#38E1A0", tb:"rgba(56,225,160,.1)",  td:"rgba(56,225,160,.28)",  prop:"Anytime TD", odds:"+135", edge:"+4.6%", soon:true},
 ];
 
+
+/* ============================================================
+   Commercial video — autoplays MUTED when scrolled into view
+   (browsers block unmuted autoplay), loops, with a tap-for-sound
+   button that unmutes. Uses the YouTube IFrame API.
+   ============================================================ */
+const YT_ID = "OOehknqPWNE";
+
+function CommercialVideo(){
+  const holderRef = useRef(null);
+  const playerRef = useRef(null);
+  const [ready, setReady] = useState(false);
+  const [muted, setMuted] = useState(true);
+  const [started, setStarted] = useState(false);
+
+  // load the YouTube IFrame API once
+  useEffect(()=>{
+    function init(){
+      if(!holderRef.current || playerRef.current) return;
+      playerRef.current = new window.YT.Player(holderRef.current, {
+        videoId: YT_ID,
+        playerVars: {
+          autoplay:0, controls:1, rel:0, modestbranding:1,
+          playsinline:1, mute:1, loop:1, playlist:YT_ID,
+        },
+        events:{ onReady:()=>setReady(true) },
+      });
+    }
+    if(window.YT && window.YT.Player){ init(); }
+    else {
+      const prev = window.onYouTubeIframeAPIReady;
+      window.onYouTubeIframeAPIReady = ()=>{ prev && prev(); init(); };
+      if(!document.getElementById("yt-iframe-api")){
+        const s=document.createElement("script");
+        s.id="yt-iframe-api"; s.src="https://www.youtube.com/iframe_api";
+        document.body.appendChild(s);
+      }
+    }
+  },[]);
+
+  // play (muted) when scrolled into view, pause when out of view
+  useEffect(()=>{
+    if(!ready) return;
+    const el = holderRef.current;
+    const io = new IntersectionObserver((entries)=>{
+      entries.forEach((e)=>{
+        const p = playerRef.current; if(!p) return;
+        if(e.isIntersecting){ p.mute(); p.playVideo(); setStarted(true); }
+        else { p.pauseVideo(); }
+      });
+    }, { threshold:0.5 });
+    if(el) io.observe(el);
+    return ()=>io.disconnect();
+  },[ready]);
+
+  const toggleSound = ()=>{
+    const p = playerRef.current; if(!p) return;
+    if(muted){ p.unMute(); p.setVolume(100); p.playVideo(); setMuted(false); }
+    else { p.mute(); setMuted(true); }
+  };
+
+  return (
+    <div className="vidframe">
+      <div ref={holderRef} className="vidyt" />
+      <button className={"vid-sound"+(muted?"":" on")} onClick={toggleSound} aria-label={muted?"Tap for sound":"Mute"}>
+        {muted ? "🔊 Tap for sound" : "🔈 Mute"}
+      </button>
+    </div>
+  );
+}
 
 /* ============================================================
    WizePicks — Landing (Direction B)
@@ -71,15 +142,7 @@ export default function LandingPage(){
         <section className="vidsec">
           <div className="vid-eyebrow">▶ WATCH · 30 SECONDS</div>
           <div className="vid-h">This is what betting blind looks like.</div>
-          <div className="vidframe">
-            {/* ↓↓↓ When the commercial is ready, replace this placeholder with ONE of: ↓↓↓
-                <video src="/wizepicks-commercial.mp4" poster="/commercial-poster.jpg" controls playsInline/>
-                — or a YouTube embed —
-                <iframe src="https://www.youtube.com/embed/YOUR_VIDEO_ID" title="WizePicks" allowFullScreen/>
-            */}
-            <div className="vid-play"/>
-            <div className="vid-cap">Commercial coming soon</div>
-          </div>
+          <CommercialVideo />
         </section>
       </div>
 
@@ -275,6 +338,14 @@ const CSS = `
   border:1px solid rgba(56,225,160,.22);box-shadow:0 40px 90px -50px #000,0 0 60px -30px rgba(56,225,160,.25);
   background:linear-gradient(135deg,#0c241c,#08130e);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:15px}
 .lpwrap .vidframe video,.lpwrap .vidframe iframe{position:absolute;inset:0;width:100%;height:100%;display:block;border:0;object-fit:cover}
+.lpwrap .vidyt{position:absolute;inset:0;width:100%;height:100%}
+.lpwrap .vidyt iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.lpwrap .vid-sound{position:absolute;right:14px;bottom:14px;z-index:5;cursor:pointer;
+  font-family:var(--mono);font-size:12px;letter-spacing:.08em;color:#07140f;
+  background:#38E1A0;border:0;border-radius:999px;padding:9px 15px;font-weight:700;
+  box-shadow:0 8px 24px -8px rgba(0,0,0,.6);transition:transform .15s,background .15s}
+.lpwrap .vid-sound:hover{transform:translateY(-1px)}
+.lpwrap .vid-sound.on{background:rgba(7,20,15,.78);color:#cfe9df;border:1px solid rgba(56,225,160,.4)}
 .lpwrap .vid-play{width:66px;height:66px;border-radius:50%;background:rgba(255,255,255,.92);position:relative;animation:pulse 2s infinite}
 .lpwrap .vid-play::after{content:"";position:absolute;top:50%;left:54%;transform:translate(-50%,-50%);border-left:21px solid #07140f;border-top:13px solid transparent;border-bottom:13px solid transparent}
 .lpwrap .vid-cap{font-family:var(--mono);font-size:12px;color:#8AA89D;letter-spacing:.14em;text-transform:uppercase}
