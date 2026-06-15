@@ -48,7 +48,9 @@ function parseExpectedStatsCsv(text) {
   const iId = cols.indexOf("player_id");
   const iXba = cols.indexOf("est_ba");
   const iXwoba = cols.indexOf("est_woba");
+  const iXslg = cols.indexOf("est_slg");
   const iBa = cols.indexOf("ba");
+  const iSlg = cols.indexOf("slg");
   const iPa = cols.indexOf("pa");
   if (iId < 0 || iXba < 0) return map; // wrong shape — bail rather than mis-map
   for (let r = 1; r < lines.length; r++) {
@@ -59,7 +61,9 @@ function parseExpectedStatsCsv(text) {
     map.set(id, {
       xBA,
       xwOBA: iXwoba >= 0 ? (parseFloat(f[iXwoba]) || null) : null,
+      xSLG: iXslg >= 0 ? (parseFloat(f[iXslg]) || null) : null,
       ba: iBa >= 0 ? (parseFloat(f[iBa]) || null) : null,
+      slg: iSlg >= 0 ? (parseFloat(f[iSlg]) || null) : null,
       pa: iPa >= 0 ? (parseInt(f[iPa], 10) || null) : null,
     });
   }
