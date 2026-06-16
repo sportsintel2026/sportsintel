@@ -137,8 +137,8 @@ export default function LandingPage(){
         </div>
       </section>
 
-      {/* CUT: white hero -> navy video (jagged peaks) */}
-      <span className="cut"><svg viewBox="0 0 1200 46" preserveAspectRatio="none"><path d="M0,0 L150,30 L320,6 L520,34 L760,8 L980,32 L1200,4 L1200,46 L0,46 Z" fill="#0E2230"/></svg></span>
+      {/* CUT: white hero -> navy video (clean diagonal) */}
+      <span className="cut"><svg viewBox="0 0 1200 46" preserveAspectRatio="none"><path d="M0,46 L1200,10 L1200,46 Z" fill="#0E2230"/><path d="M0,0 L1200,0 L1200,10 L0,46 Z" fill="#CFE2F4"/></svg></span>
 
       {/* VIDEO SECTION */}
       <section className="vidsec">
@@ -149,8 +149,8 @@ export default function LandingPage(){
         <CommercialVideo />
       </section>
 
-      {/* CUT: navy video -> emerald features (diagonal slash) */}
-      <span className="cut"><svg viewBox="0 0 1200 46" preserveAspectRatio="none"><path d="M0,46 L1200,0 L1200,46 Z" fill="#07140F"/><path d="M0,0 L0,46 L1200,0 Z" fill="#0E2230"/></svg></span>
+      {/* CUT: navy video -> emerald features (clean diagonal + mint seam) */}
+      <span className="cut"><svg viewBox="0 0 1200 46" preserveAspectRatio="none"><path d="M0,18 L1200,0 L1200,46 L0,46 Z" fill="#07140F"/><path d="M0,18 L1200,0" stroke="#38E1A0" stroke-opacity="0.35" stroke-width="1.5" fill="none"/></svg></span>
 
       {/* PAGE SYSTEM (emerald) */}
       <div className="feat-zone">
@@ -203,49 +203,34 @@ export default function LandingPage(){
             </div>
           </div>
         </div>
-      </div>
-      </div>
 
-      {/* CUT: emerald features -> blue Market Read (chevron point) */}
-      <span className="cut"><svg viewBox="0 0 1200 46" preserveAspectRatio="none"><path d="M0,0 L300,34 L600,6 L900,34 L1200,0 L1200,46 L0,46 Z" fill="#123A5C"/></svg></span>
-
-      {/* MARKET READ (blue) — what the books are saying */}
-      <div className="band-blue">
-        <section className="mrsec"><div className="wrap">
-          <div className="eyebrow">Market Read · new</div>
-          <h3>What every book is saying.</h3>
-          <p>We read the whole market — where the books agree, where they split, and which way they're moving — then tell you who they're leaning on. A read on the room, not a guarantee.</p>
-          <div className="mrgrid">
+        <div className="feat rev" id="marketread">
+          <div className="ftxt">
+            <div className="eyebrow">Market Read · new</div>
+            <h3>What every book is saying</h3>
+            <p>We read the whole market — where the books agree, where they split, and which way they're moving — then tell you who they're leaning on. A read on the room, not a guarantee.</p>
+            <Link className="lk" to="/market-read">See the market read →</Link>
+          </div>
+          <div className="panel">
+            <div className="pbar"><span>Market Read · today</span><span>consensus</span></div>
             <div className="mrcard">
-              <div className="top"><span className="mu">SD @ STL</span><span className="tier" style={{color:"#5DCAA5"}}><span className="d" style={{background:"#1D9E75"}}/>Strong</span></div>
-              <div className="read">Market is confident in the <b>Cardinals</b>.</div>
-              <div className="sub">7 books agree · 61% to win · tight prices</div>
+              <div className="mrtop"><span className="mrmu">SD @ STL</span><span className="mrtier" style={{color:"#5DCAA5"}}><span className="mrd" style={{background:"#1D9E75"}}/>Strong</span></div>
+              <div className="mrread">Market is confident in the <b>Cardinals</b>.</div>
+              <div className="mrsub">7 books agree · 61% to win</div>
             </div>
             <div className="mrcard">
-              <div className="top"><span className="mu">TB @ LAD</span><span className="tier" style={{color:"#EF9F27"}}><span className="d" style={{background:"#EF9F27"}}/>Soft</span></div>
-              <div className="read">Books split on the <b>Dodgers</b>.</div>
-              <div className="sub">Slim favorite · prices range · coin-flip</div>
+              <div className="mrtop"><span className="mrmu">TB @ LAD</span><span className="mrtier" style={{color:"#EF9F27"}}><span className="mrd" style={{background:"#EF9F27"}}/>Soft</span></div>
+              <div className="mrread">Books split on the <b>Dodgers</b>.</div>
+              <div className="mrsub">Slim favorite · prices range</div>
             </div>
           </div>
-          <div className="mr-ex">Illustrative examples — not live picks</div>
-        </div></section>
+        </div>
+
+      </div>
       </div>
 
-      {/* CUT: blue Market Read -> white tools (zigzag) */}
-      <span className="cut"><svg viewBox="0 0 1200 46" preserveAspectRatio="none"><path d="M0,46 L120,18 L300,40 L500,12 L720,38 L940,14 L1200,40 L1200,0 L0,0 Z" fill="#123A5C"/><path d="M0,46 L120,18 L300,40 L500,12 L720,38 L940,14 L1200,40 L1200,46 Z" fill="#FFFFFF"/></svg></span>
-
-      {/* TOOLS TO WIN (white two-tone) */}
-      <div className="band-white">
-        <section className="tools"><div className="wrap">
-          <div className="lab">The tools to win</div>
-          <h2>Trust your gut — with the data on your side.</h2>
-          <p>We don't sell guaranteed picks. We hand you every edge, every prop, and what the whole market is saying — then you make the call. That's the smartest way to beat the books.</p>
-          <Link className="btn btn-pri" to="/signup">Get started →</Link>
-        </div></section>
-      </div>
-
-      {/* CUT: white tools -> black props (sharp slash) */}
-      <span className="cut"><svg viewBox="0 0 1200 46" preserveAspectRatio="none"><path d="M0,0 L1200,40 L1200,46 L0,46 Z" fill="#05080A"/><path d="M0,0 L1200,40 L1200,0 Z" fill="#CFE2F4"/></svg></span>
+      {/* CUT: emerald features -> black props (clean diagonal + mint seam) */}
+      <span className="cut"><svg viewBox="0 0 1200 46" preserveAspectRatio="none"><path d="M0,0 L1200,28 L1200,46 L0,46 Z" fill="#05080A"/><path d="M0,0 L1200,28" stroke="#38E1A0" stroke-opacity="0.4" stroke-width="1.5" fill="none"/></svg></span>
 
       {/* PLAYER PROPS BANNER (black) */}
       <div className="propszone"><div className="wrap">
@@ -283,8 +268,21 @@ export default function LandingPage(){
         </section>
       </div></div>
 
-      {/* CUT: black props -> emerald proof (chevron) */}
-      <span className="cut"><svg viewBox="0 0 1200 46" preserveAspectRatio="none"><path d="M0,46 L600,8 L1200,46 L1200,0 L0,0 Z" fill="#05080A"/><path d="M0,46 L600,8 L1200,46 Z" fill="#07140F"/></svg></span>
+      {/* CUT: black props -> white tools (clean diagonal into white) */}
+      <span className="cut"><svg viewBox="0 0 1200 46" preserveAspectRatio="none"><path d="M0,46 L1200,18 L1200,46 Z" fill="#05080A"/><path d="M0,0 L1200,0 L1200,18 L0,46 Z" fill="#FFFFFF"/></svg></span>
+
+      {/* TOOLS TO WIN (white two-tone) — the turn */}
+      <div className="band-white">
+        <section className="tools"><div className="wrap">
+          <div className="lab">The tools to win</div>
+          <h2>Trust your gut — with the data on your side.</h2>
+          <p>We don't sell guaranteed picks. We hand you every edge, every prop, and what the whole market is saying — then you make the call. That's the smartest way to beat the books.</p>
+          <Link className="btn btn-pri" to="/signup">Get started →</Link>
+        </div></section>
+      </div>
+
+      {/* CUT: white tools -> emerald proof (clean diagonal out of white) */}
+      <span className="cut"><svg viewBox="0 0 1200 46" preserveAspectRatio="none"><path d="M0,0 L1200,28 L1200,46 L0,46 Z" fill="#07140F"/><path d="M0,0 L1200,28 L1200,0 Z" fill="#CFE2F4"/></svg></span>
 
       {/* PROOF */}
       <div className="proof"><div className="wrap">
@@ -368,7 +366,7 @@ const CSS = `
 .lpwrap .tbtn{font-family:var(--disp);font-weight:600;font-size:13px;background:var(--red);color:#fff;padding:9px 16px;border-radius:9px}
 .lpwrap .tbtn:hover{background:#dc2626}
 
-.lpwrap .hero{position:relative;overflow:hidden;min-height:600px;display:flex;align-items:center;
+.lpwrap .hero{position:relative;overflow:hidden;min-height:600px;display:flex;align-items:center;padding:48px 0 56px;
   background:linear-gradient(165deg,#FFFFFF 0%,#EAF2FA 55%,#CFE2F4 100%)}
 .lpwrap .hero::before{content:"";position:absolute;inset:0;background:radial-gradient(90% 80% at 85% 12%,rgba(29,158,117,.10),transparent 50%)}
 .lpwrap .hero .wrap{position:relative;z-index:4;width:100%;display:grid;grid-template-columns:1fr;gap:42px;align-items:center}
@@ -523,23 +521,16 @@ const CSS = `
 .lpwrap .pb-btn:hover{background:#dc2626}
 .lpwrap .pb-ex{font-family:var(--mono);font-size:10.5px;color:#5f7a70}
 
-/* ---- Market Read section (blue band) ---- */
-.lpwrap .mrsec{padding:56px 0}
-.lpwrap .mrsec .eyebrow{color:var(--bluelt)}
-.lpwrap .mrsec .eyebrow::before{background:var(--bluelt)}
-.lpwrap .mrsec h3{font-family:var(--disp);font-weight:700;font-size:clamp(24px,3.3vw,34px);letter-spacing:-.02em;margin-bottom:12px;color:#fff}
-.lpwrap .mrsec p{color:#C5DCEF;line-height:1.6;font-size:16px;max-width:480px;margin-bottom:22px}
-.lpwrap .mrgrid{display:grid;grid-template-columns:1fr;gap:12px;max-width:560px}
-@media(min-width:680px){.lpwrap .mrgrid{grid-template-columns:1fr 1fr}}
-.lpwrap .mrcard{background:rgba(255,255,255,.06);border:1px solid rgba(159,208,245,.25);border-radius:14px;padding:15px 16px}
-.lpwrap .mrcard .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
-.lpwrap .mrcard .mu{font-family:var(--disp);font-weight:600;color:#fff;font-size:15px}
-.lpwrap .mrcard .tier{font-family:var(--mono);font-size:11px;font-weight:700;display:flex;align-items:center;gap:6px}
-.lpwrap .mrcard .tier .d{width:8px;height:8px;border-radius:50%;display:inline-block}
-.lpwrap .mrcard .read{font-size:15px;color:#fff;font-weight:600;line-height:1.4}
-.lpwrap .mrcard .read b{color:#9FD0F5;font-weight:700}
-.lpwrap .mrcard .sub{font-family:var(--mono);font-size:11.5px;color:#9FB8CE;margin-top:6px}
-.lpwrap .mr-ex{font-family:var(--mono);font-size:10.5px;color:#7F9BB5;margin-top:16px}
+/* ---- Market Read card (inside feature panel) ---- */
+.lpwrap .mrcard{background:rgba(93,169,232,.06);border:1px solid rgba(93,169,232,.22);border-radius:12px;padding:12px 13px;margin-bottom:9px}
+.lpwrap .mrcard:last-child{margin-bottom:0}
+.lpwrap .mrtop{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.lpwrap .mrmu{font-family:var(--disp);font-weight:600;color:#E7F1EC;font-size:14px}
+.lpwrap .mrtier{font-family:var(--mono);font-size:10.5px;font-weight:700;display:flex;align-items:center;gap:5px}
+.lpwrap .mrd{width:7px;height:7px;border-radius:50%;display:inline-block}
+.lpwrap .mrread{font-size:13.5px;color:#E7F1EC;font-weight:600;line-height:1.4}
+.lpwrap .mrread b{color:#9FD0F5;font-weight:700}
+.lpwrap .mrsub{font-family:var(--mono);font-size:10.5px;color:#8FB0C4;margin-top:4px}
 
 /* ---- Tools to win (white two-tone band) ---- */
 .lpwrap .tools{padding:54px 0}
