@@ -335,27 +335,39 @@ function computeTotalRead(totalsQuotes) {
 
 function computeCoverRead(spreadQuotes, awayTeam, homeTeam) {
   if (!spreadQuotes || spreadQuotes.length < 2) return null;
-  // Favorite is the -1.5 side. Measure agreement on the favorite's run-line price.
-  const favPrices = spreadQuotes.map(q => (q.awayLine < 0 ? q.away : q.home)).filter(p => p != null);
-  const dogPrices = spreadQuotes.map(q => (q.awayLine < 0 ? q.home : q.away)).filter(p => p != null);
-  if (favPrices.length < 2 || dogPrices.length < 2) return null;
-  const favTeamIsAway = spreadQuotes[0].awayLine < 0;
-  const favImp = mrMedian(favPrices.map(americanToImpliedProb));
-  const dogImp = mrMedian(dogPrices.map(americanToImpliedProb));
-  const sum = favImp + dogImp;
+  // The -1.5 favorite covering by 2+ is usually LESS than 50% — laying the runs is
+  // hard, which is why the -1.5 side pays + money. So don't blindly read the
+  // favorite: read whichever side the market actually favors TO COVER. Build both
+  // sides' prices, de-vig, and pick the higher cover prob (commonly the +1.5 dog).
+  const minusSide = spreadQuotes.map(q => (q.awayLine < 0 ? q.away : q.home)).filter(p => p != null);   // -1.5 favorite
+  const plusSide  = spreadQuotes.map(q => (q.awayLine < 0 ? q.home : q.away)).filter(p => p != null);   // +1.5 dog
+  if (minusSide.length < 2 || plusSide.length < 2) return null;
+  const minusTeamIsAway = spreadQuotes[0].awayLine < 0;
+  const minusImp = mrMedian(minusSide.map(americanToImpliedProb));
+  const plusImp  = mrMedian(plusSide.map(americanToImpliedProb));
+  const sum = minusImp + plusImp;
   if (!sum) return null;
-  const favCoverProb = favImp / sum;
-  const favImps = favPrices.map(americanToImpliedProb);
-  const spreadPts = (Math.max(...favImps) - Math.min(...favImps)) * 100;
+  const minusCover = minusImp / sum, plusCover = plusImp / sum;
+  const minusFavored = minusCover >= plusCover; // does the market lean the -1.5 side to cover?
+
+  // Chosen side: the one the market leans to cover.
+  const chosenPrices = minusFavored ? minusSide : plusSide;
+  const chosenTeamIsAway = minusFavored ? minusTeamIsAway : !minusTeamIsAway;
+  const chosenLine = minusFavored ? -1.5 : 1.5;
+  const chosenProb = minusFavored ? minusCover : plusCover;
+
+  // Agreement on the CHOSEN side, measured in implied-prob points (scale-invariant).
+  const chosenImps = chosenPrices.map(americanToImpliedProb);
+  const spreadPts = (Math.max(...chosenImps) - Math.min(...chosenImps)) * 100;
   return {
-    favSide: favTeamIsAway ? "away" : "home",
-    favTeam: favTeamIsAway ? awayTeam : homeTeam,
-    favLine: -1.5,
-    favProb: Math.round(favCoverProb * 100),
-    consensus: Math.round(mrMedian(favPrices)),
-    centSpread: Math.round(Math.max(...favPrices.map(mrCentsVal)) - Math.min(...favPrices.map(mrCentsVal))),
+    favSide: chosenTeamIsAway ? "away" : "home",
+    favTeam: chosenTeamIsAway ? awayTeam : homeTeam,
+    favLine: chosenLine,
+    favProb: Math.round(chosenProb * 100),
+    consensus: Math.round(mrMedian(chosenPrices)),
+    centSpread: Math.round(Math.max(...chosenImps.map(p => p * 100)) - Math.min(...chosenImps.map(p => p * 100))),
     tier: mrTier(spreadPts),
-    nBooks: favPrices.length,
+    nBooks: chosenPrices.length,
   };
 }
 
