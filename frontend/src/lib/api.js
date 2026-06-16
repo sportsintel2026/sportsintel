@@ -36,7 +36,14 @@ export const edgesApi = {
 };
 // NEW — player batting card (expand-on-tap under a prop player), read-only
 export const playerCardApi = {
-  getMLB: (playerId) => apiFetch(`/api/player-card/mlb/${playerId}`),
+  getMLB: (playerId, opts = {}) => {
+    const q = new URLSearchParams();
+    if (opts.gameId) q.set("gameId", opts.gameId);
+    if (opts.team) q.set("team", opts.team);
+    if (opts.name) q.set("name", opts.name);
+    const qs = q.toString();
+    return apiFetch(`/api/player-card/mlb/${playerId}${qs ? `?${qs}` : ""}`);
+  },
 };
 // NEW — consensus (Best Bets ∩ model edges), read-only
 export const consensusApi = {
