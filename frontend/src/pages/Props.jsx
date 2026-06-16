@@ -7,7 +7,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-import { edgesApi, subscriptionApi } from "../lib/api";
+import { edgesApi, subscriptionApi, playerCardApi } from "../lib/api";
 import Sidebar from "./Sidebar";
 import BottomNav from "./BottomNav";
 import TerminalShell from "./TerminalShell";
@@ -184,7 +184,84 @@ function PropsLock({ navigate }) {
 }
 
 // ---- MLB prop row (unchanged behavior) ----
+// format a rate stat the baseball way: .947 / 1.203 (strip a leading zero, keep 1.xxx)
+function fmt3(v) {
+  if (v == null || v === "") return "—";
+  const f = Number(v).toFixed(3);
+  return f.startsWith("0.") ? f.slice(1) : f;
+}
+
+// one hand-split panel (vs LHP / vs RHP). `active` highlights the side that applies
+// tonight — unused in v1 (no pitcher hand yet), wired in a later phase.
+function SplitCard({ label, s, active }) {
+  if (!s) {
+    return (
+      <div className={"hcsp" + (active ? " act" : "")}>
+        <div className="hcvh">{label}</div>
+        <div className="hcmut" style={{ marginTop: 8 }}>no data</div>
+      </div>
+    );
+  }
+  return (
+    <div className={"hcsp" + (active ? " act" : "")}>
+      {active && <span className="hctag">TONIGHT</span>}
+      <div className="hcvh">{label}</div>
+      <div className="hcops">{fmt3(s.ops)}</div>
+      <div className="hcopsl">OPS</div>
+      <div className="hcr">
+        <div><div className="hcv">{fmt3(s.avg)}</div><div className="hcl">AVG</div></div>
+        <div><div className="hcv">{fmt3(s.slg)}</div><div className="hcl">SLG</div></div>
+        <div><div className="hcv hchr">{s.hr ?? "—"}</div><div className="hcl">HR</div></div>
+        <div><div className="hcv">{s.ab ?? "—"}</div><div className="hcl">AB</div></div>
+      </div>
+      {s.thin && <div className="hcthin">small sample</div>}
+    </div>
+  );
+}
+
+// the expand-on-tap batting card (v1: hand-vs-hand splits). More sections land here
+// next: model factors (barrel%/xwOBA/recent), model-vs-market, pull profile.
+function HrCard({ card, loading }) {
+  if (loading) return <div className="hrcard"><div className="hcmut">Loading batting card…</div></div>;
+  if (!card || card.ok === false || !card.splits)
+    return <div className="hrcard"><div className="hcmut">Batting card unavailable for this player.</div></div>;
+  const s = card.splits;
+  const bats = card.player?.bats;
+  return (
+    <div className="hrcard">
+      <div className="hcsec">
+        <div className="hctitle"><span className="hcdot"></span>Hand vs Hand · {s.season}{bats ? ` · bats ${bats}` : ""}</div>
+        <div className="hcsplits">
+          <SplitCard label="vs LHP" s={s.vsLHP} />
+          <SplitCard label="vs RHP" s={s.vsRHP} />
+        </div>
+      </div>
+      <div className="hcdisc">A <span className="hcb">Wize</span>Picks read — a lean, not a guarantee. More coming: model factors &amp; pull profile.</div>
+    </div>
+  );
+}
+
 function PropRow({ p, type, rank, navigate }) {
+  const isHR = type === "hr";
+  const [open, setOpen] = useState(false);
+  const [card, setCard] = useState(null);
+  const [cardLoading, setCardLoading] = useState(false);
+
+  const onTap = () => {
+    // HR rows expand the batting card; every other prop type keeps the old behavior
+    // (tap → game detail).
+    if (!isHR) { if (p.gameId) navigate(`/game/mlb/${p.gameId}`); return; }
+    const next = !open;
+    setOpen(next);
+    if (next && card == null && p.playerId) {
+      setCardLoading(true);
+      playerCardApi.getMLB(p.playerId)
+        .then((d) => setCard(d || { ok: false }))
+        .catch(() => setCard({ ok: false }))
+        .finally(() => setCardLoading(false));
+    }
+  };
+
   let pct, lbl, line, edgeBadge = null;
   if (type === "hr") {
     pct = Math.round((p.hrProb || 0) * 100); lbl = "to homer"; line = `O 0.5 HR · ${formatOdds(p.odds)}`;
@@ -209,23 +286,27 @@ function PropRow({ p, type, rank, navigate }) {
   }
   const ab = shortTeam(p.team || p.game || ""); const col = teamCol(ab);
   return (
-    <div className="pprow" onClick={() => p.gameId && navigate(`/game/mlb/${p.gameId}`)}>
-      <div className="rkn">{rank}</div>
-      <div className="ppav" style={{ background: `linear-gradient(180deg, ${col}, #0c1018 88%)`, boxShadow: `0 0 0 2px ${col}88` }}>
-        {p.playerId
-          ? <img src={`https://midfield.mlbstatic.com/v1/people/${p.playerId}/spots/120`} alt="" onError={(ev) => { ev.currentTarget.style.display = "none"; }} />
-          : (type === "ks" ? "⚾" : "🧢")}
+    <div className={"pprowwrap" + (isHR && open ? " open" : "")}>
+      <div className={"pprow" + (isHR ? " tappable" : "") + (isHR && open ? " rowopen" : "")} onClick={onTap}>
+        <div className="rkn">{rank}</div>
+        <div className="ppav" style={{ background: `linear-gradient(180deg, ${col}, #0c1018 88%)`, boxShadow: `0 0 0 2px ${col}88` }}>
+          {p.playerId
+            ? <img src={`https://midfield.mlbstatic.com/v1/people/${p.playerId}/spots/120`} alt="" onError={(ev) => { ev.currentTarget.style.display = "none"; }} />
+            : (type === "ks" ? "⚾" : "🧢")}
+        </div>
+        <div className="ppinfo">
+          <div className="ppname">{p.player || "—"}</div>
+          <div className="ppgame">{p.game || p.team || ""}</div>
+          <div className="ppline">{line}</div>
+        </div>
+        <div className="ppright">
+          <div className="pppct">{pct}<span className="pc">%</span></div>
+          <div className="pplbl">{lbl}</div>
+          {edgeBadge && <div className="ppedge">{edgeBadge} EDGE</div>}
+        </div>
+        {isHR && <div className="ppchev">{open ? "▴" : "▾"}</div>}
       </div>
-      <div className="ppinfo">
-        <div className="ppname">{p.player || "—"}</div>
-        <div className="ppgame">{p.game || p.team || ""}</div>
-        <div className="ppline">{line}</div>
-      </div>
-      <div className="ppright">
-        <div className="pppct">{pct}<span className="pc">%</span></div>
-        <div className="pplbl">{lbl}</div>
-        {edgeBadge && <div className="ppedge">{edgeBadge} EDGE</div>}
-      </div>
+      {isHR && open && <HrCard card={card} loading={cardLoading} />}
     </div>
   );
 }
@@ -291,6 +372,31 @@ const CSS = `
 .pplbl{font-size:8.5px;color:#7d8a93;font-weight:700;text-transform:uppercase;letter-spacing:.3px;margin-top:1px}
 .ppedge{margin-top:5px;font-size:9px;font-weight:800;color:#33e991;background:rgba(51,233,145,.12);border-radius:5px;padding:2px 6px;white-space:nowrap}
 .ppwarn{border:1px solid rgba(243,185,79,.32);background:rgba(243,185,79,.08);border-radius:10px;padding:10px 12px;font-size:11px;color:#f3c66b;font-weight:600;line-height:1.45;margin-bottom:12px}.ppwarn b{color:#ffd98a}
+.pprowwrap{display:block}
+.pprow.tappable{cursor:pointer}
+.ppchev{position:absolute;top:10px;right:11px;color:#33e991;font-size:11px;pointer-events:none}
+.pprow.rowopen{border-bottom-left-radius:0;border-bottom-right-radius:0;border-bottom-color:transparent}
+.hrcard{border:1px solid #161d24;border-top:1px dashed #20303a;border-radius:0 0 12px 12px;background:linear-gradient(180deg,#0b1016,#070a0e);padding:2px 12px 12px;margin-top:-1px}
+.hcsec{padding:13px 0 4px}
+.hctitle{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:11px;letter-spacing:.11em;text-transform:uppercase;color:#8a99a2;margin-bottom:10px;display:flex;align-items:center;gap:7px}
+.hcdot{width:6px;height:6px;border-radius:50%;background:#33e991;display:inline-block}
+.hcsplits{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.hcsp{position:relative;background:#0d1218;border:1px solid #18212a;border-radius:11px;padding:11px 12px}
+.hcsp.act{border-color:rgba(51,233,145,.5);background:linear-gradient(180deg,rgba(51,233,145,.06),#0d1218)}
+.hctag{position:absolute;top:-8px;right:10px;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:9px;letter-spacing:.08em;background:#ff7a6c;color:#1a0c08;padding:2px 7px;border-radius:5px}
+.hcvh{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:12px;letter-spacing:.06em;color:#8a99a2}
+.hcsp.act .hcvh{color:#7cf0a8}
+.hcops{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:28px;line-height:1;margin:6px 0 1px}
+.hcopsl{font-size:9.5px;color:#6a7882;letter-spacing:.1em;text-transform:uppercase}
+.hcr{display:flex;justify-content:space-between;gap:4px;margin-top:9px}
+.hcr>div{flex:1;text-align:center}
+.hcv{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:15px}
+.hcl{font-size:9px;color:#6a7882;text-transform:uppercase;letter-spacing:.06em;margin-top:1px}
+.hchr{color:#ffd98a}
+.hcthin{font-size:9.5px;color:#6a7882;font-style:italic;margin-top:8px}
+.hcmut{color:#7d8a93;font-size:12px;padding:14px 4px;text-align:center}
+.hcdisc{font-size:10px;color:#6a7882;text-align:center;margin-top:12px;padding:0 6px}
+.hcb{color:#33e991;font-weight:800}
 .ppmuted{color:#6b7681;font-size:13px;font-weight:600;padding:24px 4px;text-align:center}
 .ppnote{font-size:10.5px;color:#54616b;font-weight:600;margin-top:14px;line-height:1.4}
 .ppsb{display:none}
@@ -301,6 +407,7 @@ const CSS = `
   .pptitle{font-size:40px}
   .ppsports,.pptabs{max-width:760px}
   .pplist{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:10px}
+  .pprowwrap.open{grid-column:1/-1}
 }
 /* ---- DESKTOP (>=1024): TerminalShell provides the nav; drop the 200px margin ---- */
 @media (min-width:1024px){
