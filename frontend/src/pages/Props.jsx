@@ -10,6 +10,7 @@ import { useAuth } from "../hooks/useAuth";
 import { edgesApi, subscriptionApi } from "../lib/api";
 import Sidebar from "./Sidebar";
 import BottomNav from "./BottomNav";
+import TerminalShell from "./TerminalShell";
 
 const TEAMCOL = { ARI:"#A71930",ATL:"#CE1141",BAL:"#DF4601",BOS:"#BD3039",CHC:"#0E3386",CWS:"#C4CED4",CHW:"#C4CED4",CIN:"#C6011F",CLE:"#E31937",COL:"#5A4F9C",DET:"#FA4616",HOU:"#EB6E1F",KC:"#3E7DC4",KCR:"#3E7DC4",LAA:"#BA0021",LAD:"#3E7DC4",LOS:"#3E7DC4",MIA:"#00A3E0",MIL:"#FFC52F",MIN:"#D31145",NYM:"#FF5910",NYY:"#3A4F73",OAK:"#EFB21E",ATH:"#EFB21E",PHI:"#E81828",PIT:"#FDB827",SD:"#FFC425",SDP:"#FFC425",SEA:"#1B9A8E",SF:"#FD5A1E",SFG:"#FD5A1E",STL:"#C41E3A",TB:"#8FBCE6",TBR:"#8FBCE6",TEX:"#3E66B0",TOR:"#1D6FE0",WSH:"#E0263B",WAS:"#E0263B",
   // NBA
@@ -86,6 +87,7 @@ export default function PropsPage() {
     : (NBA_MK[tab] ? NBA_MK[tab].toLowerCase() : "");
 
   return (
+    <TerminalShell active="/props" plan={plan} navigate={navigate}>
     <div style={{ minHeight: "100vh", background: "#000", color: "#f2f6f4", fontFamily: "'Inter',system-ui,-apple-system,sans-serif" }}>
       <style>{CSS}</style>
       <BottomNav />
@@ -145,6 +147,7 @@ export default function PropsPage() {
         </>)}
       </div>
     </div>
+    </TerminalShell>
   );
 }
 
@@ -291,12 +294,19 @@ const CSS = `
 .ppmuted{color:#6b7681;font-size:13px;font-weight:600;padding:24px 4px;text-align:center}
 .ppnote{font-size:10.5px;color:#54616b;font-weight:600;margin-top:14px;line-height:1.4}
 .ppsb{display:none}
-/* ---- DESKTOP: left sidebar shell (same as the Performance page) ---- */
-@media (min-width:769px){
+/* ---- TABLET (769-1023): old left sidebar shell ---- */
+@media (min-width:769px) and (max-width:1023px){
   .ppsb{display:block}
   .ppwrap{margin-left:200px;max-width:none;padding:30px 30px 60px}
   .pptitle{font-size:40px}
   .ppsports,.pptabs{max-width:760px}
+  .pplist{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:10px}
+}
+/* ---- DESKTOP (>=1024): TerminalShell provides the nav; drop the 200px margin ---- */
+@media (min-width:1024px){
+  .ppsb{display:none}
+  .ppwrap{margin-left:0;max-width:none;padding:30px 34px 60px}
+  .pptitle{font-size:40px}
   .pplist{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:10px}
 }
 `;
