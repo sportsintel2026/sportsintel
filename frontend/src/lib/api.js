@@ -31,6 +31,7 @@ export const edgesApi = {
   getNBA: () => apiFetch("/api/edges/nba"),
   getNBAProps: () => apiFetch("/api/edges/nba/props"),
   getOddsHistory: () => apiFetch("/api/edges/odds-history/mlb"),
+  getMarketRead: () => apiFetch("/api/edges/market-read/mlb"),
   clearCache: () => apiFetch("/api/edges/cache", { method: "DELETE" }),
 };
 // NEW — consensus (Best Bets ∩ model edges), read-only
