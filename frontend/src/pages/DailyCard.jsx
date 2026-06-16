@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { subscriptionApi } from "../lib/api";
 import Sidebar from "./Sidebar";
+import TerminalShell from "./TerminalShell";
 import BottomNav from "./BottomNav";
 
 const API_BASE = import.meta.env.VITE_API_URL || "https://sportsintel-production.up.railway.app";
@@ -54,6 +55,7 @@ export default function DailyCardPage() {
   }, [scope]);
 
   return (
+    <TerminalShell active="/daily-card" plan={plan} navigate={navigate}>
     <div style={{ minHeight: "100vh", background: "#0a0e14", color: "#e4e7eb", fontFamily: "'Inter',system-ui,-apple-system,sans-serif" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
@@ -64,6 +66,15 @@ export default function DailyCardPage() {
         @keyframes slideIn{from{transform:translateX(-100%)}to{transform:translateX(0)}}
         .mobile-only{display:none}
         .desktop-sidebar{display:block}
+         (min-width: 1024px) {
+          .desktop-sidebar{display:none!important}
+          .main-content{margin-left:0!important}
+        }
+
+        @media (min-width: 1024px) {
+          .desktop-sidebar{display:none!important}
+          .main-content{margin-left:0!important}
+        }
         @media (max-width: 768px) {
           .desktop-sidebar{display:none!important}
           .main-content{margin-left:0!important}
@@ -117,6 +128,7 @@ export default function DailyCardPage() {
         </div>
       </div>
     </div>
+    </TerminalShell>
   );
 }
 
