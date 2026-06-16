@@ -121,7 +121,7 @@ export default function PropsPage() {
           </div>
 
           {hasFull && sport === "mlb" && tab === "hr" && !loading && (
-            <div className="ppwarn">⚠️ Longshots — not guaranteed. Even the top names homer only about 1 game in 5. These are ranked by the model's chance to homer (a speculative lottery-ticket bet), <b>not</b> a tracked +EV play. Bet small, if at all.</div>
+            <div className="pphint">👆 Tap any player to open their batting profile — splits, recent form, the model's read vs the market, and pull tendencies. <b>Longshots</b> — bet small, if at all.</div>
           )}
           {hasFull && sport === "nba" && !loading && (
             <div className="ppwarn">⚠️ Experimental projections. Prop markets are sharp, so flagged edges are rare and <b>informational, not betting advice</b>. Shown as the model's projection vs the book line.</div>
@@ -508,6 +508,7 @@ const CSS = `
 .pplbl{font-size:8.5px;color:#7d8a93;font-weight:700;text-transform:uppercase;letter-spacing:.3px;margin-top:1px}
 .ppedge{margin-top:5px;font-size:9px;font-weight:800;color:#33e991;background:rgba(51,233,145,.12);border-radius:5px;padding:2px 6px;white-space:nowrap}
 .ppwarn{border:1px solid rgba(243,185,79,.32);background:rgba(243,185,79,.08);border-radius:10px;padding:10px 12px;font-size:11px;color:#f3c66b;font-weight:600;line-height:1.45;margin-bottom:12px}.ppwarn b{color:#ffd98a}
+.pphint{border:1px solid rgba(51,233,145,.28);background:rgba(51,233,145,.07);border-radius:10px;padding:10px 12px;font-size:11px;color:#9fe9c4;font-weight:600;line-height:1.45;margin-bottom:12px}.pphint b{color:#d8f7e7}
 .pprowwrap{display:block}
 .pprow.tappable{cursor:pointer}
 .ppchev{position:absolute;top:10px;right:11px;color:#33e991;font-size:11px;pointer-events:none}
