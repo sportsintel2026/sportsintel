@@ -2,11 +2,11 @@
 // each prop player in the Props board. READ-ONLY and isolated (its own router) so
 // a bug here can never destabilize the main edges feed — same pattern as Market Read.
 //
-// v2: hand-vs-hand splits + tonight's matchup (pitcher + hand → which split applies)
+// v3: hand-vs-hand splits + tonight's matchup (pitcher + hand → which split applies)
 // + measured factors (barrel%/xwOBA/recent L15) + park factor + model-vs-market
-// history. All sourced directly from the same feeds the HR model uses — the card
-// never reaches into the model's internals, so it can't drift or destabilize it.
-// PHASE 2 (separate): batted-ball pull/spray (needs a verified Savant feed first).
+// history + batted-ball pull/spray (Savant custom leaderboard, columns confirmed via
+// the probe below). All sourced directly from the same feeds the HR model uses — the
+// card never reaches into the model's internals, so it can't drift or destabilize it.
 const express = require("express");
 const router = express.Router();
 const axios = require("axios");
@@ -19,8 +19,9 @@ const {
 const { getBatterBarrels, getBatterExpectedStats, parseCsvLine, SAVANT_BASE } = require("../services/savantApi");
 
 const db = () => createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
-
-const THIN_AB = 40; // below this, a vs-hand split is too small a sample to trust
+const SAV = SAVANT_BASE || "https://baseballsavant.mlb.com";
+const THIN_AB = 40;     // below this, a vs-hand split is too small a sample to trust
+const THIN_BB_PA = 50;  // below this, batted-ball direction % are too noisy to show as firm
 
 function shapeSplit(s) {
   if (!s) return null;
@@ -31,14 +32,12 @@ function shapeSplit(s) {
   };
 }
 
-// Raw implied probability from an American price (what the quoted line implies).
 function impliedFromOdds(o) {
   const n = Number(o);
   if (!Number.isFinite(n) || n === 0) return null;
   return n > 0 ? 100 / (n + 100) : -n / (-n + 100);
 }
 
-// A plain-English tier for a barrel rate (league avg ~7-8%, elite ~16%+).
 function barrelTier(rate) {
   if (rate == null) return null;
   if (rate >= 0.16) return "elite";
@@ -48,7 +47,49 @@ function barrelTier(rate) {
   return "low";
 }
 
-// Find a game by id across today (and tomorrow, since the board can roll forward).
+// ── BATTED-BALL DIRECTION (pull/straight/oppo) ────────────────────────────────
+// Savant custom leaderboard, columns confirmed via /probe-batted-ball:
+// player_id, pa, pull_percent, straightaway_percent, opposite_percent (PERCENT units).
+// min=1 = all batters (gate low-PA as thin); fetched once/day and cached like barrels.
+const BB_URL = (y) =>
+  `${SAV}/leaderboard/custom?year=${y}&type=batter&filter=&min=1&selections=pa,pull_percent,straightaway_percent,opposite_percent&sort=pull_percent&sortDir=desc&csv=true`;
+let _bbCache = { date: null, map: null };
+async function getBattedBallMap() {
+  const today = getEasternDate(0);
+  if (_bbCache.map && _bbCache.date === today) return _bbCache.map;
+  const y = new Date().getFullYear();
+  try {
+    const res = await axios.get(BB_URL(y), {
+      timeout: 15000, responseType: "text", transformResponse: (x) => x, validateStatus: () => true,
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; WizePicks/1.0)", Accept: "text/csv,text/plain,*/*" },
+    });
+    const body = typeof res.data === "string" ? res.data : "";
+    const lines = body.split(/\r?\n/).filter((l) => l.length > 0);
+    if (lines.length < 2 || /^\s*<(!doctype|html)/i.test(body)) return null;
+    const cols = parseCsvLine(lines[0]).map((c) => c.trim());
+    const iId = cols.indexOf("player_id"), iPa = cols.indexOf("pa"),
+      iPull = cols.indexOf("pull_percent"), iStr = cols.indexOf("straightaway_percent"),
+      iOppo = cols.indexOf("opposite_percent");
+    if (iId < 0 || iPull < 0) return null;
+    const map = new Map();
+    for (let r = 1; r < lines.length; r++) {
+      const f = parseCsvLine(lines[r]);
+      const id = parseInt(f[iId], 10);
+      if (!Number.isFinite(id)) continue;
+      const pull = parseFloat(f[iPull]);
+      if (!Number.isFinite(pull)) continue;
+      map.set(id, {
+        pullPct: pull,
+        straightPct: iStr >= 0 ? (parseFloat(f[iStr]) || null) : null,
+        oppoPct: iOppo >= 0 ? (parseFloat(f[iOppo]) || null) : null,
+        pa: iPa >= 0 ? (parseInt(f[iPa], 10) || null) : null,
+      });
+    }
+    if (map.size > 0) { _bbCache = { date: today, map }; return map; }
+    return null;
+  } catch (_) { return null; }
+}
+
 async function findGame(gameId) {
   if (!gameId) return null;
   for (const off of [0, 1, -1]) {
@@ -61,8 +102,6 @@ async function findGame(gameId) {
   return null;
 }
 
-// Resolve tonight's matchup for this batter: opposing probable pitcher + hand,
-// which split applies, platoon advantage, and the park HR factor.
 async function resolveMatchup(game, teamAbbr) {
   if (!game) return null;
   const t = String(teamAbbr || "").toUpperCase();
@@ -95,24 +134,24 @@ router.get("/mlb/:playerId", async (req, res) => {
   const { gameId, team, name } = req.query;
 
   try {
-    // Fire the independent reads in parallel.
-    const [splits, bats, recent, barrelMap, xMap, game] = await Promise.all([
+    const [splits, bats, recent, barrelMap, xMap, bbMap, game] = await Promise.all([
       getBatterHandednessSplits(playerId).catch(() => null),
       getBatterHand(playerId).catch(() => null),
       getBatterRecentStats(playerId, 15).catch(() => null),
       getBatterBarrels().catch(() => null),
       getBatterExpectedStats().catch(() => null),
+      getBattedBallMap().catch(() => null),
       findGame(gameId),
     ]);
 
     const matchup = game ? await resolveMatchup(game, team) : null;
     const bx = barrelMap ? barrelMap.get(idNum) : null;
     const xs = xMap ? xMap.get(idNum) : null;
+    const bb = bbMap ? bbMap.get(idNum) : null;
 
     const barrelPct = bx?.barrelRate ?? null;
     const xwoba = xs?.xwOBA ?? null;
 
-    // bats vs opposing hand → platoon advantage (switch hitters always have it)
     let platoonAdvantage = null;
     if (matchup?.pitcherHand && bats) {
       platoonAdvantage =
@@ -121,7 +160,6 @@ router.get("/mlb/:playerId", async (req, res) => {
         (bats === "R" && matchup.pitcherHand === "L");
     }
 
-    // model-vs-market history: this player's past HR-prop rows (matched by name).
     let modelVsMarket = [];
     if (name) {
       try {
@@ -143,7 +181,7 @@ router.get("/mlb/:playerId", async (req, res) => {
             marketImplied: impliedFromOdds(r.odds),
             homered: r.result === "pending" ? null : r.result === "win",
           }))
-          .reverse(); // oldest → newest for the chart
+          .reverse();
       } catch (_) { modelVsMarket = []; }
     }
 
@@ -154,9 +192,7 @@ router.get("/mlb/:playerId", async (req, res) => {
         bats: bats || null,
         headshot: `https://midfield.mlbstatic.com/v1/people/${playerId}/spots/120`,
       },
-      matchup: matchup
-        ? { ...matchup, platoonAdvantage }
-        : null,
+      matchup: matchup ? { ...matchup, platoonAdvantage } : null,
       splits: splits
         ? { season: new Date().getFullYear(), vsLHP: shapeSplit(splits.vsLHP), vsRHP: shapeSplit(splits.vsRHP) }
         : null,
@@ -169,19 +205,20 @@ router.get("/mlb/:playerId", async (req, res) => {
             ? { games: recent.days, hr: recent.homeRuns ?? null, avg: recent.avg ?? null, slg: recent.slg ?? null, ab: recent.atBats ?? null }
             : null,
         },
-        park: matchup?.parkHRFactor != null
-          ? { factor: matchup.parkHRFactor, venue: matchup.venue }
-          : null,
+        park: matchup?.parkHRFactor != null ? { factor: matchup.parkHRFactor, venue: matchup.venue } : null,
         platoonAdvantage,
       },
       modelVsMarket,
-      battedBall: null, // PHASE 2
+      battedBall: bb
+        ? { pullPct: bb.pullPct, straightPct: bb.straightPct, oppoPct: bb.oppoPct, pa: bb.pa, thin: (bb.pa ?? 0) < THIN_BB_PA }
+        : null,
       dataHealth: {
         splits: !!splits,
         savant: barrelPct != null || xwoba != null,
         gamelog: !!recent,
         matchup: !!matchup,
         history: modelVsMarket.length,
+        battedBall: !!bb,
       },
     });
   } catch (e) {
@@ -190,36 +227,19 @@ router.get("/mlb/:playerId", async (req, res) => {
   }
 });
 
-// ── PULL / SPRAY PROBE (phase 2 prep) ─────────────────────────────────────────
-// We do NOT yet trust any Savant batted-ball feed. This probe tries candidate
-// leaderboards and REPORTS what each returns (HTTP status, real header line, which
-// target columns are present) so we can confirm the actual column names + a working
-// URL BEFORE wiring pull% into the card. Same discipline as the whiff/barrel probes.
-const SAV = SAVANT_BASE || "https://baseballsavant.mlb.com";
+// ── PULL / SPRAY PROBE (kept as a diagnostic) ─────────────────────────────────
 const BB_URL_CANDIDATES = (y) => ([
-  // custom leaderboard with batted-ball direction selections (qualified, then all)
   `${SAV}/leaderboard/custom?year=${y}&type=batter&filter=&min=q&selections=pa,pull_percent,straightaway_percent,opposite_percent&sort=pull_percent&sortDir=desc&csv=true`,
   `${SAV}/leaderboard/custom?year=${y}&type=batter&filter=&min=1&selections=pa,pull_percent,straightaway_percent,opposite_percent&sort=pull_percent&sortDir=desc&csv=true`,
-  // alternate direction selection names, in case the above are rejected
-  `${SAV}/leaderboard/custom?year=${y}&type=batter&filter=&min=q&selections=pa,pull_pct,straight_pct,oppo_pct&sort=pull_pct&sortDir=desc&csv=true`,
-  // the statcast (exit velocity & barrels) leaderboard — already returns CSV; check if it carries direction cols
-  `${SAV}/leaderboard/statcast?type=batter&year=${y}&position=&team=&min=q&csv=true`,
 ]);
-// every name we want to detect — the probe reports which ones each CSV actually has
-const BB_TARGET_COLS = [
-  "player_id", "pull_percent", "straightaway_percent", "opposite_percent",
-  "pull_pct", "straight_pct", "oppo_pct",
-  "groundballs_percent", "flyballs_percent", "linedrives_percent", "popups_percent",
-];
-
+const BB_TARGET_COLS = ["player_id", "pa", "pull_percent", "straightaway_percent", "opposite_percent"];
 async function probeBattedBall(year) {
   const y = year || new Date().getFullYear();
   const attempts = [];
   for (const url of BB_URL_CANDIDATES(y)) {
     try {
       const res = await axios.get(url, {
-        timeout: 15000, responseType: "text", transformResponse: (x) => x,
-        validateStatus: () => true,
+        timeout: 15000, responseType: "text", transformResponse: (x) => x, validateStatus: () => true,
         headers: { "User-Agent": "Mozilla/5.0 (compatible; WizePicks/1.0)", Accept: "text/csv,text/plain,*/*" },
       });
       const body = typeof res.data === "string" ? res.data : JSON.stringify(res.data);
@@ -229,33 +249,16 @@ async function probeBattedBall(year) {
       const cols = looksCsv ? parseCsvLine(lines[0]).map((c) => c.trim()) : [];
       const hasColumns = {};
       for (const t of BB_TARGET_COLS) hasColumns[t] = cols.includes(t);
-      attempts.push({
-        url, httpStatus: res.status,
-        contentType: (res.headers && res.headers["content-type"]) || null,
-        byteLength: body.length, dataLineCount: lines.length,
-        looksCsv, looksLikeHtml: isHtml,
-        headerLine: looksCsv ? lines[0] : (isHtml ? "(html page)" : (lines[0] || null)),
-        firstDataRow: looksCsv ? lines[1] : null,
-        hasColumns,
-      });
-    } catch (e) {
-      attempts.push({ url, error: e.message });
-    }
+      attempts.push({ url, httpStatus: res.status, byteLength: body.length, dataLineCount: lines.length, looksCsv, headerLine: looksCsv ? lines[0] : null, firstDataRow: looksCsv ? lines[1] : null, hasColumns });
+    } catch (e) { attempts.push({ url, error: e.message }); }
   }
-  // "usable" = a CSV keyed by player_id with at least one pull/direction column
-  const usable = attempts.filter((a) => a.looksCsv && a.hasColumns && a.hasColumns.player_id &&
-    (a.hasColumns.pull_percent || a.hasColumns.pull_pct));
+  const usable = attempts.filter((a) => a.looksCsv && a.hasColumns && a.hasColumns.player_id && a.hasColumns.pull_percent);
   return { ok: usable.length > 0, year: y, usableUrls: usable.map((u) => u.url), attempts };
 }
-
-// GET /api/player-card/probe-batted-ball — diagnostic only; confirms the real Savant
-// pull/spray columns + a working URL before we wire the feed.
 router.get("/probe-batted-ball", async (req, res) => {
   try {
-    const year = req.query.year ? Number(req.query.year) : undefined;
-    res.json(await probeBattedBall(year));
+    res.json(await probeBattedBall(req.query.year ? Number(req.query.year) : undefined));
   } catch (e) {
-    console.error("[player-card] batted-ball probe error:", e.message);
     res.status(500).json({ ok: false, error: e.message });
   }
 });
