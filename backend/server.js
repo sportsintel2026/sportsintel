@@ -24,6 +24,7 @@ const dailyCardRoutes = require("./routes/dailyCard");
 const gradeNowRoutes = require("./routes/gradeNow");
 const consensusRoutes = require("./routes/consensus");
 const oddsRoutes = require("./routes/odds");
+const playerCardRoutes = require("./routes/playerCard");
 
 const { refreshDailyGames } = require("./services/sportsData");
 const { gradeFinishedGames, captureClosingLines, captureNbaClosingLines, captureOddsTicks } = require("./services/predictionTracker");
@@ -104,6 +105,7 @@ app.use("/api/daily-card", dailyCardRoutes);
 app.use("/api/grade-now", gradeNowRoutes);
 app.use("/api/consensus", consensusRoutes);
 app.use("/api/odds", oddsRoutes);
+app.use("/api/player-card", playerCardRoutes);
 
 // Health check
 app.get("/api/health", (req, res) => {
