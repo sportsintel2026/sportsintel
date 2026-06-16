@@ -114,7 +114,6 @@ export default function HomeDesktop(props) {
     ["BOARD", null],
     ["📊", "Dashboard", "/home", true],
     ["💹", "Market Price", "/odds"],
-    ["🎯", "Edge Board", "/home"],
     ["⚾", "Props", "/props"],
     ["TRACK", null],
     ["📈", "Performance", "/performance"],
