@@ -219,24 +219,134 @@ function SplitCard({ label, s, active }) {
   );
 }
 
-// the expand-on-tap batting card (v1: hand-vs-hand splits). More sections land here
-// next: model factors (barrel%/xwOBA/recent), model-vs-market, pull profile.
-function HrCard({ card, loading }) {
+// raw implied probability from an American price (what the quoted line implies)
+function impliedFromOdds(o) {
+  const n = Number(o);
+  if (!Number.isFinite(n) || n === 0) return null;
+  return n > 0 ? 100 / (n + 100) : -n / (-n + 100);
+}
+function parkPctLabel(fac) {
+  if (fac == null) return "—";
+  const p = Math.round((fac - 1) * 100);
+  return p === 0 ? "neutral" : (p > 0 ? `+${p}%` : `${p}%`);
+}
+
+// one factor chip in "what the model sees"
+function Fac({ label, val, tier, sub, bar }) {
+  return (
+    <div className="hcfac">
+      <div className="hcfl"><span>{label}</span>{tier && <span className="hcrk">{tier}</span>}</div>
+      <div className="hcfv">{val}</div>
+      {bar != null && <div className="hcbar"><span style={{ width: Math.max(3, Math.min(100, bar)) + "%" }}></span></div>}
+      {sub && <div className="hcfp">{sub}</div>}
+    </div>
+  );
+}
+
+// model HR% (bars) vs market implied % (blue ticks), per past spot; dot = homered.
+function ModelVsMarket({ data, tonight }) {
+  const n = data.length;
+  const W = 320, top = 10, base = 96, plot = base - top;
+  const vals = data.flatMap((d) => [d.modelProb || 0, d.marketImplied || 0]);
+  if (tonight) vals.push(tonight.model || 0, tonight.market || 0);
+  const maxV = Math.max(0.35, ...vals);
+  const y = (p) => base - (Math.min(p || 0, maxV) / maxV) * plot;
+  const slotW = W / Math.max(n, 1);
+  const barW = Math.min(20, slotW * 0.55);
+  return (
+    <div className="hccw">
+      <div className="hcch">
+        <span className="hccht">Model HR% vs market implied · last {n}</span>
+        {tonight && tonight.market != null && (
+          <span className="hcchu"><b style={{ color: "#7cf0a8" }}>{Math.round((tonight.model || 0) * 100)}%</b> <i>vs</i> <b style={{ color: "#5da9e8" }}>{Math.round((tonight.market || 0) * 100)}%</b></span>
+        )}
+      </div>
+      <svg viewBox={`0 0 ${W} 120`} width="100%" preserveAspectRatio="xMidYMid meet">
+        <line x1="2" y1={base} x2={W - 2} y2={base} stroke="#22352c" strokeWidth="1" />
+        {data.map((d, i) => {
+          const cx = i * slotW + slotW / 2;
+          const yTop = y(d.modelProb || 0);
+          const lean = (d.modelProb || 0) >= (d.marketImplied || 0);
+          return (
+            <g key={i}>
+              <rect x={cx - barW / 2} y={yTop} width={barW} height={Math.max(1, base - yTop)} rx="3" fill={lean ? "#33e991" : "#2f6b4f"} opacity={lean ? 1 : 0.75} />
+              <line x1={cx - barW / 2 - 2} y1={y(d.marketImplied)} x2={cx + barW / 2 + 2} y2={y(d.marketImplied)} stroke="#5da9e8" strokeWidth="2.5" strokeLinecap="round" />
+              <circle cx={cx} cy={112} r={d.homered ? 4 : 3.2} fill={d.homered ? "#33e991" : "none"} stroke={d.homered ? "#33e991" : "#3a5f55"} />
+            </g>
+          );
+        })}
+      </svg>
+      <div className="hclg">
+        <span><i style={{ background: "#33e991" }}></i>model %</span>
+        <span><i style={{ background: "#5da9e8", height: 3, borderRadius: 2 }}></i>market %</span>
+        <span><i style={{ background: "#33e991", borderRadius: "50%" }}></i>homered</span>
+      </div>
+      <div className="hcnote2">Bars above the blue line = model sees more value than the price.</div>
+    </div>
+  );
+}
+
+// the expand-on-tap batting card (v2): matchup → splits → model-vs-market →
+// factors → pull (phase 2). Sourced from the same feeds the HR model uses.
+function HrCard({ card, loading, p }) {
   if (loading) return <div className="hrcard"><div className="hcmut">Loading batting card…</div></div>;
   if (!card || card.ok === false || !card.splits)
     return <div className="hrcard"><div className="hcmut">Batting card unavailable for this player.</div></div>;
   const s = card.splits;
-  const bats = card.player?.bats;
+  const m = card.matchup;
+  const f = card.factors || {};
+  const meas = f.measured || {};
+  const applies = m?.appliesSplit;
+  const hist = card.modelVsMarket || [];
+  const tonight = { model: p?.hrProb ?? null, market: impliedFromOdds(p?.odds) };
+
   return (
     <div className="hrcard">
+      {m && (m.pitcher || m.pitcherHand) && (
+        <div className="hcmatch">
+          <div className="hcml">Tonight vs <b>{m.pitcher || "TBD"}</b></div>
+          <div className="hcmr">
+            {m.pitcherHand && <span className="hcpill">{m.pitcherHand}HP</span>}
+            {f.platoonAdvantage && <span className="hcadv">▲ platoon edge</span>}
+          </div>
+        </div>
+      )}
+
       <div className="hcsec">
-        <div className="hctitle"><span className="hcdot"></span>Hand vs Hand · {s.season}{bats ? ` · bats ${bats}` : ""}</div>
+        <div className="hctitle"><span className="hcdot"></span>Hand vs Hand · {s.season}{card.player?.bats ? ` · bats ${card.player.bats}` : ""}</div>
         <div className="hcsplits">
-          <SplitCard label="vs LHP" s={s.vsLHP} />
-          <SplitCard label="vs RHP" s={s.vsRHP} />
+          <SplitCard label="vs LHP" s={s.vsLHP} active={applies === "vsLHP"} />
+          <SplitCard label="vs RHP" s={s.vsRHP} active={applies === "vsRHP"} />
         </div>
       </div>
-      <div className="hcdisc">A <span className="hcb">Wize</span>Picks read — a lean, not a guarantee. More coming: model factors &amp; pull profile.</div>
+
+      {hist.length > 0 && (
+        <div className="hcsec">
+          <div className="hctitle"><span className="hcdot"></span>Model % vs Market %</div>
+          <ModelVsMarket data={hist} tonight={tonight} />
+        </div>
+      )}
+
+      <div className="hcsec">
+        <div className="hctitle"><span className="hcdot"></span>What the model sees</div>
+        <div className="hcfacs">
+          {meas.barrelPct != null && <Fac label="Barrel %" tier={meas.barrelTier} val={(meas.barrelPct * 100).toFixed(1) + "%"} bar={(meas.barrelPct / 0.20) * 100} />}
+          {meas.xwoba != null && <Fac label="xwOBA" tier={meas.xwoba >= 0.37 ? "elite" : meas.xwoba >= 0.33 ? "strong" : null} val={fmt3(meas.xwoba)} bar={(meas.xwoba / 0.45) * 100} />}
+          {meas.recent15 && <Fac label="Recent · L15" val={`${meas.recent15.hr ?? 0} HR`} sub={`${fmt3(meas.recent15.avg)} / ${fmt3(meas.recent15.slg)} · ${meas.recent15.ab ?? 0} AB`} />}
+          {f.platoonAdvantage != null && <Fac label="Platoon" tier={f.platoonAdvantage ? "+adv" : null} val={f.platoonAdvantage ? "advantage" : "neutral"} sub={card.player?.bats && m?.pitcherHand ? `${card.player.bats} bat vs ${m.pitcherHand}HP` : ""} />}
+          {f.park && <Fac label={"Park" + (f.park.venue ? " · " + f.park.venue : "")} tier={f.park.factor > 1.03 ? "+HR" : f.park.factor < 0.97 ? "−HR" : null} val={parkPctLabel(f.park.factor)} />}
+        </div>
+      </div>
+
+      <div className="hcsec">
+        <div className="hctitle"><span className="hcdot" style={{ background: "#e8c07a" }}></span>Batted-ball profile</div>
+        <div className="hcsoon">
+          <div className="hcs1">Pull % · Spray direction <span className="hcstag">ADDING NEXT</span></div>
+          <div className="hcs2">Pull rate, oppo rate and spray vs the pitcher's hand — coming from Baseball Savant.</div>
+        </div>
+      </div>
+
+      <div className="hcdisc">A <span className="hcb">Wize</span>Picks read — a lean, not a guarantee.</div>
     </div>
   );
 }
@@ -255,7 +365,7 @@ function PropRow({ p, type, rank, navigate }) {
     setOpen(next);
     if (next && card == null && p.playerId) {
       setCardLoading(true);
-      playerCardApi.getMLB(p.playerId)
+      playerCardApi.getMLB(p.playerId, { gameId: p.gameId, team: p.team, name: p.player })
         .then((d) => setCard(d || { ok: false }))
         .catch(() => setCard({ ok: false }))
         .finally(() => setCardLoading(false));
@@ -306,7 +416,7 @@ function PropRow({ p, type, rank, navigate }) {
         </div>
         {isHR && <div className="ppchev">{open ? "▴" : "▾"}</div>}
       </div>
-      {isHR && open && <HrCard card={card} loading={cardLoading} />}
+      {isHR && open && <HrCard card={card} loading={cardLoading} p={p} />}
     </div>
   );
 }
@@ -397,6 +507,29 @@ const CSS = `
 .hcmut{color:#7d8a93;font-size:12px;padding:14px 4px;text-align:center}
 .hcdisc{font-size:10px;color:#6a7882;text-align:center;margin-top:12px;padding:0 6px}
 .hcb{color:#33e991;font-weight:800}
+.hcmatch{display:flex;align-items:center;justify-content:space-between;gap:8px;background:#0d1218;border:1px solid #18212a;border-radius:11px;padding:9px 12px;margin:11px 0 2px}
+.hcml{font-size:12.5px;color:#8a99a2}.hcml b{color:#eef3f1;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:14px}
+.hcmr{display:flex;gap:6px;align-items:center;flex:0 0 auto}
+.hcpill{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:11px;padding:2px 8px;border-radius:6px;background:rgba(93,169,232,.14);color:#5da9e8;border:1px solid rgba(93,169,232,.3)}
+.hcadv{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:11px;color:#7cf0a8;background:rgba(51,233,145,.12);border:1px solid rgba(51,233,145,.3);padding:2px 8px;border-radius:6px}
+.hcfacs{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.hcfac{background:#0d1218;border:1px solid #18212a;border-radius:10px;padding:9px 11px}
+.hcfl{font-size:11px;color:#8a99a2;display:flex;justify-content:space-between;align-items:center;gap:6px}
+.hcrk{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:9px;color:#04130d;background:#33e991;padding:1px 6px;border-radius:5px;white-space:nowrap}
+.hcfv{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:19px;margin-top:2px}
+.hcbar{height:4px;border-radius:3px;background:#16231d;margin-top:6px;overflow:hidden}.hcbar>span{display:block;height:100%;border-radius:3px;background:linear-gradient(90deg,#1f9d62,#33e991)}
+.hcfp{font-size:10px;color:#6a7882;margin-top:4px}
+.hccw{background:#0d1218;border:1px solid #18212a;border-radius:11px;padding:11px 9px 7px}
+.hcch{display:flex;justify-content:space-between;align-items:baseline;gap:6px;padding:0 3px 5px}
+.hccht{font-size:11.5px;color:#8a99a2}
+.hcchu{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:15px}.hcchu i{color:#7d8a93;font-size:11px;font-style:normal;margin:0 3px}
+.hclg{display:flex;gap:12px;justify-content:center;font-size:10px;color:#8a99a2;padding-top:6px;flex-wrap:wrap}
+.hclg i{width:9px;height:9px;border-radius:2px;display:inline-block;margin-right:5px;vertical-align:-1px}
+.hcnote2{font-size:10px;color:#6a7882;text-align:center;margin-top:6px;line-height:1.4}
+.hcsoon{border:1px dashed #2f4339;border-radius:11px;padding:12px;background:repeating-linear-gradient(135deg,transparent,transparent 9px,rgba(255,255,255,.012) 9px,rgba(255,255,255,.012) 18px)}
+.hcs1{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:13.5px;color:#8a99a2;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.hcstag{font-size:9px;font-family:'Barlow Condensed',sans-serif;font-weight:800;letter-spacing:.08em;color:#e8c07a;border:1px solid rgba(232,192,122,.4);padding:1px 7px;border-radius:5px}
+.hcs2{font-size:11px;color:#6a7882;margin-top:6px;line-height:1.45}
 .ppmuted{color:#6b7681;font-size:13px;font-weight:600;padding:24px 4px;text-align:center}
 .ppnote{font-size:10.5px;color:#54616b;font-weight:600;margin-top:14px;line-height:1.4}
 .ppsb{display:none}
