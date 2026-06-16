@@ -637,7 +637,7 @@ const LEAGUE_K9 = 8.6;              // league starter strikeouts per 9
 const LEAGUE_TEAM_K_PER_GAME = 8.6; // league average team strikeouts per game
 const DEFAULT_START_IP = 5.3;       // league-average starter innings per start
 const K_ALLOW_OVERS = false;        // K OVER picks were confirmed -EV pre-v2; unders only until v2 overs re-validate via k_backtest. Flip to true to re-enable.
-const K_DISPERSION_PHI = 1.5;       // negbin variance/mean ratio (>1 = overdispersed). Tunable; sweep via k_backtest as volume grows.
+const K_DISPERSION_PHI = 2.0;       // negbin variance/mean ratio (>1 = overdispersed). Bumped 1.5->2.0 on 2026-06-16: k_backtest showed the model overconfident in the 0.55-0.70 band (claimed ~58-68%, hit 38-50%) and bleeding -44% ROI in the 0.05-0.10 edge band. Wider tails pull mid-range probs toward 0.5. Re-backtest after a few graded slates; raise to 2.5 if still overconfident.
 
 function poissonCdf(k, lambda) {
   if (k < 0 || !(lambda > 0)) return 0;
