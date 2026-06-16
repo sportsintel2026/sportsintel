@@ -78,6 +78,7 @@ export default function HomePage(){
   const [wpRecord,setWpRecord]=useState(null);
   const [live,setLive]=useState(null);
   const [oddsHist,setOddsHist]=useState(null);
+  const [marketRead,setMarketRead]=useState(null);
   const prev=useRef({}); const [flash,setFlash]=useState({});
   const hasFull=plan.isAdmin===true||plan.tier==="pro"||plan.tier==="elite"||user?.email==="r7002g@gmail.com";
   const sp=SPORTS[sport]||SPORTS.mlb;
@@ -98,6 +99,7 @@ export default function HomePage(){
   useEffect(()=>{ setEdges(null); setLoading(true); prev.current={}; load(); const id=setInterval(load,45000); return ()=>clearInterval(id); },[load]);
   useEffect(()=>{ if(!SPORTS[sport].hasLive){ setLive([]); return; } let t; const pull=async()=>{ try{ const d=await liveApi.getMLB(); setLive(d?.games||[]); }catch(_){ setLive([]); } t=setTimeout(pull,60000); }; pull(); return ()=>clearTimeout(t); },[sport]);
   useEffect(()=>{ if(!SPORTS[sport].hasHist){ setOddsHist([]); return; } let t; const pull=async()=>{ try{ const d=await edgesApi.getOddsHistory(); setOddsHist(d?.games||[]); }catch(_){ setOddsHist([]); } t=setTimeout(pull,300000); }; pull(); return ()=>clearTimeout(t); },[sport]);
+  useEffect(()=>{ if(sport!=="mlb"){ setMarketRead([]); return; } let t; const pull=async()=>{ try{ const d=await edgesApi.getMarketRead(); setMarketRead(d?.games||[]); }catch(_){ setMarketRead([]); } t=setTimeout(pull,120000); }; pull(); return ()=>clearTimeout(t); },[sport]);
 
   if(loading&&!edges) return <div style={S.shell}><style>{CSS}</style><div style={{padding:40,textAlign:"center",color:"#8a99a2"}}>Loading the board…</div></div>;
   const e=edges||{}; const games=e.games||[];
@@ -220,6 +222,25 @@ export default function HomePage(){
         </Carousel>}
         <div className="note">{hasMoves?"Open to now, today’s line moves. Updates every 15 min.":"Live prices now. Moves fill in as ticks accumulate today."}</div>
       </section>
+
+      {/* MARKET READ — what the books are collectively saying (MLB) */}
+      {sport==="mlb"&&(<section className="panel">
+        <div className="sh"><div className="l"><span className="i">🧭</span>MARKET READ <span className="s">who the books lean</span></div><span className="s2" onClick={()=>navigate("/market-read")} style={{cursor:"pointer"}}>see all →</span></div>
+        {!hasFull
+          ?<Gate kind="movers" title="Market Read is locked" sub={<>See what every book is saying with <b>All-Access</b></>} navigate={navigate}/>
+          :(()=>{ const mr=(marketRead||[]).filter(g=>g.win); if(mr.length===0) return <div className="note">Reading the market — fills in as books come online today.</div>;
+            const TD={Strong:"#1D9E75",Soft:"#f3b94f",Split:"#ff5247"};
+            return <Carousel>
+            {mr.map(g=>{ const w=g.win; const verb=w.tier==="Split"?"split on":w.favProb>=70?"heavily on":w.tier==="Strong"?"confident in":"leaning";
+              return (<div key={g.gameId} className="mvr" onClick={()=>navigate("/market-read")}>
+                <div className="mvrtop"><span className="mvrm">{g.awayAbbr} @ {g.homeAbbr}</span><span className="mvrt"><i style={{background:TD[w.tier]||"#f3b94f"}}/>{w.tier}</span></div>
+                <div className="mvrh">{w.tier==="Split"?<>Books can’t agree on the <b>{w.favTeam}</b></>:<>Market {verb} the <b>{w.favTeam}</b></>}</div>
+                <div className="mvrp">{w.favProb}% to win · consensus {formatOdds(w.consensus)}</div>
+                <div className="mvrf">{w.model? (w.model.agrees?<span className="ok">✓ model agrees</span>:<span className="warn">⚠ model differs</span>):<span className="mut">model —</span>}{w.bestPrice!=null&&<span className="bp">best {formatOdds(w.bestPrice)}</span>}</div>
+              </div>);})}
+          </Carousel>; })()}
+        <div className="note">What the books collectively lean — a read, not a guarantee.</div>
+      </section>)}
 
       {/* PLAYER PROPS — full board lives in the Props tab (per sport) */}
       {sp.hasProps&&(<section className="panel">
@@ -577,6 +598,14 @@ section{padding:13px 12px 2px;margin:0;border-top:1px solid #161d24}
 .mv{width:152px;border:1px solid rgba(255,255,255,.06);border-radius:12px;background:#0b0f14;padding:9px 12px}
 .mvk{font-weight:800;font-size:15px;color:#eaf1ee}
 .mvv{font-size:14px;font-weight:800;margin-top:6px;color:#eaf1ee;transition:color .3s;white-space:nowrap}.mvv.up{color:#33e991}.mvv.dn{color:#ff5a5a}.mvv .ar{color:#8a99a2;font-weight:700}.mvv .amt{font-weight:800}.mvc{font-size:12px;font-weight:800;margin-top:4px}.mvc.up{color:#33e991}.mvc.dn{color:#ff5a5a}.mvm{font-size:10px;color:#8a99a2;font-weight:600;margin-top:3px}.mv.fl-up .mvv{color:#33e991}.mv.fl-dn .mvv{color:#ff5a5a}
+.mvr{width:212px;border:1px solid rgba(255,255,255,.07);border-radius:12px;background:#0b0f14;padding:11px 13px}
+.mvrtop{display:flex;align-items:center;justify-content:space-between;margin-bottom:7px}
+.mvrm{font-size:12px;font-weight:700;color:#cfd7e2}
+.mvrt{display:flex;align-items:center;gap:5px;font-size:10px;font-weight:800;color:#aeb9c8}.mvrt i{width:8px;height:8px;border-radius:50%;display:inline-block}
+.mvrh{font-size:13.5px;font-weight:600;color:#eaf1ee;line-height:1.35;margin-bottom:5px}.mvrh b{color:#5fd6a0;font-weight:800}
+.mvrp{font-size:11px;color:#8a99a2;font-weight:600;margin-bottom:8px}
+.mvrf{display:flex;align-items:center;justify-content:space-between;gap:8px;border-top:1px solid rgba(255,255,255,.06);padding-top:7px;font-size:11px;font-weight:600}
+.mvrf .ok{color:#5fd6a0}.mvrf .warn{color:#f3b94f}.mvrf .mut{color:#6b7681}.mvrf .bp{color:#cfd7e2}
 .pc2{width:186px;border:1px solid #1a212b;border-radius:12px;background:linear-gradient(180deg,#100d1a,#070a0d);padding:9px 10px;position:relative}
 .pc2 .rk{position:absolute;top:0;left:0;width:22px;height:22px;border-radius:12px 0 10px 0;background:rgba(155,123,255,.2);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;color:#b9a6ff}
 .pc2 .hd{display:flex;align-items:center;gap:8px;margin-left:18px}
