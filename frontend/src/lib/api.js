@@ -34,6 +34,10 @@ export const edgesApi = {
   getMarketRead: () => apiFetch("/api/edges/market-read/mlb"),
   clearCache: () => apiFetch("/api/edges/cache", { method: "DELETE" }),
 };
+// NEW — player batting card (expand-on-tap under a prop player), read-only
+export const playerCardApi = {
+  getMLB: (playerId) => apiFetch(`/api/player-card/mlb/${playerId}`),
+};
 // NEW — consensus (Best Bets ∩ model edges), read-only
 export const consensusApi = {
   getMLB: () => apiFetch("/api/consensus/mlb"),
