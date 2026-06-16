@@ -268,7 +268,7 @@ async function countsReport() {
     push: await n([["result", "eq", "push"]]),
   };
 
-  const markets = ["moneyline", "total", "run_line", "hr_prop", "player_strikeouts", "player_hits"];
+  const markets = ["moneyline", "total", "run_line", "hr_prop", "player_strikeouts", "player_hits", "player_total_bases_shadow"];
   const byMarket = {};
   for (const m of markets) {
     byMarket[m] = {
