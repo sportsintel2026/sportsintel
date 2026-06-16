@@ -9,13 +9,14 @@
 // PHASE 2 (separate): batted-ball pull/spray (needs a verified Savant feed first).
 const express = require("express");
 const router = express.Router();
+const axios = require("axios");
 const { createClient } = require("@supabase/supabase-js");
 
 const {
   getBatterHandednessSplits, getBatterHand, getScheduleForDate, getPitcherHand,
   getEasternDate, getBatterRecentStats, normPlayerName,
 } = require("../services/mlbStatsApi");
-const { getBatterBarrels, getBatterExpectedStats } = require("../services/savantApi");
+const { getBatterBarrels, getBatterExpectedStats, parseCsvLine, SAVANT_BASE } = require("../services/savantApi");
 
 const db = () => createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 
@@ -186,6 +187,76 @@ router.get("/mlb/:playerId", async (req, res) => {
   } catch (e) {
     console.error("[player-card] mlb error:", e.message);
     res.status(500).json({ ok: false, error: "Failed to load player card" });
+  }
+});
+
+// ── PULL / SPRAY PROBE (phase 2 prep) ─────────────────────────────────────────
+// We do NOT yet trust any Savant batted-ball feed. This probe tries candidate
+// leaderboards and REPORTS what each returns (HTTP status, real header line, which
+// target columns are present) so we can confirm the actual column names + a working
+// URL BEFORE wiring pull% into the card. Same discipline as the whiff/barrel probes.
+const SAV = SAVANT_BASE || "https://baseballsavant.mlb.com";
+const BB_URL_CANDIDATES = (y) => ([
+  // custom leaderboard with batted-ball direction selections (qualified, then all)
+  `${SAV}/leaderboard/custom?year=${y}&type=batter&filter=&min=q&selections=pa,pull_percent,straightaway_percent,opposite_percent&sort=pull_percent&sortDir=desc&csv=true`,
+  `${SAV}/leaderboard/custom?year=${y}&type=batter&filter=&min=1&selections=pa,pull_percent,straightaway_percent,opposite_percent&sort=pull_percent&sortDir=desc&csv=true`,
+  // alternate direction selection names, in case the above are rejected
+  `${SAV}/leaderboard/custom?year=${y}&type=batter&filter=&min=q&selections=pa,pull_pct,straight_pct,oppo_pct&sort=pull_pct&sortDir=desc&csv=true`,
+  // the statcast (exit velocity & barrels) leaderboard — already returns CSV; check if it carries direction cols
+  `${SAV}/leaderboard/statcast?type=batter&year=${y}&position=&team=&min=q&csv=true`,
+]);
+// every name we want to detect — the probe reports which ones each CSV actually has
+const BB_TARGET_COLS = [
+  "player_id", "pull_percent", "straightaway_percent", "opposite_percent",
+  "pull_pct", "straight_pct", "oppo_pct",
+  "groundballs_percent", "flyballs_percent", "linedrives_percent", "popups_percent",
+];
+
+async function probeBattedBall(year) {
+  const y = year || new Date().getFullYear();
+  const attempts = [];
+  for (const url of BB_URL_CANDIDATES(y)) {
+    try {
+      const res = await axios.get(url, {
+        timeout: 15000, responseType: "text", transformResponse: (x) => x,
+        validateStatus: () => true,
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; WizePicks/1.0)", Accept: "text/csv,text/plain,*/*" },
+      });
+      const body = typeof res.data === "string" ? res.data : JSON.stringify(res.data);
+      const lines = body.split(/\r?\n/).filter((l) => l.length > 0);
+      const isHtml = /^\s*<(!doctype|html)/i.test(body);
+      const looksCsv = !isHtml && lines.length > 1 && /,/.test(lines[0]);
+      const cols = looksCsv ? parseCsvLine(lines[0]).map((c) => c.trim()) : [];
+      const hasColumns = {};
+      for (const t of BB_TARGET_COLS) hasColumns[t] = cols.includes(t);
+      attempts.push({
+        url, httpStatus: res.status,
+        contentType: (res.headers && res.headers["content-type"]) || null,
+        byteLength: body.length, dataLineCount: lines.length,
+        looksCsv, looksLikeHtml: isHtml,
+        headerLine: looksCsv ? lines[0] : (isHtml ? "(html page)" : (lines[0] || null)),
+        firstDataRow: looksCsv ? lines[1] : null,
+        hasColumns,
+      });
+    } catch (e) {
+      attempts.push({ url, error: e.message });
+    }
+  }
+  // "usable" = a CSV keyed by player_id with at least one pull/direction column
+  const usable = attempts.filter((a) => a.looksCsv && a.hasColumns && a.hasColumns.player_id &&
+    (a.hasColumns.pull_percent || a.hasColumns.pull_pct));
+  return { ok: usable.length > 0, year: y, usableUrls: usable.map((u) => u.url), attempts };
+}
+
+// GET /api/player-card/probe-batted-ball — diagnostic only; confirms the real Savant
+// pull/spray columns + a working URL before we wire the feed.
+router.get("/probe-batted-ball", async (req, res) => {
+  try {
+    const year = req.query.year ? Number(req.query.year) : undefined;
+    res.json(await probeBattedBall(year));
+  } catch (e) {
+    console.error("[player-card] batted-ball probe error:", e.message);
+    res.status(500).json({ ok: false, error: e.message });
   }
 });
 
