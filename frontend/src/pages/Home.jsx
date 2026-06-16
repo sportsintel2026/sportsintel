@@ -119,7 +119,7 @@ export default function HomePage(){
   const boardArr=board==="ml"?e.moneylineEdges:board==="spread"?e.spreadEdges:e.totalsEdges;
   const boardEdges=oneSidePerGame(boardArr||[]).filter(x=>sport==="mlb"?(x.edge??0)>0:(x.edge??0)>=1).sort((a,b)=>((b.convictionScore||0)-(a.convictionScore||0))||((b.edge||0)-(a.edge||0)));
   const moverPool=[...(e.moneylineEdges||[]),...(e.totalsEdges||[]),...(e.spreadEdges||[])].map(x=>{ const ser=seriesFor(x); const open=(ser&&ser.length)?ser[0].o:null; const now=(ser&&ser.length)?ser[ser.length-1].o:x.odds; const delta=(open!=null&&ser&&ser.length>1)?(amCents(now)-amCents(open)):null; return {...x,_open:open,_now:now,_delta:delta}; });
-  const movers=moverPool.sort((a,b)=>{ const ad=a._delta==null?-1:Math.abs(a._delta); const bd=b._delta==null?-1:Math.abs(b._delta); return (bd-ad)||((b.edge??0)-(a.edge??0)); }).slice(0,6);
+  const movers=moverPool.filter(m=>m._delta!=null).sort((a,b)=>{ const ad=Math.abs(a._delta); const bd=Math.abs(b._delta); return (bd-ad)||((b.edge??0)-(a.edge??0)); }).slice(0,12);
   const hasMoves=movers.some(m=>m._delta!=null);
   const hrP=(e.hrPropEdges||[]).slice(0,6);
   const hitsP=(e.hitsPropEdges||[]).slice(0,6);
