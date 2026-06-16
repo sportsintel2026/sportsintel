@@ -17,6 +17,8 @@ const {
   getMLBStrikeoutPropsForAllEvents,
   getMLBHitsPropsForAllEvents,
   getMLBTotalBasesPropsForAllEvents,
+  getMLBDoublesPropsForAllEvents,
+  getMLBTriplesPropsForAllEvents,
 } = require("../services/oddsApi");
 const {
   calculateGameEdges,
@@ -24,6 +26,8 @@ const {
   calculateStrikeoutPropEdges,
   calculateHitsPropEdges,
   calculateTotalBasesShadow,
+  calculateDoublesBoard,
+  calculateTriplesBoard,
   debugHitsProps,
 } = require("../services/edgesModel");
 const { recordPredictions, recordTotalBasesShadow } = require("../services/predictionTracker");
@@ -469,8 +473,12 @@ router.get("/mlb", async (req, res) => {
     let hrPropEdges = [];
     let kPropEdges = [];
     let hitsPropEdges = [];
+    let tbPropEdges = [];
+    let doublesPropEdges = [];
+    let triplesPropEdges = [];
     let tbAutoEventIds = [];
     let tbAutoGames = [];
+    let tbBoardResult = null; // computed TB shadow rows, reused by persistence below
     try {
       // Take the first 5 not-yet-started games WITH ODDS for HR props.
       // Skip live/final games (sportsbooks pull or re-price HR props once underway).
@@ -496,6 +504,22 @@ router.get("/mlb", async (req, res) => {
           return res.json({ ok: true, slateDate, gamesUsed: topGamesForHR.map(g => `${g.awayAbbr}@${g.homeAbbr}`), count: dbg.length, hits_debug: dbg });
         }
         hitsPropEdges = await calculateHitsPropEdges(topGamesForHR, hitsOddsByEvent);
+        // ── EXPERIMENTAL rare-hit boards: TB / Doubles / Triples ─────────────
+        // Same pre-game feed as TB shadow. Ranked by likelihood (uncalibrated —
+        // shown like the HR board, no edge claims). Fully wrapped; never blocks
+        // or breaks the normal response. The TB result is reused below for the
+        // shadow persistence so TB odds aren't fetched twice.
+        try {
+          const tbOddsByEvent = await getMLBTotalBasesPropsForAllEvents(eventIds, 10);
+          tbBoardResult = await calculateTotalBasesShadow(topGamesForHR, tbOddsByEvent);
+          tbPropEdges = [...tbBoardResult].sort((a, b) => (b.overProb ?? 0) - (a.overProb ?? 0));
+          const dblOddsByEvent = await getMLBDoublesPropsForAllEvents(eventIds, 10);
+          doublesPropEdges = await calculateDoublesBoard(topGamesForHR, dblOddsByEvent);
+          const triOddsByEvent = await getMLBTriplesPropsForAllEvents(eventIds, 10);
+          triplesPropEdges = await calculateTriplesBoard(topGamesForHR, triOddsByEvent);
+        } catch (e) {
+          console.error("[Edges] rare-hit boards (TB/2B/3B) failed:", e.message);
+        }
         // ── TOTAL BASES SHADOW (read-only, opt-in via ?tb_shadow=1) ──────────
         // Fetches TB odds + runs the logged-only projection model. Returns the
         // projections as JSON and does NOT alter the normal edges response. Safe
@@ -542,6 +566,9 @@ router.get("/mlb", async (req, res) => {
       hrPropEdges: hrPropEdges.slice(0, 25),
       kPropEdges: kPropEdges.slice(0, 25),
       hitsPropEdges: hitsPropEdges.slice(0, 25),
+      tbPropEdges: tbPropEdges.slice(0, 25),
+      doublesPropEdges: doublesPropEdges.slice(0, 25),
+      triplesPropEdges: triplesPropEdges.slice(0, 25),
       computedAt: new Date().toISOString(),
       cached: false,
     };
@@ -560,8 +587,13 @@ router.get("/mlb", async (req, res) => {
     if (typeof tbAutoEventIds !== "undefined" && tbAutoEventIds.length > 0) {
       (async () => {
         try {
-          const tbOddsByEvent = await getMLBTotalBasesPropsForAllEvents(tbAutoEventIds, 10);
-          const tbShadow = await calculateTotalBasesShadow(tbAutoGames, tbOddsByEvent);
+          // Reuse the TB rows already computed for the board above; only recompute
+          // if the board path didn't run (e.g. errored) so grading never starves.
+          let tbShadow = tbBoardResult;
+          if (!tbShadow) {
+            const tbOddsByEvent = await getMLBTotalBasesPropsForAllEvents(tbAutoEventIds, 10);
+            tbShadow = await calculateTotalBasesShadow(tbAutoGames, tbOddsByEvent);
+          }
           await recordTotalBasesShadow(tbShadow, slateDate);
         } catch (e) {
           console.error("[Edges] TB-shadow auto-run failed:", e.message);
