@@ -1100,6 +1100,17 @@ async function captureOddsTicks() {
     if (ev.h2h && ev.h2h.home != null)   rows.push({ ...base, market: "ml",    side: "home",  line: null,                 odds: ev.h2h.home });
     if (ev.totals && ev.totals.over != null)  rows.push({ ...base, market: "total", side: "over",  line: ev.totals.line ?? null, odds: ev.totals.over });
     if (ev.totals && ev.totals.under != null) rows.push({ ...base, market: "total", side: "under", line: ev.totals.line ?? null, odds: ev.totals.under });
+    // Per-book moneyline snapshots so we can later show "N books moved toward X".
+    // Stored in the SAME table (no schema change): market="mlbook", side encodes
+    // the book + side as "away@DraftKings". Harmless to existing readers, which
+    // filter on market="ml"/"total" only. Accumulates history starting now.
+    if (Array.isArray(ev.h2hQuotes)) {
+      for (const q of ev.h2hQuotes) {
+        if (!q || !q.book) continue;
+        if (q.away != null) rows.push({ ...base, market: "mlbook", side: `away@${q.book}`, line: null, odds: q.away });
+        if (q.home != null) rows.push({ ...base, market: "mlbook", side: `home@${q.book}`, line: null, odds: q.home });
+      }
+    }
   }
   if (!rows.length) return 0;
   const { error } = await supabase.from("odds_ticks").insert(rows);
