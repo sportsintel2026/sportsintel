@@ -21,7 +21,7 @@ const shortTeam = (t) => { const m = String(t).match(/[A-Z]{2,3}/); return m ? m
 const formatOdds = (o) => { if (o == null || o === "") return "—"; const n = Number(o); return n > 0 ? `+${n}` : `${n}`; };
 
 const SPORT_TABS = [["mlb","MLB","⚾"],["nba","NBA","🏀"],["nfl","NFL","🏈"],["cfb","CFB","🏟️"],["nhl","NHL","🏒"]];
-const MLB_CATS = [["hr","HR","💣"],["hits","Hits","🏏"],["ks","Ks","🔥"]];
+const MLB_CATS = [["hr","HR","💣"],["hits","Hits","🏏"],["ks","Ks","🔥"],["tb","TB","💥"],["doubles","2B","↔️"],["triples","3B","🚀"]];
 const NBA_CATS = [["points","Points","🟠"],["rebounds","Rebounds","🛟"],["assists","Assists","🎯"],["threes","Threes","🎲"]];
 const HAS_PROPS = { mlb:true, nba:true }; // sports with a prop model wired
 const NBA_MK = { points:"PTS", rebounds:"REB", assists:"AST", threes:"3PM" };
@@ -56,8 +56,13 @@ export default function PropsPage() {
   let list = [];
   if (sport === "mlb") {
     const e = mlb || {};
-    list = tab === "hr" ? (e.hrPropEdges || []) : tab === "hits" ? (e.hitsPropEdges || []) : (e.kPropEdges || []);
-    list = [...list].sort((a, b) => tab === "hr" ? ((b.hrProb || 0) - (a.hrProb || 0)) : ((b.edge || 0) - (a.edge || 0)));
+    if (tab === "tb" || tab === "doubles" || tab === "triples") {
+      const src = tab === "tb" ? (e.tbPropEdges || []) : tab === "doubles" ? (e.doublesPropEdges || []) : (e.triplesPropEdges || []);
+      list = [...src].sort((a, b) => (b.overProb || 0) - (a.overProb || 0));
+    } else {
+      list = tab === "hr" ? (e.hrPropEdges || []) : tab === "hits" ? (e.hitsPropEdges || []) : (e.kPropEdges || []);
+      list = [...list].sort((a, b) => tab === "hr" ? ((b.hrProb || 0) - (a.hrProb || 0)) : ((b.edge || 0) - (a.edge || 0)));
+    }
   } else if (sport === "nba") {
     const e = nba || {};
     list = tab === "points" ? (e.pointsProps || []) : tab === "rebounds" ? (e.reboundsProps || []) : tab === "assists" ? (e.assistsProps || []) : (e.threesProps || []);
@@ -65,13 +70,19 @@ export default function PropsPage() {
   }
 
   const catCount = (id) => {
-    if (sport === "mlb") { const e = mlb || {}; return (id === "hr" ? (e.hrPropEdges || []) : id === "hits" ? (e.hitsPropEdges || []) : (e.kPropEdges || [])).length || ""; }
+    if (sport === "mlb") {
+      const e = mlb || {};
+      if (id === "tb") return (e.tbPropEdges || []).length || "";
+      if (id === "doubles") return (e.doublesPropEdges || []).length || "";
+      if (id === "triples") return (e.triplesPropEdges || []).length || "";
+      return (id === "hr" ? (e.hrPropEdges || []) : id === "hits" ? (e.hitsPropEdges || []) : (e.kPropEdges || [])).length || "";
+    }
     if (sport === "nba") { const e = nba || {}; return (id === "points" ? (e.pointsProps || []) : id === "rebounds" ? (e.reboundsProps || []) : id === "assists" ? (e.assistsProps || []) : (e.threesProps || [])).length || ""; }
     return "";
   };
 
   const emptyLabel = sport === "mlb"
-    ? (tab === "hr" ? "home run" : tab === "hits" ? "hits" : "strikeout")
+    ? (tab === "hr" ? "home run" : tab === "hits" ? "hits" : tab === "ks" ? "strikeout" : tab === "tb" ? "total bases" : tab === "doubles" ? "doubles" : tab === "triples" ? "triples" : "")
     : (NBA_MK[tab] ? NBA_MK[tab].toLowerCase() : "");
 
   return (
@@ -107,6 +118,9 @@ export default function PropsPage() {
             ))}
           </div>
 
+          {hasFull && sport === "mlb" && (tab === "tb" || tab === "doubles" || tab === "triples") && !loading && (
+            <div className="ppwarn">🧪 Experimental & uncalibrated. Ranked by the model's raw chance to clear the line — <b>not</b> a tracked +EV play and not yet validated against results. Informational only.</div>
+          )}
           {hasFull && sport === "mlb" && tab === "hr" && !loading && (
             <div className="ppwarn">⚠️ Longshots — not guaranteed. Even the top names homer only about 1 game in 5. These are ranked by the model's chance to homer (a speculative lottery-ticket bet), <b>not</b> a tracked +EV play. Bet small, if at all.</div>
           )}
@@ -126,6 +140,8 @@ export default function PropsPage() {
 
           {hasFull && <div className="ppnote">{sport === "nba"
             ? "NBA props are experimental projections (model vs line), not tracked +EV plays. Flagged means the model's lean cleared its stability + hit-rate gates."
+            : (tab === "tb" || tab === "doubles" || tab === "triples")
+              ? "Experimental boards — ranked by the model's chance to clear the line. Uncalibrated and not yet graded; shown to preview the model, not as betting advice."
             : tab === "hr"
               ? "HR props are ranked by the model's chance to homer. The HR market is efficient — these are options to consider, not tracked +EV plays."
               : "Sorted by model edge — the % is the model's price vs the book's. These clear our positive-EV bar."}</div>}
@@ -179,6 +195,13 @@ function PropRow({ p, type, rank, navigate }) {
       ? `${needH}+ Hits · ${formatOdds(p.odds)}`
       : (p.line <= 0.5 ? `0 Hits · ${formatOdds(p.odds)}` : `Under ${p.line} Hits · ${formatOdds(p.odds)}`);
     if ((p.edge ?? 0) > 0) edgeBadge = `+${(p.edge * 100).toFixed(1)}%`;
+  } else if (type === "tb" || type === "doubles" || type === "triples") {
+    pct = Math.round((p.overProb || 0) * 100);
+    lbl = type === "tb" ? "to clear" : type === "doubles" ? "2B chance" : "3B chance";
+    const unit = type === "tb" ? "TB" : type === "doubles" ? "2B" : "3B";
+    const needN = Math.floor(p.line) + 1;
+    line = p.line <= 0.5 ? `${needN}+ ${unit} · ${formatOdds(p.odds)}` : `O ${p.line} ${unit} · ${formatOdds(p.odds)}`;
+    // No edge badge — these boards are ranked by likelihood, not priced edges.
   } else {
     pct = Math.round((p.kProb || 0) * 100); lbl = "K prob";
     line = `${p.side === "over" ? "O" : "U"} ${p.line} Ks · ${formatOdds(p.odds)}`;
