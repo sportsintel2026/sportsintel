@@ -18,6 +18,7 @@ const NAV = [
   ["BOARD", null],
   ["📊", "Dashboard", "/home"],
   ["💹", "Market Price", "/odds"],
+  ["🧭", "Market Read", "/market-read"],
   ["⚾", "Props", "/props"],
   ["TRACK", null],
   ["📈", "Performance", "/performance"],
