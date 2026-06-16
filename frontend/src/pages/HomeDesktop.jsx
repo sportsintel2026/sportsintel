@@ -43,7 +43,7 @@ function Lock({ title, sub, navigate }) {
 
 export default function HomeDesktop(props) {
   const { edges, games = [], movers = [], live = [], abbrById = {}, topProps = [], propList = [], propsByType = {}, hero, hasFull, planLoaded = true, lineSeries = {},
-    wpRecord, navigate, plan = {}, sport = "mlb", setSport, marketsLive, anyLive } = props;
+    wpRecord, navigate, plan = {}, sport = "mlb", setSport, marketsLive, anyLive, marketRead = [] } = props;
   const lg = sport === "nba" ? "nba" : "mlb";
   const [market, setMarket] = useState("ml");
   const [propTab, setPropTab] = useState("hits");
@@ -219,6 +219,36 @@ export default function HomeDesktop(props) {
                   </table>
                 )}
           </div>
+
+          {/* MARKET READ — what the books are collectively saying (win market) */}
+          {sport === "mlb" && Array.isArray(marketRead) && marketRead.filter(g => g.win).length > 0 && (
+            <div className="panel">
+              <div className="phead"><div className="t">🧭 Market Read</div><div className="right" onClick={() => navigate("/market-read")} style={{ cursor: "pointer" }}>who the books lean · all markets →</div></div>
+              {!hasFull
+                ? <Lock title="Market Read is an All-Access feature" sub={<>See what every book is saying on every game. <b>$7/mo</b></>} navigate={navigate} />
+                : (
+                  <table className="tbl mrtbl">
+                    <thead><tr><th>Matchup</th><th>Market read</th><th className="c">Win %</th><th className="c">Confidence</th><th className="c">Model</th></tr></thead>
+                    <tbody>
+                      {marketRead.filter(g => g.win).map((g, i) => {
+                        const w = g.win;
+                        const td = w.tier === "Strong" ? "#1D9E75" : w.tier === "Soft" ? "#f3b94f" : "#ff5247";
+                        const verb = w.tier === "Split" ? "split on" : w.favProb >= 70 ? "heavily on" : w.tier === "Strong" ? "confident in" : "leaning";
+                        return (
+                          <tr key={g.gameId || i} className="click" onClick={() => navigate("/market-read")}>
+                            <td className="mu">{g.awayAbbr} <span className="at">@</span> {g.homeAbbr}</td>
+                            <td className="mread">{w.tier === "Split" ? <>Books can’t agree on the <b>{w.favTeam}</b></> : <>Market {verb} the <b>{w.favTeam}</b></>}</td>
+                            <td className="c num">{w.favProb}%</td>
+                            <td className="c"><span className="mrtag" style={{ color: td }}><span className="dot" style={{ background: td }} />{w.tier}</span></td>
+                            <td className="c">{w.model ? (w.model.agrees ? <span className="magree">✓</span> : <span className="mdiff">⚠</span>) : <span className="mnone">—</span>}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+            </div>
+          )}
 
           {/* WEATHER FACTOR */}
           {wx.length > 0 && (
@@ -565,4 +595,8 @@ const TCSS = `
 .wpterm .cleg{display:flex;justify-content:space-between;margin-top:10px;font-size:11px;color:var(--mut)}
 .wpterm .cleg span{display:inline-flex;align-items:center;gap:5px}.wpterm .cleg b{color:#c4cdd9;font-weight:700}
 .wpterm .cleg i{width:8px;height:8px;border-radius:2px}.wpterm .cleg .dh{background:var(--amber)}.wpterm .cleg .dm{background:var(--up)}.wpterm .cleg .dl{background:var(--mut2)}
+.wpterm .mrtbl .mread{font-size:13px;color:#cfd7e2}.wpterm .mrtbl .mread b{color:#5fd6a0;font-weight:800}
+.wpterm .mrtbl .mu{font-family:var(--disp);font-weight:700;font-size:14px}.wpterm .mrtbl .mu .at{color:var(--mut2)}
+.wpterm .mrtag{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:800}.wpterm .mrtag .dot{width:8px;height:8px;border-radius:50%}
+.wpterm .mrtbl .magree{color:var(--up);font-weight:800}.wpterm .mrtbl .mdiff{color:var(--amber);font-weight:800}.wpterm .mrtbl .mnone{color:var(--mut2)}
 `;
