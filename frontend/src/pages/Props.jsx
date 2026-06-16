@@ -118,9 +118,6 @@ export default function PropsPage() {
             ))}
           </div>
 
-          {hasFull && sport === "mlb" && (tab === "tb" || tab === "doubles" || tab === "triples") && !loading && (
-            <div className="ppwarn">🧪 Experimental & uncalibrated. Ranked by the model's raw chance to clear the line — <b>not</b> a tracked +EV play and not yet validated against results. Informational only.</div>
-          )}
           {hasFull && sport === "mlb" && tab === "hr" && !loading && (
             <div className="ppwarn">⚠️ Longshots — not guaranteed. Even the top names homer only about 1 game in 5. These are ranked by the model's chance to homer (a speculative lottery-ticket bet), <b>not</b> a tracked +EV play. Bet small, if at all.</div>
           )}
