@@ -30,8 +30,9 @@ function winHeadline(w) {
 }
 function coverHeadline(c) {
   if (!c) return null;
-  if (c.tier === "Split") return <>Books split on the <b>{c.favTeam}</b> run line.</>;
-  return <>Market expects the <b>{c.favTeam}</b> to cover {c.favLine}.</>;
+  const line = c.favLine > 0 ? `+${c.favLine}` : `${c.favLine}`;
+  if (c.tier === "Split") return <>Books split on the <b>{c.favTeam} {line}</b> run line.</>;
+  return <>Market leans <b>{c.favTeam} {line}</b> to cover.</>;
 }
 function totalHeadline(t) {
   if (!t) return null;
@@ -91,7 +92,7 @@ function Card({ g, market }) {
     read = g.cover; if (!read) return null;
     headline = coverHeadline(read);
     bestPrice = read.bestPrice; bestBook = read.bestBook; bestLabel = "Best";
-    subline = <>Books price the run line at <b>{read.favProb}% to cover</b> — agreement within {read.centSpread}¢.</>;
+    subline = <>Books give them a <b>{read.favProb}% cover</b> on the run line — agreement within {read.centSpread} pts.</>;
     favTeamForMove = read.favTeam;
   } else {
     read = g.total; if (!read) return null;
@@ -108,7 +109,7 @@ function Card({ g, market }) {
   return (
     <div className="mrcard">
       <div className="mrtop">
-        <div className="mrmatch">{g.awayAbbr} <span className="at">@</span> {g.homeAbbr}{market !== "win" && read.line != null ? <span className="ln"> · {market === "total" ? `O/U ${read.line}` : read.favLine}</span> : ""}</div>
+        <div className="mrmatch">{g.awayAbbr} <span className="at">@</span> {g.homeAbbr}{market === "total" && read.line != null ? <span className="ln"> · O/U {read.line}</span> : market === "cover" && read.favLine != null ? <span className="ln"> · {read.favLine > 0 ? `+${read.favLine}` : read.favLine}</span> : ""}</div>
         <div className="mrtier"><span className="td" style={{ background: ti.dot }} />{ti.label}</div>
       </div>
       <div className="mrhead">{headline}</div>
