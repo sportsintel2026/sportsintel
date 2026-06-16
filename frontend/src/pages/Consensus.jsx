@@ -12,6 +12,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { consensusApi, subscriptionApi } from "../lib/api";
 import Sidebar from "./Sidebar";
+import TerminalShell from "./TerminalShell";
 
 // "TB @ MIA" -> { away: "TB", home: "MIA" }
 function teamsFromGame(game) {
@@ -63,6 +64,7 @@ export default function ConsensusPage() {
   const consensus = (data && Array.isArray(data.consensus)) ? data.consensus : [];
 
   return (
+    <TerminalShell active="/consensus" plan={plan} navigate={navigate}>
     <div style={{ minHeight: "100vh", background: "#0a0e14", color: "#e4e7eb", fontFamily: "'Inter',system-ui,-apple-system,sans-serif" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
@@ -76,6 +78,15 @@ export default function ConsensusPage() {
         .hamburger-btn{display:none}
         .mobile-only{display:none}
         .desktop-sidebar{display:block}
+         (min-width: 1024px) {
+          .desktop-sidebar{display:none!important}
+          .main-content{margin-left:0!important}
+        }
+
+        @media (min-width: 1024px) {
+          .desktop-sidebar{display:none!important}
+          .main-content{margin-left:0!important}
+        }
         @media (max-width: 768px) {
           .desktop-sidebar{display:none!important}
           .main-content{margin-left:0!important;padding-top:0!important}
@@ -185,5 +196,6 @@ export default function ConsensusPage() {
         </div>
       </div>
     </div>
+    </TerminalShell>
   );
 }
