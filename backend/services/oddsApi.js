@@ -135,6 +135,7 @@ function parseMainOddsEvent(ev) {
   // line and then the best price AT that line (keeps over/under on the same number).
   const totalsQuotes = []; // { line, over, overBook, under, underBook }
   const spreadQuotes = []; // matched +/-1.5 run-line pairs: { awayLine, away, awayBook, homeLine, home, homeBook }
+  const h2hQuotes = []; // per-book moneyline pairs for the Market Read consensus: { away, home, book }
 
   for (const bm of ev.bookmakers || []) {
     if (!PREFERRED_BOOKS_MAIN.includes(bm.key)) continue;
@@ -149,6 +150,12 @@ function parseMainOddsEvent(ev) {
         if (homeOutcome && plausibleMlOdds(homeOutcome.price) && (h2h.home == null || homeOutcome.price > h2h.home)) {
           h2h.home = homeOutcome.price;
           h2h.homeBook = bm.title;
+        }
+        // Market Read: keep BOTH sides from this single book as a pair (only when both
+        // are plausible) so we can measure cross-book consensus & agreement later.
+        if (awayOutcome && homeOutcome
+            && plausibleMlOdds(awayOutcome.price) && plausibleMlOdds(homeOutcome.price)) {
+          h2hQuotes.push({ away: awayOutcome.price, home: homeOutcome.price, book: bm.title });
         }
       } else if (m.key === "totals" && m.outcomes?.length >= 2) {
         // A book may return a LADDER of total lines as separate outcomes, not just
@@ -227,6 +234,13 @@ function parseMainOddsEvent(ev) {
     }
   }
 
+  // ── Market Read: translate per-book prices into a confidence call per market ──
+  const marketRead = {
+    win: computeWinRead(h2hQuotes, ev.away_team, ev.home_team),
+    total: computeTotalRead(totalsQuotes),
+    cover: computeCoverRead(spreadQuotes, ev.away_team, ev.home_team),
+  };
+
   return {
     eventId: ev.id,
     commenceTime: ev.commence_time,
@@ -235,10 +249,115 @@ function parseMainOddsEvent(ev) {
     h2h,
     totals,
     spreads,
+    marketRead,
+    h2hQuotes,
   };
 }
 
-// ── MLB Player HR Props ───────────────────────────────────────────────────────
+// ── Market Read helpers ───────────────────────────────────────────────────────
+// Translate per-book prices into: who the market favors, how likely (de-vigged
+// implied %), and how CONFIDENT the market is (agreement across books). Agreement
+// is measured in IMPLIED-PROBABILITY POINTS so it's scale-invariant — a 20¢ gap on
+// a -460 favorite is proportionally tighter than 20¢ on a -120 favorite, and raw
+// cents would wrongly flag every big favorite as a "split". Tiers: Strong / Soft /
+// Split. Returns null when fewer than 2 books quote the market (no consensus).
+function mrMedian(nums) {
+  const s = [...nums].filter(n => n != null).sort((a, b) => a - b);
+  const n = s.length;
+  if (!n) return null;
+  return n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2;
+}
+function mrTier(spreadPts) {
+  if (spreadPts <= 1.5) return "Strong";
+  if (spreadPts <= 3.5) return "Soft";
+  return "Split";
+}
+function mrCentsVal(a) { return a >= 100 ? a : (200 + a); } // monotonic ¢ proxy for display
+
+function computeWinRead(quotes, awayTeam, homeTeam) {
+  const awayP = quotes.map(q => q.away).filter(p => p != null);
+  const homeP = quotes.map(q => q.home).filter(p => p != null);
+  if (awayP.length < 2 || homeP.length < 2) return null;
+  const awayImp = mrMedian(awayP.map(americanToImpliedProb));
+  const homeImp = mrMedian(homeP.map(americanToImpliedProb));
+  const sum = awayImp + homeImp;
+  if (!sum) return null;
+  const awayFair = awayImp / sum, homeFair = homeImp / sum;
+  const favIsHome = homeFair >= awayFair;
+  const favPrices = favIsHome ? homeP : awayP;
+  const favImps = favPrices.map(americanToImpliedProb);
+  const spreadPts = (Math.max(...favImps) - Math.min(...favImps)) * 100;
+  return {
+    favSide: favIsHome ? "home" : "away",
+    favTeam: favIsHome ? homeTeam : awayTeam,
+    dogTeam: favIsHome ? awayTeam : homeTeam,
+    favProb: Math.round((favIsHome ? homeFair : awayFair) * 100),
+    consensus: Math.round(mrMedian(favPrices)),
+    centSpread: Math.round(Math.max(...favPrices.map(mrCentsVal)) - Math.min(...favPrices.map(mrCentsVal))),
+    tier: mrTier(spreadPts),
+    nBooks: favPrices.length,
+  };
+}
+
+function computeTotalRead(totalsQuotes) {
+  if (!totalsQuotes || totalsQuotes.length < 2) return null;
+  // Consensus line = most common; if books disagree on the NUMBER itself, that's a
+  // real split signal beyond price disagreement.
+  const lineCounts = {};
+  for (const q of totalsQuotes) lineCounts[q.line] = (lineCounts[q.line] || 0) + 1;
+  const sortedLines = Object.entries(lineCounts).sort((a, b) => b[1] - a[1]);
+  const consensusLine = Number(sortedLines[0][0]);
+  const atLine = totalsQuotes.filter(q => q.line === consensusLine);
+  if (atLine.length < 2) return null;
+  const overImp = mrMedian(atLine.map(q => americanToImpliedProb(q.over)));
+  const underImp = mrMedian(atLine.map(q => americanToImpliedProb(q.under)));
+  const sum = overImp + underImp;
+  if (!sum) return null;
+  const overFair = overImp / sum, underFair = underImp / sum;
+  const overFavored = overFair >= underFair;
+  const sidePrices = atLine.map(q => overFavored ? q.over : q.under);
+  const sideImps = sidePrices.map(americanToImpliedProb);
+  let spreadPts = (Math.max(...sideImps) - Math.min(...sideImps)) * 100;
+  // If books are split across DIFFERENT total numbers, widen the uncertainty.
+  const lineDisagreement = sortedLines.length > 1 && sortedLines[0][1] < totalsQuotes.length;
+  if (lineDisagreement) spreadPts = Math.max(spreadPts, 4);
+  return {
+    line: consensusLine,
+    favSide: overFavored ? "over" : "under",
+    favProb: Math.round((overFavored ? overFair : underFair) * 100),
+    consensus: Math.round(mrMedian(sidePrices)),
+    centSpread: Math.round(Math.max(...sidePrices.map(mrCentsVal)) - Math.min(...sidePrices.map(mrCentsVal))),
+    tier: mrTier(spreadPts),
+    lineSplit: lineDisagreement,
+    nBooks: atLine.length,
+  };
+}
+
+function computeCoverRead(spreadQuotes, awayTeam, homeTeam) {
+  if (!spreadQuotes || spreadQuotes.length < 2) return null;
+  // Favorite is the -1.5 side. Measure agreement on the favorite's run-line price.
+  const favPrices = spreadQuotes.map(q => (q.awayLine < 0 ? q.away : q.home)).filter(p => p != null);
+  const dogPrices = spreadQuotes.map(q => (q.awayLine < 0 ? q.home : q.away)).filter(p => p != null);
+  if (favPrices.length < 2 || dogPrices.length < 2) return null;
+  const favTeamIsAway = spreadQuotes[0].awayLine < 0;
+  const favImp = mrMedian(favPrices.map(americanToImpliedProb));
+  const dogImp = mrMedian(dogPrices.map(americanToImpliedProb));
+  const sum = favImp + dogImp;
+  if (!sum) return null;
+  const favCoverProb = favImp / sum;
+  const favImps = favPrices.map(americanToImpliedProb);
+  const spreadPts = (Math.max(...favImps) - Math.min(...favImps)) * 100;
+  return {
+    favSide: favTeamIsAway ? "away" : "home",
+    favTeam: favTeamIsAway ? awayTeam : homeTeam,
+    favLine: -1.5,
+    favProb: Math.round(favCoverProb * 100),
+    consensus: Math.round(mrMedian(favPrices)),
+    centSpread: Math.round(Math.max(...favPrices.map(mrCentsVal)) - Math.min(...favPrices.map(mrCentsVal))),
+    tier: mrTier(spreadPts),
+    nBooks: favPrices.length,
+  };
+}
 
 async function getMLBHRPropsForEvent(eventId) {
   const cacheKey = `mlb_hr_${eventId}`;
