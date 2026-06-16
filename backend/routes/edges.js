@@ -823,4 +823,146 @@ router.get("/health-data", async (req, res) => {
   res.status(healthy ? 200 : 503).json({ ok: healthy, checkedAt: new Date().toISOString(), checks });
 });
 
+// ── Market Read ───────────────────────────────────────────────────────────────
+// A read on what the BOOKS are collectively saying per game: who they favor, how
+// likely (de-vigged implied %), and how CONFIDENT the market is (price agreement
+// across books → Strong/Soft/Split). Adds the model as a second opinion and an
+// honest line-move read. Its own endpoint so it can never destabilize /mlb.
+//
+// The move read is honest about our data: we log the BEST line over time (not each
+// book), so we say "the market moved +N¢ toward X today" — never "N books moved"
+// until per-book history (now being captured) has accumulated.
+function mrAmCents(a) { if (a == null || isNaN(a)) return null; const n = Number(a); return n >= 100 ? n - 100 : n <= -100 ? n + 100 : 0; }
+function mrMoveFromSeries(series) {
+  // series: [{o,t}...] best-line ticks for one side. Returns signed cent move
+  // open→now, or null if not enough ticks. Positive = price lengthened (drifting),
+  // negative = shortened (money coming in). We invert to "toward favorite" later.
+  if (!Array.isArray(series) || series.length < 2) return null;
+  const open = mrAmCents(series[0].o), now = mrAmCents(series[series.length - 1].o);
+  if (open == null || now == null) return null;
+  return now - open;
+}
+
+router.get("/market-read/mlb", async (req, res) => {
+  try {
+    const { date: slateDate, rolled } = await resolveSlateDate();
+    const allGames = await getScheduleForDate(slateDate);
+    const games = allGames.filter(g => g.status !== "postponed" && g.status !== "cancelled");
+    if (games.length === 0) {
+      return res.json({ ok: true, date: slateDate, rolledToNextDay: rolled, games: [], computedAt: new Date().toISOString() });
+    }
+
+    let oddsEvents = [];
+    try { oddsEvents = await getMLBMainOdds(); }
+    catch (e) { console.error("[MarketRead] odds fetch failed:", e.message); }
+
+    const gamesWithOdds = games.map(g => {
+      const oddsMatch = matchOddsToGame(g, oddsEvents);
+      return { ...g, _oddsMatch: oddsMatch, _oddsEventId: oddsMatch?.eventId };
+    });
+
+    const allEdges = await Promise.all(
+      gamesWithOdds.map(g => calculateGameEdges(g, g._oddsMatch).catch(() => null))
+    );
+    const gameEdges = allEdges.filter(Boolean);
+
+    // Best-line history for the honest market-move read (last ~20h of ticks).
+    const histByKey = {};
+    try {
+      if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY) {
+        const { createClient } = require("@supabase/supabase-js");
+        const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+        const sinceIso = new Date(Date.now() - 20 * 3600 * 1000).toISOString();
+        const PAGE = 1000; let rows = [];
+        for (let from = 0; ; from += PAGE) {
+          const { data, error } = await sb.from("odds_ticks")
+            .select("away_team,home_team,market,side,odds,captured_at")
+            .gte("captured_at", sinceIso).eq("market", "ml")
+            .order("captured_at", { ascending: true }).range(from, from + PAGE - 1);
+          if (error || !data || data.length === 0) break;
+          rows = rows.concat(data);
+          if (data.length < PAGE) break;
+        }
+        for (const r of rows) {
+          const key = r.away_team + "|" + r.home_team;
+          if (!histByKey[key]) histByKey[key] = { away: [], home: [] };
+          if (r.side === "away" || r.side === "home") histByKey[key][r.side].push({ o: r.odds, t: r.captured_at });
+        }
+      }
+    } catch (_) { /* move read just goes quiet if history is unavailable */ }
+
+    const MOVE_MIN_CENTS = 12; // a move must clear this to be "convincing"
+    const isPreGame = (status) => status === "scheduled";
+
+    const out = [];
+    for (const ge of gameEdges) {
+      const sourceGame = gamesWithOdds.find(g => g.id === ge.game.id);
+      if (!isPreGame(sourceGame?.status)) continue;
+      const odds = sourceGame?._oddsMatch;
+      const mr = odds?.marketRead;
+      if (!mr) continue;
+
+      // Model second-opinion per market (which side the model leans + its prob).
+      const m = ge.moneyline || {};
+      const t = ge.totals || {};
+      const rl = ge.runLine || {};
+
+      // Honest market-move read for the WIN market (best-line series).
+      let move = null;
+      const hk = histByKey[(ge.game.away) + "|" + (ge.game.home)];
+      if (hk && mr.win) {
+        const favSeries = mr.win.favSide === "home" ? hk.home : hk.away;
+        const d = mrMoveFromSeries(favSeries); // + = drifted (off fav), − = shortened (toward fav)
+        if (d != null && Math.abs(d) >= MOVE_MIN_CENTS) {
+          move = { towardFav: d < 0, cents: Math.abs(d) };
+        }
+      }
+
+      out.push({
+        gameId: ge.game.id,
+        away: ge.game.away, home: ge.game.home,
+        awayAbbr: ge.game.awayAbbr, homeAbbr: ge.game.homeAbbr,
+        time: ge.game.time,
+        win: mr.win ? {
+          ...mr.win,
+          bestPrice: mr.win.favSide === "home" ? odds.h2h?.home : odds.h2h?.away,
+          bestBook: mr.win.favSide === "home" ? odds.h2h?.homeBook : odds.h2h?.awayBook,
+          model: {
+            favSide: (m.homeWinProb ?? 0) >= (m.awayWinProb ?? 0) ? "home" : "away",
+            favTeam: (m.homeWinProb ?? 0) >= (m.awayWinProb ?? 0) ? ge.game.home : ge.game.away,
+            prob: Math.round(Math.max(m.awayWinProb ?? 0, m.homeWinProb ?? 0) * 100),
+            agrees: ((m.homeWinProb ?? 0) >= (m.awayWinProb ?? 0) ? "home" : "away") === mr.win.favSide,
+          },
+          move,
+        } : null,
+        total: mr.total ? {
+          ...mr.total,
+          bestOver: odds.totals?.over, bestOverBook: odds.totals?.overBook,
+          bestUnder: odds.totals?.under, bestUnderBook: odds.totals?.underBook,
+          model: (t.overProb != null || t.underProb != null) ? {
+            favSide: (t.overProb ?? 0) >= (t.underProb ?? 0) ? "over" : "under",
+            prob: Math.round(Math.max(t.overProb ?? 0, t.underProb ?? 0) * 100),
+            agrees: ((t.overProb ?? 0) >= (t.underProb ?? 0) ? "over" : "under") === mr.total.favSide,
+          } : null,
+        } : null,
+        cover: mr.cover ? {
+          ...mr.cover,
+          bestPrice: mr.cover.favSide === "home" ? odds.spreads?.home : odds.spreads?.away,
+          bestBook: mr.cover.favSide === "home" ? odds.spreads?.homeBook : odds.spreads?.awayBook,
+          model: (rl.awayCoverProb != null || rl.homeCoverProb != null) ? {
+            favSide: (rl.homeCoverProb ?? 0) >= (rl.awayCoverProb ?? 0) ? "home" : "away",
+            prob: Math.round(Math.max(rl.awayCoverProb ?? 0, rl.homeCoverProb ?? 0) * 100),
+            agrees: ((rl.homeCoverProb ?? 0) >= (rl.awayCoverProb ?? 0) ? "home" : "away") === mr.cover.favSide,
+          } : null,
+        } : null,
+      });
+    }
+
+    res.json({ ok: true, date: slateDate, rolledToNextDay: rolled, games: out, computedAt: new Date().toISOString() });
+  } catch (e) {
+    console.error("[MarketRead] error:", e.message);
+    res.status(500).json({ ok: false, games: [], error: e.message });
+  }
+});
+
 module.exports = router;
