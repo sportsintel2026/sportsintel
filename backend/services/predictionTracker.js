@@ -522,7 +522,11 @@ async function recordNbaPropPredictions(proj, gameIso) {
 async function recordTotalBasesShadow(tbShadow, gameIso) {
   if (!Array.isArray(tbShadow) || tbShadow.length === 0) return;
   const supabase = db();
-  const gameDate = etDate(gameIso) || getEasternDate(0);
+  // gameIso is already an ET "YYYY-MM-DD" slate date (same value recordPredictions uses raw).
+  // Do NOT re-run it through etDate(): a bare date string parses as UTC midnight, which rolls
+  // back a day in Eastern, stamping rows on the wrong date so the grader (which groups by date
+  // and fetches that date's schedule) never matches the game_id and leaves every row pending. (fixed 2026-06-16)
+  const gameDate = gameIso || getEasternDate(0);
   const rows = [];
   for (const p of tbShadow) {
     if (!p.playerId || p.line == null || p.overProb == null) continue;
