@@ -2186,6 +2186,7 @@ async function calculateTotalBasesShadow(games, tbOddsByEvent) {
         slgTrue: proj.slgTrue,
         expAB: proj.expAB,
         overProb: modelOver,
+        odds: propOdds.overOdds ?? null,
         marketFairOver: fairOver,
         edgeOverShadow,
         seasonSlg: batterStats?.slg ?? null,
@@ -2205,12 +2206,99 @@ async function calculateTotalBasesShadow(games, tbOddsByEvent) {
   return out;
 }
 
+// ── DOUBLES / TRIPLES rare-hit prop boards (2026-06-15) ──────────────────────
+// Both are rare per-AB events → modeled as Poisson on expected count. Ranked by
+// likelihood (P(>=line)), NOT priced as edges (uncalibrated; the board shows the
+// model's chance, like the HR tab). `kind` is "doubles" or "triples".
+const LEAGUE_2B_RATE = 0.046;   // league doubles per AB (~4.6%)
+const LEAGUE_3B_RATE = 0.005;   // league triples per AB (~0.5%)
+const RARE_REGRESS_AB = 200;    // regress the per-AB rate toward league by this sample
+function rareHitExpectedAndOverProb(batterStats, line, kind, opts = {}) {
+  if (line == null || !batterStats) return null;
+  const ab = batterStats.atBats;
+  if (ab == null || ab <= 0) return null;
+  const made = kind === "triples" ? batterStats.triples : batterStats.doubles;
+  if (made == null) return null;
+  const leagueRate = kind === "triples" ? LEAGUE_3B_RATE : LEAGUE_2B_RATE;
+  // Per-AB rate, regressed toward league by sample size (rare events are noisy).
+  const rawRate = made / ab;
+  const rate = (rawRate * ab + leagueRate * RARE_REGRESS_AB) / (ab + RARE_REGRESS_AB);
+  const expAB = opts.expAB != null && opts.expAB > 0 ? opts.expAB : DEFAULT_AB_PER_GAME;
+  // Park nudge (extra-base hits are park-sensitive; mild). Triples especially favor
+  // big outfields, but we only have an HR park factor — use it gently as a proxy.
+  let lambda = rate * expAB;
+  const park = opts.parkFactor;
+  if (park != null && park > 0) lambda *= Math.max(0.94, Math.min(1.06, 1 + (park - 1) * 0.4));
+  if (!(lambda > 0)) return null;
+  // P(count > floor(line)) via Poisson. For the standard 0.5 line → P(>=1)=1-e^-λ.
+  const k = Math.floor(line);
+  const pOver = 1 - poissonCdf(k, lambda);
+  if (!(pOver >= 0)) return null;
+  return { expCount: round3(lambda), rate: round3(rate), expAB: round2(expAB), overProb: round3(Math.max(0.001, Math.min(0.99, pOver))) };
+}
+
+// Shared orchestrator for the doubles & triples boards. Ranked by likelihood.
+async function calculateRareHitBoard(games, oddsByEvent, kind) {
+  const targetGames = games.slice(0, MAX_HITS_GAMES);
+  const out = [];
+  for (const game of targetGames) {
+    const eventId = findEventIdForGame(game, oddsByEvent);
+    const odds = eventId ? oddsByEvent[eventId] : null;
+    if (!odds || odds.length === 0) continue;
+    const [awayLineupRes, homeLineupRes] = await Promise.all([
+      getTeamLineup(game.awayId, game.id),
+      getTeamLineup(game.homeId, game.id),
+    ]);
+    for (const propOdds of odds) {
+      const batter = await findPlayerByName(propOdds.player, [game.awayId, game.homeId]);
+      if (!batter) continue;
+      const onAwayTeam = batter.teamId === game.awayId;
+      const batterStats = await getBatterSeasonStats(batter.id);
+      const lineupRes = onAwayTeam ? awayLineupRes : homeLineupRes;
+      const myLineup = (lineupRes && lineupRes.lineup) || [];
+      const spotIdx = myLineup.findIndex(p => p.id === batter.id);
+      const expAB = expABForSpot(spotIdx >= 0 ? spotIdx + 1 : null);
+      const proj = rareHitExpectedAndOverProb(batterStats, propOdds.line, kind, {
+        expAB, parkFactor: game.parkHRFactor ?? null,
+      });
+      if (proj == null) continue;
+      const fairOver = devigTwoWay(propOdds.overOdds, propOdds.underOdds);
+      out.push({
+        gameId: game.id,
+        playerId: batter.id,
+        player: propOdds.player,
+        team: onAwayTeam ? game.awayAbbr : game.homeAbbr,
+        game: `${game.awayAbbr} @ ${game.homeAbbr}`,
+        line: propOdds.line,
+        expCount: proj.expCount,
+        rate: proj.rate,
+        expAB: proj.expAB,
+        overProb: proj.overProb,        // the board ranks on this (likelihood)
+        marketFairOver: fairOver,       // shown for reference only, not as an edge
+        odds: propOdds.overOdds,
+        seasonRate: batterStats && batterStats.atBats > 0
+          ? round3((kind === "triples" ? batterStats.triples : batterStats.doubles) / batterStats.atBats) : null,
+        book: propOdds.book,
+        kind,
+      });
+    }
+  }
+  out.sort((a, b) => (b.overProb ?? 0) - (a.overProb ?? 0));
+  console.log(`[RARE-${kind.toUpperCase()}] computed ${out.length} ${kind} projections (board only — not priced)`);
+  return out;
+}
+
+async function calculateDoublesBoard(games, oddsByEvent) { return calculateRareHitBoard(games, oddsByEvent, "doubles"); }
+async function calculateTriplesBoard(games, oddsByEvent) { return calculateRareHitBoard(games, oddsByEvent, "triples"); }
+
 module.exports = {
   calculateGameEdges,
   calculateHRPropEdges,
   calculateStrikeoutPropEdges,
   calculateHitsPropEdges,
   calculateTotalBasesShadow,
+  calculateDoublesBoard,
+  calculateTriplesBoard,
   debugHitsProps,
   rateConfidence,
   calculateEdge,
