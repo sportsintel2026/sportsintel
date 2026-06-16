@@ -289,7 +289,16 @@ async function countsReport() {
     };
   }
 
-  return { ok: true, overall, byMarket, byDate };
+  const tbShadowByDate = {};
+  for (let i = 0; i <= 6; i++) {
+    const d = getEasternDate(-i);
+    tbShadowByDate[d] = {
+      graded: await n([["market", "eq", "player_total_bases_shadow"], ["game_date", "eq", d], ["result", "neq", "pending"]]),
+      pending: await n([["market", "eq", "player_total_bases_shadow"], ["game_date", "eq", d], ["result", "eq", "pending"]]),
+    };
+  }
+
+  return { ok: true, overall, byMarket, byDate, tbShadowByDate };
 }
 
 // READ-ONLY. Every graded K / hits pick with projection vs actual, plus per-side
