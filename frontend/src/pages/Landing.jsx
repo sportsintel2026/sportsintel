@@ -137,6 +137,9 @@ export default function LandingPage(){
         </div>
       </section>
 
+      {/* CUT: white hero -> navy video (jagged peaks) */}
+      <span className="cut"><svg viewBox="0 0 1200 46" preserveAspectRatio="none"><path d="M0,0 L150,30 L320,6 L520,34 L760,8 L980,32 L1200,4 L1200,46 L0,46 Z" fill="#0E2230"/></svg></span>
+
       {/* VIDEO SECTION */}
       <section className="vidsec">
         <div className="wrap">
@@ -146,7 +149,11 @@ export default function LandingPage(){
         <CommercialVideo />
       </section>
 
-      {/* PAGE SYSTEM */}
+      {/* CUT: navy video -> emerald features (diagonal slash) */}
+      <span className="cut"><svg viewBox="0 0 1200 46" preserveAspectRatio="none"><path d="M0,46 L1200,0 L1200,46 Z" fill="#07140F"/><path d="M0,0 L0,46 L1200,0 Z" fill="#0E2230"/></svg></span>
+
+      {/* PAGE SYSTEM (emerald) */}
+      <div className="feat-zone">
       <div className="sech" id="how">Everything the sharps do — done for you</div>
       <div className="wrap">
 
@@ -197,17 +204,59 @@ export default function LandingPage(){
           </div>
         </div>
       </div>
+      </div>
 
-      {/* PLAYER PROPS BANNER */}
-      <div className="wrap">
+      {/* CUT: emerald features -> blue Market Read (chevron point) */}
+      <span className="cut"><svg viewBox="0 0 1200 46" preserveAspectRatio="none"><path d="M0,0 L300,34 L600,6 L900,34 L1200,0 L1200,46 L0,46 Z" fill="#123A5C"/></svg></span>
+
+      {/* MARKET READ (blue) — what the books are saying */}
+      <div className="band-blue">
+        <section className="mrsec"><div className="wrap">
+          <div className="eyebrow">Market Read · new</div>
+          <h3>What every book is saying.</h3>
+          <p>We read the whole market — where the books agree, where they split, and which way they're moving — then tell you who they're leaning on. A read on the room, not a guarantee.</p>
+          <div className="mrgrid">
+            <div className="mrcard">
+              <div className="top"><span className="mu">SD @ STL</span><span className="tier" style={{color:"#5DCAA5"}}><span className="d" style={{background:"#1D9E75"}}/>Strong</span></div>
+              <div className="read">Market is confident in the <b>Cardinals</b>.</div>
+              <div className="sub">7 books agree · 61% to win · tight prices</div>
+            </div>
+            <div className="mrcard">
+              <div className="top"><span className="mu">TB @ LAD</span><span className="tier" style={{color:"#EF9F27"}}><span className="d" style={{background:"#EF9F27"}}/>Soft</span></div>
+              <div className="read">Books split on the <b>Dodgers</b>.</div>
+              <div className="sub">Slim favorite · prices range · coin-flip</div>
+            </div>
+          </div>
+          <div className="mr-ex">Illustrative examples — not live picks</div>
+        </div></section>
+      </div>
+
+      {/* CUT: blue Market Read -> white tools (zigzag) */}
+      <span className="cut"><svg viewBox="0 0 1200 46" preserveAspectRatio="none"><path d="M0,46 L120,18 L300,40 L500,12 L720,38 L940,14 L1200,40 L1200,0 L0,0 Z" fill="#123A5C"/><path d="M0,46 L120,18 L300,40 L500,12 L720,38 L940,14 L1200,40 L1200,46 Z" fill="#FFFFFF"/></svg></span>
+
+      {/* TOOLS TO WIN (white two-tone) */}
+      <div className="band-white">
+        <section className="tools"><div className="wrap">
+          <div className="lab">The tools to win</div>
+          <h2>Trust your gut — with the data on your side.</h2>
+          <p>We don't sell guaranteed picks. We hand you every edge, every prop, and what the whole market is saying — then you make the call. That's the smartest way to beat the books.</p>
+          <Link className="btn btn-pri" to="/signup">Get started →</Link>
+        </div></section>
+      </div>
+
+      {/* CUT: white tools -> black props (sharp slash) */}
+      <span className="cut"><svg viewBox="0 0 1200 46" preserveAspectRatio="none"><path d="M0,0 L1200,40 L1200,46 L0,46 Z" fill="#05080A"/><path d="M0,0 L1200,40 L1200,0 Z" fill="#CFE2F4"/></svg></span>
+
+      {/* PLAYER PROPS BANNER (black) */}
+      <div className="propszone"><div className="wrap">
         <section className="propsband">
           <div className="pb-eyebrow">Player Props</div>
           <div className="pb-h">The props the books <span>misprice.</span></div>
           <div className="pb-sub">Every player, every market, graded against our projection — so you see the edge before you bet.</div>
           <div className="cov">
-            <div className="cov-row"><span className="cov-lab">⚾ MLB</span><span className="chip">Home Runs</span><span className="chip">Hits</span><span className="chip">Strikeouts</span></div>
+            <div className="cov-row"><span className="cov-lab">⚾ MLB</span><span className="chip">Home Runs</span><span className="chip">Hits</span><span className="chip">Strikeouts</span><span className="chip">Total Bases</span><span className="chip">Doubles</span><span className="chip">Triples</span></div>
             <div className="cov-row"><span className="cov-lab">🏀 NBA</span><span className="chip">Points</span><span className="chip">Rebounds</span><span className="chip">Assists</span><span className="chip">Threes</span></div>
-            <div className="cov-row"><span className="cov-lab">🏈 NFL</span><span className="chip">Passing Yds</span><span className="chip">Rushing Yds</span><span className="chip">Receiving Yds</span><span className="chip">Receptions</span><span className="chip">Pass TDs</span><span className="chip">Anytime TD</span><span className="soon">coming soon</span></div>
+            <div className="cov-row"><span className="cov-lab">🏈 NFL</span><span className="chip">Passing Yds</span><span className="chip">Rushing Yds</span><span className="chip">Receiving Yds</span><span className="chip">Receptions</span><span className="chip">Pass TDs</span><span className="chip">Rushing TD</span><span className="chip">Anytime TD</span><span className="soon">coming soon</span></div>
           </div>
           <div className="marquee">
             <div className="track">
@@ -232,7 +281,10 @@ export default function LandingPage(){
             <span className="pb-ex">Illustrative examples — not live picks</span>
           </div>
         </section>
-      </div>
+      </div></div>
+
+      {/* CUT: black props -> emerald proof (chevron) */}
+      <span className="cut"><svg viewBox="0 0 1200 46" preserveAspectRatio="none"><path d="M0,46 L600,8 L1200,46 L1200,0 L0,0 Z" fill="#05080A"/><path d="M0,46 L600,8 L1200,46 Z" fill="#07140F"/></svg></span>
 
       {/* PROOF */}
       <div className="proof"><div className="wrap">
@@ -245,6 +297,9 @@ export default function LandingPage(){
           <div className="stat"><div className="n">$7</div><div className="l">flat monthly — no upsells</div></div>
         </div>
       </div></div>
+
+      {/* CUT: emerald proof -> blue CTA (peaks) */}
+      <span className="cut"><svg viewBox="0 0 1200 46" preserveAspectRatio="none"><path d="M0,0 L400,36 L800,8 L1200,32 L1200,46 L0,46 Z" fill="#123A5C"/></svg></span>
 
       {/* CTA BAND */}
       <div className="ctaband"><div className="wrap">
@@ -286,12 +341,23 @@ export default function LandingPage(){
 
 const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap');
-.lpwrap{--teal:#1D9E75;--mint:#38E1A0;--red:#ef4444;
+.lpwrap{--teal:#1D9E75;--mint:#38E1A0;--red:#ef4444;--blue:#123A5C;--bluelt:#5DA9E8;
   --disp:'Space Grotesk',sans-serif;--body:'Inter',sans-serif;--mono:'JetBrains Mono',monospace;
   background:#07140F;color:#E7F1EC;font-family:var(--body);-webkit-font-smoothing:antialiased;min-height:100vh;overflow-x:hidden}
 .lpwrap *{box-sizing:border-box;margin:0;padding:0}
 .lpwrap a{color:inherit;text-decoration:none}
 .lpwrap .wrap{max-width:1180px;margin:0 auto;padding:0 28px}
+
+/* ---- alternating section backgrounds + creative diagonal cuts ---- */
+.lpwrap .band{position:relative}
+.lpwrap .band-navy{background:#0E2230}
+.lpwrap .band-emerald{background:#07140F}
+.lpwrap .band-blue{background:var(--blue)}
+.lpwrap .band-black{background:#05080A}
+.lpwrap .band-white{background:linear-gradient(165deg,#FFFFFF 0%,#EAF2FA 55%,#CFE2F4 100%);color:#0A1410}
+.lpwrap .cut{display:block;height:0;line-height:0}
+.lpwrap .cut svg{display:block;width:100%;height:46px}
+@media(max-width:859px){.lpwrap .cut svg{height:32px}}
 
 .lpwrap .topbar{position:sticky;top:0;z-index:20;background:rgba(7,20,15,.8);backdrop-filter:blur(10px);border-bottom:1px solid rgba(255,255,255,.06)}
 .lpwrap .topbar .wrap{display:flex;align-items:center;justify-content:space-between;height:62px}
@@ -303,16 +369,22 @@ const CSS = `
 .lpwrap .tbtn:hover{background:#dc2626}
 
 .lpwrap .hero{position:relative;overflow:hidden;min-height:600px;display:flex;align-items:center;
-  background:linear-gradient(160deg,#07140F 0%,#0B231C 48%,#103027 100%)}
-.lpwrap .hero::before{content:"";position:absolute;inset:0;background:radial-gradient(90% 80% at 85% 12%,rgba(56,225,160,.20),transparent 50%)}
+  background:linear-gradient(165deg,#FFFFFF 0%,#EAF2FA 55%,#CFE2F4 100%)}
+.lpwrap .hero::before{content:"";position:absolute;inset:0;background:radial-gradient(90% 80% at 85% 12%,rgba(29,158,117,.10),transparent 50%)}
 .lpwrap .hero .wrap{position:relative;z-index:4;width:100%;display:grid;grid-template-columns:1fr;gap:42px;align-items:center}
 @media(min-width:860px){.lpwrap .hero .wrap{grid-template-columns:1.1fr .9fr}}
+.lpwrap .hero .eyebrow{color:var(--teal)}
+.lpwrap .hero .eyebrow::before{background:var(--teal)}
 .lpwrap .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--mint);
   display:inline-flex;align-items:center;gap:9px;margin-bottom:22px}
 .lpwrap .eyebrow::before{content:"";width:26px;height:1px;background:var(--mint);opacity:.7}
 .lpwrap h1.hl{font-family:var(--disp);font-weight:700;font-size:clamp(38px,5vw,60px);line-height:1.03;letter-spacing:-.02em;
-  background:linear-gradient(92deg,#EAF7F0 30%,var(--mint));-webkit-background-clip:text;background-clip:text;color:transparent}
-.lpwrap h1.hl em{font-style:normal;background:linear-gradient(92deg,var(--mint),#9CF0C8);-webkit-background-clip:text;background-clip:text;color:transparent}
+  color:#0A1410}
+.lpwrap h1.hl em{font-style:normal;color:var(--teal)}
+.lpwrap .hero .sub{color:#46554E}
+.lpwrap .hero .btn-ghost{color:#0A1410;border:1px solid #C9D6D0}
+.lpwrap .hero .btn-ghost:hover{border-color:#9fb3aa}
+.lpwrap .hero .price-note{color:#6B7A73}
 .lpwrap .sub{font-size:18px;line-height:1.55;color:#A7C3B8;max-width:440px;margin:22px 0 30px}
 .lpwrap .cta-row{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
 .lpwrap .btn{font-family:var(--disp);font-weight:600;font-size:15px;padding:15px 26px;border-radius:11px;cursor:pointer;border:0;display:inline-block;transition:.18s}
@@ -450,6 +522,42 @@ const CSS = `
 .lpwrap .pb-btn{font-family:var(--disp);font-weight:600;font-size:14px;background:var(--red);color:#fff;padding:12px 22px;border-radius:11px}
 .lpwrap .pb-btn:hover{background:#dc2626}
 .lpwrap .pb-ex{font-family:var(--mono);font-size:10.5px;color:#5f7a70}
+
+/* ---- Market Read section (blue band) ---- */
+.lpwrap .mrsec{padding:56px 0}
+.lpwrap .mrsec .eyebrow{color:var(--bluelt)}
+.lpwrap .mrsec .eyebrow::before{background:var(--bluelt)}
+.lpwrap .mrsec h3{font-family:var(--disp);font-weight:700;font-size:clamp(24px,3.3vw,34px);letter-spacing:-.02em;margin-bottom:12px;color:#fff}
+.lpwrap .mrsec p{color:#C5DCEF;line-height:1.6;font-size:16px;max-width:480px;margin-bottom:22px}
+.lpwrap .mrgrid{display:grid;grid-template-columns:1fr;gap:12px;max-width:560px}
+@media(min-width:680px){.lpwrap .mrgrid{grid-template-columns:1fr 1fr}}
+.lpwrap .mrcard{background:rgba(255,255,255,.06);border:1px solid rgba(159,208,245,.25);border-radius:14px;padding:15px 16px}
+.lpwrap .mrcard .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.lpwrap .mrcard .mu{font-family:var(--disp);font-weight:600;color:#fff;font-size:15px}
+.lpwrap .mrcard .tier{font-family:var(--mono);font-size:11px;font-weight:700;display:flex;align-items:center;gap:6px}
+.lpwrap .mrcard .tier .d{width:8px;height:8px;border-radius:50%;display:inline-block}
+.lpwrap .mrcard .read{font-size:15px;color:#fff;font-weight:600;line-height:1.4}
+.lpwrap .mrcard .read b{color:#9FD0F5;font-weight:700}
+.lpwrap .mrcard .sub{font-family:var(--mono);font-size:11.5px;color:#9FB8CE;margin-top:6px}
+.lpwrap .mr-ex{font-family:var(--mono);font-size:10.5px;color:#7F9BB5;margin-top:16px}
+
+/* ---- Tools to win (white two-tone band) ---- */
+.lpwrap .tools{padding:54px 0}
+.lpwrap .tools .lab{display:inline-block;font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--blue);background:#E6F1FB;border:1px solid #B5D4F4;padding:6px 14px;border-radius:20px;margin-bottom:16px}
+.lpwrap .tools h2{font-family:var(--disp);font-weight:700;font-size:clamp(26px,3.6vw,38px);line-height:1.12;letter-spacing:-.02em;color:#0A1410;margin-bottom:13px;max-width:600px}
+.lpwrap .tools p{font-size:16px;color:#46554E;line-height:1.6;max-width:520px;margin-bottom:22px}
+.lpwrap .tools .btn-pri{background:var(--teal);box-shadow:0 10px 30px -12px var(--teal)}
+.lpwrap .tools .btn-pri:hover{background:#17835f}
+
+/* ---- band-aware overrides ---- */
+.lpwrap .vidsec{background:#0E2230}
+.lpwrap .vid-eyebrow{color:var(--bluelt)}
+.lpwrap .feat-zone{background:#07140F}
+.lpwrap .propszone{background:#05080A;padding-top:34px;padding-bottom:8px}
+.lpwrap .propsband{border-color:rgba(56,225,160,.14)}
+.lpwrap .proof{background:#07140F}
+.lpwrap .ctaband{background:var(--blue) !important}
+.lpwrap .ctaband p{color:#C5DCEF}
 
 @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(56,225,160,.5)}70%{box-shadow:0 0 0 9px rgba(56,225,160,0)}100%{box-shadow:0 0 0 0 rgba(56,225,160,0)}}
 `;
