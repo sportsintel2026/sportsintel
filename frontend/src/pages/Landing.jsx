@@ -113,7 +113,19 @@ export default function LandingPage(){
         <Link className="tbtn" to="/signup">Start free →</Link>
       </div></div>
 
-      {/* HERO */}
+      {/* VIDEO SECTION (now on top) */}
+      <section className="vidsec">
+        <div className="wrap">
+          <div className="vid-eyebrow">▶ WATCH · 30 SECONDS</div>
+          <div className="vid-h">This is what betting blind looks like.</div>
+        </div>
+        <CommercialVideo />
+      </section>
+
+      {/* CUT: navy video -> white hero (clean diagonal) */}
+      <span className="cut"><svg viewBox="0 0 1200 46" preserveAspectRatio="none"><path d="M0,0 L1200,0 L1200,18 L0,46 Z" fill="#0E2230"/><path d="M0,46 L1200,18 L1200,46 Z" fill="#FFFFFF"/></svg></span>
+
+      {/* HERO (now below video) */}
       <section className="hero">
         <div className="wrap">
           <div>
@@ -137,20 +149,8 @@ export default function LandingPage(){
         </div>
       </section>
 
-      {/* CUT: white hero -> navy video (clean diagonal) */}
-      <span className="cut"><svg viewBox="0 0 1200 46" preserveAspectRatio="none"><path d="M0,46 L1200,10 L1200,46 Z" fill="#0E2230"/><path d="M0,0 L1200,0 L1200,10 L0,46 Z" fill="#CFE2F4"/></svg></span>
-
-      {/* VIDEO SECTION */}
-      <section className="vidsec">
-        <div className="wrap">
-          <div className="vid-eyebrow">▶ WATCH · 30 SECONDS</div>
-          <div className="vid-h">This is what betting blind looks like.</div>
-        </div>
-        <CommercialVideo />
-      </section>
-
-      {/* CUT: navy video -> emerald features (clean diagonal + mint seam) */}
-      <span className="cut"><svg viewBox="0 0 1200 46" preserveAspectRatio="none"><path d="M0,18 L1200,0 L1200,46 L0,46 Z" fill="#07140F"/><path d="M0,18 L1200,0" stroke="#38E1A0" stroke-opacity="0.35" stroke-width="1.5" fill="none"/></svg></span>
+      {/* CUT: white hero -> emerald features (clean diagonal + mint seam) */}
+      <span className="cut"><svg viewBox="0 0 1200 46" preserveAspectRatio="none"><path d="M0,0 L1200,28 L1200,46 L0,46 Z" fill="#07140F"/><path d="M0,0 L1200,28" stroke="#38E1A0" stroke-opacity="0.35" stroke-width="1.5" fill="none"/></svg></span>
 
       {/* PAGE SYSTEM (emerald) */}
       <div className="feat-zone">
@@ -357,7 +357,7 @@ const CSS = `
 .lpwrap .cut svg{display:block;width:100%;height:46px}
 @media(max-width:859px){.lpwrap .cut svg{height:32px}}
 
-.lpwrap .topbar{position:sticky;top:0;z-index:20;background:rgba(7,20,15,.8);backdrop-filter:blur(10px);border-bottom:1px solid rgba(255,255,255,.06)}
+.lpwrap .topbar{position:sticky;top:0;z-index:20;background:rgba(14,34,48,.85);backdrop-filter:blur(10px);border-bottom:1px solid rgba(255,255,255,.06)}
 .lpwrap .topbar .wrap{display:flex;align-items:center;justify-content:space-between;height:62px}
 .lpwrap .logo{font-family:var(--disp);font-weight:700;font-size:19px}
 .lpwrap .logo span{color:var(--teal)}
@@ -401,7 +401,7 @@ const CSS = `
 .lpwrap .ec-meta{font-family:var(--mono);font-size:12px;color:#9DBAAF}
 .lpwrap .ec-edge{font-family:var(--mono);font-weight:700;font-size:16px;color:var(--mint)}
 
-.lpwrap .vidsec{padding:64px 0 40px;text-align:center}
+.lpwrap .vidsec{padding:30px 0 36px;text-align:center}
 .lpwrap .vid-eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:var(--mint);margin-bottom:12px}
 .lpwrap .vid-h{font-family:var(--disp);font-weight:700;font-size:clamp(24px,3.3vw,36px);letter-spacing:-.02em;margin-bottom:22px}
 .lpwrap .vidframe{position:relative;width:100vw;left:50%;right:50%;margin-left:-50vw;margin-right:-50vw;max-width:100vw;aspect-ratio:16/9;border-radius:0;overflow:hidden;
