@@ -226,6 +226,71 @@ export default function LandingPage(){
           </div>
         </div>
 
+        {/* PLAYER PROFILE (new) — phone-left / copy-right */}
+        <div className="feat rev" id="playerprofile">
+          <div className="ftxt">
+            <div className="eyebrow">Player Profiles · new</div>
+            <h3>Every hitter, fully scouted.</h3>
+            <p>No more blind longshots. Tap any home-run pick and the player's full batting card opens — the same scouting the model runs, in plain sight.</p>
+            <Link className="lk" to="/props">Open the board →</Link>
+          </div>
+          <div className="panel pppanel">
+            <div className="ppprow">
+              <div className="pppic">KS<img src="https://midfield.mlbstatic.com/v1/people/656941/spots/120" alt="" loading="lazy" onError={(e)=>{e.currentTarget.style.display="none";}}/></div>
+              <div className="pppnm">
+                <div className="pppn">Kyle Schwarber</div>
+                <div className="pppg">MIA @ PHI · bats L</div>
+                <div className="pppl">O 0.5 HR · +240</div>
+              </div>
+              <div className="pppr"><div className="pppv">21<small>%</small></div><div className="pppvl">to homer</div></div>
+            </div>
+            <div className="pppbody">
+              <div className="pppmh"><span>Tonight vs <b>RHP starter</b></span><span><i className="ppppill">RHP</i><i className="pppadv">▲ platoon</i></span></div>
+
+              <div className="pppsec">Hand vs Hand · 2026</div>
+              <div className="pppsp2">
+                <div className="pppsp"><div className="pppvh">vs LHP</div><div className="pppops">.700</div><div className="pppopsl">OPS</div><div className="pppsr"><div><div className="pppsv">.210</div><div className="pppsl">AVG</div></div><div><div className="pppsv">.400</div><div className="pppsl">SLG</div></div><div><div className="pppsv ppphr">7</div><div className="pppsl">HR</div></div></div></div>
+                <div className="pppsp act"><span className="ppptg">TONIGHT</span><div className="pppvh">vs RHP</div><div className="pppops">.960</div><div className="pppopsl">OPS</div><div className="pppsr"><div><div className="pppsv">.265</div><div className="pppsl">AVG</div></div><div><div className="pppsv">.580</div><div className="pppsl">SLG</div></div><div><div className="pppsv ppphr">28</div><div className="pppsl">HR</div></div></div></div>
+              </div>
+
+              <div className="pppsec">Model % vs Market %</div>
+              <div className="pppmvm">
+                <div className="pppmtop"><div className="pppmt">Model HR% vs implied · last 8</div><div className="pppmr"><span className="g">21%</span><span className="x">vs</span><span className="b">29%</span></div></div>
+                <div className="pppplot">
+                  <div className="pppcol"><span className="ppptick" style={{bottom:"46px"}}/><span className="pppbar" style={{height:"64px"}}/></div>
+                  <div className="pppcol"><span className="ppptick" style={{bottom:"49px"}}/><span className="pppbar" style={{height:"52px"}}/></div>
+                  <div className="pppcol"><span className="ppptick" style={{bottom:"52px"}}/><span className="pppbar" style={{height:"90px"}}/></div>
+                  <div className="pppcol"><span className="ppptick" style={{bottom:"81px"}}/><span className="pppbar dim" style={{height:"44px"}}/></div>
+                  <div className="pppcol"><span className="ppptick" style={{bottom:"70px"}}/><span className="pppbar dim" style={{height:"49px"}}/></div>
+                  <div className="pppcol"><span className="ppptick" style={{bottom:"78px"}}/><span className="pppbar dim" style={{height:"41px"}}/></div>
+                  <div className="pppcol"><span className="ppptick" style={{bottom:"52px"}}/><span className="pppbar" style={{height:"70px"}}/></div>
+                  <div className="pppcol"><span className="ppptick" style={{bottom:"61px"}}/><span className="pppbar dim" style={{height:"55px"}}/></div>
+                </div>
+                <div className="pppdots">
+                  <div className="pppdc"><span className="pppdot hit"/></div><div className="pppdc"><span className="pppdot"/></div>
+                  <div className="pppdc"><span className="pppdot hit"/></div><div className="pppdc"><span className="pppdot"/></div>
+                  <div className="pppdc"><span className="pppdot"/></div><div className="pppdc"><span className="pppdot"/></div>
+                  <div className="pppdc"><span className="pppdot hit"/></div><div className="pppdc"><span className="pppdot"/></div>
+                </div>
+                <div className="pppleg"><span><i className="lg"/>model %</span><span><i className="lb"/>market %</span><span><i className="ld"/>homered</span></div>
+                <div className="pppcap">Bars above the blue line = model sees more value than the price.</div>
+              </div>
+
+              <div className="pppsec">What the model sees</div>
+              <div className="pppchips">
+                <div className="pppchip"><div className="pppcl">Barrel % <span className="pppcrk">elite</span></div><div className="pppcv">21%</div><div className="pppcbar"><span style={{width:"90%"}}/></div></div>
+                <div className="pppchip"><div className="pppcl">xwOBA <span className="pppcrk">elite</span></div><div className="pppcv">.405</div><div className="pppcbar"><span style={{width:"88%"}}/></div></div>
+              </div>
+
+              <div className="pppsec">Batted-ball profile</div>
+              <div className="pppbb">
+                <div className="pppbbar"><span style={{width:"56%",background:"#33e991"}}/><span style={{width:"26%",background:"#42504a"}}/><span style={{width:"18%",background:"#5da9e8"}}/></div>
+                <div className="pppbbl"><span><i style={{background:"#33e991"}}/>Pull 56%</span><span><i style={{background:"#42504a"}}/>Straight 26%</span><span><i style={{background:"#5da9e8"}}/>Oppo 18%</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
       </div>
       </div>
 
@@ -434,6 +499,60 @@ const CSS = `
 .lpwrap .prow .t{font-family:var(--disp);font-weight:600;font-size:14px}
 .lpwrap .prow .m{font-family:var(--mono);font-size:12px;color:#8AA89D}
 .lpwrap .pill{font-family:var(--mono);font-weight:700;font-size:13px;color:#03130D;background:var(--mint);padding:3px 9px;border-radius:6px}
+/* Player Profile feature panel */
+.lpwrap .pppanel{padding:0;overflow:hidden}
+.lpwrap .ppprow{position:relative;display:flex;align-items:center;gap:10px;padding:14px 15px;background:rgba(51,233,145,.04);border-bottom:1px dashed rgba(56,225,160,.18)}
+.lpwrap .pppic{position:relative;width:42px;height:42px;border-radius:50%;flex:0 0 42px;background:linear-gradient(180deg,#E81828,#0c1018 88%);box-shadow:0 0 0 2px #E8182866;overflow:hidden;display:flex;align-items:center;justify-content:center;font-family:var(--disp);font-weight:700;color:#fff;font-size:14px}
+.lpwrap .pppic img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.lpwrap .pppnm{flex:1;min-width:0}
+.lpwrap .pppn{font-family:var(--disp);font-weight:700;font-size:16px}
+.lpwrap .pppg{font-family:var(--mono);font-size:10px;color:#7F9C90;margin-top:1px}
+.lpwrap .pppl{font-size:11px;color:#A9C6BB;margin-top:3px}
+.lpwrap .pppr{text-align:right}
+.lpwrap .pppv{font-family:var(--disp);font-weight:700;font-size:26px;color:var(--mint);line-height:.9}
+.lpwrap .pppv small{font-size:14px}
+.lpwrap .pppvl{font-family:var(--mono);font-size:8px;color:#7F9C90;text-transform:uppercase;letter-spacing:.5px;margin-top:2px}
+.lpwrap .pppbody{padding:13px 15px 16px}
+.lpwrap .pppmh{display:flex;align-items:center;justify-content:space-between;gap:8px;background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.06);border-radius:10px;padding:9px 11px}
+.lpwrap .pppmh>span:first-child{font-size:11px;color:#8AA89D}.lpwrap .pppmh b{font-family:var(--disp);font-weight:700;color:#eef3f1;font-size:12.5px}
+.lpwrap .ppppill{font-family:var(--mono);font-weight:700;font-size:10px;font-style:normal;padding:2px 7px;border-radius:6px;background:rgba(93,169,232,.14);color:#5DA9E8;border:1px solid rgba(93,169,232,.3)}
+.lpwrap .pppadv{font-family:var(--mono);font-weight:700;font-size:10px;font-style:normal;color:#7CF0A8;background:rgba(51,233,145,.12);border:1px solid rgba(51,233,145,.3);padding:2px 7px;border-radius:6px;margin-left:5px}
+.lpwrap .pppsec{font-family:var(--mono);font-weight:700;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#7F9C90;margin:15px 0 9px;display:flex;align-items:center;gap:7px}
+.lpwrap .pppsec::before{content:"";width:5px;height:5px;border-radius:50%;background:var(--mint)}
+.lpwrap .pppsp2{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.lpwrap .pppsp{position:relative;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.06);border-radius:11px;padding:10px 11px}
+.lpwrap .pppsp.act{border-color:rgba(255,122,108,.5);background:linear-gradient(180deg,rgba(51,233,145,.06),rgba(255,255,255,.02))}
+.lpwrap .ppptg{position:absolute;top:-8px;right:9px;font-family:var(--mono);font-weight:700;font-size:8px;background:#FF7A6C;color:#1a0c08;padding:1px 7px;border-radius:5px}
+.lpwrap .pppvh{font-family:var(--mono);font-weight:700;font-size:11px;color:#7F9C90}.lpwrap .pppsp.act .pppvh{color:#7CF0A8}
+.lpwrap .pppops{font-family:var(--disp);font-weight:700;font-size:24px;line-height:1;margin-top:5px}
+.lpwrap .pppopsl{font-family:var(--mono);font-size:8px;color:#6a7882;letter-spacing:.1em;text-transform:uppercase}
+.lpwrap .pppsr{display:flex;justify-content:space-between;margin-top:8px;gap:4px}.lpwrap .pppsr div{flex:1;text-align:center}
+.lpwrap .pppsv{font-family:var(--disp);font-weight:700;font-size:13px}.lpwrap .pppsl{font-family:var(--mono);font-size:7px;color:#6a7882;text-transform:uppercase;margin-top:2px}
+.lpwrap .ppphr{color:#E8C07A}
+.lpwrap .pppmvm{background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.06);border-radius:12px;padding:12px 13px 10px}
+.lpwrap .pppmtop{display:flex;justify-content:space-between;align-items:baseline}
+.lpwrap .pppmt{font-size:10px;color:#8AA89D}
+.lpwrap .pppmr{font-family:var(--disp);font-weight:700;font-size:14px}.lpwrap .pppmr .g{color:var(--mint)}.lpwrap .pppmr .b{color:#5DA9E8}.lpwrap .pppmr .x{color:#5a6b63;font-size:11px;margin:0 4px}
+.lpwrap .pppplot{position:relative;height:96px;display:flex;align-items:flex-end;gap:7px;margin:12px 2px 0;border-bottom:1px solid rgba(255,255,255,.08)}
+.lpwrap .pppcol{position:relative;flex:1;height:100%;display:flex;align-items:flex-end}
+.lpwrap .pppbar{width:100%;border-radius:5px 5px 0 0;background:linear-gradient(180deg,#3df2a0,#1f9d62)}
+.lpwrap .pppbar.dim{background:linear-gradient(180deg,#2c6b4f,#1d4a37)}
+.lpwrap .ppptick{position:absolute;left:-1px;right:-1px;height:3px;border-radius:2px;background:#5DA9E8;box-shadow:0 0 7px rgba(93,169,232,.55)}
+.lpwrap .pppdots{display:flex;gap:7px;margin:8px 2px 0}.lpwrap .pppdc{flex:1;display:flex;justify-content:center}
+.lpwrap .pppdot{width:8px;height:8px;border-radius:50%;border:1.5px solid #2f6a4d}.lpwrap .pppdot.hit{background:var(--mint);border-color:var(--mint);box-shadow:0 0 7px rgba(51,233,145,.6)}
+.lpwrap .pppleg{display:flex;justify-content:center;gap:15px;margin-top:11px;font-family:var(--mono);font-size:9px;color:#8AA89D}
+.lpwrap .pppleg span{display:flex;align-items:center;gap:5px}
+.lpwrap .pppleg i{display:inline-block}.lpwrap .pppleg .lg{width:9px;height:9px;border-radius:2px;background:var(--mint)}.lpwrap .pppleg .lb{width:12px;height:3px;border-radius:2px;background:#5DA9E8}.lpwrap .pppleg .ld{width:9px;height:9px;border-radius:50%;background:var(--mint)}
+.lpwrap .pppcap{font-size:9px;color:#5f6d76;text-align:center;margin-top:9px}
+.lpwrap .pppchips{display:flex;gap:9px}
+.lpwrap .pppchip{flex:1;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.06);border-radius:11px;padding:9px 10px}
+.lpwrap .pppcl{font-size:10px;color:#8AA89D;display:flex;justify-content:space-between;align-items:center}
+.lpwrap .pppcrk{font-family:var(--mono);font-weight:700;font-size:8px;color:#03130D;background:var(--mint);padding:1px 6px;border-radius:5px}
+.lpwrap .pppcv{font-family:var(--disp);font-weight:700;font-size:18px;margin-top:3px}
+.lpwrap .pppcbar{height:3px;border-radius:2px;background:rgba(51,233,145,.12);margin-top:6px;overflow:hidden}.lpwrap .pppcbar>span{display:block;height:100%;background:linear-gradient(90deg,#1f9d62,var(--mint))}
+.lpwrap .pppbb{background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.06);border-radius:11px;padding:11px}
+.lpwrap .pppbbar{display:flex;height:13px;border-radius:7px;overflow:hidden;gap:2px;background:rgba(0,0,0,.3)}.lpwrap .pppbbar>span{display:block;height:100%}
+.lpwrap .pppbbl{display:flex;justify-content:space-between;margin-top:8px;font-family:var(--mono);font-size:10px;color:#A9C6BB}.lpwrap .pppbbl i{width:8px;height:8px;border-radius:2px;display:inline-block;margin-right:5px;vertical-align:-1px}
 .lpwrap .barwrap{display:flex;align-items:flex-end;gap:8px;height:120px;padding-top:8px}
 .lpwrap .bar{flex:1;background:linear-gradient(180deg,var(--mint),rgba(56,225,160,.25));border-radius:5px 5px 0 0}
 
