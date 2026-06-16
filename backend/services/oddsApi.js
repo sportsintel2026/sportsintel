@@ -502,6 +502,92 @@ async function getMLBTotalBasesPropsForAllEvents(eventIds, maxEvents = 5) {
   return results;
 }
 
+// ── Generic batter-prop parser (doubles / triples) ───────────────────────────
+// Mirrors parseTotalBasesProps but (a) takes the market key, and (b) for rare
+// markets accepts OVER-ONLY props — books often price a 0.5 Over on triples with
+// no Under. Since these boards are ranked by likelihood (not de-vigged edges),
+// an Over-only line is still usable. Prefers the lowest line with both sides;
+// falls back to the lowest line with an Over price.
+function parseBatterCountProps(ev, marketKey) {
+  const out = new Map();
+  for (const bm of (ev.bookmakers || [])) {
+    for (const m of (bm.markets || [])) {
+      if (m.key !== marketKey) continue;
+      const byPlayer = new Map();
+      for (const o of (m.outcomes || [])) {
+        const player = o.description;
+        const line = o.point;
+        if (!player || line == null || o.price == null) continue;
+        const side = (o.name || "").toLowerCase();
+        const lines = byPlayer.get(player) || new Map();
+        const rec = lines.get(line) || { line };
+        if (side === "over") rec.over = o.price;
+        else if (side === "under") rec.under = o.price;
+        lines.set(line, rec);
+        byPlayer.set(player, lines);
+      }
+      for (const [player, lines] of byPlayer) {
+        if (out.has(player)) continue; // first book wins
+        const all = Array.from(lines.values()).sort((a, b) => a.line - b.line);
+        const twoSided = all.filter((r) => r.over != null && r.under != null);
+        const overOnly = all.filter((r) => r.over != null);
+        const rec = twoSided[0] || overOnly[0];
+        if (!rec) continue;
+        out.set(player, { player, line: rec.line, overOdds: rec.over ?? null, underOdds: rec.under ?? null, book: bm.title });
+      }
+    }
+  }
+  return Array.from(out.values());
+}
+
+async function getMLBDoublesPropsForEvent(eventId) {
+  const cacheKey = `mlb_2b_${eventId}`;
+  const cached = cache.get(cacheKey);
+  if (isCacheValid(cached)) return cached.data;
+  try {
+    const data = await oddsGet(`/sports/baseball_mlb/events/${eventId}/odds`, {
+      regions: "us", oddsFormat: "american", markets: "batter_doubles",
+    });
+    const props = parseBatterCountProps(data, "batter_doubles");
+    cache.set(cacheKey, { data: props, fetchedAt: Date.now() });
+    return props;
+  } catch (e) {
+    if (cached) return cached.data;
+    return [];
+  }
+}
+
+async function getMLBDoublesPropsForAllEvents(eventIds, maxEvents = 5) {
+  const targets = eventIds.slice(0, maxEvents);
+  const results = {};
+  for (const id of targets) results[id] = await getMLBDoublesPropsForEvent(id);
+  return results;
+}
+
+async function getMLBTriplesPropsForEvent(eventId) {
+  const cacheKey = `mlb_3b_${eventId}`;
+  const cached = cache.get(cacheKey);
+  if (isCacheValid(cached)) return cached.data;
+  try {
+    const data = await oddsGet(`/sports/baseball_mlb/events/${eventId}/odds`, {
+      regions: "us", oddsFormat: "american", markets: "batter_triples",
+    });
+    const props = parseBatterCountProps(data, "batter_triples");
+    cache.set(cacheKey, { data: props, fetchedAt: Date.now() });
+    return props;
+  } catch (e) {
+    if (cached) return cached.data;
+    return [];
+  }
+}
+
+async function getMLBTriplesPropsForAllEvents(eventIds, maxEvents = 5) {
+  const targets = eventIds.slice(0, maxEvents);
+  const results = {};
+  for (const id of targets) results[id] = await getMLBTriplesPropsForEvent(id);
+  return results;
+}
+
 // ── Convert American odds to implied probability ──────────────────────────────
 
 function americanToImpliedProb(american) {
@@ -888,6 +974,10 @@ module.exports = {
   getMLBHitsPropsForAllEvents,
   getMLBTotalBasesPropsForEvent,
   getMLBTotalBasesPropsForAllEvents,
+  getMLBDoublesPropsForEvent,
+  getMLBDoublesPropsForAllEvents,
+  getMLBTriplesPropsForEvent,
+  getMLBTriplesPropsForAllEvents,
   americanToImpliedProb,
   getRawTotalsDebug,
   probeOddsCoverage,
