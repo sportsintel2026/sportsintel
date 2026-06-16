@@ -286,6 +286,28 @@ function ModelVsMarket({ data, tonight }) {
   );
 }
 
+// pull / straight / oppo distribution — pull-side is the HR-relevant direction
+function BattedBall({ bb }) {
+  const pull = bb.pullPct ?? 0, str = bb.straightPct ?? 0, oppo = bb.oppoPct ?? 0;
+  const tot = (pull + str + oppo) || 100;
+  const tier = pull >= 45 ? "heavy pull" : pull >= 38 ? "pull-side" : pull <= 30 ? "spray / oppo" : "balanced";
+  return (
+    <div className="hcbb">
+      <div className="hcbbbar">
+        <span style={{ width: (pull / tot) * 100 + "%", background: "#33e991" }}></span>
+        <span style={{ width: (str / tot) * 100 + "%", background: "#42504a" }}></span>
+        <span style={{ width: (oppo / tot) * 100 + "%", background: "#5da9e8" }}></span>
+      </div>
+      <div className="hcbblg">
+        <span><i style={{ background: "#33e991" }}></i>Pull {pull.toFixed(0)}%</span>
+        <span><i style={{ background: "#42504a" }}></i>Straight {str.toFixed(0)}%</span>
+        <span><i style={{ background: "#5da9e8" }}></i>Oppo {oppo.toFixed(0)}%</span>
+      </div>
+      <div className="hcbbnote"><b>{tier}</b> hitter{bb.thin ? " · limited sample" : ""} — pull-side power is the HR signal</div>
+    </div>
+  );
+}
+
 // the expand-on-tap batting card (v2): matchup → splits → model-vs-market →
 // factors → pull (phase 2). Sourced from the same feeds the HR model uses.
 function HrCard({ card, loading, p }) {
@@ -339,11 +361,15 @@ function HrCard({ card, loading, p }) {
       </div>
 
       <div className="hcsec">
-        <div className="hctitle"><span className="hcdot" style={{ background: "#e8c07a" }}></span>Batted-ball profile</div>
-        <div className="hcsoon">
-          <div className="hcs1">Pull % · Spray direction <span className="hcstag">ADDING NEXT</span></div>
-          <div className="hcs2">Pull rate, oppo rate and spray vs the pitcher's hand — coming from Baseball Savant.</div>
-        </div>
+        <div className="hctitle"><span className="hcdot" style={{ background: card.battedBall ? "#33e991" : "#e8c07a" }}></span>Batted-ball profile</div>
+        {card.battedBall
+          ? <BattedBall bb={card.battedBall} />
+          : (
+            <div className="hcsoon">
+              <div className="hcs1">Pull % · Spray direction <span className="hcstag">ADDING NEXT</span></div>
+              <div className="hcs2">Pull rate, oppo rate and spray vs the pitcher's hand — coming from Baseball Savant.</div>
+            </div>
+          )}
       </div>
 
       <div className="hcdisc">A <span className="hcb">Wize</span>Picks read — a lean, not a guarantee.</div>
@@ -530,6 +556,12 @@ const CSS = `
 .hcs1{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:13.5px;color:#8a99a2;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .hcstag{font-size:9px;font-family:'Barlow Condensed',sans-serif;font-weight:800;letter-spacing:.08em;color:#e8c07a;border:1px solid rgba(232,192,122,.4);padding:1px 7px;border-radius:5px}
 .hcs2{font-size:11px;color:#6a7882;margin-top:6px;line-height:1.45}
+.hcbb{background:#0d1218;border:1px solid #18212a;border-radius:11px;padding:12px}
+.hcbbbar{display:flex;height:14px;border-radius:7px;overflow:hidden;gap:2px;background:#0a0e12}
+.hcbbbar>span{display:block;height:100%}
+.hcbblg{display:flex;justify-content:space-between;gap:8px;margin-top:9px;font-size:11px;color:#b6c0c7}
+.hcbblg i{width:9px;height:9px;border-radius:2px;display:inline-block;margin-right:5px;vertical-align:-1px}
+.hcbbnote{font-size:10.5px;color:#6a7882;margin-top:9px;text-align:center}.hcbbnote b{color:#cfe0d8;text-transform:capitalize}
 .ppmuted{color:#6b7681;font-size:13px;font-weight:600;padding:24px 4px;text-align:center}
 .ppnote{font-size:10.5px;color:#54616b;font-weight:600;margin-top:14px;line-height:1.4}
 .ppsb{display:none}
