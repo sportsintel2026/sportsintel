@@ -1099,6 +1099,13 @@ async function captureOddsTicks() {
   for (const ev of oddsEvents) {
     const away = ev.awayTeam, home = ev.homeTeam;
     if (!away || !home) continue;
+    // Only snapshot PRE-GAME prices. The main odds feed can still return a game that
+    // is already underway, with wild in-play moneylines (a lopsided game late shows
+    // things like +475/-460). Because ticks are keyed by team name over a 20h window,
+    // those in-play prices then pollute the NEXT same-matchup game's "open" (the 2nd/
+    // 3rd game of a series), producing fake giant line moves in Market Movers. Skip
+    // any event that has already started so only true pre-game movement is recorded.
+    if (ev.commenceTime && new Date(ev.commenceTime).getTime() <= Date.now()) continue;
     const base = { captured_at: now, away_team: away, home_team: home };
     if (ev.h2h && ev.h2h.away != null)   rows.push({ ...base, market: "ml",    side: "away",  line: null,                 odds: ev.h2h.away });
     if (ev.h2h && ev.h2h.home != null)   rows.push({ ...base, market: "ml",    side: "home",  line: null,                 odds: ev.h2h.home });
