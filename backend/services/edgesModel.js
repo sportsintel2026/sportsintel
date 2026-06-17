@@ -637,7 +637,8 @@ const LEAGUE_K9 = 8.6;              // league starter strikeouts per 9
 const LEAGUE_TEAM_K_PER_GAME = 8.6; // league average team strikeouts per game
 const DEFAULT_START_IP = 5.3;       // league-average starter innings per start
 const K_ALLOW_OVERS = false;        // K OVER picks were confirmed -EV pre-v2; unders only until v2 overs re-validate via k_backtest. Flip to true to re-enable.
-const K_DISPERSION_PHI = 2.0;       // negbin variance/mean ratio (>1 = overdispersed). Bumped 1.5->2.0 on 2026-06-16: k_backtest showed the model overconfident in the 0.55-0.70 band (claimed ~58-68%, hit 38-50%) and bleeding -44% ROI in the 0.05-0.10 edge band. Wider tails pull mid-range probs toward 0.5. Re-backtest after a few graded slates; raise to 2.5 if still overconfident.
+const K_DISPERSION_PHI = 2.5;       // negbin variance/mean ratio (>1 = overdispersed). 1.5->2.0 (2026-06-16), 2.0->2.5 (2026-06-17): k_backtest v2.1-era (n=85) still overconfident — best temper 0.5, calibrationGap +0.121, and EVERY temper (incl. as-is) lost to a coin-flip baseline (logLoss 0.6931). Wider tails pull mid-range probs toward 0.5. Re-backtest after a few graded slates.
+const K_MIN_EDGE = 0.10;            // K-specific edge gate (2026-06-17). k_backtest byEdgeBand: the 0.05-0.10 band bled -42% ROI (noise) while the 0.10+ band returned +11.6% (55.9%) — the only +EV slice. Fire K picks ONLY at >=0.10 model-vs-market edge. Keeps ~40% of volume. Loosen toward MIN_PROP_EDGE only if a future backtest proves the middle band.
 
 function poissonCdf(k, lambda) {
   if (k < 0 || !(lambda > 0)) return 0;
@@ -1725,7 +1726,7 @@ async function calculateStrikeoutPropEdges(games, kOddsByEvent) {
     }
   }
   return out
-    .filter(p => p.edge != null && p.edge >= MIN_PROP_EDGE)
+    .filter(p => p.edge != null && p.edge >= K_MIN_EDGE)
     .sort((a, b) => (b.edge ?? -1) - (a.edge ?? -1));
 }
 
@@ -2045,7 +2046,8 @@ const TB_MARKET_WEIGHT = 0.45;    // weight on de-vigged market mean vs model me
 const TB_DISPERSION_PHI = 1.35;   // negative-binomial overdispersion (variance/mean) for TB count
 const TB_SLG_MIN = 0.230;         // clamp regressed SLG to sane range
 const TB_SLG_MAX = 0.720;
-const TB_XSLG_BLEND = 0.65;       // weight on Savant xSLG vs season SLG when xSLG present (luck-stripped power)
+const TB_XSLG_BLEND = 0.55;       // weight on Savant xSLG vs season SLG when xSLG present. Lowered 0.65->0.55 (2026-06-17): xSLG running above real SLG for many hitters (e.g. Wood slg .560 / xSLG .630), over-weighting it inflated 2+ TB projections.
+const TB_MEAN_HAIRCUT = 0.93;     // moderate haircut on the model's TB mean (2026-06-17). tb_grade n=302: model over-projects across EVERY bucket; 1.5 line claimed 50.2% over / actual 33% (-37% ROI). This pulls the model mean down ~7% (=~3.8% on final mu after the 0.45 market anchor), closing ~half the gap. Re-measure ?tb_grade=1 at n~140 more; deepen toward 0.88 if 1.5-line over-bias persists, or raise TB_DISPERSION_PHI if extremes stay overconfident.
 
 function tbExpectedAndOverProb(batterStats, oppPitcherStats, line, opts = {}) {
   if (line == null) return null;
@@ -2107,7 +2109,7 @@ function tbExpectedAndOverProb(batterStats, oppPitcherStats, line, opts = {}) {
 
   // 4) Expected total bases = expected AB × bases-per-AB (SLG).
   const expAB = opts.expAB != null && opts.expAB > 0 ? opts.expAB : DEFAULT_AB_PER_GAME;
-  let muModel = expAB * slgTrue;
+  let muModel = expAB * slgTrue * TB_MEAN_HAIRCUT;
 
   // 5) Light anchor to the de-vigged market mean implied by the line (if provided).
   //    We approximate the market's implied mean as the line itself nudged by which
