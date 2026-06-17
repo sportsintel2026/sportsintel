@@ -15,6 +15,8 @@ const sideOf = (e) => e.side === "over" ? "ov" : e.side === "under" ? "un" : "ml
 const sideTag = (e) => { const s = sideOf(e); return `<span class="side ${s}">${s === "ov" ? "OVER" : s === "un" ? "UNDER" : "PICK"}</span>`; };
 function oneSidePerGame(arr) { const g = new Map(); for (const e of arr || []) { const p = g.get(e.gameId); if (!p || (e.edge ?? -Infinity) > (p.edge ?? -Infinity)) g.set(e.gameId, e); } return [...g.values()]; }
 const convClass = (c) => c === "HIGH" ? "high" : c === "MEDIUM" ? "med" : "low";
+const DTIERS = ["NEUTRAL", "LOW", "MEDIUM", "HIGH"];
+const dTierBump = (c, dir) => { const i = DTIERS.indexOf(String(c || "").toUpperCase()); if (i < 0) return c; return DTIERS[Math.max(0, Math.min(DTIERS.length - 1, i + dir))]; };
 // MLB edge is a fraction (→ %); NBA ML already a %, NBA spread/totals are points.
 function fmtEdge(e, sport) { const v = e.edge ?? 0; const s = v >= 0 ? "+" : ""; if (sport !== "nba") return `${s}${(v * 100).toFixed(1)}%`; if (isTotal(e) || e.line != null) return `${s}${v.toFixed(1)}`; return `${s}${v.toFixed(1)}%`; }
 function edgePct(e, sport) { const v = e.edge ?? 0; return sport !== "nba" ? v * 100 : v; }
@@ -42,7 +44,7 @@ function Lock({ title, sub, navigate }) {
 }
 
 export default function HomeDesktop(props) {
-  const { edges, games = [], movers = [], live = [], abbrById = {}, topProps = [], propList = [], propsByType = {}, hero, hasFull, planLoaded = true, lineSeries = {},
+  const { edges, games = [], movers = [], live = [], abbrById = {}, topProps = [], propList = [], propsByType = {}, hero, hasFull, planLoaded = true, lineSeries = {}, moveByPick = {},
     wpRecord, navigate, plan = {}, sport = "mlb", setSport, marketsLive, anyLive, marketRead = [] } = props;
   const lg = sport === "nba" ? "nba" : "mlb";
   const [market, setMarket] = useState("ml");
@@ -79,9 +81,12 @@ export default function HomeDesktop(props) {
   let rows = sport === "mlb"
     ? games.map(mkRow).filter(Boolean)
     : oneSidePerGame(arrFor(market) || []).filter((x) => x.edge != null);
+  // Movement guardrail: nudge each row's conviction one tier based on its line move
+  // (computed in Home.jsx, passed as moveByPick). Bounded; flag explains it.
+  rows = rows.map((x) => { const mv = moveByPick[x.gameId + x.side]; const dir = mv?.dir || 0; return dir ? { ...x, _moveDir: dir, _moveFlag: mv.flag, _convAdj: dTierBump(x.conviction, dir) } : { ...x, _moveDir: 0, _moveFlag: null, _convAdj: x.conviction }; });
   rows = [...rows].sort((a, b) => {
     if (sortKey === "model") return ((a.modelProb || 0) - (b.modelProb || 0)) * sortDir;
-    if (sortKey === "conv") { const r = { HIGH: 3, MEDIUM: 2, LOW: 1 }; return (((r[a.conviction] || a.convictionScore || 0)) - ((r[b.conviction] || b.convictionScore || 0))) * sortDir; }
+    if (sortKey === "conv") { const r = { HIGH: 3, MEDIUM: 2, LOW: 1 }; return (((r[a._convAdj] || a.convictionScore || 0)) - ((r[b._convAdj] || b.convictionScore || 0))) * sortDir; }
     return ((a.edge ?? -9) - (b.edge ?? -9)) * sortDir;
   });
   const allPos = [...(e.moneylineEdges || []), ...(e.totalsEdges || []), ...(e.spreadEdges || [])].filter((x) => (x.edge ?? 0) > 0);
@@ -211,7 +216,7 @@ export default function HomeDesktop(props) {
                             <td className="book">{formatOdds(x.odds)}{x.book ? <><br /><span className="bk">{x.book}</span></> : ""}</td>
                             <td className="c">{(() => { const s = lineSeries[x.gameId + x.side]; return s && s.length > 1 ? <span dangerouslySetInnerHTML={{ __html: miniSpark(s) }} /> : <span className="nomove">—</span>; })()}</td>
                             <td className="edge-cell">{hasE ? <><div className={"edge-v " + (pos ? "up" : "dn")}>{fmtEdge(x, sport)}</div><div className="edge-bar"><i style={{ width: Math.min(100, Math.abs(ep) * 12 + 8) + "%" }} /></div></> : <span className="nomove">no edge</span>}</td>
-                            <td className="c"><span className={"conv " + convClass(x.conviction)}>{(x.conviction || "—")}</span></td>
+                            <td className="c"><span className={"conv " + convClass(x._convAdj || x.conviction)}>{(x._convAdj || x.conviction || "—")}{x._moveDir > 0 ? " ↑" : x._moveDir < 0 ? " ↓" : ""}</span>{x._moveFlag === "against" && <div className="dmove against">⚠ moving against</div>}{x._moveFlag === "toward" && <div className="dmove toward">↘ money in</div>}</td>
                           </tr>
                         );
                       })}
@@ -550,6 +555,9 @@ const TCSS = `
 .wpterm .conv.high{color:var(--amber);background:rgba(243,185,79,.12);border:1px solid rgba(243,185,79,.25)}
 .wpterm .conv.med{color:#8fd9c2;background:rgba(43,212,125,.08);border:1px solid rgba(43,212,125,.2)}
 .wpterm .conv.low{color:var(--mut);background:rgba(130,145,154,.08);border:1px solid var(--line)}
+.wpterm .dmove{font-size:9px;font-weight:700;margin-top:3px;white-space:nowrap}
+.wpterm .dmove.against{color:#ff7a6c}
+.wpterm .dmove.toward{color:#33e991}
 .wpterm .temp{font-family:var(--mono);font-size:13px;font-weight:600}.wpterm .temp.hot{color:#ffb454}.wpterm .temp.cold{color:var(--cold)}.wpterm .temp.mild{color:#c4cdd9}
 .wpterm .wind{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:12px;color:#c4cdd9}.wpterm .wind .war{font-size:13px}.wpterm .wind.out .war{color:var(--up)}.wpterm .wind.in .war{color:var(--dn)}
 .wpterm .sky{font-size:15px}.wpterm .dome{font-size:11px;color:var(--mut);font-style:italic;font-family:var(--mono)}
