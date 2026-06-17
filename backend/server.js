@@ -7,6 +7,13 @@ const rateLimit = require("express-rate-limit");
 const cron = require("node-cron");
 const axios = require("axios");
 
+// gzip compression — OPTIONAL require so a missing/uninstalled module can never
+// crash startup. It's added to package.json (Railway installs it on deploy); if for
+// any reason it isn't present yet, the server still boots and just skips gzip.
+let compression = null;
+try { compression = require("compression"); }
+catch (_) { console.warn("[startup] compression not installed yet — running without gzip"); }
+
 const authRoutes = require("./routes/auth");
 const gamesRoutes = require("./routes/games");
 const statsRoutes = require("./routes/stats");
@@ -31,6 +38,19 @@ const { gradeFinishedGames, captureClosingLines, captureNbaClosingLines, capture
 const { gradeExpertPicks } = require("./services/expertPicksGrader");
 const { gradeDailyCard } = require("./services/dailyCard");
 
+// ── Crash guards ────────────────────────────────────────────────────────────────
+// A single unhandled error must NOT take the whole backend down. Log loudly so it's
+// visible in Railway logs, but keep the process alive so the site stays up for
+// everyone else. (If we later add a fast auto-restart process manager, an
+// uncaughtException could instead exit(1) for a clean restart — for now, staying
+// alive beats a total outage.)
+process.on("unhandledRejection", (reason) => {
+  console.error("[UNHANDLED REJECTION] keeping server alive. Reason:", reason);
+});
+process.on("uncaughtException", (err) => {
+  console.error("[UNCAUGHT EXCEPTION] keeping server alive. Error:", (err && err.stack) || err);
+});
+
 // ── Cron heartbeat monitoring (Healthchecks.io) ────────────────────────────────
 // Fire-and-forget ping so we get alerted the instant a cron silently stops.
 // Completely inert until the matching env var is set, and can never throw into
@@ -50,6 +70,9 @@ const PORT = process.env.PORT || 4000;
 
 // ── Security ──────────────────────────────────────────────────────────────────
 app.use(helmet());
+// gzip all responses — faster board loads + less bandwidth under launch traffic.
+// Guarded: only mounts if the optional compression module loaded above.
+if (compression) app.use(compression());
 // Allowed front-end origins. Includes the new WizePicks domain (with and without
 // www), the original Vercel domain (kept so it keeps working during the transition),
 // local dev, and an optional FRONTEND_URL env override. Requests with no origin
