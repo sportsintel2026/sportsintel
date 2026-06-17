@@ -229,7 +229,7 @@ export default function LandingPage(){
         {/* PLAYER PROFILE (new) — phone-left / copy-right */}
         <div className="feat rev" id="playerprofile">
           <div className="ftxt">
-            <div className="eyebrow">Player Profiles · new</div>
+            <div className="eyebrow">Player Profiles</div>
             <h3>Every hitter, fully scouted.</h3>
             <p>No more blind longshots. Tap any home-run pick and the player's full batting card opens — the same scouting the model runs, in plain sight.</p>
             <Link className="lk" to="/props">Open the board →</Link>
