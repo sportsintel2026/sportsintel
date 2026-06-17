@@ -72,7 +72,7 @@ function ModelLine({ model, leanTeam, bestPrice, bestBook, bestLabel, marketNoun
     <div className="mrmodel">
       <span className={"mm " + (agree ? "ok" : "warn")}>
         <span className="ic">{agree ? "✓" : "⚠"}</span>
-        {agree ? `Your model agrees on the ${marketNoun}` : `Model sees ${model.favTeam || (model.favSide === "over" ? "the over" : model.favSide === "under" ? "the under" : "the other side")} live`}
+        {agree ? `Your model agrees on the ${marketNoun}` : `Model leans ${model.favTeam || (model.favSide === "over" ? "the over" : model.favSide === "under" ? "the under" : "the other side")}`}
       </span>
       {bestPrice != null && <span className="mbest">{bestLabel} <b>{fmtOdds(bestPrice)}{bestBook ? ` ${bestBook}` : ""}</b></span>}
     </div>
