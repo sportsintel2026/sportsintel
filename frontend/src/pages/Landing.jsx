@@ -84,6 +84,7 @@ function CommercialVideo(){
   return (
     <div className="vidframe">
       <div ref={holderRef} className="vidyt" />
+      <div className="vidcover" aria-hidden="true" />
       <button className={"vid-sound"+(muted?"":" on")} onClick={toggleSound} aria-label={muted?"Tap for sound":"Mute"}>
         {muted ? "🔊 Tap for sound" : "🔈 Mute"}
       </button>
@@ -470,12 +471,15 @@ const CSS = `
 .lpwrap .vidsec{padding:30px 0 36px;text-align:center}
 .lpwrap .vid-eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:var(--mint);margin-bottom:12px}
 .lpwrap .vid-h{font-family:var(--disp);font-weight:700;font-size:clamp(24px,3.3vw,36px);letter-spacing:-.02em;margin-bottom:22px}
-.lpwrap .vidframe{position:relative;width:100vw;left:50%;right:50%;margin-left:-50vw;margin-right:-50vw;max-width:100vw;aspect-ratio:16/9;border-radius:0;overflow:hidden;
+.lpwrap .vidframe{position:relative;width:100vw;left:50%;right:50%;margin-left:-50vw;margin-right:-50vw;max-width:100vw;aspect-ratio:16/10;border-radius:0;overflow:hidden;
   border:0;border-top:1px solid rgba(56,225,160,.18);border-bottom:1px solid rgba(56,225,160,.18);box-shadow:0 40px 90px -50px #000;
   background:linear-gradient(135deg,#0c241c,#08130e);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:15px}
 .lpwrap .vidframe video,.lpwrap .vidframe iframe{position:absolute;inset:0;width:100%;height:100%;display:block;border:0;object-fit:cover}
-.lpwrap .vidyt{position:absolute;inset:0;width:100%;height:100%}
+.lpwrap .vidyt{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:114%;height:114%}
 .lpwrap .vidyt iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.lpwrap .vidcover{position:absolute;inset:0;z-index:2}
+.lpwrap .vidcover::before{content:"";position:absolute;top:0;left:0;right:0;height:66px;background:linear-gradient(180deg,#08130e 0%,#08130e 68%,transparent 100%);pointer-events:none}
+.lpwrap .vidcover::after{content:"";position:absolute;bottom:0;left:0;right:0;height:54px;background:linear-gradient(0deg,#08130e 0%,transparent 100%);pointer-events:none}
 .lpwrap .vid-sound{position:absolute;right:14px;bottom:14px;z-index:5;cursor:pointer;
   font-family:var(--mono);font-size:12px;letter-spacing:.08em;color:#07140f;
   background:#38E1A0;border:0;border-radius:999px;padding:9px 15px;font-weight:700;
