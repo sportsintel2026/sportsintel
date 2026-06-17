@@ -236,7 +236,7 @@ export default function HomePage(){
                 <div className="mvrtop"><span className="mvrm">{g.awayAbbr} @ {g.homeAbbr}</span><span className="mvrt"><i style={{background:TD[w.tier]||"#f3b94f"}}/>{w.tier}</span></div>
                 <div className="mvrh">{w.tier==="Split"?<>Books can’t agree on the <b>{w.favTeam}</b></>:<>Market {verb} the <b>{w.favTeam}</b></>}</div>
                 <div className="mvrp">{w.favProb}% to win · consensus {formatOdds(w.consensus)}</div>
-                <div className="mvrf">{w.model? (w.model.agrees?<span className="ok">✓ model agrees</span>:<span className="warn">⚠ model differs</span>):<span className="mut">model —</span>}{w.bestPrice!=null&&<span className="bp">best {formatOdds(w.bestPrice)}</span>}</div>
+                <div className="mvrf">{w.model? (w.model.agrees?<span className="ok">✓ model agrees on winner</span>:<span className="warn">⚠ model differs on winner</span>):<span className="mut">model —</span>}{w.bestPrice!=null&&<span className="bp">best {formatOdds(w.bestPrice)}</span>}</div>
               </div>);})}
           </Carousel>; })()}
         <div className="note">What the books collectively lean — a read, not a guarantee.</div>
