@@ -41,8 +41,9 @@ function CommercialVideo(){
       playerRef.current = new window.YT.Player(holderRef.current, {
         videoId: YT_ID,
         playerVars: {
-          autoplay:0, controls:1, rel:0, modestbranding:1,
+          autoplay:1, controls:0, rel:0, modestbranding:1,
           playsinline:1, mute:1, loop:1, playlist:YT_ID,
+          fs:0, iv_load_policy:3, disablekb:1,
         },
         events:{ onReady:()=>setReady(true) },
       });
