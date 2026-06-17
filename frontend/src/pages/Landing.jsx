@@ -117,7 +117,7 @@ export default function LandingPage(){
       <section className="vidsec">
         <div className="wrap">
           <div className="vid-eyebrow">▶ WATCH · 30 SECONDS</div>
-          <div className="vid-h">This is what betting blind looks like.</div>
+          <div className="vid-h">Betting blind is a losing game.</div>
         </div>
         <CommercialVideo />
       </section>
