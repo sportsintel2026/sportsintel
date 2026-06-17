@@ -63,7 +63,7 @@ function MoveLine({ move, favTeam }) {
   );
 }
 
-function ModelLine({ model, leanTeam, bestPrice, bestBook, bestLabel }) {
+function ModelLine({ model, leanTeam, bestPrice, bestBook, bestLabel, marketNoun = "winner" }) {
   if (!model) {
     return <div className="mrmodel"><span className="mm muted">Model: no read</span>{bestPrice != null && <span className="mbest">{bestLabel} <b>{fmtOdds(bestPrice)}{bestBook ? ` ${bestBook}` : ""}</b></span>}</div>;
   }
@@ -72,7 +72,7 @@ function ModelLine({ model, leanTeam, bestPrice, bestBook, bestLabel }) {
     <div className="mrmodel">
       <span className={"mm " + (agree ? "ok" : "warn")}>
         <span className="ic">{agree ? "✓" : "⚠"}</span>
-        {agree ? "Your model agrees" : `Model sees ${model.favTeam || (model.favSide === "over" ? "the over" : model.favSide === "under" ? "the under" : "the other side")} live`}
+        {agree ? `Your model agrees on the ${marketNoun}` : `Model sees ${model.favTeam || (model.favSide === "over" ? "the over" : model.favSide === "under" ? "the under" : "the other side")} live`}
       </span>
       {bestPrice != null && <span className="mbest">{bestLabel} <b>{fmtOdds(bestPrice)}{bestBook ? ` ${bestBook}` : ""}</b></span>}
     </div>
@@ -115,7 +115,7 @@ function Card({ g, market }) {
       <div className="mrhead">{headline}</div>
       <div className="mrsub">{subline}</div>
       {market === "win" && <MoveLine move={move} favTeam={favTeamForMove} />}
-      <ModelLine model={read.model} bestPrice={bestPrice} bestBook={bestBook} bestLabel={bestLabel} />
+      <ModelLine model={read.model} bestPrice={bestPrice} bestBook={bestBook} bestLabel={bestLabel} marketNoun={market === "win" ? "winner" : market === "cover" ? "spread" : "total"} />
     </div>
   );
 }
