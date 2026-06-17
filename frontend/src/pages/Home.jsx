@@ -41,6 +41,13 @@ function shortTeam(t){ const m=String(t).match(/[A-Z]{2,3}/); return m?m[0]:Stri
 const MLB_ABBR={diamondbacks:"ARI",braves:"ATL",orioles:"BAL","red sox":"BOS",cubs:"CHC","white sox":"CHW",reds:"CIN",guardians:"CLE",rockies:"COL",tigers:"DET",astros:"HOU",royals:"KC",angels:"LAA",dodgers:"LAD",marlins:"MIA",brewers:"MIL",twins:"MIN",mets:"NYM",yankees:"NYY",athletics:"OAK","a's":"OAK",phillies:"PHI",pirates:"PIT",padres:"SD",mariners:"SEA",giants:"SF",cardinals:"STL",rays:"TB",rangers:"TEX","blue jays":"TOR",nationals:"WSH"};
 function mlbAbbr(name){ const s=String(name||"").toLowerCase(); for(const k in MLB_ABBR){ if(s.includes(k)) return MLB_ABBR[k]; } return shortTeam(name); }
 function oneSidePerGame(arr){ const g=new Map(); for(const e of arr||[]){ const p=g.get(e.gameId); if(!p||(e.edge??-Infinity)>(p.edge??-Infinity))g.set(e.gameId,e);} return [...g.values()]; }
+// Movement guardrail: how many "cents from even" a price must move to count.
+const MOVE_GUARD_CENTS=15;
+const CONV_TIERS=["NEUTRAL","LOW","MEDIUM","HIGH"];
+const tierRank=(c)=>{ const i=CONV_TIERS.indexOf(String(c||"").toUpperCase()); return i<0?-1:i; };
+// Nudge a conviction tier by one step (dir +1 up / -1 down), bounded — movement
+// adjusts at the margin, it never overrides the model (HIGH can't fall past MED, etc.).
+const tierBump=(c,dir)=>{ const i=tierRank(c); if(i<0)return c; return CONV_TIERS[Math.max(0,Math.min(CONV_TIERS.length-1,i+dir))]; };
 const isTotal=(e)=>e.side==="over"||e.side==="under";
 const edgeLabel=(e)=>isTotal(e)?`${e.side==="over"?"Over":"Under"} ${e.line}`:(e.line!=null?`${e.teamAbbr||shortTeam(e.matchup)} ${e.line>0?"+":""}${e.line}`:`${e.teamAbbr||shortTeam(e.matchup)} ML`);
 const edgeTeam=(e)=>isTotal(e)?null:(e.teamAbbr||"");
@@ -110,16 +117,24 @@ export default function HomePage(){
   const histByKey={}; (oddsHist||[]).forEach(g=>{ histByKey[normName(g.away_team)+"|"+normName(g.home_team)]=g; });
   const findHist=(gm)=> gm?(histByKey[normName(gm.away)+"|"+normName(gm.home)]||null):null;
   const seriesFor=(edge)=>{ const gm=games.find(x=>x.id===edge.gameId); const h=findHist(gm); if(!h)return null; return (isTotal(edge)?h.total[edge.side]:h.ml[edge.side])||null; };
+  // Movement guardrail: per pick, compute open→now cent move on its OWN side and
+  // nudge conviction one tier. _delta>0 = drifted longer (money OFF our side →
+  // market fading the pick → downgrade ⚠). _delta<0 = shortened (money IN on our
+  // side → market confirming → upgrade ↘). Bounded one tier; flag explains it.
+  const moveAdjust=(x)=>{ const ser=seriesFor(x); let delta=null; if(ser&&ser.length>1){ const d=amCents(ser[ser.length-1].o)-amCents(ser[0].o); if(d!=null&&!isNaN(d))delta=d; } let dir=0,flag=null; if(delta!=null){ if(delta>=MOVE_GUARD_CENTS){dir=-1;flag="against";} else if(delta<=-MOVE_GUARD_CENTS){dir=1;flag="toward";} } return {...x,_delta:delta,_moveDir:dir,_moveFlag:flag,_convAdj:dir!==0?tierBump(x.conviction,dir):x.conviction}; };
+  const mlAdj=(e.moneylineEdges||[]).map(moveAdjust);
+  const totAdj=(e.totalsEdges||[]).map(moveAdjust);
+  const spAdj=(e.spreadEdges||[]).map(moveAdjust);
   const anyLive=games.some(g=>g.status==="live");
   const allDone=games.length>0&&games.every(g=>g.status==="final");
   const marketsLive=!allDone;
 
-  const pool=[...(e.moneylineEdges||[]),...(e.totalsEdges||[]),...(e.spreadEdges||[])].filter(x=>x.convictionScore!=null&&(x.conviction==="HIGH"||x.conviction==="MEDIUM")&&(x.edge??0)>0);
-  pool.sort((a,b)=>(b.convictionScore-a.convictionScore)||((b.edge??0)-(a.edge??0)));
+  const pool=[...mlAdj,...totAdj,...spAdj].filter(x=>x.convictionScore!=null&&(x._convAdj==="HIGH"||x._convAdj==="MEDIUM")&&(x.edge??0)>0);
+  pool.sort((a,b)=>(tierRank(b._convAdj)-tierRank(a._convAdj))||(b.convictionScore-a.convictionScore)||((b.edge??0)-(a.edge??0)));
   const hero=pool[0]||null;
   const topHeroes=pool.slice(0,5);
-  const boardArr=board==="ml"?e.moneylineEdges:board==="spread"?e.spreadEdges:e.totalsEdges;
-  const boardEdges=oneSidePerGame(boardArr||[]).filter(x=>sport==="mlb"?(x.edge??0)>0:(x.edge??0)>=1).sort((a,b)=>((b.convictionScore||0)-(a.convictionScore||0))||((b.edge||0)-(a.edge||0)));
+  const boardArr=board==="ml"?mlAdj:board==="spread"?spAdj:totAdj;
+  const boardEdges=oneSidePerGame(boardArr||[]).filter(x=>sport==="mlb"?(x.edge??0)>0:(x.edge??0)>=1).sort((a,b)=>((tierRank(b._convAdj)-tierRank(a._convAdj))||((b.convictionScore||0)-(a.convictionScore||0))||((b.edge||0)-(a.edge||0))));
   const moverPool=[...(e.moneylineEdges||[]),...(e.totalsEdges||[]),...(e.spreadEdges||[])].map(x=>{ const ser=seriesFor(x); const open=(ser&&ser.length)?ser[0].o:null; const now=(ser&&ser.length)?ser[ser.length-1].o:x.odds; const delta=(open!=null&&ser&&ser.length>1)?(amCents(now)-amCents(open)):null; return {...x,_open:open,_now:now,_delta:delta}; });
   const movers=moverPool.filter(m=>m._delta!=null).sort((a,b)=>{ const ad=Math.abs(a._delta); const bd=Math.abs(b._delta); return (bd-ad)||((b.edge??0)-(a.edge??0)); }).slice(0,12);
   const hasMoves=movers.some(m=>m._delta!=null);
@@ -436,7 +451,7 @@ function LiveGameCard({g,info,navigate,locked}){
 
 function EdgeRow({e,navigate,sport="mlb"}){
   const model=Math.round((e.modelProb||0)*100);
-  const conv=(e.conviction||"").toLowerCase();
+  const conv=(e._convAdj||e.conviction||"").toLowerCase();
   const ab=edgeTeam(e);
   const lg=(SPORTS[sport]||SPORTS.mlb).lg;
   return (
@@ -447,8 +462,10 @@ function EdgeRow({e,navigate,sport="mlb"}){
         <div className={"epct "+((e.edge??0)>=0?"pos":"neg")}>{fmtEdgeFor(e,sport)}</div>
       </div>
       <div className="emid">
-        <span className={"econv "+conv}>{e.conviction||"—"}</span>
+        <span className={"econv "+conv}>{e._convAdj||e.conviction||"—"}{e._moveDir>0?" ↑":e._moveDir<0?" ↓":""}</span>
         <span className="emeta">{e.modelProb!=null?`${model}% model · `:""}{formatOdds(e.odds)}</span>
+        {e._moveFlag==="against"&&<span className="emove against">⚠ market moving against</span>}
+        {e._moveFlag==="toward"&&<span className="emove toward">↘ money coming in</span>}
         {e.inflation?.inflated&&<span className="einf">⚠ market inflated</span>}
       </div>
       {e.reason&&<div className="ereason">{e.reason}</div>}
@@ -593,6 +610,9 @@ section{padding:13px 12px 2px;margin:0;border-top:1px solid #161d24}
 .econv{font-size:8.5px;font-weight:800;border-radius:5px;padding:2px 6px;color:#33e991;background:rgba(51,233,145,.12)}.econv.medium{color:#f3b94f;background:rgba(243,185,79,.12)}.econv.low{color:#8a99a2;background:rgba(130,145,154,.1)}
 .emeta{font-size:10px;color:#9aa7b0;font-weight:600}
 .einf{font-size:9px;font-weight:700;color:#f3b94f;background:rgba(243,185,79,.1);border-radius:5px;padding:2px 5px}
+.emove{font-size:9px;font-weight:700;border-radius:5px;padding:2px 5px}
+.emove.against{color:#ff7a6c;background:rgba(255,122,108,.12)}
+.emove.toward{color:#33e991;background:rgba(51,233,145,.12)}
 .ereason{font-size:11px;color:#a8b4bd;font-weight:500;margin-top:5px;line-height:1.4}
 .rw{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;padding-bottom:2px}.rw::-webkit-scrollbar{display:none}.rw>*{scroll-snap-align:start;flex:0 0 auto}
 .mv{width:152px;border:1px solid rgba(255,255,255,.06);border-radius:12px;background:#0b0f14;padding:9px 12px}
