@@ -28,6 +28,25 @@ function isCacheValid(entry) {
   return entry && (Date.now() - entry.fetchedAt) < CACHE_TTL_MS;
 }
 
+// ── Request coalescing (stampede protection) ────────────────────────────────────
+// Without this, when a cache key expires and N callers arrive at once (e.g. the warm
+// cron + the CLV cron + the tick cron + a board request all landing together), all N
+// fire a separate Odds API fetch — a "stampede" that burns credits and can trip the
+// API rate limit. coalesce() makes concurrent callers for the same key share ONE
+// in-flight fetch; the rest await its result. Mirrors weatherApi.js. Reusable for the
+// per-event prop fetches later if quota data shows they need it too.
+const inFlight = new Map();
+function coalesce(cacheKey, producer) {
+  const existing = inFlight.get(cacheKey);
+  if (existing) return existing;              // a fetch for this key is already running → wait on it
+  const p = (async () => {
+    try { return await producer(); }
+    finally { inFlight.delete(cacheKey); }     // always clear, success or fail
+  })();
+  inFlight.set(cacheKey, p);
+  return p;
+}
+
 async function oddsGet(path, params = {}) {
   if (!ODDS_API_KEY) {
     throw new Error("ODDS_API_KEY not configured");
@@ -53,21 +72,27 @@ async function getMLBMainOdds({ forceFresh = false } = {}) {
     console.log("[OddsAPI] Returning cached MLB main odds");
     return cached.data;
   }
-  try {
-    const data = await oddsGet("/sports/baseball_mlb/odds", {
-      regions: "us",
-      markets: "h2h,totals,spreads",
-      oddsFormat: "american",
-      dateFormat: "iso",
-    });
-    const games = (data || []).map(parseMainOddsEvent);
-    cache.set(cacheKey, { data: games, fetchedAt: Date.now() });
-    return games;
-  } catch (e) {
-    console.error("[OddsAPI] MLB main odds error:", e.message);
-    if (cached) return cached.data;
-    return [];
-  }
+  return coalesce(cacheKey, async () => {
+    // Re-check inside the coalesced runner: a concurrent caller may have just filled
+    // the cache while we waited, so we skip a redundant fetch.
+    const fresh = cache.get(cacheKey);
+    if (!forceFresh && isCacheValid(fresh)) return fresh.data;
+    try {
+      const data = await oddsGet("/sports/baseball_mlb/odds", {
+        regions: "us",
+        markets: "h2h,totals,spreads",
+        oddsFormat: "american",
+        dateFormat: "iso",
+      });
+      const games = (data || []).map(parseMainOddsEvent);
+      cache.set(cacheKey, { data: games, fetchedAt: Date.now() });
+      return games;
+    } catch (e) {
+      console.error("[OddsAPI] MLB main odds error:", e.message);
+      if (cached) return cached.data;
+      return [];
+    }
+  });
 }
 
 // Live-game odds: SAME data shape as getMLBMainOdds, but a much shorter cache so
@@ -82,21 +107,25 @@ async function getMLBLiveOdds() {
   if (cached && (Date.now() - cached.fetchedAt) < LIVE_ODDS_TTL_MS) {
     return cached.data;
   }
-  try {
-    const data = await oddsGet("/sports/baseball_mlb/odds", {
-      regions: "us",
-      markets: "h2h,totals,spreads",
-      oddsFormat: "american",
-      dateFormat: "iso",
-    });
-    const games = (data || []).map(parseMainOddsEvent);
-    cache.set(cacheKey, { data: games, fetchedAt: Date.now() });
-    return games;
-  } catch (e) {
-    console.error("[OddsAPI] MLB live odds error:", e.message);
-    if (cached) return cached.data;
-    return [];
-  }
+  return coalesce(cacheKey, async () => {
+    const fresh = cache.get(cacheKey);
+    if (fresh && (Date.now() - fresh.fetchedAt) < LIVE_ODDS_TTL_MS) return fresh.data;
+    try {
+      const data = await oddsGet("/sports/baseball_mlb/odds", {
+        regions: "us",
+        markets: "h2h,totals,spreads",
+        oddsFormat: "american",
+        dateFormat: "iso",
+      });
+      const games = (data || []).map(parseMainOddsEvent);
+      cache.set(cacheKey, { data: games, fetchedAt: Date.now() });
+      return games;
+    } catch (e) {
+      console.error("[OddsAPI] MLB live odds error:", e.message);
+      if (cached) return cached.data;
+      return [];
+    }
+  });
 }
 
 // ── Odds sanity guard ─────────────────────────────────────────────────────────
