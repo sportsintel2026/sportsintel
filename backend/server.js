@@ -205,6 +205,25 @@ cron.schedule("0 * * * *", async () => {
   }
 }, { timezone: "America/New_York" });
 
+// ── Warm-cache cron ─────────────────────────────────────────────────────────────
+// /api/edges/mlb does a full slate recompute (main odds + 6 prop markets) on every
+// cache miss, so the first user after the 15-min TTL expires waits for all of it.
+// This keeps the cache hot by rebuilding it every 12 min during active hours (under
+// the TTL), so real users always hit the instant cached path. Self-pings the live
+// endpoint in-process; its side effects (recordPredictions + TB shadow) are deduped
+// by unique constraints, so repeats are harmless no-ops. Fully fire-and-forget — a
+// timeout + swallowed errors mean it can never hang or crash the server.
+async function warmEdgesCache() {
+  try {
+    await axios.get(`http://127.0.0.1:${PORT}/api/edges/mlb`, { timeout: 90000 });
+    console.log("[WARM] edges cache refreshed");
+  } catch (e) {
+    console.error("[WARM] edges cache warm failed:", e.message);
+  }
+}
+// Every 12 min during active hours (11am–2am ET), comfortably under the 15-min TTL.
+cron.schedule("*/12 11-23,0-2 * * *", warmEdgesCache, { timezone: "America/New_York" });
+
 // ── Error handler ─────────────────────────────────────────────────────────────
 app.use((err, req, res, next) => {
   console.error(err.stack);
@@ -215,6 +234,9 @@ app.use((err, req, res, next) => {
 
 app.listen(PORT, () => {
   console.log(`🚀 WizePicks API running on port ${PORT}`);
+  // Warm the board cache ~15s after boot so the first post-deploy load is fast, not
+  // cold. Delayed so the server is fully ready to serve its own warm request.
+  setTimeout(warmEdgesCache, 15000);
 });
 
 module.exports = app;
