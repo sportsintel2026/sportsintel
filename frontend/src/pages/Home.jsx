@@ -125,6 +125,9 @@ export default function HomePage(){
   const mlAdj=(e.moneylineEdges||[]).map(moveAdjust);
   const totAdj=(e.totalsEdges||[]).map(moveAdjust);
   const spAdj=(e.spreadEdges||[]).map(moveAdjust);
+  // Movement keyed by pick for the desktop board (single source of truth — the math
+  // stays here where amCents/seriesFor live; HomeDesktop just looks up dir/flag).
+  const moveByPick={}; [...mlAdj,...totAdj,...spAdj].forEach(x=>{ if(x._moveDir) moveByPick[x.gameId+x.side]={dir:x._moveDir,flag:x._moveFlag}; });
   const anyLive=games.some(g=>g.status==="live");
   const allDone=games.length>0&&games.every(g=>g.status==="final");
   const marketsLive=!allDone;
@@ -164,7 +167,7 @@ export default function HomePage(){
   const lineSeries={};
   [...(e.moneylineEdges||[]),...(e.totalsEdges||[]),...(e.spreadEdges||[])].forEach(x=>{ const s=seriesFor(x); if(s&&s.length>1) lineSeries[x.gameId+x.side]=s.map(p=>p.o).filter(o=>o!=null); });
 
-  if(isDesktop) return <HomeDesktop edges={edges} games={games} movers={movers} live={live||[]} abbrById={abbrById} topProps={topProps} propList={propList} propsByType={propsByType} hero={hero} hasFull={hasFull} planLoaded={planLoaded} lineSeries={lineSeries} wpRecord={wpRecord} navigate={navigate} plan={plan} sport={sport} setSport={(k)=>{setSport(k);setBoard("ml");}} marketsLive={marketsLive} anyLive={anyLive} marketRead={marketRead} />;
+  if(isDesktop) return <HomeDesktop edges={edges} games={games} movers={movers} live={live||[]} abbrById={abbrById} topProps={topProps} propList={propList} propsByType={propsByType} hero={hero} hasFull={hasFull} planLoaded={planLoaded} lineSeries={lineSeries} moveByPick={moveByPick} wpRecord={wpRecord} navigate={navigate} plan={plan} sport={sport} setSport={(k)=>{setSport(k);setBoard("ml");}} marketsLive={marketsLive} anyLive={anyLive} marketRead={marketRead} />;
 
   return (
     <div style={S.shell}><style>{CSS}</style>
