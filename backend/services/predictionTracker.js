@@ -1132,4 +1132,80 @@ async function captureOddsTicks() {
   return rows.length;
 }
 
-module.exports = { recordPredictions, recordTotalBasesShadow, recordNbaPropPredictions, recordNbaTeamPredictions, gradeFinishedGames, gradeNbaProp, captureClosingLines, captureNbaClosingLines, captureOddsTicks };
+// Retire DNP / scratched prop picks as no-action (push). A finished-game prop whose
+// player never recorded a plate appearance (or a pitcher who never took the mound) can
+// NEVER grade — the official box simply has no row for them. gradeFinishedGames()
+// deliberately leaves these pending (it refuses to false-loss a missing player), so
+// without this sweep they pile up as "stuck pending" forever. This is the SINGLE source
+// of that logic, called by BOTH the hourly grading cron and the manual /api/grade-now
+// ?void_unmatched=1 endpoint — so a newly-added prop market can never again be covered
+// in one place but not the other (that gap is what stranded the TB-shadow rows).
+//
+// Conservative + idempotent: only voids when the game is FINAL, the box read SUCCEEDS,
+// and the player is provably absent. Unreadable boxes are left pending to retry; any
+// player who is present grades normally and is never touched. Covers every recorded
+// prop market — extend PROP here (one place) when a new prop market starts recording.
+const VOID_PROP_MARKETS = new Set(["hr_prop", "player_strikeouts", "player_hits", "player_total_bases_shadow"]);
+
+async function voidUnmatchedProps() {
+  const supabase = db();
+
+  const { data: pendingAll, error } = await supabase
+    .from("model_predictions")
+    .select("id,league,market,selection,game_id,game_date,result")
+    .eq("result", "pending");
+  if (error) { console.error("[VoidSweep] fetch failed:", error.message); return { finalPropsChecked: 0, voided: 0, details: [] }; }
+
+  const props = (pendingAll || []).filter(p => p.league !== "nba" && VOID_PROP_MARKETS.has(p.market));
+  if (!props.length) return { finalPropsChecked: 0, voided: 0, details: [] };
+
+  const byDate = {};
+  for (const p of props) (byDate[p.game_date] ||= []).push(p);
+
+  const schedCache = {};
+  const boxCache = new Map();
+  let voided = 0, finalChecked = 0;
+  const details = [];
+
+  for (const [date, preds] of Object.entries(byDate)) {
+    if (!schedCache[date]) {
+      try { const sgs = await getScheduleForDate(date); const m = {}; for (const g of sgs) m[String(g.id)] = g; schedCache[date] = m; }
+      catch { schedCache[date] = {}; }
+    }
+    const sched = schedCache[date];
+    for (const p of preds) {
+      const g = sched[String(p.game_id)];
+      if (!g || g.status !== "final") continue;        // only final games
+      finalChecked++;
+
+      const key = `${p.market}:${p.game_id}`;
+      let box;
+      if (boxCache.has(key)) box = boxCache.get(key);
+      else {
+        try {
+          if (p.market === "player_strikeouts") box = await getGamePitcherStrikeouts(p.game_id);
+          else if (p.market === "player_hits") box = await getGameBatterHits(p.game_id);
+          else if (p.market === "player_total_bases_shadow") box = await getGameBatterTotalBases(p.game_id);
+          else box = await getGameHRHitters(p.game_id);
+        } catch { box = { ok: false }; }
+        boxCache.set(key, box);
+      }
+      if (!box || !box.ok) continue;                    // unreadable → leave pending, retry later
+
+      const map = box.hits || box.ks || box.tb || box.hr;
+      const ci = p.selection.lastIndexOf(":");
+      const pname = (p.market === "hr_prop") ? p.selection : (ci >= 0 ? p.selection.slice(0, ci) : p.selection);
+      const found = (p.market === "hr_prop") ? resolveHR(map, pname).found : resolvePlayerStat(map, pname).found;
+      if (found) continue;                              // would grade normally → don't void
+
+      const { error: upErr } = await supabase
+        .from("model_predictions")
+        .update({ result: "push", actual_value: null, graded_at: new Date().toISOString() })
+        .eq("id", p.id);
+      if (!upErr) { voided++; details.push({ market: p.market, game_id: String(p.game_id), selection: p.selection }); }
+    }
+  }
+  return { finalPropsChecked: finalChecked, voided, details };
+}
+
+module.exports = { recordPredictions, recordTotalBasesShadow, recordNbaPropPredictions, recordNbaTeamPredictions, gradeFinishedGames, gradeNbaProp, captureClosingLines, captureNbaClosingLines, captureOddsTicks, voidUnmatchedProps };
