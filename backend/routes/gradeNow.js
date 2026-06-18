@@ -17,7 +17,7 @@ const { createClient } = require("@supabase/supabase-js");
 const { gradeFinishedGames } = require("../services/predictionTracker");
 const {
   getScheduleForDate, getGameHRHitters, getGamePitcherStrikeouts,
-  getGameBatterHits, normPlayerName, getEasternDate, getLinescore,
+  getGameBatterHits, getGameBatterTotalBases, normPlayerName, getEasternDate, getLinescore,
 } = require("../services/mlbStatsApi");
 const { getRawTotalsDebug, probeOddsCoverage, getPinnacleAnchorComparison } = require("../services/oddsApi");
 const { probeExpectedStats, probeBarrels, probePitcherWhiff, probePitcherWhiffData } = require("../services/savantApi");
@@ -146,12 +146,13 @@ async function probeReport() {
           if (p.market === "player_strikeouts") box = await getGamePitcherStrikeouts(p.game_id);
           else if (p.market === "player_hits") box = await getGameBatterHits(p.game_id);
           else if (p.market === "hr_prop") box = await getGameHRHitters(p.game_id);
+          else if (p.market === "player_total_bases_shadow") box = await getGameBatterTotalBases(p.game_id);
           else box = { ok: "n/a (team market)" };
         } catch (e) { box = { ok: false, threw: e.message }; }
         boxCache.set(key, box);
       }
 
-      const map = box && (box.hits || box.ks || box.hr);
+      const map = box && (box.hits || box.ks || box.hr || box.tb);
       const inMap = map instanceof Map ? map.has(target) : false;
       results.push({
         market: p.market, game_id: String(p.game_id), selection: p.selection,
@@ -192,7 +193,7 @@ function localResolve(map, playerName) {
 // found (that grades normally). Idempotent.
 async function voidUnmatched() {
   const supabase = db();
-  const PROP = new Set(["hr_prop", "player_strikeouts", "player_hits"]);
+  const PROP = new Set(["hr_prop", "player_strikeouts", "player_hits", "player_total_bases_shadow"]);
   const props = (await pendingMlb()).filter(p => PROP.has(p.market));
 
   const byDate = {};
@@ -221,13 +222,14 @@ async function voidUnmatched() {
         try {
           if (p.market === "player_strikeouts") box = await getGamePitcherStrikeouts(p.game_id);
           else if (p.market === "player_hits") box = await getGameBatterHits(p.game_id);
+          else if (p.market === "player_total_bases_shadow") box = await getGameBatterTotalBases(p.game_id);
           else box = await getGameHRHitters(p.game_id);
         } catch { box = { ok: false }; }
         boxCache.set(key, box);
       }
       if (!box || !box.ok) continue;                // unreadable → leave pending, retry later
 
-      const map = box.hits || box.ks || box.hr;
+      const map = box.hits || box.ks || box.hr || box.tb;
       const ci = p.selection.lastIndexOf(":");
       const pname = (p.market === "hr_prop") ? p.selection : (ci >= 0 ? p.selection.slice(0, ci) : p.selection);
       const { found } = localResolve(map, pname);
