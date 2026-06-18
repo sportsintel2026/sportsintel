@@ -34,7 +34,7 @@ const oddsRoutes = require("./routes/odds");
 const playerCardRoutes = require("./routes/playerCard");
 
 const { refreshDailyGames } = require("./services/sportsData");
-const { gradeFinishedGames, captureClosingLines, captureNbaClosingLines, captureOddsTicks } = require("./services/predictionTracker");
+const { gradeFinishedGames, captureClosingLines, captureNbaClosingLines, captureOddsTicks, voidUnmatchedProps } = require("./services/predictionTracker");
 const { gradeExpertPicks } = require("./services/expertPicksGrader");
 const { gradeDailyCard } = require("./services/dailyCard");
 
@@ -195,6 +195,15 @@ cron.schedule("0 * * * *", async () => {
   console.log("[CRON] Grading finished-game predictions...");
   try {
     await gradeFinishedGames();
+    // Retire DNP/scratched props (player never batted/pitched → can't grade) as
+    // no-action push. Runs every hour right after grading so "stuck pending" props
+    // clear themselves instead of accumulating until a manual ?void_unmatched=1.
+    try {
+      const v = await voidUnmatchedProps();
+      if (v && v.voided) console.log(`[CRON] Auto-voided ${v.voided} DNP prop(s) (no action).`);
+    } catch (ve) {
+      console.error("[CRON] Auto-void failed:", ve.message);
+    }
     await gradeExpertPicks({ dryRun: false });
     await gradeDailyCard();
     console.log("[CRON] Expert picks graded.");
