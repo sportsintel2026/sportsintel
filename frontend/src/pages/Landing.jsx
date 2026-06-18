@@ -112,7 +112,10 @@ export default function LandingPage(){
           <a href="#perf">Performance</a>
           <Link to="/pricing">Pricing</Link>
         </div>
-        <Link className="tbtn" to="/signup">Start free →</Link>
+        <div className="tcta">
+          <Link className="tlogin" to="/login">Log in</Link>
+          <Link className="tbtn" to="/signup">Start free →</Link>
+        </div>
       </div></div>
 
       {/* VIDEO SECTION (now on top) */}
@@ -358,7 +361,7 @@ export default function LandingPage(){
         <small>Every number tracked live and published — illustrative example shown</small>
         <div className="stats3">
           <div className="stat"><div className="n">60.2%</div><div className="l">totals win rate (tracked)</div></div>
-          <div className="stat"><div className="n">+9.8%</div><div className="l">overall ROI (tracked)</div></div>
+          <div className="stat"><div className="n">61-40</div><div className="l">WizePlays record<br/>handpicked daily by our own analytics</div></div>
           <div className="stat"><div className="n">$7</div><div className="l">flat monthly — no upsells</div></div>
         </div>
       </div></div>
@@ -432,6 +435,9 @@ const CSS = `
 .lpwrap .tnav a:hover{color:#E7F1EC}
 .lpwrap .tbtn{font-family:var(--disp);font-weight:600;font-size:13px;background:var(--red);color:#fff;padding:9px 16px;border-radius:9px}
 .lpwrap .tbtn:hover{background:#dc2626}
+.lpwrap .tcta{display:flex;align-items:center;gap:18px}
+.lpwrap .tlogin{font-family:var(--disp);font-weight:600;font-size:13px;color:#cfe0d8}
+.lpwrap .tlogin:hover{color:#fff}
 
 .lpwrap .hero{position:relative;overflow:hidden;min-height:600px;display:flex;align-items:center;padding:48px 0 56px;
   background:linear-gradient(165deg,#FFFFFF 0%,#EAF2FA 55%,#CFE2F4 100%)}
@@ -589,6 +595,7 @@ const CSS = `
 @media(max-width:859px){
   .lpwrap .wrap{padding:0 16px}
   .lpwrap .tnav{display:none}
+  .lpwrap .tcta{gap:13px}
   .lpwrap .feat{gap:16px;padding:42px 0}
   .lpwrap .feat .eyebrow{margin-bottom:9px;font-size:10.5px;letter-spacing:.12em}
   .lpwrap .feat .eyebrow::before{width:16px}
