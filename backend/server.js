@@ -241,8 +241,16 @@ app.listen(PORT, () => {
 
 module.exports = app;
 
-// Clear cache endpoint
+// Clear cache endpoint — destructive (wipes games_cache), so it's locked behind a
+// shared secret. Set ADMIN_TOKEN in the Railway env to a long random string, then
+// call with header `x-admin-token: <that value>`. Fails CLOSED: if ADMIN_TOKEN isn't
+// configured, or the header is missing/wrong, the request is rejected — it can never
+// be left accidentally open.
 app.delete('/api/cache', async (req, res) => {
+  const token = req.get('x-admin-token');
+  if (!process.env.ADMIN_TOKEN || token !== process.env.ADMIN_TOKEN) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
   try {
     const { createClient } = require('@supabase/supabase-js');
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
