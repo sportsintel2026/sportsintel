@@ -14,7 +14,7 @@
 const express = require("express");
 const router = express.Router();
 const { createClient } = require("@supabase/supabase-js");
-const { gradeFinishedGames } = require("../services/predictionTracker");
+const { gradeFinishedGames, voidUnmatchedProps } = require("../services/predictionTracker");
 const {
   getScheduleForDate, getGameHRHitters, getGamePitcherStrikeouts,
   getGameBatterHits, getGameBatterTotalBases, normPlayerName, getEasternDate, getLinescore,
@@ -30,7 +30,7 @@ router.get("/", async (req, res) => {
   try {
     if (req.query.debug === "1" || req.query.debug === "true") return res.json(await debugReport());
     if (req.query.probe === "1" || req.query.probe === "true") return res.json(await probeReport());
-    if (req.query.void_unmatched === "1" || req.query.void_unmatched === "true") return res.json(await voidUnmatched());
+    if (req.query.void_unmatched === "1" || req.query.void_unmatched === "true") return res.json({ ok: true, ...(await voidUnmatchedProps()) });
     if (req.query.counts === "1" || req.query.counts === "true") return res.json(await countsReport());
     if (req.query.prop_results === "1" || req.query.prop_results === "true") return res.json(await propResults());
     if (req.query.tb_grade != null) {
@@ -167,83 +167,7 @@ async function probeReport() {
   return { ok: true, mlbPendingTotal: mlb.length, probed, results };
 }
 
-// Mirror grade-time name matching: exact normalized, then UNIQUE last-name+initial.
-function localResolve(map, playerName) {
-  if (!(map instanceof Map)) return { found: false, value: null };
-  const target = normPlayerName(playerName);
-  if (!target) return { found: false, value: null };
-  if (map.has(target)) return { found: true, value: map.get(target) };
-  const parts = target.split(" ");
-  if (parts.length >= 2) {
-    const fi = parts[0][0], last = parts[parts.length - 1];
-    const hits = [];
-    for (const [name, v] of map.entries()) {
-      const np = name.split(" ");
-      if (np.length >= 2 && np[np.length - 1] === last && np[0][0] === fi) hits.push(v);
-    }
-    if (hits.length === 1) return { found: true, value: hits[0] };
-  }
-  return { found: false, value: null };
-}
-
-// WRITES. Mark prop picks "push" (no action) when their game is FINAL, the box read
-// SUCCEEDS, and the player is provably absent (wrong-game assignment or a DNP). Such
-// picks can never grade and would otherwise sit pending forever. Conservative: never
-// touches a pick whose box can't be read (left pending to retry) or whose player is
-// found (that grades normally). Idempotent.
-async function voidUnmatched() {
-  const supabase = db();
-  const PROP = new Set(["hr_prop", "player_strikeouts", "player_hits", "player_total_bases_shadow"]);
-  const props = (await pendingMlb()).filter(p => PROP.has(p.market));
-
-  const byDate = {};
-  for (const p of props) (byDate[p.game_date] ||= []).push(p);
-
-  const schedCache = {};
-  const boxCache = new Map();
-  let voided = 0, finalChecked = 0;
-  const details = [];
-
-  for (const [date, preds] of Object.entries(byDate)) {
-    if (!schedCache[date]) {
-      try { const sgs = await getScheduleForDate(date); const m = {}; for (const g of sgs) m[String(g.id)] = g; schedCache[date] = m; }
-      catch { schedCache[date] = {}; }
-    }
-    const sched = schedCache[date];
-    for (const p of preds) {
-      const g = sched[String(p.game_id)];
-      if (!g || g.status !== "final") continue;     // only final games
-      finalChecked++;
-
-      const key = `${p.market}:${p.game_id}`;
-      let box;
-      if (boxCache.has(key)) box = boxCache.get(key);
-      else {
-        try {
-          if (p.market === "player_strikeouts") box = await getGamePitcherStrikeouts(p.game_id);
-          else if (p.market === "player_hits") box = await getGameBatterHits(p.game_id);
-          else if (p.market === "player_total_bases_shadow") box = await getGameBatterTotalBases(p.game_id);
-          else box = await getGameHRHitters(p.game_id);
-        } catch { box = { ok: false }; }
-        boxCache.set(key, box);
-      }
-      if (!box || !box.ok) continue;                // unreadable → leave pending, retry later
-
-      const map = box.hits || box.ks || box.hr || box.tb;
-      const ci = p.selection.lastIndexOf(":");
-      const pname = (p.market === "hr_prop") ? p.selection : (ci >= 0 ? p.selection.slice(0, ci) : p.selection);
-      const { found } = localResolve(map, pname);
-      if (found) continue;                          // would grade normally → don't void
-
-      const { error: upErr } = await supabase
-        .from("model_predictions")
-        .update({ result: "push", actual_value: null, graded_at: new Date().toISOString() })
-        .eq("id", p.id);
-      if (!upErr) { voided++; details.push({ market: p.market, game_id: String(p.game_id), selection: p.selection }); }
-    }
-  }
-  return { ok: true, finalPropsChecked: finalChecked, voided, details };
-}
+// (void-DNP sweep now lives in services/predictionTracker.js as voidUnmatchedProps — single source, shared by the hourly cron and ?void_unmatched=1)
 
 // READ-ONLY. Real graded vs pending counts so nothing is taken on faith:
 // overall, per market, and per recent date. "graded" = result is not pending
