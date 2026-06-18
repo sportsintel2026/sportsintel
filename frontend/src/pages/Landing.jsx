@@ -361,7 +361,7 @@ export default function LandingPage(){
         <small>Every number tracked live and published — illustrative example shown</small>
         <div className="stats3">
           <div className="stat"><div className="n">60.2%</div><div className="l">totals win rate (tracked)</div></div>
-          <div className="stat"><div className="n">61-40</div><div className="l">WizePlays record<br/>handpicked daily by our own analytics</div></div>
+          <div className="stat"><div className="n">62.4%</div><div className="u">+24.3 units</div><div className="l">WizePlays win rate<br/>handpicked by our own analytics</div></div>
           <div className="stat"><div className="n">$7</div><div className="l">flat monthly — no upsells</div></div>
         </div>
       </div></div>
@@ -575,6 +575,7 @@ const CSS = `
 .lpwrap .stats3{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:32px}
 .lpwrap .stat{background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:24px}
 .lpwrap .stat .n{font-family:var(--mono);font-weight:700;font-size:30px;color:var(--mint)}
+.lpwrap .stat .u{font-family:var(--mono);font-weight:700;font-size:17px;color:var(--mint);opacity:.85;margin-top:5px}
 .lpwrap .stat .l{font-size:13px;color:#9DB8AD;margin-top:6px}
 
 .lpwrap .ctaband{text-align:center;padding:78px 0;background:radial-gradient(80% 120% at 50% 0%,rgba(56,225,160,.14),transparent 60%)}
@@ -613,6 +614,7 @@ const CSS = `
   .lpwrap .stats3{gap:11px;margin-top:28px}
   .lpwrap .stat{padding:18px 12px}
   .lpwrap .stat .n{font-size:25px}
+  .lpwrap .stat .u{font-size:14px}
   .lpwrap .stat .l{font-size:11px}
 }
 /* ---- player props banner (narrow + airy, auto-scrolling cards) ---- */
