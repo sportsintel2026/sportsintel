@@ -88,7 +88,7 @@ export default function PropsPage() {
 
   return (
     <TerminalShell active="/props" plan={plan} navigate={navigate}>
-    <div style={{ minHeight: "100vh", background: "#0c1d31", color: "#f2f6f4", fontFamily: "'Inter',system-ui,-apple-system,sans-serif" }}>
+    <div style={{ minHeight: "100vh", background: "#000", color: "#f2f6f4", fontFamily: "'Inter',system-ui,-apple-system,sans-serif" }}>
       <style>{CSS}</style>
       <BottomNav />
       <div className="ppsb"><Sidebar user={user} plan={plan} signOut={signOut} navigate={navigate} /></div>
@@ -482,21 +482,19 @@ const CSS = `
 .pphead{margin-bottom:14px}
 .pptitle{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:30px;line-height:1;letter-spacing:-.01em}.pptitle .b{color:#ff5d4d}
 .ppsub{font-size:12px;color:#8a99a2;font-weight:500;margin-top:6px;line-height:1.4}
-.ppsports{display:flex;gap:24px;overflow-x:auto;scrollbar-width:none;border-bottom:1px solid rgba(255,255,255,.08);margin-bottom:14px}
+.ppsports{display:flex;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,.09);margin-bottom:26px}
 .ppsports::-webkit-scrollbar{display:none}
-.ppsport{flex:0 0 auto;display:inline-flex;align-items:center;padding:11px 0;cursor:pointer;white-space:nowrap;position:relative;
-  font-size:16px;font-weight:700;font-family:'Barlow Condensed',sans-serif;border:none;background:none;color:#8a99a2}
-.ppsport.on{color:#fff}
-.ppsport.on::after{content:'';position:absolute;left:0;right:0;bottom:-1px;height:2px;background:#ff5d4d;border-radius:2px}
-.pptabs{display:flex;gap:22px;margin-bottom:14px;overflow-x:auto;scrollbar-width:none;border-bottom:1px solid rgba(255,255,255,.08)}
+.ppsport{flex:0 0 auto;display:inline-flex;align-items:center;padding:9px 3px;cursor:pointer;white-space:nowrap;
+  font-size:16px;font-weight:700;font-family:'Barlow Condensed',sans-serif;border:none;border-bottom:2px solid transparent;background:none;color:#8a99a2;margin-bottom:-1px}
+.ppsport.on{color:#fff;border-bottom-color:#ff5d4d}
+.pptabs{display:flex;justify-content:space-between;margin-bottom:16px;border-bottom:1px solid rgba(255,255,255,.09)}
 .pptabs::-webkit-scrollbar{display:none}
-.pptab{flex:0 0 auto;display:inline-flex;align-items:center;gap:5px;padding:11px 0;cursor:pointer;position:relative;
-  font-family:'Barlow Condensed',sans-serif;font-size:15px;font-weight:700;white-space:nowrap;border:none;background:none;color:#8a99a2}
-.pptab.on{color:#fff}
-.pptab.on::after{content:'';position:absolute;left:0;right:0;bottom:-1px;height:2px;background:#ff5d4d;border-radius:2px}
-.pptab .ct{font-size:11px;font-weight:700;color:#6b7681}.pptab.on .ct{color:#ff8a7d}
+.pptab{flex:0 0 auto;display:inline-flex;align-items:center;gap:4px;padding:9px 3px;cursor:pointer;
+  font-family:'Barlow Condensed',sans-serif;font-size:14px;font-weight:600;white-space:nowrap;border:none;border-bottom:2px solid transparent;background:none;color:#8a99a2;margin-bottom:-1px}
+.pptab.on{color:#fff;border-bottom-color:#ff5d4d}
+.pptab .ct{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;color:#6b7681;margin-left:4px}.pptab.on .ct{color:#ff8a7d}
 .pplist{display:flex;flex-direction:column;gap:8px}
-.pprow{display:flex;align-items:center;gap:11px;border:1px solid rgba(255,255,255,.06);border-radius:12px;background:#13273c;padding:10px 12px;cursor:pointer;position:relative}
+.pprow{display:flex;align-items:center;gap:11px;border:1px solid #161d24;border-radius:12px;background:linear-gradient(180deg,#0c1117,#080b0f);padding:10px 12px;cursor:pointer;position:relative}
 .rkn{position:absolute;top:6px;left:8px;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:10px;color:#3f4a55}
 .ppav{width:46px;height:46px;border-radius:50%;display:flex;align-items:flex-end;justify-content:center;font-size:20px;flex:0 0 auto;position:relative;overflow:hidden;margin-left:6px}
 .ppav img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
