@@ -28,7 +28,7 @@ export default function GamesPage() {
   const finalGames = allGames.filter(g => g.status === "final");
 
   return (
-    <div style={{ minHeight: "100vh", background: "#0a0e14", color: "#e4e7eb", fontFamily: "'Inter',system-ui,-apple-system,sans-serif" }}>
+    <div style={{ minHeight: "100vh", background: "#0c1d31", color: "#e4e7eb", fontFamily: "'Inter',system-ui,-apple-system,sans-serif" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
         *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -69,7 +69,7 @@ export default function GamesPage() {
         </>
       )}
 
-      <div className="mobile-only" style={{ display: "none", position: "sticky", top: 0, zIndex: 40, background: "#0a0e14", borderBottom: "1px solid #1a1f28", padding: "10px 14px", alignItems: "center", justifyContent: "space-between" }}>
+      <div className="mobile-only" style={{ display: "none", position: "sticky", top: 0, zIndex: 40, background: "#0c1d31", borderBottom: "1px solid #1a1f28", padding: "10px 14px", alignItems: "center", justifyContent: "space-between" }}>
         <button onClick={() => setDrawerOpen(true)} style={{ background: "none", border: "none", color: "#e4e7eb", fontSize: 22, padding: 4, cursor: "pointer" }}>☰</button>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e", animation: "pulse 2s infinite" }} />
@@ -80,7 +80,7 @@ export default function GamesPage() {
 
       <div className="main-content" style={{ marginLeft: 200 }}>
         <div className="games-content" style={{ maxWidth: 1200, margin: "0 auto", padding: "32px 24px 80px", animation: "fadeIn .3s ease" }}>
-          <h1 style={{ margin: "0 0 8px", fontSize: 28, fontWeight: 700, letterSpacing: "-0.01em" }}>⚾ MLB Games</h1>
+          <h1 style={{ margin: "0 0 8px", fontSize: 28, fontWeight: 700, letterSpacing: "-0.01em" }}>MLB Games</h1>
           <p style={{ margin: "0 0 28px", fontSize: 13, color: "#9ca3af" }}>
             Today's slate · <span style={{ color: "#ef4444", fontWeight: 600 }}>tap any game</span> for full analysis
           </p>
@@ -89,12 +89,12 @@ export default function GamesPage() {
           {!loading && !edges && <ErrorState onRetry={loadEdges} />}
           {!loading && edges && (
             <>
-              {liveGames.length > 0 && <GamesSection title="🔴 LIVE NOW" titleColor="#ef4444" games={liveGames} navigate={navigate} defaultOpen showLiveBadge />}
-              {upcomingGames.length > 0 && <GamesSection title="⏰ UPCOMING" titleColor="#9ca3af" games={upcomingGames} navigate={navigate} defaultOpen />}
-              {finalGames.length > 0 && <GamesSection title="✅ FINAL" titleColor="#6b7280" games={finalGames} navigate={navigate} defaultOpen={false} showFinalScore />}
+              {liveGames.length > 0 && <GamesSection title="LIVE NOW" titleColor="#ef4444" games={liveGames} navigate={navigate} defaultOpen showLiveBadge />}
+              {upcomingGames.length > 0 && <GamesSection title="UPCOMING" titleColor="#9ca3af" games={upcomingGames} navigate={navigate} defaultOpen />}
+              {finalGames.length > 0 && <GamesSection title="FINAL" titleColor="#6b7280" games={finalGames} navigate={navigate} defaultOpen={false} showFinalScore />}
               {allGames.length === 0 && (
-                <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 8, padding: 48, textAlign: "center" }}>
-                  <div style={{ fontSize: 48, marginBottom: 16 }}>⚾</div>
+                <div style={{ background: "#13273c", border: "1px solid #1f2937", borderRadius: 8, padding: 48, textAlign: "center" }}>
+                  
                   <div style={{ fontSize: 16, fontWeight: 700 }}>No games scheduled today</div>
                   <div style={{ fontSize: 13, color: "#9ca3af", marginTop: 6 }}>Check back tomorrow for the next slate.</div>
                 </div>
@@ -110,7 +110,7 @@ export default function GamesPage() {
 function GamesSection({ title, titleColor, games, navigate, defaultOpen, showLiveBadge, showFinalScore }) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
   return (
-    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 8, padding: 14, marginBottom: 12 }}>
+    <div style={{ background: "#13273c", border: "1px solid #1f2937", borderRadius: 8, padding: 14, marginBottom: 12 }}>
       <div className="section-header" onClick={() => setIsOpen(!isOpen)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: isOpen ? 12 : 0 }}>
         <span style={{ fontSize: 11, letterSpacing: 1, color: titleColor, fontWeight: 700 }}>
           {title} <span style={{ marginLeft: 4, color: "#6b7280" }}>· {games.length} game{games.length === 1 ? "" : "s"}</span>
@@ -179,15 +179,15 @@ function GamesSection({ title, titleColor, games, navigate, defaultOpen, showLiv
 
 function WeatherIndicator({ weather }) {
   if (!weather) return <span style={{ color: "#4b5563", fontSize: 11 }}>—</span>;
-  if (weather.indoor) return <span title="Indoor stadium" style={{ fontSize: 14 }}>🏟️</span>;
+  if (weather.indoor) return <span title="Indoor stadium" style={{ fontSize: 10, fontWeight: 700, color: "#7d8a93", letterSpacing: ".04em" }}>DOME</span>;
   const icons = [];
   let tooltip = `${weather.tempF}°F`;
-  if (weather.windEffect === "out") { icons.push("💨↗"); tooltip += ` · Wind OUT ${weather.windMph}mph (favors hitters)`; }
-  else if (weather.windEffect === "in") { icons.push("💨↙"); tooltip += ` · Wind IN ${weather.windMph}mph (favors pitchers)`; }
-  else if (weather.windEffect === "cross") { icons.push("💨"); tooltip += ` · Cross wind ${weather.windMph}mph`; }
-  if (weather.tempEffect === "hot") { icons.push("🔥"); tooltip += " · Warm air carries"; }
-  else if (weather.tempEffect === "cold") { icons.push("🥶"); tooltip += " · Cold air dense"; }
-  if (weather.isRaining) { icons.push("🌧️"); tooltip += " · Rain"; }
+  if (weather.windEffect === "out") { icons.push("Wind out"); tooltip += ` · Wind OUT ${weather.windMph}mph (favors hitters)`; }
+  else if (weather.windEffect === "in") { icons.push("Wind in"); tooltip += ` · Wind IN ${weather.windMph}mph (favors pitchers)`; }
+  else if (weather.windEffect === "cross") { icons.push("Cross wind"); tooltip += ` · Cross wind ${weather.windMph}mph`; }
+  if (weather.tempEffect === "hot") { icons.push("Warm"); tooltip += " · Warm air carries"; }
+  else if (weather.tempEffect === "cold") { icons.push("Cold"); tooltip += " · Cold air dense"; }
+  if (weather.isRaining) { icons.push("Rain"); tooltip += " · Rain"; }
   if (icons.length === 0) return <span title={tooltip} style={{ fontSize: 11, color: "#6b7280" }}>{weather.tempF}°</span>;
   return <span title={tooltip} style={{ fontSize: 13, cursor: "help" }}>{icons.join(" ")}</span>;
 }
@@ -210,8 +210,8 @@ function Loader() {
 
 function ErrorState({ onRetry }) {
   return (
-    <div style={{ textAlign: "center", padding: 64, background: "#0f1419", border: "1px solid #1f2937", borderRadius: 8 }}>
-      <div style={{ fontSize: 32, marginBottom: 12 }}>⚠️</div>
+    <div style={{ textAlign: "center", padding: 64, background: "#13273c", border: "1px solid #1f2937", borderRadius: 8 }}>
+      <div style={{ fontSize: 32, marginBottom: 12 }}></div>
       <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>Could not load games</div>
       <button onClick={onRetry} style={{ background: "#ef4444", color: "#fff", border: "none", borderRadius: 6, padding: "8px 18px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", marginTop: 8 }}>Retry</button>
     </div>
