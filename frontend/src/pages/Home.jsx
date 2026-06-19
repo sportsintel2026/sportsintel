@@ -179,14 +179,14 @@ export default function HomePage(){
         <span className={"pill"+(marketsLive?"":" off")}><span className={"dot"+(marketsLive?"":" grey")}/> {anyLive?"LIVE":marketsLive?"OPEN":"CLOSED"}</span>
         <div className="mk"><span className={"dot"+(marketsLive?"":" grey")}/><span className="l">MARKETS {marketsLive?"LIVE":"CLOSED"}</span>
           <svg className="sp" viewBox="0 0 46 14" id="hs"><polyline fill="none" stroke="#33e991" strokeWidth="1.5" points="0,10 6,8 12,9 18,5 24,7 30,3 36,5 46,2"/></svg></div>
-        <div className="bell" onClick={()=>navigate("/settings")}>🔔</div>
+        <div className="bell" onClick={()=>navigate("/settings")}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></div>
       </div>
       <div className="tabs">
         {/* MLB + NBA have native edge boards → switch the board in-place. The others
             don't have a board yet, so they route to that sport's live Games page
             (Phase 3 gives each its own board). */}
-        {[["⚾","MLB","mlb"],["🏀","NBA","nba"],["🏒","NHL","nhl"],["🏈","NFL","nfl"],["🏉","CFB","cfb"]].map(([ic,lb,key])=>(
-          <div key={lb} className={"tab"+(sport===key?" on":"")} onClick={()=>{ if(key==="mlb"||key==="nba"){ if(key!==sport){ setSport(key); setBoard("ml"); } } else { navigate(`/${key}-games`); } }}><span className="i">{ic}</span>{lb}</div>))}
+        {[["MLB","mlb"],["NBA","nba"],["NHL","nhl"],["NFL","nfl"],["CFB","cfb"]].map(([lb,key])=>(
+          <div key={lb} className={"tab"+(sport===key?" on":"")} onClick={()=>{ if(key==="mlb"||key==="nba"){ if(key!==sport){ setSport(key); setBoard("ml"); } } else { navigate(`/${key}-games`); } }}>{lb}</div>))}
       </div>
 
       {/* HERO */}
@@ -214,7 +214,7 @@ export default function HomePage(){
 
       {/* EDGE BOARD — unified reasoned edges with a market toggle */}
       <section className="panel">
-        <div className="sh"><div className="l"><span className="i">📊</span>{slateUpper} EDGE BOARD <span className="s">ranked by conviction</span></div>
+        <div className="sh"><div className="l">{slateUpper} EDGE BOARD <span className="s">ranked by conviction</span></div>
           <div className="seg">{sp.markets.map(([key,lb])=><b key={key} className={board===key?"on":""} onClick={()=>setBoard(key)}>{lb}</b>)}</div></div>
         <div className="note" style={{marginTop:0,marginBottom:9}}>{slateLower} top team plays for every game, ranked by conviction.{sp.hasProps?<> Player props live in the <span onClick={(ev)=>{ev.stopPropagation();navigate("/props");}} style={{color:"#ff7a6c",fontWeight:700,cursor:"pointer"}}>Props tab →</span></>:""}</div>
         {!hasFull
@@ -226,7 +226,7 @@ export default function HomePage(){
 
       {/* MARKET MOVERS */}
       <section className="panel">
-        <div className="sh"><div className="l"><span className="i">⚡</span>MARKET MOVERS <span className="s">biggest moves today</span></div><span className="s2">swipe →</span></div>
+        <div className="sh"><div className="l">MARKET MOVERS <span className="s">biggest moves today</span></div><span className="s2">swipe →</span></div>
         {!hasFull
           ?<Gate kind="movers" title="Line moves are locked" sub={<>See where the market's moving with <b>All-Access</b></>} navigate={navigate}/>
           :<Carousel>
@@ -243,7 +243,7 @@ export default function HomePage(){
 
       {/* MARKET READ — what the books are collectively saying (MLB) */}
       {sport==="mlb"&&(<section className="panel">
-        <div className="sh"><div className="l"><span className="i">🧭</span>MARKET READ <span className="s">who the books lean</span></div><span className="s2" onClick={()=>navigate("/market-read")} style={{cursor:"pointer"}}>see all →</span></div>
+        <div className="sh"><div className="l">MARKET READ <span className="s">who the books lean</span></div><span className="s2" onClick={()=>navigate("/market-read")} style={{cursor:"pointer"}}>see all →</span></div>
         {!hasFull
           ?<Gate kind="movers" title="Market Read is locked" sub={<>See what every book is saying with <b>All-Access</b></>} navigate={navigate}/>
           :(()=>{ const mr=(marketRead||[]).filter(g=>g.win); if(mr.length===0) return <div className="note">Reading the market — fills in as books come online today.</div>;
@@ -254,7 +254,7 @@ export default function HomePage(){
                 <div className="mvrtop"><span className="mvrm">{g.awayAbbr} @ {g.homeAbbr}</span><span className="mvrt"><i style={{background:TD[w.tier]||"#f3b94f"}}/>{w.tier}</span></div>
                 <div className="mvrh">{w.tier==="Split"?<>Books can’t agree on the <b>{w.favTeam}</b></>:<>Market {verb} the <b>{w.favTeam}</b></>}</div>
                 <div className="mvrp">{w.favProb}% to win · consensus {formatOdds(w.consensus)}</div>
-                <div className="mvrf">{w.model? (w.model.agrees?<span className="ok">✓ model agrees on winner</span>:<span className="warn">⚠ model differs on winner</span>):<span className="mut">model —</span>}{w.bestPrice!=null&&<span className="bp">best {formatOdds(w.bestPrice)}</span>}</div>
+                <div className="mvrf">{w.model? (w.model.agrees?<span className="ok">✓ model agrees on winner</span>:<span className="warn">model differs on winner</span>):<span className="mut">model —</span>}{w.bestPrice!=null&&<span className="bp">best {formatOdds(w.bestPrice)}</span>}</div>
               </div>);})}
           </Carousel>; })()}
         <div className="note">What the books collectively lean — a read, not a guarantee.</div>
@@ -262,7 +262,7 @@ export default function HomePage(){
 
       {/* PLAYER PROPS — full board lives in the Props tab (per sport) */}
       {sp.hasProps&&(<section className="panel">
-        <div className="sh"><div className="l"><span className="i">🎯</span>PLAYER PROPS</div>{hasFull&&topProps.length>3&&<span className="ppswipe">swipe →</span>}</div>
+        <div className="sh"><div className="l">PLAYER PROPS</div>{hasFull&&topProps.length>3&&<span className="ppswipe">swipe →</span>}</div>
         {!hasFull
           ?<Gate kind="props" title="Player props are locked" sub={<>HR, hits, K &amp; more — every game. <b>$7/mo</b></>} navigate={navigate}/>
           :<>
@@ -275,7 +275,7 @@ export default function HomePage(){
                 <div key={p.k} className="prc" onClick={()=>navigate("/props")}>
                   <div className="prcrank">{i+1}</div>
                   <div className="prcav" style={{boxShadow:`0 0 0 2.5px ${col}`,background:`radial-gradient(circle at 50% 28%, ${col}66, #0c1018 80%)`}}>
-                    {p.id?<img src={`https://midfield.mlbstatic.com/v1/people/${p.id}/spots/120`} alt="" onError={(ev)=>{ev.currentTarget.style.display="none";}}/>:<span>{p.market==="K"?"⚾":"🧢"}</span>}
+                    {p.id?<img src={`https://midfield.mlbstatic.com/v1/people/${p.id}/spots/120`} alt="" onError={(ev)=>{ev.currentTarget.style.display="none";}}/>:<span>{p.market==="K"?"":""}</span>}
                   </div>
                   <div className="prcname">{p.name}</div>
                   <div className="prcmu">{p.game||p.team||""}</div>
@@ -298,7 +298,7 @@ export default function HomePage(){
 
       {/* PARK FACTORS */}
       {parks.length>0&&(<section className="panel">
-        <div className="sh"><div className="l"><span className="i">🏟️</span>PARK FACTORS TODAY</div><span className="s2">swipe →</span></div>
+        <div className="sh"><div className="l">PARK FACTORS TODAY</div><span className="s2">swipe →</span></div>
         <Carousel>{parks.map((g,i)=><ParkCard key={i} g={g}/>)}</Carousel>
       </section>)}
 
@@ -306,19 +306,19 @@ export default function HomePage(){
       <section>
         <div className="tw">
           <div className="pr g" onClick={()=>navigate("/expert-picks")}>
-            <div className="prh"><div className="h">⭐ WIZEPLAYS <span className="new">NEW</span></div>
+            <div className="prh"><div className="h">WIZEPLAYS <span className="new">NEW</span></div>
               {wpRecord&&(wpRecord.wins+wpRecord.losses+wpRecord.pushes)>0&&(
                 <div className="wkbox"><div className="t">THIS WEEK</div><div className="r">{wpRecord.wins}-{wpRecord.losses}{wpRecord.pushes?`-${wpRecord.pushes}`:""}</div><div className={"u "+(wpRecord.units>=0?"pos":"neg")}>{wpRecord.units>=0?"+":""}{wpRecord.units.toFixed(2)}u</div></div>)}
             </div>
-            <div className="d">Handpicked by our analysts after extra review.</div><div className="cta">View WizePlays →</div></div>
-          <div className="pr pp" onClick={()=>navigate("/daily-card")}><div className="h">✳️ WIZE SPIN <span className="new">NEW</span></div><div className="wh"/><div className="d">Need a play fast? Spin for model-qualified plays.</div><div className="cta">Spin the wheel →</div></div>
+            <div className="d">Handpicked by our own analytics after extra review.</div><div className="cta">View WizePlays →</div></div>
+          <div className="pr pp" onClick={()=>navigate("/daily-card")}><div className="h">WIZE SPIN <span className="new">NEW</span></div><div className="wh"/><div className="d">Need a play fast? Spin for model-qualified plays.</div><div className="cta">Spin the wheel →</div></div>
         </div>
       </section>
 
       {/* HOW TO USE GUIDE */}
       <section>
         <div className="guideb" onClick={()=>navigate("/guide")}>
-          <div className="guideb-ic">📘</div>
+          <div className="guideb-ic"></div>
           <div className="guideb-tx">
             <div className="guideb-h">New here? How to use WizePicks</div>
             <div className="guideb-s">Edges, props, line shopping &amp; the full board — a quick walkthrough of everything inside.</div>
@@ -329,7 +329,7 @@ export default function HomePage(){
 
       {/* UPCOMING */}
       {upcoming.length>0&&(<section className="panel">
-        <div className="sh"><div className="l"><span className="i">🗓️</span>UPCOMING GAMES</div><span className="s2" onClick={()=>navigate("/games")}>View all →</span></div>
+        <div className="sh"><div className="l">UPCOMING GAMES</div><span className="s2" onClick={()=>navigate("/games")}>View all →</span></div>
         <div className="rw">
           {upcoming.map((g,i)=>{ const aAb=g.awayAbbr||shortTeam(g.away||""); const hAb=g.homeAbbr||shortTeam(g.home||""); const gid=g.id||g.gameId;
             return (<div key={i} className="gm" onClick={()=>gid&&navigate(`/game/${sport}/${gid}`)}>
@@ -342,8 +342,8 @@ export default function HomePage(){
     </div>
 
     <nav className="nav">
-      <a className="on"><span className="i">🏠</span>Home</a>
-      <a onClick={()=>navigate("/games")}><span className="i">🗓️</span>Games</a>
+      <a className="on"><span className="i">🏠</span>Dashboard</a>
+      <a onClick={()=>navigate("/games")}>Games</a>
       {hasFull?<a onClick={()=>navigate("/props")}><span className="i">🔥</span>Props</a>:<a className="up" onClick={()=>navigate("/pricing")}><span className="i">🔓</span>Unlock</a>}
       <a onClick={()=>navigate("/odds")}><span className="i">💹</span>Market</a>
       <a onClick={()=>navigate("/performance")}><span className="i">📈</span>Performance</a>
@@ -384,7 +384,7 @@ function Hero({hero,navigate,live,series,sport="mlb",rolled}){
   const moved=hasChart&&pts[0]!==pts[pts.length-1];
   return (
     <div className="hero" onClick={()=>hero.gameId&&navigate(`/game/${sport}/${hero.gameId}`)}>
-      <div className="hh"><div className="eb">{rolled?"🔥 TOMORROW'S BEST EDGE":"🔥 BEST EDGE RIGHT NOW"}</div><div className="hhr"><span className="hedge">{fmtEdgeFor(hero,sport)} <i>EDGE</i></span><span className="hot">🔥 HOT</span></div></div>
+      <div className="hh"><div className="eb">{rolled?"TOMORROW'S BEST EDGE":"BEST EDGE RIGHT NOW"}</div><div className="hhr"><span className="hedge">{fmtEdgeFor(hero,sport)} <i>EDGE</i></span><span className="hot">HOT</span></div></div>
       <div className="htop">
         <div className="hL"><div className="pk">{edgeLabel(hero)}</div><div className="pg">{hero.matchup}</div>
           <div className="ch">
@@ -396,8 +396,8 @@ function Hero({hero,navigate,live,series,sport="mlb",rolled}){
             <div className="cap">{hasChart?<>{formatOdds(pts[0])} {String.fromCharCode(8594)} {formatOdds(pts[pts.length-1])} · since open</>:(hero.modelProb!=null?<>model {modelPct}% vs mkt {mktPct}%</>:<>best price {formatOdds(hero.odds)}</>)}</div></div></div>
       </div>
       {moved
-        ?<div className="hstrip"><span>⚡ Line moved {formatOdds(pts[0])} {String.fromCharCode(8594)} {formatOdds(pts[pts.length-1])} since open</span><span>›</span></div>
-        :<div className="hf"><span>⚡ Tap for the full matchup breakdown</span><span>›</span></div>}
+        ?<div className="hstrip"><span>Line moved {formatOdds(pts[0])} {String.fromCharCode(8594)} {formatOdds(pts[pts.length-1])} since open</span><span>›</span></div>
+        :<div className="hf"><span>Tap for the full matchup breakdown</span><span>›</span></div>}
     </div>
   );
 }
@@ -423,7 +423,7 @@ function Gate({title,sub,kind,navigate}){
   return (
     <div className="gatewrap">
       <div className="blurlayer">{sk}</div>
-      <div className="gate"><div className="lock">🔒</div><div className="gt">{title}</div><div className="gs">{sub}</div>
+      <div className="gate"><div className="lock"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div><div className="gt">{title}</div><div className="gs">{sub}</div>
         <div className="gbtn" onClick={()=>navigate("/pricing")}>Unlock All-Access →</div></div>
     </div>
   );
@@ -447,7 +447,7 @@ function LiveGameCard({g,info,navigate,locked}){
   return (
     <div className="lgc" onClick={()=>g.gameId&&navigate(locked?"/pricing":`/game/mlb/${g.gameId}`)}>
       <div className="lgh"><span className="lgmatch">{a} @ {h}</span><span className="lglive"><span className="livedot r"/>{half} {g.inning}{g.outs!=null?` · ${g.outs} out`:""}</span></div>
-      {locked ? <div className="lglock">🔒 In-game edges — All-Access</div> : <><Row r={ml}/><Row r={tot}/></>}
+      {locked ? <div className="lglock">In-game edges — All-Access</div> : <><Row r={ml}/><Row r={tot}/></>}
     </div>
   );
 }
@@ -467,9 +467,9 @@ function EdgeRow({e,navigate,sport="mlb"}){
       <div className="emid">
         <span className={"econv "+conv}>{e._convAdj||e.conviction||"—"}{e._moveDir>0?" ↑":e._moveDir<0?" ↓":""}</span>
         <span className="emeta">{e.modelProb!=null?`${model}% model · `:""}{formatOdds(e.odds)}</span>
-        {e._moveFlag==="against"&&<span className="emove against">⚠ market moving against</span>}
+        {e._moveFlag==="against"&&<span className="emove against">market moving against</span>}
         {e._moveFlag==="toward"&&<span className="emove toward">↘ money coming in</span>}
-        {e.inflation?.inflated&&<span className="einf">⚠ market inflated</span>}
+        {e.inflation?.inflated&&<span className="einf">market inflated</span>}
       </div>
       {e.reason&&<div className="ereason">{e.reason}</div>}
     </div>
@@ -480,24 +480,24 @@ function PropCard({p,type,rank,navigate}){
   let big,lbl,line,edgeBadge=null,sig=[];
   if(type==="hr"){
     big=Math.round((p.hrProb||0)*100)+"%"; lbl="CHANCE TO HOMER"; line=`O 0.5 HR · ${formatOdds(p.odds)}`;
-    if(p.parkHRFactor!=null) sig.push(["🏟️ Park",`${p.parkHRFactor>1?"+":""}${Math.round((p.parkHRFactor-1)*100)}%`]);
-    if(p.opposingPitcherHR9!=null) sig.push(["⚾ HR/9",Number(p.opposingPitcherHR9).toFixed(1)]);
+    if(p.parkHRFactor!=null) sig.push(["Park",`${p.parkHRFactor>1?"+":""}${Math.round((p.parkHRFactor-1)*100)}%`]);
+    if(p.opposingPitcherHR9!=null) sig.push([" HR/9",Number(p.opposingPitcherHR9).toFixed(1)]);
   } else if(type==="hits"){
     big=Math.round((p.hitsProb||0)*100)+"%"; lbl="HIT PROBABILITY";
     line=`${p.side==="over"?"O":"U"} ${p.line} Hits · ${formatOdds(p.odds)}`;
     if((p.edge??0)>0) edgeBadge=`+${(p.edge*100).toFixed(1)}% EDGE`;
-    if(p.battingAvg!=null) sig.push(["📊 AVG",Number(p.battingAvg).toFixed(3).replace(/^0/,"")]);
+    if(p.battingAvg!=null) sig.push(["AVG",Number(p.battingAvg).toFixed(3).replace(/^0/,"")]);
   } else {
     big=Math.round((p.kProb||0)*100)+"%"; lbl="STRIKEOUT PROB";
     line=`${p.side==="over"?"O":"U"} ${p.line} Ks · ${formatOdds(p.odds)}`;
     if((p.edge??0)>0) edgeBadge=`+${(p.edge*100).toFixed(1)}% EDGE`;
-    if(p.expectedKs!=null) sig.push(["🎯 Proj Ks",Number(p.expectedKs).toFixed(1)]);
-    if(p.pitcherK9!=null) sig.push(["⚾ K/9",Number(p.pitcherK9).toFixed(1)]);
+    if(p.expectedKs!=null) sig.push(["Proj Ks",Number(p.expectedKs).toFixed(1)]);
+    if(p.pitcherK9!=null) sig.push([" K/9",Number(p.pitcherK9).toFixed(1)]);
   }
   return (
     <div className="pc2" onClick={()=>p.gameId&&navigate(`/game/mlb/${p.gameId}`)}>
       <div className="rk">{rank}</div>
-      <div className="hd"><div className="av" style={(()=>{const c=teamCol(shortTeam(p.team||p.game||""));return {background:`linear-gradient(180deg, ${c}, #0c1018 88%)`,boxShadow:`0 0 0 2px ${c}88`};})()}>{p.playerId?<img src={`https://midfield.mlbstatic.com/v1/people/${p.playerId}/spots/120`} alt="" onError={(e)=>{e.currentTarget.style.display="none";}}/>:(type==="ks"?"⚾":"🧢")}</div><div><div className="nm">{p.player||"—"}</div><div className="mu">{p.game||p.team||""}</div></div></div>
+      <div className="hd"><div className="av" style={(()=>{const c=teamCol(shortTeam(p.team||p.game||""));return {background:`linear-gradient(180deg, ${c}, #0c1018 88%)`,boxShadow:`0 0 0 2px ${c}88`};})()}>{p.playerId?<img src={`https://midfield.mlbstatic.com/v1/people/${p.playerId}/spots/120`} alt="" onError={(e)=>{e.currentTarget.style.display="none";}}/>:(type==="ks"?"":"")}</div><div><div className="nm">{p.player||"—"}</div><div className="mu">{p.game||p.team||""}</div></div></div>
       <div className="cn2"><div className="n">{big}</div><div className="l">{lbl}</div></div>
       {sig.length>0&&<div className="sg">{sig.slice(0,2).map((s,i)=><div key={i} className="x"><div className="kk">{s[0]}</div><div className="vv">{s[1]}</div></div>)}</div>}
       <div className="pline">{line}{edgeBadge&&<span className="ebadge">{edgeBadge}</span>}</div>
@@ -508,11 +508,11 @@ function PropCard({p,type,rank,navigate}){
 function ParkCard({g}){
   const f=g.parkRunFactor; const hf=g.parkHRFactor; const w=g.weather||{};
   const hot=(hf??f)>1.05,cold=(hf??f)<0.95;
-  const tag=hot?["🔥 HITTER FRIENDLY","h"]:cold?["🧤 PITCHER FRIENDLY","p"]:["⚖️ NEUTRAL","n"];
+  const tag=hot?["HITTER FRIENDLY","h"]:cold?["PITCHER FRIENDLY","p"]:["NEUTRAL","n"];
   const pct=Math.round((f-1)*100); const hpct=hf!=null?Math.round((hf-1)*100):null;
   const indoor=w.indoor; const t=w.tempF!=null?Math.round(w.tempF):null;
   const wind=w.windMph?`${w.windMph} mph${w.windEffect?" "+w.windEffect:""}`:null;
-  const wxIcon=indoor?"🏟️":(t!=null&&t>=82?"☀️":t!=null&&t<=55?"🌥️":"⛅");
+  const wxIcon=indoor?"Dome":(t!=null&&t>=82?"Warm":t!=null&&t<=55?"Cool":"Mild");
   const wxText=indoor?"Indoor · roof closed":([t!=null?t+"°F":null,wind].filter(Boolean).join(" · ")||"Forecast pending");
   return (
     <div className={"pkc"+(hot?" hot":cold?" cold":"")}>
@@ -605,7 +605,7 @@ section{padding:13px 12px 2px;margin:0;border-top:1px solid #161d24}
 .erow{border:1px solid #1a232c;border-radius:12px;background:linear-gradient(180deg,#0d1218,#090d12);padding:10px 12px}
 .etop{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .eleft{display:flex;align-items:center;gap:9px;min-width:0;flex:1}
-.totg{width:30px;height:30px;border-radius:50%;background:rgba(155,123,255,.14);border:1px solid rgba(155,123,255,.32);display:inline-flex;align-items:center;justify-content:center;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:11px;color:#bba6ff;flex:0 0 auto}.pkside.ov{color:#33e991}.pkside.un{color:#ff5d52}
+.totg{width:30px;height:30px;border-radius:50%;background:rgba(38,116,176,.14);border:1px solid rgba(38,116,176,.32);display:inline-flex;align-items:center;justify-content:center;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:11px;color:#9fc3e8;flex:0 0 auto}.pkside.ov{color:#33e991}.pkside.un{color:#ff5d52}
 .elabel{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:17px;color:#fff;min-width:0}
 .elabel .emu{font-family:'Inter',sans-serif;font-weight:600;font-size:10px;color:#8a99a2;margin-left:6px}
 .epct{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:20px;line-height:1;flex:0 0 auto}.epct.pos{color:#33e991}.epct.neg{color:#ff5a5a}
@@ -630,14 +630,14 @@ section{padding:13px 12px 2px;margin:0;border-top:1px solid #161d24}
 .mvrf{display:flex;align-items:center;justify-content:space-between;gap:8px;border-top:1px solid rgba(255,255,255,.06);padding-top:7px;font-size:11px;font-weight:600}
 .mvrf .ok{color:#5fd6a0}.mvrf .warn{color:#f3b94f}.mvrf .mut{color:#6b7681}.mvrf .bp{color:#cfd7e2}
 .pc2{width:186px;border:1px solid #1a212b;border-radius:12px;background:linear-gradient(180deg,#100d1a,#070a0d);padding:9px 10px;position:relative}
-.pc2 .rk{position:absolute;top:0;left:0;width:22px;height:22px;border-radius:12px 0 10px 0;background:rgba(155,123,255,.2);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;color:#b9a6ff}
+.pc2 .rk{position:absolute;top:0;left:0;width:22px;height:22px;border-radius:12px 0 10px 0;background:rgba(38,116,176,.2);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;color:#9fc3e8}
 .pc2 .hd{display:flex;align-items:center;gap:8px;margin-left:18px}
-.av{width:44px;height:44px;border-radius:50%;background:linear-gradient(180deg,#26344f,#1a2335);display:flex;align-items:flex-end;justify-content:center;font-size:19px;flex:0 0 auto;position:relative;overflow:hidden;box-shadow:0 0 0 2px rgba(155,123,255,.28)}.av img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.av{width:44px;height:44px;border-radius:50%;background:linear-gradient(180deg,#26344f,#1a2335);display:flex;align-items:flex-end;justify-content:center;font-size:19px;flex:0 0 auto;position:relative;overflow:hidden;box-shadow:0 0 0 2px rgba(38,116,176,.28)}.av img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
 .pc2 .nm{font-family:'Inter',sans-serif;font-weight:800;font-size:12.5px;line-height:1.1}.pc2 .mu{font-family:'Inter',sans-serif;font-size:9.5px;color:#8a99a2;margin-top:2px}
 .cn2{text-align:center;margin:7px 0 1px}.cn2 .n{font-family:'Inter',sans-serif;font-weight:800;font-size:23px;color:#33e991;line-height:1;letter-spacing:-.5px}.cn2 .l{font-size:7.5px;color:#8fd9c2;font-weight:800;letter-spacing:.3px}
 .sg{display:flex;gap:6px;margin-top:6px}.sg .x{flex:1;border:1px solid #1a212b;border-radius:7px;background:rgba(255,255,255,.015);padding:4px 6px}.sg .kk{font-size:8px;color:#8a99a2;font-weight:700;white-space:nowrap}.sg .vv{font-family:'Inter',sans-serif;font-size:11px;font-weight:800;margin-top:1px}
-.vbk{margin-top:8px;border:1px solid rgba(155,123,255,.3);border-radius:8px;background:rgba(155,123,255,.07);text-align:center;padding:6px;font-size:11px;font-weight:800;color:#bba6ff}
-.pline{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:6px;border:1px solid rgba(155,123,255,.26);border-radius:7px;background:rgba(155,123,255,.07);padding:6px 8px;font-size:10.5px;font-weight:800;color:#cdbcff}
+.vbk{margin-top:8px;border:1px solid rgba(38,116,176,.3);border-radius:8px;background:rgba(38,116,176,.07);text-align:center;padding:6px;font-size:11px;font-weight:800;color:#9fc3e8}
+.pline{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:6px;border:1px solid rgba(38,116,176,.26);border-radius:7px;background:rgba(38,116,176,.07);padding:6px 8px;font-size:10.5px;font-weight:800;color:#9fc3e8}
 .ebadge{font-size:9px;font-weight:800;color:#33e991;background:rgba(51,233,145,.12);border-radius:5px;padding:2px 5px;white-space:nowrap}
 .pkc{width:186px;border:1px solid rgba(255,255,255,.07);border-radius:13px;background:#0b0f14;padding:10px 12px}.pkc.hot{border-color:rgba(243,185,79,.26);background:#0c1109}.pkc.cold{border-color:rgba(95,184,255,.16);background:#0b0f14}
 .pkc .r1{display:flex;align-items:center;justify-content:space-between}.pkc .n{font-weight:700;font-size:14px}.pkc .c{font-size:10px;color:#8a99a2;font-weight:600}
@@ -645,8 +645,8 @@ section{padding:13px 12px 2px;margin:0;border-top:1px solid #161d24}
 .bs{display:flex;gap:10px}.bs .b{flex:1}.bs .kk{font-size:8.5px;color:#8a99a2;font-weight:800}.bs .vv{font-family:'Barlow Condensed';font-weight:800;font-size:21px}.vv.u{color:#33e991}.vv.dn2{color:#ff5d52}
 .wx{display:flex;gap:10px;margin-top:7px;font-size:10px;color:#c0c9cd;font-weight:600}
 .wxrow{display:flex;align-items:center;gap:7px;margin-top:9px;padding-top:8px;border-top:1px solid rgba(255,255,255,.07);font-size:11.5px;color:#dbe4e2;font-weight:600}.wxrow .wi{font-size:14px}
-.propscta{display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid rgba(155,123,255,.28);border-radius:12px;background:rgba(155,123,255,.06);padding:12px 14px;cursor:pointer}
-.pctah{font-weight:800;font-size:13px;color:#eaf1ee}.pctas{font-size:10.5px;color:#8a99a2;font-weight:500;margin-top:3px;line-height:1.35}.pctaarrow{font-size:18px;color:#bba6ff;font-weight:800;flex:0 0 auto}
+.propscta{display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid rgba(38,116,176,.28);border-radius:12px;background:rgba(38,116,176,.06);padding:12px 14px;cursor:pointer}
+.pctah{font-weight:800;font-size:13px;color:#eaf1ee}.pctas{font-size:10.5px;color:#8a99a2;font-weight:500;margin-top:3px;line-height:1.35}.pctaarrow{font-size:18px;color:#9fc3e8;font-weight:800;flex:0 0 auto}
 .prrow{display:flex;gap:8px;align-items:stretch;overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;padding-bottom:4px;scrollbar-width:none;scroll-padding-left:2px}
 .prrow::-webkit-scrollbar{display:none}
 .ppswipe{font-size:11px;font-weight:700;color:#8a99a2}
@@ -657,26 +657,26 @@ section{padding:13px 12px 2px;margin:0;border-top:1px solid #161d24}
 .guideb-h{font-size:14px;font-weight:800;color:#fff;line-height:1.25}
 .guideb-s{font-size:11.5px;color:#9aa6b2;line-height:1.4;margin-top:3px}
 .guideb-ar{font-size:18px;color:#33e991;font-weight:800;flex:0 0 auto}
-.prc{flex:0 0 auto;width:118px;scroll-snap-align:start;min-width:0;position:relative;border:1px solid rgba(155,123,255,.22);border-radius:13px;background:linear-gradient(180deg,rgba(155,123,255,.08),rgba(155,123,255,.02));padding:12px 7px 10px;cursor:pointer;display:flex;flex-direction:column;align-items:center;text-align:center}
-.prc:active{background:rgba(155,123,255,.13)}
-.prcrank{position:absolute;top:6px;left:6px;width:18px;height:18px;border-radius:6px;background:rgba(155,123,255,.92);color:#fff;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:11px;display:flex;align-items:center;justify-content:center;line-height:1;z-index:2}
+.prc{flex:0 0 auto;width:118px;scroll-snap-align:start;min-width:0;position:relative;border:1px solid rgba(38,116,176,.22);border-radius:13px;background:linear-gradient(180deg,rgba(38,116,176,.08),rgba(38,116,176,.02));padding:12px 7px 10px;cursor:pointer;display:flex;flex-direction:column;align-items:center;text-align:center}
+.prc:active{background:rgba(38,116,176,.13)}
+.prcrank{position:absolute;top:6px;left:6px;width:18px;height:18px;border-radius:6px;background:rgba(38,116,176,.92);color:#fff;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:11px;display:flex;align-items:center;justify-content:center;line-height:1;z-index:2}
 .prcav{width:60px;height:60px;border-radius:50%;overflow:hidden;position:relative;display:flex;align-items:flex-end;justify-content:center;font-size:25px;margin-top:6px}
 .prcav img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center top;transform:scale(1.2);transform-origin:center 12%}
 .prcname{font-weight:800;font-size:12.5px;color:#eaf1ee;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:7px}
 .prcmu{font-size:9px;color:#8a99a2;font-weight:600;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
 .prcedge{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:25px;line-height:1;margin-top:5px}
 .prclbl{font-size:7.5px;letter-spacing:.3px;color:#8a99a2;font-weight:800;margin-top:1px}
-.prcbet{margin-top:8px;width:100%;display:flex;align-items:center;justify-content:space-between;gap:4px;border:1px solid rgba(155,123,255,.3);border-radius:8px;background:rgba(155,123,255,.08);padding:6px 8px}
+.prcbet{margin-top:8px;width:100%;display:flex;align-items:center;justify-content:space-between;gap:4px;border:1px solid rgba(38,116,176,.3);border-radius:8px;background:rgba(38,116,176,.08);padding:6px 8px}
 .prcbet span{font-weight:800;font-size:10px;color:#dbe4e2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.prcbet .o{font-family:'Barlow Condensed',sans-serif;font-size:12px;color:#bba6ff;flex:0 0 auto}
-.ppseeall{margin-top:11px;text-align:center;font-size:12px;font-weight:800;color:#bba6ff;cursor:pointer;border:1px solid rgba(155,123,255,.28);border-radius:10px;padding:9px;background:rgba(155,123,255,.06)}
-.ppseeall:active{background:rgba(155,123,255,.12)}
+.prcbet .o{font-family:'Barlow Condensed',sans-serif;font-size:12px;color:#9fc3e8;flex:0 0 auto}
+.ppseeall{margin-top:11px;text-align:center;font-size:12px;font-weight:800;color:#9fc3e8;cursor:pointer;border:1px solid rgba(38,116,176,.28);border-radius:10px;padding:9px;background:rgba(38,116,176,.06)}
+.ppseeall:active{background:rgba(38,116,176,.12)}
 .dots{display:flex;justify-content:center;gap:5px;margin-top:8px}.dots i{width:5px;height:5px;border-radius:50%;background:#222c33;transition:.25s}.dots i.on{width:14px;border-radius:3px;background:#ff5d4d}
 .prh{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}.wkbox{position:absolute;top:10px;right:10px;border:1px solid rgba(243,185,79,.3);border-radius:9px;background:rgba(243,185,79,.06);padding:4px 8px;text-align:center}.wkbox .t{font-size:7px;letter-spacing:.4px;color:#f3b94f;font-weight:800}.wkbox .r{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:18px;color:#fff;line-height:1.05}.wkbox .u{font-size:9px;font-weight:700;margin-top:1px}.wkbox .u.pos{color:#33e991}.wkbox .u.neg{color:#ff5a5a}
 .tw{display:grid;grid-template-columns:1fr 1fr;gap:9px}
-.pr{border-radius:14px;padding:11px;border:1px solid #161e26;position:relative;min-height:104px}.pr.g{border-color:rgba(243,185,79,.3);background:linear-gradient(180deg,#14110a,#06090b)}.pr.pp{border-color:rgba(155,123,255,.3);background:linear-gradient(180deg,#110d20,#06090b)}
+.pr{border-radius:14px;padding:11px;border:1px solid #161e26;position:relative;min-height:104px}.pr.g{border-color:rgba(243,185,79,.3);background:linear-gradient(180deg,#14110a,#06090b)}.pr.pp{border-color:rgba(38,116,176,.3);background:linear-gradient(180deg,#110d20,#06090b)}
 .pr .h{font-weight:800;font-size:12px}.new{font-size:8px;font-weight:800;border-radius:4px;padding:1px 4px}.pr.g .new{background:#f3b94f;color:#1a1405}.pr.pp .new{background:#9b7bff;color:#0d0820}
-.pr .d{font-size:10px;color:#8a99a2;margin:7px 0 0;line-height:1.4}.pr .cta{font-size:12px;font-weight:800;color:#f3b94f;margin-top:9px}.pr.pp .cta{color:#bba6ff}.pr.pp .d{max-width:60%}.pr.g .d{padding-right:84px}
+.pr .d{font-size:10px;color:#8a99a2;margin:7px 0 0;line-height:1.4}.pr .cta{font-size:12px;font-weight:800;color:#f3b94f;margin-top:9px}.pr.pp .cta{color:#9fc3e8}.pr.pp .d{max-width:60%}.pr.g .d{padding-right:84px}
 .wh{width:54px;height:54px;border-radius:50%;position:absolute;top:30px;right:10px;background:radial-gradient(circle,#2f2363,#110d20 72%);border:2px solid #4a3d86;animation:spin 7s linear infinite}.wh::before{content:"";position:absolute;inset:6px;border-radius:50%;border:1px dashed #6a58c0}
 @keyframes spin{to{transform:rotate(360deg)}}
 .gm{width:122px;border:1px solid #161e26;border-radius:11px;background:#0b0f14;padding:8px 10px}.gmm{display:flex;align-items:center;gap:4px;font-weight:800;font-size:14px}.gmm .x{color:#8a99a2}.gme{font-size:9px;color:#8a99a2;font-weight:600;margin-top:6px}
@@ -685,7 +685,7 @@ section{padding:13px 12px 2px;margin:0;border-top:1px solid #161d24}
 .gatewrap{position:relative;border-radius:14px;overflow:hidden}
 .blurlayer{filter:blur(7px);opacity:.5;pointer-events:none;user-select:none}
 .gate{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:18px;background:radial-gradient(circle at 50% 40%,rgba(8,10,16,.5),rgba(6,9,11,.9))}
-.gate .lock{width:42px;height:42px;border-radius:13px;display:flex;align-items:center;justify-content:center;font-size:20px;background:rgba(155,123,255,.14);border:1px solid rgba(155,123,255,.4);margin-bottom:11px}
+.gate .lock{width:42px;height:42px;border-radius:13px;display:flex;align-items:center;justify-content:center;font-size:20px;background:rgba(38,116,176,.14);border:1px solid rgba(38,116,176,.4);margin-bottom:11px}
 .gate .gt{font-size:15px;font-weight:800;color:#fff;margin-bottom:4px}
 .gate .gs{font-size:11.5px;color:#9aa6b2;line-height:1.5;max-width:250px;margin-bottom:13px}.gate .gs b{color:#33e991;font-weight:800}
 .gate .gbtn{display:inline-flex;align-items:center;gap:7px;background:#1D9E75;color:#04130d;font-weight:800;font-size:13px;padding:11px 20px;border-radius:11px;cursor:pointer}
