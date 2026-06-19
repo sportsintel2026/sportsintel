@@ -7,7 +7,7 @@
 import { useNavigate, useLocation } from "react-router-dom";
 
 const TABS = [
-  { label: "Home",        icon: "🏠", path: "/home",        match: (p) => p === "/" || p === "/home" },
+  { label: "Dashboard",   icon: "🏠", path: "/home",        match: (p) => p === "/" || p === "/home" },
   { label: "Games",       icon: "🗓️", path: "/games",       match: (p) => p.includes("games") },
   { label: "Props",       icon: "🔥", path: "/props",       match: (p) => p === "/props" },
   { label: "Market",      icon: "💹", path: "/odds",        match: (p) => p === "/odds" },
