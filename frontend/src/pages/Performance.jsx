@@ -76,7 +76,7 @@ export default function PerformancePage() {
       <div className="main-content" style={{ marginLeft: 200 }}>
         <div className="perf-content" style={{ maxWidth: 900, margin: "0 auto", padding: "32px 24px 80px", animation: "fadeIn .3s ease" }}>
           <div onClick={() => navigate(-1)} style={{ color: "#6b7280", fontSize: 13, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6, marginBottom: 14, userSelect: "none" }}>← Back</div>
-          <h1 style={{ margin: "0 0 8px", fontSize: 28, fontWeight: 700, letterSpacing: "-0.01em" }}>📈 Model Performance</h1>
+          <h1 style={{ margin: "0 0 8px", fontSize: 28, fontWeight: 700, letterSpacing: "-0.01em" }}>Model Performance</h1>
           <p style={{ margin: "0 0 20px", fontSize: 13, color: "#9ca3af" }}>
             How the model's edges have actually performed · each sport tracked separately
           </p>
@@ -91,10 +91,10 @@ export default function PerformancePage() {
   );
 }
 const SPORTS = [
-  { key: "mlb", label: "MLB", icon: "⚾" },
-  { key: "nba", label: "NBA", icon: "🏀" },
-  { key: "nfl", label: "NFL", icon: "🏈" },
-  { key: "cfb", label: "CFB", icon: "🎓" },
+  { key: "mlb", label: "MLB", icon: "" },
+  { key: "nba", label: "NBA", icon: "" },
+  { key: "nfl", label: "NFL", icon: "" },
+  { key: "cfb", label: "CFB", icon: "" },
 ];
 function SportTabs({ league, setLeague }) {
   return (
@@ -103,7 +103,7 @@ function SportTabs({ league, setLeague }) {
         const active = s.key === league;
         return (
           <button key={s.key} onClick={() => setLeague(s.key)} style={{ display: "flex", alignItems: "center", gap: 6, background: active ? "#ef4444" : "#0f1419", color: active ? "#fff" : "#9ca3af", border: `1px solid ${active ? "#ef4444" : "#1f2937"}`, borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", transition: "all .15s" }}>
-            <span>{s.icon}</span>{s.label}
+            {s.label}
           </button>
         );
       })}
@@ -120,7 +120,7 @@ function PerfBody({ data, league }) {
       <div>
         <ClvCard clv={data.clv} />
         <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 40, textAlign: "center" }}>
-          <div style={{ fontSize: 40, marginBottom: 14 }}>⏳</div>
+          <div style={{ fontSize: 40, marginBottom: 14 }}></div>
           <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>Building the track record</div>
           <p style={{ fontSize: 13, color: "#9ca3af", maxWidth: 420, margin: "0 auto", lineHeight: 1.7 }}>
             The model is recording its predictions now. Once today's games finish, results start posting here.
@@ -149,7 +149,7 @@ function PerfBody({ data, league }) {
       </div>
       {graded > 0 && graded < 25 && (
         <div style={{ background: "#1a1410", border: "1px solid #f5970022", borderRadius: 6, padding: "8px 12px", marginBottom: 16, fontSize: 11.5, color: "#fbbf24" }}>
-          ⚠️ Very early sample ({graded} graded pick{graded === 1 ? "" : "s"}) — treat these as noise, not a track record yet.
+          Very early sample ({graded} graded pick{graded === 1 ? "" : "s"}) — treat these as noise, not a track record yet.
         </div>
       )}
       {/* CLV — led as the most reliable signal of edge */}
@@ -183,7 +183,7 @@ function ClvCard({ clv }) {
   if (!clv || !clv.sample) {
     return (
       <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 12, padding: 20, marginBottom: 24 }}>
-        <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 10 }}>🎯 Closing line value (CLV)</div>
+        <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 10 }}>Closing line value (CLV)</div>
         <p style={{ fontSize: 12.5, color: "#9ca3af", lineHeight: 1.7, margin: 0 }}>
           CLV measures whether our picks got a better price than the market's closing line — the single strongest
           indicator of a real edge. It's collecting now and will appear here once games with tracked picks have started.
@@ -194,7 +194,7 @@ function ClvCard({ clv }) {
   const positive = clv.avgClvPct >= 0;
   return (
     <div style={{ background: "linear-gradient(180deg,#0f1419,#0a0e14)", border: "1px solid #22c55e33", borderLeft: "3px solid #22c55e", borderRadius: 12, padding: 24, marginBottom: 24 }}>
-      <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 4 }}>🎯 Closing line value (CLV)</div>
+      <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 4 }}>Closing line value (CLV)</div>
       <div style={{ fontSize: 12, color: "#22c55e", fontWeight: 600, marginBottom: 16 }}>Our most reliable early signal of edge</div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 16 }}>
         <Metric
@@ -336,7 +336,7 @@ function Loader() {
 function ErrorState() {
   return (
     <div style={{ textAlign: "center", padding: 48, background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10 }}>
-      <div style={{ fontSize: 28, marginBottom: 10 }}>⚠️</div>
+      <div style={{ fontSize: 28, marginBottom: 10 }}></div>
       <div style={{ fontSize: 14, fontWeight: 600 }}>Couldn't load performance</div>
       <div style={{ fontSize: 12, color: "#6b7280", marginTop: 6 }}>The tracker may still be warming up. Check back shortly.</div>
     </div>
