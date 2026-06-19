@@ -22,6 +22,13 @@ export default function BottomNav({ desktop = false }) {
     <>
       <style>{`
         .wpbn{display:none}
+        .wpbn .dbars{display:block}
+        .wpbn .dbars rect{height:5px;y:17px;animation:eqbar 1.1s ease-in-out infinite}
+        .wpbn .dbars .db1{fill:#2DBE7A;animation-delay:0s}
+        .wpbn .dbars .db2{fill:#ff5d4d;animation-delay:.18s}
+        .wpbn .dbars .db3{fill:#2DBE7A;animation-delay:.36s}
+        .wpbn .dbars .db4{fill:#ff5d4d;animation-delay:.54s}
+        @keyframes eqbar{0%,100%{height:5px;y:17px}50%{height:17px;y:5px}}
         @media (max-width: 768px){
           .mobile-only{display:none!important}
           .main-content{padding-bottom:76px!important}
@@ -48,7 +55,9 @@ export default function BottomNav({ desktop = false }) {
       <nav className="wpbn">
         {TABS.map((t) => (
           <a key={t.label} className={t.match(pathname) ? "on" : ""} onClick={() => navigate(t.path)}>
-            <span className="i">{t.icon}</span>{t.label}
+            <span className="i">{t.label === "Dashboard"
+              ? (<svg className="dbars" viewBox="0 0 24 24" width="18" height="18"><rect className="db1" x="2" y="17" width="4" height="5" rx="1"/><rect className="db2" x="7.3" y="17" width="4" height="5" rx="1"/><rect className="db3" x="12.6" y="17" width="4" height="5" rx="1"/><rect className="db4" x="18" y="17" width="4" height="5" rx="1"/></svg>)
+              : t.icon}</span>{t.label}
           </a>
         ))}
       </nav>
