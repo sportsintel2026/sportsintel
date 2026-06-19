@@ -21,9 +21,9 @@ const nbaCol = (ab) => NBACOL[String(ab || "").toUpperCase()] || "#3a4a57";
 const shortTeam = (t) => { const m = String(t).match(/[A-Z]{2,3}/); return m ? m[0] : String(t).slice(0, 3).toUpperCase(); };
 const formatOdds = (o) => { if (o == null || o === "") return "—"; const n = Number(o); return n > 0 ? `+${n}` : `${n}`; };
 
-const SPORT_TABS = [["mlb","MLB","⚾"],["nba","NBA","🏀"],["nfl","NFL","🏈"],["cfb","CFB","🏟️"],["nhl","NHL","🏒"]];
-const MLB_CATS = [["hr","HR","💣"],["hits","Hits","🏏"],["ks","Ks","🔥"],["tb","TB","💥"],["doubles","2B","↔️"],["triples","3B","🚀"]];
-const NBA_CATS = [["points","Points","🟠"],["rebounds","Rebounds","🛟"],["assists","Assists","🎯"],["threes","Threes","🎲"]];
+const SPORT_TABS = [["mlb","MLB"],["nba","NBA"],["nfl","NFL"],["cfb","CFB"],["nhl","NHL"]];
+const MLB_CATS = [["hr","HR"],["hits","Hits"],["ks","Ks"],["tb","TB"],["doubles","2B"],["triples","3B"]];
+const NBA_CATS = [["points","Points"],["rebounds","Rebounds"],["assists","Assists"],["threes","Threes"]];
 const HAS_PROPS = { mlb:true, nba:true }; // sports with a prop model wired
 const NBA_MK = { points:"PTS", rebounds:"REB", assists:"AST", threes:"3PM" };
 
@@ -88,7 +88,7 @@ export default function PropsPage() {
 
   return (
     <TerminalShell active="/props" plan={plan} navigate={navigate}>
-    <div style={{ minHeight: "100vh", background: "#000", color: "#f2f6f4", fontFamily: "'Inter',system-ui,-apple-system,sans-serif" }}>
+    <div style={{ minHeight: "100vh", background: "#0c1d31", color: "#f2f6f4", fontFamily: "'Inter',system-ui,-apple-system,sans-serif" }}>
       <style>{CSS}</style>
       <BottomNav />
       <div className="ppsb"><Sidebar user={user} plan={plan} signOut={signOut} navigate={navigate} /></div>
@@ -101,9 +101,9 @@ export default function PropsPage() {
 
         {/* SPORT SELECTOR — same pill style as the Games page */}
         <div className="ppsports">
-          {SPORT_TABS.map(([id, lb, ic]) => (
+          {SPORT_TABS.map(([id, lb]) => (
             <button key={id} className={"ppsport" + (sport === id ? " on" : "")} onClick={() => { setSport(id); setTab(id === "mlb" ? "hr" : "points"); }}>
-              <span className="ic">{ic}</span>{lb}
+              {lb}
             </button>
           ))}
         </div>
@@ -112,19 +112,19 @@ export default function PropsPage() {
           <div className="ppmuted" style={{ padding: "44px 8px" }}>Player props aren’t available for {sport.toUpperCase()} yet — they come online as each sport’s model does.</div>
         ) : (<>
           <div className="pptabs">
-            {cats.map(([id, lb, ic]) => (
+            {cats.map(([id, lb]) => (
               <button key={id} className={"pptab" + (tab === id ? " on" : "")} onClick={() => setTab(id)}>
-                <span className="ic">{ic}</span>{lb}
+                {lb}
                 <span className="ct">{catCount(id)}</span>
               </button>
             ))}
           </div>
 
           {hasFull && sport === "mlb" && tab === "hr" && !loading && (
-            <div className="pphint">👆 Tap any player to open their batting profile — splits, recent form, the model's read vs the market, and pull tendencies. <b>Longshots</b> — bet small, if at all.</div>
+            <div className="pphint">Tap any player to open their batting profile — splits, recent form, the model's read vs the market, and pull tendencies. <b>Longshots</b> — bet small, if at all.</div>
           )}
           {hasFull && sport === "nba" && !loading && (
-            <div className="ppwarn">⚠️ Experimental projections. Prop markets are sharp, so flagged edges are rare and <b>informational, not betting advice</b>. Shown as the model's projection vs the book line.</div>
+            <div className="ppwarn">Experimental projections. Prop markets are sharp, so flagged edges are rare and <b>informational, not betting advice</b>. Shown as the model's projection vs the book line.</div>
           )}
 
           {loading
@@ -174,9 +174,9 @@ function PropsLock({ navigate }) {
         ))}
       </div>
       <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", padding: 20, background: "radial-gradient(circle at 50% 35%, rgba(0,0,0,.45), rgba(0,0,0,.9))" }}>
-        <div style={{ width: 46, height: 46, borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, background: "rgba(155,123,255,.14)", border: "1px solid rgba(155,123,255,.4)", marginBottom: 13 }}>🔒</div>
+        <div style={{ width: 46, height: 46, borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, background: "rgba(38,116,176,.14)", border: "1px solid rgba(38,116,176,.4)", marginBottom: 13 }}><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#9fc3e8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
         <div style={{ fontSize: 16, fontWeight: 800, color: "#fff", marginBottom: 5 }}>The full prop board is locked</div>
-        <div style={{ fontSize: 12, color: "#9aa6b2", lineHeight: 1.5, maxWidth: 270, marginBottom: 15 }}>Every flagged prop — HR, hits, K, points, rebounds, assists &amp; threes — across every game. <b style={{ color: "#33e991" }}>$7/mo</b> · cancel anytime.</div>
+        <div style={{ fontSize: 12, color: "#9aa6b2", lineHeight: 1.5, maxWidth: 270, marginBottom: 15 }}>Every flagged prop — HR, hits, K, points, rebounds, assists &amp; threes — across every game. <b style={{ color: "#2DBE7A" }}>$7/mo</b> · cancel anytime.</div>
         <button onClick={() => navigate("/pricing")} style={{ background: "#1D9E75", color: "#04130d", border: "none", fontWeight: 800, fontSize: 14, padding: "12px 22px", borderRadius: 11, cursor: "pointer", fontFamily: "inherit" }}>Unlock All-Access →</button>
       </div>
     </div>
@@ -269,17 +269,17 @@ function ModelVsMarket({ data, tonight }) {
           const lean = (d.modelProb || 0) >= (d.marketImplied || 0);
           return (
             <g key={i}>
-              <rect x={cx - barW / 2} y={yTop} width={barW} height={Math.max(1, base - yTop)} rx="3" fill={lean ? "#33e991" : "#2f6b4f"} opacity={lean ? 1 : 0.75} />
+              <rect x={cx - barW / 2} y={yTop} width={barW} height={Math.max(1, base - yTop)} rx="3" fill={lean ? "#2DBE7A" : "#2f6b4f"} opacity={lean ? 1 : 0.75} />
               <line x1={cx - barW / 2 - 2} y1={y(d.marketImplied)} x2={cx + barW / 2 + 2} y2={y(d.marketImplied)} stroke="#5da9e8" strokeWidth="2.5" strokeLinecap="round" />
-              <circle cx={cx} cy={112} r={d.homered ? 4 : 3.2} fill={d.homered ? "#33e991" : "none"} stroke={d.homered ? "#33e991" : "#3a5f55"} />
+              <circle cx={cx} cy={112} r={d.homered ? 4 : 3.2} fill={d.homered ? "#2DBE7A" : "none"} stroke={d.homered ? "#2DBE7A" : "#3a5f55"} />
             </g>
           );
         })}
       </svg>
       <div className="hclg">
-        <span><i style={{ background: "#33e991" }}></i>model %</span>
+        <span><i style={{ background: "#2DBE7A" }}></i>model %</span>
         <span><i style={{ background: "#5da9e8", height: 3, borderRadius: 2 }}></i>market %</span>
-        <span><i style={{ background: "#33e991", borderRadius: "50%" }}></i>homered</span>
+        <span><i style={{ background: "#2DBE7A", borderRadius: "50%" }}></i>homered</span>
       </div>
       <div className="hcnote2">Bars above the blue line = model sees more value than the price.</div>
     </div>
@@ -294,12 +294,12 @@ function BattedBall({ bb }) {
   return (
     <div className="hcbb">
       <div className="hcbbbar">
-        <span style={{ width: (pull / tot) * 100 + "%", background: "#33e991" }}></span>
+        <span style={{ width: (pull / tot) * 100 + "%", background: "#2DBE7A" }}></span>
         <span style={{ width: (str / tot) * 100 + "%", background: "#42504a" }}></span>
         <span style={{ width: (oppo / tot) * 100 + "%", background: "#5da9e8" }}></span>
       </div>
       <div className="hcbblg">
-        <span><i style={{ background: "#33e991" }}></i>Pull {pull.toFixed(0)}%</span>
+        <span><i style={{ background: "#2DBE7A" }}></i>Pull {pull.toFixed(0)}%</span>
         <span><i style={{ background: "#42504a" }}></i>Straight {str.toFixed(0)}%</span>
         <span><i style={{ background: "#5da9e8" }}></i>Oppo {oppo.toFixed(0)}%</span>
       </div>
@@ -361,7 +361,7 @@ function HrCard({ card, loading, p }) {
       </div>
 
       <div className="hcsec">
-        <div className="hctitle"><span className="hcdot" style={{ background: card.battedBall ? "#33e991" : "#e8c07a" }}></span>Batted-ball profile</div>
+        <div className="hctitle"><span className="hcdot" style={{ background: card.battedBall ? "#2DBE7A" : "#e8c07a" }}></span>Batted-ball profile</div>
         {card.battedBall
           ? <BattedBall bb={card.battedBall} />
           : (
@@ -428,7 +428,7 @@ function PropRow({ p, type, rank, navigate }) {
         <div className="ppav" style={{ background: `linear-gradient(180deg, ${col}, #0c1018 88%)`, boxShadow: `0 0 0 2px ${col}88` }}>
           {p.playerId
             ? <img src={`https://midfield.mlbstatic.com/v1/people/${p.playerId}/spots/120`} alt="" onError={(ev) => { ev.currentTarget.style.display = "none"; }} />
-            : (type === "ks" ? "⚾" : "🧢")}
+            : ""}
         </div>
         <div className="ppinfo">
           <div className="ppname">{p.player || "—"}</div>
@@ -451,7 +451,7 @@ function PropRow({ p, type, rank, navigate }) {
 function NbaPropRow({ p, market, rank, navigate }) {
   const ab = shortTeam(p.teamAbbr || p.game || ""); const col = nbaCol(ab);
   const over = p.side === "OVER";
-  const sideCol = over ? "#33e991" : "#ff5d52";
+  const sideCol = over ? "#2DBE7A" : "#ff5d52";
   const e = p.edge ?? 0;
   return (
     <div className="pprow" onClick={() => p.gameId && navigate(`/game/nba/${p.gameId}`)}>
@@ -459,7 +459,7 @@ function NbaPropRow({ p, market, rank, navigate }) {
       <div className="ppav" style={{ background: `linear-gradient(180deg, ${col}, #0c1018 88%)`, boxShadow: `0 0 0 2px ${col}88` }}>
         {p.athleteId
           ? <img src={`https://a.espncdn.com/i/headshots/nba/players/full/${p.athleteId}.png`} alt="" onError={(ev) => { ev.currentTarget.style.display = "none"; }} />
-          : "🏀"}
+          : ""}
       </div>
       <div className="ppinfo">
         <div className="ppname">{p.player || "—"}</div>
@@ -469,7 +469,7 @@ function NbaPropRow({ p, market, rank, navigate }) {
       <div className="ppright">
         <div className="pppct" style={{ color: sideCol }}>{p.projection}</div>
         <div className="pplbl">proj {NBA_MK[market]}</div>
-        <div className="ppedge" style={{ color: sideCol, background: over ? "rgba(51,233,145,.12)" : "rgba(255,93,82,.12)" }}>{over ? "▲" : "▼"} {e >= 0 ? "+" : ""}{e}{p.flagged ? " ⚑" : ""}</div>
+        <div className="ppedge" style={{ color: sideCol, background: over ? "rgba(45,190,122,.12)" : "rgba(255,93,82,.12)" }}>{over ? "▲" : "▼"} {e >= 0 ? "+" : ""}{e}{p.flagged ? " ⚑" : ""}</div>
       </div>
     </div>
   );
@@ -482,20 +482,21 @@ const CSS = `
 .pphead{margin-bottom:14px}
 .pptitle{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:30px;line-height:1;letter-spacing:-.01em}.pptitle .b{color:#ff5d4d}
 .ppsub{font-size:12px;color:#8a99a2;font-weight:500;margin-top:6px;line-height:1.4}
-.ppsports{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding-bottom:4px;margin-bottom:14px}
+.ppsports{display:flex;gap:24px;overflow-x:auto;scrollbar-width:none;border-bottom:1px solid rgba(255,255,255,.08);margin-bottom:14px}
 .ppsports::-webkit-scrollbar{display:none}
-.ppsport{flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;padding:7px 15px;border-radius:999px;cursor:pointer;white-space:nowrap;
-  font-size:13px;font-weight:700;font-family:inherit;border:1px solid #1f2937;background:#0e131b;color:#9ca3af}
-.ppsport.on{border-color:#ef4444;background:rgba(239,68,68,.12);color:#fff}
-.ppsport .ic{font-size:15px}
-.pptabs{display:flex;gap:8px;margin-bottom:14px;overflow-x:auto;scrollbar-width:none}
+.ppsport{flex:0 0 auto;display:inline-flex;align-items:center;padding:11px 0;cursor:pointer;white-space:nowrap;position:relative;
+  font-size:16px;font-weight:700;font-family:'Barlow Condensed',sans-serif;border:none;background:none;color:#8a99a2}
+.ppsport.on{color:#fff}
+.ppsport.on::after{content:'';position:absolute;left:0;right:0;bottom:-1px;height:2px;background:#ff5d4d;border-radius:2px}
+.pptabs{display:flex;gap:22px;margin-bottom:14px;overflow-x:auto;scrollbar-width:none;border-bottom:1px solid rgba(255,255,255,.08)}
 .pptabs::-webkit-scrollbar{display:none}
-.pptab{flex:1 0 auto;display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:9px 8px;border-radius:10px;cursor:pointer;
-  font-family:inherit;font-size:13px;font-weight:800;white-space:nowrap;border:1px solid #1a212b;background:#0b0f14;color:#9aa7b0}
-.pptab.on{border-color:#ff5d4d;background:rgba(255,93,77,.1);color:#fff}
-.pptab .ic{font-size:14px}.pptab .ct{font-size:10px;font-weight:700;color:#6b7681}.pptab.on .ct{color:#ffb3aa}
+.pptab{flex:0 0 auto;display:inline-flex;align-items:center;gap:5px;padding:11px 0;cursor:pointer;position:relative;
+  font-family:'Barlow Condensed',sans-serif;font-size:15px;font-weight:700;white-space:nowrap;border:none;background:none;color:#8a99a2}
+.pptab.on{color:#fff}
+.pptab.on::after{content:'';position:absolute;left:0;right:0;bottom:-1px;height:2px;background:#ff5d4d;border-radius:2px}
+.pptab .ct{font-size:11px;font-weight:700;color:#6b7681}.pptab.on .ct{color:#ff8a7d}
 .pplist{display:flex;flex-direction:column;gap:8px}
-.pprow{display:flex;align-items:center;gap:11px;border:1px solid #161d24;border-radius:12px;background:linear-gradient(180deg,#0c1117,#080b0f);padding:10px 12px;cursor:pointer;position:relative}
+.pprow{display:flex;align-items:center;gap:11px;border:1px solid rgba(255,255,255,.06);border-radius:12px;background:#13273c;padding:10px 12px;cursor:pointer;position:relative}
 .rkn{position:absolute;top:6px;left:8px;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:10px;color:#3f4a55}
 .ppav{width:46px;height:46px;border-radius:50%;display:flex;align-items:flex-end;justify-content:center;font-size:20px;flex:0 0 auto;position:relative;overflow:hidden;margin-left:6px}
 .ppav img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
@@ -504,22 +505,22 @@ const CSS = `
 .ppgame{font-size:10.5px;color:#8a99a2;font-weight:600;margin-top:1px}
 .ppline{font-size:11px;color:#b6c0c7;font-weight:600;margin-top:4px}
 .ppright{text-align:right;flex:0 0 auto;display:flex;flex-direction:column;align-items:flex-end}
-.pppct{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:26px;color:#33e991;line-height:1}.pppct .pc{font-size:15px;margin-left:1px}
+.pppct{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:26px;color:#2DBE7A;line-height:1}.pppct .pc{font-size:15px;margin-left:1px}
 .pplbl{font-size:8.5px;color:#7d8a93;font-weight:700;text-transform:uppercase;letter-spacing:.3px;margin-top:1px}
-.ppedge{margin-top:5px;font-size:9px;font-weight:800;color:#33e991;background:rgba(51,233,145,.12);border-radius:5px;padding:2px 6px;white-space:nowrap}
+.ppedge{margin-top:5px;font-size:9px;font-weight:800;color:#2DBE7A;background:rgba(45,190,122,.12);border-radius:5px;padding:2px 6px;white-space:nowrap}
 .ppwarn{border:1px solid rgba(243,185,79,.32);background:rgba(243,185,79,.08);border-radius:10px;padding:10px 12px;font-size:11px;color:#f3c66b;font-weight:600;line-height:1.45;margin-bottom:12px}.ppwarn b{color:#ffd98a}
-.pphint{border:1px solid rgba(51,233,145,.28);background:rgba(51,233,145,.07);border-radius:10px;padding:10px 12px;font-size:11px;color:#9fe9c4;font-weight:600;line-height:1.45;margin-bottom:12px}.pphint b{color:#d8f7e7}
+.pphint{border:1px solid rgba(45,190,122,.28);background:rgba(45,190,122,.07);border-radius:10px;padding:10px 12px;font-size:11px;color:#fff;font-weight:600;line-height:1.45;margin-bottom:12px}.pphint b{color:#fff}
 .pprowwrap{display:block}
 .pprow.tappable{cursor:pointer}
-.ppchev{position:absolute;top:10px;right:11px;color:#33e991;font-size:11px;pointer-events:none}
+.ppchev{position:absolute;top:10px;right:11px;color:#2DBE7A;font-size:11px;pointer-events:none}
 .pprow.rowopen{border-bottom-left-radius:0;border-bottom-right-radius:0;border-bottom-color:transparent}
 .hrcard{border:1px solid #161d24;border-top:1px dashed #20303a;border-radius:0 0 12px 12px;background:linear-gradient(180deg,#0b1016,#070a0e);padding:2px 12px 12px;margin-top:-1px}
 .hcsec{padding:13px 0 4px}
 .hctitle{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:11px;letter-spacing:.11em;text-transform:uppercase;color:#8a99a2;margin-bottom:10px;display:flex;align-items:center;gap:7px}
-.hcdot{width:6px;height:6px;border-radius:50%;background:#33e991;display:inline-block}
+.hcdot{width:6px;height:6px;border-radius:50%;background:#2DBE7A;display:inline-block}
 .hcsplits{display:grid;grid-template-columns:1fr 1fr;gap:9px}
 .hcsp{position:relative;background:#0d1218;border:1px solid #18212a;border-radius:11px;padding:11px 12px}
-.hcsp.act{border-color:rgba(51,233,145,.5);background:linear-gradient(180deg,rgba(51,233,145,.06),#0d1218)}
+.hcsp.act{border-color:rgba(45,190,122,.5);background:linear-gradient(180deg,rgba(45,190,122,.06),#0d1218)}
 .hctag{position:absolute;top:-8px;right:10px;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:9px;letter-spacing:.08em;background:#ff7a6c;color:#1a0c08;padding:2px 7px;border-radius:5px}
 .hcvh{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:12px;letter-spacing:.06em;color:#8a99a2}
 .hcsp.act .hcvh{color:#7cf0a8}
@@ -533,18 +534,18 @@ const CSS = `
 .hcthin{font-size:9.5px;color:#6a7882;font-style:italic;margin-top:8px}
 .hcmut{color:#7d8a93;font-size:12px;padding:14px 4px;text-align:center}
 .hcdisc{font-size:10px;color:#6a7882;text-align:center;margin-top:12px;padding:0 6px}
-.hcb{color:#33e991;font-weight:800}
+.hcb{color:#2DBE7A;font-weight:800}
 .hcmatch{display:flex;align-items:center;justify-content:space-between;gap:8px;background:#0d1218;border:1px solid #18212a;border-radius:11px;padding:9px 12px;margin:11px 0 2px}
 .hcml{font-size:12.5px;color:#8a99a2}.hcml b{color:#eef3f1;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:14px}
 .hcmr{display:flex;gap:6px;align-items:center;flex:0 0 auto}
 .hcpill{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:11px;padding:2px 8px;border-radius:6px;background:rgba(93,169,232,.14);color:#5da9e8;border:1px solid rgba(93,169,232,.3)}
-.hcadv{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:11px;color:#7cf0a8;background:rgba(51,233,145,.12);border:1px solid rgba(51,233,145,.3);padding:2px 8px;border-radius:6px}
+.hcadv{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:11px;color:#7cf0a8;background:rgba(45,190,122,.12);border:1px solid rgba(45,190,122,.3);padding:2px 8px;border-radius:6px}
 .hcfacs{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .hcfac{background:#0d1218;border:1px solid #18212a;border-radius:10px;padding:9px 11px}
 .hcfl{font-size:11px;color:#8a99a2;display:flex;justify-content:space-between;align-items:center;gap:6px}
-.hcrk{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:9px;color:#04130d;background:#33e991;padding:1px 6px;border-radius:5px;white-space:nowrap}
+.hcrk{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:9px;color:#04130d;background:#2DBE7A;padding:1px 6px;border-radius:5px;white-space:nowrap}
 .hcfv{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:19px;margin-top:2px}
-.hcbar{height:4px;border-radius:3px;background:#16231d;margin-top:6px;overflow:hidden}.hcbar>span{display:block;height:100%;border-radius:3px;background:linear-gradient(90deg,#1f9d62,#33e991)}
+.hcbar{height:4px;border-radius:3px;background:#16231d;margin-top:6px;overflow:hidden}.hcbar>span{display:block;height:100%;border-radius:3px;background:linear-gradient(90deg,#1f9d62,#2DBE7A)}
 .hcfp{font-size:10px;color:#6a7882;margin-top:4px}
 .hccw{background:#0d1218;border:1px solid #18212a;border-radius:11px;padding:11px 9px 7px}
 .hcch{display:flex;justify-content:space-between;align-items:baseline;gap:6px;padding:0 3px 5px}
