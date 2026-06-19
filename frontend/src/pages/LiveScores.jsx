@@ -12,11 +12,11 @@ import TerminalShell from "./TerminalShell";
 import BottomNav from "./BottomNav";
 
 const LEAGUE_META = {
-  mlb: { icon: "⚾", title: "MLB Games", periodLabel: "Inn" },
-  nba: { icon: "🏀", title: "NBA Games", periodLabel: "Qtr" },
-  nfl: { icon: "🏈", title: "NFL Games", periodLabel: "Qtr" },
-  cfb: { icon: "🏟️", title: "College Football", periodLabel: "Qtr" },
-  nhl: { icon: "🏒", title: "NHL Games", periodLabel: "Per" },
+  mlb: { icon: "", title: "MLB Games", periodLabel: "Inn" },
+  nba: { icon: "", title: "NBA Games", periodLabel: "Qtr" },
+  nfl: { icon: "", title: "NFL Games", periodLabel: "Qtr" },
+  cfb: { icon: "", title: "College Football", periodLabel: "Qtr" },
+  nhl: { icon: "", title: "NHL Games", periodLabel: "Per" },
 };
 
 export default function LiveScoresPage({ league = "mlb" }) {
@@ -121,7 +121,7 @@ export default function LiveScoresPage({ league = "mlb" }) {
             ← Back
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
-            <h1 style={{ margin: 0, fontSize: 28, fontWeight: 700, letterSpacing: "-0.01em" }}>{meta.icon} {meta.title}</h1>
+            <h1 style={{ margin: 0, fontSize: 28, fontWeight: 700, letterSpacing: "-0.01em" }}>{meta.title}</h1>
             {refreshedAt && (
               <span style={{ fontSize: 11, color: "#6b7280" }}>
                 Updated {refreshedAt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })} · auto-refreshes
@@ -132,20 +132,19 @@ export default function LiveScoresPage({ league = "mlb" }) {
             Live scores · <span style={{ color: "#ef4444", fontWeight: 600 }}>tap a game</span> for the box score & full analysis
           </p>
 
-          <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4, marginBottom: 22, scrollbarWidth: "none" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid rgba(255,255,255,.09)", marginBottom: 22 }}>
             {Object.keys(LEAGUE_META).map((lg) => {
               const m = LEAGUE_META[lg];
               const on = lg === activeLeague;
               return (
                 <button key={lg} onClick={() => setActiveLeague(lg)} style={{
-                  flex: "0 0 auto", display: "inline-flex", alignItems: "center", gap: 6,
-                  padding: "7px 15px", borderRadius: 999, cursor: "pointer", whiteSpace: "nowrap",
-                  fontSize: 13, fontWeight: 700, fontFamily: "inherit",
-                  border: on ? "1px solid #ef4444" : "1px solid #1f2937",
-                  background: on ? "rgba(239,68,68,0.12)" : "#0e131b",
-                  color: on ? "#fff" : "#9ca3af",
+                  flex: "0 0 auto", padding: "9px 3px", cursor: "pointer", whiteSpace: "nowrap",
+                  fontSize: 16, fontWeight: 700, fontFamily: "'Barlow Condensed',sans-serif",
+                  background: "none", border: "none",
+                  borderBottom: on ? "2px solid #ff5d4d" : "2px solid transparent",
+                  color: on ? "#fff" : "#8a99a2", marginBottom: -1,
                 }}>
-                  <span style={{ fontSize: 15 }}>{m.icon}</span>{lg.toUpperCase()}
+                  {lg.toUpperCase()}
                 </button>
               );
             })}
@@ -448,7 +447,7 @@ function Loader() {
 function ErrorState({ onRetry }) {
   return (
     <div style={{ textAlign: "center", padding: 64, background: "#0f1419", border: "1px solid #1f2937", borderRadius: 8 }}>
-      <div style={{ fontSize: 32, marginBottom: 12 }}>⚠️</div>
+      
       <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>Could not load scores</div>
       <button onClick={onRetry} style={{ background: "#ef4444", color: "#fff", border: "none", borderRadius: 6, padding: "8px 18px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", marginTop: 8 }}>Retry</button>
     </div>
@@ -459,7 +458,7 @@ function EmptyState({ icon, league }) {
   if (offSeason) {
     return (
       <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 8, padding: 48, textAlign: "center" }}>
-        <div style={{ fontSize: 48, marginBottom: 16 }}>{icon}</div>
+        
         <div style={{ fontSize: 16, fontWeight: 700 }}>Off season</div>
         <div style={{ fontSize: 13, color: "#9ca3af", marginTop: 6 }}>{offSeason}</div>
       </div>
@@ -467,7 +466,7 @@ function EmptyState({ icon, league }) {
   }
   return (
     <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 8, padding: 48, textAlign: "center" }}>
-      <div style={{ fontSize: 48, marginBottom: 16 }}>{icon}</div>
+      
       <div style={{ fontSize: 16, fontWeight: 700 }}>No games scheduled today</div>
       <div style={{ fontSize: 13, color: "#9ca3af", marginTop: 6 }}>Check back when the next slate is posted.</div>
     </div>
