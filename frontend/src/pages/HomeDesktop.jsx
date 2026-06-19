@@ -34,7 +34,7 @@ function Lock({ title, sub, navigate }) {
     <div className="lockwrap">
       <div className="lockblur"></div>
       <div className="lockcard">
-        <div className="lk">🔒</div>
+        <div className="lk"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
         <div className="lt">{title}</div>
         <div className="ls">{sub}</div>
         <button onClick={() => navigate("/pricing")}>Unlock All-Access →</button>
@@ -117,16 +117,16 @@ export default function HomeDesktop(props) {
 
   const NAV = [
     ["BOARD", null],
-    ["📊", "Dashboard", "/home", true],
-    ["💹", "Market Price", "/odds"],
-    ["🧭", "Market Read", "/market-read"],
-    ["⚾", "Props", "/props"],
+    ["", "Dashboard", "/home", true],
+    ["", "Market Price", "/odds"],
+    ["", "Market Read", "/market-read"],
+    ["", "Props", "/props"],
     ["TRACK", null],
-    ["📈", "Performance", "/performance"],
-    ["⭐", "WizePlays", "/expert-picks"],
-    ["🎰", "Wize Spin", "/daily-card"],
+    ["", "Performance", "/performance"],
+    ["", "WizePlays", "/expert-picks"],
+    ["", "Wize Spin", "/daily-card"],
     ["SCORES", null],
-    ["🟢", "Games & Scores", "/games"],
+    ["", "Games & Scores", "/games"],
   ];
 
   return (
@@ -159,8 +159,8 @@ export default function HomeDesktop(props) {
           <div className="maintop">
             <div><h1>Today's Board</h1><div className="sub">{games.length} games · {sport.toUpperCase()} · model live</div></div>
             <div className="sportbar">
-              {[["⚾", "MLB", "mlb"], ["🏀", "NBA", "nba"], ["🏈", "NFL", "nfl"], ["🏒", "NHL", "nhl"], ["🏉", "CFB", "cfb"]].map(([ic, lb, k]) => (
-                <div key={k} className={"sp" + (sport === k ? " on" : "")} onClick={() => (k === "mlb" || k === "nba") ? (setSport && setSport(k)) : navigate(`/${k}-games`)}><span className="d" />{ic} {lb}</div>
+              {[["MLB", "mlb"], ["NBA", "nba"], ["NFL", "nfl"], ["NHL", "nhl"], ["CFB", "cfb"]].map(([lb, k]) => (
+                <div key={k} className={"sp" + (sport === k ? " on" : "")} onClick={() => (k === "mlb" || k === "nba") ? (setSport && setSport(k)) : navigate(`/${k}-games`)}><span className="d" />{lb}</div>
               ))}
             </div>
           </div>
@@ -171,7 +171,7 @@ export default function HomeDesktop(props) {
             <div className="idx green"><div className="k">Best Edge</div>
               {!planLoaded ? <><div className="v num">…</div><div className="chg">loading</div></>
                 : hasFull ? <><div className="v num">{bestEdge}</div><div className="chg">{hero ? `${edgeLabel(hero)} · ${hero.conviction || ""}` : "top of the board"}</div></>
-                : <><div className="v num lockv">🔒</div><div className="chg">All-Access</div></>}
+                : <><div className="v num lockv"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div><div className="chg">All-Access</div></>}
             </div>
             <div className="idx amber"><div className="k">Live Now</div><div className="v num">{liveStrip.length}</div><div className="chg">{anyLive ? "in-game models running" : "no games live"}</div></div>
             <div className="idx purple"><div className="k">WizePlays · Tracked</div>
@@ -182,7 +182,7 @@ export default function HomeDesktop(props) {
 
           {/* EDGE BOARD */}
           <div className="panel">
-            <div className="phead"><div className="t">🎯 Edge Board</div>
+            <div className="phead"><div className="t">Edge Board</div>
               <div className="seg">{[["ml", "Moneyline"], ["totals", "Totals"], ...(sport === "nba" ? [["spread", "Spread"]] : [])].map(([m, lb]) => (
                 <b key={m} className={market === m ? "on" : ""} onClick={() => setMarket(m)}>{lb}</b>))}</div>
               <div className="right"><span className="ldot" />click a column to sort</div>
@@ -216,7 +216,7 @@ export default function HomeDesktop(props) {
                             <td className="book">{formatOdds(x.odds)}{x.book ? <><br /><span className="bk">{x.book}</span></> : ""}</td>
                             <td className="c">{(() => { const s = lineSeries[x.gameId + x.side]; return s && s.length > 1 ? <span dangerouslySetInnerHTML={{ __html: miniSpark(s) }} /> : <span className="nomove">—</span>; })()}</td>
                             <td className="edge-cell">{hasE ? <><div className={"edge-v " + (pos ? "up" : "dn")}>{fmtEdge(x, sport)}</div><div className="edge-bar"><i style={{ width: Math.min(100, Math.abs(ep) * 12 + 8) + "%" }} /></div></> : <span className="nomove">no edge</span>}</td>
-                            <td className="c"><span className={"conv " + convClass(x._convAdj || x.conviction)}>{(x._convAdj || x.conviction || "—")}{x._moveDir > 0 ? " ↑" : x._moveDir < 0 ? " ↓" : ""}</span>{x._moveFlag === "against" && <div className="dmove against">⚠ moving against</div>}{x._moveFlag === "toward" && <div className="dmove toward">↘ money in</div>}</td>
+                            <td className="c"><span className={"conv " + convClass(x._convAdj || x.conviction)}>{(x._convAdj || x.conviction || "—")}{x._moveDir > 0 ? " ↑" : x._moveDir < 0 ? " ↓" : ""}</span>{x._moveFlag === "against" && <div className="dmove against"> moving against</div>}{x._moveFlag === "toward" && <div className="dmove toward">↘ money in</div>}</td>
                           </tr>
                         );
                       })}
@@ -228,7 +228,7 @@ export default function HomeDesktop(props) {
           {/* MARKET READ — what the books are collectively saying (win market) */}
           {sport === "mlb" && Array.isArray(marketRead) && marketRead.filter(g => g.win).length > 0 && (
             <div className="panel">
-              <div className="phead"><div className="t">🧭 Market Read</div><div className="right" onClick={() => navigate("/market-read")} style={{ cursor: "pointer" }}>who the books lean · all markets →</div></div>
+              <div className="phead"><div className="t">Market Read</div><div className="right" onClick={() => navigate("/market-read")} style={{ cursor: "pointer" }}>who the books lean · all markets →</div></div>
               {!hasFull
                 ? <Lock title="Market Read is an All-Access feature" sub={<>See what every book is saying on every game. <b>$7/mo</b></>} navigate={navigate} />
                 : (
@@ -245,7 +245,7 @@ export default function HomeDesktop(props) {
                             <td className="mread">{w.tier === "Split" ? <>Books can’t agree on the <b>{w.favTeam}</b></> : <>Market {verb} the <b>{w.favTeam}</b></>}</td>
                             <td className="c num">{w.favProb}%</td>
                             <td className="c"><span className="mrtag" style={{ color: td }}><span className="dot" style={{ background: td }} />{w.tier}</span></td>
-                            <td className="c">{w.model ? (w.model.agrees ? <span className="magree">✓</span> : <span className="mdiff">⚠</span>) : <span className="mnone">—</span>}</td>
+                            <td className="c">{w.model ? (w.model.agrees ? <span className="magree">✓</span> : <span className="mdiff"></span>) : <span className="mnone">—</span>}</td>
                           </tr>
                         );
                       })}
@@ -258,7 +258,7 @@ export default function HomeDesktop(props) {
           {/* WEATHER FACTOR */}
           {wx.length > 0 && (
             <div className="panel">
-              <div className="phead"><div className="t">🌬️ Weather Factor</div><div className="right">first-pitch forecast → run environment</div></div>
+              <div className="phead"><div className="t">Weather Factor</div><div className="right">first-pitch forecast → run environment</div></div>
               <table className="tbl">
                 <thead><tr><th>Matchup</th><th className="c">Temp</th><th>Wind</th><th className="c">Sky</th><th className="c">Park RF</th><th>Model Read</th></tr></thead>
                 <tbody>
@@ -272,10 +272,10 @@ export default function HomeDesktop(props) {
                       <tr key={g.id || i}>
                         <td><div className="matchup"><span className="logos"><TLogo ab={a} /><TLogo ab={h} /></span><span className="mu"><span className="mua">{a}<span className="at"> @ </span>{h}</span></span></div></td>
                         {w.indoor
-                          ? <><td className="c"><span className="dome">roof closed</span></td><td><span className="dome">no wind</span></td><td className="c"><span className="sky">🏟️</span></td></>
+                          ? <><td className="c"><span className="dome">roof closed</span></td><td><span className="dome">no wind</span></td><td className="c"><span className="sky"></span></td></>
                           : <><td className="c"><span className={"temp " + tC}>{w.tempF != null ? `${w.tempF}°` : "—"}</span></td>
                             <td><span className={"wind " + wc}><span className="war">{wAr}</span>{w.windMph != null ? `${w.windMph} mph` : "calm"}</span></td>
-                            <td className="c"><span className="sky">{w.isRaining ? "🌧️" : "☀️"}</span></td></>}
+                            <td className="c"><span className="sky">{w.isRaining ? "Rain" : "Clear"}</span></td></>}
                         <td className="c">{rf != null ? <span className={"rf " + rfc}>{rf.toFixed(2)}×</span> : "—"}</td>
                         <td className="wsum">{w.summary || w.conditions || "—"}</td>
                       </tr>
@@ -289,7 +289,7 @@ export default function HomeDesktop(props) {
           {/* PLAYER PROPS */}
           <div className="panel">
             <div className="phead">
-              <div className="t">🎯 Player Props</div>
+              <div className="t">Player Props</div>
               <div className="ptabs">
                 {[["hits", "Hits"], ["ks", "Strikeouts"], ["hr", "Home Runs"]].map(([k, lb]) => (
                   <button key={k} className={"ptab" + (propTab === k ? " on" : "")} onClick={() => setPropTab(k)}>{lb}</button>
@@ -303,7 +303,7 @@ export default function HomeDesktop(props) {
               : propRows.length === 0
               ? <div className="empty">No {propTab === "hr" ? "home run" : propTab === "ks" ? "strikeout" : "hits"} props posted yet — they fill in closer to first pitch.</div>
               : <>
-                {propTab === "hr" && <div className="pnote">⚠️ Home run props are longshots — ranked by model chance to homer, not +EV. Bet small.</div>}
+                {propTab === "hr" && <div className="pnote">Home run props are longshots — ranked by model chance to homer, not +EV. Bet small.</div>}
                 <table className="tbl">
                   <thead><tr>
                     <th>Player</th><th>Matchup</th><th>Prop</th>
@@ -317,7 +317,7 @@ export default function HomeDesktop(props) {
                       const ev = sport === "mlb" ? (p.edge ?? 0) * 100 : (p.edge ?? 0);
                       return (
                         <tr key={p.k || i} className="click" onClick={() => navigate("/props")}>
-                          <td><div className="pp"><span className="pph">{p.id ? <img src={`https://midfield.mlbstatic.com/v1/people/${p.id}/spots/120`} alt="" onError={(ev2) => { ev2.currentTarget.style.display = "none"; }} /> : "🧢"}</span><span className="ppn">{p.name}</span></div></td>
+                          <td><div className="pp"><span className="pph">{p.id ? <img src={`https://midfield.mlbstatic.com/v1/people/${p.id}/spots/120`} alt="" onError={(ev2) => { ev2.currentTarget.style.display = "none"; }} /> : ""}</span><span className="ppn">{p.name}</span></div></td>
                           <td className="dim">{p.game || p.team || "—"}</td>
                           <td><span className={"ptag " + (over ? "ov" : "un")}>{p.betSide || p.market}</span></td>
                           <td className="model-p">{p.prob != null ? `${Math.round(p.prob * 100)}%` : "—"}</td>
@@ -338,7 +338,7 @@ export default function HomeDesktop(props) {
         <aside className="rail">
           {liveStrip.length > 0 && (
             <div className="panel">
-              <div className="phead"><div className="t">🟢 Live</div><div className="right"><span className="ldot" />{liveStrip.length} now</div></div>
+              <div className="phead"><div className="t">Live</div><div className="right"><span className="ldot" />{liveStrip.length} now</div></div>
               <div className="rlive">
                 {liveStrip.map((g, i) => {
                   const info = abbrById[g.gameId] || {}; const a = info.a || shortTeam(g.away || ""); const h = info.h || shortTeam(g.home || "");
@@ -356,7 +356,7 @@ export default function HomeDesktop(props) {
           )}
 
           <div className="panel">
-            <div className="phead"><div className="t">⚡ Market Movers</div></div>
+            <div className="phead"><div className="t">Market Movers</div></div>
             {!planLoaded
               ? <div className="empty">Loading…</div>
               : !hasFull
@@ -375,7 +375,7 @@ export default function HomeDesktop(props) {
           </div>
 
           <div className="panel grow">
-            <div className="phead"><div className="t">💹 Market Price</div><div className="right">best price</div></div>
+            <div className="phead"><div className="t">Market Price</div><div className="right">best price</div></div>
             {mp.length === 0
               ? <div className="empty">Prices fill in as books post.</div>
               : <div className="mplist">
@@ -404,7 +404,7 @@ export default function HomeDesktop(props) {
 const TCSS = `
 .wpterm{--ink:#06080d;--panel:#0b0e16;--line:#1a2030;--line2:#232c3d;--teal:#1D9E75;--up:#2bd47d;--dn:#ff5247;--model:#9b7bff;--amber:#f3b94f;--cold:#5aa9ff;--tx:#e8edf4;--mut:#6b7888;--mut2:#485364;--mono:'IBM Plex Mono',ui-monospace,monospace;--disp:'Barlow Condensed',sans-serif;
   position:relative;min-height:100vh;width:100%;background:var(--ink);color:var(--tx);font-family:'Inter',system-ui,sans-serif;display:flex;flex-direction:column;
-  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(155,123,255,.06),transparent 60%),radial-gradient(900px 500px at 0% 110%,rgba(29,158,117,.06),transparent 55%)}
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(38,116,176,.06),transparent 60%),radial-gradient(900px 500px at 0% 110%,rgba(29,158,117,.06),transparent 55%)}
 .wpterm .num{font-family:var(--mono);font-variant-numeric:tabular-nums}
 .wpterm .status{position:sticky;top:0;z-index:30;flex:0 0 52px;display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:18px;height:52px;padding:0 18px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,#0a0d15,#080a11)}
 .wpterm .brand{display:flex;align-items:center;gap:9px}
@@ -436,7 +436,7 @@ const TCSS = `
 .wpterm .nav a.on{background:linear-gradient(90deg,rgba(29,158,117,.16),rgba(29,158,117,.04));color:#fff;border-color:rgba(29,158,117,.28)}
 .wpterm .nav a.on::before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:3px;border-radius:0 3px 3px 0;background:var(--teal)}
 .wpterm .nav .spacer{flex:1}
-.wpterm .nav .upsell{margin:8px 4px 4px;border:1px solid rgba(155,123,255,.3);border-radius:11px;background:linear-gradient(180deg,rgba(155,123,255,.1),rgba(155,123,255,.02));padding:12px}
+.wpterm .nav .upsell{margin:8px 4px 4px;border:1px solid rgba(38,116,176,.3);border-radius:11px;background:linear-gradient(180deg,rgba(38,116,176,.1),rgba(38,116,176,.02));padding:12px}
 .wpterm .nav .upsell .h{font-family:var(--disp);font-weight:800;font-size:16px;color:#cdbcff}
 .wpterm .nav .upsell .d{font-size:10.5px;color:var(--mut);margin:4px 0 9px;line-height:1.4}
 .wpterm .nav .upsell button{width:100%;border:0;border-radius:8px;background:var(--teal);color:#04130d;font-weight:800;font-size:12px;padding:8px;cursor:pointer;font-family:inherit}
@@ -462,7 +462,7 @@ const TCSS = `
 .wpterm .phead .t{font-family:var(--disp);font-weight:800;font-size:clamp(13px,1vw,15.5px);letter-spacing:.4px;display:flex;align-items:center;gap:8px}
 .wpterm .phead .seg{display:flex;gap:2px;background:#080b12;border:1px solid var(--line);border-radius:9px;padding:3px;margin-left:6px}
 .wpterm .phead .seg b{font-size:11.5px;font-weight:700;color:var(--mut);padding:5px 12px;border-radius:6px;cursor:pointer}
-.wpterm .phead .seg b.on{background:#16203a;color:#fff;box-shadow:inset 0 0 0 1px rgba(155,123,255,.35)}
+.wpterm .phead .seg b.on{background:#16203a;color:#fff;box-shadow:inset 0 0 0 1px rgba(38,116,176,.35)}
 .wpterm .phead .right{margin-left:auto;display:flex;align-items:center;gap:7px;font-size:11px;color:var(--mut)}
 .wpterm .phead .right .ldot{width:6px;height:6px}
 .wpterm .empty{padding:22px 16px;color:var(--mut);font-size:12.5px}
@@ -495,7 +495,7 @@ const TCSS = `
 .wpterm .mua{font-family:var(--disp);font-weight:700;font-size:15px}.wpterm .mua .at{color:var(--mut2)}
 .wpterm .pick{font-family:var(--disp);font-weight:700;font-size:15px}
 .wpterm .pick .side{font-size:10px;font-weight:800;border-radius:4px;padding:1px 5px;margin-right:6px;font-family:'Inter',sans-serif}
-.wpterm .side.ov{color:var(--up);background:rgba(43,212,125,.12)}.wpterm .side.un{color:var(--dn);background:rgba(255,82,71,.12)}.wpterm .side.ml{color:var(--model);background:rgba(155,123,255,.14)}
+.wpterm .side.ov{color:var(--up);background:rgba(43,212,125,.12)}.wpterm .side.un{color:var(--dn);background:rgba(255,82,71,.12)}.wpterm .side.ml{color:var(--model);background:rgba(38,116,176,.14)}
 .wpterm .model-p{font-family:var(--mono);font-size:12.5px;color:#5fd6a0;text-align:right}
 .wpterm .book-p{font-family:var(--mono);font-size:12.5px;color:var(--mut);text-align:right}
 .wpterm .spark-mini{width:54px;height:20px;vertical-align:middle}
@@ -504,7 +504,7 @@ const TCSS = `
 .wpterm .tln{font-family:var(--mono);font-size:13px;color:#e8edf4;font-weight:600}
 .wpterm .plist{display:flex;flex-direction:column}
 .wpterm .prow{display:flex;align-items:center;gap:9px;padding:8px 12px;border-bottom:1px solid #11151f;cursor:pointer}.wpterm .prow:last-child{border-bottom:0}.wpterm .prow:hover{background:rgba(255,255,255,.02)}
-.wpterm .pph{width:30px;height:30px;border-radius:50%;background:radial-gradient(circle at 50% 30%,#2a3550,#0c1018);border:1.5px solid rgba(155,123,255,.45);overflow:hidden;position:relative;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:13px}
+.wpterm .pph{width:30px;height:30px;border-radius:50%;background:radial-gradient(circle at 50% 30%,#2a3550,#0c1018);border:1.5px solid rgba(38,116,176,.45);overflow:hidden;position:relative;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:13px}
 .wpterm .pph img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center top}
 .wpterm .pinfo{flex:1;min-width:0;display:flex;flex-direction:column}.wpterm .pnm{font-size:12.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .wpterm .pmk{font-size:10px;color:var(--mut);font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -519,7 +519,7 @@ const TCSS = `
 .wpterm .pnote{font-size:11.5px;color:#f3b94f;background:rgba(243,185,79,.07);border-bottom:1px solid var(--line);padding:8px 14px}
 /* player cell */
 .wpterm .pp{display:flex;align-items:center;gap:9px}
-.wpterm .pph{width:28px;height:28px;border-radius:50%;background:radial-gradient(circle at 50% 30%,#2a3550,#0c1018);border:1.5px solid rgba(155,123,255,.4);overflow:hidden;position:relative;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:13px}
+.wpterm .pph{width:28px;height:28px;border-radius:50%;background:radial-gradient(circle at 50% 30%,#2a3550,#0c1018);border:1.5px solid rgba(38,116,176,.4);overflow:hidden;position:relative;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:13px}
 .wpterm .pph img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center top}
 .wpterm .ppn{font-weight:700;font-size:13px;white-space:nowrap}
 .wpterm td.dim{color:var(--mut);font-family:var(--mono);font-size:12px}
@@ -576,16 +576,16 @@ const TCSS = `
 .wpterm .mvc.up .md{color:var(--up)}.wpterm .mvc.dn .md{color:var(--dn)}
 .wpterm .spot{padding:13px;cursor:pointer}
 .wpterm .spot .who{display:flex;align-items:center;gap:11px}
-.wpterm .spot .ph{width:46px;height:46px;border-radius:50%;background:radial-gradient(circle at 50% 30%,#2a3550,#0c1018);border:2px solid rgba(155,123,255,.5);overflow:hidden;position:relative;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:20px}
+.wpterm .spot .ph{width:46px;height:46px;border-radius:50%;background:radial-gradient(circle at 50% 30%,#2a3550,#0c1018);border:2px solid rgba(38,116,176,.5);overflow:hidden;position:relative;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:20px}
 .wpterm .spot .ph img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center top}
 .wpterm .spot .nm{font-weight:800;font-size:14px}.wpterm .spot .mk{font-size:10.5px;color:var(--mut);font-family:var(--mono);margin-top:2px}
-.wpterm .spot .sline{display:flex;align-items:center;justify-content:space-between;margin-top:11px;border:1px solid rgba(155,123,255,.25);background:rgba(155,123,255,.06);border-radius:9px;padding:9px 11px}
+.wpterm .spot .sline{display:flex;align-items:center;justify-content:space-between;margin-top:11px;border:1px solid rgba(38,116,176,.25);background:rgba(38,116,176,.06);border-radius:9px;padding:9px 11px}
 .wpterm .spot .pl{font-size:12px;font-weight:700;color:#cdbcff}.wpterm .spot .od{font-family:var(--mono);font-size:13px;color:#c3b1ff}
 .wpterm .spot .dots{display:flex;gap:5px;justify-content:center;margin-top:10px}.wpterm .spot .dots i{width:5px;height:5px;border-radius:50%;background:#222c3d}.wpterm .spot .dots i.on{width:15px;border-radius:3px;background:var(--model)}
 .wpterm .lockwrap{position:relative;min-height:180px}
 .wpterm .lockblur{position:absolute;inset:0;background:repeating-linear-gradient(0deg,#0c1018 0 38px,#0a0d14 38px 39px);opacity:.5;filter:blur(2px)}
 .wpterm .lockcard{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:22px;background:radial-gradient(circle at 50% 40%,rgba(8,10,16,.4),rgba(6,9,11,.9))}
-.wpterm .lockcard .lk{width:44px;height:44px;border-radius:13px;display:flex;align-items:center;justify-content:center;font-size:21px;background:rgba(155,123,255,.14);border:1px solid rgba(155,123,255,.4);margin-bottom:12px}
+.wpterm .lockcard .lk{width:44px;height:44px;border-radius:13px;display:flex;align-items:center;justify-content:center;font-size:21px;background:rgba(38,116,176,.14);border:1px solid rgba(38,116,176,.4);margin-bottom:12px}
 .wpterm .lockcard .lt{font-size:16px;font-weight:800;color:#fff;margin-bottom:5px}
 .wpterm .lockcard .ls{font-size:12px;color:#9aa6b2;line-height:1.5;max-width:300px;margin-bottom:14px}.wpterm .lockcard .ls b{color:var(--up);font-weight:800}
 .wpterm .lockcard button{background:var(--teal);color:#04130d;border:0;font-weight:800;font-size:13px;padding:11px 22px;border-radius:11px;cursor:pointer;font-family:inherit}
