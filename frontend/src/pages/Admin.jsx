@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-import { supabase, scoresApi } from "../lib/api";
+import { supabase, edgesApi } from "../lib/api";
 
 const API_BASE = import.meta.env.VITE_API_URL || "https://sportsintel-production.up.railway.app";
 const ADMIN_EMAIL = "r7002g@gmail.com";
@@ -61,18 +61,59 @@ export default function AdminPage() {
   };
   useEffect(() => { if(isAdmin){ loadToday(); loadRecord(); } }, [isAdmin]);
 
+  // Games come from the EDGES board so each one carries its live odds (moneyline /
+  // total / run-line). Selecting a game + market + selection then auto-fills the price.
   useEffect(() => {
     let cancelled = false;
-    scoresApi.getScores(sport).then(d => {
+    const p = sport==="nba" ? edgesApi.getNBA() : edgesApi.getMLB();
+    p.then(d => {
       if (cancelled) return;
-      const list = (Array.isArray(d) ? d : (d?.games||[])).map(g => ({
-        gameId: g.id || g.gameId || g.espnId, awayAbbr: g.awayAbbr || g.away, homeAbbr: g.homeAbbr || g.home,
+      const arr = Array.isArray(d) ? d : (d?.games || []);
+      const list = arr.map(g => ({
+        gameId: g.id || g.gameId || g.gamePk,
+        awayAbbr: g.awayAbbr || g.away || "?",
+        homeAbbr: g.homeAbbr || g.home || "?",
         label: `${g.awayAbbr||g.away||"?"} @ ${g.homeAbbr||g.home||"?"}${g.time?" · "+g.time:""}`,
+        moneyline: g.moneyline || null,
+        totals: g.totals || null,
+        runLine: g.runLine || null,
+        spread: g.spread || null,
       }));
       setGames(list); setGameIdx(-1); setSelection("");
     }).catch(()=>setGames([]));
     return () => { cancelled = true; };
   }, [sport, sheetOpen]);
+
+  // Auto-fill ODDS (and LINE) from the selected game's live edges data.
+  const numOr = (v) => (v==null||v===""||isNaN(Number(v))) ? null : Number(v);
+  const autoOdds = (g, mkt, sel) => {
+    if (!g) return { odds: null, line: null };
+    if (mkt==="moneyline") { const ml=g.moneyline||{}; return { odds: sel==="home"?ml.home:ml.away, line: null }; }
+    if (mkt==="total")     { const t=g.totals||{};     return { odds: sel==="under"?t.underOdds:t.overOdds, line: t.line ?? null }; }
+    if (mkt==="run_line")  {
+      const rl=g.runLine||{}, ml=g.moneyline||{};
+      const hm=numOr(ml.home), aw=numOr(ml.away);
+      const homeFav = (hm!=null && aw!=null) ? hm < aw : null;          // more-negative ML = favorite
+      const sideFav = sel==="home" ? homeFav : (homeFav===null ? null : !homeFav);
+      const mag = (rl.line!=null && !isNaN(Number(rl.line))) ? Math.abs(Number(rl.line)) : 1.5;
+      const ln = sideFav===null ? (sel==="home"?-mag:mag) : (sideFav ? -mag : mag);
+      return { odds: sel==="home"?rl.homeOdds:rl.awayOdds, line: ln };
+    }
+    if (mkt==="spread")    {
+      const sp=g.spread||{};
+      const mag = (sp.line!=null && !isNaN(Number(sp.line))) ? Math.abs(Number(sp.line)) : null;
+      return { odds: sel==="home"?sp.homeOdds:sp.awayOdds, line: mag==null?null:(sel==="home"?-mag:mag) };
+    }
+    return { odds: null, line: null };
+  };
+  useEffect(() => {
+    const g = games[gameIdx];
+    if (!g || !selection) return;
+    const { odds: od, line: ln } = autoOdds(g, market, selection);
+    if (od!=null && od!=="") setOdds(String(od));
+    if (ln!=null) setLine(String(ln));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameIdx, market, selection]);
 
   const save = async (next) => {
     setSaving(true);
