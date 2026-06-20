@@ -1,1278 +1,426 @@
-import { useEffect, useState } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-import { edgesApi, subscriptionApi, scoresApi, liveApi } from "../lib/api";
-import { BoxScore } from "./LiveScores";
-import Sidebar from "./Sidebar";
-import BottomNav from "./BottomNav";
-// last word of a team name, lowercased — used to match an ESPN game to a model
-// game when the backend didn't attach a detailId (same idea the backend uses).
-const nick = (s) => String(s || "").trim().split(/\s+/).pop().toLowerCase();
+import { edgesApi, subscriptionApi, scoresApi } from "../lib/api";
+
+const TEAMCOL = {
+  ARI:"#A71930",ATL:"#CE1141",BAL:"#DF4601",BOS:"#BD3039",CHC:"#0E3386",CWS:"#27251F",CHW:"#27251F",
+  CIN:"#C6011F",CLE:"#00385D",COL:"#33006F",DET:"#0C2340",HOU:"#EB6E1F",KC:"#004687",LAA:"#BA0021",
+  LAD:"#005A9C",MIA:"#00A3E0",MIL:"#FFC52F",MIN:"#002B5C",NYM:"#FF5910",NYY:"#0C2340",OAK:"#003831",
+  ATH:"#003831",PHI:"#E81828",PIT:"#FDB827",SD:"#2F241D",SF:"#FD5A1E",SEA:"#0C2C56",STL:"#C41E3A",
+  TB:"#092C5C",TEX:"#003278",TOR:"#134A8E",WSH:"#AB0003",WAS:"#AB0003"
+};
+const SLUGM = { CWS:"chw", CHW:"chw", ATH:"oak" };
+const colFor = (ab) => TEAMCOL[(ab||"").toUpperCase()] || "#2674b0";
+const nick = (s) => String(s||"").trim().split(/\s+/).pop().toLowerCase();
+const fmtOdds = (o) => o==null||o===""||isNaN(+o) ? "—" : (+o>0 ? "+"+(+o) : ""+(+o));
+const shortTeam = (s) => (s||"").trim().split(/\s+/).slice(-1)[0].slice(0,3).toUpperCase();
+const fmtTime = (t) => { if(!t) return ""; if(typeof t==="string" && !t.includes("T")) return t;
+  try { return new Date(t).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit",timeZone:"America/New_York"}).replace(" ","")+" ET"; } catch { return String(t); } };
+const implied = (o) => { if(o==null||isNaN(+o)) return null; o=+o; return o>0 ? 100/(o+100) : (-o)/(-o+100); };
+const pct = (x) => x==null ? null : Math.round(x*100);
+
 export default function GameDetailPage() {
   const { gameId } = useParams();
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const [allEdges, setAllEdges] = useState(null);
-  const [scoresGame, setScoresGame] = useState(null); // matched game from the scores feed
+  const [scoresGame, setScoresGame] = useState(null);
+  const [detail, setDetail] = useState(null);     // getGameDetail: series / umpire / line score
+  const [bvpData, setBvpData] = useState(null);    // getGameDetail: batter-vs-pitcher
+  const [marketRead, setMarketRead] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [plan, setPlan] = useState({ tier: "free", isAdmin: false });
-  const isAdmin = plan.isAdmin === true;
-  const isPro = plan.tier === "pro" || plan.tier === "elite";
-  const hasFullAccess = isAdmin || isPro;
-  useEffect(() => { subscriptionApi.getMyPlan().then(setPlan).catch(() => {}); }, []);
-  // Load BOTH feeds: the model edges (for full analysis) and the scores feed
-  // (so we can resolve a game even when it has no model detailId yet).
+  const [plan, setPlan] = useState({ tier:"free", isAdmin:false });
+  const hasFull = plan.isAdmin === true || plan.tier === "pro" || plan.tier === "elite";
+
+  useEffect(() => { subscriptionApi.getMyPlan().then(setPlan).catch(()=>{}); }, []);
+
   useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
+    let cancelled = false; setLoading(true);
     (async () => {
-      try {
-        const [edges, scores] = await Promise.all([
-          edgesApi.getMLB().catch(() => null),
-          scoresApi.getScores("mlb").catch(() => null),
-        ]);
-        if (cancelled) return;
-        setAllEdges(edges);
-        const all = scores ? [...(scores.live || []), ...(scores.upcoming || []), ...(scores.final || [])] : [];
-        const sg = all.find(
-          (g) => String(g.detailId) === String(gameId) || String(g.id) === String(gameId)
-        ) || null;
-        setScoresGame(sg);
-        setLoading(false);
-      } catch (e) {
-        console.error(e);
-        if (!cancelled) { setError("Could not load game data"); setLoading(false); }
+      const [edges, scores, mr] = await Promise.all([
+        edgesApi.getMLB().catch(()=>null),
+        scoresApi.getScores("mlb").catch(()=>null),
+        edgesApi.getMarketRead ? edgesApi.getMarketRead("mlb").catch(()=>null) : Promise.resolve(null),
+      ]);
+      if (cancelled) return;
+      setAllEdges(edges); setMarketRead(mr);
+      const all = scores ? [...(scores.live||[]),...(scores.upcoming||[]),...(scores.final||[])] : [];
+      const sg = all.find(g => String(g.detailId)===String(gameId) || String(g.id)===String(gameId)) || null;
+      setScoresGame(sg);
+      const sid = sg?.id || sg?.detailId;
+      if (sid && scoresApi.getGameDetail) {
+        scoresApi.getGameDetail("mlb", sid).then(d => { if(!cancelled){ setDetail(d); setBvpData(d); } }).catch(()=>{});
       }
+      setLoading(false);
     })();
     return () => { cancelled = true; };
   }, [gameId]);
-  // Resolve the MODEL game: first by id, then (if we arrived via an ESPN id)
-  // by matching the scores game's team nicknames against the edges feed.
-  let game = allEdges?.games?.find((g) => String(g.id) === String(gameId));
+
+  let game = allEdges?.games?.find(g => String(g.id)===String(gameId));
   if (!game && scoresGame && allEdges?.games) {
     const key = `${nick(scoresGame.away?.name)}|${nick(scoresGame.home?.name)}`;
-    game = allEdges.games.find((g) => `${nick(g.away)}|${nick(g.home)}` === key);
+    game = allEdges.games.find(g => `${nick(g.away)}|${nick(g.home)}` === key);
   }
-  const gameHRProps = (allEdges?.hrPropEdges || []).filter(
-    p => p.game === `${game?.awayAbbr} @ ${game?.homeAbbr}`
-  );
-  // ESPN id for scores-based widgets (box score, team form series lookup).
-  const scoresId = scoresGame?.id || null;
+
+  const aAb = game?.awayAbbr || shortTeam(scoresGame?.away?.name || game?.away || "");
+  const hAb = game?.homeAbbr || shortTeam(scoresGame?.home?.name || game?.home || "");
+  const st = (game?.status==="live"||scoresGame?.status==="live") ? "live"
+           : (game?.status==="final"||scoresGame?.status==="final") ? "final" : "pre";
+
+  // edges for this game
+  const gEdges = (allEdges?.edges || []).filter(e => e.gameId === game?.id);
+  const pickByMarket = (kinds) => gEdges.find(e => kinds.some(k => String(e.market||"").toLowerCase().includes(k)));
+  const mlPick = pickByMarket(["moneyline","ml"]);
+  const totPick = pickByMarket(["total"]);
+  const bestEdge = [...gEdges].sort((a,b)=>(b.edge||0)-(a.edge||0))[0] || null;
+
+  const mr = (Array.isArray(marketRead) ? marketRead : marketRead?.games || [])
+    .find(x => x.gameId === game?.id);
+
+  const title = (aAb && hAb) ? `${aAb} @ ${hAb}` : "Matchup";
+  const venue = game?.venue || scoresGame?.venue || "";
+  const sub = st==="pre" ? [fmtTime(game?.time||scoresGame?.time), venue].filter(Boolean).join(" · ")
+            : st==="live" ? ["Live", venue].filter(Boolean).join(" · ")
+            : ["Final", venue].filter(Boolean).join(" · ");
+
   return (
-    <div style={{ minHeight: "100vh", background: "#0a0e14", color: "#e4e7eb", fontFamily: "'Inter',system-ui,-apple-system,sans-serif" }}>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
-        *{box-sizing:border-box}
-        @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
-        @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
-        @keyframes spin{to{transform:rotate(360deg)}}
-        @keyframes slideIn{from{transform:translateX(-100%)}to{transform:translateX(0)}}
-        ::-webkit-scrollbar{width:6px;height:6px}
-        ::-webkit-scrollbar-thumb{background:#1f2937;border-radius:3px}
-        .back-btn{transition:color .15s;cursor:pointer}
-        .back-btn:hover{color:#fff!important}
-        .mobile-only{display:none}
-        .desktop-sidebar{display:block}
-        @media (max-width: 768px) {
-          .desktop-sidebar{display:none!important}
-          .main-content{margin-left:0!important;max-width:100vw!important;overflow-x:hidden!important}
-          .mobile-only{display:flex!important}
-          .gd-content{padding:16px 14px 60px!important;max-width:100vw!important}
-          h1{font-size:24px!important}
-          .bvp-grid{grid-template-columns:1fr!important}
-          .two-col{grid-template-columns:1fr!important}
-        }
-      `}</style>
-      <div className="desktop-sidebar">
-        <Sidebar user={user} plan={plan} signOut={signOut} navigate={navigate} />
+    <div className="app"><style>{CSS}</style>
+      <div className="shead">
+        <div className="x" onClick={()=>navigate(-1)}>{"\u2039"}</div>
+        <div><div className="t">{title}</div><div className="ts">{sub}</div></div>
       </div>
-      <BottomNav />
-      <div className="main-content" style={{ marginLeft: 200 }}>
-        <div className="gd-content" style={{ maxWidth: 1100, margin: "0 auto", padding: "20px 24px 80px" }}>
-          <Link to="/games" className="back-btn" style={{ color: "#6b7280", fontSize: 13, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
-            ← Back to MLB Games
-          </Link>
-          {loading && <Loader />}
-          {error && <ErrorState />}
-          {/* Neither feed knows this game → not found. */}
-          {!loading && !error && !game && !scoresGame && <NotFound gameId={gameId} />}
-          {/* Model has the game → full analysis (works for upcoming, live, or final). */}
-          {!loading && !error && game && (
-            <GameDetail game={game} scoresId={scoresId} hrProps={gameHRProps} hasFullAccess={hasFullAccess} navigate={navigate} />
-          )}
-          {/* No model game yet, but it's in the scores feed → clean pre-game page. */}
-          {!loading && !error && !game && scoresGame && (
-            <PreGameDetail scoresGame={scoresGame} />
-          )}
-        </div>
+      <div className="sbody">
+        {loading && <div className="estate"><div className="et">Loading matchup…</div></div>}
+        {!loading && !game && <div className="estate"><div className="et">Game not found</div><div className="es">It may have rolled off today's slate.</div></div>}
+        {!loading && game && st==="pre"   && <SheetPre   game={game} aAb={aAb} hAb={hAb} gEdges={gEdges} mlPick={mlPick} totPick={totPick} bestEdge={bestEdge} mr={mr} detail={detail} bvpData={bvpData} hasFull={hasFull} navigate={navigate}/>}
+        {!loading && game && st==="live"  && <SheetLive  game={game} scoresGame={scoresGame} aAb={aAb} hAb={hAb} gEdges={gEdges} detail={detail}/>}
+        {!loading && game && st==="final" && <SheetFinal game={game} scoresGame={scoresGame} aAb={aAb} hAb={hAb} bestEdge={bestEdge} detail={detail} venue={venue}/>}
       </div>
+      <nav className="nav">
+        <a onClick={()=>navigate("/dashboard")}><span className="i"><svg className="dbars" viewBox="0 0 24 24" width="18" height="18"><rect x="2" y="13" width="4" height="5" rx="1"/><rect x="7.3" y="9" width="4" height="9" rx="1"/><rect x="12.6" y="11" width="4" height="7" rx="1"/><rect x="18" y="6" width="4" height="12" rx="1"/></svg></span>Dashboard</a>
+        <a className="on" onClick={()=>navigate("/games")}><span className="i">{"\u25a6"}</span>Games</a>
+        <a onClick={()=>navigate(hasFull?"/props":"/pricing")}><span className="i">{"\u25c8"}</span>Props</a>
+        <a onClick={()=>navigate("/odds")}><span className="i">{"\u25d0"}</span>Market</a>
+        <a onClick={()=>navigate("/performance")}><span className="i">{"\u25b2"}</span>Performance</a>
+        <a onClick={()=>navigate("/settings")}><span className="i">{"\u25cd"}</span>Account</a>
+      </nav>
     </div>
   );
 }
-// Pre-game page shown when the model hasn't posted this game yet, but it's on
-// the schedule. Matchup header + scheduled time/venue + team form, plus a note
-// that the full model breakdown posts closer to first pitch.
-function PreGameDetail({ scoresGame }) {
-  const a = scoresGame.away || {};
-  const h = scoresGame.home || {};
-  let when = "";
-  try {
-    when = scoresGame.startTime
-      ? new Date(scoresGame.startTime).toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
-      : (scoresGame.statusDetail || "");
-  } catch (_) { when = scoresGame.statusDetail || ""; }
-  return (
-    <div style={{ animation: "fadeIn .3s ease" }}>
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ fontSize: 11, color: "#6b7280", letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 600, marginBottom: 8 }}>
-          ⚾ MLB · {when}
-        </div>
-        <h1 style={{ margin: 0, fontSize: 32, fontWeight: 800, letterSpacing: "-0.02em", lineHeight: 1.1 }}>
-          <span style={{ color: "#e4e7eb" }}>{a.name || a.abbrev}</span>
-          <span style={{ color: "#4b5563", margin: "0 12px", fontWeight: 400 }}>@</span>
-          <span style={{ color: "#e4e7eb" }}>{h.name || h.abbrev}</span>
-        </h1>
-        {scoresGame.venue && <div style={{ marginTop: 8, fontSize: 13, color: "#6b7280" }}>📍 {scoresGame.venue}</div>}
-        {scoresGame.seriesSummary && <div style={{ marginTop: 4, fontSize: 12, color: "#9ca3af" }}>{scoresGame.seriesSummary}</div>}
-      </div>
 
-      {/* ── MATCHUP ── (sparse here — full matchup cards arrive once the model posts) */}
-      <GroupLabel>Matchup</GroupLabel>
-      <TeamForm gameId={scoresGame.id} awayAbbr={a.abbrev} homeAbbr={h.abbrev} awayName={a.name} homeName={h.name} league="mlb" />
+function LogoB({ ab, col }) { const [bad,setBad]=useState(false); const slug=(SLUGM[(ab||"").toUpperCase()]||ab||"").toLowerCase();
+  return <span className="lgb" style={{background:`radial-gradient(circle at 50% 32%, ${col}aa,#0c1018 82%)`}}>{(bad||!ab)?String(ab||"?").slice(0,3):<img src={`https://a.espncdn.com/i/teamlogos/mlb/500/${slug}.png`} alt="" onError={()=>setBad(true)}/>}</span>; }
+function LogoP({ ab, col }) { const [bad,setBad]=useState(false); const slug=(SLUGM[(ab||"").toUpperCase()]||ab||"").toLowerCase();
+  return <span className="pl" style={{background:`radial-gradient(circle at 50% 32%, ${col}99,#0c1018 82%)`}}>{(bad||!ab)?String(ab||"?").slice(0,2):<img src={`https://a.espncdn.com/i/teamlogos/mlb/500/${slug}.png`} alt="" onError={()=>setBad(true)}/>}</span>; }
 
-      {/* ── DETAILS ── */}
-      <GroupLabel>Details</GroupLabel>
-      <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderLeft: "3px solid #ef4444", borderRadius: 10, padding: "16px 20px", marginTop: 10 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: "#e4e7eb", marginBottom: 4 }}>🔍 Full model breakdown posts closer to first pitch</div>
-        <div style={{ fontSize: 12, color: "#9ca3af", lineHeight: 1.5 }}>
-          Model edges, projected total, starting-pitcher matchup, and batter-vs-pitcher history appear here once today's slate is finalized — usually a few hours before the game.
-        </div>
-      </div>
-    </div>
-  );
+const Agree = ({ ok }) => ok==null ? null : <span className={"ma "+(ok?"ag":"df")}>{ok?"\u2713 agrees":"\u2260 differs"}</span>;
+const Block = ({ label, bx, children, style }) => (
+  <div className="dblk" style={style}><div className="bl">{label}{bx && <span className="bx">{bx}</span>}</div>{children}</div>
+);
+function TeamHead({ aAb, hAb, aCol, hCol, aRec, hRec }) {
+  return <div className="dblk"><div className="mst">
+    <div className="tm"><LogoB ab={aAb} col={aCol}/><div className="ab">{aAb}</div><div className="rc">{aRec||""}</div></div>
+    <div className="at">@</div>
+    <div className="tm"><LogoB ab={hAb} col={hCol}/><div className="ab">{hAb}</div><div className="rc">{hRec||""}</div></div>
+  </div></div>;
 }
-function GameDetail({ game, scoresId, hrProps, hasFullAccess, navigate }) {
+
+function SheetPre({ game, aAb, hAb, gEdges, mlPick, totPick, bestEdge, mr, detail, bvpData, hasFull, navigate }) {
+  const aCol=colFor(aAb), hCol=colFor(hAb);
   const ml = game.moneyline || {};
-  const totals = game.totals || {};
+  const wlA = pct(ml.awayWinProb), wlH = pct(ml.homeWinProb);
+  const t = game.totals || {};
+  const projA = t.awayProjected ?? t.projectedAway ?? game.awayProjected ?? null;
+  const projH = t.homeProjected ?? t.projectedHome ?? game.homeProjected ?? null;
+  const projTot = (projA!=null && projH!=null) ? (parseFloat(projA)+parseFloat(projH)).toFixed(1) : (t.projected ?? null);
+  const ou = t.line ?? t.projected ?? "—";
   const rl = game.runLine || {};
-  const awayP = game.pitchers?.away;
-  const homeP = game.pitchers?.home;
-  const isLive = game.status === "live";
-  const isFinal = game.status === "final";
-  // Scores-feed widgets resolve their game by detailId OR id; prefer the ESPN id
-  // when we have it (covers games whose backend detailId is missing).
-  const scoresLookupId = scoresId || game.id;
-  const candidates = [
-    { type: "ML", side: "away", team: game.awayAbbr, prob: ml.awayWinProb, odds: ml.awayOdds, book: ml.awayBook, edge: ml.awayEdge, confidence: ml.awayConfidence },
-    { type: "ML", side: "home", team: game.homeAbbr, prob: ml.homeWinProb, odds: ml.homeOdds, book: ml.homeBook, edge: ml.homeEdge, confidence: ml.homeConfidence },
-    { type: "TOTAL", side: "over", line: totals.line, prob: totals.overProb, odds: totals.overOdds, book: totals.overBook, edge: totals.overEdge, confidence: totals.overConfidence, projected: totals.projected },
-    { type: "TOTAL", side: "under", line: totals.line, prob: totals.underProb, odds: totals.underOdds, book: totals.underBook, edge: totals.underEdge, confidence: totals.underConfidence, projected: totals.projected },
-    { type: "RL", side: "away", team: game.awayAbbr, line: rl.awayLine, prob: rl.awayCoverProb, odds: rl.awayOdds, book: rl.awayBook, edge: rl.awayEdge, confidence: rl.awayConfidence },
-    { type: "RL", side: "home", team: game.homeAbbr, line: rl.homeLine, prob: rl.homeCoverProb, odds: rl.homeOdds, book: rl.homeBook, edge: rl.homeEdge, confidence: rl.homeConfidence },
-  ].filter(c => c.edge != null);
-  const bestEdge = candidates.length > 0 ? candidates.reduce((a, b) => (a.edge > b.edge ? a : b)) : null;
-  // Pre-game analysis cards (matchup + supporting detail). Shared between the
-  // expanded pre-game layout and the collapsed live-game section.
-  const matchupCards = (
-    <>
-      <PitcherMatchup awayPitcher={awayP} homePitcher={homeP} hasFullAccess={hasFullAccess} navigate={navigate} />
-      <HeadToHeadSection gameId={game.id} />
-      <TeamForm gameId={scoresLookupId} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} awayName={game.away} homeName={game.home} league="mlb" />
-      <BatterVsPitcherSection gameId={game.id} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} hasFullAccess={hasFullAccess} navigate={navigate} />
-      <LineupBadge lineups={game.lineups} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} />
-      <BattingOrderCard lineups={game.lineups} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} />
-    </>
-  );
-  const detailCards = (
-    <>
-      {game.weather && <WeatherCard weather={game.weather} />}
-      <ContextCard game={game} />
-      {hrProps.length > 0 && <HRPropsCard hrProps={hrProps} hasFullAccess={hasFullAccess} navigate={navigate} />}
-    </>
-  );
-  return (
-    <div style={{ animation: "fadeIn .3s ease" }}>
-      <GameHeader game={game} isLive={isLive} isFinal={isFinal} />
-      {/* Scoreboard + box score on top (only renders for live/final games). */}
-      <LiveScoreHeader gameId={scoresLookupId} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} league="mlb" />
+  const edgeStr = bestEdge ? ((bestEdge.edge>=0?"+":"")+(bestEdge.edge*100).toFixed(1)+"%") : "—";
+  const pa = game.pitchers?.away || {}, ph = game.pitchers?.home || {};
+  const lineups = game.lineups || {};
+  const luA = lineups.away || [], luH = lineups.home || [];
+  const series = detail?.series || {};
+  const formA = series.away || series.awayForm || null;
+  const formH = series.home || series.homeForm || null;
+  const ump = detail?.umpire || null;
+  const bvpA = bvpData?.awayBattersVsHomePitcher || [];
+  const bvpH = bvpData?.homeBattersVsAwayPitcher || [];
+  const bvp = [...(bvpA||[]), ...(bvpH||[])].slice(0,4);
+  const wx = game.weather ? (game.weather.indoor ? "Dome · roof closed"
+      : [game.weather.tempF!=null?Math.round(game.weather.tempF)+"°F":null, game.weather.windMph?game.weather.windMph+" mph":null].filter(Boolean).join(" · ")) : "";
+  const parkTxt = game.parkRunFactor!=null ? ((game.parkRunFactor>1?"+":"")+Math.round((game.parkRunFactor-1)*100)+"% runs") : "—";
 
-      {/* Pre-game model breakdown — shown for all states. Live in-game edges now live on the Home page. */}
-      <GroupLabel>Matchup</GroupLabel>
-      {matchupCards}
+  const reads = [];
+  if (mr?.win) reads.push(["Win", mr.win.model?.agrees, mr.win.favTeam, fmtOdds(mr.win.consensus), mr.win.model?.agrees]);
+  if (mr?.cover?.favTeam) reads.push(["Cover", mr.cover.agrees, mr.cover.favTeam, fmtOdds(mr.cover.odds), mr.cover.agrees]);
+  if (mr?.total && (mr.total.lean||mr.total.side)) reads.push(["Total", mr.total.agrees, String(mr.total.lean||mr.total.side).toUpperCase()+(mr.total.line!=null?" "+mr.total.line:""), fmtOdds(mr.total.odds), mr.total.agrees]);
 
-      {/* BETTING — pre-game model (win prob / totals / run line). */}
-      <GroupLabel>Betting</GroupLabel>
-      {hasFullAccess ? (
-        <>
-          {bestEdge && <BestEdgeCard edge={bestEdge} game={game} hasFullAccess={hasFullAccess} navigate={navigate} />}
-          <WinProbabilityCard awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} awayProb={ml.awayWinProb} homeProb={ml.homeWinProb} awayOdds={ml.awayOdds} homeOdds={ml.homeOdds} awayBook={ml.awayBook} homeBook={ml.homeBook} awayEdge={ml.awayEdge} homeEdge={ml.homeEdge} hasFullAccess={hasFullAccess} navigate={navigate} />
-          <TotalsCard totals={totals} hasFullAccess={hasFullAccess} navigate={navigate} />
-          <RunLineCard rl={rl} awayAbbr={game.awayAbbr} homeAbbr={game.homeAbbr} />
-        </>
-      ) : (
-        <EdgeLock navigate={navigate} />
-      )}
+  return (<>
+    <TeamHead aAb={aAb} hAb={hAb} aCol={aCol} hCol={hCol} aRec={game.awayRecord} hRec={game.homeRecord}/>
 
-      <GroupLabel>Details</GroupLabel>
-      {detailCards}
-    </div>
-  );
-}
-// Faint uppercase group label that introduces a section of the page
-// (Matchup / Betting / Details) so the long detail page has clear hierarchy.
-function GroupLabel({ children }) {
-  return (
-    <div style={{ fontSize: 10, letterSpacing: "0.12em", color: "#4b5563", fontWeight: 600, textTransform: "uppercase", margin: "20px 4px 8px" }}>
-      {children}
-    </div>
-  );
-}
-// Tappable collapsible section. Used on LIVE games to tuck the pre-game
-// analysis (matchup, form, lineups…) away below the score + live edges.
-function CollapsibleSection({ title, subtitle, defaultOpen = false, children }) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <div style={{ marginBottom: 10, marginTop: 10 }}>
-      <div
-        onClick={() => setOpen((o) => !o)}
-        role="button"
-        tabIndex={0}
-        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen((o) => !o); } }}
-        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: "13px 16px", cursor: "pointer", userSelect: "none" }}
-      >
-        <div>
-          <span style={{ fontSize: 13, fontWeight: 700, color: "#e4e7eb" }}>📋 {title}</span>
-          {subtitle && <span style={{ fontSize: 11, color: "#6b7280", marginLeft: 8 }}>{subtitle}</span>}
-        </div>
-        <span style={{ fontSize: 12, color: "#9ca3af", whiteSpace: "nowrap" }}>{open ? "Hide ▾" : "Show ▸"}</span>
+    <Block label="MODEL PROJECTION" bx="win prob">
+      {(wlA!=null && wlH!=null) ? <div className="wpwrap"><div className="wprow"><div className="s aw" style={{width:wlA+"%"}}>{aAb} {wlA}%</div><div className="s hm" style={{width:wlH+"%"}}>{hAb} {wlH}%</div></div></div>
+        : <div className="estate" style={{padding:14}}><div className="es">Win probability posts with the model line.</div></div>}
+      <div className="proj">
+        <div className="p"><div className="k">PROJ {aAb}</div><div className="v">{projA ?? "—"}</div></div>
+        <div className="p"><div className="k">PROJ {hAb}</div><div className="v">{projH ?? "—"}</div></div>
+        <div className="p"><div className="k">PROJ TOTAL</div><div className="v g">{projTot ?? "—"}</div></div>
+        <div className="p"><div className="k">O/U</div><div className="v">{ou}</div></div>
       </div>
-      {open && <div style={{ marginTop: 10 }}>{children}</div>}
-    </div>
-  );
-}
-// Format an ISO date (YYYY-MM-DD) as M/D/YYYY for display, no leading zeros.
-function fmtMeetingDate(d) {
-  if (!d) return "";
-  const [y, mo, da] = String(d).split("-");
-  if (!y || !mo || !da) return d;
-  return `${Number(mo)}/${Number(da)}/${y}`;
-}
-// Season head-to-head: the series record between the two teams + recent
-// meetings with scores. Fetched lazily from /api/matchups/mlb/:gameId/h2h.
-// Hides itself until loaded, and stays hidden if the teams haven't met yet.
-function HeadToHeadSection({ gameId }) {
-  const [h2h, setH2h] = useState(null);
-  const [done, setDone] = useState(false);
-  useEffect(() => {
-    let cancelled = false;
-    const base = import.meta.env.VITE_API_URL || "https://sportsintel-production.up.railway.app";
-    fetch(`${base}/api/matchups/mlb/${gameId}/h2h`)
-      .then(r => (r.ok ? r.json() : null))
-      .then(d => { if (!cancelled) { setH2h(d && d.headToHead ? d.headToHead : null); setDone(true); } })
-      .catch(() => { if (!cancelled) setDone(true); });
-    return () => { cancelled = true; };
-  }, [gameId]);
+    </Block>
 
-  if (!done || !h2h || h2h.played === 0) return null;
+    <Block label="ODDS & EDGES" bx="best line">
+      <div className="orow"><div className="ol">Moneyline</div><div className="os">{aAb} <b>{fmtOdds(ml.away)}</b> · {hAb} <b>{fmtOdds(ml.home)}</b></div><div className="oe pos">{edgeStr}</div></div>
+      {(rl.awayOdds!=null||rl.homeOdds!=null) && <div className="orow"><div className="ol">Run Line</div><div className="os">{aAb} <b>{fmtOdds(rl.awayOdds)}</b> · {hAb} <b>{fmtOdds(rl.homeOdds)}</b></div><div className="oe pos">{rl.line!=null?(rl.line>0?"+":"")+rl.line:""}</div></div>}
+      {(t.overOdds!=null||t.underOdds!=null||t.line!=null) && <div className="orow"><div className="ol">Total</div><div className="os">O <b>{fmtOdds(t.overOdds)}</b> · U <b>{fmtOdds(t.underOdds)}</b></div><div className="oe pos">{totPick?((totPick.edge>=0?"+":"")+(totPick.edge*100).toFixed(1)+"%"):""}</div></div>}
+    </Block>
 
-  return (
-    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 20, marginBottom: 18 }}>
-      <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 10 }}>
-        🆚 Season series · {h2h.season}
+    <Block label="PROBABLE STARTERS">
+      <PitcherCard ab={aAb} col={aCol} p={pa}/>
+      <PitcherCard ab={hAb} col={hCol} p={ph}/>
+    </Block>
+
+    {(luA.length>0 || luH.length>0) ? <Lineups aAb={aAb} hAb={hAb} aCol={aCol} hCol={hCol} luA={luA} luH={luH}/> :
+      <Block label="LINEUPS" bx="confirms ~90 min before first pitch"><div className="estate" style={{padding:14}}><div className="es">Lineups not posted yet.</div></div></Block>}
+
+    {bvp.length>0 && <Block label="BATTER vs PITCHER" bx="career">
+      {bvp.map((b,i)=><div key={i} className="bvp"><div><div className="bn">{b.batter||b.name||b[0]}</div><div className="bvs">{b.vs||b.line||b[2]||""}</div></div><div className="bl"><b>{b.stat||b.slash||b[1]||""}</b></div></div>)}
+    </Block>}
+
+    {(formA||formH) && <Block label="TEAM FORM" bx="last 5 · runs/game"><div className="formgrid">
+      <FormCol ab={aAb} f={formA}/><FormCol ab={hAb} f={formH}/>
+    </div></Block>}
+
+    {ump && <Block label="HOME PLATE UMPIRE" bx="season tendencies">
+      <div className="umphd">{ump.name||"TBD"} {ump.favor && <span className="umpf">leans {ump.favor}</span>}</div>
+      <div className="umpgrid">
+        <div className="ug"><div className="k">RUNS vs AVG</div><div className={"v "+(String(ump.runs||"").startsWith("-")?"dn":"up")}>{ump.runs ?? "—"}</div></div>
+        <div className="ug"><div className="k">K RATE</div><div className="v">{ump.k ?? "—"}</div></div>
+        <div className="ug"><div className="k">BB RATE</div><div className="v">{ump.bb ?? "—"}</div></div>
       </div>
-      <div style={{ fontSize: 15, fontWeight: 700, color: "#e4e7eb", marginBottom: 2 }}>{h2h.summary}</div>
-      <div style={{ fontSize: 11, color: "#6b7280", marginBottom: h2h.recent && h2h.recent.length ? 14 : 0 }}>
-        {h2h.played} game{h2h.played === 1 ? "" : "s"} played this season
-      </div>
-      {h2h.recent && h2h.recent.length > 0 && (
-        <div>
-          <div style={{ fontSize: 10, letterSpacing: "0.08em", color: "#6b7280", fontWeight: 600, textTransform: "uppercase", marginBottom: 8 }}>Recent meetings</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {h2h.recent.map((m, i) => {
-              const parts = String(m.score || "").split(/[-–—]/);
-              const aS = (parts[0] || "").trim();
-              const hS = (parts[1] || "").trim();
-              const awayWon = m.winner && m.winner === m.away;
-              const homeWon = m.winner && m.winner === m.home;
-              return (
-                <div key={i} style={{ display: "grid", gridTemplateColumns: "auto 1fr auto", gap: 10, alignItems: "center", padding: "10px 12px", background: "#0a0e14", borderRadius: 6 }}>
-                  <div style={{ fontSize: 11, color: "#9ca3af", whiteSpace: "nowrap" }}>{fmtMeetingDate(m.date)}</div>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
-                    <span style={{ fontSize: 13, fontWeight: awayWon ? 800 : 600, color: awayWon ? "#22c55e" : "#9ca3af" }}>{m.away} {aS}</span>
-                    <span style={{ fontSize: 11, color: "#4b5563" }}>–</span>
-                    <span style={{ fontSize: 13, fontWeight: homeWon ? 800 : 600, color: homeWon ? "#22c55e" : "#9ca3af" }}>{hS} {m.home}</span>
-                  </div>
-                  <div style={{ fontSize: 10, color: "#6b7280", textAlign: "right", whiteSpace: "nowrap" }}>{m.winner ? `${m.winner} won` : "—"}</div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
+    </Block>}
+
+    {reads.length>0 && <Block label="MARKET READ" bx="books' collective lean">
+      {reads.map((r,i)=><div key={i} className="mr"><span className={"md "+(r[1]?"ag":"df")}/><span className="mk">{r[0]}</span><span className="mv"><b>{r[2]}</b> · {r[3]}</span><Agree ok={r[4]}/></div>)}
+    </Block>}
+
+    <Block label="CONTEXT"><div className="ctx">
+      {venueChip(game.venue||scoresGame_venue(game))}{wx && <span className="ch">{wx}</span>}<span className="ch">Park: <b>{parkTxt}</b></span>
+    </div></Block>
+
+    {bestEdge?.reason && <div className="dblk"><div className="why"><span className="wl">WHY THE EDGE</span>{bestEdge.reason}</div></div>}
+  </>);
+}
+const scoresGame_venue = (g) => g?.venue || "";
+const venueChip = (v) => v ? <span className="ch">{v}</span> : null;
+
+function PitcherCard({ ab, col, p }) {
+  return <div className="pcard"><LogoP ab={ab} col={col}/>
+    <div><div className="pn">{p?.name || "TBD"}</div><div className="ph">{ab}{p?.wins!=null?` · ${p.wins}-${p.losses??0}`:""}</div></div>
+    <div className="pstats">
+      <div className="st"><div className="k">ERA</div><div className="v">{p?.era ?? "—"}</div></div>
+      <div className="st"><div className="k">WHIP</div><div className="v">{p?.whip ?? "—"}</div></div>
+      <div className="st"><div className="k">K/9</div><div className="v">{p?.k9 ?? "—"}</div></div>
     </div>
-  );
+  </div>;
 }
-// Team form: current streak, last 10 games, record + run differential for both
-// teams. Pulled from the standings feed and matched by team abbreviation.
-function TeamForm({ gameId, awayAbbr, homeAbbr, awayName, homeName, league = "mlb" }) {
-  const [standings, setStandings] = useState(null);
-  const [failed, setFailed] = useState(false);
-  const [series, setSeries] = useState(null);
-  const [umpire, setUmpire] = useState(null);
-  useEffect(() => {
-    let cancelled = false;
-    scoresApi.getStandings(league)
-      .then((d) => { if (!cancelled) setStandings(d); })
-      .catch(() => { if (!cancelled) setFailed(true); });
-    return () => { cancelled = true; };
-  }, [league]);
-  // Resolve this game in the scores feed (to get its ESPN id), then fetch its
-  // detail for the current series record ("ATL leads series 1-0").
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const scores = await scoresApi.getScores(league);
-        const all = [...(scores.live || []), ...(scores.upcoming || []), ...(scores.final || [])];
-        const m = all.find((g) => String(g.detailId) === String(gameId) || String(g.id) === String(gameId));
-        if (!m) return;
-        const detail = await scoresApi.getGameDetail(league, m.id);
-        if (!cancelled && detail && detail.series && detail.series.summary) setSeries(detail.series);
-        if (!cancelled && detail && detail.umpire) setUmpire(detail.umpire);
-      } catch (_) { /* no series → just don't show it */ }
-    })();
-    return () => { cancelled = true; };
-  }, [gameId, league]);
-  if (failed) return null;          // quietly hide if standings unavailable
-  // MLB/ESPN use different abbreviations for some teams. Try the given abbrev
-  // and its known aliases so the standings lookup matches.
-  const ALIASES = {
-    AZ: ["ARI"], ARI: ["AZ"],
-    CHW: ["CWS"], CWS: ["CHW"],
-    WSH: ["WAS"], WAS: ["WSH"],
-    SD: ["SDP"], SDP: ["SD"],
-    SF: ["SFG"], SFG: ["SF"],
-    TB: ["TBR"], TBR: ["TB"],
-    KC: ["KCR"], KCR: ["KC"],
-  };
-  const lookup = (abbr) => {
-    if (!standings || !abbr) return null;
-    const up = String(abbr).toUpperCase();
-    if (standings[up]) return standings[up];
-    for (const alt of ALIASES[up] || []) {
-      if (standings[alt]) return standings[alt];
-    }
-    return null;
-  };
-  const a = lookup(awayAbbr);
-  const h = lookup(homeAbbr);
-  if (standings && !a && !h && !series && !umpire) return null; // nothing to show
-  return (
-    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 20, marginBottom: 10 }}>
-      <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 16 }}>📈 Team form</div>
-      {/* series record now lives in the merged Series card (HeadToHeadSection) above — removed here to de-dupe */}
-      {/* home plate umpire (name only) */}
-      {umpire && (
-        <div style={{ background: "#0a0e14", border: "1px solid #1f2937", borderRadius: 8, padding: "10px 14px", marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ fontSize: 14 }}>🧑‍⚖️</span>
-          <span style={{ fontSize: 12, color: "#9ca3af" }}>Home plate umpire:</span>
-          <span style={{ fontSize: 13, fontWeight: 700, color: "#e4e7eb" }}>{umpire}</span>
-        </div>
-      )}
-      <div className="two-col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        <FormCard abbr={awayAbbr} name={awayName} side="AWAY" form={a} loading={!standings} />
-        <FormCard abbr={homeAbbr} name={homeName} side="HOME" form={h} loading={!standings} />
-      </div>
-    </div>
-  );
+function Lineups({ aAb, hAb, aCol, hCol, luA, luH }) {
+  const [open, setOpen] = useState(false);
+  const top = [...luA.slice(0,3).map(x=>[aAb,x]), ...luH.slice(0,3).map(x=>[hAb,x])];
+  const name = (x) => Array.isArray(x) ? x[1] : (x?.name || x?.player || "");
+  const ordOf = (x) => Array.isArray(x) ? x[0] : (x?.order ?? x?.spot ?? "");
+  const posOf = (x) => Array.isArray(x) ? x[2] : (x?.pos || x?.position || "");
+  const handOf = (x) => Array.isArray(x) ? x[3] : (x?.bats || x?.hand || "");
+  return <div className="dblk"><div className="bl">LINEUPS <span className="bx">confirms ~90 min before first pitch</span></div>
+    {top.map(([ab,x],i)=><div key={i} className="lurow"><LogoP ab={ab} col={ab===aAb?aCol:hCol}/><span className="ln">{ordOf(x)}. {name(x)}</span><span className="lustat">{posOf(x)}</span></div>)}
+    <div className="exbtn" onClick={()=>setOpen(o=>!o)}><span className={"cv"+(open?" open":"")}>{"\u25b8"}</span> View full lineups (1–9)</div>
+    {open && <div className="exwrap open">
+      <div className="lusub">{aAb}</div>{luA.map((x,i)=><div key={"a"+i} className="lurowf"><span className="o">{ordOf(x)}</span><span className="nm">{name(x)}</span><span className="po">{posOf(x)}</span><span className="hd">{handOf(x)}</span></div>)}
+      <div className="lusub">{hAb}</div>{luH.map((x,i)=><div key={"h"+i} className="lurowf"><span className="o">{ordOf(x)}</span><span className="nm">{name(x)}</span><span className="po">{posOf(x)}</span><span className="hd">{handOf(x)}</span></div>)}
+    </div>}
+  </div>;
 }
-function FormCard({ abbr, name, side, form, loading }) {
-  const streakColor = (s) => {
-    if (!s) return "#9ca3af";
-    return s.startsWith("W") ? "#22c55e" : s.startsWith("L") ? "#ef4444" : "#9ca3af";
-  };
-  return (
-    <div style={{ background: "#0a0e14", border: "1px solid #1f2937", borderRadius: 8, padding: 16 }}>
-      <div style={{ fontSize: 10, color: "#6b7280", letterSpacing: "0.08em", marginBottom: 4, fontWeight: 600 }}>{side}</div>
-      <div style={{ fontSize: 15, fontWeight: 700, color: "#fff", marginBottom: 12 }}>{abbr} <span style={{ fontSize: 11, color: "#6b7280", fontWeight: 500 }}>{name}</span></div>
-      {loading ? (
-        <div style={{ fontSize: 12, color: "#6b7280" }}>Loading form…</div>
-      ) : !form ? (
-        <div style={{ fontSize: 12, color: "#6b7280" }}>No form data</div>
-      ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-          <FormStat label="Record" value={form.record || "—"} color="#e4e7eb" />
-          <FormStat label="Streak" value={form.streak || "—"} color={streakColor(form.streak)} />
-          <FormStat label="Last 10" value={form.lastTen || "—"} color="#e4e7eb" />
-        </div>
-      )}
-    </div>
-  );
+function FormCol({ ab, f }) {
+  const l5 = (f?.l5 || f?.last5 || "").toString();
+  return <div className="fcol"><div className="fab">{ab}</div>
+    <div className="fdots">{l5.split("").map((c,i)=><i key={i} className={c==="W"?"w":"l"}>{c}</i>)}</div>
+    <div className="frr">RF <b>{f?.rf ?? "—"}</b> · RA <b>{f?.ra ?? "—"}</b></div>
+  </div>;
 }
-function FormStat({ label, value, color }) {
-  return (
-    <div style={{ background: "#0f1419", border: "1px solid #1a1f28", borderRadius: 6, padding: "8px 6px", textAlign: "center", minWidth: 0, overflow: "hidden" }}>
-      <div style={{ fontSize: 9, color: "#6b7280", letterSpacing: "0.08em", fontWeight: 600, textTransform: "uppercase", marginBottom: 4 }}>{label}</div>
-      <div style={{ fontSize: 16, fontWeight: 800, color, lineHeight: 1 }}>{value}</div>
-    </div>
-  );
+
+function LineScore({ ls }) {
+  if (!ls || !ls.length) return null;
+  const innings = Math.max(...ls.map(r => (r[1]||[]).length), 0);
+  return <table className="lsc"><thead><tr><th style={{textAlign:"left"}}>&nbsp;</th>{Array.from({length:innings}).map((_,i)=><th key={i}>{i+1}</th>)}<th>R</th></tr></thead>
+    <tbody>{ls.map((r,ri)=><tr key={ri}><td className="tm">{r[0]}</td>{Array.from({length:innings}).map((_,i)=><td key={i}>{r[1]?.[i]!=null?r[1][i]:""}</td>)}<td className="rh">{r[2]}</td></tr>)}</tbody></table>;
 }
-// Live/final scoreboard + box score, shown at the top of the detail page.
-// Finds this game in the scores feed by detailId OR id, then fetches the box
-// score by the matched game's ESPN id. Refreshes every 30s while live.
-// Renders nothing if the game isn't live/final in the scores feed (page unchanged).
-function LiveScoreHeader({ gameId, awayAbbr, homeAbbr, league = "mlb" }) {
-  const [match, setMatch] = useState(null);   // game object from scores feed
-  const [box, setBox] = useState(null);       // box score detail
-  const [boxLoading, setBoxLoading] = useState(false);
-  useEffect(() => {
-    let cancelled = false;
-    let timer = null;
-    const pull = async () => {
-      try {
-        const data = await scoresApi.getScores(league);
-        const all = [...(data.live || []), ...(data.final || [])];
-        const m = all.find((g) => String(g.detailId) === String(gameId) || String(g.id) === String(gameId));
-        if (!cancelled) setMatch(m || null);
-      } catch (_) {
-        if (!cancelled) setMatch(null);
-      }
-    };
-    pull();
-    timer = setInterval(pull, 10000);
-    return () => { cancelled = true; if (timer) clearInterval(timer); };
-  }, [gameId, league]);
-  // Once we know the matched game's ESPN id, fetch its box score (and refresh while live).
-  useEffect(() => {
-    if (!match) { setBox(null); return; }
-    let cancelled = false;
-    let timer = null;
-    const pullBox = async () => {
-      try {
-        if (!box) setBoxLoading(true);
-        const d = await scoresApi.getGameDetail(league, match.id);
-        if (!cancelled) setBox(d);
-      } catch (_) {
-        /* keep scoreboard even if box fails */
-      }
-      if (!cancelled) setBoxLoading(false);
-    };
-    pullBox();
-    if (match.bucket === "live") timer = setInterval(pullBox, 10000);
-    return () => { cancelled = true; if (timer) clearInterval(timer); };
-  }, [match, league]);
-  if (!match) return null; // not live/final in scores feed → show nothing (page unchanged)
-  const isLiveNow = match.bucket === "live";
-  const a = match.away || {};
-  const h = match.home || {};
-  // Logos from the scores feed (the ones already showing on the score card),
-  // keyed by every abbrev they might appear under, to pass into the box score.
-  const teamLogos = {};
-  if (a.logo) { if (a.abbrev) teamLogos[a.abbrev] = a.logo; if (awayAbbr) teamLogos[awayAbbr] = a.logo; }
-  if (h.logo) { if (h.abbrev) teamLogos[h.abbrev] = h.logo; if (homeAbbr) teamLogos[homeAbbr] = h.logo; }
-  const accent = isLiveNow ? "#ef4444" : "#22c55e";
-  return (
-    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: "13px 15px", marginBottom: 10 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-        {isLiveNow && <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#ef4444", animation: "pulse 1.2s infinite" }} />}
-        <span style={{ fontSize: 11, fontWeight: 800, color: accent, letterSpacing: "0.06em" }}>{isLiveNow ? "LIVE" : "FINAL"}</span>
-        <span style={{ fontSize: 11, color: "#9ca3af" }}>· {match.statusDetail || ""}</span>
-        {isLiveNow && <span style={{ marginLeft: "auto", fontSize: 10, color: "#6b7280" }}>updates automatically</span>}
-      </div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-        <ScoreRow abbr={a.abbrev || awayAbbr} name={a.name} score={a.score} logo={a.logo} />
-        <div style={{ fontSize: 12, color: "#4b5563", fontWeight: 700 }}>@</div>
-        <ScoreRow abbr={h.abbrev || homeAbbr} name={h.name} score={h.score} logo={h.logo} alignRight />
-      </div>
-      {/* Box score (innings/quarters line + player stats) — same component as the games list */}
-      <div style={{ marginTop: 12, borderTop: "1px solid #1f2937", paddingTop: 12 }}>
-        {box ? <BoxScore detail={box} logos={teamLogos} /> : boxLoading ? (
-          <div style={{ fontSize: 12, color: "#6b7280" }}>Loading box score…</div>
-        ) : (
-          <div style={{ fontSize: 12, color: "#6b7280" }}>Box score not available yet.</div>
-        )}
-      </div>
-    </div>
-  );
+function SheetLive({ game, scoresGame, aAb, hAb, gEdges, detail }) {
+  const aCol=colFor(aAb), hCol=colFor(hAb);
+  const ml = game.moneyline || {};
+  const wlA = pct(ml.awayWinProb), wlH = pct(ml.homeWinProb);
+  const aS = game.awayScore ?? scoresGame?.away?.score ?? 0;
+  const hS = game.homeScore ?? scoresGame?.home?.score ?? 0;
+  const state = (game.half==="bottom"?"Bot ":"Top ")+(game.inning||"");
+  const ls = detail?.lineScore || scoresGame?.lineScore || null;
+  return (<>
+    <div className="dblk"><div className="mst">
+      <div className="tm"><LogoB ab={aAb} col={aCol}/><div className="ab">{aAb}</div></div>
+      <div className="bigscore">{aS}</div><div className="at" style={{fontSize:11}}>{state}</div><div className="bigscore">{hS}</div>
+      <div className="tm"><LogoB ab={hAb} col={hCol}/><div className="ab">{hAb}</div></div>
+    </div></div>
+    {(wlA!=null&&wlH!=null) && <Block label="LIVE WIN PROBABILITY"><div className="wprow"><div className="s aw" style={{width:wlA+"%"}}>{aAb} {wlA}%</div><div className="s hm" style={{width:wlH+"%"}}>{hAb} {wlH}%</div></div></Block>}
+    {gEdges.length>0 && <Block label="LIVE EDGES" bx="in-game">{gEdges.map((e,i)=><div key={i} className="orow"><div className="ol">{e.teamAbbr||""} {String(e.market||"").toUpperCase()}</div><div className="os">{e.modelProb!=null?Math.round(e.modelProb*100)+"%":""} · <b>{fmtOdds(e.odds)}</b></div><div className="oe pos">{(e.edge>=0?"+":"")+(e.edge*100).toFixed(1)}%</div></div>)}</Block>}
+    {ls && <Block label="LINE SCORE"><LineScore ls={ls}/></Block>}
+  </>);
 }
-function ScoreRow({ abbr, name, score, logo, alignRight }) {
-  const scoreEl = <span style={{ fontSize: 30, fontWeight: 800, color: "#fff", fontVariantNumeric: "tabular-nums", minWidth: 32, textAlign: "center" }}>{score != null ? score : "—"}</span>;
-  const logoEl = logo ? <img src={logo} alt="" width="34" height="34" style={{ objectFit: "contain", flexShrink: 0 }} onError={(e) => { e.currentTarget.style.display = "none"; }} /> : null;
-  const teamEl = (
-    <div style={{ textAlign: alignRight ? "right" : "left" }}>
-      <div style={{ fontSize: 16, fontWeight: 700, color: "#e4e7eb" }}>{abbr}</div>
-      {name && <div style={{ fontSize: 11, color: "#6b7280" }}>{name}</div>}
-    </div>
-  );
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, justifyContent: alignRight ? "flex-end" : "flex-start" }}>
-      {!alignRight && scoreEl}
-      {!alignRight && logoEl}
-      {teamEl}
-      {alignRight && logoEl}
-      {alignRight && scoreEl}
-    </div>
-  );
+function SheetFinal({ game, scoresGame, aAb, hAb, bestEdge, detail, venue }) {
+  const aCol=colFor(aAb), hCol=colFor(hAb);
+  const aS = game.awayScore ?? scoresGame?.away?.score ?? 0;
+  const hS = game.homeScore ?? scoresGame?.home?.score ?? 0;
+  const win = aS>hS ? "a" : "h";
+  const ls = detail?.lineScore || scoresGame?.lineScore || null;
+  return (<>
+    <div className="dblk"><div className="mst">
+      <div className="tm"><LogoB ab={aAb} col={aCol}/><div className="ab">{aAb}</div></div>
+      <div className={"bigscore "+(win==="a"?"win":"")}>{aS}</div><div className="at">FINAL</div><div className={"bigscore "+(win==="h"?"win":"")}>{hS}</div>
+      <div className="tm"><LogoB ab={hAb} col={hCol}/><div className="ab">{hAb}</div></div>
+    </div></div>
+    {bestEdge?.reason && <div className="dblk" style={{borderColor:"rgba(51,233,145,.3)"}}><div className="bl" style={{color:"var(--green)"}}>MODEL RESULT</div><div className="why">{bestEdge.reason}</div></div>}
+    {ls && <Block label="LINE SCORE"><LineScore ls={ls}/></Block>}
+    {venue && <Block label="CONTEXT"><div className="ctx"><span className="ch">{venue}</span></div></Block>}
+  </>);
 }
-function LiveWarningBanner() {
-  return (
-    <div style={{ background: "#1a1410", border: "1px solid #f5970033", borderLeft: "3px solid #f59700", borderRadius: 6, padding: "12px 16px", marginBottom: 10 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <span style={{ fontSize: 18 }}>⚠️</span>
-        <div>
-          <div style={{ fontSize: 13, color: "#fbbf24", fontWeight: 700, marginBottom: 2 }}>This game is in progress</div>
-          <div style={{ fontSize: 11, color: "#a8915c", lineHeight: 1.5 }}>
-            Odds shown are <strong>live in-game odds</strong>, which move quickly. Our model is calibrated for pre-game lines.
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-function FinalBanner({ game }) {
-  return (
-    <div style={{ background: "#0a1f15", border: "1px solid #22c55e30", borderLeft: "3px solid #22c55e", borderRadius: 6, padding: "12px 16px", marginBottom: 10 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ fontSize: 18 }}>✅</span>
-          <div>
-            <div style={{ fontSize: 13, color: "#22c55e", fontWeight: 700 }}>Final</div>
-            <div style={{ fontSize: 11, color: "#6b7280" }}>This game has ended</div>
-          </div>
-        </div>
-        {game.awayScore != null && (
-          <div style={{ fontSize: 18, fontWeight: 800, color: "#e4e7eb" }}>
-            {game.awayAbbr} {game.awayScore} — {game.homeScore} {game.homeAbbr}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-function BatterVsPitcherSection({ gameId, awayAbbr, homeAbbr, hasFullAccess, navigate }) {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(false);
-    const base = import.meta.env.VITE_API_URL || "https://sportsintel-production.up.railway.app";
-    fetch(`${base}/api/matchups/mlb/${gameId}`)
-      .then(r => { if (!r.ok) throw new Error("bad response"); return r.json(); })
-      .then(d => { if (!cancelled) { setData(d); setLoading(false); } })
-      .catch(() => { if (!cancelled) { setError(true); setLoading(false); } });
-    return () => { cancelled = true; };
-  }, [gameId]);
-  return (
-    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 20, marginBottom: 18, position: "relative" }}>
-      <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 6 }}>
-        ⚔️ Batter vs Pitcher · Career history
-      </div>
-      <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 16 }}>
-        Hitters with career at-bats against today's opposing starter
-      </div>
-      {loading && (
-        <div style={{ textAlign: "center", padding: 32 }}>
-          <div style={{ width: 26, height: 26, border: "3px solid #1f2937", borderTopColor: "#ef4444", borderRadius: "50%", animation: "spin .8s linear infinite", margin: "0 auto 12px" }} />
-          <div style={{ fontSize: 12, color: "#6b7280" }}>Loading matchup history...</div>
-        </div>
-      )}
-      {error && !loading && (
-        <div style={{ textAlign: "center", padding: 24, fontSize: 12, color: "#6b7280" }}>
-          Couldn't load matchup history right now.
-        </div>
-      )}
-      {!loading && !error && data && (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, position: "relative" }} className="bvp-grid">
-          <BvPTable
-            teamAbbr={awayAbbr}
-            pitcherName={data.homePitcher?.name}
-            batters={data.awayBattersVsHomePitcher || []}
-          />
-          <BvPTable
-            teamAbbr={homeAbbr}
-            pitcherName={data.awayPitcher?.name}
-            batters={data.homeBattersVsAwayPitcher || []}
-          />
-          {!hasFullAccess && (
-            <div style={{ position: "absolute", inset: 0, background: "rgba(10,14,20,0.92)", backdropFilter: "blur(6px)", borderRadius: 8, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 20 }}>
-              <div style={{ fontSize: 13, color: "#9ca3af", marginBottom: 12, textAlign: "center" }}>
-                See how every hitter has fared vs today's starter
-              </div>
-              <button onClick={() => navigate("/pricing")} style={ctaBtnStyle}>🔒 Unlock batter vs pitcher — $7/mo</button>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-function BvPTable({ teamAbbr, pitcherName, batters }) {
-  if (!batters || batters.length === 0) {
-    return (
-      <div style={{ background: "#0a0e14", border: "1px solid #1f2937", borderRadius: 8, padding: 14 }}>
-        <div style={{ fontSize: 11, color: "#9ca3af", fontWeight: 700, marginBottom: 10 }}>
-          {teamAbbr} vs {pitcherName || "TBD"}
-        </div>
-        <div style={{ fontSize: 11, color: "#4b5563", textAlign: "center", padding: 20 }}>
-          No hitters have faced this pitcher before
-        </div>
-      </div>
-    );
-  }
-  const totals = batters.reduce((a, b) => ({
-    pa: a.pa + (b.plateAppearances || 0),
-    h: a.h + (b.hits || 0),
-    hr: a.hr + (b.homeRuns || 0),
-    ab: a.ab + (b.atBats || 0),
-  }), { pa: 0, h: 0, hr: 0, ab: 0 });
-  const teamAvg = totals.ab > 0 ? totals.h / totals.ab : null;
-  return (
-    <div style={{ background: "#0a0e14", border: "1px solid #1f2937", borderRadius: 8, overflow: "hidden" }}>
-      <div style={{ padding: "10px 12px", borderBottom: "1px solid #1f2937", background: "#0f1419" }}>
-        <div style={{ fontSize: 11, color: "#9ca3af", fontWeight: 700 }}>
-          {teamAbbr} vs {pitcherName || "TBD"}
-        </div>
-      </div>
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
-        <thead>
-          <tr style={{ color: "#6b7280" }}>
-            <th style={bvpTh("left")}>Batter</th>
-            <th style={bvpTh("right")}>PA</th>
-            <th style={bvpTh("right")}>H</th>
-            <th style={bvpTh("right")}>AVG</th>
-            <th style={bvpTh("right")}>HR</th>
-          </tr>
-        </thead>
-        <tbody>
-          {batters.map((b, i) => {
-            const notable = b.homeRuns > 0 || (b.atBats >= 10 && b.avg > 0.300);
-            const avgColor = b.avg > 0.300 ? "#22c55e" : b.avg < 0.150 ? "#ef4444" : "#e4e7eb";
-            return (
-              <tr key={i} style={{ borderTop: "1px solid #131820", background: notable ? "#0f1419" : "transparent" }}>
-                <td style={{ ...bvpTd("left"), maxWidth: 0 }}>
-                  <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {notable && <span style={{ color: "#22c55e", marginRight: 4 }}>⭐</span>}
-                    {b.batterName}
-                    {b.season && (b.season.avg != null || b.season.homeRuns != null) && (
-                      <span style={{ fontSize: 9.5, color: "#6b7280", fontWeight: 500, marginLeft: 6 }}>
-                        {b.season.avg != null ? b.season.avg.toFixed(3).replace(/^0/, "") : "—"}·{b.season.homeRuns ?? 0}HR·{b.season.ops != null ? b.season.ops.toFixed(3).replace(/^0/, "") : "—"}
-                      </span>
-                    )}
-                  </div>
-                </td>
-                <td style={bvpTd("right", "#9ca3af")}>{b.plateAppearances}</td>
-                <td style={bvpTd("right", "#e4e7eb")}>{b.hits}</td>
-                <td style={bvpTd("right", avgColor)}>{b.avg != null ? b.avg.toFixed(3).replace(/^0/, "") : "—"}</td>
-                <td style={bvpTd("right", b.homeRuns > 0 ? "#22c55e" : "#9ca3af")}>{b.homeRuns}</td>
-              </tr>
-            );
-          })}
-          {totals.pa > 0 && (
-            <tr style={{ borderTop: "2px solid #1f2937", background: "#0a0e14" }}>
-              <td style={{ ...bvpTd("left", "#9ca3af"), fontSize: 10, letterSpacing: "0.04em", textTransform: "uppercase", fontWeight: 700 }}>Total</td>
-              <td style={bvpTd("right", "#e4e7eb")}>{totals.pa}</td>
-              <td style={bvpTd("right", "#e4e7eb")}>{totals.h}</td>
-              <td style={bvpTd("right", "#e4e7eb")}>{teamAvg != null ? teamAvg.toFixed(3).replace(/^0/, "") : "—"}</td>
-              <td style={bvpTd("right", totals.hr > 0 ? "#22c55e" : "#9ca3af")}>{totals.hr}</td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-function bvpTh(align) {
-  return { padding: "5px 8px", textAlign: align, fontWeight: 500, fontSize: 9, letterSpacing: "0.05em", textTransform: "uppercase" };
-}
-function bvpTd(align, color = "#e4e7eb") {
-  return { padding: "5px 8px", textAlign: align, color, fontSize: 11, fontWeight: 600, fontVariantNumeric: "tabular-nums" };
-}
-function GameHeader({ game, isLive, isFinal }) {
-  return (
-    <div style={{ marginBottom: 24 }}>
-      <div style={{ fontSize: 11, color: "#6b7280", letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 600, marginBottom: 8, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-        ⚾ MLB · {game.time}
-        {isLive && (
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 10, fontWeight: 800, padding: "2px 8px", borderRadius: 3, background: "#ef444415", color: "#ef4444", border: "1px solid #ef444440" }}>
-            <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#ef4444", animation: "pulse 1.5s infinite" }} />
-            LIVE {game.inning ? `· ${game.inning}` : ""}
-          </span>
-        )}
-        {isFinal && <span style={{ fontSize: 10, fontWeight: 800, padding: "2px 8px", borderRadius: 3, background: "#22c55e15", color: "#22c55e", border: "1px solid #22c55e40" }}>FINAL</span>}
-      </div>
-      <h1 style={{ margin: 0, fontSize: 32, fontWeight: 800, letterSpacing: "-0.02em", lineHeight: 1.1 }}>
-        <span style={{ color: "#e4e7eb" }}>{game.away}</span>
-        <span style={{ color: "#4b5563", margin: "0 12px", fontWeight: 400 }}>@</span>
-        <span style={{ color: "#e4e7eb" }}>{game.home}</span>
-      </h1>
-      <div style={{ marginTop: 8, fontSize: 13, color: "#6b7280" }}>📍 {game.venue}</div>
-    </div>
-  );
-}
-function WeatherCard({ weather }) {
-  if (weather.indoor) {
-    return (
-      <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 18, marginBottom: 18, display: "flex", alignItems: "center", gap: 14 }}>
-        <div style={{ fontSize: 30 }}>🏟️</div>
-        <div>
-          <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 2 }}>Game conditions</div>
-          <div style={{ fontSize: 14, color: "#e4e7eb", fontWeight: 600 }}>Indoor stadium</div>
-        </div>
-      </div>
-    );
-  }
-  const hitterFavored = weather.windEffect === "out" || weather.tempEffect === "hot";
-  const pitcherFavored = weather.windEffect === "in" || weather.tempEffect === "cold";
-  const borderColor = hitterFavored ? "#22c55e44" : pitcherFavored ? "#ef444444" : "#1f2937";
-  const accentColor = hitterFavored ? "#22c55e" : pitcherFavored ? "#ef4444" : "#9ca3af";
-  return (
-    <div style={{ background: "#0f1419", border: `1px solid ${borderColor}`, borderRadius: 10, padding: 20, marginBottom: 10 }}>
-      <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 14 }}>🌤️ Game conditions</div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12 }}>
-        <WeatherStat icon="🌡️" label="Temperature" value={`${weather.tempF}°F`} color={weather.tempEffect === "hot" ? "#22c55e" : weather.tempEffect === "cold" ? "#ef4444" : "#e4e7eb"} subtitle={weather.tempEffect === "hot" ? "Warm air carries" : weather.tempEffect === "cold" ? "Cold air dense" : null} />
-        <WeatherStat icon={weather.windEffect === "out" ? "💨↗" : weather.windEffect === "in" ? "💨↙" : "💨"} label="Wind" value={weather.windMph != null ? `${weather.windMph} mph` : "—"} color={weather.windEffect === "out" ? "#22c55e" : weather.windEffect === "in" ? "#ef4444" : "#e4e7eb"} subtitle={weather.windEffect === "out" ? "Favors hitters" : weather.windEffect === "in" ? "Favors pitchers" : weather.windEffect === "cross" ? "Cross wind" : "Calm"} />
-        <WeatherStat icon={weather.isRaining ? "🌧️" : "☁️"} label="Conditions" value={weather.conditions || "—"} color="#e4e7eb" subtitle={weather.isRaining ? "Rain expected" : null} />
-      </div>
-      <div style={{ marginTop: 14, padding: 12, background: "#0a0e14", borderRadius: 6, fontSize: 12, color: accentColor }}>{weather.summary}</div>
-    </div>
-  );
-}
-function WeatherStat({ icon, label, value, color, subtitle }) {
-  return (
-    <div style={{ background: "#0a0e14", border: "1px solid #1f2937", borderRadius: 8, padding: 12 }}>
-      <div style={{ fontSize: 10, color: "#6b7280", letterSpacing: "0.08em", fontWeight: 600, textTransform: "uppercase", marginBottom: 6 }}>{icon} {label}</div>
-      <div style={{ fontSize: 18, fontWeight: 700, color, lineHeight: 1.1 }}>{value}</div>
-      {subtitle && <div style={{ fontSize: 11, color: "#6b7280", marginTop: 4 }}>{subtitle}</div>}
-    </div>
-  );
-}
-function EdgeLock({ navigate }) {
-  const sk = { background: "#1f2937", borderRadius: 5 };
-  return (
-    <div style={{ position: "relative", borderRadius: 10, overflow: "hidden", marginBottom: 18 }}>
-      <div style={{ filter: "blur(7px)", opacity: 0.5, pointerEvents: "none", userSelect: "none" }}>
-        <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 20 }}>
-          <div style={{ ...sk, height: 14, width: "45%", marginBottom: 14 }} />
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            <div style={{ ...sk, height: 70 }} /><div style={{ ...sk, height: 70 }} />
-          </div>
-          <div style={{ ...sk, height: 54, marginTop: 12 }} />
-        </div>
-      </div>
-      <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", padding: 18, background: "radial-gradient(circle at 50% 40%, rgba(8,10,16,.5), rgba(10,14,20,.9))" }}>
-        <div style={{ width: 42, height: 42, borderRadius: 13, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, background: "rgba(155,123,255,.14)", border: "1px solid rgba(155,123,255,.4)", marginBottom: 11 }}>🔒</div>
-        <div style={{ fontSize: 15, fontWeight: 800, color: "#fff", marginBottom: 4 }}>Model edges are locked</div>
-        <div style={{ fontSize: 11.5, color: "#9aa6b2", lineHeight: 1.5, maxWidth: 250, marginBottom: 13 }}>Win probability, totals, run line &amp; the biggest edge — all inside <b style={{ color: "#33e991" }}>All-Access · $7/mo</b></div>
-        <button onClick={() => navigate("/pricing")} style={{ background: "#1D9E75", color: "#04130d", border: "none", fontWeight: 800, fontSize: 13, padding: "11px 20px", borderRadius: 11, cursor: "pointer", fontFamily: "inherit" }}>Unlock All-Access →</button>
-      </div>
-    </div>
-  );
-}
-function BestEdgeCard({ edge, game, hasFullAccess, navigate }) {
-  const positive = edge.edge > 0;
-  const desc = edge.type === "ML" ? `${edge.team} Moneyline`
-    : edge.type === "RL" ? `${edge.team} ${edge.line > 0 ? "+" : ""}${edge.line}`
-    : `${edge.side === "over" ? "Over" : "Under"} ${edge.line}`;
-  return (
-    <div style={{ background: positive ? "linear-gradient(180deg,#0a1f15 0%,#0f1419 100%)" : "linear-gradient(180deg,#1f0a0a 0%,#0f1419 100%)", border: `1px solid ${positive ? "#22c55e44" : "#ef444444"}`, borderLeft: `4px solid ${positive ? "#22c55e" : "#ef4444"}`, borderRadius: 10, padding: "20px 24px", marginBottom: 10 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
-        <div>
-          <div style={{ fontSize: 10, color: positive ? "#22c55e" : "#ef4444", letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 700, marginBottom: 6 }}>🎯 Biggest model edge</div>
-          <div style={{ fontSize: 22, fontWeight: 700, color: "#fff" }}>{desc}</div>
-          <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 2 }}>{formatOdds(edge.odds)}{edge.book ? ` · best at ${edge.book}` : ""} {edge.type === "TOTAL" && edge.projected != null && `· proj ${edge.projected}`}</div>
-        </div>
-        <div style={{ textAlign: "right" }}>
-          <div style={{ fontSize: 36, fontWeight: 800, color: positive ? "#22c55e" : "#ef4444", lineHeight: 1 }}>
-            {positive ? "+" : ""}{(edge.edge * 100).toFixed(1)}%
-          </div>
-          <ConfidenceBadge conf={edge.confidence} />
-        </div>
-      </div>
-    </div>
-  );
-}
-// Small honesty badge: shows whether the model's offense input is based on a
-// CONFIRMED lineup (today's posted card), a PROJECTED lineup (last game's, used
-// as a proxy before today's posts), or season team stats (no lineup resolved).
-// Live in-game edges (moneyline + over/under + run line) for a game in progress.
-// Fetches the live win-expectancy model and pulls out THIS game. Refreshes 60s.
-function LiveEdgeCards({ gameId, awayAbbr, homeAbbr }) {
-  const [g, setG] = useState(null);
-  const [loaded, setLoaded] = useState(false);
-  useEffect(() => {
-    let cancelled = false, timer = null;
-    const pull = async () => {
-      try {
-        const d = await liveApi.getMLB();
-        const match = (d.games || []).find(x => String(x.gameId) === String(gameId));
-        if (!cancelled) { setG(match || null); setLoaded(true); }
-      } catch (_) { if (!cancelled) setLoaded(true); }
-      if (!cancelled) timer = setTimeout(pull, 60000);
-    };
-    pull();
-    return () => { cancelled = true; if (timer) clearTimeout(timer); };
-  }, [gameId]);
-  if (!loaded) return null;
-  if (!g) return null; // not in the live feed yet — show nothing rather than stale data
-  const row = (label, prob, odds, edge) => {
-    const edgePos = edge != null && edge > 0;
-    return (
-      <div style={{ background: "#0a0e14", border: "1px solid #1f2937", borderRadius: 8, padding: 14 }}>
-        <div style={{ fontSize: 13, fontWeight: 800, color: "#fff", marginBottom: 8 }}>
-          {label}{odds != null ? <span style={{ fontSize: 11, color: "#6b7280", fontWeight: 500 }}> · {odds > 0 ? `+${odds}` : odds}</span> : null}
-        </div>
-        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-          <span style={{ fontSize: 11, color: "#6b7280" }}>Our prob</span>
-          <span style={{ fontSize: 16, fontWeight: 800, color: "#22c55e" }}>{prob != null ? `${Math.round(prob * 100)}%` : "—"}</span>
-        </div>
-        {edge != null && (
-          <div style={{ display: "flex", justifyContent: "space-between" }}>
-            <span style={{ fontSize: 11, color: "#6b7280" }}>Edge</span>
-            <span style={{ fontSize: 15, fontWeight: 800, color: edgePos ? "#22c55e" : "#ef4444" }}>{edgePos ? "+" : ""}{(edge * 100).toFixed(1)}%</span>
-          </div>
-        )}
-      </div>
-    );
-  };
-  return (
-    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 20, marginBottom: 10 }}>
-      <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 12 }}>🔴 Live edges · {g.half === "bottom" ? "Bot" : "Top"} {g.inning}, {g.outs} out</div>
-      <div style={{ fontSize: 10, color: "#9ca3af", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 8 }}>💰 Moneyline</div>
-      <div className="two-col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
-        {row(awayAbbr, g.awayWinProb, g.awayOdds, g.awayEdge)}
-        {row(homeAbbr, g.homeWinProb, g.homeOdds, g.homeEdge)}
-      </div>
-      {g.totalLine != null && (
-        <>
-          <div style={{ fontSize: 10, color: "#9ca3af", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 8 }}>📊 Total {g.totalLine} · proj {g.projectedTotal}</div>
-          <div className="two-col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
-            {row(`Over ${g.totalLine}`, g.overProb, g.overOdds, g.overEdge)}
-            {row(`Under ${g.totalLine}`, g.underProb, g.underOdds, g.underEdge)}
-          </div>
-        </>
-      )}
-      {(g.homeRunLineProb != null || g.awayRunLineProb != null) && (
-        <>
-          <div style={{ fontSize: 10, color: "#9ca3af", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 8 }}>📐 Run line ±1.5</div>
-          <div className="two-col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            {row(`${awayAbbr} ${fmtLine(g.rlLine != null ? -g.rlLine : 1.5)}`, g.awayRLCoverProb ?? g.awayRunLineProb, g.awayRLOdds, g.awayRLEdge)}
-            {row(`${homeAbbr} ${fmtLine(g.rlLine ?? -1.5)}`, g.homeRLCoverProb ?? g.homeRunLineProb, g.homeRLOdds, g.homeRLEdge)}
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-function LineupBadge({ lineups, awayAbbr, homeAbbr }) {
-  if (!lineups) return null;
-  const tag = (side, abbr) => {
-    const src = side?.source || "none";
-    if (src === "confirmed") return { text: `${abbr}: ✓ Confirmed lineup`, color: "#22c55e", bg: "#0a1f15", border: "#22c55e44" };
-    if (src === "recent") return { text: `${abbr}: Projected lineup`, color: "#9ca3af", bg: "#0a0e14", border: "#1f2937" };
-    return { text: `${abbr}: Season averages`, color: "#6b7280", bg: "#0a0e14", border: "#1f2937" };
-  };
-  const a = tag(lineups.away, awayAbbr);
-  const h = tag(lineups.home, homeAbbr);
-  const anyConfirmed = lineups.away?.source === "confirmed" || lineups.home?.source === "confirmed";
-  return (
-    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 16, marginBottom: 10 }}>
-      <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 12 }}>📋 Lineup status</div>
-      <div className="two-col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-        {[a, h].map((t, i) => (
-          <div key={i} style={{ background: t.bg, border: `1px solid ${t.border}`, borderRadius: 8, padding: "10px 12px", fontSize: 13, fontWeight: 700, color: t.color }}>
-            {t.text}
-          </div>
-        ))}
-      </div>
-      <div style={{ marginTop: 10, fontSize: 11, color: "#6b7280", lineHeight: 1.5 }}>
-        {anyConfirmed
-          ? "Model offense reflects today's posted lineup. Confirmed lineups usually post a few hours before first pitch."
-          : "Today's lineup isn't posted yet — model uses the most recent lineup (or season averages) until the official card drops, then it sharpens automatically."}
-      </div>
-    </div>
-  );
-}
-// Shows each team's batting order 1-9 (name + position). Order numbers are green
-// when today's card is confirmed, gray when it's the last-game projection.
-function BattingOrderCard({ lineups, awayAbbr, homeAbbr }) {
-  if (!lineups) return null;
-  const aOrder = lineups.away?.order || [];
-  const hOrder = lineups.home?.order || [];
-  if (aOrder.length === 0 && hOrder.length === 0) return null;
-  const chip = (src) => {
-    if (src === "confirmed") return { label: "CONFIRMED", color: "#22c55e", bg: "rgba(34,197,94,0.12)", border: "#22c55e44" };
-    if (src === "recent") return { label: "PROJECTED · LAST GAME", color: "#9ca3af", bg: "#0a0e14", border: "#1f2937" };
-    return { label: "SEASON AVG", color: "#6b7280", bg: "#0a0e14", border: "#1f2937" };
-  };
-  const col = (abbr, order, src) => {
-    const c = chip(src);
-    const accent = src === "confirmed" ? "#22c55e" : "#9ca3af";
-    return (
-      <div>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8, paddingBottom: 6, borderBottom: "1px solid #1f2937" }}>
-          <span style={{ fontSize: 13, fontWeight: 800, color: "#fff" }}>{abbr}</span>
-          <span style={{ fontSize: 9, fontWeight: 700, color: c.color, background: c.bg, border: `1px solid ${c.border}`, borderRadius: 4, padding: "1px 5px" }}>{c.label}</span>
-        </div>
-        {order.length === 0
-          ? <div style={{ fontSize: 12, color: "#6b7280", padding: "6px 0" }}>Not posted yet</div>
-          : order.map((p, i) => (
-            <div key={i} style={{ display: "flex", alignItems: "center", gap: 9, padding: "4px 0", borderBottom: i < order.length - 1 ? "1px solid #14181f" : "none" }}>
-              <span style={{ flexShrink: 0, width: 18, height: 18, borderRadius: "50%", background: `${accent}1f`, color: accent, fontSize: 10, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center" }}>{i + 1}</span>
-              <div style={{ flex: 1, minWidth: 0, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>
-                <span style={{ fontSize: 12.5, color: "#e4e7eb", fontWeight: 600 }}>{p.name}</span>
-                {p.season && (p.season.avg != null || p.season.homeRuns != null) && (
-                  <span style={{ fontSize: 9.5, color: "#6b7280", fontWeight: 500, marginLeft: 6 }}>
-                    {p.season.avg != null ? p.season.avg.toFixed(3).replace(/^0/, "") : "—"}·{p.season.homeRuns ?? 0}HR·{p.season.ops != null ? p.season.ops.toFixed(3).replace(/^0/, "") : "—"}
-                  </span>
-                )}
-              </div>
-              <span style={{ fontSize: 10, color: "#6b7280", fontWeight: 700 }}>{p.pos}</span>
-            </div>
-          ))}
-      </div>
-    );
-  };
-  return (
-    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 16, marginBottom: 10 }}>
-      <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 12 }}>Batting order</div>
-      <div className="two-col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-        {col(awayAbbr, aOrder, lineups.away?.source)}
-        {col(homeAbbr, hOrder, lineups.home?.source)}
-      </div>
-    </div>
-  );
-}
-// Per-stat comparison metadata. lowerBetter=true → smaller value wins (ERA etc.);
-// false → bigger value wins (K/9, IP). Only the four RATE stats count toward the
-// verdict — raw H/BB/IP scale with innings, so a workhorse would unfairly "lose"
-// H/BB just for pitching more. We still color all seven for at-a-glance reading.
-const PITCHER_STAT_DEFS = [
-  { key: "era",  lowerBetter: true,  get: (s) => s?.era },
-  { key: "whip", lowerBetter: true,  get: (s) => s?.whip },
-  { key: "k9",   lowerBetter: false, get: (s) => s?.strikeoutsPer9 },
-  { key: "hr9",  lowerBetter: true,  get: (s) => s?.homeRunsPer9 },
-  { key: "ip",   lowerBetter: false, get: (s) => s?.inningsPitched },
-  { key: "h",    lowerBetter: true,  get: (s) => s?.hits },
-  { key: "bb",   lowerBetter: true,  get: (s) => s?.walks },
-];
-const VERDICT_KEYS = ["era", "whip", "k9", "hr9"];
-// Returns per-stat status maps for each side ("win"|"lose"|"tie"|null) plus the
-// rate-stat win counts used for the verdict line. null status = can't compare
-// (a side is missing that stat) → left neutral.
-function comparePitchers(awayStats, homeStats) {
-  const away = {}, home = {};
-  let awayWins = 0, homeWins = 0;
-  for (const def of PITCHER_STAT_DEFS) {
-    const av = def.get(awayStats);
-    const hv = def.get(homeStats);
-    if (av == null || hv == null) { away[def.key] = null; home[def.key] = null; continue; }
-    if (av === hv) { away[def.key] = "tie"; home[def.key] = "tie"; continue; }
-    const awayBetter = def.lowerBetter ? av < hv : av > hv;
-    away[def.key] = awayBetter ? "win" : "lose";
-    home[def.key] = awayBetter ? "lose" : "win";
-    if (VERDICT_KEYS.includes(def.key)) { if (awayBetter) awayWins++; else homeWins++; }
-  }
-  return { away, home, awayWins, homeWins };
-}
-function PitcherMatchup({ awayPitcher, homePitcher, hasFullAccess, navigate }) {
-  // Compare only when both starters have season stats; otherwise no coloring/verdict.
-  const cmp = (awayPitcher?.stats && homePitcher?.stats)
-    ? comparePitchers(awayPitcher.stats, homePitcher.stats)
-    : null;
-  const total = cmp ? cmp.awayWins + cmp.homeWins : 0;
-  let verdict = null;
-  if (cmp && total > 0) {
-    if (cmp.awayWins > cmp.homeWins) verdict = { text: `${awayPitcher.name} has the edge by the numbers`, detail: `${cmp.awayWins} of ${total} key categories`, color: "#22c55e" };
-    else if (cmp.homeWins > cmp.awayWins) verdict = { text: `${homePitcher.name} has the edge by the numbers`, detail: `${cmp.homeWins} of ${total} key categories`, color: "#22c55e" };
-    else verdict = { text: "Even matchup by the numbers", detail: `${cmp.awayWins} key categories each`, color: "#9ca3af" };
-  }
-  return (
-    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 10, marginBottom: 10 }}>
-      <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 16 }}>⚾ Starting pitcher matchup</div>
-      <div className="pitcher-grid" style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", gap: 8 }}>
-        <PitcherCard pitcher={awayPitcher} label="AWAY" compare={cmp?.away} hasFullAccess={hasFullAccess} navigate={navigate} />
-        <PitcherCard pitcher={homePitcher} label="HOME" compare={cmp?.home} hasFullAccess={hasFullAccess} navigate={navigate} />
-      </div>
-      {verdict && (
-        <div style={{ marginTop: 14, background: "#0a0e14", border: "1px solid #1f2937", borderRadius: 8, padding: "10px 14px", textAlign: "center" }}>
-          <span style={{ fontSize: 13, fontWeight: 700, color: verdict.color }}>🎯 {verdict.text}</span>
-          <span style={{ fontSize: 11, color: "#6b7280", marginLeft: 6 }}>· {verdict.detail}</span>
-        </div>
-      )}
-      {verdict && (
-        <div style={{ marginTop: 6, fontSize: 10, color: "#4b5563", textAlign: "center", lineHeight: 1.5 }}>
-          Green = better, red = worse. Verdict is based on season ERA, WHIP, K/9 and HR/9 — a stat comparison, not the full model projection.
-        </div>
-      )}
-    </div>
-  );
-}
-function PitcherCard({ pitcher, label, compare, hasFullAccess, navigate }) {
-  const [imgOk, setImgOk] = useState(true);
-  if (!pitcher) {
-    return (
-      <div style={{ background: "#0a0e14", border: "1px solid #1f2937", borderRadius: 8, padding: 16, textAlign: "center" }}>
-        <div style={{ fontSize: 10, color: "#6b7280", letterSpacing: "0.08em", marginBottom: 8, fontWeight: 600 }}>{label}</div>
-        <div style={{ width: 40, height: 40, borderRadius: "50%", background: "#0f1419", border: "1px solid #1f2937", margin: "6px auto", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>⚾</div>
-        <div style={{ fontSize: 14, color: "#4b5563" }}>TBD</div>
-      </div>
-    );
-  }
-  const stats = pitcher.stats;
-  const photo = pitcher.id ? `https://midfield.mlbstatic.com/v1/people/${pitcher.id}/spots/120` : null;
-  const record = stats && (stats.wins != null || stats.losses != null)
-    ? `${stats.wins ?? 0}-${stats.losses ?? 0}` : null;
-  return (
-    <div style={{ background: "#0a0e14", border: "1px solid #1f2937", borderRadius: 8, padding: 8, textAlign: "center", minWidth: 0, overflow: "hidden" }}>
-      <div style={{ fontSize: 10, color: "#6b7280", letterSpacing: "0.08em", marginBottom: 10, fontWeight: 600 }}>{label}</div>
-      {/* headshot on top (ESPN game-card style) — compact */}
-      <div style={{ width: 72, height: 72, margin: "0 auto 8px", borderRadius: "50%", overflow: "hidden", background: "#0f1419", border: "2px solid #1f2937", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        {photo && imgOk ? (
-          <img
-            src={photo}
-            alt={pitcher.name}
-            width={72}
-            height={72}
-            style={{ objectFit: "cover", objectPosition: "top center" }}
-            onError={() => setImgOk(false)}
-          />
-        ) : (
-          <span style={{ fontSize: 28 }}>⚾</span>
-        )}
-      </div>
-      <div style={{ fontSize: 15, fontWeight: 700, color: "#fff" }}>{pitcher.name}</div>
-      <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 12, marginTop: 2 }}>
-        {pitcher.hand ? `${pitcher.hand}HP` : ""}{pitcher.hand && record ? " · " : ""}{record ? `${record}` : ""}
-      </div>
-      {stats && (
-        <>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, fontSize: 12, textAlign: "left" }}>
-            <StatBlock label="ERA" value={stats.era?.toFixed(2)} status={compare?.era} />
-            <StatBlock label="WHIP" value={stats.whip?.toFixed(2)} status={compare?.whip} />
-            <StatBlock label="K/9" value={stats.strikeoutsPer9?.toFixed(1)} status={compare?.k9} />
-            <StatBlock label="HR/9" value={stats.homeRunsPer9?.toFixed(2)} status={compare?.hr9} />
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 4, fontSize: 12, textAlign: "left", marginTop: 6 }}>
-            <StatBlock label="IP" value={stats.inningsPitched != null ? stats.inningsPitched : "—"} status={compare?.ip} />
-            <StatBlock label="H" value={stats.hits != null ? stats.hits : "—"} status={compare?.h} />
-            <StatBlock label="BB" value={stats.walks != null ? stats.walks : "—"} status={compare?.bb} />
-            <StatBlock label="SO" value={stats.strikeouts != null ? stats.strikeouts : "—"} />
-            <StatBlock label="HR" value={stats.homeRuns != null ? stats.homeRuns : "—"} />
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-function StatBlock({ label, value, status }) {
-  const valueColor = status === "win" ? "#22c55e" : status === "lose" ? "#ef4444" : "#e4e7eb";
-  const borderColor = status === "win" ? "#22c55e44" : status === "lose" ? "#ef444444" : "#1a1f28";
-  return (
-    <div style={{ background: "#0f1419", border: `1px solid ${borderColor}`, borderRadius: 6, padding: "4px 5px", minWidth: 0, overflow: "hidden" }}>
-      <div style={{ fontSize: 9, color: "#6b7280", letterSpacing: "0.04em", fontWeight: 600, textTransform: "uppercase" }}>{label}</div>
-      <div style={{ fontSize: 12, fontWeight: 700, color: valueColor, marginTop: 2, whiteSpace: "nowrap" }}>{value ?? "—"}</div>
-    </div>
-  );
-}
-function WinProbabilityCard({ awayAbbr, homeAbbr, awayProb, homeProb, awayOdds, homeOdds, awayBook, homeBook, awayEdge, homeEdge }) {
-  if (awayProb == null && homeProb == null) return null;
-  const awayPct = Math.round((awayProb ?? 0) * 100);
-  const homePct = Math.round((homeProb ?? 0) * 100);
-  return (
-    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 20, marginBottom: 10 }}>
-      <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 16 }}>💰 Moneyline · model vs market</div>
-      <div className="two-col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        <MLBox abbr={awayAbbr} prob={awayProb} odds={awayOdds} book={awayBook} edge={awayEdge} side="Away" />
-        <MLBox abbr={homeAbbr} prob={homeProb} odds={homeOdds} book={homeBook} edge={homeEdge} side="Home" />
-      </div>
-    </div>
-  );
-}
-function MLBox({ abbr, prob, odds, book, edge, side }) {
-  const positive = edge != null && edge > 0;
-  // Market % is derived from the model prob and the edge the backend already
-  // computed (edge = model − market), so model / market / edge always stay
-  // internally consistent: model − market reads back to the edge shown.
-  const marketPct = (prob != null && edge != null) ? Math.round((prob - edge) * 100) : null;
-  return (
-    <div style={{ background: "#0a0e14", border: `1px solid ${positive ? "#22c55e30" : "#1f2937"}`, borderRadius: 8, padding: 14 }}>
-      <div style={{ fontSize: 10, color: "#6b7280", letterSpacing: "0.08em", fontWeight: 600, marginBottom: 4 }}>{side.toUpperCase()}</div>
-      <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>{abbr} ML · {formatOdds(odds)}</div>
-      {book && <div style={{ fontSize: 10, color: "#22c55e", fontWeight: 600, marginBottom: 6 }}>best at {book}</div>}
-      <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 2 }}>Model: <span style={{ color: "#22c55e", fontWeight: 600 }}>{prob != null ? Math.round(prob * 100) : "—"}%</span></div>
-      {marketPct != null && (
-        <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 2 }}>Market: <span style={{ color: "#9ca3af", fontWeight: 600 }}>{marketPct}%</span></div>
-      )}
-      {edge != null && (
-        <div style={{ marginTop: 10, fontSize: 18, fontWeight: 800, color: positive ? "#22c55e" : "#ef4444" }}>
-          {positive ? "+" : ""}{(edge * 100).toFixed(1)}%
-        </div>
-      )}
-    </div>
-  );
-}
-function RunLineCard({ rl, awayAbbr, homeAbbr }) {
-  if (!rl || rl.awayEdge == null || rl.homeEdge == null) return null;
-  return (
-    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 20, marginBottom: 10 }}>
-      <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 16 }}>📐 Run line · ±1.5</div>
-      <div className="two-col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        <RLBox abbr={awayAbbr} line={rl.awayLine} odds={rl.awayOdds} book={rl.awayBook} prob={rl.awayCoverProb} edge={rl.awayEdge} />
-        <RLBox abbr={homeAbbr} line={rl.homeLine} odds={rl.homeOdds} book={rl.homeBook} prob={rl.homeCoverProb} edge={rl.homeEdge} />
-      </div>
-      <div style={{ marginTop: 12, fontSize: 11, color: "#6b7280", lineHeight: 1.5 }}>Derived from the moneyline projection — the same lean expressed at a spread price, with more variance.</div>
-    </div>
-  );
-}
-function RLBox({ abbr, line, odds, book, prob, edge }) {
-  const positive = edge != null && edge > 0;
-  const fmtLine = line != null ? (line > 0 ? `+${line}` : `${line}`) : "";
-  return (
-    <div style={{ background: "#0a0e14", border: `1px solid ${positive ? "#22c55e30" : "#1f2937"}`, borderRadius: 8, padding: 14 }}>
-      <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>{abbr} {fmtLine} · {formatOdds(odds)}</div>
-      {book && <div style={{ fontSize: 10, color: "#22c55e", fontWeight: 600, marginBottom: 6 }}>best at {book}</div>}
-      <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 2 }}>Cover: <span style={{ color: "#22c55e", fontWeight: 600 }}>{prob != null ? Math.round(prob * 100) : "—"}%</span></div>
-      {edge != null && (
-        <div style={{ marginTop: 10, fontSize: 18, fontWeight: 800, color: positive ? "#22c55e" : "#ef4444" }}>
-          {positive ? "+" : ""}{(edge * 100).toFixed(1)}%
-        </div>
-      )}
-    </div>
-  );
-}
-function TotalsCard({ totals }) {
-  if (totals.line == null && totals.projected == null) return null;
-  return (
-    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 20, marginBottom: 10 }}>
-      <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 16 }}>📊 Total runs</div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
-        <BigStat label="Sportsbook" value={totals.line ?? "—"} color="#9ca3af" />
-        <BigStat label="Model" value={totals.projected ?? "—"} color="#22c55e" />
-        <BigStat label="Diff" value={totals.line != null && totals.projected != null ? `${(totals.projected - totals.line).toFixed(1)}` : "—"} color="#e4e7eb" />
-      </div>
-    </div>
-  );
-}
-function BigStat({ label, value, color }) {
-  return (
-    <div style={{ background: "#0a0e14", border: "1px solid #1f2937", borderRadius: 8, padding: "14px 8px", textAlign: "center", minWidth: 0, overflow: "hidden" }}>
-      <div style={{ fontSize: 10, color: "#6b7280", letterSpacing: "0.08em", fontWeight: 600, textTransform: "uppercase", marginBottom: 4 }}>{label}</div>
-      <div style={{ fontSize: 28, fontWeight: 800, color, lineHeight: 1.1 }}>{value}</div>
-    </div>
-  );
-}
-function ContextCard({ game }) {
-  return (
-    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 20, marginBottom: 10 }}>
-      <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 16 }}>🏟️ Park factors</div>
-      <div className="two-col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        <FactorCard label="Runs" factor={game.parkRunFactor || 1} />
-        <FactorCard label="HRs" factor={game.parkHRFactor || 1} />
-      </div>
-    </div>
-  );
-}
-function FactorCard({ label, factor }) {
-  const delta = (factor - 1) * 100;
-  const color = delta > 5 ? "#22c55e" : delta < -5 ? "#ef4444" : "#9ca3af";
-  return (
-    <div style={{ background: "#0a0e14", border: "1px solid #1f2937", borderRadius: 8, padding: 14 }}>
-      <div style={{ fontSize: 10, color: "#6b7280", letterSpacing: "0.08em", fontWeight: 600, textTransform: "uppercase", marginBottom: 6 }}>{label}</div>
-      <div style={{ fontSize: 22, fontWeight: 800, color }}>{delta > 0 ? "+" : ""}{delta.toFixed(0)}%</div>
-    </div>
-  );
-}
-function HRPropsCard({ hrProps, hasFullAccess, navigate }) {
-  const sorted = [...hrProps].sort((a, b) => (b.hrProb ?? b.prob ?? 0) - (a.hrProb ?? a.prob ?? 0));
-  return (
-    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 20, marginBottom: 10 }}>
-      <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 8 }}>💣 Home run props</div>
-      <div style={{ fontSize: 11, color: "#f3c66b", fontWeight: 600, lineHeight: 1.45, marginBottom: 16, background: "rgba(243,185,79,.08)", border: "1px solid rgba(243,185,79,.28)", borderRadius: 8, padding: "8px 10px" }}>
-        ⚠️ Longshots — ranked by the model's chance to homer, <b style={{ color: "#ffd98a" }}>not</b> a tracked +EV play. Even top names homer only about 1 game in 5. Bet small, if at all.
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        {sorted.slice(0, hasFullAccess ? 10 : 1).map((p, i) => (
-          <HRPropCard key={i} prop={p} />
-        ))}
-        {!hasFullAccess && sorted.length > 1 && (
-          <div style={{ marginTop: 4, padding: 16, background: "#0a0e14", border: "1px solid #1f2937", borderRadius: 8, textAlign: "center" }}>
-            <div style={{ fontSize: 12, color: "#9ca3af", marginBottom: 10 }}>{sorted.length - 1} more HR props</div>
-            <button onClick={() => navigate("/pricing")} style={ctaBtnStyle}>🔒 Unlock all</button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-function HRPropCard({ prop }) {
-  // HR is a LONGSHOT market — we show the model's CHANCE TO HOMER (hrProb), never a
-  // market-edge % or a conviction badge. This matches the /props board and keeps us
-  // honest: HR is never presented as a tracked +EV play. (Edge is intentionally unused.)
-  const pct = Math.round((prop.hrProb ?? prop.prob ?? 0) * 100);
-  return (
-    <div style={{ background: "#0a0e14", border: "1px solid #1f2937", borderRadius: 8, padding: 14 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, flexWrap: "wrap" }}>
-        <div>
-          <div style={{ fontSize: 15, fontWeight: 700, color: "#fff" }}>{prop.player}</div>
-          <div style={{ fontSize: 11, color: "#9ca3af" }}>{prop.team} · facing {prop.opposingPitcher || "TBD"}</div>
-          <div style={{ fontSize: 11, color: "#b6c0c7", fontWeight: 600, marginTop: 4 }}>O 0.5 HR · {formatOdds(prop.odds)}</div>
-        </div>
-        <div style={{ textAlign: "right" }}>
-          <div style={{ fontSize: 22, fontWeight: 800, color: "#33e991", lineHeight: 1 }}>
-            {pct}<span style={{ fontSize: 14 }}>%</span>
-          </div>
-          <div style={{ fontSize: 8.5, color: "#7d8a93", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".3px", marginTop: 2 }}>to homer</div>
-        </div>
-      </div>
-    </div>
-  );
-}
-function ConfidenceBadge({ conf }) {
-  const colors = {
-    HIGH: { bg: "#22c55e15", fg: "#22c55e", border: "#22c55e30" },
-    MEDIUM: { bg: "#f59e0b15", fg: "#f59e0b", border: "#f59e0b30" },
-    LOW: { bg: "#1f2937", fg: "#9ca3af", border: "#374151" },
-    NEUTRAL: { bg: "#1f2937", fg: "#6b7280", border: "#374151" },
-  };
-  const c = colors[conf] || colors.NEUTRAL;
-  return <span style={{ fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 4, background: c.bg, color: c.fg, border: `1px solid ${c.border}`, marginTop: 6, display: "inline-block" }}>{conf || "—"}</span>;
-}
-function formatOdds(american) {
-  if (american == null) return "—";
-  return american > 0 ? `+${american}` : `${american}`;
-}
-function fmtLine(n) {
-  if (n == null) return "";
-  return n > 0 ? `+${n}` : `${n}`;
-}
-const ctaBtnStyle = { background: "#ef4444", color: "#fff", border: "none", borderRadius: 6, padding: "8px 16px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" };
-function Loader() {
-  return (
-    <div style={{ textAlign: "center", padding: 80 }}>
-      <div style={{ width: 32, height: 32, border: "3px solid #1f2937", borderTopColor: "#ef4444", borderRadius: "50%", animation: "spin .8s linear infinite", margin: "0 auto 14px" }} />
-      <div style={{ fontSize: 13, color: "#6b7280" }}>Loading game analysis...</div>
-    </div>
-  );
-}
-function ErrorState() {
-  return (
-    <div style={{ textAlign: "center", padding: 64, background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10 }}>
-      <div style={{ fontSize: 32, marginBottom: 12 }}>⚠️</div>
-      <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>Could not load this game</div>
-      <Link to="/games" style={{ fontSize: 12, color: "#ef4444", textDecoration: "none", fontWeight: 700 }}>← Back to MLB Games</Link>
-    </div>
-  );
-}
-function NotFound({ gameId }) {
-  return (
-    <div style={{ textAlign: "center", padding: 64, background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10 }}>
-      <div style={{ fontSize: 32, marginBottom: 12 }}>🔍</div>
-      <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>Game not found</div>
-      <Link to="/games" style={{ fontSize: 12, color: "#ef4444", textDecoration: "none", fontWeight: 700 }}>← Back to MLB Games</Link>
-    </div>
-  );
-}
+
+const CSS = `@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700;800&display=swap');
+:root{--mono:'IBM Plex Mono',ui-monospace,monospace}
+
+:root{--bg:#06090b;--panel:#0b1117;--line:#16202a;--line2:#1d2a36;--gold:#f3b94f;--green:#33e991;--neg:#ff5d4d;--red:#ff5d4d;--steel:#2674b0;--blue:#5da9e8;--mut:#7d8a98;--mut2:#4a5663;--disp:'Barlow Condensed',sans-serif;--ui:'Inter',sans-serif;--mono:'JetBrains Mono',monospace}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoothing:antialiased}
+.app{max-width:460px;margin:0 auto;min-height:100vh;position:relative}
+.hd{position:sticky;top:0;z-index:10;background:rgba(6,9,11,.94);backdrop-filter:blur(12px);border-bottom:1px solid var(--line);padding:0 14px}
+.hrow{display:flex;align-items:center;gap:9px;padding:12px 0 9px}
+.logo{font-family:var(--disp);font-weight:800;font-size:21px;letter-spacing:.4px;color:#fff}.logo .w{color:var(--gold)}
+.open{font-family:var(--mono);font-size:9px;font-weight:700;color:var(--green);border:1px solid rgba(51,233,145,.32);background:rgba(51,233,145,.08);border-radius:999px;padding:3px 8px}
+.sp{flex:1}
+.ibtn{width:30px;height:30px;border-radius:9px;border:1px solid var(--line2);display:flex;align-items:center;justify-content:center;color:var(--mut)}
+.sports{display:flex;gap:6px;padding:0 0 11px;overflow-x:auto;scrollbar-width:none}.sports::-webkit-scrollbar{display:none}
+.sports b{flex:0 0 auto;font-family:var(--disp);font-weight:700;font-size:13px;letter-spacing:.4px;color:var(--mut);border:1px solid var(--line2);border-radius:999px;padding:6px 13px;display:inline-flex;align-items:center;gap:6px;cursor:pointer}
+.sports b.on{color:#fff;border-color:var(--steel);background:#0e1822}
+.sports b .dot{width:6px;height:6px;border-radius:50%;background:#2a3640}.sports b.on .dot{background:var(--green)}
+.chips{display:flex;gap:7px;padding:11px 14px 4px;overflow-x:auto;scrollbar-width:none}.chips::-webkit-scrollbar{display:none}
+.chips b{flex:0 0 auto;font-family:var(--mono);font-size:11px;font-weight:600;color:var(--mut);border:1px solid var(--line2);border-radius:8px;padding:6px 12px;cursor:pointer}
+.chips b.on{color:#06090b;background:var(--gold);border-color:var(--gold);font-weight:700}
+.seclbl{font-family:var(--disp);font-weight:800;font-size:13px;letter-spacing:1px;color:var(--mut);margin:18px 14px 2px;display:flex;align-items:center;gap:8px}
+.seclbl .c{font-family:var(--mono);font-size:10px;font-weight:600;color:var(--mut2);letter-spacing:0}
+.seclbl .ld,.gstat .ld{width:7px;height:7px;border-radius:50%;background:var(--red);animation:plr 1.3s infinite}
+@keyframes plr{0%,100%{opacity:1}50%{opacity:.35}}
+.gc{margin:8px 14px 0;border:1px solid var(--line);border-radius:14px;background:linear-gradient(180deg,#0c1218,#080c11);overflow:hidden;cursor:pointer;transition:border-color .15s}
+.gc:active{border-color:var(--steel)}
+.gc.live{border-color:rgba(255,93,77,.3)}
+.gtop{display:flex;align-items:center;justify-content:space-between;padding:9px 13px;border-bottom:1px solid var(--line)}
+.gstat{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10px;font-weight:700}
+.gstat.live{color:var(--red)}.gstat.pre{color:var(--gold)}.gstat.final{color:var(--mut)}
+.gstat .ld{width:6px;height:6px}
+.gtop .ou{font-family:var(--mono);font-size:10px;color:var(--mut)}.gtop .ou b{color:#cdd7e1;font-weight:600}
+.team{display:flex;align-items:center;gap:10px;padding:9px 13px}
+.team+.team{border-top:1px solid rgba(255,255,255,.04)}
+.lg{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#0c1018;border:1px solid #000;font-family:var(--disp);font-weight:800;font-size:9px;color:#fff;flex:0 0 auto}.lg img{width:21px;height:21px;object-fit:contain}
+.team .nm{font-family:var(--disp);font-weight:800;font-size:18px;color:#eef3f5;line-height:1}
+.team .rec{font-family:var(--mono);font-size:9px;color:var(--mut2);margin-top:2px}
+.team .tw{flex:1;min-width:0}
+.team .ml{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--mut);flex:0 0 auto}
+.team .scr{font-family:var(--disp);font-weight:800;font-size:24px;color:#fff;flex:0 0 auto;font-variant-numeric:tabular-nums;min-width:26px;text-align:right}
+.team.win .scr{color:var(--green)}.team.lose .nm,.team.lose .scr{color:var(--mut)}
+.probs{padding:8px 13px;border-top:1px solid rgba(255,255,255,.04);display:flex;flex-direction:column;gap:4px}
+.prob{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;color:#aeb9c8}
+.prob .h{color:var(--mut2);font-size:9px;width:30px;flex:0 0 auto}.prob .nm2{color:#cdd7e1}.prob .era{margin-left:auto;color:var(--mut)}
+.gfoot{display:flex;align-items:center;gap:8px;padding:9px 13px;border-top:1px solid var(--line);background:rgba(243,185,79,.03)}
+.lean{font-family:var(--mono);font-size:11px;color:#cdd7e1}.lean .lb{color:var(--gold);font-weight:700;font-family:var(--disp);font-size:11px;letter-spacing:.3px;margin-right:5px}.lean .e{color:var(--green);font-weight:600}
+.gfoot .go{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--blue);font-weight:600}
+.estate{margin:40px 14px;border:1px dashed var(--line2);border-radius:14px;padding:36px 18px;text-align:center}
+.estate .et{font-family:var(--disp);font-weight:800;font-size:18px;color:#cfd7e2}.estate .es{font-size:12px;color:var(--mut);margin-top:6px;font-family:var(--mono)}
+#wrap{padding-bottom:96px}
+.nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:460px;display:flex;justify-content:space-around;padding:7px 4px;background:rgba(0,0,0,.96);backdrop-filter:blur(12px);border-top:1px solid var(--line);z-index:20}
+.nav a{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;font-family:var(--disp);font-weight:700;font-size:10px;letter-spacing:.3px;color:var(--mut2);text-decoration:none}
+.nav a.on{color:var(--gold)}.nav a .i{font-size:15px;line-height:1}
+.nav a .dbars rect{fill:var(--mut2)}.nav a.on .dbars rect{fill:var(--gold)}
+/* detail sheet */
+.sheet{position:fixed;top:0;bottom:0;left:50%;width:100%;max-width:460px;z-index:200;background:var(--bg);overflow-y:auto;transform:translate(-50%,100%);transition:transform .28s cubic-bezier(.4,0,.2,1);visibility:hidden}
+.sheet.open{transform:translate(-50%,0);visibility:visible}
+.shead{position:sticky;top:0;background:#080c11;backdrop-filter:blur(12px);border-bottom:1px solid var(--line);padding:12px 14px;display:flex;align-items:center;gap:11px;z-index:2}
+.shead .x{width:32px;height:32px;border-radius:9px;border:1px solid var(--line2);display:flex;align-items:center;justify-content:center;color:#cdd7e1;font-size:19px;cursor:pointer;flex:0 0 auto}
+.shead .t{font-family:var(--disp);font-weight:800;font-size:19px;color:#fff;line-height:1}.shead .ts{font-family:var(--mono);font-size:10px;color:var(--mut);margin-top:2px}
+.sbody{padding:13px 14px 80px}
+.dblk{border:1px solid var(--line);border-radius:13px;background:var(--panel);padding:13px;margin-top:11px}
+.dblk .bl{font-family:var(--disp);font-weight:800;font-size:12px;letter-spacing:.7px;color:var(--mut);margin-bottom:11px;display:flex;align-items:center;justify-content:space-between}
+.dblk .bl .bx{font-family:var(--mono);font-size:9px;color:var(--mut2);letter-spacing:0;font-weight:500}
+.mst{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.mst .tm{display:flex;flex-direction:column;align-items:center;gap:6px;flex:1}
+.mst .tm .lgb{width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#0c1018;border:1px solid #000}.mst .tm .lgb img{width:38px;height:38px;object-fit:contain}
+.mst .tm .ab{font-family:var(--disp);font-weight:800;font-size:18px;color:#fff;margin-top:2px}.mst .tm .rc{font-family:var(--mono);font-size:9px;color:var(--mut2)}
+.mst .at{font-family:var(--disp);font-weight:700;font-size:13px;color:var(--mut2)}
+.bigscore{font-family:var(--disp);font-weight:800;font-size:34px;color:#fff;font-variant-numeric:tabular-nums}.bigscore.win{color:var(--green)}
+.wpwrap{margin-top:4px}
+.wprow{display:flex;height:32px;border-radius:8px;overflow:hidden}
+.wprow .s{display:flex;align-items:center;font-family:var(--disp);font-weight:800;font-size:13px;padding:0 10px}
+.wprow .aw{background:linear-gradient(90deg,#13283c,#1a3f5c);color:#cfe2f5}
+.wprow .hm{background:linear-gradient(90deg,#1f6b3f,#123a23);color:#d6ffe8;justify-content:flex-end;margin-left:auto}
+.wpcap{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10px;color:var(--mut);margin-top:6px}
+.proj{display:flex;justify-content:space-around;text-align:center;margin-top:12px;padding-top:11px;border-top:1px solid var(--line)}
+.proj .p .k{font-family:var(--mono);font-size:8.5px;color:var(--mut2);font-weight:600}.proj .p .v{font-family:var(--disp);font-weight:800;font-size:19px;color:#fff;margin-top:2px}.proj .p .v.g{color:var(--green)}
+.orow{display:flex;align-items:center;gap:8px;padding:9px 0;border-top:1px solid rgba(255,255,255,.05)}.orow:first-of-type{border-top:none}
+.orow .ol{font-family:var(--disp);font-weight:800;font-size:14px;color:#dbe4e2;width:64px;flex:0 0 auto}
+.orow .os{font-family:var(--mono);font-size:11px;color:#aeb9c8;flex:1}.orow .os b{color:#fff}
+.orow .oe{font-family:var(--disp);font-weight:800;font-size:15px;flex:0 0 auto}.oe.pos{color:var(--green)}.oe.neg{color:var(--mut)}
+.pcard{display:flex;gap:11px;padding:10px 0;border-top:1px solid rgba(255,255,255,.05)}.pcard:first-of-type{border-top:none}
+.pcard .pl{width:34px;height:34px;border-radius:50%;background:#0c1018;border:1px solid #000;display:flex;align-items:center;justify-content:center;overflow:hidden;flex:0 0 auto}.pcard .pl img{width:27px;height:27px;object-fit:contain}
+.pcard .pn{font-weight:700;font-size:13px;color:#eaf1ee}.pcard .ph{font-family:var(--mono);font-size:9px;color:var(--mut)}
+.pcard .pstats{display:flex;gap:13px;margin-left:auto;text-align:right}
+.pcard .pstats .st .k{font-family:var(--mono);font-size:8px;color:var(--mut2)}.pcard .pstats .st .v{font-family:var(--disp);font-weight:800;font-size:15px;color:#cfe2f5}
+.mr{display:flex;align-items:center;gap:9px;padding:8px 0;border-top:1px solid rgba(255,255,255,.05)}.mr:first-of-type{border-top:none}
+.mr .md{width:8px;height:8px;border-radius:50%;flex:0 0 auto}.md.strong{background:var(--green)}.md.soft{background:var(--gold)}.md.split{background:var(--mut)}
+.mr .mk{font-family:var(--disp);font-weight:800;font-size:11px;color:var(--mut);width:42px;flex:0 0 auto}
+.mr .mv{font-family:var(--mono);font-size:11px;color:#cdd7e1;flex:1}.mr .mv b{color:#fff}
+.mr .ma{font-family:var(--mono);font-size:10px;font-weight:600;flex:0 0 auto}.ma.ag{color:var(--green)}.ma.df{color:var(--gold)}
+.ctx{display:flex;flex-wrap:wrap;gap:7px}
+.ctx .ch{font-family:var(--mono);font-size:10px;color:#aeb9c8;background:#0e1620;border:1px solid var(--line2);border-radius:7px;padding:5px 9px}.ctx .ch b{color:#fff}
+.why{font-size:12.5px;color:#c4cfd9;line-height:1.55}.why .wl{font-family:var(--disp);font-weight:800;font-size:11px;letter-spacing:.5px;color:var(--gold);display:block;margin-bottom:4px}
+
+.lurow{display:flex;align-items:center;gap:9px;padding:8px 0;border-top:1px solid rgba(255,255,255,.05)}.lurow:first-of-type{border-top:none}
+.lurow .ln{font-family:var(--disp);font-weight:800;font-size:14px;color:#dbe4e2;flex:1}
+.lustat{font-family:var(--mono);font-size:10px;font-weight:700;border-radius:6px;padding:3px 9px}.lustat.c{color:var(--green);background:rgba(51,233,145,.12)}.lustat.p{color:var(--gold);background:rgba(243,185,79,.12)}
+.bvp{display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid rgba(255,255,255,.05)}.bvp:first-of-type{border-top:none}
+.bvp .bn{font-family:var(--ui);font-weight:700;font-size:12px;color:#eaf1ee}.bvp .bvs{font-family:var(--mono);color:var(--mut2);font-size:9px;margin-top:1px}
+.bvp .bl{margin-left:auto;font-family:var(--mono);font-size:11px;color:#cfe2f5;font-weight:600}.bvp .bl b{color:var(--gold)}
+.formgrid{display:flex;gap:10px}
+.fcol{flex:1;border:1px solid var(--line);border-radius:10px;padding:10px 9px;text-align:center}
+.fcol .fab{font-family:var(--disp);font-weight:800;font-size:15px;color:#fff}
+.fdots{display:flex;gap:3px;justify-content:center;margin:8px 0}
+.fdots i{width:14px;height:14px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-family:var(--disp);font-weight:800;font-size:8px}
+.fdots i.w{background:rgba(51,233,145,.18);color:var(--green)}.fdots i.l{background:rgba(255,93,77,.16);color:var(--neg)}
+.fcol .frr{font-family:var(--mono);font-size:9px;color:var(--mut)}.fcol .frr b{color:#cdd7e1}
+
+.exbtn{margin-top:11px;font-family:var(--mono);font-size:11px;font-weight:600;color:var(--blue);cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.exbtn .cv{display:inline-block;transition:transform .2s}.exbtn.open .cv{transform:rotate(90deg)}
+.exwrap{display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}.exwrap.open{display:block}
+.lusub{font-family:var(--disp);font-weight:800;font-size:12px;letter-spacing:.4px;color:var(--gold);margin:11px 0 3px}.lusub:first-child{margin-top:0}
+.lurowf{display:flex;align-items:center;gap:9px;padding:5px 0;border-top:1px solid rgba(255,255,255,.04)}
+.lurowf .o{font-family:var(--mono);font-size:10px;color:var(--mut2);width:14px;flex:0 0 auto}
+.lurowf .nm{font-family:var(--ui);font-weight:600;font-size:12px;color:#dbe4e2;flex:1}
+.lurowf .po{font-family:var(--mono);font-size:9px;color:var(--mut);width:28px;flex:0 0 auto}
+.lurowf .hd{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--blue);width:16px;text-align:right;flex:0 0 auto}
+.bvtbl{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:10.5px}
+.bvtbl th{color:var(--mut2);font-weight:500;font-size:8.5px;padding:4px 4px;text-align:right;white-space:nowrap}.bvtbl th:first-child{text-align:left}
+.bvtbl td{padding:6px 4px;text-align:right;border-top:1px solid var(--line);color:#cdd7e1;white-space:nowrap}.bvtbl td:first-child{text-align:left;font-family:var(--ui);font-weight:600;color:#eaf1ee}.bvtbl td.sl{color:var(--mut2);font-size:9.5px}
+.umphd{font-family:var(--disp);font-weight:800;font-size:16px;color:#fff;display:flex;align-items:center;gap:8px;margin-bottom:11px}
+.umpf{font-family:var(--mono);font-size:9px;font-weight:600;color:var(--gold);background:rgba(243,185,79,.1);border-radius:6px;padding:3px 8px;letter-spacing:0}
+.umpgrid{display:flex;gap:10px}
+.umpgrid .ug{flex:1;border:1px solid var(--line);border-radius:9px;padding:9px;text-align:center}
+.umpgrid .k{font-family:var(--mono);font-size:8px;color:var(--mut2);font-weight:600}
+.umpgrid .v{font-family:var(--disp);font-weight:800;font-size:18px;color:#cfe2f5;margin-top:2px}.umpgrid .v.up{color:var(--green)}.umpgrid .v.dn{color:var(--neg)}
+.lsc{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11px}
+.lsc th{color:var(--mut2);font-weight:500;font-size:9px;padding:3px 5px;text-align:center}.lsc td{padding:4px 5px;text-align:center;color:#cdd7e1;border-top:1px solid var(--line)}
+.lsc td.tm{text-align:left;font-family:var(--disp);font-weight:800;font-size:13px;color:#fff}.lsc td.rh{color:#fff;font-weight:700}
+`;
