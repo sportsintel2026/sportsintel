@@ -276,7 +276,7 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .shead .x{width:32px;height:32px;border-radius:9px;border:1px solid var(--line2);display:flex;align-items:center;justify-content:center;color:#cdd7e1;font-size:19px;cursor:pointer;flex:0 0 auto}
 .shead .t{font-family:var(--disp);font-weight:800;font-size:19px;color:#fff;line-height:1}.shead .ts{font-family:var(--mono);font-size:10px;color:var(--mut);margin-top:2px}
 .sbody{padding:13px 14px 80px}
-.gridblk{border:1px solid var(--line);border-radius:13px;background:var(--panel);padding:11px;margin-top:11px;overflow-x:auto}
+.gridblk{border:1px solid var(--line);border-radius:13px;background:linear-gradient(180deg,#0c1218,#080c11);padding:11px;margin-top:11px;overflow-x:auto}
 .gridblk .bl{font-family:var(--disp);font-weight:800;font-size:12px;letter-spacing:.6px;color:var(--mut);margin-bottom:9px}
 .otbl{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11px;min-width:330px}
 .otbl th{color:var(--mut2);font-weight:500;font-size:8.5px;padding:5px 4px;text-align:center;border-bottom:1px solid var(--line)}.otbl th:first-child{text-align:left}
