@@ -1,584 +1,328 @@
-// Props.jsx — the full player-props board, now sport-aware.
-// SPORT selector (Games-page pill style) switches the feed + category tabs:
-//   MLB → HR / Hits / Ks  (from /api/edges/mlb)
-//   NBA → Points / Rebounds / Assists / Threes (from /api/edges/nba/props — EXPERIMENTAL projections)
-// MLB rendering is unchanged. NBA props are projections (proj vs line), shown with an
-// experimental disclaimer — sharp markets, flagged edges are rare and informational.
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { edgesApi, subscriptionApi, playerCardApi } from "../lib/api";
-import Sidebar from "./Sidebar";
-import BottomNav from "./BottomNav";
-import TerminalShell from "./TerminalShell";
 
-const TEAMCOL = { ARI:"#A71930",ATL:"#CE1141",BAL:"#DF4601",BOS:"#BD3039",CHC:"#0E3386",CWS:"#C4CED4",CHW:"#C4CED4",CIN:"#C6011F",CLE:"#E31937",COL:"#5A4F9C",DET:"#FA4616",HOU:"#EB6E1F",KC:"#3E7DC4",KCR:"#3E7DC4",LAA:"#BA0021",LAD:"#3E7DC4",LOS:"#3E7DC4",MIA:"#00A3E0",MIL:"#FFC52F",MIN:"#D31145",NYM:"#FF5910",NYY:"#3A4F73",OAK:"#EFB21E",ATH:"#EFB21E",PHI:"#E81828",PIT:"#FDB827",SD:"#FFC425",SDP:"#FFC425",SEA:"#1B9A8E",SF:"#FD5A1E",SFG:"#FD5A1E",STL:"#C41E3A",TB:"#8FBCE6",TBR:"#8FBCE6",TEX:"#3E66B0",TOR:"#1D6FE0",WSH:"#E0263B",WAS:"#E0263B",
-  // NBA
-  NBA_BOS:"#007A33" };
-const NBACOL = { ATL:"#E03A3E",BOS:"#007A33",BKN:"#777",CHA:"#1D1160",CHI:"#CE1141",CLE:"#860038",DAL:"#00538C",DEN:"#0E2240",DET:"#C8102E",GSW:"#1D428A",HOU:"#CE1141",IND:"#002D62",LAC:"#C8102E",LAL:"#552583",MEM:"#5D76A9",MIA:"#98002E",MIL:"#00471B",MIN:"#236192",NOP:"#85714D",NYK:"#006BB6",OKC:"#007AC1",ORL:"#0077C0",PHI:"#006BB6",PHX:"#E56020",POR:"#E03A3E",SAC:"#5A2D81",SAS:"#9AA7AE",TOR:"#CE1141",UTA:"#3E2680",WAS:"#002B5C" };
-const teamCol = (ab) => TEAMCOL[String(ab || "").toUpperCase()] || "#3a4a57";
-const nbaCol = (ab) => NBACOL[String(ab || "").toUpperCase()] || "#3a4a57";
-const shortTeam = (t) => { const m = String(t).match(/[A-Z]{2,3}/); return m ? m[0] : String(t).slice(0, 3).toUpperCase(); };
-const formatOdds = (o) => { if (o == null || o === "") return "—"; const n = Number(o); return n > 0 ? `+${n}` : `${n}`; };
-
-const SPORT_TABS = [["mlb","MLB"],["nba","NBA"],["nfl","NFL"],["cfb","CFB"],["nhl","NHL"]];
-const MLB_CATS = [["hr","HR"],["hits","Hits"],["ks","Ks"],["tb","TB"],["doubles","2B"],["triples","3B"]];
-const NBA_CATS = [["points","Points"],["rebounds","Rebounds"],["assists","Assists"],["threes","Threes"]];
-const HAS_PROPS = { mlb:true, nba:true }; // sports with a prop model wired
-const NBA_MK = { points:"PTS", rebounds:"REB", assists:"AST", threes:"3PM" };
+const TEAMCOL = {
+  ARI:"#A71930",ATL:"#CE1141",BAL:"#DF4601",BOS:"#BD3039",CHC:"#0E3386",CWS:"#27251F",CHW:"#27251F",
+  CIN:"#C6011F",CLE:"#00385D",COL:"#33006F",DET:"#0C2340",HOU:"#EB6E1F",KC:"#004687",LAA:"#BA0021",
+  LAD:"#005A9C",MIA:"#00A3E0",MIL:"#FFC52F",MIN:"#002B5C",NYM:"#FF5910",NYY:"#0C2340",OAK:"#003831",
+  ATH:"#003831",PHI:"#E81828",PIT:"#FDB827",SD:"#2F241D",SF:"#FD5A1E",SEA:"#0C2C56",STL:"#C41E3A",
+  TB:"#092C5C",TEX:"#003278",TOR:"#134A8E",WSH:"#AB0003",WAS:"#AB0003"
+};
+const teamCol = (ab) => TEAMCOL[String(ab||"").toUpperCase()] || "#3a4a57";
+const shortTeam = (t) => { const m = String(t||"").match(/[A-Z]{2,3}/); return m ? m[0] : String(t||"").slice(0,3).toUpperCase(); };
+const formatOdds = (o) => o==null||o==="" ? "—" : (Number(o)>0 ? "+"+Number(o) : ""+Number(o));
+const initialsOf = (name) => { const parts = String(name||"").trim().split(/\s+/); const s = parts.map(w=>w[0]).join("").slice(0,2); return s || String(name||"").slice(0,2); };
+const pctOf = (x) => x==null ? null : (x<=1 ? Math.round(x*100) : Math.round(x));
 
 export default function PropsPage() {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
-  const [plan, setPlan] = useState({ tier: "free", isAdmin: false });
+  const [plan, setPlan] = useState({ tier:"free", isAdmin:false });
   const hasFull = plan.isAdmin === true || plan.tier === "pro" || plan.tier === "elite";
-  const [sport, setSport] = useState("mlb");
-  const [tab, setTab] = useState("hr");
   const [mlb, setMlb] = useState(null);
-  const [nba, setNba] = useState(null);
   const [loading, setLoading] = useState(true);
-
-  useEffect(() => { subscriptionApi.getMyPlan().then(setPlan).catch(() => {}); }, []);
-
-  useEffect(() => {
-    let on = true; setLoading(true);
-    if (sport === "mlb") {
-      edgesApi.getMLB().then((d) => { if (on) { setMlb(d || {}); setLoading(false); } }).catch(() => { if (on) { setMlb({}); setLoading(false); } });
-    } else if (sport === "nba") {
-      edgesApi.getNBAProps().then((d) => { if (on) { setNba(d || {}); setLoading(false); } }).catch(() => { if (on) { setNba({}); setLoading(false); } });
-    } else { setLoading(false); }
-    return () => { on = false; };
-  }, [sport]);
-
-  const cats = sport === "mlb" ? MLB_CATS : sport === "nba" ? NBA_CATS : [];
-  const hasProps = !!HAS_PROPS[sport];
-
-  // resolve the active list for the current sport+tab
-  let list = [];
-  if (sport === "mlb") {
-    const e = mlb || {};
-    if (tab === "tb" || tab === "doubles" || tab === "triples") {
-      const src = tab === "tb" ? (e.tbPropEdges || []) : tab === "doubles" ? (e.doublesPropEdges || []) : (e.triplesPropEdges || []);
-      list = [...src].sort((a, b) => (b.overProb || 0) - (a.overProb || 0));
-    } else {
-      list = tab === "hr" ? (e.hrPropEdges || []) : tab === "hits" ? (e.hitsPropEdges || []) : (e.kPropEdges || []);
-      list = [...list].sort((a, b) => tab === "hr" ? ((b.hrProb || 0) - (a.hrProb || 0)) : ((b.edge || 0) - (a.edge || 0)));
-    }
-  } else if (sport === "nba") {
-    const e = nba || {};
-    list = tab === "points" ? (e.pointsProps || []) : tab === "rebounds" ? (e.reboundsProps || []) : tab === "assists" ? (e.assistsProps || []) : (e.threesProps || []);
-    // already sorted by |edge| server-side
-  }
-
-  const catCount = (id) => {
-    if (sport === "mlb") {
-      const e = mlb || {};
-      if (id === "tb") return (e.tbPropEdges || []).length || "";
-      if (id === "doubles") return (e.doublesPropEdges || []).length || "";
-      if (id === "triples") return (e.triplesPropEdges || []).length || "";
-      return (id === "hr" ? (e.hrPropEdges || []) : id === "hits" ? (e.hitsPropEdges || []) : (e.kPropEdges || [])).length || "";
-    }
-    if (sport === "nba") { const e = nba || {}; return (id === "points" ? (e.pointsProps || []) : id === "rebounds" ? (e.reboundsProps || []) : id === "assists" ? (e.assistsProps || []) : (e.threesProps || [])).length || ""; }
-    return "";
-  };
-
-  const emptyLabel = sport === "mlb"
-    ? (tab === "hr" ? "home run" : tab === "hits" ? "hits" : tab === "ks" ? "strikeout" : tab === "tb" ? "total bases" : tab === "doubles" ? "doubles" : tab === "triples" ? "triples" : "")
-    : (NBA_MK[tab] ? NBA_MK[tab].toLowerCase() : "");
-
-  return (
-    <TerminalShell active="/props" plan={plan} navigate={navigate}>
-    <div style={{ minHeight: "100vh", background: "#000", color: "#f2f6f4", fontFamily: "'Inter',system-ui,-apple-system,sans-serif" }}>
-      <style>{CSS}</style>
-      <BottomNav />
-      <div className="ppsb"><Sidebar user={user} plan={plan} signOut={signOut} navigate={navigate} /></div>
-      <div className="ppwrap">
-        <div onClick={() => navigate(-1)} style={{ color: "#6b7280", fontSize: 13, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6, marginBottom: 14, userSelect: "none" }}>← Back</div>
-        <div className="pphead">
-          <div className="pptitle"><span className="b">Player</span> Props</div>
-          <div className="ppsub">{sport === "mlb" && mlb?.rolledToNextDay ? <><b style={{ color: "#ff7a6c" }}>Tomorrow's board</b> — </> : ""}Every prop the model flags with an edge — the full board, not just the top picks.</div>
-        </div>
-
-        {/* SPORT SELECTOR — same pill style as the Games page */}
-        <div className="ppsports">
-          {SPORT_TABS.map(([id, lb]) => (
-            <button key={id} className={"ppsport" + (sport === id ? " on" : "")} onClick={() => { setSport(id); setTab(id === "mlb" ? "hr" : "points"); }}>
-              {lb}
-            </button>
-          ))}
-        </div>
-
-        {!hasProps ? (
-          <div className="ppmuted" style={{ padding: "44px 8px" }}>Player props aren’t available for {sport.toUpperCase()} yet — they come online as each sport’s model does.</div>
-        ) : (<>
-          <div className="pptabs">
-            {cats.map(([id, lb]) => (
-              <button key={id} className={"pptab" + (tab === id ? " on" : "")} onClick={() => setTab(id)}>
-                {lb}
-                <span className="ct">{catCount(id)}</span>
-              </button>
-            ))}
-          </div>
-
-          {hasFull && sport === "mlb" && tab === "hr" && !loading && (
-            <div className="pphint">Tap any player to open their batting profile — splits, recent form, the model's read vs the market, and pull tendencies. <b>Longshots</b> — bet small, if at all.</div>
-          )}
-          {hasFull && sport === "nba" && !loading && (
-            <div className="ppwarn">Experimental projections. Prop markets are sharp, so flagged edges are rare and <b>informational, not betting advice</b>. Shown as the model's projection vs the book line.</div>
-          )}
-
-          {loading
-            ? <div className="ppmuted">Loading the board…</div>
-            : !hasFull
-              ? <PropsLock navigate={navigate} />
-              : list.length === 0
-              ? <div className="ppmuted">No {emptyLabel} props on the board yet{sport === "nba" ? " — projections need ≥8 recent games per player and fill in closer to tip" : " — fills in closer to first pitch"}.</div>
-              : <div className="pplist">{list.map((p, i) => sport === "nba"
-                  ? <NbaPropRow key={(p.player || "") + i} p={p} market={tab} rank={i + 1} navigate={navigate} />
-                  : <PropRow key={(p.player || "") + i} p={p} type={tab} rank={i + 1} navigate={navigate} />)}</div>}
-
-          {hasFull && <div className="ppnote">{sport === "nba"
-            ? "NBA props are experimental projections (model vs line), not tracked +EV plays. Flagged means the model's lean cleared its stability + hit-rate gates."
-            : (tab === "tb" || tab === "doubles" || tab === "triples")
-              ? "Experimental boards — ranked by the model's chance to clear the line. Uncalibrated and not yet graded; shown to preview the model, not as betting advice."
-            : tab === "hr"
-              ? "HR props are ranked by the model's chance to homer. The HR market is efficient — these are options to consider, not tracked +EV plays."
-              : "Sorted by model edge — the % is the model's price vs the book's. These clear our positive-EV bar."}</div>}
-        </>)}
-      </div>
-    </div>
-    </TerminalShell>
-  );
-}
-
-// ---- Free-tier lock: blurred board + unlock card ----
-function PropsLock({ navigate }) {
-  const sk = (w, h) => ({ background: "#1f2937", borderRadius: 5, width: w, height: h });
-  return (
-    <div style={{ position: "relative", borderRadius: 14, overflow: "hidden" }}>
-      <div className="pplist" style={{ filter: "blur(7px)", opacity: 0.5, pointerEvents: "none", userSelect: "none" }}>
-        {[0, 1, 2, 3].map((i) => (
-          <div key={i} className="pprow">
-            <div className="rkn" style={{ color: "transparent" }}>{i + 1}</div>
-            <div className="ppav" style={{ background: "#1f2937", boxShadow: "none" }} />
-            <div className="ppinfo">
-              <div style={{ ...sk("60%", 12), marginBottom: 6 }} />
-              <div style={{ ...sk("40%", 9), marginBottom: 6 }} />
-              <div style={sk("50%", 10)} />
-            </div>
-            <div className="ppright">
-              <div style={{ ...sk(42, 22), marginLeft: "auto" }} />
-              <div style={{ ...sk(30, 8), marginTop: 6, marginLeft: "auto" }} />
-            </div>
-          </div>
-        ))}
-      </div>
-      <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", padding: 20, background: "radial-gradient(circle at 50% 35%, rgba(0,0,0,.45), rgba(0,0,0,.9))" }}>
-        <div style={{ width: 46, height: 46, borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, background: "rgba(38,116,176,.14)", border: "1px solid rgba(38,116,176,.4)", marginBottom: 13 }}><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#9fc3e8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
-        <div style={{ fontSize: 16, fontWeight: 800, color: "#fff", marginBottom: 5 }}>The full prop board is locked</div>
-        <div style={{ fontSize: 12, color: "#9aa6b2", lineHeight: 1.5, maxWidth: 270, marginBottom: 15 }}>Every flagged prop — HR, hits, K, points, rebounds, assists &amp; threes — across every game. <b style={{ color: "#2DBE7A" }}>$7/mo</b> · cancel anytime.</div>
-        <button onClick={() => navigate("/pricing")} style={{ background: "#1D9E75", color: "#04130d", border: "none", fontWeight: 800, fontSize: 14, padding: "12px 22px", borderRadius: 11, cursor: "pointer", fontFamily: "inherit" }}>Unlock All-Access →</button>
-      </div>
-    </div>
-  );
-}
-
-// ---- MLB prop row (unchanged behavior) ----
-// format a rate stat the baseball way: .947 / 1.203 (strip a leading zero, keep 1.xxx)
-function fmt3(v) {
-  if (v == null || v === "") return "—";
-  const f = Number(v).toFixed(3);
-  return f.startsWith("0.") ? f.slice(1) : f;
-}
-
-// one hand-split panel (vs LHP / vs RHP). `active` highlights the side that applies
-// tonight — unused in v1 (no pitcher hand yet), wired in a later phase.
-function SplitCard({ label, s, active }) {
-  if (!s) {
-    return (
-      <div className={"hcsp" + (active ? " act" : "")}>
-        <div className="hcvh">{label}</div>
-        <div className="hcmut" style={{ marginTop: 8 }}>no data</div>
-      </div>
-    );
-  }
-  return (
-    <div className={"hcsp" + (active ? " act" : "")}>
-      {active && <span className="hctag">TONIGHT</span>}
-      <div className="hcvh">{label}</div>
-      <div className="hcops">{fmt3(s.ops)}</div>
-      <div className="hcopsl">OPS</div>
-      <div className="hcr">
-        <div><div className="hcv">{fmt3(s.avg)}</div><div className="hcl">AVG</div></div>
-        <div><div className="hcv">{fmt3(s.slg)}</div><div className="hcl">SLG</div></div>
-        <div><div className="hcv hchr">{s.hr ?? "—"}</div><div className="hcl">HR</div></div>
-        <div><div className="hcv">{s.ab ?? "—"}</div><div className="hcl">AB</div></div>
-      </div>
-      {s.thin && <div className="hcthin">small sample</div>}
-    </div>
-  );
-}
-
-// raw implied probability from an American price (what the quoted line implies)
-function impliedFromOdds(o) {
-  const n = Number(o);
-  if (!Number.isFinite(n) || n === 0) return null;
-  return n > 0 ? 100 / (n + 100) : -n / (-n + 100);
-}
-function parkPctLabel(fac) {
-  if (fac == null) return "—";
-  const p = Math.round((fac - 1) * 100);
-  return p === 0 ? "neutral" : (p > 0 ? `+${p}%` : `${p}%`);
-}
-
-// one factor chip in "what the model sees"
-function Fac({ label, val, tier, sub, bar }) {
-  return (
-    <div className="hcfac">
-      <div className="hcfl"><span>{label}</span>{tier && <span className="hcrk">{tier}</span>}</div>
-      <div className="hcfv">{val}</div>
-      {bar != null && <div className="hcbar"><span style={{ width: Math.max(3, Math.min(100, bar)) + "%" }}></span></div>}
-      {sub && <div className="hcfp">{sub}</div>}
-    </div>
-  );
-}
-
-// model HR% (bars) vs market implied % (blue ticks), per past spot; dot = homered.
-function ModelVsMarket({ data, tonight }) {
-  const n = data.length;
-  const W = 320, top = 10, base = 96, plot = base - top;
-  const vals = data.flatMap((d) => [d.modelProb || 0, d.marketImplied || 0]);
-  if (tonight) vals.push(tonight.model || 0, tonight.market || 0);
-  const maxV = Math.max(0.35, ...vals);
-  const y = (p) => base - (Math.min(p || 0, maxV) / maxV) * plot;
-  const slotW = W / Math.max(n, 1);
-  const barW = Math.min(20, slotW * 0.55);
-  return (
-    <div className="hccw">
-      <div className="hcch">
-        <span className="hccht">Model HR% vs market implied · last {n}</span>
-        {tonight && tonight.market != null && (
-          <span className="hcchu"><b style={{ color: "#7cf0a8" }}>{Math.round((tonight.model || 0) * 100)}%</b> <i>vs</i> <b style={{ color: "#5da9e8" }}>{Math.round((tonight.market || 0) * 100)}%</b></span>
-        )}
-      </div>
-      <svg viewBox={`0 0 ${W} 120`} width="100%" preserveAspectRatio="xMidYMid meet">
-        <line x1="2" y1={base} x2={W - 2} y2={base} stroke="#22352c" strokeWidth="1" />
-        {data.map((d, i) => {
-          const cx = i * slotW + slotW / 2;
-          const yTop = y(d.modelProb || 0);
-          const lean = (d.modelProb || 0) >= (d.marketImplied || 0);
-          return (
-            <g key={i}>
-              <rect x={cx - barW / 2} y={yTop} width={barW} height={Math.max(1, base - yTop)} rx="3" fill={lean ? "#2DBE7A" : "#2f6b4f"} opacity={lean ? 1 : 0.75} />
-              <line x1={cx - barW / 2 - 2} y1={y(d.marketImplied)} x2={cx + barW / 2 + 2} y2={y(d.marketImplied)} stroke="#5da9e8" strokeWidth="2.5" strokeLinecap="round" />
-              <circle cx={cx} cy={112} r={d.homered ? 4 : 3.2} fill={d.homered ? "#2DBE7A" : "none"} stroke={d.homered ? "#2DBE7A" : "#3a5f55"} />
-            </g>
-          );
-        })}
-      </svg>
-      <div className="hclg">
-        <span><i style={{ background: "#2DBE7A" }}></i>model %</span>
-        <span><i style={{ background: "#5da9e8", height: 3, borderRadius: 2 }}></i>market %</span>
-        <span><i style={{ background: "#2DBE7A", borderRadius: "50%" }}></i>homered</span>
-      </div>
-      <div className="hcnote2">Bars above the blue line = model sees more value than the price.</div>
-    </div>
-  );
-}
-
-// pull / straight / oppo distribution — pull-side is the HR-relevant direction
-function BattedBall({ bb }) {
-  const pull = bb.pullPct ?? 0, str = bb.straightPct ?? 0, oppo = bb.oppoPct ?? 0;
-  const tot = (pull + str + oppo) || 100;
-  const tier = pull >= 45 ? "heavy pull" : pull >= 38 ? "pull-side" : pull <= 30 ? "spray / oppo" : "balanced";
-  return (
-    <div className="hcbb">
-      <div className="hcbbbar">
-        <span style={{ width: (pull / tot) * 100 + "%", background: "#2DBE7A" }}></span>
-        <span style={{ width: (str / tot) * 100 + "%", background: "#42504a" }}></span>
-        <span style={{ width: (oppo / tot) * 100 + "%", background: "#5da9e8" }}></span>
-      </div>
-      <div className="hcbblg">
-        <span><i style={{ background: "#2DBE7A" }}></i>Pull {pull.toFixed(0)}%</span>
-        <span><i style={{ background: "#42504a" }}></i>Straight {str.toFixed(0)}%</span>
-        <span><i style={{ background: "#5da9e8" }}></i>Oppo {oppo.toFixed(0)}%</span>
-      </div>
-      <div className="hcbbnote"><b>{tier}</b> hitter{bb.thin ? " · limited sample" : ""} — pull-side power is the HR signal</div>
-    </div>
-  );
-}
-
-// the expand-on-tap batting card (v2): matchup → splits → model-vs-market →
-// factors → pull (phase 2). Sourced from the same feeds the HR model uses.
-function HrCard({ card, loading, p }) {
-  if (loading) return <div className="hrcard"><div className="hcmut">Loading batting card…</div></div>;
-  if (!card || card.ok === false || !card.splits)
-    return <div className="hrcard"><div className="hcmut">Batting card unavailable for this player.</div></div>;
-  const s = card.splits;
-  const m = card.matchup;
-  const f = card.factors || {};
-  const meas = f.measured || {};
-  const applies = m?.appliesSplit;
-  const hist = card.modelVsMarket || [];
-  const tonight = { model: p?.hrProb ?? null, market: impliedFromOdds(p?.odds) };
-
-  return (
-    <div className="hrcard">
-      {m && (m.pitcher || m.pitcherHand) && (
-        <div className="hcmatch">
-          <div className="hcml">Tonight vs <b>{m.pitcher || "TBD"}</b></div>
-          <div className="hcmr">
-            {m.pitcherHand && <span className="hcpill">{m.pitcherHand}HP</span>}
-            {f.platoonAdvantage && <span className="hcadv">▲ platoon edge</span>}
-          </div>
-        </div>
-      )}
-
-      <div className="hcsec">
-        <div className="hctitle"><span className="hcdot"></span>Hand vs Hand · {s.season}{card.player?.bats ? ` · bats ${card.player.bats}` : ""}</div>
-        <div className="hcsplits">
-          <SplitCard label="vs LHP" s={s.vsLHP} active={applies === "vsLHP"} />
-          <SplitCard label="vs RHP" s={s.vsRHP} active={applies === "vsRHP"} />
-        </div>
-      </div>
-
-      {hist.length > 0 && (
-        <div className="hcsec">
-          <div className="hctitle"><span className="hcdot"></span>Model % vs Market %</div>
-          <ModelVsMarket data={hist} tonight={tonight} />
-        </div>
-      )}
-
-      <div className="hcsec">
-        <div className="hctitle"><span className="hcdot"></span>What the model sees</div>
-        <div className="hcfacs">
-          {meas.barrelPct != null && <Fac label="Barrel %" tier={meas.barrelTier} val={(meas.barrelPct * 100).toFixed(1) + "%"} bar={(meas.barrelPct / 0.20) * 100} />}
-          {meas.xwoba != null && <Fac label="xwOBA" tier={meas.xwoba >= 0.37 ? "elite" : meas.xwoba >= 0.33 ? "strong" : null} val={fmt3(meas.xwoba)} bar={(meas.xwoba / 0.45) * 100} />}
-          {meas.recent15 && <Fac label="Recent · L15" val={`${meas.recent15.hr ?? 0} HR`} sub={`${fmt3(meas.recent15.avg)} / ${fmt3(meas.recent15.slg)} · ${meas.recent15.ab ?? 0} AB`} />}
-          {f.platoonAdvantage != null && <Fac label="Platoon" tier={f.platoonAdvantage ? "+adv" : null} val={f.platoonAdvantage ? "advantage" : "neutral"} sub={card.player?.bats && m?.pitcherHand ? `${card.player.bats} bat vs ${m.pitcherHand}HP` : ""} />}
-          {f.park && <Fac label={"Park" + (f.park.venue ? " · " + f.park.venue : "")} tier={f.park.factor > 1.03 ? "+HR" : f.park.factor < 0.97 ? "−HR" : null} val={parkPctLabel(f.park.factor)} />}
-        </div>
-      </div>
-
-      <div className="hcsec">
-        <div className="hctitle"><span className="hcdot" style={{ background: card.battedBall ? "#2DBE7A" : "#e8c07a" }}></span>Batted-ball profile</div>
-        {card.battedBall
-          ? <BattedBall bb={card.battedBall} />
-          : (
-            <div className="hcsoon">
-              <div className="hcs1">Pull % · Spray direction <span className="hcstag">ADDING NEXT</span></div>
-              <div className="hcs2">Pull rate, oppo rate and spray vs the pitcher's hand — coming from Baseball Savant.</div>
-            </div>
-          )}
-      </div>
-
-      <div className="hcdisc">A <span className="hcb">Wize</span>Picks read — a lean, not a guarantee.</div>
-    </div>
-  );
-}
-
-function PropRow({ p, type, rank, navigate }) {
-  const isHR = type === "hr";
-  const [open, setOpen] = useState(false);
+  const [mfilter, setMfilter] = useState("All");
+  const [sortBy, setSortBy] = useState("edge");
+  const [selProp, setSelProp] = useState(null);
   const [card, setCard] = useState(null);
   const [cardLoading, setCardLoading] = useState(false);
 
-  const onTap = () => {
-    // HR rows expand the batting card; every other prop type keeps the old behavior
-    // (tap → game detail).
-    if (!isHR) { if (p.gameId) navigate(`/game/mlb/${p.gameId}`); return; }
-    const next = !open;
-    setOpen(next);
-    if (next && card == null && p.playerId) {
-      setCardLoading(true);
-      playerCardApi.getMLB(p.playerId, { gameId: p.gameId, team: p.team, name: p.player })
-        .then((d) => setCard(d || { ok: false }))
-        .catch(() => setCard({ ok: false }))
-        .finally(() => setCardLoading(false));
-    }
+  useEffect(() => { subscriptionApi.getMyPlan().then(setPlan).catch(()=>{}); }, []);
+  useEffect(() => {
+    let c = false;
+    const load = async () => { try { const d = await edgesApi.getMLB(); if(!c) setMlb(d); } catch(e){} if(!c) setLoading(false); };
+    load(); const id = setInterval(load, 60000);
+    return () => { c = true; clearInterval(id); };
+  }, []);
+
+  const openP = (p) => {
+    setSelProp(p); setCard(null); setCardLoading(true);
+    playerCardApi.getMLB(p.id, { gameId: p.gameId, team: p.teamRaw, name: p.pl[0] })
+      .then(d => setCard(d)).catch(()=>setCard(null)).finally(()=>setCardLoading(false));
   };
+  const closeP = () => { setSelProp(null); setCard(null); };
 
-  let pct, lbl, line, edgeBadge = null;
-  if (type === "hr") {
-    pct = Math.round((p.hrProb || 0) * 100); lbl = "to homer"; line = `O 0.5 HR · ${formatOdds(p.odds)}`;
-  } else if (type === "hits") {
-    pct = Math.round((p.hitsProb || 0) * 100); lbl = "hit prob";
-    const needH = Math.floor(p.line) + 1;
-    line = p.side === "over"
-      ? `${needH}+ Hits · ${formatOdds(p.odds)}`
-      : (p.line <= 0.5 ? `0 Hits · ${formatOdds(p.odds)}` : `Under ${p.line} Hits · ${formatOdds(p.odds)}`);
-    if ((p.edge ?? 0) > 0) edgeBadge = `+${(p.edge * 100).toFixed(1)}%`;
-  } else if (type === "tb" || type === "doubles" || type === "triples") {
-    pct = Math.round((p.overProb || 0) * 100);
-    lbl = type === "tb" ? "to clear" : type === "doubles" ? "2B chance" : "3B chance";
-    const unit = type === "tb" ? "TB" : type === "doubles" ? "2B" : "3B";
-    const needN = Math.floor(p.line) + 1;
-    line = p.line <= 0.5 ? `${needN}+ ${unit} · ${formatOdds(p.odds)}` : `O ${p.line} ${unit} · ${formatOdds(p.odds)}`;
-    // No edge badge — these boards are ranked by likelihood, not priced edges.
-  } else {
-    pct = Math.round((p.kProb || 0) * 100); lbl = "K prob";
-    line = `${p.side === "over" ? "O" : "U"} ${p.line} Ks · ${formatOdds(p.odds)}`;
-    if ((p.edge ?? 0) > 0) edgeBadge = `+${(p.edge * 100).toFixed(1)}%`;
-  }
-  const ab = shortTeam(p.team || p.game || ""); const col = teamCol(ab);
+  const M = mlb || {};
+  const convOf = (p) => {
+    const c = String(p.conviction||"").toLowerCase();
+    if (c.startsWith("high")) return "high"; if (c.startsWith("med")) return "med"; if (c) return "low";
+    const e = (p.edge||0)*100; return e>=4 ? "high" : e>=2 ? "med" : "low";
+  };
+  const lineOf = (p, unit) => { const side = String(p.betSide||"O").toUpperCase().startsWith("U") ? "U" : "O"; return `${side} ${p.line ?? ""} ${unit}`.trim(); };
+  const toP = (p, mk, unit) => ({
+    pl: [ p.player || p.name || "—", initialsOf(p.player||p.name||""), teamCol(shortTeam(p.team||p.game||"")) ],
+    g: p.game || p.team || "", pos: p.pos || p.position || "",
+    line: lineOf(p, unit), odds: formatOdds(p.odds), edge: (p.edge||0)*100,
+    mk, conv: convOf(p),
+    model: p.modelProb!=null ? Math.round(p.modelProb*100) : null,
+    mkt: p.marketProb!=null ? Math.round(p.marketProb*100) : (p.impliedProb!=null ? Math.round(p.impliedProb*100) : null),
+    gameId: p.gameId, id: p.playerId || p.id, teamRaw: p.team
+  });
+  const allProps = [
+    ...(M.hrPropEdges||[]).map(p => toP(p,"HR","HR")),
+    ...(M.hitsPropEdges||[]).map(p => toP(p,"HITS","Hits")),
+    ...((M.kPropEdges||M.ksPropEdges||[])).map(p => toP(p,"K","Ks")),
+  ];
+  const FILT = ["All","HR","Hits","K"];
+  const fmap = { HR:"HR", Hits:"HITS", K:"K" };
+  let list = mfilter==="All" ? allProps : allProps.filter(p => p.mk === fmap[mfilter]);
+  const rank = { high:3, med:2, low:1 };
+  list = [...list].sort((a,b) => sortBy==="edge" ? b.edge-a.edge : ((rank[b.conv]-rank[a.conv]) || b.edge-a.edge));
+  const avg = (list.reduce((s,p)=>s+p.edge,0)/Math.max(list.length,1)).toFixed(1);
+
   return (
-    <div className={"pprowwrap" + (isHR && open ? " open" : "")}>
-      <div className={"pprow" + (isHR ? " tappable" : "") + (isHR && open ? " rowopen" : "")} onClick={onTap}>
-        <div className="rkn">{rank}</div>
-        <div className="ppav" style={{ background: `linear-gradient(180deg, ${col}, #0c1018 88%)`, boxShadow: `0 0 0 2px ${col}88` }}>
-          {p.playerId
-            ? <img src={`https://midfield.mlbstatic.com/v1/people/${p.playerId}/spots/120`} alt="" onError={(ev) => { ev.currentTarget.style.display = "none"; }} />
-            : ""}
+    <div className="app"><style>{CSS}</style>
+      <div className="hd">
+        <div className="hrow">
+          <div className="logo"><span className="w">Wize</span>Picks</div>
+          <span className="open">{"\u25cf"} OPEN</span>
+          <div className="sp"/>
+          <div className="ibtn" onClick={()=>navigate("/settings")}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></div>
         </div>
-        <div className="ppinfo">
-          <div className="ppname">{p.player || "—"}</div>
-          <div className="ppgame">{p.game || p.team || ""}</div>
-          <div className="ppline">{line}</div>
+        <div className="sports">
+          {[["MLB","mlb"],["NBA","nba"],["NHL","nhl"],["NFL","nfl"],["CFB","cfb"]].map(([lb,key])=>(
+            <b key={key} className={key==="mlb"?"on":""} onClick={()=>{ if(key==="nba")navigate("/nba"); else if(key!=="mlb")navigate(`/${key}-games`); }}><span className="dot"/>{lb}</b>
+          ))}
         </div>
-        <div className="ppright">
-          <div className="pppct">{pct}<span className="pc">%</span></div>
-          <div className="pplbl">{lbl}</div>
-          {edgeBadge && <div className="ppedge">{edgeBadge} EDGE</div>}
-        </div>
-        {isHR && <div className="ppchev">{open ? "▴" : "▾"}</div>}
       </div>
-      {isHR && open && <HrCard card={card} loading={cardLoading} p={p} />}
+
+      {!hasFull ? <Gate navigate={navigate}/> : <>
+        <div className="chips">{FILT.map(f=><b key={f} className={f===mfilter?"on":""} onClick={()=>setMfilter(f)}>{f}</b>)}</div>
+        <div className="bar">
+          <span>{list.length} props · avg edge +{avg}%</span>
+          <span className="sort"><b className={sortBy==="edge"?"on":""} onClick={()=>setSortBy("edge")}>Edge</b><b className={sortBy==="conv"?"on":""} onClick={()=>setSortBy("conv")}>Conviction</b></span>
+        </div>
+        <div id="wrap">
+          {loading ? <div className="estate"><div className="et">Loading props…</div><div className="es">Pulling model edges.</div></div>
+            : list.length ? list.map((p,i)=><PropRow key={i} p={p} onOpen={openP}/>)
+            : <div className="estate"><div className="et">No {mfilter} props</div><div className="es">Try another market.</div></div>}
+        </div>
+      </>}
+
+      <nav className="nav">
+        <a onClick={()=>navigate("/dashboard")}><span className="i"><svg className="dbars" viewBox="0 0 24 24" width="18" height="18"><rect x="2" y="13" width="4" height="5" rx="1"/><rect x="7.3" y="9" width="4" height="9" rx="1"/><rect x="12.6" y="11" width="4" height="7" rx="1"/><rect x="18" y="6" width="4" height="12" rx="1"/></svg></span>Dashboard</a>
+        <a onClick={()=>navigate("/games")}><span className="i">{"\u25a6"}</span>Games</a>
+        <a className="on"><span className="i">{"\u25c8"}</span>Props</a>
+        <a onClick={()=>navigate("/odds")}><span className="i">{"\u25d0"}</span>Market</a>
+        <a onClick={()=>navigate("/performance")}><span className="i">{"\u25b2"}</span>Performance</a>
+        <a onClick={()=>navigate("/settings")}><span className="i">{"\u25cd"}</span>Account</a>
+      </nav>
+
+      {selProp && <PlayerSheet p={selProp} card={card} loading={cardLoading} onClose={closeP}/>}
     </div>
   );
 }
 
-// ---- NBA prop row: matches the MLB card — big projection number + label + edge badge ----
-function NbaPropRow({ p, market, rank, navigate }) {
-  const ab = shortTeam(p.teamAbbr || p.game || ""); const col = nbaCol(ab);
-  const over = p.side === "OVER";
-  const sideCol = over ? "#2DBE7A" : "#ff5d52";
-  const e = p.edge ?? 0;
+function PropRow({ p, onOpen }) {
   return (
-    <div className="pprow" onClick={() => p.gameId && navigate(`/game/nba/${p.gameId}`)}>
-      <div className="rkn">{rank}</div>
-      <div className="ppav" style={{ background: `linear-gradient(180deg, ${col}, #0c1018 88%)`, boxShadow: `0 0 0 2px ${col}88` }}>
-        {p.athleteId
-          ? <img src={`https://a.espncdn.com/i/headshots/nba/players/full/${p.athleteId}.png`} alt="" onError={(ev) => { ev.currentTarget.style.display = "none"; }} />
-          : ""}
+    <div className="prow" onClick={()=>onOpen(p)}>
+      <div className={"rail "+p.conv}/>
+      <div className="av" style={{ background:`radial-gradient(circle at 50% 28%, ${p.pl[2]}, #0c1018 82%)`, boxShadow:`inset 0 0 0 2px ${p.pl[2]}` }}>{p.pl[1]}</div>
+      <div className="pinfo">
+        <div className="pn">{p.pl[0]}</div>
+        <div className="pmu">{p.g}{p.pos ? " · "+p.pos : ""}</div>
+        <div className="pline">{p.line}<span className="od">{p.odds}</span></div>
       </div>
-      <div className="ppinfo">
-        <div className="ppname">{p.player || "—"}</div>
-        <div className="ppgame">{p.game || p.teamAbbr || ""}</div>
-        <div className="ppline">{over ? "Over" : "Under"} {p.line} {NBA_MK[market]}</div>
-      </div>
-      <div className="ppright">
-        <div className="pppct" style={{ color: sideCol }}>{p.projection}</div>
-        <div className="pplbl">proj {NBA_MK[market]}</div>
-        <div className="ppedge" style={{ color: sideCol, background: over ? "rgba(45,190,122,.12)" : "rgba(255,93,82,.12)" }}>{over ? "▲" : "▼"} {e >= 0 ? "+" : ""}{e}{p.flagged ? " ⚑" : ""}</div>
+      <div className="pr">
+        <div className="ped">+{p.edge.toFixed(1)}%</div>
+        <div className="plb">EDGE</div>
+        <div className={"ptag "+p.mk}>{p.mk}</div>
       </div>
     </div>
   );
 }
 
-const CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&family=Inter:wght@400;500;600;700;800&display=swap');
-*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-.ppwrap{max-width:560px;margin:0 auto;padding:18px 14px 90px}
-.pphead{margin-bottom:14px}
-.pptitle{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:30px;line-height:1;letter-spacing:-.01em}.pptitle .b{color:#ff5d4d}
-.ppsub{font-size:12px;color:#8a99a2;font-weight:500;margin-top:6px;line-height:1.4}
-.ppsports{display:flex;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,.09);margin-bottom:26px}
-.ppsports::-webkit-scrollbar{display:none}
-.ppsport{flex:0 0 auto;display:inline-flex;align-items:center;padding:9px 3px;cursor:pointer;white-space:nowrap;
-  font-size:16px;font-weight:700;font-family:'Barlow Condensed',sans-serif;border:none;border-bottom:2px solid transparent;background:none;color:#8a99a2;margin-bottom:-1px}
-.ppsport.on{color:#fff;border-bottom-color:#ff5d4d}
-.pptabs{display:flex;justify-content:space-between;margin-bottom:16px;border-bottom:1px solid rgba(255,255,255,.09)}
-.pptabs::-webkit-scrollbar{display:none}
-.pptab{flex:0 0 auto;display:inline-flex;align-items:center;gap:4px;padding:9px 3px;cursor:pointer;
-  font-family:'Barlow Condensed',sans-serif;font-size:14px;font-weight:600;white-space:nowrap;border:none;border-bottom:2px solid transparent;background:none;color:#8a99a2;margin-bottom:-1px}
-.pptab.on{color:#fff;border-bottom-color:#ff5d4d}
-.pptab .ct{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;color:#6b7681;margin-left:4px}.pptab.on .ct{color:#ff8a7d}
-.pplist{display:flex;flex-direction:column;gap:8px}
-.pprow{display:flex;align-items:center;gap:11px;border:1px solid #161d24;border-radius:12px;background:linear-gradient(180deg,#0c1117,#080b0f);padding:10px 12px;cursor:pointer;position:relative}
-.rkn{position:absolute;top:6px;left:8px;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:10px;color:#3f4a55}
-.ppav{width:46px;height:46px;border-radius:50%;display:flex;align-items:flex-end;justify-content:center;font-size:20px;flex:0 0 auto;position:relative;overflow:hidden;margin-left:6px}
-.ppav img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
-.ppinfo{flex:1;min-width:0}
-.ppname{font-weight:800;font-size:14px;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.ppgame{font-size:10.5px;color:#8a99a2;font-weight:600;margin-top:1px}
-.ppline{font-size:11px;color:#b6c0c7;font-weight:600;margin-top:4px}
-.ppright{text-align:right;flex:0 0 auto;display:flex;flex-direction:column;align-items:flex-end}
-.pppct{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:26px;color:#2DBE7A;line-height:1}.pppct .pc{font-size:15px;margin-left:1px}
-.pplbl{font-size:8.5px;color:#7d8a93;font-weight:700;text-transform:uppercase;letter-spacing:.3px;margin-top:1px}
-.ppedge{margin-top:5px;font-size:9px;font-weight:800;color:#2DBE7A;background:rgba(45,190,122,.12);border-radius:5px;padding:2px 6px;white-space:nowrap}
-.ppwarn{border:1px solid rgba(243,185,79,.32);background:rgba(243,185,79,.08);border-radius:10px;padding:10px 12px;font-size:11px;color:#f3c66b;font-weight:600;line-height:1.45;margin-bottom:12px}.ppwarn b{color:#ffd98a}
-.pphint{border:1px solid rgba(45,190,122,.28);background:rgba(45,190,122,.07);border-radius:10px;padding:10px 12px;font-size:11px;color:#fff;font-weight:600;line-height:1.45;margin-bottom:12px}.pphint b{color:#fff}
-.pprowwrap{display:block}
-.pprow.tappable{cursor:pointer}
-.ppchev{position:absolute;top:10px;right:11px;color:#2DBE7A;font-size:11px;pointer-events:none}
-.pprow.rowopen{border-bottom-left-radius:0;border-bottom-right-radius:0;border-bottom-color:transparent}
-.hrcard{border:1px solid #161d24;border-top:1px dashed #20303a;border-radius:0 0 12px 12px;background:linear-gradient(180deg,#0b1016,#070a0e);padding:2px 12px 12px;margin-top:-1px}
-.hcsec{padding:13px 0 4px}
-.hctitle{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:11px;letter-spacing:.11em;text-transform:uppercase;color:#8a99a2;margin-bottom:10px;display:flex;align-items:center;gap:7px}
-.hcdot{width:6px;height:6px;border-radius:50%;background:#2DBE7A;display:inline-block}
-.hcsplits{display:grid;grid-template-columns:1fr 1fr;gap:9px}
-.hcsp{position:relative;background:#0d1218;border:1px solid #18212a;border-radius:11px;padding:11px 12px}
-.hcsp.act{border-color:rgba(45,190,122,.5);background:linear-gradient(180deg,rgba(45,190,122,.06),#0d1218)}
-.hctag{position:absolute;top:-8px;right:10px;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:9px;letter-spacing:.08em;background:#ff7a6c;color:#1a0c08;padding:2px 7px;border-radius:5px}
-.hcvh{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:12px;letter-spacing:.06em;color:#8a99a2}
-.hcsp.act .hcvh{color:#7cf0a8}
-.hcops{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:28px;line-height:1;margin:6px 0 1px}
-.hcopsl{font-size:9.5px;color:#6a7882;letter-spacing:.1em;text-transform:uppercase}
-.hcr{display:flex;justify-content:space-between;gap:4px;margin-top:9px}
-.hcr>div{flex:1;text-align:center}
-.hcv{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:15px}
-.hcl{font-size:9px;color:#6a7882;text-transform:uppercase;letter-spacing:.06em;margin-top:1px}
-.hchr{color:#ffd98a}
-.hcthin{font-size:9.5px;color:#6a7882;font-style:italic;margin-top:8px}
-.hcmut{color:#7d8a93;font-size:12px;padding:14px 4px;text-align:center}
-.hcdisc{font-size:10px;color:#6a7882;text-align:center;margin-top:12px;padding:0 6px}
-.hcb{color:#2DBE7A;font-weight:800}
-.hcmatch{display:flex;align-items:center;justify-content:space-between;gap:8px;background:#0d1218;border:1px solid #18212a;border-radius:11px;padding:9px 12px;margin:11px 0 2px}
-.hcml{font-size:12.5px;color:#8a99a2}.hcml b{color:#eef3f1;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:14px}
-.hcmr{display:flex;gap:6px;align-items:center;flex:0 0 auto}
-.hcpill{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:11px;padding:2px 8px;border-radius:6px;background:rgba(93,169,232,.14);color:#5da9e8;border:1px solid rgba(93,169,232,.3)}
-.hcadv{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:11px;color:#7cf0a8;background:rgba(45,190,122,.12);border:1px solid rgba(45,190,122,.3);padding:2px 8px;border-radius:6px}
-.hcfacs{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.hcfac{background:#0d1218;border:1px solid #18212a;border-radius:10px;padding:9px 11px}
-.hcfl{font-size:11px;color:#8a99a2;display:flex;justify-content:space-between;align-items:center;gap:6px}
-.hcrk{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:9px;color:#04130d;background:#2DBE7A;padding:1px 6px;border-radius:5px;white-space:nowrap}
-.hcfv{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:19px;margin-top:2px}
-.hcbar{height:4px;border-radius:3px;background:#16231d;margin-top:6px;overflow:hidden}.hcbar>span{display:block;height:100%;border-radius:3px;background:linear-gradient(90deg,#1f9d62,#2DBE7A)}
-.hcfp{font-size:10px;color:#6a7882;margin-top:4px}
-.hccw{background:#0d1218;border:1px solid #18212a;border-radius:11px;padding:11px 9px 7px}
-.hcch{display:flex;justify-content:space-between;align-items:baseline;gap:6px;padding:0 3px 5px}
-.hccht{font-size:11.5px;color:#8a99a2}
-.hcchu{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:15px}.hcchu i{color:#7d8a93;font-size:11px;font-style:normal;margin:0 3px}
-.hclg{display:flex;gap:12px;justify-content:center;font-size:10px;color:#8a99a2;padding-top:6px;flex-wrap:wrap}
-.hclg i{width:9px;height:9px;border-radius:2px;display:inline-block;margin-right:5px;vertical-align:-1px}
-.hcnote2{font-size:10px;color:#6a7882;text-align:center;margin-top:6px;line-height:1.4}
-.hcsoon{border:1px dashed #2f4339;border-radius:11px;padding:12px;background:repeating-linear-gradient(135deg,transparent,transparent 9px,rgba(255,255,255,.012) 9px,rgba(255,255,255,.012) 18px)}
-.hcs1{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:13.5px;color:#8a99a2;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.hcstag{font-size:9px;font-family:'Barlow Condensed',sans-serif;font-weight:800;letter-spacing:.08em;color:#e8c07a;border:1px solid rgba(232,192,122,.4);padding:1px 7px;border-radius:5px}
-.hcs2{font-size:11px;color:#6a7882;margin-top:6px;line-height:1.45}
-.hcbb{background:#0d1218;border:1px solid #18212a;border-radius:11px;padding:12px}
-.hcbbbar{display:flex;height:14px;border-radius:7px;overflow:hidden;gap:2px;background:#0a0e12}
-.hcbbbar>span{display:block;height:100%}
-.hcbblg{display:flex;justify-content:space-between;gap:8px;margin-top:9px;font-size:11px;color:#b6c0c7}
-.hcbblg i{width:9px;height:9px;border-radius:2px;display:inline-block;margin-right:5px;vertical-align:-1px}
-.hcbbnote{font-size:10.5px;color:#6a7882;margin-top:9px;text-align:center}.hcbbnote b{color:#cfe0d8;text-transform:capitalize}
-.ppmuted{color:#6b7681;font-size:13px;font-weight:600;padding:24px 4px;text-align:center}
-.ppnote{font-size:10.5px;color:#54616b;font-weight:600;margin-top:14px;line-height:1.4}
-.ppsb{display:none}
-/* ---- TABLET (769-1023): old left sidebar shell ---- */
-@media (min-width:769px) and (max-width:1023px){
-  .ppsb{display:block}
-  .ppwrap{margin-left:200px;max-width:none;padding:30px 30px 60px}
-  .pptitle{font-size:40px}
-  .ppsports,.pptabs{max-width:760px}
-  .pplist{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:10px}
-  .pprowwrap.open{grid-column:1/-1}
+function MMbar({ model, mkt }) {
+  if (model==null) return null;
+  return <><div className="mmlab"><span>model <b>{model}%</b></span><span>market {mkt ?? "—"}%</span></div>
+    <div className="mmbar"><div className="fill" style={{width:model+"%"}}/>{mkt!=null && <div className="mk" style={{left:mkt+"%"}}/>}</div></>;
 }
-/* ---- DESKTOP (>=1024): TerminalShell provides the nav; drop the 200px margin ---- */
-@media (min-width:1024px){
-  .ppsb{display:none}
-  .ppwrap{margin-left:0;max-width:none;padding:30px 34px 60px}
-  .pptitle{font-size:40px}
-  .pplist{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:10px}
+function Tile({ k, v, cls }) { return <div className="stile"><div className="k">{k}</div><div className={"v "+(cls||"")}>{v ?? "—"}</div></div>; }
+
+function PlayerSheet({ p, card, loading, onClose }) {
+  const c = card || {};
+  const isK = p.mk === "K";
+  const bats = c.player?.bats || c.bats || "";
+  const sR = c.splits?.vsRHP || {}, sL = c.splits?.vsLHP || {};
+  const slash = (s) => [s.avg, s.obp, s.slg].map(x => x==null ? "—" : (typeof x==="number" ? (x<1?x.toFixed(3).replace(/^0/,""):x) : x)).join(" / ");
+  const bb = c.battedBall || {};
+  const pull = pctOf(bb.pullPct), straight = pctOf(bb.straightPct), oppo = pctOf(bb.oppoPct);
+  const haveBB = pull!=null && straight!=null && oppo!=null;
+  const lean = haveBB ? (pull>=straight && pull>=oppo ? ["Heavy Pull","pull-side power is the HR signal"]
+              : oppo>=pull && oppo>=straight ? ["Oppo","uses the whole field"] : ["Spray","balanced batted-ball spread"]) : null;
+  const meas = c.meas || {};
+  const recentHR = meas.recent?.hr ?? meas.recent15?.hr ?? null;
+  const park = c.matchup?.park || c.factors?.park || {};
+  const oppP = c.matchup?.opposingPitcher || c.matchup?.pitcher || null;
+  const hist = c.modelVsMarket || [];
+  const barH = (g) => { const m = g.modelPct ?? g.model ?? g.modelHrPct ?? g.modelProb; const v = m!=null ? (m<=1?m*100:m) : null; return v!=null ? Math.max(10, Math.min(100, Math.round(v))) : (g.homered?90:30); };
+  const f = c.factors || {};
+  const whyParts = [];
+  if (meas.barrelPct!=null) whyParts.push(`${typeof meas.barrelPct==="number"?meas.barrelPct.toFixed(1):meas.barrelPct}% barrel rate`);
+  if (haveBB && pull>=45) whyParts.push(`${pull}% pull rate`);
+  if (f.platoonAdvantage) whyParts.push("a platoon edge tonight");
+  if (park.hr) whyParts.push(`a ${park.hr} HR park`);
+  const why = c.factors?.why || c.why || p.reason
+    || (whyParts.length ? `Model sees value vs the price — ${whyParts.slice(0,3).join(", ")}.` : "Model projects more value than the posted price implies.");
+
+  return (
+    <>
+      <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.55)",zIndex:60}}/>
+      <div className="sheet open" style={{zIndex:61}}>
+        <div className="shead"><div className="x" onClick={onClose}>{"\u2039"}</div><div><div className="t">{p.pl[0]}</div><div className="ts">{p.g} · {p.line}</div></div></div>
+        <div className="sbody">
+          <div className="dblk"><div className="recline">
+            <div className="av2" style={{background:`radial-gradient(circle at 50% 28%, ${p.pl[2]}, #0c1018 82%)`, boxShadow:`inset 0 0 0 2px ${p.pl[2]}`}}>{p.pl[1]}</div>
+            <div className="rl"><div className="bet">{p.line}</div><div className="sub">{shortTeam(p.teamRaw||p.g)} · best <b>{p.odds}</b></div></div>
+            <div className="edg"><div className="e">+{p.edge.toFixed(1)}%</div><div className="c">{p.conv.toUpperCase()} CONV</div></div>
+          </div><MMbar model={p.model} mkt={p.mkt}/></div>
+
+          {loading && <div className="dblk"><div className="estate" style={{padding:16}}><div className="es">Loading player card…</div></div></div>}
+
+          {!isK && (
+            <div className="dblk"><div className="bl">SPLITS{oppP ? <span className="bx">tonight vs {oppP}</span> : null}</div>
+              <div className="splitrow">
+                <div className={"scol "+(bats==="R"?"on":"")}><div className="sh">vs RHP</div><div className="sv">{sR.hr ?? "—"} HR</div><div className="ss">{slash(sR)}</div></div>
+                <div className={"scol "+(bats==="L"?"on":"")}><div className="sh">vs LHP</div><div className="sv">{sL.hr ?? "—"} HR</div><div className="ss">{slash(sL)}</div></div>
+              </div>
+              <div className="hrsplit">HR splits — <b>{sR.hr ?? "—"}</b> vs RHP · <b>{sL.hr ?? "—"}</b> vs LHP{(sR.ab||sL.ab) ? ` (${sR.ab??"—"}/${sL.ab??"—"} AB)` : ""}</div>
+            </div>
+          )}
+
+          <div className="dblk"><div className="bl">STATCAST <span className="bx">expected metrics</span></div>
+            <div className="stiles">
+              <Tile k="BARREL%" v={meas.barrelPct!=null?(typeof meas.barrelPct==="number"?meas.barrelPct.toFixed(1)+"%":meas.barrelPct):null} cls="gold"/>
+              <Tile k="xwOBA" v={meas.xwoba!=null?(typeof meas.xwoba==="number"?meas.xwoba.toFixed(3).replace(/^0/,""):meas.xwoba):null} cls="g"/>
+              <Tile k="HARD-HIT" v={meas.hardHitPct!=null?meas.hardHitPct+"%":(meas.hardhit??null)}/>
+              <Tile k="xBA" v={meas.xba!=null?(typeof meas.xba==="number"?meas.xba.toFixed(3).replace(/^0/,""):meas.xba):null}/>
+            </div>
+          </div>
+
+          {!isK && (
+            <div className="dblk"><div className="bl">BATTED-BALL PROFILE</div>
+              {haveBB ? <div className="bbwrap">
+                <div className="bbbar"><i className="pull" style={{width:pull+"%",background:"#33e991"}}/><i className="straight" style={{width:straight+"%",background:"#3a4756"}}/><i className="oppo" style={{width:oppo+"%",background:"#5da9e8"}}/></div>
+                <div className="bbleg"><span><i style={{background:"#33e991"}}/>Pull {pull}%</span><span><i style={{background:"#3a4756"}}/>Straight {straight}%</span><span><i style={{background:"#5da9e8"}}/>Oppo {oppo}%</span></div>
+                {lean && <div className="bbread"><b>{lean[0]}</b> hitter — {lean[1]}</div>}
+              </div> : <div className="estate" style={{padding:14}}><div className="es">Batted-ball profile not available.</div></div>}
+            </div>
+          )}
+
+          <div className="dblk"><div className="bl">PARK &amp; WEATHER</div><div className="ctx">
+            <span className="ch">HR factor <b>{park.hr ?? park.hrFactor ?? "—"}</b></span>
+            <span className="ch">Runs <b>{park.run ?? park.runFactor ?? "—"}</b></span>
+            {park.wx && <span className="ch">{park.wx}</span>}
+          </div></div>
+
+          <div className="dblk"><div className="bl">RECENT FORM <span className="bx">last 15 games</span></div>
+            {hist.length>0 && <div className="spark15">{hist.slice(-15).map((g,i)=><i key={i} className={g.homered?"hr":""} style={{height:barH(g)+"%"}}/>)}</div>}
+            <div className="l15cap"><b>{recentHR ?? 0} HR</b> in last 15</div>
+          </div>
+
+          <div className="dblk"><div className="why"><span className="wl">WHY THE EDGE</span>{why}</div></div>
+
+          <div style={{textAlign:"center",fontSize:11,color:"#7d8a98",margin:"14px 0 4px"}}>A <b style={{color:"#33e991"}}>Wize</b>Picks read — a lean, not a guarantee.</div>
+        </div>
+      </div>
+    </>
+  );
 }
+
+function Gate({ navigate }) {
+  return <div style={{ margin:"18px 14px", border:"1px solid rgba(243,185,79,.3)", borderRadius:13, background:"linear-gradient(180deg,#14110a,#06090b)", padding:26, textAlign:"center" }}>
+    <div style={{ fontSize:22, marginBottom:10 }}>{"\uD83D\uDD12"}</div>
+    <div style={{ fontWeight:800, color:"#fff", fontSize:15, marginBottom:6 }}>Player props are All-Access</div>
+    <div style={{ color:"#7d8a98", fontSize:12, marginBottom:16 }}>HR, Hits & strikeout edges — model vs market, ranked.</div>
+    <div onClick={()=>navigate("/pricing")} style={{ display:"inline-block", background:"#f3b94f", color:"#06090b", fontWeight:800, fontSize:13, padding:"10px 18px", borderRadius:10, cursor:"pointer" }}>Unlock All-Access {"\u203a"}</div>
+  </div>;
+}
+
+const CSS = `@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700;800&display=swap');
+:root{--mono:'IBM Plex Mono',ui-monospace,monospace}
+.bbwrap{margin-top:2px}
+.bbbar{display:flex;height:13px;border-radius:7px;overflow:hidden;background:#0c1219}
+.bbbar i{display:block;height:100%}
+.bbleg{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10px;color:#7d8a98;margin-top:8px}
+.bbleg span{display:flex;align-items:center;gap:5px}
+.bbleg i{width:9px;height:9px;border-radius:2px;display:inline-block}
+.bbread{font-size:11px;color:#7d8a98;text-align:center;margin-top:10px}.bbread b{color:#e8eef3}
+.hrsplit{font-family:var(--mono);font-size:10px;color:#7d8a98;text-align:center;margin-top:9px}.hrsplit b{color:#f3b94f}
+
+:root{--bg:#06090b;--panel:#0b1117;--line:#16202a;--line2:#1d2a36;--gold:#f3b94f;--green:#33e991;--neg:#ff5d4d;--red:#ff5d4d;--steel:#2674b0;--blue:#5da9e8;--mut:#7d8a98;--mut2:#4a5663;--disp:'Barlow Condensed',sans-serif;--ui:'Inter',sans-serif;--mono:'JetBrains Mono',monospace}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoothing:antialiased}
+.app{max-width:460px;margin:0 auto;min-height:100vh;position:relative}
+.hd{position:sticky;top:0;z-index:10;background:rgba(6,9,11,.94);backdrop-filter:blur(12px);border-bottom:1px solid var(--line);padding:0 14px}
+.hrow{display:flex;align-items:center;gap:9px;padding:12px 0 9px}
+.logo{font-family:var(--disp);font-weight:800;font-size:21px;letter-spacing:.4px;color:#fff}.logo .w{color:var(--gold)}
+.open{font-family:var(--mono);font-size:9px;font-weight:700;color:var(--green);border:1px solid rgba(51,233,145,.32);background:rgba(51,233,145,.08);border-radius:999px;padding:3px 8px}
+.sp{flex:1}.ibtn{width:30px;height:30px;border-radius:9px;border:1px solid var(--line2);display:flex;align-items:center;justify-content:center;color:var(--mut)}
+.sports{display:flex;gap:6px;padding:0 0 11px;overflow-x:auto;scrollbar-width:none}.sports::-webkit-scrollbar{display:none}
+.sports b{flex:0 0 auto;font-family:var(--disp);font-weight:700;font-size:13px;letter-spacing:.4px;color:var(--mut);border:1px solid var(--line2);border-radius:999px;padding:6px 13px;display:inline-flex;align-items:center;gap:6px;cursor:pointer}
+.sports b.on{color:#fff;border-color:var(--steel);background:#0e1822}
+.sports b .dot{width:6px;height:6px;border-radius:50%;background:#2a3640}.sports b.on .dot{background:var(--green)}
+.chips{display:flex;gap:7px;padding:11px 14px 4px;overflow-x:auto;scrollbar-width:none}.chips::-webkit-scrollbar{display:none}
+.chips b{flex:0 0 auto;font-family:var(--mono);font-size:11px;font-weight:600;color:var(--mut);border:1px solid var(--line2);border-radius:8px;padding:6px 12px;cursor:pointer}
+.chips b.on{color:#06090b;background:var(--gold);border-color:var(--gold);font-weight:700}
+.bar{display:flex;align-items:center;justify-content:space-between;padding:9px 14px 0;font-family:var(--mono);font-size:10px;color:var(--mut)}
+.bar .sort{display:flex;gap:0;border:1px solid var(--line2);border-radius:8px;overflow:hidden}
+.bar .sort b{padding:5px 10px;color:var(--mut);cursor:pointer;font-weight:600}.bar .sort b.on{background:#141d24;color:#fff}
+.prow{position:relative;display:flex;align-items:center;gap:11px;margin:8px 14px 0;border:1px solid var(--line);border-radius:13px;background:linear-gradient(180deg,#0c1218,#080c11);padding:11px 13px 11px 16px;overflow:hidden;cursor:pointer;transition:border-color .15s}
+.prow:active{border-color:var(--steel)}
+.prow .rail{position:absolute;left:0;top:0;bottom:0;width:4px}.rail.high{background:var(--green)}.rail.med{background:var(--gold)}.rail.low{background:#39454f}
+.prow .av{width:42px;height:42px;border-radius:50%;display:flex;align-items:flex-end;justify-content:center;font-family:var(--disp);font-weight:800;font-size:15px;color:#fff;flex:0 0 auto;overflow:hidden}
+.prow .pinfo{flex:1;min-width:0}
+.prow .pn{font-weight:700;font-size:14px;color:#eef3f5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prow .pmu{font-family:var(--mono);font-size:9px;color:var(--mut2);margin-top:1px}
+.prow .pline{font-family:var(--disp);font-weight:800;font-size:13px;color:#cdd7e1;margin-top:4px}.pline .od{font-family:var(--mono);font-size:11px;color:var(--mut);font-weight:600;margin-left:6px}
+.prow .pr{text-align:right;flex:0 0 auto}
+.prow .ped{font-family:var(--disp);font-weight:800;font-size:22px;color:var(--green);line-height:1}
+.prow .plb{font-family:var(--mono);font-size:8px;color:var(--mut);font-weight:700;margin-top:2px;letter-spacing:.3px}
+.prow .ptag{display:inline-block;font-family:var(--mono);font-size:8px;font-weight:700;border-radius:5px;padding:2px 6px;margin-top:5px}
+.ptag.HR{color:var(--gold);background:rgba(243,185,79,.12)}.ptag.HITS{color:var(--blue);background:rgba(93,169,232,.12)}.ptag.K{color:#c08bff;background:rgba(155,123,255,.14)}
+.seclbl{font-family:var(--disp);font-weight:800;font-size:13px;letter-spacing:1px;color:var(--mut);margin:18px 14px 2px}
+#wrap{padding-bottom:96px}
+.nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:460px;display:flex;justify-content:space-around;padding:7px 4px;background:rgba(0,0,0,.96);backdrop-filter:blur(12px);border-top:1px solid var(--line);z-index:20}
+.nav a{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;font-family:var(--disp);font-weight:700;font-size:10px;letter-spacing:.3px;color:var(--mut2);text-decoration:none}
+.nav a.on{color:var(--gold)}.nav a .i{font-size:15px;line-height:1}.nav a .dbars rect{fill:var(--mut2)}
+/* detail sheet */
+.sheet{position:fixed;top:0;bottom:0;left:50%;width:100%;max-width:460px;z-index:200;background:var(--bg);overflow-y:auto;transform:translate(-50%,100%);transition:transform .28s cubic-bezier(.4,0,.2,1);visibility:hidden}
+.sheet.open{transform:translate(-50%,0);visibility:visible}
+.shead{position:sticky;top:0;background:#080c11;backdrop-filter:blur(12px);border-bottom:1px solid var(--line);padding:12px 14px;display:flex;align-items:center;gap:11px;z-index:2}
+.shead .x{width:32px;height:32px;border-radius:9px;border:1px solid var(--line2);display:flex;align-items:center;justify-content:center;color:#cdd7e1;font-size:19px;cursor:pointer;flex:0 0 auto}
+.shead .t{font-family:var(--disp);font-weight:800;font-size:19px;color:#fff;line-height:1}.shead .ts{font-family:var(--mono);font-size:10px;color:var(--mut);margin-top:2px}
+.sbody{padding:13px 14px 80px}
+.dblk{border:1px solid var(--line);border-radius:13px;background:var(--panel);padding:13px;margin-top:11px}
+.dblk .bl{font-family:var(--disp);font-weight:800;font-size:12px;letter-spacing:.7px;color:var(--mut);margin-bottom:11px;display:flex;align-items:center;justify-content:space-between}
+.dblk .bl .bx{font-family:var(--mono);font-size:9px;color:var(--mut2);letter-spacing:0;font-weight:500}
+/* recommendation */
+.recline{display:flex;align-items:center;gap:11px;margin-bottom:12px}
+.recline .av2{width:50px;height:50px;border-radius:50%;display:flex;align-items:flex-end;justify-content:center;font-family:var(--disp);font-weight:800;font-size:18px;color:#fff;flex:0 0 auto;overflow:hidden}
+.recline .rl .bet{font-family:var(--disp);font-weight:800;font-size:20px;color:#fff}.recline .rl .sub{font-family:var(--mono);font-size:10px;color:var(--mut);margin-top:2px}
+.recline .rl .sub b{color:var(--blue)}
+.recline .edg{margin-left:auto;text-align:right}.recline .edg .e{font-family:var(--disp);font-weight:800;font-size:26px;color:var(--green);line-height:1}.recline .edg .c{font-family:var(--mono);font-size:8px;color:var(--mut);font-weight:700}
+.mmlab{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10px;color:var(--mut);margin-bottom:5px}.mmlab b{color:#fff}
+.mmbar{position:relative;height:26px;border-radius:7px;background:#0e1620;border:1px solid var(--line);overflow:hidden}
+.mmbar .fill{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,#1f6b3f,#33e991)}
+.mmbar .mk{position:absolute;top:-2px;bottom:-2px;width:2px;background:#fff;box-shadow:0 0 6px rgba(255,255,255,.6)}
+.mmbar .mkl{position:absolute;top:50%;transform:translateY(-50%);font-family:var(--mono);font-size:8px;color:#06090b;font-weight:700;padding:0 5px}
+.stiles{display:flex;gap:9px}
+.stile{flex:1;border:1px solid var(--line);border-radius:10px;padding:10px 6px;text-align:center}
+.stile .k{font-family:var(--mono);font-size:8px;color:var(--mut2);font-weight:600}.stile .v{font-family:var(--disp);font-weight:800;font-size:18px;color:#cfe2f5;margin-top:3px}.stile .v.g{color:var(--green)}.stile .v.gold{color:var(--gold)}
+.splitrow{display:flex;gap:9px}
+.scol{flex:1;border:1px solid var(--line);border-radius:10px;padding:10px;text-align:center}.scol.on{border-color:var(--gold);background:rgba(243,185,79,.05)}
+.scol .sh{font-family:var(--mono);font-size:9px;color:var(--mut);font-weight:600}.scol .sh b{color:var(--gold)}
+.scol .sv{font-family:var(--disp);font-weight:800;font-size:15px;color:#fff;margin-top:5px}.scol .ss{font-family:var(--mono);font-size:9px;color:var(--mut2);margin-top:2px}
+.spark15{display:flex;align-items:flex-end;gap:3px;height:40px;margin-bottom:7px}
+.spark15 i{flex:1;background:#26405a;border-radius:2px 2px 0 0;min-height:3px;position:relative}.spark15 i.hit{background:var(--green)}.spark15 i.hr{background:var(--gold)}
+.l15cap{font-family:var(--mono);font-size:10px;color:var(--mut)}.l15cap b{color:#cdd7e1}
+.orow{display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid rgba(255,255,255,.05)}.orow:first-of-type{border-top:none}
+.orow .ol{font-family:var(--disp);font-weight:800;font-size:13px;color:#dbe4e2;flex:1}.orow .ov{font-family:var(--mono);font-size:11px;color:#cdd7e1}.orow .ov b{color:#fff}
+.ctx{display:flex;flex-wrap:wrap;gap:7px}.ctx .ch{font-family:var(--mono);font-size:10px;color:#aeb9c8;background:#0e1620;border:1px solid var(--line2);border-radius:7px;padding:5px 9px}.ctx .ch b{color:#fff}
+.bbgrid{display:flex;gap:8px}.bbgrid .bb{flex:1;text-align:center;border:1px solid var(--line);border-radius:9px;padding:8px 4px}.bbgrid .bb .k{font-family:var(--mono);font-size:8px;color:var(--mut2);font-weight:600}.bbgrid .bb .v{font-family:var(--disp);font-weight:800;font-size:16px;color:#cfe2f5;margin-top:2px}
+.histrow{display:flex;align-items:center;gap:10px}.histrow .hv{font-family:var(--disp);font-weight:800;font-size:22px;color:var(--green)}.histrow .ht{font-family:var(--mono);font-size:11px;color:#cdd7e1}.histrow .ht b{color:#fff}
+.why{font-size:12.5px;color:#c4cfd9;line-height:1.55}.why .wl{font-family:var(--disp);font-weight:800;font-size:11px;letter-spacing:.5px;color:var(--gold);display:block;margin-bottom:4px}
+.estate{margin:40px 14px;border:1px dashed var(--line2);border-radius:14px;padding:36px 18px;text-align:center}.estate .et{font-family:var(--disp);font-weight:800;font-size:18px;color:#cfd7e2}.estate .es{font-size:12px;color:var(--mut);margin-top:6px;font-family:var(--mono)}
 `;
