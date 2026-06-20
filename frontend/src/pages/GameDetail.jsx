@@ -127,6 +127,22 @@ const Agree = ({ ok }) => ok==null ? null : <span className={"ma "+(ok?"ag":"df"
 const Block = ({ label, bx, children, style }) => (
   <div className="dblk" style={style}><div className="bl">{label}{bx && <span className="bx">{bx}</span>}</div>{children}</div>
 );
+// Home-plate umpire tendencies (from detail.umpire). Shown on every game state, not
+// just pre-game. Renders nothing until the crew is posted (a few hours pre-first-pitch).
+const UmpBlock = ({ detail }) => {
+  const ump = detail?.umpire || null;
+  if (!ump) return null;
+  return (
+    <Block label="HOME PLATE UMPIRE" bx="season tendencies">
+      <div className="umphd">{ump.name||"TBD"} {ump.favor && <span className="umpf">leans {ump.favor}</span>}</div>
+      <div className="umpgrid">
+        <div className="ug"><div className="k">RUNS vs AVG</div><div className={"v "+(String(ump.runs||"").startsWith("-")?"dn":"up")}>{ump.runs ?? "—"}</div></div>
+        <div className="ug"><div className="k">K RATE</div><div className="v">{ump.k ?? "—"}</div></div>
+        <div className="ug"><div className="k">BB RATE</div><div className="v">{ump.bb ?? "—"}</div></div>
+      </div>
+    </Block>
+  );
+};
 function TeamHead({ aAb, hAb, aCol, hCol, aRec, hRec }) {
   return <div className="dblk"><div className="mst">
     <div className="tm"><LogoB ab={aAb} col={aCol}/><div className="ab">{aAb}</div><div className="rc">{aRec||""}</div></div>
@@ -286,6 +302,7 @@ function SheetLive({ game, scoresGame, aAb, hAb, gEdges, detail }) {
     {(wlA!=null&&wlH!=null) && <Block label="LIVE WIN PROBABILITY"><div className="wprow"><div className="s aw" style={{width:wlA+"%"}}>{aAb} {wlA}%</div><div className="s hm" style={{width:wlH+"%"}}>{hAb} {wlH}%</div></div></Block>}
     {gEdges.length>0 && <Block label="LIVE EDGES" bx="in-game">{gEdges.map((e,i)=><div key={i} className="orow"><div className="ol">{e.teamAbbr||""} {String(e.market||"").toUpperCase()}</div><div className="os">{e.modelProb!=null?Math.round(e.modelProb*100)+"%":""} · <b>{fmtOdds(e.odds)}</b></div><div className="oe pos">{(e.edge>=0?"+":"")+(e.edge*100).toFixed(1)}%</div></div>)}</Block>}
     {ls && <Block label="LINE SCORE"><LineScore ls={ls}/></Block>}
+    <UmpBlock detail={detail}/>
   </>);
 }
 function SheetFinal({ game, scoresGame, aAb, hAb, bestEdge, detail, venue }) {
@@ -302,6 +319,7 @@ function SheetFinal({ game, scoresGame, aAb, hAb, bestEdge, detail, venue }) {
     </div></div>
     {bestEdge?.reason && <div className="dblk" style={{borderColor:"rgba(51,233,145,.3)"}}><div className="bl" style={{color:"var(--green)"}}>MODEL RESULT</div><div className="why">{bestEdge.reason}</div></div>}
     {ls && <Block label="LINE SCORE"><LineScore ls={ls}/></Block>}
+    <UmpBlock detail={detail}/>
     {venue && <Block label="CONTEXT"><div className="ctx"><span className="ch">{venue}</span></div></Block>}
   </>);
 }
