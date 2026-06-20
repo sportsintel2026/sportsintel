@@ -205,7 +205,7 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .seclbl .c{font-family:var(--mono);font-size:10px;font-weight:600;color:var(--mut2);letter-spacing:0}
 .seclbl .ld,.gstat .ld{width:7px;height:7px;border-radius:50%;background:var(--red);animation:plr 1.3s infinite}
 @keyframes plr{0%,100%{opacity:1}50%{opacity:.35}}
-.gc{margin:8px 14px 0;border:1px solid var(--line);border-radius:14px;background:linear-gradient(180deg,#0c1218,#080c11);overflow:hidden;cursor:pointer;transition:border-color .15s}
+.gc{margin:8px 14px 0;border:1px solid var(--line);border-radius:14px;background:linear-gradient(180deg,#0c0c0e,#020203);overflow:hidden;cursor:pointer;transition:border-color .15s}
 .gc:active{border-color:var(--steel)}
 .gc.live{border-color:rgba(255,93,77,.3)}
 .gtop{display:flex;align-items:center;justify-content:space-between;padding:9px 13px;border-bottom:1px solid var(--line)}
@@ -242,7 +242,7 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .shead .x{width:32px;height:32px;border-radius:9px;border:1px solid var(--line2);display:flex;align-items:center;justify-content:center;color:#cdd7e1;font-size:19px;cursor:pointer;flex:0 0 auto}
 .shead .t{font-family:var(--disp);font-weight:800;font-size:19px;color:#fff;line-height:1}.shead .ts{font-family:var(--mono);font-size:10px;color:var(--mut);margin-top:2px}
 .sbody{padding:13px 14px 80px}
-.dblk{border:1px solid var(--line);border-radius:13px;background:linear-gradient(180deg,#0c1218,#080c11);padding:13px;margin-top:11px}
+.dblk{border:1px solid var(--line);border-radius:13px;background:linear-gradient(180deg,#0c0c0e,#020203);padding:13px;margin-top:11px}
 .dblk .bl{font-family:var(--disp);font-weight:800;font-size:12px;letter-spacing:.7px;color:var(--mut);margin-bottom:11px;display:flex;align-items:center;justify-content:space-between}
 .dblk .bl .bx{font-family:var(--mono);font-size:9px;color:var(--mut2);letter-spacing:0;font-weight:500}
 .mst{display:flex;align-items:center;justify-content:space-between;gap:8px}
