@@ -139,7 +139,7 @@ router.get("/:league", async (req, res) => {
     // A sport with no captured closing lines simply returns clv = null.
     const { data: clvData } = await supabase
       .from("model_predictions")
-      .select("confidence, clv, beat_close")
+      .select("confidence, clv, beat_close, game_date")
       .eq("league", league)
       .in("market", cfg.clv)
       .not("clv", "is", null);
@@ -155,6 +155,66 @@ router.get("/:league", async (req, res) => {
         avgClvPct: Math.round(avgClv * 10000) / 100,
       };
     }
+
+    // ── Range windows — headline KPIs + cumulative units curve + CLV per window ─
+    // BY CONVICTION (byConfidence) and BY MARKET (byMarket) stay season-level
+    // above. The headline KPIs, the units-over-time curve, and the CLV grid are
+    // range-aware here: 7D / 30D / Season / All, each computed from the qualified
+    // rows + qualified CLV rows inside that date window. The series is cumulative
+    // 1-unit-flat P/L in chronological order — the real proof curve, not synthetic.
+    const daysAgoIso = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); };
+    const SEASON_START = { mlb: "2026-03-01", nba: "2025-10-01", nfl: "2025-09-01", cfb: "2025-08-01" }[league] || "2000-01-01";
+    const WINDOWS = [["7D", daysAgoIso(7)], ["30D", daysAgoIso(30)], ["Season", SEASON_START], ["All", "0000-00-00"]];
+    const inWindow = (gd, cut) => cut === "0000-00-00" || (gd && gd >= cut);
+    const rangeStats = (cut) => {
+      const set = qualifiedRows.filter(r => inWindow(r.game_date, cut));
+      const sorted = [...set].sort((a, b) => String(a.game_date || "").localeCompare(String(b.game_date || "")));
+      let cum = 0, wins = 0, losses = 0; const series = [0];
+      for (const r of sorted) { const won = r.result === "win"; const p = won ? unitProfit(r.odds) : -1; cum += p; if (won) wins++; else losses++; series.push(Math.round(cum * 100) / 100); }
+      const total = wins + losses;
+      const cwin = clvRows.filter(r => inWindow(r.game_date, cut));
+      const beat = cwin.filter(r => r.beat_close === true).length;
+      const avgClv = cwin.length ? cwin.reduce((s, r) => s + (Number(r.clv) || 0), 0) / cwin.length : null;
+      return {
+        roi: total ? Math.round((cum / total) * 1000) / 10 : 0,
+        units: Math.round(cum * 100) / 100,
+        w: wins, l: losses, p: 0,
+        clv: avgClv == null ? 0 : Math.round(avgClv * 10000) / 100,
+        bc: cwin.length ? Math.round((beat / cwin.length) * 1000) / 10 : 0,
+        n: total,
+        series: series.length > 1 ? series : [0, 0],
+      };
+    };
+    const ranges = {};
+    for (const [name, cut] of WINDOWS) ranges[name] = rangeStats(cut);
+
+    // ── Recent graded picks (core + props), newest first, with a readable label ─
+    let recent = [];
+    try {
+      const sel = "market, confidence, result, odds, edge, game_date, clv, beat_close, closing_odds, matchup, side, selection, line, team";
+      const { data: recRows } = await supabase
+        .from("model_predictions")
+        .select(sel)
+        .eq("league", league)
+        .in("market", [...cfg.core, ...cfg.props])
+        .in("result", ["win", "loss"])
+        .order("game_date", { ascending: false })
+        .order("id", { ascending: false })
+        .limit(60);
+      const elig = (recRows || []).filter(r => cfg.core.includes(r.market) ? isQualified(r) : afterReset(r));
+      recent = elig.slice(0, 20).map(r => {
+        const won = r.result === "win";
+        return {
+          date: r.game_date,
+          pick: pickLabel(r),
+          result: won ? "W" : "L",
+          edge: r.edge != null ? Math.round(Number(r.edge) * 1000) / 10 : null,
+          units: won ? Math.round(unitProfit(r.odds) * 100) / 100 : -1,
+          clvPct: r.clv != null ? Math.round(Number(r.clv) * 10000) / 100 : null,
+          clvCents: (r.odds != null && r.closing_odds != null) ? clvCents(r.odds, r.closing_odds) : null,
+        };
+      });
+    } catch (_) { recent = []; }
 
     // ── Props table (SEPARATE; hit-rate + ROI; never in core record or CLV) ───
     // Overall props summary PLUS a per-stat breakdown (points / rebounds /
@@ -173,6 +233,10 @@ router.get("/:league", async (req, res) => {
       // Headline = qualified picks (what we stand behind).
       ...qualified,
       totalGraded: qualifiedRows.length,
+      // Range-aware headline KPIs + cumulative units curve + CLV grid.
+      ranges,
+      // Newest graded picks (core + props) for the Recent Results list.
+      recent,
       // Full sample kept visible so nothing is hidden.
       fullSample: { ...full, totalGraded: rows.length },
       clv: clvSummary,
@@ -199,6 +263,30 @@ function blank() { return { wins: 0, losses: 0, units: 0 }; }
 function tally(b, won, profit) {
   if (won) b.wins++; else b.losses++;
   b.units += profit;
+}
+// CLV in cents: our price vs the closing price on the same side. Positive = we
+// locked in a better number than the market closed at.
+function clvCents(our, close) {
+  const toCents = (o) => { const n = Number(o); if (!n || isNaN(n)) return null; return n >= 100 ? n - 100 : n <= -100 ? n + 100 : 0; };
+  const a = toCents(our), b = toCents(close);
+  if (a == null || b == null) return null;
+  return Math.round(a - b);
+}
+// Human-readable pick label for the Recent Results list.
+function pickLabel(r) {
+  const team = r.team || "", mu = r.matchup || "", side = String(r.side || "").toLowerCase(), sel = r.selection || "", line = r.line;
+  const sign = (x) => (Number(x) > 0 ? "+" : "") + x;
+  const ou = side === "under" ? "Under" : "Over";
+  switch (r.market) {
+    case "moneyline": return `${team || mu || (r.side || "") || "Pick"} ML`.trim();
+    case "run_line":
+    case "spread": return `${team || r.side || ""} ${line != null ? sign(line) : ""}`.trim();
+    case "total": return `${ou}${line != null ? " " + line : ""}${mu ? " " + mu : ""}`.trim();
+    case "hr_prop": return `${sel || team} ${ou} ${line != null ? line : "0.5"} HR`.trim();
+    case "player_hits": return `${sel || team} ${ou} ${line != null ? line : ""} Hits`.trim();
+    case "player_strikeouts": return `${sel || team} ${ou} ${line != null ? line : ""} K`.trim();
+    default: return `${sel || team || mu || "Pick"}${line != null ? " " + line : ""}`.trim();
+  }
 }
 function finalize(b) {
   const total = b.wins + b.losses;
