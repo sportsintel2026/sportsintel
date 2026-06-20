@@ -171,9 +171,9 @@ function PlayerSheet({ p, card, loading, onClose }) {
   const haveBB = pull!=null && straight!=null && oppo!=null;
   const lean = haveBB ? (pull>=straight && pull>=oppo ? ["Heavy Pull","pull-side power is the HR signal"]
               : oppo>=pull && oppo>=straight ? ["Oppo","uses the whole field"] : ["Spray","balanced batted-ball spread"]) : null;
-  const meas = c.meas || {};
-  const recentHR = meas.recent?.hr ?? meas.recent15?.hr ?? null;
-  const park = c.matchup?.park || c.factors?.park || {};
+  const meas = c.factors?.measured || {};
+  const recentHR = meas.recent15?.hr ?? null;
+  const park = c.factors?.park || {};
   const oppP = c.matchup?.opposingPitcher || c.matchup?.pitcher || null;
   const hist = c.modelVsMarket || [];
   const barH = (g) => { const m = g.modelPct ?? g.model ?? g.modelHrPct ?? g.modelProb; const v = m!=null ? (m<=1?m*100:m) : null; return v!=null ? Math.max(10, Math.min(100, Math.round(v))) : (g.homered?90:30); };
@@ -182,7 +182,7 @@ function PlayerSheet({ p, card, loading, onClose }) {
   if (meas.barrelPct!=null) whyParts.push(`${typeof meas.barrelPct==="number"?meas.barrelPct.toFixed(1):meas.barrelPct}% barrel rate`);
   if (haveBB && pull>=45) whyParts.push(`${pull}% pull rate`);
   if (f.platoonAdvantage) whyParts.push("a platoon edge tonight");
-  if (park.hr) whyParts.push(`a ${park.hr} HR park`);
+  if (park.factor) whyParts.push(`a ${park.factor} HR park`);
   const why = c.factors?.why || c.why || p.reason
     || (whyParts.length ? `Model sees value vs the price — ${whyParts.slice(0,3).join(", ")}.` : "Model projects more value than the posted price implies.");
 
@@ -214,8 +214,8 @@ function PlayerSheet({ p, card, loading, onClose }) {
             <div className="stiles">
               <Tile k="BARREL%" v={meas.barrelPct!=null?(typeof meas.barrelPct==="number"?meas.barrelPct.toFixed(1)+"%":meas.barrelPct):null} cls="gold"/>
               <Tile k="xwOBA" v={meas.xwoba!=null?(typeof meas.xwoba==="number"?meas.xwoba.toFixed(3).replace(/^0/,""):meas.xwoba):null} cls="g"/>
-              <Tile k="HARD-HIT" v={meas.hardHitPct!=null?meas.hardHitPct+"%":(meas.hardhit??null)}/>
               <Tile k="xBA" v={meas.xba!=null?(typeof meas.xba==="number"?meas.xba.toFixed(3).replace(/^0/,""):meas.xba):null}/>
+              <Tile k="xSLG" v={meas.xslg!=null?(typeof meas.xslg==="number"?meas.xslg.toFixed(3).replace(/^0/,""):meas.xslg):null}/>
             </div>
           </div>
 
@@ -230,7 +230,7 @@ function PlayerSheet({ p, card, loading, onClose }) {
           )}
 
           <div className="dblk"><div className="bl">PARK &amp; WEATHER</div><div className="ctx">
-            <span className="ch">HR factor <b>{park.hr ?? park.hrFactor ?? "—"}</b></span>
+            <span className="ch">HR factor <b>{park.factor ?? "—"}</b></span>
             <span className="ch">Runs <b>{park.run ?? park.runFactor ?? "—"}</b></span>
             {park.wx && <span className="ch">{park.wx}</span>}
           </div></div>
