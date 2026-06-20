@@ -17,9 +17,13 @@ const formatOdds = (o) => o==null||o===""||isNaN(+o) ? null : (+o>0 ? "+"+(+o) :
 const shortTeam = (s) => (s||"").trim().split(/\s+/).slice(-1)[0].slice(0,3).toUpperCase();
 const fmtTime = (t) => {
   if (!t) return "—";
-  if (typeof t === "string" && !t.includes("T")) return t;
-  try { const d = new Date(t); return d.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit",timeZone:"America/New_York"}).replace(" ","")+" ET"; }
-  catch { return String(t); }
+  if (typeof t === "string") {
+    if (/invalid/i.test(t)) return "—";
+    if (!/^\d{4}-\d{2}-\d{2}T/.test(t)) return t; // backend already sends "7:10 PM ET"
+  }
+  const d = new Date(t);
+  if (isNaN(d.getTime())) return "—";
+  return d.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit",timeZone:"America/New_York"}).replace(" ","")+" ET";
 };
 const edgeLabel = (e) => {
   if (!e) return "";
@@ -73,8 +77,8 @@ export default function GamesPage() {
       ou: (g.totals && g.totals.projected!=null) ? g.totals.projected : (g.totals?.line ?? "—"),
       aml: formatOdds(ml.away),
       hml: formatOdds(ml.home),
-      asp: [ pa?.name || "TBD", "", pa?.era!=null ? pa.era : "—" ],
-      hsp: [ ph?.name || "TBD", "", ph?.era!=null ? ph.era : "—" ],
+      asp: [ pa?.name || "TBD", "", pa?.stats?.era!=null ? Number(pa.stats.era).toFixed(2) : "—" ],
+      hsp: [ ph?.name || "TBD", "", ph?.stats?.era!=null ? Number(ph.stats.era).toFixed(2) : "—" ],
       state: g.status==="live" ? ((g.half==="bottom"?"Bot ":"Top ")+(g.inning||"")).trim() : "",
       lean, edge,
       win: g.status==="final" ? (((g.awayScore||0)>(g.homeScore||0))?"a":"h") : null
