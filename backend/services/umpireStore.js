@@ -115,13 +115,19 @@ function _aggregate(rows) {
   return { leagueAvg, umpires };
 }
 
+let _rowCache = { at: 0, rows: null };
 async function _allRows() {
+  // Tendencies move slowly (~15 new rows/day from the nightly logger), so a short
+  // in-memory cache keeps the by-name lookup (hit on every game-detail load) from
+  // re-reading the whole table each time.
+  if (_rowCache.rows && Date.now() - _rowCache.at < 10 * 60 * 1000) return _rowCache.rows;
   const { data, error } = await db()
     .from("umpire_games")
     .select("hp_umpire,total_k,total_bb,total_runs,nrfi,went_over")
     .not("hp_umpire", "is", null);
   if (error) throw new Error(error.message);
-  return data || [];
+  _rowCache = { at: Date.now(), rows: data || [] };
+  return _rowCache.rows;
 }
 
 // Full board, sorted by strikeout environment (kIndex) descending.
@@ -131,13 +137,56 @@ async function getUmpireTendencies({ minGames = 1 } = {}) {
   return { leagueAvg, count: umpires.length, umpires: umpires.filter((u) => u.games >= minGames) };
 }
 
-// One umpire by name (case-insensitive, trimmed). Returns null if not found.
-async function getUmpireByName(name) {
-  const want = String(name || "").trim().toLowerCase();
-  if (!want) return null;
-  const { leagueAvg, umpires } = _aggregate(await _allRows());
-  const u = umpires.find((x) => x.name.toLowerCase() === want) || null;
-  return u ? { leagueAvg, umpire: u } : { leagueAvg, umpire: null };
+// Normalize a name for cross-source matching: strip accents, drop periods/hyphens/
+// apostrophes, lowercase, collapse spaces. Lets ESPN's "D.J. Reyburn" / "Alfonso
+// Márquez" match our StatsAPI rows regardless of punctuation or diacritics.
+function _normName(s) {
+  return String(s || "")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[.\-']/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
-module.exports = { logUmpireGame, backfillUmpireGames, getUmpireTendencies, getUmpireByName };
+// One umpire by name. Exact normalized match first, then a last-name + first-initial
+// fallback for any remaining spelling drift between feeds. Returns league avg too.
+async function getUmpireByName(name) {
+  const wantRaw = String(name || "").trim();
+  if (!wantRaw) return null;
+  const { leagueAvg, umpires } = _aggregate(await _allRows());
+  const want = _normName(wantRaw);
+  let u = umpires.find((x) => _normName(x.name) === want) || null;
+  if (!u) {
+    const wp = want.split(" ");
+    const wLast = wp[wp.length - 1], wInit = (wp[0] || "")[0] || "";
+    u = umpires.find((x) => {
+      const xp = _normName(x.name).split(" ");
+      return xp[xp.length - 1] === wLast && (xp[0] || "")[0] === wInit;
+    }) || null;
+  }
+  return { leagueAvg, umpire: u };
+}
+
+// Display-shaped tendency for the game page's HOME PLATE UMPIRE block. Returns
+// { name, games, favor, runs, k, bb } when the ump is in the table, or just { name }
+// if not yet (e.g. a call-up). null only when no name is given. Never throws.
+async function getUmpireDisplay(name) {
+  const raw = String(name || "").trim();
+  if (!raw) return null;
+  let res = null;
+  try { res = await getUmpireByName(raw); } catch (_) { res = null; }
+  const u = res && res.umpire, la = res && res.leagueAvg;
+  if (!u) return { name: raw };
+  const runsDiff = (la && u.runsPerGame != null) ? (u.runsPerGame - la.runsPerGame) : null;
+  return {
+    name: u.name,
+    games: u.games,
+    favor: u.kIndex >= 1.04 ? "strikeouts" : u.kIndex <= 0.96 ? "hitters" : null,
+    runs: runsDiff != null ? (runsDiff >= 0 ? "+" : "") + runsDiff.toFixed(1) : null,
+    k: u.kPerGame != null ? u.kPerGame.toFixed(1) : null,
+    bb: u.bbPerGame != null ? u.bbPerGame.toFixed(1) : null,
+  };
+}
+
+module.exports = { logUmpireGame, backfillUmpireGames, getUmpireTendencies, getUmpireByName, getUmpireDisplay };
