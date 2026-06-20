@@ -173,6 +173,7 @@ function PlayerSheet({ p, card, loading, onClose }) {
               : oppo>=pull && oppo>=straight ? ["Oppo","uses the whole field"] : ["Spray","balanced batted-ball spread"]) : null;
   const meas = c.factors?.measured || {};
   const pit = c.pitcher || {};
+  const bvp = c.bvp || null;
   const recentHR = meas.recent15?.hr ?? null;
   const park = c.factors?.park || {};
   const oppP = c.matchup?.opposingPitcher || c.matchup?.pitcher || null;
@@ -210,6 +211,7 @@ function PlayerSheet({ p, card, loading, onClose }) {
                 <div className={"scol "+(bats==="L"?"on":"")}><div className="sh">vs LHP</div><div className="sv">{sL.hr ?? "—"} HR</div><div className="ss">{slash(sL)}</div></div>
               </div>
               <div className="hrsplit">HR splits — <b>{sR.hr ?? "—"}</b> vs RHP · <b>{sL.hr ?? "—"}</b> vs LHP{(sR.ab||sL.ab) ? ` (${sR.ab??"—"}/${sL.ab??"—"} AB)` : ""}</div>
+              {bvp && <div className="hrsplit">Career vs {bvp.pitcher} — <b>{bvp.line}</b></div>}
             </div>
           )}
 
@@ -304,7 +306,7 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .bar{display:flex;align-items:center;justify-content:space-between;padding:9px 14px 0;font-family:var(--mono);font-size:10px;color:var(--mut)}
 .bar .sort{display:flex;gap:0;border:1px solid var(--line2);border-radius:8px;overflow:hidden}
 .bar .sort b{padding:5px 10px;color:var(--mut);cursor:pointer;font-weight:600}.bar .sort b.on{background:#141d24;color:#fff}
-.prow{position:relative;display:flex;align-items:center;gap:11px;margin:8px 14px 0;border:1px solid var(--line);border-radius:13px;background:linear-gradient(180deg,#0c1218,#080c11);padding:11px 13px 11px 16px;overflow:hidden;cursor:pointer;transition:border-color .15s}
+.prow{position:relative;display:flex;align-items:center;gap:11px;margin:8px 14px 0;border:1px solid var(--line);border-radius:13px;background:linear-gradient(180deg,#0c0c0e,#020203);padding:11px 13px 11px 16px;overflow:hidden;cursor:pointer;transition:border-color .15s}
 .prow:active{border-color:var(--steel)}
 .prow .rail{position:absolute;left:0;top:0;bottom:0;width:4px}.rail.high{background:var(--green)}.rail.med{background:var(--gold)}.rail.low{background:#39454f}
 .prow .av{width:42px;height:42px;border-radius:50%;display:flex;align-items:flex-end;justify-content:center;font-family:var(--disp);font-weight:800;font-size:15px;color:#fff;flex:0 0 auto;overflow:hidden}
@@ -323,13 +325,13 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .nav a{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;font-family:var(--disp);font-weight:700;font-size:10px;letter-spacing:.3px;color:var(--mut2);text-decoration:none}
 .nav a.on{color:var(--gold)}.nav a .i{font-size:15px;line-height:1}.nav a .dbars rect{fill:var(--mut2)}
 /* detail sheet */
-.sheet{position:fixed;top:0;bottom:0;left:50%;width:100%;max-width:460px;z-index:200;background:var(--bg);overflow-y:auto;transform:translate(-50%,100%);transition:transform .28s cubic-bezier(.4,0,.2,1);visibility:hidden}
+.sheet{position:fixed;top:0;bottom:0;left:50%;width:100%;max-width:460px;z-index:200;background:#20201E;overflow-y:auto;transform:translate(-50%,100%);transition:transform .28s cubic-bezier(.4,0,.2,1);visibility:hidden}
 .sheet.show{transform:translate(-50%,0);visibility:visible}
-.shead{position:sticky;top:0;background:#080c11;backdrop-filter:blur(12px);border-bottom:1px solid var(--line);padding:12px 14px;display:flex;align-items:center;gap:11px;z-index:2}
+.shead{position:sticky;top:0;background:#000;backdrop-filter:blur(12px);border-bottom:1px solid var(--line);padding:12px 14px;display:flex;align-items:center;gap:11px;z-index:2}
 .shead .x{width:32px;height:32px;border-radius:9px;border:1px solid var(--line2);display:flex;align-items:center;justify-content:center;color:#cdd7e1;font-size:19px;cursor:pointer;flex:0 0 auto}
 .shead .t{font-family:var(--disp);font-weight:800;font-size:19px;color:#fff;line-height:1}.shead .ts{font-family:var(--mono);font-size:10px;color:var(--mut);margin-top:2px}
 .sbody{padding:13px 14px 80px}
-.dblk{border:1px solid var(--line);border-radius:13px;background:linear-gradient(180deg,#0c1218,#080c11);padding:13px;margin-top:11px}
+.dblk{border:1px solid var(--line);border-radius:13px;background:linear-gradient(180deg,#0c0c0e,#020203);padding:13px;margin-top:11px}
 .dblk .bl{font-family:var(--disp);font-weight:800;font-size:12px;letter-spacing:.7px;color:var(--mut);margin-bottom:11px;display:flex;align-items:center;justify-content:space-between}
 .dblk .bl .bx{font-family:var(--mono);font-size:9px;color:var(--mut2);letter-spacing:0;font-weight:500}
 /* recommendation */
