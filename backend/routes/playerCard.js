@@ -16,7 +16,7 @@ const {
   getBatterHandednessSplits, getBatterHand, getScheduleForDate, getPitcherHand,
   getEasternDate, getBatterRecentStats, normPlayerName,
 } = require("../services/mlbStatsApi");
-const { getBatterBarrels, getBatterExpectedStats, parseCsvLine, SAVANT_BASE } = require("../services/savantApi");
+const { getBatterBarrels, getBatterExpectedStats, getPitcherWhiffStats, parseCsvLine, SAVANT_BASE } = require("../services/savantApi");
 
 const db = () => createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 const SAV = SAVANT_BASE || "https://baseballsavant.mlb.com";
@@ -134,13 +134,14 @@ router.get("/mlb/:playerId", async (req, res) => {
   const { gameId, team, name } = req.query;
 
   try {
-    const [splits, bats, recent, barrelMap, xMap, bbMap, game] = await Promise.all([
+    const [splits, bats, recent, barrelMap, xMap, bbMap, whiffMap, game] = await Promise.all([
       getBatterHandednessSplits(playerId).catch(() => null),
       getBatterHand(playerId).catch(() => null),
       getBatterRecentStats(playerId, 15).catch(() => null),
       getBatterBarrels().catch(() => null),
       getBatterExpectedStats().catch(() => null),
       getBattedBallMap().catch(() => null),
+      getPitcherWhiffStats().catch(() => null),
       findGame(gameId),
     ]);
 
@@ -148,6 +149,7 @@ router.get("/mlb/:playerId", async (req, res) => {
     const bx = barrelMap ? barrelMap.get(idNum) : null;
     const xs = xMap ? xMap.get(idNum) : null;
     const bb = bbMap ? bbMap.get(idNum) : null;
+    const pw = whiffMap ? whiffMap.get(idNum) : null;
 
     const barrelPct = bx?.barrelRate ?? null;
     const xwoba = xs?.xwOBA ?? null;
@@ -214,6 +216,9 @@ router.get("/mlb/:playerId", async (req, res) => {
       battedBall: bb
         ? { pullPct: bb.pullPct, straightPct: bb.straightPct, oppoPct: bb.oppoPct, pa: bb.pa, thin: (bb.pa ?? 0) < THIN_BB_PA }
         : null,
+      pitcher: pw
+        ? { kPct: pw.kPct, whiffPct: pw.whiffPct, bbPct: pw.bbPct, swingPct: pw.swingPct }
+        : null,
       dataHealth: {
         splits: !!splits,
         savant: barrelPct != null || xwoba != null,
@@ -266,3 +271,4 @@ router.get("/probe-batted-ball", async (req, res) => {
 });
 
 module.exports = router;
+
