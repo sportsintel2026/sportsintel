@@ -94,6 +94,54 @@ router.get("/", async (req, res) => {
   }
 });
 
+// GET /api/umpires/shadow[?date=YYYY-MM-DD]
+// READ-ONLY preview of how each game's HP umpire WOULD nudge the K-prop and totals
+// models — shown next to the live slate but NOT applied to any edge. Lets us see the
+// factor's direction and magnitude on a real slate before wiring it into the model.
+router.get("/shadow", async (req, res) => {
+  try {
+    const date = req.query.date || getEasternDate(0);
+    const games = (await getScheduleForDate(date).catch(() => null)) || [];
+    // Conservative, tunable placeholder weights — documented as NOT live.
+    const K_W = 0.5;   // K-over prob nudge per 1.00 of (kIndex-1), clamped to ±4 pts
+    const R_W = 0.30;  // totals run nudge per run of (umpRuns-leagueRuns), clamped ±0.6
+    const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+    const rows = [];
+    for (const g of games.slice(0, 18)) {
+      let ump = null, tend = null, leagueAvg = null;
+      try { const u = await getGameUmpireAndTotals(g.id); ump = u && u.umpire; } catch (_) {}
+      if (ump) {
+        try { const t = await getUmpireByName(ump); tend = t && t.umpire; leagueAvg = t && t.leagueAvg; } catch (_) {}
+      }
+      let proposal = null;
+      if (tend && leagueAvg) {
+        proposal = {
+          kOverProbDelta: +clamp((tend.kIndex - 1) * K_W * 100, -4, 4).toFixed(1), // +pts to K-over model prob
+          totalsRunDelta: +clamp((tend.runsPerGame - leagueAvg.runsPerGame) * R_W, -0.6, 0.6).toFixed(2),
+          direction: tend.kIndex >= 1.04 ? "wide zone → K overs up / total down"
+                   : tend.kIndex <= 0.96 ? "tight zone → K overs down / total up"
+                   : "neutral",
+        };
+      }
+      rows.push({
+        matchup: `${g.awayAbbr || g.away} @ ${g.homeAbbr || g.home}`,
+        status: g.status,
+        umpire: ump || "not posted yet",
+        kIndex: tend ? tend.kIndex : null,
+        umpGames: tend ? tend.games : null,
+        proposal,
+      });
+    }
+    res.json({
+      ok: true, mode: "shadow", date,
+      note: "PREVIEW ONLY — not applied to any live edge. Weights K_W=0.5, R_W=0.30 are placeholders for review.",
+      games: rows,
+    });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String((e && e.message) || e) });
+  }
+});
+
 // GET /api/umpires/:name  -> one umpire's tendencies + league average for context.
 // Defined LAST so /probe and /backfill are matched first.
 router.get("/:name", async (req, res) => {
