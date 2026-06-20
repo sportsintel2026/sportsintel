@@ -13,6 +13,7 @@ const {
   getEasternDate,
   getScheduleForDate,
   getTeamRoster,
+  getProjectedLineup,
   getBatterSeasonStats,
   getTeamHittingAsOf,
   getPitcherEraAsOf,
@@ -146,12 +147,22 @@ router.get("/mlb/:gameId", async (req, res) => {
       awayPitcher ? rosterVsPitcher(game.homeId, awayPitcher.id) : Promise.resolve([]),
     ]);
 
+    // Projected lineups (most-recent confirmed batting order per team).
+    const [awayLineup, homeLineup] = await Promise.all([
+      game.awayId ? getProjectedLineup(game.awayId).catch(() => []) : Promise.resolve([]),
+      game.homeId ? getProjectedLineup(game.homeId).catch(() => []) : Promise.resolve([]),
+    ]);
+
     const result = {
       gameId,
       awayAbbr: game.awayAbbr,
       homeAbbr: game.homeAbbr,
       homePitcher: homePitcher ? { id: homePitcher.id, name: homePitcher.name } : null,
       awayPitcher: awayPitcher ? { id: awayPitcher.id, name: awayPitcher.name } : null,
+      lineups: {
+        away: (awayLineup || []).map((b, i) => ({ ...b, order: i + 1 })),
+        home: (homeLineup || []).map((b, i) => ({ ...b, order: i + 1 })),
+      },
       // batters from away team who have faced the home starter
       awayBattersVsHomePitcher: awayBattersVsHomeP,
       // batters from home team who have faced the away starter
