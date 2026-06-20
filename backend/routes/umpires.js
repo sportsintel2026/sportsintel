@@ -15,7 +15,7 @@ const {
   getGameUmpireAndTotals,
   getEasternDate,
 } = require("../services/mlbStatsApi");
-const { backfillUmpireGames } = require("../services/umpireStore");
+const { backfillUmpireGames, getUmpireTendencies, getUmpireByName } = require("../services/umpireStore");
 
 // Light gate so the backfill isn't wide open to spam. This only writes public
 // box-score-derived rows (no secrets exposed), so a simple fixed key is fine —
@@ -76,6 +76,29 @@ router.get("/backfill", async (req, res) => {
   if (!from) return res.status(400).json({ ok: false, error: "from=YYYY-MM-DD required" });
   try {
     const out = await backfillUmpireGames(from, to, cap);
+    res.json({ ok: true, ...out });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String((e && e.message) || e) });
+  }
+});
+
+// GET /api/umpires            -> full board sorted by strikeout environment
+// GET /api/umpires?minGames=10 -> only umps with a usable sample
+router.get("/", async (req, res) => {
+  try {
+    const minGames = Math.max(1, parseInt(req.query.minGames, 10) || 1);
+    const out = await getUmpireTendencies({ minGames });
+    res.json({ ok: true, ...out });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String((e && e.message) || e) });
+  }
+});
+
+// GET /api/umpires/:name  -> one umpire's tendencies + league average for context.
+// Defined LAST so /probe and /backfill are matched first.
+router.get("/:name", async (req, res) => {
+  try {
+    const out = await getUmpireByName(req.params.name);
     res.json({ ok: true, ...out });
   } catch (e) {
     res.status(500).json({ ok: false, error: String((e && e.message) || e) });
