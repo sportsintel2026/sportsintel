@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-import { edgesApi, subscriptionApi, scoresApi } from "../lib/api";
+import { edgesApi, subscriptionApi, scoresApi, matchupsApi } from "../lib/api";
 
 const TEAMCOL = {
   ARI:"#A71930",ATL:"#CE1141",BAL:"#DF4601",BOS:"#BD3039",CHC:"#0E3386",CWS:"#27251F",CHW:"#27251F",
@@ -27,7 +27,8 @@ export default function GameDetailPage() {
   const [allEdges, setAllEdges] = useState(null);
   const [scoresGame, setScoresGame] = useState(null);
   const [detail, setDetail] = useState(null);     // getGameDetail: series / umpire / line score
-  const [bvpData, setBvpData] = useState(null);    // getGameDetail: batter-vs-pitcher
+  const [bvpData, setBvpData] = useState(null);    // matchups: batter-vs-pitcher
+  const [lineups, setLineups] = useState(null);    // matchups: projected batting orders
   const [marketRead, setMarketRead] = useState(null);
   const [loading, setLoading] = useState(true);
   const [plan, setPlan] = useState({ tier:"free", isAdmin:false });
@@ -59,8 +60,23 @@ export default function GameDetailPage() {
       setScoresGame(sg);
       const sid = sg?.id || sg?.detailId;
       if (sid && scoresApi.getGameDetail) {
-        scoresApi.getGameDetail("mlb", sid).then(d => { if(!cancelled){ setDetail(d); setBvpData(d); } }).catch(()=>{});
+        scoresApi.getGameDetail("mlb", sid).then(d => { if(!cancelled){ setDetail(d); } }).catch(()=>{});
       }
+      // BVP + projected lineups come from the matchups endpoint (keyed by gamePk = URL id).
+      matchupsApi.getMLB(gameId).then(m => {
+        if (cancelled || !m) return;
+        const fmtAvg = (a) => a==null ? "" : Number(a).toFixed(3).replace(/^0/,"");
+        const mapRow = (r) => ({
+          batter: r.batterName || r.name,
+          vs: `${r.atBats ?? 0} AB${r.avg!=null?` · ${fmtAvg(r.avg)}`:""}`,
+          stat: `${r.hits ?? 0}-${r.atBats ?? 0}${r.homeRuns?`, ${r.homeRuns} HR`:""}`,
+        });
+        setBvpData({
+          awayBattersVsHomePitcher: (m.awayBattersVsHomePitcher||[]).map(mapRow),
+          homeBattersVsAwayPitcher: (m.homeBattersVsAwayPitcher||[]).map(mapRow),
+        });
+        setLineups(m.lineups || null);
+      }).catch(()=>{});
       setLoading(false);
     })();
     return () => { cancelled = true; };
@@ -102,7 +118,7 @@ export default function GameDetailPage() {
       <div className="sbody">
         {loading && <div className="estate"><div className="et">Loading matchup…</div></div>}
         {!loading && !game && <div className="estate"><div className="et">Game not found</div><div className="es">It may have rolled off today's slate.</div></div>}
-        {!loading && game && st==="pre"   && <SheetPre   game={game} aAb={aAb} hAb={hAb} gEdges={gEdges} mlPick={mlPick} totPick={totPick} bestEdge={bestEdge} mr={mr} detail={detail} bvpData={bvpData} hasFull={hasFull} navigate={navigate}/>}
+        {!loading && game && st==="pre"   && <SheetPre   game={game} aAb={aAb} hAb={hAb} gEdges={gEdges} mlPick={mlPick} totPick={totPick} bestEdge={bestEdge} mr={mr} detail={detail} bvpData={bvpData} lineups={lineups} hasFull={hasFull} navigate={navigate}/>}
         {!loading && game && st==="live"  && <SheetLive  game={game} scoresGame={scoresGame} aAb={aAb} hAb={hAb} gEdges={gEdges} detail={detail}/>}
         {!loading && game && st==="final" && <SheetFinal game={game} scoresGame={scoresGame} aAb={aAb} hAb={hAb} bestEdge={bestEdge} detail={detail} venue={venue}/>}
       </div>
@@ -127,6 +143,20 @@ const Agree = ({ ok }) => ok==null ? null : <span className={"ma "+(ok?"ag":"df"
 const Block = ({ label, bx, children, style }) => (
   <div className="dblk" style={style}><div className="bl">{label}{bx && <span className="bx">{bx}</span>}</div>{children}</div>
 );
+// Collapsible section — tap the header to expand. Collapsed by default to keep the
+// detail card clean. Reuses the .cv chevron used elsewhere.
+const Collapse = ({ label, bx, sub, open: defOpen = false, children }) => {
+  const [open, setOpen] = useState(defOpen);
+  return (
+    <div className="dblk">
+      <div className="exphd" onClick={() => setOpen(o => !o)}>
+        <span className="bl" style={{ margin: 0 }}>{label}{bx && <span className="bx">{bx}</span>}</span>
+        <span className="expr">{sub && <span className="expsub">{sub}</span>}<span className={"cv" + (open ? " open" : "")}>{"\u25b8"}</span></span>
+      </div>
+      {open && <div className="expbody">{children}</div>}
+    </div>
+  );
+};
 // Home-plate umpire tendencies (from detail.umpire). Shown on every game state, not
 // just pre-game. Renders nothing until the crew is posted (a few hours pre-first-pitch).
 const UmpBlock = ({ detail }) => {
@@ -151,7 +181,7 @@ function TeamHead({ aAb, hAb, aCol, hCol, aRec, hRec }) {
   </div></div>;
 }
 
-function SheetPre({ game, aAb, hAb, gEdges, mlPick, totPick, bestEdge, mr, detail, bvpData, hasFull, navigate }) {
+function SheetPre({ game, aAb, hAb, gEdges, mlPick, totPick, bestEdge, mr, detail, bvpData, lineups, hasFull, navigate }) {
   const aCol=colFor(aAb), hCol=colFor(hAb);
   const ml = game.moneyline || {};
   const wlA = pct(ml.awayWinProb), wlH = pct(ml.homeWinProb);
@@ -163,8 +193,11 @@ function SheetPre({ game, aAb, hAb, gEdges, mlPick, totPick, bestEdge, mr, detai
   const rl = game.runLine || {};
   const edgeStr = bestEdge ? ((bestEdge.edge>=0?"+":"")+(bestEdge.edge*100).toFixed(1)+"%") : "—";
   const pa = game.pitchers?.away || {}, ph = game.pitchers?.home || {};
-  const lineups = game.lineups || {};
-  const luA = lineups.away || [], luH = lineups.home || [];
+  const _lu = (lineups && ((lineups.away && lineups.away.length) || (lineups.home && lineups.home.length))) ? lineups : (game.lineups || {});
+  const luA = _lu.away || [], luH = _lu.home || [];
+  const luName = (x) => (x && (x.name || x.player)) || "";
+  const luOrd = (x) => (x && (x.order ?? x.spot)) ?? "";
+  const luPos = (x) => (x && (x.position || x.pos)) || "";
   const series = detail?.series || {};
   const formA = series.away || series.awayForm || null;
   const formH = series.home || series.homeForm || null;
@@ -206,12 +239,16 @@ function SheetPre({ game, aAb, hAb, gEdges, mlPick, totPick, bestEdge, mr, detai
       <PitcherCard ab={hAb} col={hCol} p={ph}/>
     </Block>
 
-    {(luA.length>0 || luH.length>0) ? <Lineups aAb={aAb} hAb={hAb} aCol={aCol} hCol={hCol} luA={luA} luH={luH}/> :
-      <Block label="LINEUPS" bx="confirms ~90 min before first pitch"><div className="estate" style={{padding:14}}><div className="es">Lineups not posted yet.</div></div></Block>}
+    <Collapse label="LINEUPS" bx="projected batting order" sub={(luA.length||luH.length) ? `${aAb} vs ${hAb}` : "not posted"}>
+      {(luA.length>0 || luH.length>0) ? <>
+        <div className="lusub">{aAb}</div>{luA.map((x,i)=><div key={"a"+i} className="lurowf"><span className="o">{luOrd(x)}</span><span className="nm">{luName(x)}</span><span className="po">{luPos(x)}</span></div>)}
+        <div className="lusub">{hAb}</div>{luH.map((x,i)=><div key={"h"+i} className="lurowf"><span className="o">{luOrd(x)}</span><span className="nm">{luName(x)}</span><span className="po">{luPos(x)}</span></div>)}
+      </> : <div className="estate" style={{padding:"4px 2px"}}><div className="es">Lineups confirm ~90 min before first pitch.</div></div>}
+    </Collapse>
 
-    {bvp.length>0 && <Block label="BATTER vs PITCHER" bx="career">
+    {bvp.length>0 && <Collapse label="BATTER vs PITCHER" bx="career" sub={`${bvp.length} w/ history`}>
       {bvp.map((b,i)=><div key={i} className="bvp"><div><div className="bn">{b.batter||b.name||b[0]}</div><div className="bvs">{b.vs||b.line||b[2]||""}</div></div><div className="bl"><b>{b.stat||b.slash||b[1]||""}</b></div></div>)}
-    </Block>}
+    </Collapse>}
 
     {(formA||formH) && <Block label="TEAM FORM" bx="last 5 · runs/game"><div className="formgrid">
       <FormCol ab={aAb} f={formA}/><FormCol ab={hAb} f={formH}/>
@@ -253,22 +290,6 @@ function PitcherCard({ ab, col, p }) {
   return <div className="pcard">
     <div className="prow">{head}<div className="pmeta"><div className="pn">{p?.name || "TBD"}</div><div className="ph">{p?.hand?`${p.hand}HP · `:""}{ab}{wl?` · ${wl}`:""}{s.inningsPitched!=null?` · ${Number(s.inningsPitched).toFixed(1)} IP`:""}</div></div></div>
     {(p?.name)&&<div className="pgrid">{tiles.map(([k,v],i)=><div key={i} className="pg"><div className="k">{k}</div><div className="v">{v}</div></div>)}</div>}
-  </div>;
-}
-function Lineups({ aAb, hAb, aCol, hCol, luA, luH }) {
-  const [open, setOpen] = useState(false);
-  const top = [...luA.slice(0,3).map(x=>[aAb,x]), ...luH.slice(0,3).map(x=>[hAb,x])];
-  const name = (x) => Array.isArray(x) ? x[1] : (x?.name || x?.player || "");
-  const ordOf = (x) => Array.isArray(x) ? x[0] : (x?.order ?? x?.spot ?? "");
-  const posOf = (x) => Array.isArray(x) ? x[2] : (x?.pos || x?.position || "");
-  const handOf = (x) => Array.isArray(x) ? x[3] : (x?.bats || x?.hand || "");
-  return <div className="dblk"><div className="bl">LINEUPS <span className="bx">confirms ~90 min before first pitch</span></div>
-    {top.map(([ab,x],i)=><div key={i} className="lurow"><LogoP ab={ab} col={ab===aAb?aCol:hCol}/><span className="ln">{ordOf(x)}. {name(x)}</span><span className="lustat">{posOf(x)}</span></div>)}
-    <div className="exbtn" onClick={()=>setOpen(o=>!o)}><span className={"cv"+(open?" open":"")}>{"\u25b8"}</span> View full lineups (1–9)</div>
-    {open && <div className="exwrap open">
-      <div className="lusub">{aAb}</div>{luA.map((x,i)=><div key={"a"+i} className="lurowf"><span className="o">{ordOf(x)}</span><span className="nm">{name(x)}</span><span className="po">{posOf(x)}</span><span className="hd">{handOf(x)}</span></div>)}
-      <div className="lusub">{hAb}</div>{luH.map((x,i)=><div key={"h"+i} className="lurowf"><span className="o">{ordOf(x)}</span><span className="nm">{name(x)}</span><span className="po">{posOf(x)}</span><span className="hd">{handOf(x)}</span></div>)}
-    </div>}
   </div>;
 }
 function FormCol({ ab, f }) {
@@ -448,6 +469,12 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .lurowf .o{font-family:var(--mono);font-size:10px;color:var(--mut2);width:14px;flex:0 0 auto}
 .lurowf .nm{font-family:var(--ui);font-weight:600;font-size:12px;color:#dbe4e2;flex:1}
 .lurowf .po{font-family:var(--mono);font-size:9px;color:var(--mut);width:28px;flex:0 0 auto}
+.exphd{display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none;-webkit-tap-highlight-color:transparent}
+.expr{display:flex;align-items:center;gap:9px;flex:0 0 auto}
+.expsub{font-family:var(--mono);font-size:9px;color:var(--mut2);white-space:nowrap}
+.expbody{margin-top:12px}
+.exphd .cv{display:inline-block;color:var(--mut);font-size:12px;transition:transform .2s}.exphd .cv.open{transform:rotate(90deg)}
+.exphd .bl{gap:7px;flex:0 1 auto;min-width:0;overflow:hidden}.exphd .bl .bx{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .lurowf .hd{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--blue);width:16px;text-align:right;flex:0 0 auto}
 .bvtbl{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:10.5px}
 .bvtbl th{color:var(--mut2);font-weight:500;font-size:8.5px;padding:4px 4px;text-align:right;white-space:nowrap}.bvtbl th:first-child{text-align:left}
