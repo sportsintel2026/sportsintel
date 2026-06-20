@@ -181,7 +181,7 @@ function PlayerSheet({ p, card, loading, onClose }) {
   const barH = (g) => { const m = g.modelPct ?? g.model ?? g.modelHrPct ?? g.modelProb; const v = m!=null ? (m<=1?m*100:m) : null; return v!=null ? Math.max(10, Math.min(100, Math.round(v))) : (g.homered?90:30); };
   const f = c.factors || {};
   const whyParts = [];
-  if (meas.barrelPct!=null) whyParts.push(`${typeof meas.barrelPct==="number"?meas.barrelPct.toFixed(1):meas.barrelPct}% barrel rate`);
+  if (meas.barrelPct!=null) whyParts.push(`${typeof meas.barrelPct==="number"?(meas.barrelPct*100).toFixed(1):meas.barrelPct}% barrel rate`);
   if (haveBB && pull>=45) whyParts.push(`${pull}% pull rate`);
   if (f.platoonAdvantage) whyParts.push("a platoon edge tonight");
   if (isK && pit.kPct!=null) whyParts.push(`a ${(pit.kPct*100).toFixed(0)}% strikeout rate`);
@@ -227,7 +227,7 @@ function PlayerSheet({ p, card, loading, onClose }) {
           ) : (
             <div className="dblk"><div className="bl">STATCAST <span className="bx">expected metrics</span></div>
               <div className="stiles">
-                <Tile k="BARREL%" v={meas.barrelPct!=null?(typeof meas.barrelPct==="number"?meas.barrelPct.toFixed(1)+"%":meas.barrelPct):null} cls="gold"/>
+                <Tile k="BARREL%" v={meas.barrelPct!=null?(typeof meas.barrelPct==="number"?(meas.barrelPct*100).toFixed(1)+"%":meas.barrelPct):null} cls="gold"/>
                 <Tile k="xwOBA" v={meas.xwoba!=null?(typeof meas.xwoba==="number"?meas.xwoba.toFixed(3).replace(/^0/,""):meas.xwoba):null} cls="g"/>
                 <Tile k="xBA" v={meas.xba!=null?(typeof meas.xba==="number"?meas.xba.toFixed(3).replace(/^0/,""):meas.xba):null}/>
                 <Tile k="xSLG" v={meas.xslg!=null?(typeof meas.xslg==="number"?meas.xslg.toFixed(3).replace(/^0/,""):meas.xslg):null}/>
