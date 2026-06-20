@@ -201,6 +201,8 @@ router.get("/mlb/:playerId", async (req, res) => {
           barrelPct,
           barrelTier: barrelTier(barrelPct),
           xwoba,
+          xba: xs?.xBA ?? null,
+          xslg: xs?.xSLG ?? null,
           recent15: recent
             ? { games: recent.days, hr: recent.homeRuns ?? null, avg: recent.avg ?? null, slg: recent.slg ?? null, ab: recent.atBats ?? null }
             : null,
