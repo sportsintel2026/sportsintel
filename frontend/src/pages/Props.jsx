@@ -172,6 +172,7 @@ function PlayerSheet({ p, card, loading, onClose }) {
   const lean = haveBB ? (pull>=straight && pull>=oppo ? ["Heavy Pull","pull-side power is the HR signal"]
               : oppo>=pull && oppo>=straight ? ["Oppo","uses the whole field"] : ["Spray","balanced batted-ball spread"]) : null;
   const meas = c.factors?.measured || {};
+  const pit = c.pitcher || {};
   const recentHR = meas.recent15?.hr ?? null;
   const park = c.factors?.park || {};
   const oppP = c.matchup?.opposingPitcher || c.matchup?.pitcher || null;
@@ -182,7 +183,9 @@ function PlayerSheet({ p, card, loading, onClose }) {
   if (meas.barrelPct!=null) whyParts.push(`${typeof meas.barrelPct==="number"?meas.barrelPct.toFixed(1):meas.barrelPct}% barrel rate`);
   if (haveBB && pull>=45) whyParts.push(`${pull}% pull rate`);
   if (f.platoonAdvantage) whyParts.push("a platoon edge tonight");
-  if (park.factor) whyParts.push(`a ${park.factor} HR park`);
+  if (isK && pit.kPct!=null) whyParts.push(`a ${(pit.kPct*100).toFixed(0)}% strikeout rate`);
+  if (isK && pit.whiffPct!=null) whyParts.push(`${(pit.whiffPct*100).toFixed(0)}% whiff rate`);
+  if (!isK && park.factor) whyParts.push(`a ${park.factor} HR park`);
   const why = c.factors?.why || c.why || p.reason
     || (whyParts.length ? `Model sees value vs the price — ${whyParts.slice(0,3).join(", ")}.` : "Model projects more value than the posted price implies.");
 
@@ -210,14 +213,25 @@ function PlayerSheet({ p, card, loading, onClose }) {
             </div>
           )}
 
-          <div className="dblk"><div className="bl">STATCAST <span className="bx">expected metrics</span></div>
-            <div className="stiles">
-              <Tile k="BARREL%" v={meas.barrelPct!=null?(typeof meas.barrelPct==="number"?meas.barrelPct.toFixed(1)+"%":meas.barrelPct):null} cls="gold"/>
-              <Tile k="xwOBA" v={meas.xwoba!=null?(typeof meas.xwoba==="number"?meas.xwoba.toFixed(3).replace(/^0/,""):meas.xwoba):null} cls="g"/>
-              <Tile k="xBA" v={meas.xba!=null?(typeof meas.xba==="number"?meas.xba.toFixed(3).replace(/^0/,""):meas.xba):null}/>
-              <Tile k="xSLG" v={meas.xslg!=null?(typeof meas.xslg==="number"?meas.xslg.toFixed(3).replace(/^0/,""):meas.xslg):null}/>
+          {isK ? (
+            <div className="dblk"><div className="bl">PITCHING <span className="bx">season rates</span></div>
+              <div className="stiles">
+                <Tile k="K%" v={pit.kPct!=null?(pit.kPct*100).toFixed(1)+"%":null} cls="g"/>
+                <Tile k="WHIFF%" v={pit.whiffPct!=null?(pit.whiffPct*100).toFixed(1)+"%":null} cls="gold"/>
+                <Tile k="BB%" v={pit.bbPct!=null?(pit.bbPct*100).toFixed(1)+"%":null}/>
+                <Tile k="SWING%" v={pit.swingPct!=null?(pit.swingPct*100).toFixed(1)+"%":null}/>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="dblk"><div className="bl">STATCAST <span className="bx">expected metrics</span></div>
+              <div className="stiles">
+                <Tile k="BARREL%" v={meas.barrelPct!=null?(typeof meas.barrelPct==="number"?meas.barrelPct.toFixed(1)+"%":meas.barrelPct):null} cls="gold"/>
+                <Tile k="xwOBA" v={meas.xwoba!=null?(typeof meas.xwoba==="number"?meas.xwoba.toFixed(3).replace(/^0/,""):meas.xwoba):null} cls="g"/>
+                <Tile k="xBA" v={meas.xba!=null?(typeof meas.xba==="number"?meas.xba.toFixed(3).replace(/^0/,""):meas.xba):null}/>
+                <Tile k="xSLG" v={meas.xslg!=null?(typeof meas.xslg==="number"?meas.xslg.toFixed(3).replace(/^0/,""):meas.xslg):null}/>
+              </div>
+            </div>
+          )}
 
           {!isK && (
             <div className="dblk"><div className="bl">BATTED-BALL PROFILE</div>
@@ -235,10 +249,12 @@ function PlayerSheet({ p, card, loading, onClose }) {
             {park.wx && <span className="ch">{park.wx}</span>}
           </div></div>
 
+          {!isK && (
           <div className="dblk"><div className="bl">RECENT FORM <span className="bx">last 15 games</span></div>
             {hist.length>0 && <div className="spark15">{hist.slice(-15).map((g,i)=><i key={i} className={g.homered?"hr":""} style={{height:barH(g)+"%"}}/>)}</div>}
             <div className="l15cap"><b>{recentHR ?? 0} HR</b> in last 15</div>
           </div>
+          )}
 
           <div className="dblk"><div className="why"><span className="wl">WHY THE EDGE</span>{why}</div></div>
 
@@ -313,7 +329,7 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .shead .x{width:32px;height:32px;border-radius:9px;border:1px solid var(--line2);display:flex;align-items:center;justify-content:center;color:#cdd7e1;font-size:19px;cursor:pointer;flex:0 0 auto}
 .shead .t{font-family:var(--disp);font-weight:800;font-size:19px;color:#fff;line-height:1}.shead .ts{font-family:var(--mono);font-size:10px;color:var(--mut);margin-top:2px}
 .sbody{padding:13px 14px 80px}
-.dblk{border:1px solid var(--line2);border-radius:13px;background:linear-gradient(180deg,#17222f 0,#17222f 46px,#0b1117 46px);padding:13px;margin-top:11px}
+.dblk{border:1px solid var(--line);border-radius:13px;background:linear-gradient(180deg,#0c1218,#080c11);padding:13px;margin-top:11px}
 .dblk .bl{font-family:var(--disp);font-weight:800;font-size:12px;letter-spacing:.7px;color:var(--mut);margin-bottom:11px;display:flex;align-items:center;justify-content:space-between}
 .dblk .bl .bx{font-family:var(--mono);font-size:9px;color:var(--mut2);letter-spacing:0;font-weight:500}
 /* recommendation */
