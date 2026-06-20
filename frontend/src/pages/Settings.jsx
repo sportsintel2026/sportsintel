@@ -1,171 +1,183 @@
-// Settings page — account info, subscription management
-
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { subscriptionApi } from "../lib/api";
-import Sidebar from "./Sidebar";
-import BottomNav from "./BottomNav";
+
+const OWNER_EMAIL = "r7002g@gmail.com";
+const SUPPORT_EMAIL = "support@wizepicks.com";
+const initialsOf = (s) => { const p = String(s||"").trim().split(/[\s@.]+/).filter(Boolean); const r = p.map(w=>w[0]).join("").slice(0,2).toUpperCase(); return r || "MG"; };
+
+function usePref(key, def) {
+  const [v, setV] = useState(() => { try { const s = localStorage.getItem(key); return s==null ? def : JSON.parse(s); } catch { return def; } });
+  useEffect(() => { try { localStorage.setItem(key, JSON.stringify(v)); } catch {} }, [key, v]);
+  return [v, setV];
+}
+
+const TIERS = [
+  { name:"Weekly", price:"$7", per:"/wk", foot:"All-Access · billed weekly · cancel anytime", save:null, interval:"week" },
+  { name:"Monthly", price:"$25", per:"/mo", foot:"All-Access · ", save:"save 11% vs weekly", interval:"month" },
+  { name:"Yearly", price:"$199", per:"/yr", foot:"All-Access · ", save:"save 34% — under $17/mo", interval:"year", best:true },
+];
 
 export default function SettingsPage() {
-  const { user, signOut } = useAuth();
   const navigate = useNavigate();
-  const [plan, setPlan] = useState({ tier: "free", isAdmin: false });
+  const { user, signOut } = useAuth();
+  const [plan, setPlan] = useState({ tier:"free", isAdmin:false });
   const [portalLoading, setPortalLoading] = useState(false);
-  const [drawerOpen, setDrawerOpen] = useState(false);
 
-  // Recognize the owner by email too (same gate as the /admin page), so the admin
-  // tools show even if the plan flag isn't set on the account.
-  const isAdmin = plan.isAdmin === true || user?.email === "r7002g@gmail.com";
+  useEffect(() => { subscriptionApi.getMyPlan().then(setPlan).catch(()=>{}); }, []);
+
+  const isAdmin = plan.isAdmin === true || user?.email === OWNER_EMAIL;
   const isPro = plan.tier === "pro" || plan.tier === "elite";
-  const hasFullAccess = isAdmin || isPro;
+  const paid = isAdmin || isPro;
+  const interval = plan.interval || plan.billingInterval || null;
+  const currentIdx = interval ? TIERS.findIndex(t => t.interval === interval) : -1;
 
-  useEffect(() => { subscriptionApi.getMyPlan().then(setPlan).catch(() => {}); }, []);
+  const name = user?.user_metadata?.full_name || (user?.email ? user.email.split("@")[0] : "Member");
+  const email = user?.email || "—";
+  const planBadge = isAdmin ? "\u25cf ADMIN (OWNER)" : isPro ? "\u25cf ALL-ACCESS" : "\u25cb FREE";
 
-  async function openStripePortal() {
+  // prefs (persisted per-device)
+  const [nSharp, setNSharp] = usePref("wp_n_sharp", true);
+  const [nPicks, setNPicks] = usePref("wp_n_picks", true);
+  const [nEdges, setNEdges] = usePref("wp_n_edges", true);
+  const [nLineups, setNLineups] = usePref("wp_n_lineups", false);
+  const [oddsFmt, setOddsFmt] = usePref("wp_odds_fmt", "a");
+  const [defSport, setDefSport] = usePref("wp_def_sport", "mlb");
+  const [favTeams, setFavTeams] = usePref("wp_fav_teams", ["NYY","CHC"]);
+
+  const openPortal = async () => {
+    if (!paid) { navigate("/pricing"); return; }
     setPortalLoading(true);
-    try {
-      const { url } = await subscriptionApi.getCustomerPortalUrl();
-      window.location.href = url;
-    } catch (e) {
-      console.error("Could not open portal:", e);
-      alert("Could not open subscription management. Please contact support.");
-      setPortalLoading(false);
-    }
-  }
+    try { const url = await subscriptionApi.getCustomerPortalUrl(); if (url) window.location.href = (typeof url === "string" ? url : url.url); }
+    catch (_) {} finally { setPortalLoading(false); }
+  };
+  const pickTier = (i) => { if (paid) openPortal(); else navigate("/pricing"); };
+  const toggleFav = (ab) => setFavTeams(favTeams.includes(ab) ? favTeams.filter(x=>x!==ab) : [...favTeams, ab]);
+  const doSignOut = () => { signOut(); navigate("/"); };
+  const doDelete = () => { if (window.confirm("Request account deletion? This emails support to remove your account.")) window.location.href = `mailto:${SUPPORT_EMAIL}?subject=Delete%20account%20request`; };
+
+  const Toggle = ({ on, set }) => <div className={"tg "+(on?"on":"")} onClick={()=>set(!on)}><div className="k"/></div>;
 
   return (
-    <div style={{ minHeight: "100vh", background: "#0a0e14", color: "#e4e7eb", fontFamily: "'Inter',system-ui,-apple-system,sans-serif" }}>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
-        *{box-sizing:border-box}
-        @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
-        @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
-        @keyframes slideIn{from{transform:translateX(-100%)}to{transform:translateX(0)}}
-        .mobile-only{display:none}
-        .desktop-sidebar{display:block}
-        @media (max-width: 768px) {
-          .desktop-sidebar{display:none!important}
-          .main-content{margin-left:0!important}
-          .mobile-only{display:flex!important}
-        }
-      `}</style>
+    <div className="app"><style>{CSS}</style>
+      <div className="hd"><div className="hrow"><div className="logo"><span className="w">Wize</span>Picks</div><div className="htitle">Account</div></div></div>
 
-      {/* Desktop sidebar */}
-      <BottomNav />
-      <div className="desktop-sidebar">
-        <Sidebar user={user} plan={plan} signOut={signOut} navigate={navigate} />
-      </div>
+      <div id="wrap">
+        <div className="blk"><div className="prof">
+          <div className="av">{initialsOf(name || email)}</div>
+          <div><div className="pn">{name}</div><div className="pe">{email}</div><div className="pp">{planBadge}</div></div>
+        </div></div>
 
-      {/* Mobile drawer */}
-      {drawerOpen && (
-        <>
-          <div onClick={() => setDrawerOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 49 }} />
-          <div style={{ position: "fixed", top: 0, left: 0, bottom: 0, animation: "slideIn .2s ease-out", zIndex: 51 }}>
-            <Sidebar user={user} plan={plan} signOut={signOut} navigate={(path) => { setDrawerOpen(false); navigate(path); }} />
-          </div>
-        </>
-      )}
-
-      {/* Mobile top bar */}
-      <div className="mobile-only" style={{ display: "none", position: "sticky", top: 0, zIndex: 40, background: "#0a0e14", borderBottom: "1px solid #1a1f28", padding: "10px 14px", alignItems: "center", justifyContent: "space-between" }}>
-        <button onClick={() => setDrawerOpen(true)} style={{ background: "none", border: "none", color: "#e4e7eb", fontSize: 22, padding: 4, cursor: "pointer" }}>☰</button>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#1D9E75", animation: "pulse 2s infinite" }} />
-          <span style={{ fontSize: 15, fontWeight: 800 }}>Wize<span style={{ color: "#1D9E75" }}>Picks</span></span>
+        <div className="blk"><div className="bl">SUBSCRIPTION</div>
+          {TIERS.map((t,i)=>(
+            <div key={i} className={"plan"+(i===currentIdx?" cur":"")} onClick={()=>pickTier(i)}>
+              {i===currentIdx ? <span className="badge cur">CURRENT</span> : (t.best ? <span className="badge best">BEST VALUE</span> : null)}
+              <div className="pt"><div className="pname">{t.name}</div><div className="price">{t.price}<span className="per">{t.per}</span></div></div>
+              <div className="pf">{t.foot}{t.save ? <span className="save">{t.save}</span> : null}</div>
+            </div>
+          ))}
+          <div className="mng" onClick={openPortal}>{portalLoading ? "Opening…" : paid ? "Manage subscription" : "See all plans"}</div>
+          <div className="billnote">Billing handled securely by Stripe · receipts emailed</div>
         </div>
-        <div style={{ width: 30 }} />
-      </div>
 
-      <div className="main-content" style={{ marginLeft: 200 }}>
-        <div style={{ maxWidth: 720, margin: "0 auto", padding: "32px 24px 80px", animation: "fadeIn .3s ease" }}>
-          <h1 style={{ margin: "0 0 8px", fontSize: 28, fontWeight: 700, letterSpacing: "-0.01em" }}>Settings</h1>
-          <p style={{ margin: "0 0 32px", fontSize: 13, color: "#9ca3af" }}>Manage your account and subscription</p>
-
-          <Section title="Account">
-            <Row label="Email" value={user?.email || "—"} />
-            <Row label="Account type" value={isAdmin ? "Admin (owner)" : isPro ? "Subscribed" : "Free"} valueColor={isAdmin ? "#a855f7" : isPro ? "#22c55e" : "#9ca3af"} />
-            <Row label="Member since" value={user?.created_at ? new Date(user.created_at).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "—"} />
-          </Section>
-
-          {isAdmin && (
-            <Section title="Admin">
-              <div style={infoBoxStyle("#a855f7")}>
-                <div style={{ fontSize: 13, color: "#e4e7eb", fontWeight: 600, marginBottom: 4 }}>Owner tools</div>
-                <div style={{ fontSize: 12, color: "#9ca3af", lineHeight: 1.6 }}>Create and grade today's WizePlays picks.</div>
-              </div>
-              <button onClick={() => navigate("/admin")} style={{ ...primaryBtnStyle, marginTop: 14, background: "#a855f7" }}>
-                🎯 Manage WizePlays →
-              </button>
-            </Section>
-          )}
-
-          <Section title="Subscription">
-            {isAdmin ? (
-              <div style={infoBoxStyle("#a855f7")}>
-                <div style={{ fontSize: 13, color: "#e4e7eb", fontWeight: 600, marginBottom: 4 }}>You're the owner</div>
-                <div style={{ fontSize: 12, color: "#9ca3af", lineHeight: 1.6 }}>You have full access to all features. No subscription needed.</div>
-              </div>
-            ) : isPro ? (
-              <>
-                <div style={infoBoxStyle("#22c55e")}>
-                  <div style={{ fontSize: 13, color: "#e4e7eb", fontWeight: 600, marginBottom: 4 }}>Subscribed — $7/month</div>
-                  <div style={{ fontSize: 12, color: "#9ca3af", lineHeight: 1.6 }}>You have full access to all edges, HR props, and game analysis.</div>
-                </div>
-                <button onClick={openStripePortal} disabled={portalLoading} style={{ ...primaryBtnStyle, marginTop: 14 }}>
-                  {portalLoading ? "Opening..." : "Manage subscription & billing →"}
-                </button>
-                <div style={{ fontSize: 11, color: "#6b7280", marginTop: 8 }}>Update payment method, view invoices, or cancel.</div>
-              </>
-            ) : (
-              <>
-                <div style={infoBoxStyle("#ef4444")}>
-                  <div style={{ fontSize: 13, color: "#e4e7eb", fontWeight: 600, marginBottom: 4 }}>You're on the Free plan</div>
-                  <div style={{ fontSize: 12, color: "#9ca3af", lineHeight: 1.6 }}>Subscribe to unlock all edges, HR props, model reasoning, and full game analysis.</div>
-                </div>
-                <button onClick={() => navigate("/pricing")} style={{ ...primaryBtnStyle, marginTop: 14, background: "#ef4444" }}>
-                  ⚡ Subscribe — $7/month
-                </button>
-              </>
-            )}
-          </Section>
-
-          <Section title="Support">
-            <Row label="Email us" value={<a href="mailto:wizepickshelp@gmail.com?subject=WizePicks%20support" style={{ color: "#1D9E75", textDecoration: "none", fontWeight: 600 }}>wizepickshelp@gmail.com</a>} />
-            <Row label="Feedback" value="Use the thumbs-down button anywhere" />
-          </Section>
-
-          <Section title="Account actions">
-            <button onClick={() => { signOut(); navigate("/"); }} style={dangerBtnStyle}>Sign out</button>
-          </Section>
+        <div className="blk"><div className="bl">NOTIFICATIONS</div>
+          <div className="srow"><div className="sl"><div className="sn">Sharp line moves</div><div className="ss">when a pick’s line moves ≥15¢</div></div><Toggle on={nSharp} set={setNSharp}/></div>
+          <div className="srow"><div className="sl"><div className="sn">Your tracked picks</div><div className="ss">result + CLV when a pick settles</div></div><Toggle on={nPicks} set={setNPicks}/></div>
+          <div className="srow"><div className="sl"><div className="sn">New edges posted</div><div className="ss">when tonight’s board goes live</div></div><Toggle on={nEdges} set={setNEdges}/></div>
+          <div className="srow"><div className="sl"><div className="sn">Lineup / scratch alerts</div><div className="ss">when a starter or lineup changes</div></div><Toggle on={nLineups} set={setNLineups}/></div>
         </div>
+
+        <div className="blk"><div className="bl">PREFERENCES</div>
+          <div className="srow"><div className="sl"><div className="sn">Odds format</div><div className="ss">how prices display</div></div><div className="seg"><b className={oddsFmt==="a"?"on":""} onClick={()=>setOddsFmt("a")}>American</b><b className={oddsFmt==="d"?"on":""} onClick={()=>setOddsFmt("d")}>Decimal</b></div></div>
+          <div className="srow"><div className="sl"><div className="sn">Default sport</div><div className="ss">what opens first</div></div><div className="seg"><b className={defSport==="mlb"?"on":""} onClick={()=>setDefSport("mlb")}>MLB</b><b className={defSport==="nba"?"on":""} onClick={()=>setDefSport("nba")}>NBA</b><b className={defSport==="auto"?"on":""} onClick={()=>setDefSport("auto")}>Auto</b></div></div>
+          <div className="srow" style={{display:"block"}}><div className="sn" style={{marginBottom:6}}>Favorite teams</div><div className="chiprow">{["NYY","LAD","CHC","BOS"].map(ab=><b key={ab} className={favTeams.includes(ab)?"on":""} onClick={()=>toggleFav(ab)}>{ab}</b>)}<b onClick={()=>navigate("/games")}>+ Add</b></div></div>
+        </div>
+
+        <div className="blk"><div className="bl">SUPPORT</div>
+          <div className="lrow" onClick={()=>navigate("/dashboard")}><div className="li">?</div><div className="lt">How to use WizePicks</div><div className="lc">{"\u203a"}</div></div>
+          <div className="lrow" onClick={()=>{window.location.href=`mailto:${SUPPORT_EMAIL}`;}}><div className="li">{"\u2709"}</div><div className="lt">Contact support</div><div className="lc">{"\u203a"}</div></div>
+          <div className="lrow" onClick={()=>window.open("https://wizepicks.com","_blank")}><div className="li">{"\u2605"}</div><div className="lt">Rate WizePicks</div><div className="lc">{"\u203a"}</div></div>
+        </div>
+
+        <div className="blk"><div className="bl">LEGAL &amp; RESPONSIBLE GAMING</div>
+          <div className="rg"><div className="rgt">21+ · BET RESPONSIBLY</div><div className="rgs">WizePicks provides <b>analytics and information only</b> — not betting advice, and not a sportsbook. If gambling stops being fun, call <b>1-800-GAMBLER</b>. You confirmed you are 21+ and in a legal jurisdiction.</div></div>
+          <div className="lrow" onClick={()=>window.open("https://wizepicks.com/terms","_blank")}><div className="li">{"\u00a7"}</div><div className="lt">Terms of Service</div><div className="lc">{"\u203a"}</div></div>
+          <div className="lrow" onClick={()=>window.open("https://wizepicks.com/privacy","_blank")}><div className="li">{"\u26ff"}</div><div className="lt">Privacy Policy</div><div className="lc">{"\u203a"}</div></div>
+          <div className="lrow" onClick={()=>window.open("https://www.ncpgambling.org","_blank")}><div className="li">{"\u26e8"}</div><div className="lt">Responsible gaming resources</div><div className="lc">{"\u203a"}</div></div>
+        </div>
+
+        <div className="signout" onClick={doSignOut}>Sign out</div>
+        <div className="del" onClick={doDelete}>Delete account</div>
+        <div className="ver">WizePicks v1.0.0 · wizepicks.com</div>
       </div>
+
+      <nav className="nav">
+        <a onClick={()=>navigate("/dashboard")}><span className="i"><svg className="dbars" viewBox="0 0 24 24" width="18" height="18"><rect x="2" y="13" width="4" height="5" rx="1"/><rect x="7.3" y="9" width="4" height="9" rx="1"/><rect x="12.6" y="11" width="4" height="7" rx="1"/><rect x="18" y="6" width="4" height="12" rx="1"/></svg></span>Dashboard</a>
+        <a onClick={()=>navigate("/games")}><span className="i">{"\u25a6"}</span>Games</a>
+        <a onClick={()=>navigate("/props")}><span className="i">{"\u25c8"}</span>Props</a>
+        <a onClick={()=>navigate("/odds")}><span className="i">{"\u25d0"}</span>Market</a>
+        <a onClick={()=>navigate("/performance")}><span className="i">{"\u25b2"}</span>Performance</a>
+        <a className="on"><span className="i">{"\u25cd"}</span>Account</a>
+      </nav>
     </div>
   );
 }
 
-function Section({ title, children }) {
-  return (
-    <div style={{ marginBottom: 28 }}>
-      <h2 style={{ margin: "0 0 12px", fontSize: 11, color: "#6b7280", letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 700 }}>{title}</h2>
-      <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 8, padding: 16 }}>{children}</div>
-    </div>
-  );
-}
+const CSS = `@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700;800&display=swap');
+:root{--mono:'IBM Plex Mono',ui-monospace,monospace}
 
-function Row({ label, value, valueColor }) {
-  return (
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid #1a1f28", gap: 16 }}>
-      <span style={{ fontSize: 12, color: "#9ca3af" }}>{label}</span>
-      <span style={{ fontSize: 13, color: valueColor || "#e4e7eb", fontWeight: 500, textAlign: "right" }}>{value}</span>
-    </div>
-  );
-}
-
-function infoBoxStyle(accentColor) {
-  return { background: "#0a0e14", border: `1px solid ${accentColor}30`, borderLeft: `3px solid ${accentColor}`, borderRadius: 6, padding: "12px 14px" };
-}
-
-const primaryBtnStyle = { background: "#22c55e", color: "#fff", border: "none", borderRadius: 6, padding: "10px 18px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" };
-const dangerBtnStyle = { background: "transparent", color: "#ef4444", border: "1px solid #ef444440", borderRadius: 6, padding: "10px 18px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" };
-const linkStyle = { color: "#ef4444", textDecoration: "none", fontWeight: 600 };
+:root{--bg:#06090b;--panel:#0b1117;--line:#16202a;--line2:#1d2a36;--gold:#f3b94f;--green:#33e991;--neg:#ff5d4d;--red:#ff5d4d;--steel:#2674b0;--blue:#5da9e8;--mut:#7d8a98;--mut2:#4a5663;--disp:'Barlow Condensed',sans-serif;--ui:'Inter',sans-serif;--mono:'JetBrains Mono',monospace}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoothing:antialiased}
+.app{max-width:460px;margin:0 auto;min-height:100vh;position:relative;padding-bottom:96px}
+.hd{position:sticky;top:0;z-index:10;background:rgba(6,9,11,.94);backdrop-filter:blur(12px);border-bottom:1px solid var(--line);padding:0 14px}
+.hrow{display:flex;align-items:center;gap:9px;padding:12px 0}
+.logo{font-family:var(--disp);font-weight:800;font-size:21px;letter-spacing:.4px;color:#fff}.logo .w{color:var(--gold)}
+.htitle{font-family:var(--disp);font-weight:800;font-size:18px;color:#fff;margin-left:auto}
+.blk{margin:13px 14px 0;border:1px solid var(--line);border-radius:14px;background:var(--panel);padding:14px}
+.bl{font-family:var(--disp);font-weight:800;font-size:12px;letter-spacing:.7px;color:var(--mut);margin-bottom:12px}
+/* profile */
+.prof{display:flex;align-items:center;gap:13px}
+.prof .av{width:54px;height:54px;border-radius:50%;background:radial-gradient(circle at 50% 30%,#f3b94f,#9a6a18);display:flex;align-items:center;justify-content:center;font-family:var(--disp);font-weight:800;font-size:22px;color:#1a1408;flex:0 0 auto}
+.prof .pn{font-family:var(--disp);font-weight:800;font-size:20px;color:#fff}
+.prof .pe{font-family:var(--mono);font-size:11px;color:var(--mut);margin-top:2px}
+.prof .pp{display:inline-flex;align-items:center;gap:5px;margin-top:6px;font-family:var(--mono);font-size:9px;font-weight:700;color:var(--gold);border:1px solid rgba(243,185,79,.35);background:rgba(243,185,79,.1);border-radius:999px;padding:3px 9px}
+.prof .edit{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--blue);font-weight:600;align-self:flex-start;cursor:pointer}
+/* plans */
+.plan{position:relative;border:1px solid var(--line2);border-radius:13px;background:#0d141b;padding:13px;margin-top:9px;cursor:pointer;transition:.15s}
+.plan:first-of-type{margin-top:0}
+.plan.cur{border-color:var(--gold);background:linear-gradient(180deg,rgba(243,185,79,.08),rgba(243,185,79,.01))}
+.plan .pt{display:flex;align-items:baseline;gap:7px}
+.plan .pname{font-family:var(--disp);font-weight:800;font-size:17px;color:#fff}
+.plan .price{margin-left:auto;font-family:var(--disp);font-weight:800;font-size:22px;color:#fff}.plan .price .per{font-family:var(--mono);font-size:10px;color:var(--mut);font-weight:500}
+.plan .pf{font-family:var(--mono);font-size:10px;color:var(--mut);margin-top:5px}
+.plan .badge{position:absolute;top:-8px;right:12px;font-family:var(--mono);font-size:8px;font-weight:700;border-radius:5px;padding:2px 7px;letter-spacing:.3px}
+.badge.best{background:var(--gold);color:#1a1408}.badge.cur{background:var(--green);color:#06120b}
+.plan .save{color:var(--green);font-weight:700}
+.mng{margin-top:11px;text-align:center;font-family:var(--disp);font-weight:800;font-size:14px;color:#06090b;background:var(--gold);border-radius:11px;padding:11px;cursor:pointer}
+.billnote{font-family:var(--mono);font-size:9px;color:var(--mut2);text-align:center;margin-top:8px}
+/* setting rows */
+.srow{display:flex;align-items:center;gap:11px;padding:11px 0;border-top:1px solid rgba(255,255,255,.05)}.srow:first-of-type{border-top:none}
+.srow .sl{flex:1;min-width:0}.srow .sn{font-weight:600;font-size:14px;color:#eaf1ee}.srow .ss{font-family:var(--mono);font-size:9.5px;color:var(--mut2);margin-top:1px}
+.tg{width:44px;height:25px;border-radius:999px;background:#1a242e;position:relative;cursor:pointer;transition:.2s;flex:0 0 auto;border:1px solid var(--line2)}
+.tg.on{background:var(--green);border-color:var(--green)}
+.tg .k{position:absolute;top:2px;left:2px;width:19px;height:19px;border-radius:50%;background:#fff;transition:.2s}.tg.on .k{left:21px}
+.seg{display:flex;border:1px solid var(--line2);border-radius:8px;overflow:hidden;flex:0 0 auto}
+.seg b{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--mut);padding:6px 11px;cursor:pointer}.seg b.on{background:#141d24;color:#fff}
+.chiprow{display:flex;flex-wrap:wrap;gap:7px;margin-top:4px}
+.chiprow b{font-family:var(--disp);font-weight:700;font-size:12px;color:var(--mut);border:1px solid var(--line2);border-radius:999px;padding:5px 12px;cursor:pointer}.chiprow b.on{color:#06090b;background:var(--gold);border-color:var(--gold)}
+/* link rows */
+.lrow{display:flex;align-items:center;gap:11px;padding:12px 0;border-top:1px solid rgba(255,255,255,.05);cursor:pointer}.lrow:first-of-type{border-top:none}
+.lrow .li{width:30px;height:30px;border-radius:8px;border:1px solid var(--line2);background:#0e1620;display:flex;align-items:center;justify-content:center;color:var(--mut);flex:0 0 auto;font-size:14px}
+.lrow .lt{flex:1;font-weight:600;font-size:14px;color:#dbe4e2}.lrow .lc{color:var(--mut2);font-size:16px}
+.rg{border:1px solid rgba(255,93,77,.25);background:rgba(255,93,77,.04);border-radius:12px;padding:12px;margin-top:11px}
+.rg .rgt{font-family:var(--disp);font-weight:800;font-size:12px;color:#ffb3aa;letter-spacing:.4px}
+.rg .rgs{font-family:var(--ui);font-size:11px;color:var(--mut);margin-top:5px;line-height:1.5}.rg .rgs b{color:#dbe4e2}
+.signout{margin:14px 14px 0;text-align:center;font-family:var(--disp);font-weight:800;font-size:14px;color:#dbe4e2;border:1px solid var(--line2);border-radius:12px;padding:13px;cursor:pointer}
+.del{text-align:center;font-family:var(--mono);font-size:10px;color:var(--neg);margin:13px 0 0;cursor:pointer}
+.ver{text-align:center;font-family:var(--mono);font-size:9px;color:var(--mut2);margin:16px 0 0}
+.nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:460px;display:flex;justify-content:space-around;padding:7px 4px;background:rgba(0,0,0,.96);backdrop-filter:blur(12px);border-top:1px solid var(--line);z-index:20}
+.nav a{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;font-family:var(--disp);font-weight:700;font-size:10px;letter-spacing:.3px;color:var(--mut2);text-decoration:none}
+.nav a.on{color:var(--gold)}.nav a .i{font-size:15px;line-height:1}.nav a .dbars rect{fill:var(--mut2)}
+`;
