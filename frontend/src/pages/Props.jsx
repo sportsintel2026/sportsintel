@@ -62,7 +62,14 @@ export default function PropsPage() {
     if (c.startsWith("high")) return "high"; if (c.startsWith("med")) return "med"; if (c) return "low";
     const e = (p.edge||0)*100; return e>=4 ? "high" : e>=2 ? "med" : "low";
   };
-  const lineOf = (p, unit) => { const side = String(p.betSide||"O").toUpperCase().startsWith("U") ? "U" : "O"; return `${side} ${p.line ?? ""} ${unit}`.trim(); };
+  const lineOf = (p, unit) => {
+    const isUnder = String(p.betSide||"O").toUpperCase().startsWith("U");
+    if (isUnder) return `Under ${p.line ?? "0.5"} ${unit}`;
+    // Over X.5 → (X+1)+   e.g. Over 0.5 Hits → "1+ Hits", Over 5.5 Ks → "6+ Ks"
+    const n = p.line == null ? 1 : Math.ceil(Number(p.line));
+    if (unit === "HR" && n === 1) return "Anytime HR";
+    return `${n}+ ${unit}`;
+  };
   const toP = (p, mk, unit) => ({
     pl: [ p.player || p.name || "—", initialsOf(p.player||p.name||""), teamCol(shortTeam(p.team||p.game||"")) ],
     g: p.game || p.team || "", pos: p.pos || p.position || "",
