@@ -17,6 +17,7 @@ const {
   getEasternDate, getBatterRecentStats, normPlayerName,
 } = require("../services/mlbStatsApi");
 const { getBatterBarrels, getBatterExpectedStats, getPitcherWhiffStats, parseCsvLine, SAVANT_BASE } = require("../services/savantApi");
+const { getWeatherForVenue } = require("../services/weatherApi");
 
 const db = () => createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 const SAV = SAVANT_BASE || "https://baseballsavant.mlb.com";
@@ -113,6 +114,8 @@ async function resolveMatchup(game, teamAbbr) {
   }
   let pitcherHand = null;
   if (oppProbable?.id) { try { pitcherHand = await getPitcherHand(oppProbable.id); } catch (_) {} }
+  let weather = null;
+  if (game.venue) { try { weather = await getWeatherForVenue(game.venue, game.startTimeUTC || null); } catch (_) {} }
   return {
     gameId: String(game.id),
     opponent: opponent || null,
@@ -120,7 +123,9 @@ async function resolveMatchup(game, teamAbbr) {
     pitcherHand: pitcherHand || null,
     appliesSplit: pitcherHand === "L" ? "vsLHP" : pitcherHand === "R" ? "vsRHP" : null,
     parkHRFactor: game.parkHRFactor ?? null,
+    parkRunFactor: game.parkRunFactor ?? null,
     venue: game.venue || null,
+    weather,
   };
 }
 
@@ -209,7 +214,8 @@ router.get("/mlb/:playerId", async (req, res) => {
             ? { games: recent.days, hr: recent.homeRuns ?? null, avg: recent.avg ?? null, slg: recent.slg ?? null, ab: recent.atBats ?? null }
             : null,
         },
-        park: matchup?.parkHRFactor != null ? { factor: matchup.parkHRFactor, venue: matchup.venue } : null,
+        park: matchup?.parkHRFactor != null ? { factor: matchup.parkHRFactor, runFactor: matchup.parkRunFactor ?? null, venue: matchup.venue } : null,
+        weather: matchup?.weather || null,
         platoonAdvantage,
       },
       modelVsMarket,
