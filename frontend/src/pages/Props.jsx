@@ -163,31 +163,50 @@ function MMbar({ model, mkt }) {
 }
 function Tile({ k, v, cls }) { return <div className="stile"><div className="k">{k}</div><div className={"v "+(cls||"")}>{v ?? "—"}</div></div>; }
 
-function SprayField({ bats, pull, straight, oppo }) {
+function SprayField({ bats, pull, straight, oppo, wind }) {
   const isR = String(bats||"").toUpperCase() !== "L"; // default to RHB orientation when unknown
-  const R = 118, hx = 110, hy = 142;
+  const R = 122, hx = 110, hy = 152, ri = 40;
   const pt = (d, r) => [hx + r*Math.sin(d*Math.PI/180), hy - r*Math.cos(d*Math.PI/180)];
-  const f = (n) => n.toFixed(1);
+  const f = (n) => Number(n).toFixed(1);
   const xy = (d, r) => { const [x,y] = pt(d,r); return `${f(x)},${f(y)}`; };
-  const wedge = (a, b) => `M${hx},${hy} L${xy(a,R)} A${R},${R} 0 0 1 ${xy(b,R)} Z`;
+  const wedge = (a, b, r=R) => `M${hx},${hy} L${xy(a,r)} A${r},${r} 0 0 1 ${xy(b,r)} Z`;
   const mx = Math.max(pull||0, straight||0, oppo||0, 1);
-  const op = (v) => (0.18 + 0.72*((v||0)/mx)).toFixed(2);
+  const op = (v) => (0.16 + 0.62*((v||0)/mx)).toFixed(2);
   const left  = isR ? { l:"PULL", v:pull, c:"#33e991" } : { l:"OPPO", v:oppo, c:"#5da9e8" };
   const right = isR ? { l:"OPPO", v:oppo, c:"#5da9e8" } : { l:"PULL", v:pull, c:"#33e991" };
   const ctr   = { l:"CTR", v:straight, c:"#8b97a4" };
-  const lp = (d) => pt(d, R*0.60);
+  const pullSec = isR ? [-45,-15] : [15,45];
+  const lp = (d) => pt(d, R*0.62);
   const [lx,ly] = lp(-30), [cx,cy] = lp(0), [rx,ry] = lp(30);
-  const Txt = (x, y, z) => (<g key={z.l}><text x={f(x)} y={f(y)} fontSize="13" fontWeight="700" fill="#eaf1ee">{z.v!=null?z.v+"%":"—"}</text><text x={f(x)} y={f(y+11)} fontSize="7.5" fill="#9aa6b2">{z.l}</text></g>);
+  const Txt = (x, y, z) => (<g key={z.l}><text x={f(x)} y={f(y)} fontSize="12.5" fontWeight="700" fill="#eaf1ee">{z.v!=null?z.v+"%":"—"}</text><text x={f(x)} y={f(y+11)} fontSize="7.5" fill="#aeb9c8">{z.l}</text></g>);
+  const home=[hx,hy], b1=pt(45,ri), b2=pt(0,ri*1.42), b3=pt(-45,ri);
+  const diamond = `M${xy(0,0)} L${f(b1[0])},${f(b1[1])} L${f(b2[0])},${f(b2[1])} L${f(b3[0])},${f(b3[1])} Z`;
+  const Base = ({p}) => <rect x={f(p[0]-2.1)} y={f(p[1]-2.1)} width="4.2" height="4.2" fill="#e8eef5" transform={`rotate(45 ${f(p[0])} ${f(p[1])})`}/>;
+  const we = wind && !wind.indoor ? wind.windEffect : null;
+  let windEl = null;
+  if (we==="out" || we==="in") {
+    const col = we==="out" ? "#33e991" : "#ff7a6c";
+    const yTop=hy-116, yBot=hy-84;
+    windEl = we==="out"
+      ? <g opacity="0.95"><line x1={hx} y1={yBot} x2={hx} y2={yTop+5} stroke={col} strokeWidth="2.6" strokeLinecap="round"/><polygon points={`${hx-4.5},${yTop+6} ${hx+4.5},${yTop+6} ${hx},${yTop-1}`} fill={col}/></g>
+      : <g opacity="0.95"><line x1={hx} y1={yTop} x2={hx} y2={yBot-5} stroke={col} strokeWidth="2.6" strokeLinecap="round"/><polygon points={`${hx-4.5},${yBot-6} ${hx+4.5},${yBot-6} ${hx},${yBot+1}`} fill={col}/></g>;
+  } else if (we==="cross") {
+    windEl = <g opacity="0.9"><line x1={hx-28} y1={hy-100} x2={hx+24} y2={hy-100} stroke="#f0b24a" strokeWidth="2.4" strokeLinecap="round"/><polygon points={`${hx+24},${hy-104.5} ${hx+24},${hy-95.5} ${hx+31},${hy-100}`} fill="#f0b24a"/></g>;
+  }
   return (
-    <svg viewBox="0 0 220 150" xmlns="http://www.w3.org/2000/svg">
+    <svg viewBox="0 0 220 166" xmlns="http://www.w3.org/2000/svg">
+      <path d={wedge(-45,45)} fill="#0e2417"/>
       <path d={wedge(-45,-15)} fill={left.c} opacity={op(left.v)}/>
       <path d={wedge(-15,15)} fill={ctr.c} opacity={op(ctr.v)}/>
       <path d={wedge(15,45)} fill={right.c} opacity={op(right.v)}/>
-      <path d={`M${hx},${hy} L${xy(-45,R)} M${hx},${hy} L${xy(45,R)}`} stroke="#2a3744" strokeWidth="1.4" fill="none"/>
-      <path d={`M${xy(-45,R)} A${R},${R} 0 0 1 ${xy(45,R)}`} stroke="#2a3744" strokeWidth="1.4" fill="none"/>
-      <path d={`M${hx},${hy} L${xy(-15,R)} M${hx},${hy} L${xy(15,R)}`} stroke="#1d2a36" strokeWidth="1" fill="none"/>
-      <path d={`M${hx},${hy} L${xy(-45,34)} L${xy(0,46)} L${xy(45,34)} Z`} fill="none" stroke="#2a3744" strokeWidth="1"/>
-      <circle cx={hx} cy={hy} r="2.4" fill="#cfe2f5"/>
+      <path d={wedge(pullSec[0],pullSec[1])} fill="none" stroke="#33e991" strokeWidth="1.3" opacity="0.7"/>
+      <path d={`M${xy(-45,R)} A${R},${R} 0 0 1 ${xy(45,R)}`} stroke="#3f5340" strokeWidth="2.2" fill="none"/>
+      <path d={`M${xy(-45,R-6)} A${R-6},${R-6} 0 0 1 ${xy(45,R-6)}`} stroke="#26331f" strokeWidth="3" fill="none" opacity="0.5"/>
+      <path d={`M${hx},${hy} L${xy(-45,R)} M${hx},${hy} L${xy(45,R)}`} stroke="#cdd7c8" strokeWidth="1.2" fill="none" opacity="0.5"/>
+      <path d={diamond} fill="#3a2c1d" stroke="#5a4631" strokeWidth="1"/>
+      <circle cx={hx} cy={f(hy-ri*0.6)} r="3.2" fill="#4a3826"/>
+      <Base p={home}/><Base p={b1}/><Base p={b2}/><Base p={b3}/>
+      {windEl}
       <g fontFamily="'IBM Plex Mono',monospace" textAnchor="middle">{Txt(lx,ly,left)}{Txt(cx,cy,ctr)}{Txt(rx,ry,right)}</g>
     </svg>
   );
@@ -212,6 +231,14 @@ function PlayerSheet({ p, card, loading, onClose }) {
   const park = c.factors?.park || {};
   const wx = c.factors?.weather || {};
   const pctFac = (v) => v==null ? "—" : (v>1?"+":"")+Math.round((v-1)*100)+"%";
+  const windSpray = (() => {
+    if (!wx || wx.indoor || !wx.windEffect || wx.windEffect==="calm") return null;
+    const dom = (pull>=straight&&pull>=oppo) ? "pull" : (oppo>=pull&&oppo>=straight) ? "oppo" : "center";
+    const mph = wx.windMph!=null ? `${wx.windMph} mph` : "";
+    if (wx.windEffect==="out") return { cls:"wout", arrow:"\u2191", text:`Wind OUT ${mph} — carries fly balls${dom==="pull"?", aids pull-side power":""}` };
+    if (wx.windEffect==="in")  return { cls:"win",  arrow:"\u2193", text:`Wind IN ${mph} — knocks down fly balls` };
+    return { cls:"", arrow:"\u2192", text:`Cross wind ${mph}` };
+  })();
   const oppP = c.matchup?.opposingPitcher || c.matchup?.pitcher || null;
   const pHandRaw = c.matchup?.pitcherHand || null;
   const pHand = pHandRaw==="L" ? "LHP" : pHandRaw==="R" ? "RHP" : null;
@@ -332,8 +359,9 @@ function PlayerSheet({ p, card, loading, onClose }) {
                 <>
                   <div className="hpSl">SPRAY CHART</div>
                   <div className="hpSpray">
-                    <SprayField bats={bats} pull={pull} straight={straight} oppo={oppo}/>
+                    <SprayField bats={bats} pull={pull} straight={straight} oppo={oppo} wind={wx}/>
                     <div className="hpSprayCap">{bats?`${bats}HB`:"bats —"} · pulls to {String(bats).toUpperCase()==="L"?"right":"left"} field{bb.thin?" · thin sample":""}</div>
+                    {windSpray && <div className={"hpWind "+windSpray.cls}><span className="ar">{windSpray.arrow}</span> {windSpray.text}</div>}
                   </div>
                   <div className="hpSl">BATTED-BALL PROFILE</div>
                   <div className="hpChart">
@@ -448,6 +476,7 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .bbgrid{display:flex;gap:8px}.bbgrid .bb{flex:1;text-align:center;border:1px solid var(--line);border-radius:9px;padding:8px 4px}.bbgrid .bb .k{font-family:var(--mono);font-size:8px;color:var(--mut2);font-weight:600}.bbgrid .bb .v{font-family:var(--disp);font-weight:800;font-size:16px;color:#cfe2f5;margin-top:2px}
 .hpSpray{display:flex;flex-direction:column;align-items:center;gap:5px;margin:2px 0 6px}.hpSpray svg{width:100%;max-width:228px;display:block}
 .hpSprayCap{font-family:var(--mono);font-size:9px;color:var(--mut2);letter-spacing:.3px}
+.hpWind{font-family:var(--mono);font-size:9.5px;letter-spacing:.2px;color:#aeb9c8;margin-top:2px;text-align:center}.hpWind .ar{font-weight:800;font-size:11px}.hpWind.wout{color:#7ee0a8}.hpWind.win{color:#ff8f80}
 .histrow{display:flex;align-items:center;gap:10px}.histrow .hv{font-family:var(--disp);font-weight:800;font-size:22px;color:var(--green)}.histrow .ht{font-family:var(--mono);font-size:11px;color:#cdd7e1}.histrow .ht b{color:#fff}
 .why{font-size:12.5px;color:#c4cfd9;line-height:1.55}.why .wl{font-family:var(--disp);font-weight:800;font-size:11px;letter-spacing:.5px;color:var(--gold);display:block;margin-bottom:4px}
 .estate{margin:40px 14px;border:1px dashed var(--line2);border-radius:14px;padding:36px 18px;text-align:center}.estate .et{font-family:var(--disp);font-weight:800;font-size:18px;color:#cfd7e2}.estate .es{font-size:12px;color:var(--mut);margin-top:6px;font-family:var(--mono)}
