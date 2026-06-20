@@ -168,11 +168,11 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .ranges b{flex:0 0 auto;font-family:var(--mono);font-size:11px;font-weight:600;color:var(--mut);border:1px solid var(--line2);border-radius:8px;padding:6px 13px;cursor:pointer}
 .ranges b.on{color:#06090b;background:var(--gold);border-color:var(--gold);font-weight:700}
 .kpis{display:grid;grid-template-columns:1fr 1fr;gap:9px;padding:11px 14px 0}
-.kpi{border:1px solid var(--line);border-radius:13px;background:linear-gradient(180deg,#0c1218,#080c11);padding:13px}
+.kpi{border:1px solid var(--line);border-radius:13px;background:linear-gradient(180deg,#0c0c0e,#020203);padding:13px}
 .kpi .k{font-family:var(--mono);font-size:9px;color:var(--mut);font-weight:600;letter-spacing:.3px}
 .kpi .v{font-family:var(--disp);font-weight:800;font-size:30px;color:#fff;margin-top:4px;line-height:1}.kpi .v.g{color:var(--green)}.kpi .v.gold{color:var(--gold)}.kpi .v.r{color:var(--neg)}
 .kpi .sub{font-family:var(--mono);font-size:9px;color:var(--mut2);margin-top:4px}
-.blk{margin:14px 14px 0;border:1px solid var(--line);border-radius:14px;background:linear-gradient(180deg,#0c1218,#080c11);padding:13px}
+.blk{margin:14px 14px 0;border:1px solid var(--line);border-radius:14px;background:linear-gradient(180deg,#0c0c0e,#020203);padding:13px}
 .bl{font-family:var(--disp);font-weight:800;font-size:13px;letter-spacing:.7px;color:var(--mut);margin-bottom:11px;display:flex;align-items:center;justify-content:space-between}
 .bl .bx{font-family:var(--mono);font-size:9px;color:var(--mut2);letter-spacing:0;font-weight:500}
 .chartwrap{position:relative}
