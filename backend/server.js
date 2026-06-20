@@ -36,6 +36,8 @@ const umpiresRoutes = require("./routes/umpires");
 
 const { refreshDailyGames } = require("./services/sportsData");
 const { gradeFinishedGames, captureClosingLines, captureNbaClosingLines, captureOddsTicks, voidUnmatchedProps } = require("./services/predictionTracker");
+const { backfillUmpireGames } = require("./services/umpireStore");
+const { getEasternDate } = require("./services/mlbStatsApi");
 const { gradeExpertPicks } = require("./services/expertPicksGrader");
 const { gradeDailyCard } = require("./services/dailyCard");
 
@@ -213,6 +215,21 @@ cron.schedule("0 * * * *", async () => {
   } catch (err) {
     console.error("[CRON] Grading failed:", err.message);
     pingHC(process.env.HC_PING_GRADE, false);
+  }
+}, { timezone: "America/New_York" });
+
+// ── Nightly umpire-games logger ─────────────────────────────────────────────────
+// Auto-populates umpire_games so the tendency table stays current with zero manual
+// work. Runs at 7am ET (after even West-Coast extra-inning games are final) and
+// re-logs the last two ET days. Idempotent (keyed on game_pk), so the overlap is a
+// no-op that also self-heals any day a run was missed. Fully fire-and-forget.
+cron.schedule("0 7 * * *", async () => {
+  console.log("[CRON] Logging umpire games (last 2 days)...");
+  try {
+    const out = await backfillUmpireGames(getEasternDate(-2), getEasternDate(-1), 400);
+    console.log(`[CRON] Umpire games logged: ${out.logged} (skipped ${out.skipped})`);
+  } catch (err) {
+    console.error("[CRON] Umpire game logging failed:", err.message);
   }
 }, { timezone: "America/New_York" });
 
