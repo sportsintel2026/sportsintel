@@ -163,6 +163,23 @@ function MMbar({ model, mkt }) {
 }
 function Tile({ k, v, cls }) { return <div className="stile"><div className="k">{k}</div><div className={"v "+(cls||"")}>{v ?? "—"}</div></div>; }
 
+function QCBar({ label, val, txt, lo, hi, lg }) {
+  if (val==null) return null;
+  const clamp=(x)=>Math.max(2,Math.min(100,x));
+  const pct=clamp(((val-lo)/(hi-lo))*100);
+  const lgPct=Math.max(0,Math.min(100,((lg-lo)/(hi-lo))*100));
+  const good = pct>=lgPct;
+  return (
+    <div className="qcrow">
+      <div className="qclab">{label}</div>
+      <div className="qctrack">
+        <div className="qcfill" style={{width:pct+"%",background:good?"#33e991":"#5da9e8"}}/>
+        <div className="qctick" style={{left:lgPct+"%"}}/>
+      </div>
+      <div className="qcval">{txt}</div>
+    </div>
+  );
+}
 function SprayField({ bats, pull, straight, oppo, wind }) {
   const isR = String(bats||"").toUpperCase() !== "L"; // default to RHB orientation when unknown
   const R = 122, hx = 110, hy = 152, ri = 40;
@@ -203,6 +220,9 @@ function SprayField({ bats, pull, straight, oppo, wind }) {
       <path d={`M${xy(-45,R)} A${R},${R} 0 0 1 ${xy(45,R)}`} stroke="#3f5340" strokeWidth="2.2" fill="none"/>
       <path d={`M${xy(-45,R-6)} A${R-6},${R-6} 0 0 1 ${xy(45,R-6)}`} stroke="#26331f" strokeWidth="3" fill="none" opacity="0.5"/>
       <path d={`M${hx},${hy} L${xy(-45,R)} M${hx},${hy} L${xy(45,R)}`} stroke="#cdd7c8" strokeWidth="1.2" fill="none" opacity="0.5"/>
+      <line x1={f(pt(-45,R)[0])} y1={f(pt(-45,R)[1])} x2={f(pt(-45,R)[0])} y2={f(pt(-45,R)[1]-12)} stroke="#f3b94f" strokeWidth="1.6"/>
+      <line x1={f(pt(45,R)[0])} y1={f(pt(45,R)[1])} x2={f(pt(45,R)[0])} y2={f(pt(45,R)[1]-12)} stroke="#f3b94f" strokeWidth="1.6"/>
+      <g fontFamily="'IBM Plex Mono',monospace" fontSize="8" fill="#9aa6b2" textAnchor="middle"><text x={f(pt(-37,R*0.88)[0])} y={f(pt(-37,R*0.88)[1])}>LF</text><text x={f(pt(37,R*0.88)[0])} y={f(pt(37,R*0.88)[1])}>RF</text></g>
       <path d={diamond} fill="#3a2c1d" stroke="#5a4631" strokeWidth="1"/>
       <circle cx={hx} cy={f(hy-ri*0.6)} r="3.2" fill="#4a3826"/>
       <Base p={home}/><Base p={b1}/><Base p={b2}/><Base p={b3}/>
@@ -355,6 +375,17 @@ function PlayerSheet({ p, card, loading, onClose }) {
                 {park.factor!=null && <div className="hpWs full"><div className="hpWt"><span className="k">Park{park.venue?` · ${park.venue}`:""}</span>{parkPct!=null&&parkPct>0&&<span className="hpBd gold">+HR</span>}</div><div className="hpWv">{parkPct!=null?(parkPct>=0?"+":"")+parkPct+"%":"—"}</div></div>}
               </div>
 
+              {(barrelV!=null || meas.xwoba!=null || meas.xba!=null || meas.xslg!=null) && <>
+                <div className="hpSl">QUALITY OF CONTACT</div>
+                <div className="dblk qcwrap">
+                  <QCBar label="Barrel%" val={barrelV} txt={barrelV!=null?barrelV.toFixed(1)+"%":"—"} lo={0} hi={24} lg={8}/>
+                  <QCBar label="xwOBA" val={meas.xwoba} txt={fmt3(meas.xwoba)} lo={0.250} hi={0.450} lg={0.315}/>
+                  <QCBar label="xBA" val={meas.xba} txt={fmt3(meas.xba)} lo={0.200} hi={0.330} lg={0.245}/>
+                  <QCBar label="xSLG" val={meas.xslg} txt={fmt3(meas.xslg)} lo={0.300} hi={0.620} lg={0.410}/>
+                  <div className="qcnote"><span className="qctk"/> league avg · green = above</div>
+                </div>
+              </>}
+
               {haveBB && (
                 <>
                   <div className="hpSl">SPRAY CHART</div>
@@ -474,7 +505,16 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .ctx{display:flex;flex-wrap:wrap;gap:7px}.ctx .ch{font-family:var(--mono);font-size:10px;color:#aeb9c8;background:#0e1620;border:1px solid var(--line2);border-radius:7px;padding:5px 9px}.ctx .ch b{color:#fff}
 .ctx .ch.wout{color:#7ee0a8;border-color:rgba(126,224,168,.32)}.ctx .ch.win{color:#ff8f80;border-color:rgba(255,143,128,.32)}
 .bbgrid{display:flex;gap:8px}.bbgrid .bb{flex:1;text-align:center;border:1px solid var(--line);border-radius:9px;padding:8px 4px}.bbgrid .bb .k{font-family:var(--mono);font-size:8px;color:var(--mut2);font-weight:600}.bbgrid .bb .v{font-family:var(--disp);font-weight:800;font-size:16px;color:#cfe2f5;margin-top:2px}
-.hpSpray{display:flex;flex-direction:column;align-items:center;gap:5px;margin:2px 0 6px}.hpSpray svg{width:100%;max-width:228px;display:block}
+.hpSpray{display:flex;flex-direction:column;align-items:center;gap:5px;margin:2px 0 6px}.hpSpray svg{width:100%;max-width:306px;display:block}
+.qcwrap{padding:15px 14px}
+.qcrow{display:flex;align-items:center;gap:11px;margin:11px 0}.qcrow:first-child{margin-top:1px}
+.qclab{font-family:var(--mono);font-size:10px;color:#aeb9c8;width:52px;flex:0 0 auto}
+.qctrack{position:relative;flex:1;height:8px;background:#10161d;border-radius:5px}
+.qcfill{position:absolute;left:0;top:0;height:100%;border-radius:5px}
+.qctick{position:absolute;top:-2px;width:2px;height:12px;background:#e8eef3;opacity:.55;border-radius:1px}
+.qcval{font-family:var(--mono);font-size:11px;color:#e8eef3;font-weight:700;width:44px;text-align:right;flex:0 0 auto}
+.qcnote{font-family:var(--mono);font-size:8.5px;color:var(--mut2);margin-top:11px;display:flex;align-items:center;gap:6px}
+.qcnote .qctk{display:inline-block;width:2px;height:9px;background:#e8eef3;opacity:.55}
 .hpSprayCap{font-family:var(--mono);font-size:9px;color:var(--mut2);letter-spacing:.3px}
 .hpWind{font-family:var(--mono);font-size:9.5px;letter-spacing:.2px;color:#aeb9c8;margin-top:2px;text-align:center}.hpWind .ar{font-weight:800;font-size:11px}.hpWind.wout{color:#7ee0a8}.hpWind.win{color:#ff8f80}
 .histrow{display:flex;align-items:center;gap:10px}.histrow .hv{font-family:var(--disp);font-weight:800;font-size:22px;color:var(--green)}.histrow .ht{font-family:var(--mono);font-size:11px;color:#cdd7e1}.histrow .ht b{color:#fff}
