@@ -271,4 +271,3 @@ router.get("/probe-batted-ball", async (req, res) => {
 });
 
 module.exports = router;
-
