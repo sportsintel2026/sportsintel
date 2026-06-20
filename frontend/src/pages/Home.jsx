@@ -598,7 +598,7 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .caption{font-family:var(--mono);font-size:10px;color:var(--mut2);margin:9px 14px 0;line-height:1.4}
 .seeall{margin:11px 14px 0;text-align:center;font-family:var(--disp);font-weight:800;font-size:14px;color:var(--blue);border:1px solid rgba(93,169,232,.3);border-radius:11px;padding:11px;background:rgba(93,169,232,.06);cursor:pointer}
 /* mover card */
-.mvc{width:188px;border:1px solid var(--line);border-radius:13px;background:linear-gradient(180deg,#0d1218,#090d12);padding:12px}
+.mvc{width:188px;border:1px solid var(--line);border-radius:13px;background:linear-gradient(180deg,#0c0c0e,#020203);padding:12px}
 .mvc .pk{font-family:var(--disp);font-weight:800;font-size:18px;color:#fff;line-height:1}.mvc .mu{font-family:var(--mono);font-size:10px;color:var(--mut);margin-top:3px}
 .mvc .od{font-family:var(--mono);font-size:14px;font-weight:600;margin-top:10px}.mvc .od .a{color:var(--mut2)}.mvc .od.up{color:var(--green)}.mvc .od.dn{color:var(--neg)}
 .mvc .ct2{font-family:var(--mono);font-size:11px;font-weight:600;margin-top:4px}.mvc .ct2.up{color:var(--green)}.mvc .ct2.dn{color:var(--neg)}
@@ -613,7 +613,7 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .prc .bet{margin-top:9px;width:100%;display:flex;align-items:center;justify-content:space-between;border:1px solid rgba(93,169,232,.3);border-radius:8px;background:rgba(93,169,232,.07);padding:6px 8px}
 .prc .bet span{font-family:var(--mono);font-weight:600;font-size:10px;color:#dbe4e2}.prc .bet .o{color:var(--blue)}
 /* park card */
-.pkc{width:200px;border:1px solid var(--line);border-radius:13px;background:linear-gradient(180deg,#0d1218,#090d12);padding:12px}
+.pkc{width:200px;border:1px solid var(--line);border-radius:13px;background:linear-gradient(180deg,#0c0c0e,#020203);padding:12px}
 .pkc.h{border-color:rgba(243,185,79,.26)}.pkc.p{border-color:rgba(93,169,232,.2)}
 .pkc .r1{display:flex;align-items:center;justify-content:space-between}.pkc .vn{font-family:var(--disp);font-weight:800;font-size:15px;color:#fff}.pkc .tm{font-family:var(--mono);font-size:9px;color:var(--mut);margin-top:1px}
 .pkc .lg{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--disp);font-weight:800;font-size:8px;color:#fff;flex:0 0 auto;overflow:hidden;background:#0c1018}.pkc .lg img{width:20px;height:20px;object-fit:contain}
