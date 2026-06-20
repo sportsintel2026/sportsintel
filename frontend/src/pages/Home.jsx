@@ -467,7 +467,7 @@ const CSS=`@import url('https://fonts.googleapis.com/css2?family=Barlow+Condense
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}html,body{margin:0}
 body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-webkit-font-smoothing:antialiased}
 .app{max-width:460px;margin:0 auto;min-height:100vh;padding-bottom:64px}
-.hd{position:sticky;top:0;z-index:20;background:linear-gradient(180deg,#000 84%,transparent);padding:11px 14px 0}
+.hd{position:sticky;top:0;z-index:20;background:#000;padding:11px 14px 0}
 .hrow{display:flex;align-items:center;gap:8px}
 .brand{font-family:var(--disp);font-weight:800;font-size:21px}.brand b{color:#fff}.brand i{color:var(--red);font-style:normal}
 .pill{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line2);border-radius:999px;padding:3px 8px;font-size:9px;font-weight:800;letter-spacing:.4px;color:#d2ebe2}
