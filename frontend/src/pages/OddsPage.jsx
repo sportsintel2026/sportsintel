@@ -240,7 +240,7 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .subnav b.on{background:#141d24;color:#fff}
 .cap{font-family:var(--mono);font-size:10px;color:var(--mut2);margin:10px 14px 0;line-height:1.4}
 /* odds (line shop) card */
-.oc{margin:9px 14px 0;border:1px solid var(--line);border-radius:14px;background:linear-gradient(180deg,#0c1218,#080c11);padding:12px;cursor:pointer;transition:border-color .15s}.oc:active{border-color:var(--steel)}
+.oc{margin:9px 14px 0;border:1px solid var(--line);border-radius:14px;background:linear-gradient(180deg,#0c0c0e,#020203);padding:12px;cursor:pointer;transition:border-color .15s}.oc:active{border-color:var(--steel)}
 .oc .och{display:flex;align-items:center;gap:9px;margin-bottom:11px}
 .lg{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#0c1018;border:1px solid #000;font-family:var(--disp);font-weight:800;font-size:8px;color:#fff;flex:0 0 auto}.lg img{width:19px;height:19px;object-fit:contain}
 .lgs{display:flex}.lgs .lg{margin-left:-5px}.lgs .lg:first-child{margin-left:0}
@@ -251,13 +251,13 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .bp .v{font-family:var(--disp);font-weight:800;font-size:15px;color:#fff;margin-top:3px}.bp .v .pr{color:var(--green)}
 .bp .bk{font-family:var(--mono);font-size:8px;color:var(--gold);font-weight:700;margin-top:2px}
 /* movers */
-.mvrow{display:flex;align-items:center;gap:11px;margin:8px 14px 0;border:1px solid var(--line);border-radius:12px;background:linear-gradient(180deg,#0c1218,#080c11);padding:11px 13px}
+.mvrow{display:flex;align-items:center;gap:11px;margin:8px 14px 0;border:1px solid var(--line);border-radius:12px;background:linear-gradient(180deg,#0c0c0e,#020203);padding:11px 13px}
 .mvrow .rk{font-family:var(--disp);font-weight:800;font-size:13px;color:var(--mut2);width:18px;flex:0 0 auto}
 .mvrow .mp{flex:1;min-width:0}.mvrow .mpk{font-family:var(--disp);font-weight:800;font-size:15px;color:#fff}.mvrow .mmu{font-family:var(--mono);font-size:9px;color:var(--mut2);margin-top:1px}
 .mvrow .mo{font-family:var(--mono);font-size:13px;font-weight:600;text-align:right;flex:0 0 auto}.mo.up{color:var(--green)}.mo.dn{color:var(--neg)}.mo .a{color:var(--mut2)}
 .mvrow .mc{font-family:var(--mono);font-size:10px;font-weight:600;margin-top:2px}.mc.up{color:var(--green)}.mc.dn{color:var(--neg)}
 /* consensus */
-.cc{margin:9px 14px 0;border:1px solid var(--line);border-radius:14px;background:linear-gradient(180deg,#0c1218,#080c11);padding:12px}
+.cc{margin:9px 14px 0;border:1px solid var(--line);border-radius:14px;background:linear-gradient(180deg,#0c0c0e,#020203);padding:12px}
 .cc .och{display:flex;align-items:center;gap:9px;margin-bottom:9px}
 .crow{display:flex;align-items:center;gap:9px;padding:8px 0;border-top:1px solid rgba(255,255,255,.05)}.crow:first-of-type{border-top:none}
 .crow .cd{width:8px;height:8px;border-radius:50%;flex:0 0 auto}.cd.strong{background:var(--green)}.cd.soft{background:var(--gold)}.cd.split{background:var(--mut)}
@@ -276,7 +276,7 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .shead .x{width:32px;height:32px;border-radius:9px;border:1px solid var(--line2);display:flex;align-items:center;justify-content:center;color:#cdd7e1;font-size:19px;cursor:pointer;flex:0 0 auto}
 .shead .t{font-family:var(--disp);font-weight:800;font-size:19px;color:#fff;line-height:1}.shead .ts{font-family:var(--mono);font-size:10px;color:var(--mut);margin-top:2px}
 .sbody{padding:13px 14px 80px}
-.gridblk{border:1px solid var(--line);border-radius:13px;background:linear-gradient(180deg,#0c1218,#080c11);padding:11px;margin-top:11px;overflow-x:auto}
+.gridblk{border:1px solid var(--line);border-radius:13px;background:linear-gradient(180deg,#0c0c0e,#020203);padding:11px;margin-top:11px;overflow-x:auto}
 .gridblk .bl{font-family:var(--disp);font-weight:800;font-size:12px;letter-spacing:.6px;color:var(--mut);margin-bottom:9px}
 .otbl{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11px;min-width:330px}
 .otbl th{color:var(--mut2);font-weight:500;font-size:8.5px;padding:5px 4px;text-align:center;border-bottom:1px solid var(--line)}.otbl th:first-child{text-align:left}
