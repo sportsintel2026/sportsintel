@@ -191,8 +191,8 @@ router.get("/:league", async (req, res) => {
     // ── Recent graded picks (core + props), newest first, with a readable label ─
     let recent = [];
     try {
-      const sel = "market, confidence, result, odds, edge, game_date, clv, beat_close, closing_odds, matchup, side, selection, line, team";
-      const { data: recRows } = await supabase
+      const sel = "market, confidence, result, odds, edge, game_date, clv, beat_close, closing_odds, matchup, selection, line";
+      const { data: recRows, error: recErr } = await supabase
         .from("model_predictions")
         .select(sel)
         .eq("league", league)
@@ -201,6 +201,7 @@ router.get("/:league", async (req, res) => {
         .order("game_date", { ascending: false })
         .order("id", { ascending: false })
         .limit(60);
+      if (recErr) { console.warn("[performance] recent query failed:", recErr.message); }
       const elig = (recRows || []).filter(r => cfg.core.includes(r.market) ? isQualified(r) : afterReset(r));
       recent = elig.slice(0, 20).map(r => {
         const won = r.result === "win";
@@ -272,21 +273,29 @@ function clvCents(our, close) {
   if (a == null || b == null) return null;
   return Math.round(a - b);
 }
-// Human-readable pick label for the Recent Results list.
+// Derive a team label from "AWAY @ HOME" matchup + a side ("away"/"home").
+function teamFromMatchup(matchup, side) {
+  const parts = String(matchup || "").split(/\s+(?:@|vs|at)\s+/i);
+  if (parts.length === 2) return (String(side).toLowerCase() === "home" ? parts[1] : parts[0]).trim();
+  return String(side).toLowerCase() === "home" ? "Home" : "Away";
+}
+// Human-readable pick label for Recent Results. model_predictions stores the
+// side INSIDE `selection`: "away"/"home" for ML/RL, "over"/"under" for totals,
+// the player name for HR props, and "Player:side" for hits/K props.
 function pickLabel(r) {
-  const team = r.team || "", mu = r.matchup || "", side = String(r.side || "").toLowerCase(), sel = r.selection || "", line = r.line;
+  const mu = r.matchup || "", sel = String(r.selection || ""), line = r.line, m = r.market;
   const sign = (x) => (Number(x) > 0 ? "+" : "") + x;
-  const ou = side === "under" ? "Under" : "Over";
-  switch (r.market) {
-    case "moneyline": return `${team || mu || (r.side || "") || "Pick"} ML`.trim();
-    case "run_line":
-    case "spread": return `${team || r.side || ""} ${line != null ? sign(line) : ""}`.trim();
-    case "total": return `${ou}${line != null ? " " + line : ""}${mu ? " " + mu : ""}`.trim();
-    case "hr_prop": return `${sel || team} ${ou} ${line != null ? line : "0.5"} HR`.trim();
-    case "player_hits": return `${sel || team} ${ou} ${line != null ? line : ""} Hits`.trim();
-    case "player_strikeouts": return `${sel || team} ${ou} ${line != null ? line : ""} K`.trim();
-    default: return `${sel || team || mu || "Pick"}${line != null ? " " + line : ""}`.trim();
+  if (m === "moneyline") return `${teamFromMatchup(mu, sel)} ML`;
+  if (m === "run_line" || m === "spread") return `${teamFromMatchup(mu, sel)} ${line != null ? sign(line) : ""}`.trim();
+  if (m === "total") return `${sel === "under" ? "Under" : "Over"}${line != null ? " " + line : ""}${mu ? " " + mu : ""}`.trim();
+  if (m === "hr_prop") return `${sel} Over ${line != null ? line : "0.5"} HR`.trim();
+  if (m === "player_hits" || m === "player_strikeouts") {
+    const [player, side] = sel.split(":");
+    const ou = String(side || "").toLowerCase() === "under" ? "Under" : "Over";
+    const unit = m === "player_hits" ? "Hits" : "K";
+    return `${player || sel} ${ou} ${line != null ? line : ""} ${unit}`.trim();
   }
+  return `${sel || mu || "Pick"}${line != null ? " " + line : ""}`.trim();
 }
 function finalize(b) {
   const total = b.wins + b.losses;
