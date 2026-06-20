@@ -46,7 +46,16 @@ export default function GameDetailPage() {
       if (cancelled) return;
       setAllEdges(edges); setMarketRead(mr);
       const all = scores ? [...(scores.live||[]),...(scores.upcoming||[]),...(scores.final||[])] : [];
-      const sg = all.find(g => String(g.detailId)===String(gameId) || String(g.id)===String(gameId)) || null;
+      // The URL gameId is the EDGES id (Odds-API-derived); the scores feed carries ESPN ids,
+      // so a direct id match never lands. Resolve the edges game first, then bridge to the
+      // scores game by team-nickname matchup (ids differ across feeds, the matchup is stable).
+      const eg = edges?.games?.find(g => String(g.id)===String(gameId)) || null;
+      const egKey = eg ? `${nick(eg.away)}|${nick(eg.home)}` : null;
+      const sg = all.find(g =>
+        String(g.detailId)===String(gameId) ||
+        String(g.id)===String(gameId) ||
+        (egKey && `${nick(g.away?.name)}|${nick(g.home?.name)}` === egKey)
+      ) || null;
       setScoresGame(sg);
       const sid = sg?.id || sg?.detailId;
       if (sid && scoresApi.getGameDetail) {
