@@ -166,6 +166,8 @@ function PlayerSheet({ p, card, loading, onClose }) {
   const bats = c.player?.bats || c.bats || "";
   const sR = c.splits?.vsRHP || {}, sL = c.splits?.vsLHP || {};
   const slash = (s) => [s.avg, s.obp, s.slg].map(x => x==null ? "—" : (typeof x==="number" ? (x<1?x.toFixed(3).replace(/^0/,""):x) : x)).join(" / ");
+  const fmt3 = (x) => x==null ? "—" : (typeof x==="number" ? (x<1?x.toFixed(3).replace(/^0/,""):x.toFixed(3)) : x);
+  const opsOf = (s) => s?.ops!=null ? s.ops : (s?.obp!=null&&s?.slg!=null ? s.obp+s.slg : null);
   const bb = c.battedBall || {};
   const pull = pctOf(bb.pullPct), straight = pctOf(bb.straightPct), oppo = pctOf(bb.oppoPct);
   const haveBB = pull!=null && straight!=null && oppo!=null;
@@ -173,13 +175,30 @@ function PlayerSheet({ p, card, loading, onClose }) {
               : oppo>=pull && oppo>=straight ? ["Oppo","uses the whole field"] : ["Spray","balanced batted-ball spread"]) : null;
   const meas = c.factors?.measured || {};
   const pit = c.pitcher || {};
-  const bvp = c.bvp || null;
-  const recentHR = meas.recent15?.hr ?? null;
+  const recent = meas.recent15 || {};
+  const recentHR = recent.hr ?? null;
   const park = c.factors?.park || {};
   const oppP = c.matchup?.opposingPitcher || c.matchup?.pitcher || null;
+  const pHandRaw = c.matchup?.pitcherHand || null;
+  const pHand = pHandRaw==="L" ? "LHP" : pHandRaw==="R" ? "RHP" : null;
+  const platoon = !!c.factors?.platoonAdvantage;
   const hist = c.modelVsMarket || [];
-  const barH = (g) => { const m = g.modelPct ?? g.model ?? g.modelHrPct ?? g.modelProb; const v = m!=null ? (m<=1?m*100:m) : null; return v!=null ? Math.max(10, Math.min(100, Math.round(v))) : (g.homered?90:30); };
   const f = c.factors || {};
+  const toHomer = p.model!=null ? Math.round(p.model<=1?p.model*100:p.model) : null;
+  const mktPct = p.mkt!=null ? Math.round(p.mkt<=1?p.mkt*100:p.mkt) : null;
+  const barrelV = meas.barrelPct!=null ? (meas.barrelPct<=1?meas.barrelPct*100:meas.barrelPct) : null;
+  const bTier = meas.barrelTier || (barrelV!=null ? (barrelV>=16?"elite":barrelV>=11?"strong":barrelV>=8?"above avg":"average") : null);
+  const xwTier = meas.xwoba!=null ? (meas.xwoba>=0.36?"elite":meas.xwoba>=0.34?"strong":meas.xwoba>=0.32?"above avg":"average") : null;
+  const parkPct = park.factor!=null ? Math.round((Number(park.factor)-1)*100) : null;
+  const cg = hist.slice(-8);
+  const mP = (g)=>{ const m=g.modelProb ?? g.model ?? g.modelPct ?? g.modelHrPct; return m!=null?(m<=1?m*100:m):null; };
+  const kP = (g)=>{ const k=g.marketImplied ?? g.market ?? g.marketPct; return k!=null?(k<=1?k*100:k):null; };
+  const cmax = Math.max(1, ...cg.flatMap(g=>[mP(g)||0, kP(g)||0]))*1.18;
+  const barFrac = (v)=> v==null?0:Math.max(6,Math.min(100,Math.round(v/cmax*100)));
+  const tcls = (t)=> t==="elite"||t==="strong" ? "g" : "";
+  const splitOrder = pHandRaw==="L" ? [["LHP",sL,true],["RHP",sR,false]]
+                   : pHandRaw==="R" ? [["RHP",sR,true],["LHP",sL,false]]
+                   : [["RHP",sR,false],["LHP",sL,false]];
   const whyParts = [];
   if (meas.barrelPct!=null) whyParts.push(`${typeof meas.barrelPct==="number"?(meas.barrelPct*100).toFixed(1):meas.barrelPct}% barrel rate`);
   if (haveBB && pull>=45) whyParts.push(`${pull}% pull rate`);
@@ -196,71 +215,95 @@ function PlayerSheet({ p, card, loading, onClose }) {
       <div className="sheet show" style={{zIndex:61}}>
         <div className="shead"><div className="x" onClick={onClose}>{"\u2039"}</div><div><div className="t">{p.pl[0]}</div><div className="ts">{p.g} · {p.line}</div></div></div>
         <div className="sbody">
-          <div className="dblk"><div className="recline">
-            <Avatar pid={p.pid} initials={p.pl[1]} color={p.pl[2]} cls="av2"/>
-            <div className="rl"><div className="bet">{p.line}</div><div className="sub">{shortTeam(p.teamRaw||p.g)} · best <b>{p.odds}</b></div></div>
-            <div className="edg"><div className="e">+{p.edge.toFixed(1)}%</div><div className="c">{p.conv.toUpperCase()} CONV</div></div>
-          </div><MMbar model={p.model} mkt={p.mkt}/></div>
-
           {loading && <div className="dblk"><div className="estate" style={{padding:16}}><div className="es">Loading player card…</div></div></div>}
 
-          {!isK && (
-            <div className="dblk"><div className="bl">SPLITS{oppP ? <span className="bx">tonight vs {oppP}</span> : null}</div>
-              <div className="splitrow">
-                <div className={"scol "+(bats==="R"?"on":"")}><div className="sh">vs RHP</div><div className="sv">{sR.hr ?? "—"} HR</div><div className="ss">{slash(sR)}</div></div>
-                <div className={"scol "+(bats==="L"?"on":"")}><div className="sh">vs LHP</div><div className="sv">{sL.hr ?? "—"} HR</div><div className="ss">{slash(sL)}</div></div>
-              </div>
-              <div className="hrsplit">HR splits — <b>{sR.hr ?? "—"}</b> vs RHP · <b>{sL.hr ?? "—"}</b> vs LHP{(sR.ab||sL.ab) ? ` (${sR.ab??"—"}/${sL.ab??"—"} AB)` : ""}</div>
-              {bvp && <div className="hrsplit">Career vs {bvp.pitcher} — <b>{bvp.line}</b></div>}
-            </div>
-          )}
-
           {isK ? (
-            <div className="dblk"><div className="bl">PITCHING <span className="bx">season rates</span></div>
-              <div className="stiles">
-                <Tile k="K%" v={pit.kPct!=null?(pit.kPct*100).toFixed(1)+"%":null} cls="g"/>
-                <Tile k="WHIFF%" v={pit.whiffPct!=null?(pit.whiffPct*100).toFixed(1)+"%":null} cls="gold"/>
-                <Tile k="BB%" v={pit.bbPct!=null?(pit.bbPct*100).toFixed(1)+"%":null}/>
-                <Tile k="SWING%" v={pit.swingPct!=null?(pit.swingPct*100).toFixed(1)+"%":null}/>
+            <>
+              <div className="dblk"><div className="recline">
+                <Avatar pid={p.pid} initials={p.pl[1]} color={p.pl[2]} cls="av2"/>
+                <div className="rl"><div className="bet">{p.line}</div><div className="sub">{shortTeam(p.teamRaw||p.g)} · best <b>{p.odds}</b></div></div>
+                <div className="edg"><div className="e">+{p.edge.toFixed(1)}%</div><div className="c">{p.conv.toUpperCase()} CONV</div></div>
+              </div><MMbar model={p.model} mkt={p.mkt}/></div>
+              <div className="dblk"><div className="bl">PITCHING <span className="bx">season rates</span></div>
+                <div className="stiles">
+                  <Tile k="K%" v={pit.kPct!=null?(pit.kPct*100).toFixed(1)+"%":null} cls="g"/>
+                  <Tile k="WHIFF%" v={pit.whiffPct!=null?(pit.whiffPct*100).toFixed(1)+"%":null} cls="gold"/>
+                  <Tile k="BB%" v={pit.bbPct!=null?(pit.bbPct*100).toFixed(1)+"%":null}/>
+                  <Tile k="SWING%" v={pit.swingPct!=null?(pit.swingPct*100).toFixed(1)+"%":null}/>
+                </div>
               </div>
-            </div>
+              <div className="dblk"><div className="bl">PARK &amp; WEATHER</div><div className="ctx">
+                <span className="ch">HR factor <b>{park.factor ?? "—"}</b></span>
+                <span className="ch">Runs <b>{park.run ?? park.runFactor ?? "—"}</b></span>
+                {park.wx && <span className="ch">{park.wx}</span>}
+              </div></div>
+              <div className="dblk"><div className="why"><span className="wl">WHY THE EDGE</span>{why}</div></div>
+            </>
           ) : (
-            <div className="dblk"><div className="bl">STATCAST <span className="bx">expected metrics</span></div>
-              <div className="stiles">
-                <Tile k="BARREL%" v={meas.barrelPct!=null?(typeof meas.barrelPct==="number"?(meas.barrelPct*100).toFixed(1)+"%":meas.barrelPct):null} cls="gold"/>
-                <Tile k="xwOBA" v={meas.xwoba!=null?(typeof meas.xwoba==="number"?meas.xwoba.toFixed(3).replace(/^0/,""):meas.xwoba):null} cls="g"/>
-                <Tile k="xBA" v={meas.xba!=null?(typeof meas.xba==="number"?meas.xba.toFixed(3).replace(/^0/,""):meas.xba):null}/>
-                <Tile k="xSLG" v={meas.xslg!=null?(typeof meas.xslg==="number"?meas.xslg.toFixed(3).replace(/^0/,""):meas.xslg):null}/>
+            <>
+              <div className="dblk"><div className="hpHead">
+                <Avatar pid={p.pid} initials={p.pl[1]} color={p.pl[2]} cls="hpAv"/>
+                <div className="hpInfo"><div className="hpName">{p.pl[0]}</div><div className="hpMu">{p.g}</div><div className="hpLn">{p.line} · best <b>{p.odds}</b></div></div>
+                <div className="hpTo"><div className="v">{toHomer!=null?toHomer:"—"}<small>%</small></div><div className="l">TO HOMER</div></div>
+              </div></div>
+
+              {oppP && <div className="hpTvs"><div className="l">Tonight vs <b>{oppP}</b></div><div className="hpBdg">{pHand && <span className="hpHand">{pHand}</span>}{platoon && <span className="hpPlat">{"\u25b2"} platoon edge</span>}</div></div>}
+
+              <div className="hpSl">HAND VS HAND{bats?` · BATS ${bats}`:""}</div>
+              <div className="hpHvh">
+                {splitOrder.map(([lbl,s,on],i)=>(
+                  <div key={i} className={"hpHv"+(on?" on":"")}>
+                    {on && <div className="hpTn">TONIGHT</div>}
+                    <div className="hpHl">vs {lbl}</div>
+                    <div className="hpOps">{fmt3(opsOf(s))}</div><div className="hpOpl">OPS</div>
+                    <div className="hpG4r">
+                      <div className="hpG4"><div className="n">{fmt3(s.avg)}</div><div className="k">AVG</div></div>
+                      <div className="hpG4"><div className="n">{fmt3(s.slg)}</div><div className="k">SLG</div></div>
+                      <div className="hpG4"><div className="n hr">{s.hr??"—"}</div><div className="k">HR</div></div>
+                      <div className="hpG4"><div className="n">{s.ab??"—"}</div><div className="k">AB</div></div>
+                    </div>
+                  </div>
+                ))}
               </div>
-            </div>
+
+              {cg.length>0 && (
+                <>
+                  <div className="hpSl">MODEL % VS MARKET %</div>
+                  <div className="hpChart">
+                    <div className="hpChd"><div className="t">Model HR% vs market implied · last {cg.length}</div><div className="r"><span className="m">{toHomer!=null?toHomer+"%":"—"}</span> <span className="x">vs</span> <span className="k">{mktPct!=null?mktPct+"%":"—"}</span></div></div>
+                    <div className="hpCwrap">{cg.map((g,i)=>{ const m=mP(g),k=kP(g); return (
+                      <div key={i} className="hpCol"><div className={"hpBar"+((m!=null&&k!=null&&m<k)?" under":"")} style={{height:barFrac(m)+"%"}}/>{k!=null&&<div className="hpMkt" style={{bottom:barFrac(k)+"%"}}/>}</div>
+                    );})}</div>
+                    <div className="hpDots">{cg.map((g,i)=><div key={i} className="hpDot"><i className={g.homered?"y":"n"}/></div>)}</div>
+                    <div className="hpLeg"><span><i/>model %</span><span><i className="ln"/>market %</span><span><i className="rnd"/>homered</span></div>
+                    <div className="hpCap">Bars above the blue line = model sees more value than the price.</div>
+                  </div>
+                </>
+              )}
+
+              <div className="hpSl">WHAT THE MODEL SEES</div>
+              <div className="hpWms">
+                <div className="hpWs"><div className="hpWt"><span className="k">Barrel %</span>{bTier&&<span className={"hpBd "+tcls(bTier)}>{bTier}</span>}</div><div className="hpWv">{barrelV!=null?barrelV.toFixed(1)+"%":"—"}</div><div className="hpPbar"><i style={{width:Math.min(100,(barrelV||0)/20*100)+"%"}}/></div></div>
+                <div className="hpWs"><div className="hpWt"><span className="k">xwOBA</span>{xwTier&&<span className={"hpBd "+tcls(xwTier)}>{xwTier}</span>}</div><div className="hpWv">{fmt3(meas.xwoba)}</div><div className="hpPbar"><i style={{width:Math.min(100,(meas.xwoba||0)/0.45*100)+"%"}}/></div></div>
+                <div className="hpWs"><div className="hpWt"><span className="k">Recent · L15</span></div><div className="hpWv">{recentHR ?? 0} HR</div><div className="hpWsub">{fmt3(recent.avg)} / {fmt3(recent.slg)}{recent.ab!=null?` · ${recent.ab} AB`:""}</div></div>
+                <div className="hpWs"><div className="hpWt"><span className="k">Platoon</span>{platoon&&<span className="hpBd g">+adv</span>}</div><div className="hpWv">{platoon?"advantage":"neutral"}</div><div className="hpWsub">{bats?`${bats} bat`:""}{pHand?` vs ${pHand}`:""}</div></div>
+                {park.factor!=null && <div className="hpWs full"><div className="hpWt"><span className="k">Park{park.venue?` · ${park.venue}`:""}</span>{parkPct!=null&&parkPct>0&&<span className="hpBd gold">+HR</span>}</div><div className="hpWv">{parkPct!=null?(parkPct>=0?"+":"")+parkPct+"%":"—"}</div></div>}
+              </div>
+
+              {haveBB && (
+                <>
+                  <div className="hpSl">BATTED-BALL PROFILE</div>
+                  <div className="hpChart">
+                    <div className="bbbar"><i className="pull" style={{width:pull+"%",background:"#33e991"}}/><i className="straight" style={{width:straight+"%",background:"#3a4756"}}/><i className="oppo" style={{width:oppo+"%",background:"#5da9e8"}}/></div>
+                    <div className="bbleg"><span><i style={{background:"#33e991"}}/>Pull {pull}%</span><span><i style={{background:"#3a4756"}}/>Straight {straight}%</span><span><i style={{background:"#5da9e8"}}/>Oppo {oppo}%</span></div>
+                    {lean && <div className="bbread"><b>{lean[0]}</b> hitter — {lean[1]}</div>}
+                  </div>
+                </>
+              )}
+
+              <div className="hpFoot">A <b>Wize</b>Picks read — a lean, not a guarantee.</div>
+            </>
           )}
-
-          {!isK && (
-            <div className="dblk"><div className="bl">BATTED-BALL PROFILE</div>
-              {haveBB ? <div className="bbwrap">
-                <div className="bbbar"><i className="pull" style={{width:pull+"%",background:"#33e991"}}/><i className="straight" style={{width:straight+"%",background:"#3a4756"}}/><i className="oppo" style={{width:oppo+"%",background:"#5da9e8"}}/></div>
-                <div className="bbleg"><span><i style={{background:"#33e991"}}/>Pull {pull}%</span><span><i style={{background:"#3a4756"}}/>Straight {straight}%</span><span><i style={{background:"#5da9e8"}}/>Oppo {oppo}%</span></div>
-                {lean && <div className="bbread"><b>{lean[0]}</b> hitter — {lean[1]}</div>}
-              </div> : <div className="estate" style={{padding:14}}><div className="es">Batted-ball profile not available.</div></div>}
-            </div>
-          )}
-
-          <div className="dblk"><div className="bl">PARK &amp; WEATHER</div><div className="ctx">
-            <span className="ch">HR factor <b>{park.factor ?? "—"}</b></span>
-            <span className="ch">Runs <b>{park.run ?? park.runFactor ?? "—"}</b></span>
-            {park.wx && <span className="ch">{park.wx}</span>}
-          </div></div>
-
-          {!isK && (
-          <div className="dblk"><div className="bl">RECENT FORM <span className="bx">last 15 games</span></div>
-            {hist.length>0 && <div className="spark15">{hist.slice(-15).map((g,i)=><i key={i} className={g.homered?"hr":""} style={{height:barH(g)+"%"}}/>)}</div>}
-            <div className="l15cap"><b>{recentHR ?? 0} HR</b> in last 15</div>
-          </div>
-          )}
-
-          <div className="dblk"><div className="why"><span className="wl">WHY THE EDGE</span>{why}</div></div>
-
-          <div style={{textAlign:"center",fontSize:11,color:"#7d8a98",margin:"14px 0 4px"}}>A <b style={{color:"#33e991"}}>Wize</b>Picks read — a lean, not a guarantee.</div>
         </div>
       </div>
     </>
@@ -362,4 +405,70 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .histrow{display:flex;align-items:center;gap:10px}.histrow .hv{font-family:var(--disp);font-weight:800;font-size:22px;color:var(--green)}.histrow .ht{font-family:var(--mono);font-size:11px;color:#cdd7e1}.histrow .ht b{color:#fff}
 .why{font-size:12.5px;color:#c4cfd9;line-height:1.55}.why .wl{font-family:var(--disp);font-weight:800;font-size:11px;letter-spacing:.5px;color:var(--gold);display:block;margin-bottom:4px}
 .estate{margin:40px 14px;border:1px dashed var(--line2);border-radius:14px;padding:36px 18px;text-align:center}.estate .et{font-family:var(--disp);font-weight:800;font-size:18px;color:#cfd7e2}.estate .es{font-size:12px;color:var(--mut);margin-top:6px;font-family:var(--mono)}
+/* ── rich HR card ──────────────────────────────────────────── */
+.hpHead{display:flex;align-items:center;gap:13px}
+.hpAv{width:58px;height:58px;border-radius:50%;flex:0 0 auto;overflow:hidden;display:flex;align-items:flex-end;justify-content:center;font-family:var(--disp);font-weight:800;font-size:20px;color:#fff}
+.hpAv img{width:100%;height:100%;object-fit:cover;border-radius:50%}
+.hpInfo{flex:1;min-width:0}
+.hpName{font-family:var(--disp);font-weight:800;font-size:23px;line-height:1.05;color:#fff}
+.hpMu{font-size:13px;color:#7d8a98;margin:2px 0}
+.hpLn{font-family:var(--mono);font-size:12px;color:#b9c6cf}.hpLn b{color:#fff}
+.hpTo{text-align:right;flex:0 0 auto}
+.hpTo .v{font-family:var(--disp);font-weight:800;font-size:34px;color:#33e991;line-height:1}
+.hpTo .v small{font-size:17px}
+.hpTo .l{font-family:var(--mono);font-size:9px;color:#7d8a98;letter-spacing:.08em;margin-top:2px}
+.hpTvs{display:flex;align-items:center;justify-content:space-between;gap:10px;background:linear-gradient(180deg,#0c0c0e,#020203);border:1px solid #15171b;border-radius:13px;padding:12px 15px;margin-bottom:14px}
+.hpTvs .l{font-size:14px;color:#7d8a98}.hpTvs .l b{color:#fff;font-weight:700}
+.hpBdg{display:flex;gap:8px;flex:0 0 auto}
+.hpHand{font-family:var(--mono);font-size:11px;font-weight:700;color:#5da9e8;border:1px solid rgba(93,169,232,.4);border-radius:8px;padding:6px 10px;white-space:nowrap}
+.hpPlat{font-size:11px;font-weight:700;color:#33e991;border:1px solid rgba(51,233,145,.4);background:rgba(51,233,145,.06);border-radius:8px;padding:6px 10px;white-space:nowrap}
+.hpSl{display:flex;align-items:center;gap:8px;font-family:var(--disp);font-weight:800;font-size:13px;letter-spacing:.06em;color:#7d8a98;margin:4px 2px 11px}
+.hpSl::before{content:"";width:7px;height:7px;border-radius:50%;background:#33e991;flex:0 0 auto}
+.hpHvh{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-bottom:18px}
+.hpHv{position:relative;background:linear-gradient(180deg,#0c0c0e,#020203);border:1px solid #15171b;border-radius:13px;padding:15px 14px}
+.hpHv.on{border-color:rgba(51,233,145,.5);background:rgba(51,233,145,.04)}
+.hpTn{position:absolute;top:-9px;left:50%;transform:translateX(-50%);font-family:var(--mono);font-size:9px;font-weight:700;color:#1a0907;background:#ff5d4d;padding:3px 9px;border-radius:7px;letter-spacing:.05em}
+.hpHl{font-family:var(--disp);font-weight:800;font-size:14px;color:#7d8a98}
+.hpHv.on .hpHl{color:#33e991}
+.hpOps{font-family:var(--disp);font-weight:800;font-size:33px;line-height:1;margin:4px 0 1px;color:#fff}
+.hpOpl{font-family:var(--mono);font-size:9px;color:#7d8a98;letter-spacing:.1em}
+.hpG4r{display:flex;justify-content:space-between;margin-top:13px}
+.hpG4{text-align:center}
+.hpG4 .n{font-family:var(--disp);font-weight:800;font-size:16px;color:#e8eef3}
+.hpG4 .n.hr{color:#f3b94f}
+.hpG4 .k{font-family:var(--mono);font-size:8px;color:#4a5663;margin-top:2px}
+.hpChart{background:linear-gradient(180deg,#0c0c0e,#020203);border:1px solid #15171b;border-radius:13px;padding:15px;margin-bottom:18px}
+.hpChd{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:14px;gap:8px}
+.hpChd .t{font-size:13px;color:#7d8a98}
+.hpChd .r{font-family:var(--disp);font-weight:800;font-size:15px;white-space:nowrap}
+.hpChd .r .m{color:#33e991}.hpChd .r .x{color:#7d8a98}.hpChd .r .k{color:#5da9e8}
+.hpCwrap{display:flex;align-items:flex-end;gap:6px;height:150px;border-bottom:1px solid #1d2a36}
+.hpCol{flex:1;position:relative;height:100%;display:flex;align-items:flex-end}
+.hpBar{width:100%;border-radius:4px 4px 0 0;background:#33e991}
+.hpBar.under{background:rgba(51,233,145,.18)}
+.hpMkt{position:absolute;left:-2px;right:-2px;height:3px;border-radius:2px;background:#5da9e8}
+.hpDots{display:flex;gap:6px;margin-top:9px}
+.hpDot{flex:1;display:flex;justify-content:center}
+.hpDot i{width:11px;height:11px;border-radius:50%}
+.hpDot i.y{background:#33e991}
+.hpDot i.n{border:1.5px solid #4a5663}
+.hpLeg{display:flex;justify-content:center;gap:18px;margin:13px 0 4px;font-size:11px;color:#7d8a98}
+.hpLeg span{display:flex;align-items:center;gap:6px}
+.hpLeg i{width:11px;height:11px;border-radius:3px;background:#33e991}
+.hpLeg i.ln{height:4px;border-radius:2px;background:#5da9e8}
+.hpLeg i.rnd{border-radius:50%;background:#33e991}
+.hpCap{text-align:center;font-size:11px;color:#4a5663;margin-top:4px}
+.hpWms{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-bottom:18px}
+.hpWs{background:linear-gradient(180deg,#0c0c0e,#020203);border:1px solid #15171b;border-radius:13px;padding:14px}
+.hpWs.full{grid-column:1/-1}
+.hpWt{display:flex;justify-content:space-between;align-items:center;gap:6px}
+.hpWt .k{font-size:13px;color:#7d8a98}
+.hpBd{font-family:var(--mono);font-size:9px;font-weight:700;color:#9aa7b2;background:rgba(255,255,255,.06);padding:3px 8px;border-radius:6px;white-space:nowrap}
+.hpBd.g{color:#06140d;background:#33e991}
+.hpBd.gold{color:#1a1407;background:#f3b94f}
+.hpWv{font-family:var(--disp);font-weight:800;font-size:25px;margin-top:7px;color:#fff}
+.hpWsub{font-family:var(--mono);font-size:11px;color:#7d8a98;margin-top:3px}
+.hpPbar{height:6px;border-radius:4px;background:rgba(255,255,255,.06);margin-top:10px;overflow:hidden}
+.hpPbar i{display:block;height:100%;border-radius:4px;background:#33e991}
+.hpFoot{text-align:center;font-size:12px;color:#7d8a98;margin:16px 0 6px}.hpFoot b{color:#33e991}
 `;
