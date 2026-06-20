@@ -160,6 +160,35 @@ function MMbar({ model, mkt }) {
 }
 function Tile({ k, v, cls }) { return <div className="stile"><div className="k">{k}</div><div className={"v "+(cls||"")}>{v ?? "—"}</div></div>; }
 
+function SprayField({ bats, pull, straight, oppo }) {
+  const isR = String(bats||"").toUpperCase() !== "L"; // default to RHB orientation when unknown
+  const R = 118, hx = 110, hy = 142;
+  const pt = (d, r) => [hx + r*Math.sin(d*Math.PI/180), hy - r*Math.cos(d*Math.PI/180)];
+  const f = (n) => n.toFixed(1);
+  const xy = (d, r) => { const [x,y] = pt(d,r); return `${f(x)},${f(y)}`; };
+  const wedge = (a, b) => `M${hx},${hy} L${xy(a,R)} A${R},${R} 0 0 1 ${xy(b,R)} Z`;
+  const mx = Math.max(pull||0, straight||0, oppo||0, 1);
+  const op = (v) => (0.18 + 0.72*((v||0)/mx)).toFixed(2);
+  const left  = isR ? { l:"PULL", v:pull, c:"#33e991" } : { l:"OPPO", v:oppo, c:"#5da9e8" };
+  const right = isR ? { l:"OPPO", v:oppo, c:"#5da9e8" } : { l:"PULL", v:pull, c:"#33e991" };
+  const ctr   = { l:"CTR", v:straight, c:"#8b97a4" };
+  const lp = (d) => pt(d, R*0.60);
+  const [lx,ly] = lp(-30), [cx,cy] = lp(0), [rx,ry] = lp(30);
+  const Txt = (x, y, z) => (<g key={z.l}><text x={f(x)} y={f(y)} fontSize="13" fontWeight="700" fill="#eaf1ee">{z.v!=null?z.v+"%":"—"}</text><text x={f(x)} y={f(y+11)} fontSize="7.5" fill="#9aa6b2">{z.l}</text></g>);
+  return (
+    <svg viewBox="0 0 220 150" xmlns="http://www.w3.org/2000/svg">
+      <path d={wedge(-45,-15)} fill={left.c} opacity={op(left.v)}/>
+      <path d={wedge(-15,15)} fill={ctr.c} opacity={op(ctr.v)}/>
+      <path d={wedge(15,45)} fill={right.c} opacity={op(right.v)}/>
+      <path d={`M${hx},${hy} L${xy(-45,R)} M${hx},${hy} L${xy(45,R)}`} stroke="#2a3744" strokeWidth="1.4" fill="none"/>
+      <path d={`M${xy(-45,R)} A${R},${R} 0 0 1 ${xy(45,R)}`} stroke="#2a3744" strokeWidth="1.4" fill="none"/>
+      <path d={`M${hx},${hy} L${xy(-15,R)} M${hx},${hy} L${xy(15,R)}`} stroke="#1d2a36" strokeWidth="1" fill="none"/>
+      <path d={`M${hx},${hy} L${xy(-45,34)} L${xy(0,46)} L${xy(45,34)} Z`} fill="none" stroke="#2a3744" strokeWidth="1"/>
+      <circle cx={hx} cy={hy} r="2.4" fill="#cfe2f5"/>
+      <g fontFamily="'IBM Plex Mono',monospace" textAnchor="middle">{Txt(lx,ly,left)}{Txt(cx,cy,ctr)}{Txt(rx,ry,right)}</g>
+    </svg>
+  );
+}
 function PlayerSheet({ p, card, loading, onClose }) {
   const c = card || {};
   const isK = p.mk === "K";
@@ -292,6 +321,11 @@ function PlayerSheet({ p, card, loading, onClose }) {
 
               {haveBB && (
                 <>
+                  <div className="hpSl">SPRAY CHART</div>
+                  <div className="hpSpray">
+                    <SprayField bats={bats} pull={pull} straight={straight} oppo={oppo}/>
+                    <div className="hpSprayCap">{bats?`${bats}HB`:"bats —"} · pulls to {String(bats).toUpperCase()==="L"?"right":"left"} field{bb.thin?" · thin sample":""}</div>
+                  </div>
                   <div className="hpSl">BATTED-BALL PROFILE</div>
                   <div className="hpChart">
                     <div className="bbbar"><i className="pull" style={{width:pull+"%",background:"#33e991"}}/><i className="straight" style={{width:straight+"%",background:"#3a4756"}}/><i className="oppo" style={{width:oppo+"%",background:"#5da9e8"}}/></div>
@@ -402,6 +436,8 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .orow .ol{font-family:var(--disp);font-weight:800;font-size:13px;color:#dbe4e2;flex:1}.orow .ov{font-family:var(--mono);font-size:11px;color:#cdd7e1}.orow .ov b{color:#fff}
 .ctx{display:flex;flex-wrap:wrap;gap:7px}.ctx .ch{font-family:var(--mono);font-size:10px;color:#aeb9c8;background:#0e1620;border:1px solid var(--line2);border-radius:7px;padding:5px 9px}.ctx .ch b{color:#fff}
 .bbgrid{display:flex;gap:8px}.bbgrid .bb{flex:1;text-align:center;border:1px solid var(--line);border-radius:9px;padding:8px 4px}.bbgrid .bb .k{font-family:var(--mono);font-size:8px;color:var(--mut2);font-weight:600}.bbgrid .bb .v{font-family:var(--disp);font-weight:800;font-size:16px;color:#cfe2f5;margin-top:2px}
+.hpSpray{display:flex;flex-direction:column;align-items:center;gap:5px;margin:2px 0 6px}.hpSpray svg{width:100%;max-width:228px;display:block}
+.hpSprayCap{font-family:var(--mono);font-size:9px;color:var(--mut2);letter-spacing:.3px}
 .histrow{display:flex;align-items:center;gap:10px}.histrow .hv{font-family:var(--disp);font-weight:800;font-size:22px;color:var(--green)}.histrow .ht{font-family:var(--mono);font-size:11px;color:#cdd7e1}.histrow .ht b{color:#fff}
 .why{font-size:12.5px;color:#c4cfd9;line-height:1.55}.why .wl{font-family:var(--disp);font-weight:800;font-size:11px;letter-spacing:.5px;color:var(--gold);display:block;margin-bottom:4px}
 .estate{margin:40px 14px;border:1px dashed var(--line2);border-radius:14px;padding:36px 18px;text-align:center}.estate .et{font-family:var(--disp);font-weight:800;font-size:18px;color:#cfd7e2}.estate .es{font-size:12px;color:var(--mut);margin-top:6px;font-family:var(--mono)}
