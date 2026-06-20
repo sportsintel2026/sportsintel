@@ -252,6 +252,62 @@ async function getLinescore(gamePk) {
   try { return await mlbGet(`/game/${gamePk}/linescore`); } catch (e) { return null; }
 }
 
+// Read-only: home-plate umpire + game-level K / BB / R / NRFI for a FINISHED game.
+// Everything here comes from feeds we already fetch (boxscore + linescore) — no new
+// endpoint families, no added cost. Officials live on the boxscore; if that copy is
+// empty (StatsAPI sometimes only fills the live feed), fall back to /feed/live.
+async function getGameUmpireAndTotals(gamePk) {
+  let box = null;
+  try { box = await mlbGet(`/game/${gamePk}/boxscore`); } catch (_) { box = null; }
+  if (!box) return null;
+
+  const num = (x) => (Number.isFinite(+x) ? +x : 0);
+  const findHP = (arr) => (arr || []).find((o) =>
+    /home\s*plate/i.test((o && o.officialType) || (o && o.official && o.official.officialType) || "")
+  );
+
+  let officials = Array.isArray(box.officials) ? box.officials : [];
+  let hp = findHP(officials);
+  let source = "boxscore";
+  if (!hp) {
+    try {
+      const res = await fetch(`https://statsapi.mlb.com/api/v1.1/game/${gamePk}/feed/live`);
+      if (res.ok) {
+        const feed = await res.json();
+        const liveOff = feed && feed.liveData && feed.liveData.boxscore && feed.liveData.boxscore.officials;
+        if (Array.isArray(liveOff) && liveOff.length) { officials = liveOff; hp = findHP(liveOff); source = "feed/live"; }
+      }
+    } catch (_) {}
+  }
+  const umpire = hp && hp.official ? (hp.official.fullName || null) : null;
+
+  const bat = (side) =>
+    (box.teams && box.teams[side] && box.teams[side].teamStats && box.teams[side].teamStats.batting) || {};
+  const hB = bat("home"), aB = bat("away");
+  const totalK = num(hB.strikeOuts) + num(aB.strikeOuts);
+  const totalBB = num(hB.baseOnBalls) + num(aB.baseOnBalls);
+  const totalRuns = num(hB.runs) + num(aB.runs);
+
+  let firstInningRuns = null, nrfi = null;
+  try {
+    const ls = await getLinescore(gamePk);
+    const inn = ls && Array.isArray(ls.innings) ? ls.innings[0] : null;
+    if (inn) {
+      firstInningRuns = num(inn.home && inn.home.runs) + num(inn.away && inn.away.runs);
+      nrfi = firstInningRuns === 0;
+    }
+  } catch (_) {}
+
+  return {
+    gamePk: String(gamePk),
+    umpire,
+    umpireSource: umpire ? source : null,
+    officialsCount: officials.length,
+    totalK, totalBB, totalRuns,
+    firstInningRuns, nrfi,
+  };
+}
+
 // ── Batter vs Pitcher career history ─────────────────────────────────────────
 async function getBatterVsPitcherHistory(batterId, pitcherId) {
   if (!batterId || !pitcherId) return null;
@@ -958,6 +1014,7 @@ module.exports = {
   getTeamLineup, getLineupOffense,
   getLiveGameState,
   getGameStatusAndScore,
+  getGameUmpireAndTotals,
   getTeamHandednessSplits, getTeamBullpenStats, getTeamBullpenUsage, getPitcherHand,
   getBatterHandednessSplits, getBatterHand,
   getGameBatterTotalBases,
