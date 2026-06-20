@@ -17,12 +17,13 @@ const {
 } = require("../services/mlbStatsApi");
 const { backfillUmpireGames } = require("../services/umpireStore");
 
-// Admin gate via ?key= matched to ADMIN_TOKEN. Browser-friendly (no custom header
-// needed). The backfill only writes public box-score-derived rows, but we still
-// don't want it open to spam (it costs MLB API calls).
+// Light gate so the backfill isn't wide open to spam. This only writes public
+// box-score-derived rows (no secrets exposed), so a simple fixed key is fine —
+// no Railway env lookup, no special characters. Trimmed + case-insensitive so a
+// stray space or capital can't trip it.
+const BACKFILL_KEY = "wizeump";
 function adminOk(req) {
-  const want = process.env.ADMIN_TOKEN;
-  return !!want && String(req.query.key || "") === String(want);
+  return String(req.query.key || "").trim().toLowerCase() === BACKFILL_KEY;
 }
 
 // GET /api/umpires/probe                  -> yesterday's finished games (ET)
