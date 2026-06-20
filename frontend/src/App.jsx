@@ -82,7 +82,7 @@ export default function App() {
           } />
           <Route path="/dashboard" element={
             <PrivateRoute>
-              <DashboardPage />
+              <HomePage />
             </PrivateRoute>
           } />
           <Route path="/home" element={
@@ -92,7 +92,7 @@ export default function App() {
           } />
           <Route path="/games" element={
             <PrivateRoute>
-              <LiveScoresPage league="mlb" />
+              <GamesPage />
             </PrivateRoute>
           } />
           <Route path="/nba-games" element={
