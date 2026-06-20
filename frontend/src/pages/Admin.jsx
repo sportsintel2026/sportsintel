@@ -237,7 +237,7 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .hrow{display:flex;align-items:center;gap:9px;padding:12px 0}
 .logo{font-family:var(--disp);font-weight:800;font-size:21px;letter-spacing:.4px;color:#fff}.logo .w{color:var(--gold)}
 .htitle{font-family:var(--disp);font-weight:800;font-size:13px;letter-spacing:1px;color:var(--gold);margin-left:auto;border:1px solid rgba(243,185,79,.35);background:rgba(243,185,79,.08);border-radius:999px;padding:4px 11px}
-.blk{margin:13px 14px 0;border:1px solid var(--line);border-radius:14px;background:linear-gradient(180deg,#0c1218,#080c11);padding:14px}
+.blk{margin:13px 14px 0;border:1px solid var(--line);border-radius:14px;background:linear-gradient(180deg,#0c0c0e,#020203);padding:14px}
 .bl{font-family:var(--disp);font-weight:800;font-size:12px;letter-spacing:.7px;color:var(--mut);margin-bottom:12px;display:flex;align-items:center;justify-content:space-between}
 .bl .bx{font-family:var(--mono);font-size:9px;color:var(--mut2);letter-spacing:0;font-weight:500}
 .prof{display:flex;align-items:center;gap:13px}
