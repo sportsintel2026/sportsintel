@@ -210,6 +210,8 @@ function PlayerSheet({ p, card, loading, onClose }) {
   const recent = meas.recent15 || {};
   const recentHR = recent.hr ?? null;
   const park = c.factors?.park || {};
+  const wx = c.factors?.weather || {};
+  const pctFac = (v) => v==null ? "—" : (v>1?"+":"")+Math.round((v-1)*100)+"%";
   const oppP = c.matchup?.opposingPitcher || c.matchup?.pitcher || null;
   const pHandRaw = c.matchup?.pitcherHand || null;
   const pHand = pHandRaw==="L" ? "LHP" : pHandRaw==="R" ? "RHP" : null;
@@ -264,10 +266,14 @@ function PlayerSheet({ p, card, loading, onClose }) {
                   <Tile k="SWING%" v={pit.swingPct!=null?(pit.swingPct*100).toFixed(1)+"%":null}/>
                 </div>
               </div>
-              <div className="dblk"><div className="bl">PARK &amp; WEATHER</div><div className="ctx">
-                <span className="ch">HR factor <b>{park.factor ?? "—"}</b></span>
-                <span className="ch">Runs <b>{park.run ?? park.runFactor ?? "—"}</b></span>
-                {park.wx && <span className="ch">{park.wx}</span>}
+              <div className="dblk"><div className="bl">PARK &amp; WEATHER{!wx.indoor && wx.forecastAtGameTime ? <span className="bx">at first pitch</span> : null}</div><div className="ctx">
+                <span className="ch">HR <b>{pctFac(park.factor)}</b></span>
+                {park.runFactor!=null && <span className="ch">Runs <b>{pctFac(park.runFactor)}</b></span>}
+                {wx.indoor ? <span className="ch">Dome · roof closed</span> : <>
+                  {wx.tempF!=null && <span className="ch">{wx.tempF}°F{wx.tempEffect&&wx.tempEffect!=="neutral"?` · ${wx.tempEffect}`:""}</span>}
+                  {wx.windLabel && <span className={"ch "+(wx.windEffect==="out"?"wout":wx.windEffect==="in"?"win":"")}>{wx.windLabel}</span>}
+                  {(wx.conditions||wx.isRaining) && <span className="ch">{wx.conditions||""}{wx.isRaining?" · rain":""}</span>}
+                </>}
               </div></div>
               <div className="dblk"><div className="why"><span className="wl">WHY THE EDGE</span>{why}</div></div>
             </>
@@ -438,6 +444,7 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .orow{display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid rgba(255,255,255,.05)}.orow:first-of-type{border-top:none}
 .orow .ol{font-family:var(--disp);font-weight:800;font-size:13px;color:#dbe4e2;flex:1}.orow .ov{font-family:var(--mono);font-size:11px;color:#cdd7e1}.orow .ov b{color:#fff}
 .ctx{display:flex;flex-wrap:wrap;gap:7px}.ctx .ch{font-family:var(--mono);font-size:10px;color:#aeb9c8;background:#0e1620;border:1px solid var(--line2);border-radius:7px;padding:5px 9px}.ctx .ch b{color:#fff}
+.ctx .ch.wout{color:#7ee0a8;border-color:rgba(126,224,168,.32)}.ctx .ch.win{color:#ff8f80;border-color:rgba(255,143,128,.32)}
 .bbgrid{display:flex;gap:8px}.bbgrid .bb{flex:1;text-align:center;border:1px solid var(--line);border-radius:9px;padding:8px 4px}.bbgrid .bb .k{font-family:var(--mono);font-size:8px;color:var(--mut2);font-weight:600}.bbgrid .bb .v{font-family:var(--disp);font-weight:800;font-size:16px;color:#cfe2f5;margin-top:2px}
 .hpSpray{display:flex;flex-direction:column;align-items:center;gap:5px;margin:2px 0 6px}.hpSpray svg{width:100%;max-width:228px;display:block}
 .hpSprayCap{font-family:var(--mono);font-size:9px;color:var(--mut2);letter-spacing:.3px}
