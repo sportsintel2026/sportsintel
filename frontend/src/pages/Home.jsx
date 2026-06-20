@@ -91,7 +91,9 @@ export default function HomePage(){
   const sp=SPORTS[sport]||SPORTS.mlb;
   const [isDesktop,setIsDesktop]=useState(typeof window!=="undefined"&&window.innerWidth>=1024);
   const [heroIdx,setHeroIdx]=useState(0);
+  const [openId,setOpenId]=useState(null);
   useEffect(()=>{ const on=()=>setIsDesktop(window.innerWidth>=1024); window.addEventListener("resize",on); return ()=>window.removeEventListener("resize",on); },[]);
+  useEffect(()=>{ setBoard("all"); },[]);
 
   useEffect(()=>{ subscriptionApi.getMyPlan().then(setPlan).catch(()=>{}).finally(()=>setPlanLoaded(true)); },[]);
   useEffect(()=>{(async()=>{ try{
@@ -167,551 +169,490 @@ export default function HomePage(){
   const lineSeries={};
   [...(e.moneylineEdges||[]),...(e.totalsEdges||[]),...(e.spreadEdges||[])].forEach(x=>{ const s=seriesFor(x); if(s&&s.length>1) lineSeries[x.gameId+x.side]=s.map(p=>p.o).filter(o=>o!=null); });
 
+  // ---- Redesign derived data (presentation only; reads existing engine vars) ----
+  const mrByGame={}; (marketRead||[]).forEach(g=>{ if(g&&g.gameId!=null) mrByGame[g.gameId]=g; });
+  const gameById={}; games.forEach(g=>{ if(g&&g.id!=null) gameById[g.id]=g; });
+  const kpiList=boardEdges||[];
+  const kpiCount=kpiList.length;
+  const kpiAvg=kpiCount?kpiList.reduce((s,x)=>s+(x.edge||0),0)/kpiCount:0;
+  const kpiBest=kpiCount?Math.max(...kpiList.map(x=>x.edge||0)):0;
+  const kpiLive=(liveGames||[]).length;
+  // Market Pulse — interpretive "updated 2m ago", built from movers + marketRead
+  const pulseAlerts=(()=>{ const out=[]; const byAbs=[...(movers||[])].sort((a,b)=>Math.abs(b._delta||0)-Math.abs(a._delta||0));
+    const sharp=byAbs.find(m=>(m._delta||0)<=-MOVE_GUARD_CENTS);
+    if(sharp) out.push({dot:"#33e991",label:"SHARP MONEY",head:`${edgeLabel(sharp)}  ${formatOdds(sharp._open)} ${String.fromCharCode(8594)} ${formatOdds(sharp._now)}`,sub:"Money coming in on this side since open — market confirming the lean."});
+    const totMove=byAbs.find(m=>isTotal(m)&&m._delta!=null);
+    if(totMove){ const mg=abbrById[totMove.gameId]; out.push({dot:"#5da9e8",label:"BIGGEST TOTAL MOVE",head:`${edgeLabel(totMove)}  ${formatOdds(totMove._open)} ${String.fromCharCode(8594)} ${formatOdds(totMove._now)}`,sub:`${mg?mg.a+" @ "+mg.h+" · ":""}${Math.abs(totMove._delta)}¢ shift since the open.`}); }
+    if((boardEdges||[]).length){ const be=boardEdges[0]; out.push({dot:"#f3b94f",label:"LARGEST EDGE",head:`${edgeLabel(be)} · ${fmtEdgeFor(be,sport)} edge`,sub:`${be.matchup||""}${be.modelProb!=null?" · model "+Math.round(be.modelProb*100)+"%":""}`}); }
+    const split=(marketRead||[]).find(g=>g.win&&g.win.tier==="Split");
+    if(split) out.push({dot:"#ff5d4d",label:"CONSENSUS SPLIT",head:`Books can't agree on the ${split.win.favTeam}`,sub:`${split.awayAbbr} @ ${split.homeAbbr} · only ${split.win.favProb}% consensus to win.`});
+    return out; })();
+  // Live scores tape — real game state always; scores only if the feed carries them
+  const scoreOf=(g,side)=>{ const c=side==="a"?[g.awayScore,g.awayRuns,g.away_runs,g.aScore,g.runsAway]:[g.homeScore,g.homeRuns,g.home_runs,g.hScore,g.runsHome]; const v=c.find(x=>x!=null); return v!=null?v:null; };
+  const tapeLive=(live||[]).map(g=>({ id:g.gameId, a:g.awayAbbr||shortTeam(g.away||""), h:g.homeAbbr||shortTeam(g.home||""), as:scoreOf(g,"a"), hs:scoreOf(g,"h"), state:`${g.half==="bottom"?"Bot":"Top"} ${g.inning||""}`.trim(), live:true }));
+  const tapeFinal=games.filter(g=>g.status==="final").slice(0,8).map(g=>({ id:g.id, a:g.awayAbbr||shortTeam(g.away||""), h:g.homeAbbr||shortTeam(g.home||""), as:scoreOf(g,"a"), hs:scoreOf(g,"h"), state:"Final", live:false }));
+  const scoreTape=[...tapeLive,...tapeFinal];
+
   if(isDesktop) return <HomeDesktop edges={edges} games={games} movers={movers} live={live||[]} abbrById={abbrById} topProps={topProps} propList={propList} propsByType={propsByType} hero={hero} hasFull={hasFull} planLoaded={planLoaded} lineSeries={lineSeries} moveByPick={moveByPick} wpRecord={wpRecord} navigate={navigate} plan={plan} sport={sport} setSport={(k)=>{setSport(k);setBoard("ml");}} marketsLive={marketsLive} anyLive={anyLive} marketRead={marketRead} />;
 
+  // ============ ADAPTERS: real data -> v11 mock shapes ============
+  const edgeNum=(x)=> sport==="mlb" ? (x.edge??0)*100 : (x.edge??0);
+  const convOf=(x)=>{const c=String(x._convAdj||x.conviction||"").toLowerCase();return c.indexOf("high")===0?"high":c.indexOf("med")===0?"med":"low";};
+  const mkOf=(x)=> isTotal(x)?"TOT":(x.line!=null?(sport==="mlb"?"RL":"SPR"):"ML");
+  const catOf=(x)=> isTotal(x)?"tot":(x.line!=null?"spr":"ml");
+  const mvOf=(x)=>{const s=seriesFor(x);if(s&&s.length>1){const o=s[0].o,n=s[s.length-1].o;const dd=amCents(n)-amCents(o);const dir=dd>0?"up":dd<0?"dn":"";if(dir)return [formatOdds(o),formatOdds(n),dir];}return null;};
+  const pairOf=(x)=>{const ab=abbrById[x.gameId];const t=teams(x.matchup);const a=ab?ab.a:shortTeam(t[0]||"");const h=ab?ab.h:shortTeam(t[1]||"");return [[a,colFor(a,sport)],[h,colFor(h,sport)]];};
+  const toBoard=(x,i)=>{const [a,h]=pairOf(x);const gm=gameById[x.gameId];const mr=mrByGame[x.gameId];
+    const model=x.modelProb!=null?+(x.modelProb*100).toFixed(1):null;
+    const mkt=+(((impliedFromAmerican(x.odds)||0)*100)).toFixed(1);
+    const flags=[];
+    if(mr&&mr.win&&mr.win.model)flags.push(mr.win.model.agrees?["ok","\u2713 model agrees"]:["warn","model differs"]);
+    if(x._moveFlag==="toward")flags.push(["ok","\u2198 money coming in"]);
+    if(x._moveFlag==="against")flags.push(["warn","market moving against"]);
+    if(x.inflation&&x.inflation.inflated)flags.push(["warn","market inflated"]);
+    let read=null;
+    if(mr&&mr.win){const w=mr.win;read={win:[w.tier,w.favTeam,formatOdds(w.consensus),w.model?w.model.agrees:false]};
+      if(mr.cover&&mr.cover.favTeam)read.cover=[mr.cover.tier,mr.cover.favTeam,formatOdds(mr.cover.odds),!!mr.cover.agrees];
+      if(mr.total&&(mr.total.lean||mr.total.side||mr.total.favTeam))read.total=[mr.total.tier,String(mr.total.lean||mr.total.side||mr.total.favTeam).toUpperCase()+(mr.total.line!=null?" "+mr.total.line:""),formatOdds(mr.total.odds),!!mr.total.agrees];}
+    const park=[];if(gm&&gm.parkRunFactor!=null)park.push((gm.parkRunFactor>1?"+":"")+Math.round((gm.parkRunFactor-1)*100)+"%");
+    const wx=gm&&gm.weather&&gm.weather.tempF!=null?(Math.round(gm.weather.tempF)+"\u00b0F"+(gm.weather.windMph?" \u00b7 "+gm.weather.windMph+" mph":"")):null;
+    return {p:edgeLabel(x),mk:mkOf(x),cat:catOf(x),conv:convOf(x),edge:edgeNum(x),odds:formatOdds(x.odds),mv:mvOf(x),delta:x._delta,clv:null,a,h,g:x.matchup,starts:gm&&gm.time?fmtTime(gm.time):null,model,mkt,flags:flags.length?flags:null,read,why:x.reason,park:park.length?park:null,wx,gameId:x.gameId,seed:i};
+  };
+  const allAdj=[...mlAdj,...totAdj,...spAdj];
+  const sortBoard=(a,b)=>((tierRank(b._convAdj)-tierRank(a._convAdj))||((b.convictionScore||0)-(a.convictionScore||0))||((b.edge||0)-(a.edge||0)));
+  const boardSrc = board==="all" ? oneSidePerGame(allAdj).filter(x=>sport==="mlb"?(x.edge??0)>0:(x.edge??0)>=1).sort(sortBoard) : boardEdges;
+  const boardItems = boardSrc.map(toBoard);
+  const heroItems = oneSidePerGame(allAdj).filter(x=>(x.edge??0)>0).sort((a,b)=>(b.edge||0)-(a.edge||0)).slice(0,3).map(toBoard);
+  const moverItems = movers.map((m)=>{return {p:edgeLabel(m),g:m.matchup,mv:(m._open!=null&&m._now!=null&&m._delta!=null)?[formatOdds(m._open),formatOdds(m._now),(m._delta>0?"up":m._delta<0?"dn":"")]:null,odds:formatOdds(m.odds),model:m.modelProb!=null?Math.round(m.modelProb*100):null,delta:m._delta};});
+  const propItems = topProps.map(p=>{const col=teamCol(shortTeam(p.team||p.game||""));const initials=((p.name||"").split(" ").map(s=>s[0]).join("").slice(0,2))||(p.name||"").slice(0,2);return {player:[p.name,initials,col],g:p.game||p.team||"",edge:(p.edge||0)*100,mk:p.market,p:p.betSide,odds:formatOdds(p.odds),id:p.id};});
+  const parkItems = parks.map(g=>{const f=g.parkRunFactor,hf=g.parkHRFactor,w=g.weather||{};const hot=(hf??f)>1.05,cold=(hf??f)<0.95;const tag=hot?["HITTER FRIENDLY","h"]:cold?["PITCHER FRIENDLY","p"]:["NEUTRAL","n"];const ab=mlbAbbr(g.home||"");const t=w.tempF!=null?Math.round(w.tempF):null;const wind=w.windMph?(w.windMph+" mph"+(w.windEffect?" "+w.windEffect:"")):null;const wx=w.indoor?"Dome \u00b7 roof closed":([t!=null?t+"\u00b0F":null,wind].filter(Boolean).join(" \u00b7 ")||"Forecast pending");return {venue:g.venue||g.park||((g.home||"")+" Park"),g:g.home||"",a:[ab,teamCol(ab)],tag,hr:(hf!=null?((hf>1?"+":"")+Math.round((hf-1)*100)+"%"):"0%"),run:((f>1?"+":"")+Math.round((f-1)*100)+"%"),wx};});
+  const liveItems = liveGames.map(g=>{const a=g.awayAbbr||(abbrById[g.gameId]?abbrById[g.gameId].a:shortTeam(g.away||""));const h=g.homeAbbr||(abbrById[g.gameId]?abbrById[g.gameId].h:shortTeam(g.home||""));const rows=[];const ml=(g.awayEdge??-9)>=(g.homeEdge??-9)?[a+" ML",g.awayWinProb,g.awayEdge,g.awayOdds]:[h+" ML",g.homeWinProb,g.homeEdge,g.homeOdds];if(ml[2]!=null)rows.push([ml[0],(ml[1]!=null?Math.round(ml[1]*100)+"%":"\u2014"),formatOdds(ml[3]),ml[2]*100]);if(g.totalLine!=null){const tt=(g.overEdge??-9)>=(g.underEdge??-9)?["Over "+g.totalLine,g.overProb,g.overEdge,g.overOdds]:["Under "+g.totalLine,g.underProb,g.underEdge,g.underOdds];if(tt[2]!=null)rows.push([tt[0],(tt[1]!=null?Math.round(tt[1]*100)+"%":"\u2014"),formatOdds(tt[3]),tt[2]*100]);}return {a,h,ac:colFor(a,sport),hc:colFor(h,sport),state:(g.half==="bottom"?"Bot":"Top")+" "+(g.inning||"")+(g.outs!=null?" \u00b7 "+g.outs+" out":""),rows,gameId:g.gameId};});
+  const kpiHas=boardItems.length>0;
+  const kAvg=kpiHas?(boardItems.reduce((a,x)=>a+x.edge,0)/boardItems.length).toFixed(1):null;
+  const kBest=kpiHas?Math.max(...boardItems.map(x=>x.edge)).toFixed(1):null;
+  const BF=[["All","all"],["ML","ml"],["Spread","spread"],["Totals","totals"]];
+
   return (
-    <div style={S.shell}><style>{CSS}</style>
-    <div className="wpsb"><Sidebar user={user} plan={plan} signOut={signOut} navigate={navigate} /></div>
-    <div className="wp">
-      {/* HEADER */}
-      <div className="top">
-        <div className="logo"><span className="a">Wize</span><span className="b">Picks</span></div>
-        <span className={"pill"+(marketsLive?"":" off")}><span className={"dot"+(marketsLive?"":" grey")}/> {anyLive?"LIVE":marketsLive?"OPEN":"CLOSED"}</span>
-        <div className="mk"><span className={"dot"+(marketsLive?"":" grey")}/><span className="l">MARKETS {marketsLive?"LIVE":"CLOSED"}</span>
-          <svg className="sp" viewBox="0 0 46 14" id="hs"><polyline fill="none" stroke="#33e991" strokeWidth="1.5" points="0,10 6,8 12,9 18,5 24,7 30,3 36,5 46,2"/></svg></div>
-        <div className="bell" onClick={()=>navigate("/settings")}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></div>
-      </div>
-      <div className="tabs">
-        {/* MLB + NBA have native edge boards → switch the board in-place. The others
-            don't have a board yet, so they route to that sport's live Games page
-            (Phase 3 gives each its own board). */}
-        {[["MLB","mlb"],["NBA","nba"],["NHL","nhl"],["NFL","nfl"],["CFB","cfb"]].map(([lb,key])=>(
-          <div key={lb} className={"tab"+(sport===key?" on":"")} onClick={()=>{ if(key==="mlb"||key==="nba"){ if(key!==sport){ setSport(key); setBoard("ml"); } } else { navigate(`/${key}-games`); } }}>{lb}</div>))}
+    <div className="app"><style>{CSS}</style>
+      <div className="hd">
+        <div className="hrow">
+          <div className="brand"><b>Wize</b><i>Picks</i></div>
+          <span className="pill"><span className="d"/>{anyLive?"LIVE":marketsLive?"OPEN":"CLOSED"}</span>
+          <div className="sp"/>
+          <div className="ibtn" onClick={()=>navigate("/settings")}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></div>
+        </div>
+        <div className="sports">
+          {[["MLB","mlb",true],["NBA","nba",true],["NHL","nhl",false],["NFL","nfl",false],["CFB","cfb",false]].map(([lb,key,ins])=>(
+            <b key={key} className={(ins?"l2 ":"")+(sport===key?"on":"")} onClick={()=>{ if(key==="mlb"||key==="nba"){ if(key!==sport){setSport(key);setBoard("all");} } else navigate(`/${key}-games`); }}><span className="o"/>{lb}</b>
+          ))}
+        </div>
       </div>
 
-      {/* HERO */}
-      {!hasFull
-        ? <div style={{margin:"11px 12px 0"}}><Gate kind="hero" title="Today's top edge is locked" sub={<>Unlock every edge with <b>All-Access · $7/mo</b></>} navigate={navigate}/></div>
-        : (topHeroes.length>0
-            ? <>
-                <div className="herocar" onScroll={(ev)=>{const w=ev.currentTarget.clientWidth||1; setHeroIdx(Math.round(ev.currentTarget.scrollLeft/w));}}>
-                  {topHeroes.map((h,i)=>(
-                    <div className="heroslide" key={(h.gameId||"")+(h.side||"")+i}>
-                      <Hero hero={h} navigate={navigate} live={anyLive} series={seriesFor(h)} sport={sport} rolled={e.rolledToNextDay}/>
-                    </div>
-                  ))}
-                </div>
-                {topHeroes.length>1&&<div className="herodots">{topHeroes.map((_,i)=><span key={i} className={"hd"+(i===heroIdx?" on":"")}/>)}</div>}
-              </>
-            : <div className="hero empty">No qualifying edge on the board yet — check back closer to game time.</div>)}
-      <div className="cols">
+      {scoreTape.length>0 && (
+        <div className="scoretape"><span className="lvpill"><span className="d"/>{scoreTape.some(t=>t.live)?"LIVE":"SCORES"}</span>
+          <div className="stwrap"><div className="sttrack">{[...scoreTape,...scoreTape].map((s,i)=>(
+            <span key={i}><span className="g">{s.a}</span> {s.as!=null?<span className="sc">{s.as}</span>:null} <span className="g">{s.h}</span> {s.hs!=null?<span className="sc">{s.hs}</span>:null} <span className="st">{s.state}</span></span>
+          ))}</div></div>
+        </div>
+      )}
 
-      {/* LIVE EDGES — in-game model edges, pulled from /api/live/mlb (moved off the game page) */}
-      {liveGames.length>0&&(<section className="panel">
-        <div className="sh"><div className="l"><span className="rdot"/>{hasFull?"LIVE EDGES":"LIVE GAMES"} <span className="s">{hasFull?"in-game · updates 60s":"scores · in-game edges locked"}</span></div></div>
-        <Carousel>{liveGames.map(g=><LiveGameCard key={g.gameId} g={g} info={abbrById[g.gameId]} navigate={navigate} locked={!hasFull}/>)}</Carousel>
-      </section>)}
+      {hasFull && pulseAlerts.length>0 && <MarketPulse alerts={pulseAlerts}/>}
 
-      {/* EDGE BOARD — unified reasoned edges with a market toggle */}
-      <section className="panel">
-        <div className="sh"><div className="l">{slateUpper} EDGE BOARD <span className="s">ranked by conviction</span></div>
-          <div className="seg">{sp.markets.map(([key,lb])=><b key={key} className={board===key?"on":""} onClick={()=>setBoard(key)}>{lb}</b>)}</div></div>
-        <div className="note" style={{marginTop:0,marginBottom:9}}>{slateLower} top team plays for every game, ranked by conviction.{sp.hasProps?<> Player props live in the <span onClick={(ev)=>{ev.stopPropagation();navigate("/props");}} style={{color:"#ff7a6c",fontWeight:700,cursor:"pointer"}}>Props tab →</span></>:""}</div>
-        {!hasFull
-          ?<Gate kind="edges" title="Edges are an All-Access feature" sub={<>Every edge, prop &amp; live play. <b>$7/mo</b> · cancel anytime.</>} navigate={navigate}/>
-          :boardEdges.length===0
-          ?<div className="muted" style={{padding:"12px 2px"}}>No {board==="ml"?"moneyline":board==="spread"?"spread":"totals"} edges on the board yet.</div>
-          :<div className="elist">{boardEdges.map((x,i)=><EdgeRow key={x.gameId+x.side+i} e={x} navigate={navigate} sport={sport}/>)}</div>}
-      </section>
+      <div id="content">
+        {hasFull
+          ? (heroItems.length>0
+              ? <Swiper cls="herocar" dotcls="hdots">{heroItems.map((h,i)=><HeroSlide key={i} h={h} i={i} navigate={navigate} sport={sport}/>)}</Swiper>
+              : <div className="herocar"><div className="hslide"><div className="hero" style={{textAlign:"center"}}><div className="eb">BEST EDGE RIGHT NOW</div><div className="heh">Edges post soon</div><div className="hes">Top edges appear ~2 hrs before first pitch.</div></div></div></div>)
+          : <Gate title="Today's top edge is locked" navigate={navigate}/>}
 
-      {/* MARKET MOVERS */}
-      <section className="panel">
-        <div className="sh"><div className="l">MARKET MOVERS <span className="s">biggest moves today</span></div><span className="s2">swipe →</span></div>
-        {!hasFull
-          ?<Gate kind="movers" title="Line moves are locked" sub={<>See where the market's moving with <b>All-Access</b></>} navigate={navigate}/>
-          :<Carousel>
-          {movers.map(x=>{ const k=x.gameId+x.side; const d=x._delta; const mg=abbrById[x.gameId]; const matchup=mg?`${mg.a} @ ${mg.h}`:"";
-            return (<div key={k} className={"mv"+(flash[k]?" fl-"+flash[k]:"")}><div className="mvk">{edgeLabel(x)}</div>
-              {matchup&&<div style={{fontSize:11,color:"#6b7280",fontWeight:600,marginTop:1,marginBottom:3}}>{matchup}</div>}
-              {d!=null
-                ?<><div className={"mvv "+(d>0?"up":d<0?"dn":"")}>{formatOdds(x._open)} <span className="ar">{String.fromCharCode(8594)}</span> {formatOdds(x._now)} <span className="amt">{d>0?String.fromCharCode(9650):d<0?String.fromCharCode(9660):"•"}{Math.abs(d)}</span></div><div className={"mvc "+(d>0?"up":d<0?"dn":"")}>{d>0?"+":d<0?String.fromCharCode(8722):""}{Math.abs(d)} cents</div></>
-                :<><div className="mvv">{formatOdds(x.odds)}</div><div className="mvm">{Math.round((x.modelProb||0)*100)}% model</div></>}
-            </div>);})}
-        </Carousel>}
-        <div className="note">{hasMoves?"Open to now, today’s line moves. Updates every 15 min.":"Live prices now. Moves fill in as ticks accumulate today."}</div>
-      </section>
+        <div className="wpbar" onClick={()=>navigate("/expert-picks")}>
+          <div className="ic">W</div>
+          <div className="tx"><div className="h">WIZEPLAYS <span className="new">CURATED</span></div><div className="s">{hasFull?"Hand-picked after extra review":"See every pick"}</div></div>
+          {wpRecord&&(wpRecord.wins+wpRecord.losses+wpRecord.pushes)>0
+            ? <div className="rec"><div className="r">{wpRecord.wins}-{wpRecord.losses}{wpRecord.pushes?"-"+wpRecord.pushes:""}</div><div className="u">{wpRecord.units>=0?"+":""}{wpRecord.units.toFixed(1)}u</div></div>
+            : <div className="rec"><div className="r" style={{fontSize:13,color:"#f3b94f"}}>View {"\u203a"}</div></div>}
+        </div>
 
-      {/* MARKET READ — what the books are collectively saying (MLB) */}
-      {sport==="mlb"&&(<section className="panel">
-        <div className="sh"><div className="l">MARKET READ <span className="s">who the books lean</span></div><span className="s2" onClick={()=>navigate("/market-read")} style={{cursor:"pointer"}}>see all →</span></div>
-        {!hasFull
-          ?<Gate kind="movers" title="Market Read is locked" sub={<>See what every book is saying with <b>All-Access</b></>} navigate={navigate}/>
-          :(()=>{ const mr=(marketRead||[]).filter(g=>g.win); if(mr.length===0) return <div className="note">Reading the market — fills in as books come online today.</div>;
-            const TD={Strong:"#1D9E75",Soft:"#f3b94f",Split:"#ff5247"};
-            return <Carousel>
-            {mr.map(g=>{ const w=g.win; const verb=w.tier==="Split"?"split on":w.favProb>=70?"heavily on":w.tier==="Strong"?"confident in":"leaning";
-              return (<div key={g.gameId} className="mvr" onClick={()=>navigate("/market-read")}>
-                <div className="mvrtop"><span className="mvrm">{g.awayAbbr} @ {g.homeAbbr}</span><span className="mvrt"><i style={{background:TD[w.tier]||"#f3b94f"}}/>{w.tier}</span></div>
-                <div className="mvrh">{w.tier==="Split"?<>Books can’t agree on the <b>{w.favTeam}</b></>:<>Market {verb} the <b>{w.favTeam}</b></>}</div>
-                <div className="mvrp">{w.favProb}% to win · consensus {formatOdds(w.consensus)}</div>
-                <div className="mvrf">{w.model? (w.model.agrees?<span className="ok">✓ model agrees on winner</span>:<span className="warn">model differs on winner</span>):<span className="mut">model —</span>}{w.bestPrice!=null&&<span className="bp">best {formatOdds(w.bestPrice)}</span>}</div>
-              </div>);})}
-          </Carousel>; })()}
-        <div className="note">What the books collectively lean — a read, not a guarantee.</div>
-      </section>)}
+        {hasFull && <div className="kpis">
+          <div className="kpi"><div className="k">EDGES</div><div className="v">{boardItems.length}</div></div>
+          <div className="kpi"><div className="k">AVG EDGE</div><div className={"v "+(kpiHas?"g":"")}>{kpiHas?"+"+kAvg+"%":"\u2014"}</div></div>
+          <div className="kpi"><div className="k">BEST</div><div className={"v "+(kpiHas?"gold":"")}>{kpiHas?"+"+kBest+"%":"\u2014"}</div></div>
+          <div className="kpi"><div className="k">LIVE</div><div className={"v "+(liveItems.length?"red":"")}>{liveItems.length}</div></div>
+        </div>}
 
-      {/* PLAYER PROPS — full board lives in the Props tab (per sport) */}
-      {sp.hasProps&&(<section className="panel">
-        <div className="sh"><div className="l">PLAYER PROPS</div>{hasFull&&topProps.length>3&&<span className="ppswipe">swipe →</span>}</div>
-        {!hasFull
-          ?<Gate kind="props" title="Player props are locked" sub={<>HR, hits, K &amp; more — every game. <b>$7/mo</b></>} navigate={navigate}/>
-          :<>
-        {topProps.length>0?(
-          <div className="prrow">
-            {topProps.slice(0,7).map((p,i)=>{
-              const col=teamCol(shortTeam(p.team||p.game||""));
-              const pos=p.edge>=0;
-              return (
-                <div key={p.k} className="prc" onClick={()=>navigate("/props")}>
-                  <div className="prcrank">{i+1}</div>
-                  <div className="prcav" style={{boxShadow:`0 0 0 2.5px ${col}`,background:`radial-gradient(circle at 50% 28%, ${col}66, #0c1018 80%)`}}>
-                    {p.id?<img src={`https://midfield.mlbstatic.com/v1/people/${p.id}/spots/120`} alt="" onError={(ev)=>{ev.currentTarget.style.display="none";}}/>:<span>{p.market==="K"?"":""}</span>}
-                  </div>
-                  <div className="prcname">{p.name}</div>
-                  <div className="prcmu">{p.game||p.team||""}</div>
-                  <div className="prcedge" style={{color:pos?"#33e991":"#ff5d4d"}}>{pos?"+":""}{(p.edge*100).toFixed(1)}%</div>
-                  <div className="prclbl">{p.market} EDGE</div>
-                  <div className="prcbet"><span>{p.betSide}</span><span className="o">{formatOdds(p.odds)}</span></div>
-                </div>
-              );
-            })}
-          </div>
-        ):(
-          <div className="propscta" onClick={()=>navigate("/props")}>
-            <div><div className="pctah">{sp.propsCopy}</div><div className="pctas">The full board lives in the Props tab — more options than before.</div></div>
-            <span className="pctaarrow">→</span>
-          </div>
-        )}
-        {topProps.length>0&&<div className="ppseeall" onClick={()=>navigate("/props")}>See all props →</div>}
+        {liveItems.length>0 && <div id="livesec">
+          <div className="seclbl">LIVE EDGES <span className="ct">in-game {"\u00b7"} updates 60s</span><span className="lk">swipe {"\u203a"}</span></div>
+          <Swiper cls="car" dotcls="dots">{liveItems.map((g,i)=><LiveEdgeCard key={i} g={g} navigate={navigate} locked={!hasFull}/>)}</Swiper>
+        </div>}
+
+        <div className="seclbl">FULL BOARD <span className="ct">{boardItems.length} edges</span></div>
+        {hasFull
+          ? <>
+              <div className="chips">{BF.map(([lb,key])=><span key={key} className={"chipf "+(board===key?"on":"")} onClick={()=>setBoard(key)}>{lb}</span>)}</div>
+              {boardItems.length>0
+                ? <>
+                    <div className="grid">{boardItems.map((d,i)=>{const id=d.gameId+d.cat+i;return <BoardRow key={id} d={d} i={i} open={openId===id} onToggle={()=>setOpenId(openId===id?null:id)} navigate={navigate} sport={sport}/>;})}</div>
+                    <div className="sum"><span className="l">{boardItems.length} game edges</span><span className="sp"/><span>avg <span className="p">+{kpiHas?kAvg:"0.0"}%</span></span></div>
+                  </>
+                : <div className="estate"><div className="et">No edges on the board yet</div><div className="es">Edges appear as books post tonight's lines.</div></div>}
+            </>
+          : <Gate title="Edges are an All-Access feature" navigate={navigate}/>}
+
+        {hasFull && moverItems.length>0 && <>
+          <div className="seclbl">MARKET MOVERS <span className="ct">all {moverItems.length} moves {"\u00b7"} ranked by {"\u00a2"}</span><span className="lk">swipe {"\u203a"}</span></div>
+          <Swiper cls="car" dotcls="dots">{moverItems.map((d,i)=><MoverCard key={i} d={d}/>)}</Swiper>
         </>}
-      </section>)}
 
-      {/* PARK FACTORS */}
-      {parks.length>0&&(<section className="panel">
-        <div className="sh"><div className="l">PARK FACTORS TODAY</div><span className="s2">swipe →</span></div>
-        <Carousel>{parks.map((g,i)=><ParkCard key={i} g={g}/>)}</Carousel>
-      </section>)}
+        {sp.hasProps && hasFull && propItems.length>0 && <>
+          <div className="seclbl">PLAYER PROPS <span className="lk">swipe {"\u203a"}</span></div>
+          <Swiper cls="car" dotcls="dots">{propItems.map((d,i)=><PropCardM key={i} d={d} rank={i+1} navigate={navigate}/>)}</Swiper>
+          <div className="seeall" onClick={()=>navigate("/props")}>See all props {"\u203a"}</div>
+        </>}
 
-      {/* PROMOS */}
-      <section>
-        <div className="tw">
-          <div className="pr g" onClick={()=>navigate("/expert-picks")}>
-            <div className="prh"><div className="h">WIZEPLAYS <span className="new">NEW</span></div>
-              {wpRecord&&(wpRecord.wins+wpRecord.losses+wpRecord.pushes)>0&&(
-                <div className="wkbox"><div className="t">THIS WEEK</div><div className="r">{wpRecord.wins}-{wpRecord.losses}{wpRecord.pushes?`-${wpRecord.pushes}`:""}</div><div className={"u "+(wpRecord.units>=0?"pos":"neg")}>{wpRecord.units>=0?"+":""}{wpRecord.units.toFixed(2)}u</div></div>)}
-            </div>
-            <div className="d">Handpicked by our own analytics after extra review.</div><div className="cta">View WizePlays →</div></div>
-          <div className="pr pp" onClick={()=>navigate("/daily-card")}><div className="h">WIZE SPIN <span className="new">NEW</span></div><div className="wh"/><div className="d">Need a play fast? Spin for model-qualified plays.</div><div className="cta">Spin the wheel →</div></div>
+        {parkItems.length>0 && <>
+          <div className="seclbl">PARK FACTORS <span className="ct">run &amp; HR environment</span><span className="lk">swipe {"\u203a"}</span></div>
+          <Swiper cls="car" dotcls="dots">{parkItems.map((d,i)=><ParkCardM key={i} d={d}/>)}</Swiper>
+        </>}
+
+        <div className="spincard" onClick={()=>navigate("/daily-card")}>
+          <div className="h">WIZE SPIN <span className="new">NEW</span></div><div className="wheel"/>
+          <div className="d">Need a play fast? Spin for a model-qualified pick.</div><div className="cta">Spin the wheel {"\u203a"}</div>
         </div>
-      </section>
 
-      {/* HOW TO USE GUIDE */}
-      <section>
-        <div className="guideb" onClick={()=>navigate("/guide")}>
-          <div className="guideb-ic"></div>
-          <div className="guideb-tx">
-            <div className="guideb-h">New here? How to use WizePicks</div>
-            <div className="guideb-s">Edges, props, line shopping &amp; the full board — a quick walkthrough of everything inside.</div>
-          </div>
-          <span className="guideb-ar">→</span>
+        <div className="seclbl">HOW TO USE WIZEPICKS</div>
+        <div className="guide" onClick={()=>navigate("/guide")}><div className="gi"/><div className="gt"><div className="gh">New here? Start with the basics</div><div className="gs">Edges, props, line shopping &amp; the full board {"\u2014"} a quick walkthrough.</div></div><div className="ga">{"\u203a"}</div></div>
+
+        <div className="seclbl">UPCOMING GAMES <span className="lk" onClick={()=>navigate("/games")}>view all {"\u203a"}</span></div>
+        <Swiper cls="car" dotcls="dots">{(upcoming||[]).map((g,i)=>{const a=g.awayAbbr||shortTeam(g.away||"");const h=g.homeAbbr||shortTeam(g.home||"");const gid=g.id||g.gameId;return <div key={i} className="gm" onClick={()=>gid&&navigate(`/game/${sport}/${gid}`)}><div className="mt">{a} <span className="x">v</span> {h}</div><div className="tm">{fmtTime(g.time)}{g.totals&&g.totals.projected!=null?" \u00b7 O/U "+g.totals.projected:""}</div></div>;})}</Swiper>
+      </div>
+
+      <nav className="nav">
+        <a className="on"><span className="i"><svg className="dbars" viewBox="0 0 24 24" width="18" height="18"><rect className="db1" x="2" y="13" width="4" height="5" rx="1"/><rect className="db2" x="7.3" y="13" width="4" height="5" rx="1"/><rect className="db3" x="12.6" y="13" width="4" height="5" rx="1"/><rect className="db4" x="18" y="13" width="4" height="5" rx="1"/></svg></span>Dashboard</a>
+        <a onClick={()=>navigate("/games")}><span className="i">{"\u25a6"}</span>Games</a>
+        <a onClick={()=>navigate(hasFull?"/props":"/pricing")}><span className="i">{"\u25c8"}</span>Props</a>
+        <a onClick={()=>navigate("/odds")}><span className="i">{"\u25d0"}</span>Market</a>
+        <a onClick={()=>navigate("/performance")}><span className="i">{"\u25b2"}</span>Performance</a>
+        <a onClick={()=>navigate("/settings")}><span className="i">{"\u25cd"}</span>Account</a>
+      </nav>
+    </div>
+  );
+}
+
+// ============ PORTED COMPONENTS (v11 mock markup) ============
+const SLUGM={CWS:"chw",CHW:"chw"};
+function LogoM({ab,col,lg="mlb"}){ const [bad,setBad]=useState(false); const slug=(SLUGM[ab]||ab||"").toLowerCase();
+  return <span className="lg" style={{background:`radial-gradient(circle at 50% 32%, ${col}aa, #0c1018 82%)`}}>{(bad||!ab)?String(ab||"?").slice(0,3):<img src={`https://a.espncdn.com/i/teamlogos/${lg}/500/${slug}.png`} alt="" onError={()=>setBad(true)}/>}</span>;
+}
+function SparkM({dir,seed=0}){ const n=7,w=40,h=15,z=[1.4,-1,.8,-1.6,.6,0,-1.2];const pts=[];
+  for(let i=0;i<n;i++){const t=dir==="up"?-(i/(n-1))*8:dir==="dn"?(i/(n-1))*8:0;const y=Math.max(2,Math.min(h-2,h/2+t*.55+z[(i+seed)%7]));pts.push([(i/(n-1))*w,y]);}
+  const col=dir==="up"?"#33e991":dir==="dn"?"#ff6a5a":"#46505c";const path=pts.map((p,i)=>(i?"L":"M")+p[0].toFixed(1)+" "+p[1].toFixed(1)).join(" ");
+  return <svg className="spk" width={w} height={h} viewBox={`0 0 ${w} ${h}`}><path d={path} fill="none" stroke={col} strokeWidth="1.4" strokeLinejoin="round"/></svg>;
+}
+function HeroChartM({dir,seed=0}){ const n=9,W=150,H=42;const base=[];
+  for(let i=0;i<n;i++){const trend=dir==="dn"?(n-1-i):i;base.push(trend+((seed*7+i*11)%5)*0.45);}
+  const mn=Math.min(...base),mx=Math.max(...base),rng=(mx-mn)||1;const X=i=>i/(n-1)*W,Y=v=>H-4-((v-mn)/rng)*(H-9);
+  const ln=base.map((v,i)=>`${i?"L":"M"}${X(i).toFixed(1)} ${Y(v).toFixed(1)}`).join(" ");const ar=ln+`L${W} ${H} L0 ${H} Z`;
+  const col=dir==="dn"?"#ff6a5a":"#33e991";const ex=X(n-1),ey=Y(base[n-1]);const gid="hg"+seed;
+  return <svg viewBox={`0 0 ${W} ${H}`} width="100%" height="40" preserveAspectRatio="none" style={{overflow:"visible",marginTop:3}}>
+    <defs><linearGradient id={gid} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={col} stopOpacity="0.3"/><stop offset="100%" stopColor={col} stopOpacity="0"/></linearGradient></defs>
+    <path d={ar} fill={`url(#${gid})`}/><path d={ln} fill="none" stroke={col} strokeWidth="2" strokeLinejoin="round" vectorEffect="non-scaling-stroke"/>
+    <circle cx={ex} cy={ey} r="2.6" fill={col}><animate attributeName="opacity" values="1;.3;1" dur="1.3s" repeatCount="indefinite"/></circle></svg>;
+}
+function HeroSlide({h,i,navigate,sport}){ const lg=(SPORTS[sport]||SPORTS.mlb).lg;
+  const mv=h.mv?<>{h.mv[0]} <span className="up">{"\u2192"} {h.mv[1]}</span></>:h.odds;
+  return (<div className="hslide"><div className="hero" onClick={()=>h.gameId&&navigate(`/game/${sport}/${h.gameId}`)}>
+    <div className="htop"><div className="eb">BEST EDGE RIGHT NOW</div><div className="hbadges"><span className="hedge">+{h.edge.toFixed(1)}% EDGE</span><span className="hot">HOT</span></div></div>
+    <div className="hpick">{h.p}<span className="mk">{h.mk}</span></div>
+    <div className="hpg"><span className="lgs" style={{display:"inline-flex",verticalAlign:"-6px",marginRight:6}}><LogoM ab={h.a[0]} col={h.a[1]} lg={lg}/><LogoM ab={h.h[0]} col={h.h[1]} lg={lg}/></span>{h.g}</div>
+    <div className="hmid">
+      <div className="hcell"><div className="k">ODDS / MOVE</div><div className="v">{mv}</div></div>
+      <div className="hcell"><div className="k">STARTS</div><div className="v">{h.starts||"\u2014"}</div></div>
+      <div className="hchart"><div className="k">LINE MOVE</div><HeroChartM dir={h.mv?h.mv[2]:"up"} seed={i}/></div>
+    </div>
+    <div className="hmm">model <b>{h.model}%</b> vs market {h.mkt}% {"\u00b7"} {String(h.conv).toUpperCase()} conviction</div>
+    <div className="hf"><span>Tap for the full matchup breakdown</span><span>{"\u203a"}</span></div>
+  </div></div>);
+}
+function BoardRow({d,i,open,onToggle,navigate,sport}){ const lg=(SPORTS[sport]||SPORTS.mlb).lg;
+  const mvCell=d.delta!=null?(d.delta>0?"\u25b2":d.delta<0?"\u25bc":"\u2014")+(d.delta!=null?Math.abs(d.delta):""):"\u2014";
+  const av=<div className="av"><LogoM ab={d.h?d.h[0]:d.a[0]} col={d.h?d.h[1]:d.a[1]} lg={lg}/></div>;
+  const leg=(name,L)=> L?(<div className="rdrow"><span className="leg">{name}</span><span className={"tier "+String(L[0]).toLowerCase()}>{L[0]}</span><span className="pk">{L[1]} {"\u00b7"} {L[2]}</span><span className={"ag "+(L[3]?"y":"n")}>{L[3]?"\u2713 agrees":"differs"}</span></div>):null;
+  return (
+    <div className={"gr "+(d.conv||"")+(open?" sel":"")} onClick={onToggle}>
+      <div className="r1">
+        <div className="lgs"><LogoM ab={d.a[0]} col={d.a[1]} lg={lg}/><LogoM ab={d.h[0]} col={d.h[1]} lg={lg}/></div>
+        <span className="pick">{d.p}</span>{d.mk&&<span className="mk">{d.mk}</span>}
+        {d.mv&&<SparkM dir={d.mv[2]} seed={i}/>}
+        <span className={"edge "+(d.edge<0?"neg":"pos")} style={{marginLeft:d.mv?"8px":"auto"}}>{d.edge>=0?"+":""}{d.edge.toFixed(1)}</span>
+      </div>
+      <div className="r2">
+        <span className="game">{d.g}</span>
+        <span className={"cell cw "+d.conv}>{d.conv?d.conv.toUpperCase():""}</span>
+        <span className="cell odds">{d.odds}</span>
+        <span className={"cell move "+(d.delta>0?"up":d.delta<0?"dn":"")}>{mvCell}</span>
+        <span className="cell clv"><span className="a">{"\u2014"}</span></span>
+      </div>
+      <div className="det"><div className="dwrap">
+        <div className="dhead">{av}<div><div className="nm">{d.g}</div><div className="mu">{d.p}</div></div>{d.starts&&<div className="st">{d.starts}</div>}</div>
+        {d.model!=null&&<div className="mvm"><div className="lbls"><span className="ml">model {d.model}%</span><span className="mk2">market {d.mkt}%</span></div><div className="bar"><i style={{width:d.model+"%"}}/></div></div>}
+        <div className="dchips">
+          {d.odds&&<span className="dchip"><b>Odds</b>{d.odds}</span>}
+          {d.mv&&<span className="dchip"><b>Move</b>{d.mv[0]}{"\u2192"}{d.mv[1]}</span>}
+          {d.conv&&<span className={"dchip "+(d.conv==="high"?"g":d.conv==="med"?"gold":"")}><b>Conv</b>{d.conv.toUpperCase()}</span>}
+          {d.park&&d.park.map((p,k)=><span key={k} className="dchip"><b>Park</b>{p}</span>)}
+          {d.wx&&<span className="dchip">{d.wx}</span>}
         </div>
-      </section>
-
-      {/* UPCOMING */}
-      {upcoming.length>0&&(<section className="panel">
-        <div className="sh"><div className="l">UPCOMING GAMES</div><span className="s2" onClick={()=>navigate("/games")}>View all →</span></div>
-        <div className="rw">
-          {upcoming.map((g,i)=>{ const aAb=g.awayAbbr||shortTeam(g.away||""); const hAb=g.homeAbbr||shortTeam(g.home||""); const gid=g.id||g.gameId;
-            return (<div key={i} className="gm" onClick={()=>gid&&navigate(`/game/${sport}/${gid}`)}>
-              <div className="gmm"><Logo ab={aAb} size={20} lg={sp.lg} col={colFor(aAb,sport)}/> {aAb} <span className="x">v</span> <Logo ab={hAb} size={20} lg={sp.lg} col={colFor(hAb,sport)}/> {hAb}</div>
-              <div className="gme">{fmtTime(g.time,true)}{g.totals?.projected!=null?` · O/U ${g.totals.projected}`:""}</div>
-            </div>);})}
-        </div>
-      </section>)}
-      </div>
-    </div>
-
-    <nav className="nav">
-      <a className="on"><span className="i"><svg className="dbars" viewBox="0 0 24 24" width="20" height="20"><rect className="db1" x="2" y="17" width="4" height="5" rx="1"/><rect className="db2" x="7.3" y="17" width="4" height="5" rx="1"/><rect className="db3" x="12.6" y="17" width="4" height="5" rx="1"/><rect className="db4" x="18" y="17" width="4" height="5" rx="1"/></svg></span>Dashboard</a>
-      <a onClick={()=>navigate("/games")}><span className="i">🗓️</span>Games</a>
-      {hasFull?<a onClick={()=>navigate("/props")}><span className="i">🔥</span>Props</a>:<a className="up" onClick={()=>navigate("/pricing")}><span className="i">🔓</span>Unlock</a>}
-      <a onClick={()=>navigate("/odds")}><span className="i">💹</span>Market</a>
-      <a onClick={()=>navigate("/performance")}><span className="i">📈</span>Performance</a>
-      <a onClick={()=>navigate("/settings")}><span className="i">👤</span>Account</a>
-    </nav>
+        {d.flags&&<div className="flags">{d.flags.map((x,k)=><span key={k} className={x[0]}>{x[1]}</span>)}</div>}
+        {d.read&&<div className="rdbox"><div className="rl">MARKET READ {"\u2014"} BOOKS LEAN</div>{leg("Win",d.read.win)}{leg("Cover",d.read.cover)}{leg("Total",d.read.total)}</div>}
+        {d.why&&<div className="why"><b>Why&nbsp;&nbsp;</b>{d.why}</div>}
+        <span className="dlink" onClick={(ev)=>{ev.stopPropagation();d.gameId&&navigate(`/game/${sport}/${d.gameId}`);}}>Full matchup breakdown {"\u203a"}</span>
+      </div></div>
     </div>
   );
 }
-
-function HeroChart({pts}){
-  const n=pts.length; const min=Math.min(...pts), max=Math.max(...pts);
-  const pad=(max-min)*0.18||5; const lo=min-pad, hi=max+pad;
-  const W=170,H=48; const X=i=>(i/(n-1))*W; const Y=v=>H-((v-lo)/(hi-lo))*H;
-  const line=pts.map((v,i)=>`${i?"L":"M"}${X(i).toFixed(1)} ${Y(v).toFixed(1)}`).join(" ");
-  const area=line+`L${W} ${H} L0 ${H} Z`;
-  const up=pts[n-1]>=pts[0]; const col=up?"#33e991":"#ff5a5a";
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height="48" preserveAspectRatio="none" style={{overflow:"visible"}}>
-      <defs><linearGradient id="hgrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={col} stopOpacity="0.3"/><stop offset="100%" stopColor={col} stopOpacity="0"/></linearGradient></defs>
-      <path d={area} fill="url(#hgrad)"/>
-      <path d={line} fill="none" stroke={col} strokeWidth="2" strokeLinejoin="round"/>
-      <circle cx={X(n-1)} cy={Y(pts[n-1])} r="3" fill="none" stroke={col} strokeWidth="1.5" opacity="0.6">
-        <animate attributeName="r" values="3;9" dur="1.3s" repeatCount="indefinite"/>
-        <animate attributeName="opacity" values="0.6;0" dur="1.3s" repeatCount="indefinite"/>
-      </circle>
-      <circle cx={X(n-1)} cy={Y(pts[n-1])} r="3" fill={col}>
-        <animate attributeName="opacity" values="1;0.35;1" dur="1.3s" repeatCount="indefinite"/>
-      </circle>
-    </svg>
-  );
+function MoverCard({d}){ const c=d.delta||0;const dir=c>=0?"up":"dn";
+  return (<div className="mvc"><div className="pk">{d.p}</div><div className="mu">{d.g}</div>
+    {d.mv?<><div className={"od "+dir}>{d.mv[0]} <span className="a">{"\u2192"}</span> {d.mv[1]} {c>=0?"\u25b2":"\u25bc"}{Math.abs(c)}</div><div className={"ct2 "+dir}>{c>=0?"+":"\u2212"}{Math.abs(c)} cents</div></>
+      :<><div className="od">{d.odds}</div><div className="ct2">{d.model!=null?d.model+"% model":""}</div></>}
+  </div>);
 }
-
-function Hero({hero,navigate,live,series,sport="mlb",rolled}){
-  const modelPct=Math.round((hero.modelProb||0)*100);
-  const mktPct=Math.round((impliedFromAmerican(hero.odds)||0)*100);
-  const pts=(series||[]).map(p=>p.o);
-  const hasChart=pts.length>=2;
-  const moved=hasChart&&pts[0]!==pts[pts.length-1];
-  return (
-    <div className="hero" onClick={()=>hero.gameId&&navigate(`/game/${sport}/${hero.gameId}`)}>
-      <div className="hh"><div className="eb">{rolled?"TOMORROW'S BEST EDGE":"BEST EDGE RIGHT NOW"}</div><div className="hhr"><span className="hedge">{fmtEdgeFor(hero,sport)} <i>EDGE</i></span><span className="hot">HOT</span></div></div>
-      <div className="htop">
-        <div className="hL"><div className="pk">{edgeLabel(hero)}</div><div className="pg">{hero.matchup}</div>
-          <div className="ch">
-            <div className="cc"><div className="k">{moved?"LINE MOVED":"ODDS"}</div><div className="v">{moved?<>{formatOdds(pts[0])}<span className="ar">{String.fromCharCode(8594)}</span><b className="gd">{formatOdds(pts[pts.length-1])}</b></>:formatOdds(hero.odds)}</div></div>
-            <div className="cc"><div className="k">STARTS</div><div className="v">{fmtTime(hero.time)}</div></div>
-          </div></div>
-        <div className="hR"><div className="ct">LINE MOVEMENT</div>
-          <div className="cwrap">{hasChart?<HeroChart pts={pts}/>:<div className="livenum">{formatOdds(hero.odds)}<span className="livedot r"/></div>}
-            <div className="cap">{hasChart?<>{formatOdds(pts[0])} {String.fromCharCode(8594)} {formatOdds(pts[pts.length-1])} · since open</>:(hero.modelProb!=null?<>model {modelPct}% vs mkt {mktPct}%</>:<>best price {formatOdds(hero.odds)}</>)}</div></div></div>
-      </div>
-      {moved
-        ?<div className="hstrip"><span>Line moved {formatOdds(pts[0])} {String.fromCharCode(8594)} {formatOdds(pts[pts.length-1])} since open</span><span>›</span></div>
-        :<div className="hf"><span>Tap for the full matchup breakdown</span><span>›</span></div>}
-    </div>
-  );
+function PropCardM({d,rank,navigate}){ const col=d.player[2];
+  return (<div className="prc" onClick={()=>navigate("/props")}><div className="rk">{rank}</div>
+    <div className="av2" style={{background:`radial-gradient(circle at 50% 30%, ${col}, #0c1018 80%)`,boxShadow:`0 0 0 2.5px ${col}`}}>{d.id?<img src={`https://midfield.mlbstatic.com/v1/people/${d.id}/spots/120`} alt="" onError={(e)=>{e.currentTarget.style.display="none";e.currentTarget.parentNode.textContent=d.player[1];}}/>:d.player[1]}</div>
+    <div className="nm">{d.player[0]}</div><div className="mu">{d.g}</div>
+    <div className="ed">+{d.edge.toFixed(1)}%</div><div className="lb">{d.mk} EDGE</div>
+    <div className="bet"><span>{d.p}</span><span className="o">{d.odds}</span></div></div>);
 }
-
-function Gate({title,sub,kind,navigate}){
-  const box=(w,h,bg,mt)=>({width:w,height:h,background:bg,borderRadius:5,marginTop:mt||0});
-  let sk;
-  if(kind==="hero"){
-    sk=<div style={{border:"1px solid rgba(243,185,79,.32)",borderRadius:14,background:"linear-gradient(180deg,#14110a,#06090b)",padding:14}}>
-      <div style={box("55%",38,"#39424f")}/><div style={box("40%",12,"#2a3340",8)}/><div style={{...box(64,48,"#2f6b54"),float:"right",marginTop:-46}}/></div>;
-  }else if(kind==="props"){
-    sk=<div className="prrow">{[0,1,2].map(i=><div key={i} className="prc">
-      <div style={{width:56,height:56,borderRadius:"50%",background:"#2a3340"}}/><div style={box("70%",10,"#39424f",10)}/><div style={box("50%",20,"#2f6b54",8)}/></div>)}</div>;
-  }else if(kind==="movers"){
-    sk=<div className="rw">{[0,1,2].map(i=><div key={i} className="mv">
-      <div style={box("60%",13,"#39424f")}/><div style={box("75%",10,"#2a3340",8)}/></div>)}</div>;
-  }else{
-    sk=<div className="elist">{[0,1,2,3].map(i=><div key={i} className="erow" style={{display:"flex",alignItems:"center",gap:9}}>
-      <div style={{width:30,height:30,borderRadius:"50%",background:"#2a3340",flexShrink:0}}/>
-      <div style={{flex:1}}><div style={box("65%",13,"#39424f")}/><div style={box("42%",8,"#2a3340",6)}/></div>
-      <div style={box(48,18,"#2f6b54")}/></div>)}</div>;
-  }
-  return (
-    <div className="gatewrap">
-      <div className="blurlayer">{sk}</div>
-      <div className="gate"><div className="lock"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div><div className="gt">{title}</div><div className="gs">{sub}</div>
-        <div className="gbtn" onClick={()=>navigate("/pricing")}>Unlock All-Access →</div></div>
-    </div>
-  );
+function ParkCardM({d}){ return (
+  <div className={"pkc "+d.tag[1]}><div className="r1"><div><div className="vn">{d.venue}</div><div className="tm">{d.g}</div></div><LogoM ab={d.a[0]} col={d.a[1]}/></div>
+    <div className={"tg "+d.tag[1]}>{d.tag[0]}</div>
+    <div className="bs"><div className="b"><div className="kk">HR BOOST</div><div className={"vv "+(d.hr.startsWith("-")?"dn":"")}>{d.hr}</div></div><div className="b"><div className="kk">RUN BOOST</div><div className={"vv "+(d.run.startsWith("-")?"dn":"")}>{d.run}</div></div></div>
+    <div className="wx">{d.wx}</div></div>);
 }
-
-function LiveGameCard({g,info,navigate,locked}){
-  const a=g.awayAbbr||info?.a||shortTeam(g.away||"")||"AWY", h=g.homeAbbr||info?.h||shortTeam(g.home||"")||"HOM";
-  const half=g.half==="bottom"?"Bot":"Top";
-  const ml=(g.awayEdge??-9)>=(g.homeEdge??-9)
-    ?{lbl:`${a} ML`,prob:g.awayWinProb,edge:g.awayEdge,odds:g.awayOdds}
-    :{lbl:`${h} ML`,prob:g.homeWinProb,edge:g.homeEdge,odds:g.homeOdds};
-  const tot=g.totalLine!=null
-    ?((g.overEdge??-9)>=(g.underEdge??-9)
-      ?{lbl:`Over ${g.totalLine}`,prob:g.overProb,edge:g.overEdge,odds:g.overOdds}
-      :{lbl:`Under ${g.totalLine}`,prob:g.underProb,edge:g.underEdge,odds:g.underOdds})
-    :null;
-  const Row=({r})=> r&&r.edge!=null?(
-    <div className="lgrow"><span className="lglbl">{r.lbl}</span>
-      <span className="lgmeta">{r.prob!=null?Math.round(r.prob*100)+"%":"—"}{r.odds!=null?` · ${formatOdds(r.odds)}`:""}</span>
-      <span className={"lgedge "+(r.edge>=0?"pos":"neg")}>{r.edge>=0?"+":""}{(r.edge*100).toFixed(1)}%</span></div>):null;
-  return (
-    <div className="lgc" onClick={()=>g.gameId&&navigate(locked?"/pricing":`/game/mlb/${g.gameId}`)}>
-      <div className="lgh"><span className="lgmatch">{a} @ {h}</span><span className="lglive"><span className="livedot r"/>{half} {g.inning}{g.outs!=null?` · ${g.outs} out`:""}</span></div>
-      {locked ? <div className="lglock">In-game edges — All-Access</div> : <><Row r={ml}/><Row r={tot}/></>}
-    </div>
-  );
+function LiveEdgeCard({g,navigate,locked}){ const rows=g.rows||[];
+  return (<div className="lec" onClick={()=>g.gameId&&navigate(locked?"/pricing":`/game/mlb/${g.gameId}`)}>
+    <div className="lh"><div className="lm"><div className="lgs"><LogoM ab={g.a} col={g.ac}/><LogoM ab={g.h} col={g.hc}/></div>{g.a} @ {g.h}</div><div className="lst"><span className="d"/>{g.state}</div></div>
+    {rows.map((r,i)=><div key={i} className="lerow"><span className="ll">{r[0]}</span><span className="lmeta">{r[1]} {"\u00b7"} {r[2]}</span><span className={"le "+(r[3]>=0?"pos":"neg")}>{r[3]>=0?"+":""}{r[3].toFixed(1)}%</span></div>)}
+  </div>);
 }
-
-function EdgeRow({e,navigate,sport="mlb"}){
-  const model=Math.round((e.modelProb||0)*100);
-  const conv=(e._convAdj||e.conviction||"").toLowerCase();
-  const ab=edgeTeam(e);
-  const lg=(SPORTS[sport]||SPORTS.mlb).lg;
-  return (
-    <div className="erow" onClick={()=>e.gameId&&navigate(`/game/${sport}/${e.gameId}`)}>
-      <div className="etop">
-        <div className="eleft">{ab?<Logo ab={ab} size={30} lg={lg} col={colFor(ab,sport)}/>:<span className="totg">O/U</span>}
-          <div className="elabel"><span className={isTotal(e)?"pkside "+(e.side==="over"?"ov":"un"):""}>{edgeLabel(e)}</span> <span className="emu">{e.matchup}</span></div></div>
-        <div className={"epct "+((e.edge??0)>=0?"pos":"neg")}>{fmtEdgeFor(e,sport)}</div>
-      </div>
-      <div className="emid">
-        <span className={"econv "+conv}>{e._convAdj||e.conviction||"—"}{e._moveDir>0?" ↑":e._moveDir<0?" ↓":""}</span>
-        <span className="emeta">{e.modelProb!=null?`${model}% model · `:""}{formatOdds(e.odds)}</span>
-        {e._moveFlag==="against"&&<span className="emove against">market moving against</span>}
-        {e._moveFlag==="toward"&&<span className="emove toward">↘ money coming in</span>}
-        {e.inflation?.inflated&&<span className="einf">market inflated</span>}
-      </div>
-      {e.reason&&<div className="ereason">{e.reason}</div>}
-    </div>
-  );
+function Swiper({cls,dotcls,children}){ const ref=useRef(null);const [act,setAct]=useState(0);const items=Children.toArray(children);
+  const onScroll=()=>{const el=ref.current;if(!el)return;const f=el.firstElementChild;const w=f?f.offsetWidth+9:200;setAct(Math.max(0,Math.round(el.scrollLeft/w)));};
+  return (<><div className={cls} ref={ref} onScroll={onScroll}>{children}</div>{items.length>1&&<div className={dotcls}>{items.map((_,i)=><i key={i} className={i===act?"on":""}/>)}</div>}</>);
 }
-
-function PropCard({p,type,rank,navigate}){
-  let big,lbl,line,edgeBadge=null,sig=[];
-  if(type==="hr"){
-    big=Math.round((p.hrProb||0)*100)+"%"; lbl="CHANCE TO HOMER"; line=`O 0.5 HR · ${formatOdds(p.odds)}`;
-    if(p.parkHRFactor!=null) sig.push(["Park",`${p.parkHRFactor>1?"+":""}${Math.round((p.parkHRFactor-1)*100)}%`]);
-    if(p.opposingPitcherHR9!=null) sig.push([" HR/9",Number(p.opposingPitcherHR9).toFixed(1)]);
-  } else if(type==="hits"){
-    big=Math.round((p.hitsProb||0)*100)+"%"; lbl="HIT PROBABILITY";
-    line=`${p.side==="over"?"O":"U"} ${p.line} Hits · ${formatOdds(p.odds)}`;
-    if((p.edge??0)>0) edgeBadge=`+${(p.edge*100).toFixed(1)}% EDGE`;
-    if(p.battingAvg!=null) sig.push(["AVG",Number(p.battingAvg).toFixed(3).replace(/^0/,"")]);
-  } else {
-    big=Math.round((p.kProb||0)*100)+"%"; lbl="STRIKEOUT PROB";
-    line=`${p.side==="over"?"O":"U"} ${p.line} Ks · ${formatOdds(p.odds)}`;
-    if((p.edge??0)>0) edgeBadge=`+${(p.edge*100).toFixed(1)}% EDGE`;
-    if(p.expectedKs!=null) sig.push(["Proj Ks",Number(p.expectedKs).toFixed(1)]);
-    if(p.pitcherK9!=null) sig.push([" K/9",Number(p.pitcherK9).toFixed(1)]);
-  }
-  return (
-    <div className="pc2" onClick={()=>p.gameId&&navigate(`/game/mlb/${p.gameId}`)}>
-      <div className="rk">{rank}</div>
-      <div className="hd"><div className="av" style={(()=>{const c=teamCol(shortTeam(p.team||p.game||""));return {background:`linear-gradient(180deg, ${c}, #0c1018 88%)`,boxShadow:`0 0 0 2px ${c}88`};})()}>{p.playerId?<img src={`https://midfield.mlbstatic.com/v1/people/${p.playerId}/spots/120`} alt="" onError={(e)=>{e.currentTarget.style.display="none";}}/>:(type==="ks"?"":"")}</div><div><div className="nm">{p.player||"—"}</div><div className="mu">{p.game||p.team||""}</div></div></div>
-      <div className="cn2"><div className="n">{big}</div><div className="l">{lbl}</div></div>
-      {sig.length>0&&<div className="sg">{sig.slice(0,2).map((s,i)=><div key={i} className="x"><div className="kk">{s[0]}</div><div className="vv">{s[1]}</div></div>)}</div>}
-      <div className="pline">{line}{edgeBadge&&<span className="ebadge">{edgeBadge}</span>}</div>
-    </div>
-  );
+function MarketPulse({alerts}){ const [idx,setIdx]=useState(0);const [paused,setPaused]=useState(false);
+  useEffect(()=>{if(paused||!alerts||alerts.length<2)return;const id=setInterval(()=>setIdx(i=>(i+1)%alerts.length),3600);return ()=>clearInterval(id);},[paused,alerts]);
+  if(!alerts||!alerts.length)return null;const cur=idx%alerts.length;const a=alerts[cur];
+  return (<div className="alerts" onClick={()=>setPaused(p=>!p)}>
+    <div className="ahead">MARKET PULSE {"\u00b7"} WHAT CHANGED &amp; WHY <span className="ago">{paused?"paused \u00b7 tap to resume":"updated 2m ago"}</span></div>
+    <div className="arow"><div className="aline"><span className="adot" style={{background:a.dot,boxShadow:`0 0 6px ${a.dot}`}}/><span className="alab">{a.label}</span><span className="aval">{a.head}</span></div><div className="awhy">{a.sub}</div></div>
+    {alerts.length>1&&<div className="dd">{alerts.map((_,i)=><i key={i} className={i===cur?"on":""} onClick={(ev)=>{ev.stopPropagation();setIdx(i);setPaused(true);}}/>)}</div>}
+  </div>);
 }
-
-function ParkCard({g}){
-  const f=g.parkRunFactor; const hf=g.parkHRFactor; const w=g.weather||{};
-  const hot=(hf??f)>1.05,cold=(hf??f)<0.95;
-  const tag=hot?["HITTER FRIENDLY","h"]:cold?["PITCHER FRIENDLY","p"]:["NEUTRAL","n"];
-  const pct=Math.round((f-1)*100); const hpct=hf!=null?Math.round((hf-1)*100):null;
-  const indoor=w.indoor; const t=w.tempF!=null?Math.round(w.tempF):null;
-  const wind=w.windMph?`${w.windMph} mph${w.windEffect?" "+w.windEffect:""}`:null;
-  const wxIcon=indoor?"Dome":(t!=null&&t>=82?"Warm":t!=null&&t<=55?"Cool":"Mild");
-  const wxText=indoor?"Indoor · roof closed":([t!=null?t+"°F":null,wind].filter(Boolean).join(" · ")||"Forecast pending");
-  return (
-    <div className={"pkc"+(hot?" hot":cold?" cold":"")}>
-      <div className="r1"><div><div className="n">{g.venue||g.park||(g.home||"")+" Park"}</div><div className="c">{g.home||""}</div></div><Logo ab={mlbAbbr(g.home||"")} size={30}/></div>
-      <span className={"tg "+tag[1]}>{tag[0]}</span>
-      <div className="bs">
-        {hpct!=null&&<div className="b"><div className="kk">HR BOOST</div><div className={"vv "+(hpct>0?"u":hpct<0?"dn2":"")}>{hpct>0?"+":""}{hpct}%</div></div>}
-        <div className="b"><div className="kk">RUN BOOST</div><div className={"vv "+(pct>0?"u":pct<0?"dn2":"")}>{pct>0?"+":""}{pct}%</div></div>
-      </div>
-      <div className="wxrow"><span className="wi">{wxIcon}</span><span className="wt">{wxText}</span></div>
-    </div>
-  );
+function Gate({title,navigate}){
+  return <div style={{margin:"13px 14px 0",border:"1px solid rgba(243,185,79,.3)",borderRadius:13,background:"linear-gradient(180deg,#14110a,#06090b)",padding:22,textAlign:"center"}}>
+    <div style={{fontSize:22,marginBottom:8}}>{"\uD83D\uDD12"}</div>
+    <div style={{fontWeight:800,color:"#fff",fontSize:15,marginBottom:10}}>{title}</div>
+    <div onClick={()=>navigate("/pricing")} style={{display:"inline-block",background:"#1D9E75",color:"#04130d",fontWeight:800,fontSize:13,padding:"10px 18px",borderRadius:10,cursor:"pointer"}}>Unlock All-Access {"\u203a"}</div>
+  </div>;
 }
 
 const S={ shell:{minHeight:"100vh",background:"#000",color:"#f2f6f4",fontFamily:"'Inter',system-ui,sans-serif"} };
 
-const CSS=`
-@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&family=Inter:wght@400;500;600;700;800&display=swap');
-*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-.wp{max-width:480px;margin:0 auto;padding-bottom:70px}
-.logo,.pk,.nm,.pc,.b,.n,.mvk,.gmm,.rk,.cn2 .n{font-family:'Barlow Condensed',sans-serif}
-.top{display:flex;align-items:center;gap:8px;padding:11px 13px 8px}
-.bgr{width:19px;display:flex;flex-direction:column;gap:4px}.bgr span{height:2px;background:#c0c9cd;border-radius:2px}
-.logo{font-weight:800;font-size:23px}.logo .a{color:#fff}.logo .b{color:#ff5d4d}
-.pill{display:inline-flex;align-items:center;gap:5px;border:1px solid #1d2731;border-radius:999px;padding:3px 9px;font-size:10px;font-weight:800;letter-spacing:.4px;color:#d2ebe2}.pill.off{color:#8a99a2}
-.dot{width:6px;height:6px;border-radius:50%;background:#33e991;animation:pl 1.8s infinite}.dot.grey{background:#3a4650;animation:none}
-@keyframes pl{0%{box-shadow:0 0 0 0 rgba(51,233,145,.55)}70%{box-shadow:0 0 0 6px rgba(51,233,145,0)}100%{box-shadow:0 0 0 0 rgba(51,233,145,0)}}
-.mk{flex:1;display:flex;align-items:center;gap:6px;justify-content:center;border:1px solid #1d2731;border-radius:999px;padding:3px 10px}.mk .l{font-size:10px;font-weight:800;color:#d2ebe2}.sp{width:46px;height:14px}
-.bell{font-size:16px;color:#c0c9cd}
-.tabs{display:flex;justify-content:space-between;padding:0 14px;border-bottom:1px solid #0e151a}
-.tab{display:flex;align-items:center;gap:5px;padding:8px 3px;font-weight:700;font-size:13px;color:#8a99a2;border-bottom:2px solid transparent;margin-bottom:-1px}.tab.on{color:#fff;border-bottom-color:#ff5d4d}.tab .i{font-size:14px}
-section{padding:13px 12px 2px;margin:0;border-top:1px solid #161d24}
-.panel{margin:0;padding:13px 12px 2px;border:0;border-radius:0;background:none;border-top:1px solid #161d24}
-.panel>.sh{margin-bottom:9px}
-.sh{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
-.sh .l{display:flex;align-items:center;gap:7px;font-family:'Barlow Condensed';font-weight:800;font-size:14px;letter-spacing:.4px;color:#dbe4e2}.sh .l .i{font-size:14px}.sh .l .s{font-family:'Inter';font-size:10px;color:#8a99a2;font-weight:600;margin-left:3px}
-.sh .s2{font-size:11px;color:#8a99a2;font-weight:600}
-.seg{display:flex;gap:2px;background:#0a0f13;border:1px solid #161e26;border-radius:8px;padding:2px}.seg b{color:#8a99a2;font-weight:800;font-size:11px;padding:4px 10px;border-radius:6px}.seg b.on{background:#141d24;color:#fff;box-shadow:inset 0 0 0 1px #ff5d4d}
-.muted,.note,.pn{color:#54616b;font-size:11px;font-weight:600}.note,.pn{margin-top:7px;line-height:1.35}
-.hero{position:relative;border:1px solid rgba(243,185,79,.32);border-radius:14px;background:linear-gradient(180deg,#14110a,#06090b);overflow:hidden;margin:11px 12px 0;animation:herolight 3.6s ease-in-out infinite}
-.hero::before{content:"";position:absolute;inset:0;background:radial-gradient(150% 120% at 50% -12%,rgba(243,185,79,.20),transparent 55%);opacity:.45;animation:heroglow 3.6s ease-in-out infinite;pointer-events:none;z-index:0}
-.hero>*{position:relative;z-index:1}
-@keyframes heroglow{0%,100%{opacity:.3}50%{opacity:.82}}
-@keyframes herolight{0%,100%{box-shadow:inset 0 0 22px rgba(243,185,79,.07);border-color:rgba(243,185,79,.30)}50%{box-shadow:inset 0 0 42px rgba(243,185,79,.22);border-color:rgba(243,185,79,.58)}}
-.dbars{display:block}
-.dbars rect{height:5px;y:17px;animation:eqbar 1.1s ease-in-out infinite}
-.dbars .db1{fill:#2DBE7A;animation-delay:0s}.dbars .db2{fill:#ff5d4d;animation-delay:.18s}.dbars .db3{fill:#2DBE7A;animation-delay:.36s}.dbars .db4{fill:#ff5d4d;animation-delay:.54s}
-@keyframes eqbar{0%,100%{height:5px;y:17px}50%{height:17px;y:5px}}
-.herocar{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;-webkit-overflow-scrolling:touch}
-.herocar::-webkit-scrollbar{display:none}
-.heroslide{flex:0 0 100%;scroll-snap-align:start;box-sizing:border-box}
-.herodots{display:flex;gap:6px;justify-content:center;margin-top:9px}
-.herodots .hd{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.22);transition:all .2s}
-.herodots .hd.on{background:#f3b94f;width:18px;border-radius:3px}
-.hero.empty{padding:18px;color:#8a99a2;font-size:13px;font-weight:600}
-.hh{display:flex;align-items:center;justify-content:space-between;padding:11px 13px 2px}.hhr{display:flex;align-items:center;gap:7px;flex:0 0 auto}.hedge{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:15px;color:#33e991;background:rgba(51,233,145,.1);border:1px solid rgba(51,233,145,.38);border-radius:8px;padding:3px 9px;display:inline-flex;align-items:center;gap:4px;line-height:1}.hedge i{font-style:normal;font-size:8px;color:#8fd9c2;font-weight:800}
-.eb{font-size:11px;font-weight:800;color:#f3b94f}.hot{border:1px solid rgba(255,93,77,.4);border-radius:999px;padding:2px 8px;font-size:10px;font-weight:800;color:#ff5d4d;background:rgba(255,93,77,.12)}
-.htop{display:flex;gap:9px;padding:6px 13px 2px;align-items:stretch}
-.hL{flex:1.05;min-width:0}.pk{font-weight:800;font-size:36px;line-height:.86;color:#fff}.pg{font-size:12px;color:#8a99a2;font-weight:600;margin-top:3px}
-.ch{display:flex;gap:6px;margin-top:9px}.cc{border:1px solid rgba(255,255,255,.07);border-radius:9px;padding:6px 9px;flex:1}.cc .k{font-size:8px;color:#8a99a2;font-weight:800}.cc .v{font-size:13px;font-weight:700;white-space:nowrap;margin-top:2px;display:flex;align-items:center;gap:3px}.cc .ar{color:#8a99a2;font-weight:700}.cc .gd{color:#33e991;font-weight:800}
-.ebx{flex:0 0 70px;align-self:center;border:1px solid rgba(51,233,145,.42);border-radius:12px;background:rgba(51,233,145,.07);padding:9px 5px;text-align:center;box-shadow:0 0 8px rgba(51,233,145,.07);display:flex;flex-direction:column;justify-content:center}
-.ebx .b{font-weight:800;font-size:25px;color:#33e991;line-height:1}.ebx .k{font-size:8px;color:#8fd9c2;font-weight:800;margin-top:2px}
-.hR{flex:1.05;min-width:0;display:flex;flex-direction:column}.ct{font-size:8px;letter-spacing:.4px;color:#8a99a2;font-weight:800;margin-bottom:3px}
-.cwrap{flex:1;display:flex;flex-direction:column;justify-content:center;border:1px solid rgba(255,255,255,.07);border-radius:9px;background:rgba(255,255,255,.015);padding:6px 8px;position:relative;overflow:hidden}
-.cwrap::before{content:"";position:absolute;inset:0;background:radial-gradient(120% 80% at 72% 50%,rgba(51,233,145,.18),transparent 70%);opacity:.3;animation:cpulse 2.8s ease-in-out infinite;pointer-events:none;z-index:0}
-.cwrap>*{position:relative;z-index:1}
-@keyframes cpulse{0%,100%{opacity:.22}50%{opacity:.66}}
-.livenum{font-family:'Barlow Condensed';font-weight:800;font-size:22px;color:#fff;display:flex;align-items:center;gap:7px}
-.livedot{width:7px;height:7px;border-radius:50%;background:#33e991;animation:pl 1.6s infinite}
-.livedot.r{background:#ff5a5a;animation:plr 1.3s infinite}
-.rdot{width:8px;height:8px;border-radius:50%;background:#ff3b3b;display:inline-block;animation:plr 1.1s infinite}
-@keyframes plr{0%{opacity:1;box-shadow:0 0 0 0 rgba(255,59,59,.7)}50%{opacity:.32}70%{box-shadow:0 0 0 7px rgba(255,59,59,0)}100%{opacity:1;box-shadow:0 0 0 0 rgba(255,59,59,0)}}
-.cap{font-size:9px;color:#8a99a2;font-weight:600;margin-top:2px}
-.cn{font-size:9px;color:#54616b;font-weight:600;margin:6px 13px 0;line-height:1.35}
-.hf{display:flex;align-items:center;justify-content:space-between;border-top:1px solid rgba(243,185,79,.16);margin-top:7px;padding:9px 13px;color:#f3b94f;font-size:11px;font-weight:600}
-.hstrip{display:flex;align-items:center;justify-content:space-between;gap:8px;border-top:1px solid rgba(243,185,79,.2);margin-top:9px;padding:10px 13px;color:#f3b94f;font-size:11.5px;font-weight:700;background:rgba(243,185,79,.06)}
-.eg{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
-.ec{border:1px solid rgba(255,255,255,.06);border-radius:13px;background:linear-gradient(180deg,#0d1218,#090d12);padding:10px 9px}
-.ec .r1{display:flex;align-items:center;gap:7px}.ec .tot{font-size:18px}
-.ec .nm{font-family:'Barlow Condensed';font-weight:800;font-size:17px;line-height:.9}.ec .vs{font-size:9.5px;color:#8a99a2;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.ec .conv{display:inline-block;margin:6px 0 4px;font-size:8px;font-weight:800;border-radius:5px;padding:2px 5px;color:#33e991;background:rgba(51,233,145,.12)}
-.ec .conv.medium{color:#f3b94f;background:rgba(243,185,79,.12)}
-.ec .pc{font-family:'Barlow Condensed';font-weight:800;font-size:26px;color:#33e991;line-height:1;transition:color .3s}.ec .pc.fl-up{color:#33e991}.ec .pc.fl-dn{color:#ff5a5a}
-.ec .md{font-size:10px;color:#9aa7b0;font-weight:600;margin-top:2px}
-.lgc{width:228px;border:1px solid rgba(255,90,90,.28);border-radius:13px;background:linear-gradient(180deg,#160d0e,#090d12);padding:10px 12px}
-.lgh{display:flex;align-items:center;justify-content:space-between;margin-bottom:7px}
-.lgmatch{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:16px;color:#fff}
-.lglive{display:flex;align-items:center;gap:5px;font-size:9px;font-weight:800;color:#ff8a8a;letter-spacing:.3px}
-.lgrow{display:flex;align-items:center;gap:8px;padding:5px 0;border-top:1px solid #161e26}
-.lglbl{font-weight:800;font-size:12px;color:#dbe4e2;flex:1;min-width:0}
-.lgmeta{font-size:10px;color:#9aa7b0;font-weight:600}
-.lgedge{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:16px;flex:0 0 auto}.lgedge.pos{color:#33e991}.lgedge.neg{color:#ff5a5a}
-.elist{display:flex;flex-direction:column;gap:7px}
-.erow{border:1px solid #1a232c;border-radius:12px;background:linear-gradient(180deg,#0d1218,#090d12);padding:10px 12px}
-.etop{display:flex;align-items:center;justify-content:space-between;gap:8px}
-.eleft{display:flex;align-items:center;gap:9px;min-width:0;flex:1}
-.totg{width:30px;height:30px;border-radius:50%;background:rgba(38,116,176,.14);border:1px solid rgba(38,116,176,.32);display:inline-flex;align-items:center;justify-content:center;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:11px;color:#9fc3e8;flex:0 0 auto}.pkside.ov{color:#33e991}.pkside.un{color:#ff5d52}
-.elabel{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:17px;color:#fff;min-width:0}
-.elabel .emu{font-family:'Inter',sans-serif;font-weight:600;font-size:10px;color:#8a99a2;margin-left:6px}
-.epct{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:20px;line-height:1;flex:0 0 auto}.epct.pos{color:#33e991}.epct.neg{color:#ff5a5a}
-.emid{display:flex;align-items:center;gap:8px;margin-top:4px}
-.econv{font-size:8.5px;font-weight:800;border-radius:5px;padding:2px 6px;color:#33e991;background:rgba(51,233,145,.12)}.econv.medium{color:#f3b94f;background:rgba(243,185,79,.12)}.econv.low{color:#8a99a2;background:rgba(130,145,154,.1)}
-.emeta{font-size:10px;color:#9aa7b0;font-weight:600}
-.einf{font-size:9px;font-weight:700;color:#f3b94f;background:rgba(243,185,79,.1);border-radius:5px;padding:2px 5px}
-.emove{font-size:9px;font-weight:700;border-radius:5px;padding:2px 5px}
-.emove.against{color:#ff7a6c;background:rgba(255,122,108,.12)}
-.emove.toward{color:#33e991;background:rgba(51,233,145,.12)}
-.ereason{font-size:11px;color:#a8b4bd;font-weight:500;margin-top:5px;line-height:1.4}
-.rw{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;padding-bottom:2px}.rw::-webkit-scrollbar{display:none}.rw>*{scroll-snap-align:start;flex:0 0 auto}
-.mv{width:152px;border:1px solid rgba(255,255,255,.06);border-radius:12px;background:#0b0f14;padding:9px 12px}
-.mvk{font-weight:800;font-size:15px;color:#eaf1ee}
-.mvv{font-size:14px;font-weight:800;margin-top:6px;color:#eaf1ee;transition:color .3s;white-space:nowrap}.mvv.up{color:#33e991}.mvv.dn{color:#ff5a5a}.mvv .ar{color:#8a99a2;font-weight:700}.mvv .amt{font-weight:800}.mvc{font-size:12px;font-weight:800;margin-top:4px}.mvc.up{color:#33e991}.mvc.dn{color:#ff5a5a}.mvm{font-size:10px;color:#8a99a2;font-weight:600;margin-top:3px}.mv.fl-up .mvv{color:#33e991}.mv.fl-dn .mvv{color:#ff5a5a}
-.mvr{width:212px;border:1px solid rgba(255,255,255,.07);border-radius:12px;background:#0b0f14;padding:11px 13px}
-.mvrtop{display:flex;align-items:center;justify-content:space-between;margin-bottom:7px}
-.mvrm{font-size:12px;font-weight:700;color:#cfd7e2}
-.mvrt{display:flex;align-items:center;gap:5px;font-size:10px;font-weight:800;color:#aeb9c8}.mvrt i{width:8px;height:8px;border-radius:50%;display:inline-block}
-.mvrh{font-size:13.5px;font-weight:600;color:#eaf1ee;line-height:1.35;margin-bottom:5px}.mvrh b{color:#eaf1ee;font-weight:800}
-.mvrp{font-size:11px;color:#8a99a2;font-weight:600;margin-bottom:8px}
-.mvrf{display:flex;align-items:center;justify-content:space-between;gap:8px;border-top:1px solid rgba(255,255,255,.06);padding-top:7px;font-size:11px;font-weight:600}
-.mvrf .ok{color:#5fd6a0}.mvrf .warn{color:#f3b94f}.mvrf .mut{color:#6b7681}.mvrf .bp{color:#cfd7e2}
-.pc2{width:186px;border:1px solid #1a212b;border-radius:12px;background:linear-gradient(180deg,#100d1a,#070a0d);padding:9px 10px;position:relative}
-.pc2 .rk{position:absolute;top:0;left:0;width:22px;height:22px;border-radius:12px 0 10px 0;background:rgba(38,116,176,.2);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;color:#9fc3e8}
-.pc2 .hd{display:flex;align-items:center;gap:8px;margin-left:18px}
-.av{width:44px;height:44px;border-radius:50%;background:linear-gradient(180deg,#26344f,#1a2335);display:flex;align-items:flex-end;justify-content:center;font-size:19px;flex:0 0 auto;position:relative;overflow:hidden;box-shadow:0 0 0 2px rgba(38,116,176,.28)}.av img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
-.pc2 .nm{font-family:'Inter',sans-serif;font-weight:800;font-size:12.5px;line-height:1.1}.pc2 .mu{font-family:'Inter',sans-serif;font-size:9.5px;color:#8a99a2;margin-top:2px}
-.cn2{text-align:center;margin:7px 0 1px}.cn2 .n{font-family:'Inter',sans-serif;font-weight:800;font-size:23px;color:#33e991;line-height:1;letter-spacing:-.5px}.cn2 .l{font-size:7.5px;color:#8fd9c2;font-weight:800;letter-spacing:.3px}
-.sg{display:flex;gap:6px;margin-top:6px}.sg .x{flex:1;border:1px solid #1a212b;border-radius:7px;background:rgba(255,255,255,.015);padding:4px 6px}.sg .kk{font-size:8px;color:#8a99a2;font-weight:700;white-space:nowrap}.sg .vv{font-family:'Inter',sans-serif;font-size:11px;font-weight:800;margin-top:1px}
-.vbk{margin-top:8px;border:1px solid rgba(38,116,176,.3);border-radius:8px;background:rgba(38,116,176,.07);text-align:center;padding:6px;font-size:11px;font-weight:800;color:#9fc3e8}
-.pline{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:6px;border:1px solid rgba(38,116,176,.26);border-radius:7px;background:rgba(38,116,176,.07);padding:6px 8px;font-size:10.5px;font-weight:800;color:#9fc3e8}
-.ebadge{font-size:9px;font-weight:800;color:#33e991;background:rgba(51,233,145,.12);border-radius:5px;padding:2px 5px;white-space:nowrap}
-.pkc{width:186px;border:1px solid rgba(255,255,255,.07);border-radius:13px;background:#0b0f14;padding:10px 12px}.pkc.hot{border-color:rgba(243,185,79,.26);background:#0c1109}.pkc.cold{border-color:rgba(95,184,255,.16);background:#0b0f14}
-.pkc .r1{display:flex;align-items:center;justify-content:space-between}.pkc .n{font-weight:700;font-size:14px}.pkc .c{font-size:10px;color:#8a99a2;font-weight:600}
-.pkc .tg{display:inline-flex;align-items:center;gap:4px;font-size:9px;font-weight:800;margin:7px 0;padding:2px 7px;border-radius:6px}.tg.h{color:#f3b94f;background:rgba(243,185,79,.1)}.tg.p{color:#ff6b5e;background:rgba(255,107,94,.12)}.tg.n{color:#8a99a2;background:rgba(130,145,154,.08)}
-.bs{display:flex;gap:10px}.bs .b{flex:1}.bs .kk{font-size:8.5px;color:#8a99a2;font-weight:800}.bs .vv{font-family:'Barlow Condensed';font-weight:800;font-size:21px}.vv.u{color:#33e991}.vv.dn2{color:#ff5d52}
-.wx{display:flex;gap:10px;margin-top:7px;font-size:10px;color:#c0c9cd;font-weight:600}
-.wxrow{display:flex;align-items:center;gap:7px;margin-top:9px;padding-top:8px;border-top:1px solid rgba(255,255,255,.07);font-size:11.5px;color:#dbe4e2;font-weight:600}.wxrow .wi{font-size:14px}
-.propscta{display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid rgba(38,116,176,.28);border-radius:12px;background:rgba(38,116,176,.06);padding:12px 14px;cursor:pointer}
-.pctah{font-weight:800;font-size:13px;color:#eaf1ee}.pctas{font-size:10.5px;color:#8a99a2;font-weight:500;margin-top:3px;line-height:1.35}.pctaarrow{font-size:18px;color:#9fc3e8;font-weight:800;flex:0 0 auto}
-.prrow{display:flex;gap:8px;align-items:stretch;overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;padding-bottom:4px;scrollbar-width:none;scroll-padding-left:2px}
-.prrow::-webkit-scrollbar{display:none}
-.ppswipe{font-size:11px;font-weight:700;color:#8a99a2}
-.guideb{display:flex;align-items:center;gap:13px;padding:15px 16px;border-radius:14px;cursor:pointer;border:1px solid rgba(51,233,145,.28);background:linear-gradient(180deg,rgba(51,233,145,.09),rgba(51,233,145,.02))}
-.guideb:active{transform:scale(.99)}
-.guideb-ic{font-size:23px;flex:0 0 auto;width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;background:rgba(51,233,145,.12);border:1px solid rgba(51,233,145,.25)}
-.guideb-tx{flex:1;min-width:0}
-.guideb-h{font-size:14px;font-weight:800;color:#fff;line-height:1.25}
-.guideb-s{font-size:11.5px;color:#9aa6b2;line-height:1.4;margin-top:3px}
-.guideb-ar{font-size:18px;color:#33e991;font-weight:800;flex:0 0 auto}
-.prc{flex:0 0 auto;width:118px;scroll-snap-align:start;min-width:0;position:relative;border:1px solid rgba(38,116,176,.22);border-radius:13px;background:linear-gradient(180deg,rgba(38,116,176,.08),rgba(38,116,176,.02));padding:12px 7px 10px;cursor:pointer;display:flex;flex-direction:column;align-items:center;text-align:center}
-.prc:active{background:rgba(38,116,176,.13)}
-.prcrank{position:absolute;top:6px;left:6px;width:18px;height:18px;border-radius:6px;background:rgba(38,116,176,.92);color:#fff;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:11px;display:flex;align-items:center;justify-content:center;line-height:1;z-index:2}
-.prcav{width:60px;height:60px;border-radius:50%;overflow:hidden;position:relative;display:flex;align-items:flex-end;justify-content:center;font-size:25px;margin-top:6px}
-.prcav img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center top;transform:scale(1.2);transform-origin:center 12%}
-.prcname{font-weight:800;font-size:12.5px;color:#eaf1ee;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:7px}
-.prcmu{font-size:9px;color:#8a99a2;font-weight:600;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
-.prcedge{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:25px;line-height:1;margin-top:5px}
-.prclbl{font-size:7.5px;letter-spacing:.3px;color:#8a99a2;font-weight:800;margin-top:1px}
-.prcbet{margin-top:8px;width:100%;display:flex;align-items:center;justify-content:space-between;gap:4px;border:1px solid rgba(38,116,176,.3);border-radius:8px;background:rgba(38,116,176,.08);padding:6px 8px}
-.prcbet span{font-weight:800;font-size:10px;color:#dbe4e2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.prcbet .o{font-family:'Barlow Condensed',sans-serif;font-size:12px;color:#9fc3e8;flex:0 0 auto}
-.ppseeall{margin-top:11px;text-align:center;font-size:12px;font-weight:800;color:#9fc3e8;cursor:pointer;border:1px solid rgba(38,116,176,.28);border-radius:10px;padding:9px;background:rgba(38,116,176,.06)}
-.ppseeall:active{background:rgba(38,116,176,.12)}
-.dots{display:flex;justify-content:center;gap:5px;margin-top:8px}.dots i{width:5px;height:5px;border-radius:50%;background:#222c33;transition:.25s}.dots i.on{width:14px;border-radius:3px;background:#ff5d4d}
-.prh{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}.wkbox{position:absolute;top:10px;right:10px;border:1px solid rgba(38,116,176,.45);border-radius:9px;background:rgba(38,116,176,.1);padding:4px 8px;text-align:center}.wkbox .t{font-size:7px;letter-spacing:.4px;color:#7fb3e0;font-weight:800}.wkbox .r{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:18px;color:#fff;line-height:1.05}.wkbox .u{font-size:9px;font-weight:700;margin-top:1px}.wkbox .u.pos{color:#33e991}.wkbox .u.neg{color:#ff5a5a}
-.tw{display:grid;grid-template-columns:1fr 1fr;gap:9px}
-.pr{border-radius:14px;padding:11px;border:1px solid #161e26;position:relative;min-height:104px}.pr.g{border-color:rgba(38,116,176,.4);background:linear-gradient(180deg,#0c1a2b,#06090b)}.pr.pp{border-color:rgba(38,116,176,.3);background:linear-gradient(180deg,#110d20,#06090b)}
-.pr .h{font-weight:800;font-size:12px}.new{font-size:8px;font-weight:800;border-radius:4px;padding:1px 4px}.pr.g .new{background:#2674B0;color:#fff}.pr.pp .new{background:#2674B0;color:#fff}
-.pr .d{font-size:10px;color:#8a99a2;margin:7px 0 0;line-height:1.4}.pr .cta{font-size:12px;font-weight:800;color:#7fb3e0;margin-top:9px}.pr.pp .cta{color:#9fc3e8}.pr.pp .d{max-width:60%}.pr.g .d{padding-right:84px}
-.wh{width:54px;height:54px;border-radius:50%;position:absolute;top:30px;right:10px;background:radial-gradient(circle,#2f2363,#110d20 72%);border:2px solid #4a3d86;animation:spin 7s linear infinite}.wh::before{content:"";position:absolute;inset:6px;border-radius:50%;border:1px dashed #6a58c0}
+const CSS=`@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700;800&display=swap');
+
+:root{--bg:#000;--panel:#0a0e13;--panel2:#0c1219;--line:#141b22;--line2:#1f2832;
+--gold:#f3b94f;--red:#ff5d4d;--blue:#5da9e8;--steel:#2674B0;--green:#33e991;--neg:#ff6a5a;--tx:#eef2f7;--mut:#7d8a98;--mut2:#46505c;
+--disp:'Barlow Condensed',sans-serif;--mono:'IBM Plex Mono',ui-monospace,monospace;--ui:'Inter',system-ui,sans-serif;}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}html,body{margin:0}
+body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-webkit-font-smoothing:antialiased}
+.app{max-width:460px;margin:0 auto;min-height:100vh;padding-bottom:64px}
+.hd{position:sticky;top:0;z-index:20;background:linear-gradient(180deg,#000 84%,transparent);padding:11px 14px 0}
+.hrow{display:flex;align-items:center;gap:8px}
+.brand{font-family:var(--disp);font-weight:800;font-size:21px}.brand b{color:#fff}.brand i{color:var(--red);font-style:normal}
+.pill{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line2);border-radius:999px;padding:3px 8px;font-size:9px;font-weight:800;letter-spacing:.4px;color:#d2ebe2}
+.pill .d{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pl 1.7s infinite}
+@keyframes pl{0%{box-shadow:0 0 0 0 rgba(51,233,145,.5)}70%{box-shadow:0 0 0 5px rgba(51,233,145,0)}100%{box-shadow:0 0 0 0 rgba(51,233,145,0)}}
+.sp{flex:1}
+.ibtn{width:30px;height:30px;border:1px solid var(--line2);border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;background:var(--panel);color:var(--mut)}
+.sports{display:flex;gap:6px;padding:11px 0 11px;overflow-x:auto;scrollbar-width:none}.sports::-webkit-scrollbar{display:none}
+.sports b{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:11px;font-weight:600;color:var(--mut);border:1px solid var(--line2);border-radius:999px;padding:4px 11px;white-space:nowrap;cursor:pointer}
+.sports b.on{color:#fff;background:rgba(38,116,176,.18);border-color:var(--steel)}
+.sports b .o{width:5px;height:5px;border-radius:50%;background:var(--mut2)}.sports b.l2 .o{background:var(--green)}
+.ticker{overflow:hidden;border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:#070a0e}
+.ticker .tk{display:inline-flex;gap:20px;white-space:nowrap;font-family:var(--mono);font-size:11px;color:var(--mut);padding:7px 0;animation:tick 28s linear infinite}
+.ticker .tk b{color:#cfd7e2;font-weight:600}.ticker .up{color:var(--green)}.ticker .dn{color:var(--neg)}.ticker .lv{color:var(--red);font-weight:700}
+@keyframes tick{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+/* live scores tape */
+.scoretape{display:flex;align-items:stretch;border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:#06090d}
+.lvpill{flex:0 0 auto;display:flex;align-items:center;gap:5px;padding:0 11px;font-family:var(--disp);font-weight:800;font-size:11px;letter-spacing:.5px;color:var(--red);border-right:1px solid var(--line)}
+.lvpill .d{width:6px;height:6px;border-radius:50%;background:var(--red);animation:plr 1.3s infinite}
+.stwrap{flex:1;overflow:hidden;display:flex;align-items:center}
+.sttrack{display:inline-flex;gap:24px;white-space:nowrap;font-family:var(--mono);font-size:11.5px;color:var(--mut);padding:7px 0;animation:tick 24s linear infinite}
+.sttrack .g{color:#cfd7e2;font-weight:600}.sttrack .sc{color:#fff;font-weight:700}.sttrack .st{color:var(--mut2)}
+/* Market Pulse alert strip */
+.alerts{margin:11px 14px 0;border:1px solid var(--line2);border-radius:12px;background:var(--panel);overflow:hidden}
+.ahead{display:flex;align-items:center;justify-content:space-between;padding:9px 13px 0;font-family:var(--disp);font-weight:800;font-size:11px;letter-spacing:.6px;color:var(--mut)}
+.ahead .ago{font-family:var(--mono);font-size:9px;color:var(--mut2);font-weight:500;letter-spacing:0}
+.arow{padding:9px 13px 11px;cursor:pointer}
+.arow.fade{animation:afade .42s ease}
+.aline{display:flex;align-items:center;gap:10px}
+.aline .adot{width:9px;height:9px;border-radius:50%;flex:0 0 auto}.adot.g{background:var(--green);box-shadow:0 0 8px rgba(51,233,145,.55)}.adot.r{background:var(--red);box-shadow:0 0 8px rgba(255,93,77,.55)}
+.aline .alab{font-family:var(--disp);font-weight:800;font-size:11px;letter-spacing:.4px;color:var(--gold);flex:0 0 auto}
+.aline .aval{font-family:var(--mono);font-size:13px;color:#fff;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.aline .aval .a{color:var(--mut2)}.aline .aval .up{color:var(--green)}.aline .aval .dn{color:var(--neg)}
+.awhy{font-family:var(--ui);font-size:10.5px;color:var(--mut);margin-top:5px;padding-left:19px;line-height:1.35}
+@keyframes afade{from{opacity:.15;transform:translateY(3px)}to{opacity:1;transform:none}}
+.alerts .dd{display:flex;gap:5px;justify-content:center;padding:0 0 9px}.alerts .dd i{width:5px;height:5px;border-radius:50%;background:#222c33;transition:.2s;cursor:pointer}.alerts .dd i.on{background:var(--gold);width:13px;border-radius:3px}
+
+/* section label */
+.seclbl{display:flex;align-items:center;gap:10px;margin:20px 14px 0;color:var(--mut);font-family:var(--disp);font-weight:800;font-size:13px;letter-spacing:.6px}
+.seclbl .ct{font-family:var(--mono);font-size:10px;color:var(--mut2);font-weight:500}
+.seclbl .lk{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--mut)}
+.seclbl::before{content:"";width:3px;height:13px;border-radius:2px;background:var(--red)}
+
+/* hero */
+.herocar{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;margin-top:11px}.herocar::-webkit-scrollbar{display:none}
+.hslide{flex:0 0 100%;scroll-snap-align:start;padding:0 14px}
+.hero{border:1px solid rgba(243,185,79,.34);border-radius:15px;background:linear-gradient(180deg,#14110a,#06090b);position:relative;overflow:hidden;animation:glow 3.6s ease-in-out infinite}
+@keyframes glow{0%,100%{box-shadow:inset 0 0 22px rgba(243,185,79,.07);border-color:rgba(243,185,79,.3)}50%{box-shadow:inset 0 0 40px rgba(243,185,79,.2);border-color:rgba(243,185,79,.55)}}
+.hero::before{content:"";position:absolute;inset:0;background:radial-gradient(150% 120% at 50% -12%,rgba(243,185,79,.18),transparent 55%);pointer-events:none}.hero>*{position:relative}
+.htop{display:flex;align-items:center;justify-content:space-between;padding:12px 14px 0}.eb{font-size:11px;font-weight:800;color:var(--gold)}
+.hbadges{display:flex;gap:7px}.hedge{font-family:var(--disp);font-weight:800;font-size:15px;color:var(--green);background:rgba(51,233,145,.1);border:1px solid rgba(51,233,145,.38);border-radius:8px;padding:3px 9px}
+.hot{font-size:9px;font-weight:800;color:var(--red);border:1px solid rgba(255,93,77,.4);background:rgba(255,93,77,.12);border-radius:999px;padding:2px 7px}
+.hpick{font-family:var(--disp);font-weight:800;font-size:34px;color:#fff;line-height:.9;padding:8px 14px 0}.hpick .mk{font-family:var(--mono);font-size:9px;color:var(--gold);border:1px solid rgba(243,185,79,.4);border-radius:4px;padding:1px 5px;margin-left:7px;vertical-align:middle}
+.hpg{font-size:12px;color:var(--mut);font-weight:600;padding:3px 14px 0}
+.hmid{display:flex;gap:8px;padding:10px 14px 0;align-items:stretch}
+.hcell{border:1px solid rgba(255,255,255,.08);border-radius:9px;padding:6px 9px;flex:1}.hcell .k{font-size:8px;color:var(--mut);font-weight:800}.hcell .v{font-family:var(--mono);font-size:12.5px;color:#fff;margin-top:2px}.hcell .v .up{color:var(--green)}
+.hchart{flex:1.1;border:1px solid rgba(255,255,255,.08);border-radius:9px;padding:6px 8px;display:flex;flex-direction:column;justify-content:center}.hchart .k{font-size:8px;color:var(--mut);font-weight:800}
+.hmm{padding:9px 14px 0;font-family:var(--mono);font-size:10.5px;color:#b9c2cc}.hmm b{color:#fff}
+.hf{display:flex;align-items:center;justify-content:space-between;border-top:1px solid rgba(243,185,79,.16);margin-top:10px;padding:9px 14px;color:var(--gold);font-size:11px;font-weight:600}
+.hdots{display:flex;gap:6px;justify-content:center;margin-top:9px}.hdots i{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.2)}.hdots i.on{background:var(--gold);width:16px;border-radius:3px}
+
+/* WizePlays (alone) */
+.wpbar{display:flex;align-items:center;gap:11px;margin:13px 14px 0;border:1px solid rgba(243,185,79,.42);border-radius:13px;background:linear-gradient(180deg,#1a1408,#06090b);padding:13px;cursor:pointer}
+.wpbar .ic{width:36px;height:36px;border-radius:10px;background:rgba(243,185,79,.16);border:1px solid rgba(243,185,79,.42);display:flex;align-items:center;justify-content:center;color:var(--gold);font-family:var(--disp);font-weight:800;font-size:18px}
+.wpbar .tx{flex:1;min-width:0}.wpbar .h{font-family:var(--disp);font-weight:800;font-size:15px;color:#fff;letter-spacing:.3px}.wpbar .h .new{font-size:8px;font-weight:800;background:var(--gold);color:#1a1408;border-radius:4px;padding:1px 4px;margin-left:6px;vertical-align:middle;font-family:var(--ui)}
+.wpbar .s{font-size:11px;color:var(--mut);margin-top:2px}.wpbar .rec{text-align:right}.wpbar .rec .r{font-family:var(--disp);font-weight:800;font-size:20px;color:#fff;line-height:1}.wpbar .rec .u{font-family:var(--mono);font-size:11px;color:var(--green);margin-top:1px}
+
+/* WizeSpin (alone) */
+.spincard{position:relative;margin:13px 14px 0;border:1px solid rgba(243,185,79,.4);border-radius:13px;background:linear-gradient(180deg,#1a1408,#06090b);padding:14px;min-height:84px;cursor:pointer;overflow:hidden}
+.spincard .h{font-family:var(--disp);font-weight:800;font-size:15px;color:#fff;letter-spacing:.3px}.spincard .h .new{font-size:8px;font-weight:800;background:var(--gold);color:#1a1408;border-radius:4px;padding:1px 4px;margin-left:6px;vertical-align:middle;font-family:var(--ui)}
+.spincard .d{font-size:11px;color:var(--mut);margin-top:7px;max-width:64%;line-height:1.4}.spincard .cta{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--gold);margin-top:9px}
+.wheel{width:52px;height:52px;border-radius:50%;position:absolute;top:24px;right:16px;background:radial-gradient(circle,#3a2c0a,#14110a 72%);border:2px solid var(--gold);animation:spin 7s linear infinite}.wheel::before{content:"";position:absolute;inset:6px;border-radius:50%;border:1px dashed rgba(243,185,79,.6)}
 @keyframes spin{to{transform:rotate(360deg)}}
-.gm{width:122px;border:1px solid #161e26;border-radius:11px;background:#0b0f14;padding:8px 10px}.gmm{display:flex;align-items:center;gap:4px;font-weight:800;font-size:14px}.gmm .x{color:#8a99a2}.gme{font-size:9px;color:#8a99a2;font-weight:600;margin-top:6px}
-.nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;display:flex;justify-content:space-around;padding:6px 4px calc(6px + env(safe-area-inset-bottom));background:rgba(0,0,0,.96);backdrop-filter:blur(14px);border-top:1px solid #161e26}
-.nav a{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:8.5px;font-weight:600;color:#8a99a2;flex:1;min-width:0}.nav a.on{color:#ff5d4d}.nav a.up{color:#33e991}.nav .i{font-size:17px}
-.gatewrap{position:relative;border-radius:14px;overflow:hidden}
-.blurlayer{filter:blur(7px);opacity:.5;pointer-events:none;user-select:none}
-.gate{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:18px;background:radial-gradient(circle at 50% 40%,rgba(8,10,16,.5),rgba(6,9,11,.9))}
-.gate .lock{width:42px;height:42px;border-radius:13px;display:flex;align-items:center;justify-content:center;font-size:20px;background:rgba(38,116,176,.14);border:1px solid rgba(38,116,176,.4);margin-bottom:11px}
-.gate .gt{font-size:15px;font-weight:800;color:#fff;margin-bottom:4px}
-.gate .gs{font-size:11.5px;color:#9aa6b2;line-height:1.5;max-width:250px;margin-bottom:13px}.gate .gs b{color:#33e991;font-weight:800}
-.gate .gbtn{display:inline-flex;align-items:center;gap:7px;background:#1D9E75;color:#04130d;font-weight:800;font-size:13px;padding:11px 20px;border-radius:11px;cursor:pointer}
-.lglock{display:flex;align-items:center;gap:6px;margin-top:9px;padding-top:8px;border-top:1px solid #1e2730;font-size:10px;color:#7d8b96;font-weight:700}
 
-.wpsb{display:none}
+.kpis{display:flex;gap:8px;margin:13px 14px 0}.kpi{flex:1;border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:8px 9px;text-align:center}
+.kpi .k{font-family:var(--mono);font-size:8px;color:var(--mut);letter-spacing:.3px}.kpi .v{font-family:var(--disp);font-weight:800;font-size:18px;color:#fff;margin-top:2px;line-height:1}.kpi .v.g{color:var(--green)}.kpi .v.gold{color:var(--gold)}.kpi .v.red{color:var(--red)}
 
-/* ---- DESKTOP: left sidebar shell (same as the Performance page) ---- */
-@media (min-width:769px){
-  .wpsb{display:block}
-  .wp{margin-left:200px;max-width:none;padding:0 30px 40px}
-  .top{padding:18px 0 10px}
-  .top .logo{display:none}
-  .tabs{padding:0}
-  .hero{margin:12px 0 0}
-  .cols{padding:0;margin-top:4px}
-  .panel{padding-left:0;padding-right:0}
-  .elist{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:9px}
-  .rw{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:9px;overflow:visible}
-  .rw>*{flex:none;scroll-snap-align:none}
-  .lgc,.mv,.gm,.pkc{width:auto}
-  .dots{display:none}
-  .nav{display:none}
-}
+.chips{display:flex;align-items:center;gap:7px;padding:8px 14px 0;overflow-x:auto;scrollbar-width:none}.chips::-webkit-scrollbar{display:none}
+.chipf{font-family:var(--mono);font-size:10px;color:var(--mut);border:1px solid var(--line2);border-radius:999px;padding:4px 10px;white-space:nowrap;cursor:pointer}.chipf.on{color:#06202a;background:var(--blue);border-color:var(--blue);font-weight:600}
+
+.grid{margin:6px 14px 0}
+.gr{position:relative;padding:13px 4px 13px 14px;border-bottom:1px solid var(--line);cursor:pointer}
+.gr::before{content:"";position:absolute;left:0;top:9px;bottom:9px;width:3px;border-radius:3px;background:var(--mut2)}
+.gr.high::before{background:var(--green)}.gr.med::before{background:var(--gold)}.gr.low::before{background:var(--mut2)}
+.gr:active{background:rgba(255,255,255,.015)}.gr.sel{background:rgba(93,169,232,.05)}
+.r1{display:flex;align-items:baseline;gap:7px}
+.lgs{display:flex;flex:0 0 auto}.lg{width:19px;height:19px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--disp);font-weight:800;font-size:7px;color:#fff;margin-left:-5px;border:1.5px solid #000;overflow:hidden;background:#0c1018}.lg:first-child{margin-left:0}.lg img{width:14px;height:14px;object-fit:contain}
+.pick{font-family:var(--disp);font-weight:800;font-size:18px;color:#fff;line-height:1}
+.mk{font-family:var(--mono);font-size:8.5px;font-weight:600;color:var(--mut);border:1px solid var(--line2);border-radius:4px;padding:1px 5px}
+.spk{margin-left:auto;flex:0 0 auto}
+.edge{font-family:var(--disp);font-weight:800;font-size:21px;line-height:1;font-variant-numeric:tabular-nums}.edge.pos{color:var(--green)}.edge.neg{color:var(--neg)}
+.tagr{font-family:var(--ui);font-size:9px;font-weight:800;border-radius:5px;padding:2px 7px;margin-left:auto}.tagr.h{color:var(--gold);background:rgba(243,185,79,.12)}.tagr.p{color:var(--blue);background:rgba(93,169,232,.12)}.tagr.n{color:var(--mut);background:rgba(130,145,154,.1)}
+.r2{display:flex;align-items:center;margin-top:7px;font-family:var(--mono);font-size:11.5px;color:var(--mut);font-variant-numeric:tabular-nums}
+.r2 .game{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#aeb9c8}
+.r2 .cw{font-weight:600}.cw.high{color:var(--green)}.cw.med{color:var(--gold)}.cw.low{color:var(--mut)}
+.r2 .cell{flex:0 0 auto;text-align:right;padding-left:11px}.r2 .odds{min-width:44px;color:#cfd7e2}.r2 .move .up{color:var(--green)}.r2 .move .dn{color:var(--neg)}.r2 .move .a{color:var(--mut2)}.r2 .clv .p{color:var(--green)}.r2 .clv .n{color:var(--neg)}.r2 .lean{color:var(--blue)}
+.lvtag{display:inline-flex;align-items:center;gap:4px;font-size:9px;font-weight:800;color:#ff8a8a;margin-left:auto}.lvtag .d{width:6px;height:6px;border-radius:50%;background:#ff5a5a;animation:plr 1.3s infinite}
+@keyframes plr{0%{opacity:1}50%{opacity:.3}100%{opacity:1}}
+.det{max-height:0;overflow:hidden;transition:max-height .28s ease}.gr.sel .det{max-height:440px;margin-top:11px}
+.dwrap{border-top:1px dashed var(--line2);padding-top:11px}
+.dhead{display:flex;align-items:center;gap:9px;margin-bottom:9px}.dhead .av{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--disp);font-weight:800;font-size:10px;color:#fff;flex:0 0 auto;overflow:hidden}.dhead .av img{width:23px;height:23px;object-fit:contain}.dhead .nm{font-weight:700;font-size:13px;color:#fff}.dhead .mu{font-size:10.5px;color:var(--mut);font-family:var(--mono);margin-top:1px}.dhead .st{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--mut)}
+.mvm{margin:4px 0 9px}.mvm .lbls{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10px;margin-bottom:4px}.mvm .lbls .ml{color:var(--green)}.mvm .lbls .mk2{color:var(--mut)}.bar{height:7px;border-radius:4px;background:#161e28;overflow:hidden}.bar i{display:block;height:100%;background:linear-gradient(90deg,var(--green),var(--steel))}
+.dchips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:9px}.dchip{font-family:var(--mono);font-size:10px;color:#cfd7e2;border:1px solid var(--line2);border-radius:6px;padding:3px 7px;background:var(--panel2)}.dchip b{color:var(--mut);font-weight:500;margin-right:4px}.dchip.g{color:var(--green)}.dchip.gold{color:var(--gold)}
+.flags{display:flex;flex-wrap:wrap;gap:8px;font-family:var(--mono);font-size:10.5px;margin-bottom:9px}.flags .ok{color:var(--green)}.flags .warn{color:var(--red)}.flags .info{color:var(--blue)}.flags .mu{color:var(--mut)}
+.why{font-size:11.5px;color:#b9c2cc;line-height:1.5;margin-bottom:10px}.why b{color:var(--mut);font-weight:700}
+.rdbox{margin-bottom:10px;border:1px solid var(--line2);border-radius:9px;background:var(--panel2);overflow:hidden}
+.rdbox .rl{font-family:var(--mono);font-size:8.5px;color:var(--mut);letter-spacing:.5px;padding:7px 10px 5px;background:#0a0f15}
+.rdrow{display:flex;align-items:center;gap:9px;font-family:var(--mono);font-size:10.5px;padding:6px 10px;border-top:1px solid #11161c}
+.rdrow .leg{flex:0 0 40px;color:var(--mut2)}
+.rdrow .tier{flex:0 0 46px;font-weight:600}.tier.strong{color:var(--green)}.tier.soft{color:var(--gold)}.tier.split{color:var(--red)}
+.rdrow .pk{flex:1;color:#cfd7e2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rdrow .ag{flex:0 0 auto}.ag.y{color:var(--green)}.ag.n{color:var(--mut)}
+.dlink{font-family:var(--disp);font-weight:800;font-size:13px;color:var(--gold)}
+.sum{display:flex;align-items:center;gap:12px;margin:0 14px;padding:11px 14px;font-family:var(--mono);font-size:11px;color:var(--mut);border-top:1px solid var(--line2)}.sum .l{color:#cfd7e2;font-weight:600}.sum .p{color:var(--green)}.sum .sp{flex:1}
+
+/* live edge cards */
+.lec{width:230px;border:1px solid rgba(255,90,90,.28);border-radius:13px;background:linear-gradient(180deg,#160d0e,#090d12);padding:11px 12px}
+.lec .lh{display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;gap:8px}
+.lec .lm{font-family:var(--disp);font-weight:800;font-size:15px;color:#fff;display:flex;align-items:center;gap:7px}
+.lec .lst{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:9px;font-weight:700;color:#ff8a8a;flex:0 0 auto}
+.lec .lst .d{width:6px;height:6px;border-radius:50%;background:#ff5a5a;animation:plr 1.3s infinite}
+.lerow{display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid rgba(255,255,255,.06)}
+.lerow .ll{font-family:var(--disp);font-weight:800;font-size:14px;color:#dbe4e2;flex:1;min-width:0}
+.lerow .lmeta{font-family:var(--mono);font-size:10px;color:var(--mut)}
+.lerow .le{font-family:var(--disp);font-weight:800;font-size:16px;flex:0 0 auto;font-variant-numeric:tabular-nums}.le.pos{color:var(--green)}.le.neg{color:var(--neg)}
+
+/* swiping carousels */
+.car{display:flex;gap:9px;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding:8px 14px 0}.car::-webkit-scrollbar{display:none}.car>*{scroll-snap-align:start;flex:0 0 auto}
+.dots{display:flex;gap:5px;justify-content:center;margin-top:9px}.dots i{width:5px;height:5px;border-radius:50%;background:#222c33;transition:.2s}.dots i.on{width:14px;border-radius:3px;background:var(--red)}
+.caption{font-family:var(--mono);font-size:10px;color:var(--mut2);margin:9px 14px 0;line-height:1.4}
+.seeall{margin:11px 14px 0;text-align:center;font-family:var(--disp);font-weight:800;font-size:14px;color:var(--blue);border:1px solid rgba(93,169,232,.3);border-radius:11px;padding:11px;background:rgba(93,169,232,.06);cursor:pointer}
+/* mover card */
+.mvc{width:188px;border:1px solid var(--line);border-radius:13px;background:linear-gradient(180deg,#0d1218,#090d12);padding:12px}
+.mvc .pk{font-family:var(--disp);font-weight:800;font-size:18px;color:#fff;line-height:1}.mvc .mu{font-family:var(--mono);font-size:10px;color:var(--mut);margin-top:3px}
+.mvc .od{font-family:var(--mono);font-size:14px;font-weight:600;margin-top:10px}.mvc .od .a{color:var(--mut2)}.mvc .od.up{color:var(--green)}.mvc .od.dn{color:var(--neg)}
+.mvc .ct2{font-family:var(--mono);font-size:11px;font-weight:600;margin-top:4px}.mvc .ct2.up{color:var(--green)}.mvc .ct2.dn{color:var(--neg)}
+/* prop card */
+.prc{width:138px;border:1px solid rgba(93,169,232,.22);border-radius:14px;background:linear-gradient(180deg,rgba(93,169,232,.06),rgba(93,169,232,.01));padding:12px 9px 11px;position:relative;display:flex;flex-direction:column;align-items:center;text-align:center}
+.prc .rk{position:absolute;top:7px;left:7px;width:19px;height:19px;border-radius:6px;background:var(--steel);color:#fff;font-family:var(--disp);font-weight:800;font-size:11px;display:flex;align-items:center;justify-content:center}
+.prc .av{width:58px;height:58px;border-radius:50%;display:flex;align-items:flex-end;justify-content:center;font-family:var(--disp);font-weight:800;font-size:18px;color:#fff;margin-top:4px}
+.prc .nm{font-weight:800;font-size:13px;color:#eaf1ee;margin-top:8px;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prc .mu{font-family:var(--mono);font-size:9px;color:var(--mut);margin-top:2px}
+.prc .ed{font-family:var(--disp);font-weight:800;font-size:24px;color:var(--green);margin-top:7px;line-height:1}
+.prc .lb{font-size:7.5px;letter-spacing:.3px;color:var(--mut);font-weight:800;margin-top:1px}
+.prc .bet{margin-top:9px;width:100%;display:flex;align-items:center;justify-content:space-between;border:1px solid rgba(93,169,232,.3);border-radius:8px;background:rgba(93,169,232,.07);padding:6px 8px}
+.prc .bet span{font-family:var(--mono);font-weight:600;font-size:10px;color:#dbe4e2}.prc .bet .o{color:var(--blue)}
+/* park card */
+.pkc{width:200px;border:1px solid var(--line);border-radius:13px;background:linear-gradient(180deg,#0d1218,#090d12);padding:12px}
+.pkc.h{border-color:rgba(243,185,79,.26)}.pkc.p{border-color:rgba(93,169,232,.2)}
+.pkc .r1{display:flex;align-items:center;justify-content:space-between}.pkc .vn{font-family:var(--disp);font-weight:800;font-size:15px;color:#fff}.pkc .tm{font-family:var(--mono);font-size:9px;color:var(--mut);margin-top:1px}
+.pkc .lg{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--disp);font-weight:800;font-size:8px;color:#fff;flex:0 0 auto;overflow:hidden;background:#0c1018}.pkc .lg img{width:20px;height:20px;object-fit:contain}
+.pkc .tg{display:inline-block;font-size:9px;font-weight:800;border-radius:6px;padding:2px 7px;margin-top:9px}.pkc .tg.h{color:var(--gold);background:rgba(243,185,79,.12)}.pkc .tg.p{color:var(--blue);background:rgba(93,169,232,.12)}
+.pkc .bs{display:flex;gap:10px;margin-top:9px}.pkc .b .kk{font-family:var(--mono);font-size:8px;color:var(--mut);font-weight:600}.pkc .b .vv{font-family:var(--disp);font-weight:800;font-size:20px;color:var(--green)}.pkc .b .vv.dn{color:var(--neg)}
+.pkc .wx{font-family:var(--mono);font-size:10px;color:#aeb9c8;margin-top:9px;padding-top:8px;border-top:1px solid var(--line)}
+
+.guide{display:flex;align-items:center;gap:12px;margin:6px 14px 0;padding:14px 15px;border-radius:14px;border:1px solid rgba(51,233,145,.28);background:linear-gradient(180deg,rgba(51,233,145,.08),rgba(51,233,145,.02));cursor:pointer}
+.guide .gi{width:40px;height:40px;border-radius:11px;background:rgba(51,233,145,.12);border:1px solid rgba(51,233,145,.25);flex:0 0 auto}
+.guide .gt{flex:1}.guide .gh{font-weight:800;font-size:13.5px;color:#fff}.guide .gs{font-size:11px;color:#9aa6b2;margin-top:3px;line-height:1.4}.guide .ga{color:var(--green);font-weight:800;font-size:17px}
+.upcrow{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding:6px 14px 0}.upcrow::-webkit-scrollbar{display:none}
+.gm{flex:0 0 auto;width:128px;border:1px solid var(--line);border-radius:11px;background:var(--panel);padding:9px 11px}.gm .mt{display:flex;align-items:center;gap:5px;font-family:var(--disp);font-weight:800;font-size:14px}.gm .x{color:var(--mut)}.gm .tm{font-family:var(--mono);font-size:9px;color:var(--mut);margin-top:6px}
+
+.offblock{margin:34px 22px;text-align:center}.offblock .big{font-family:var(--disp);font-weight:800;font-size:22px;color:#cfd7e2}.offblock .sm{font-family:var(--mono);font-size:11px;color:var(--mut);margin-top:8px;line-height:1.5}
+
+/* tier toggle + free-tier gates */
+.tier{display:flex;gap:2px;background:#0a0f13;border:1px solid var(--line2);border-radius:8px;padding:2px;margin-right:2px}
+.tier b{font-family:var(--mono);font-size:9px;font-weight:600;color:var(--mut);padding:4px 7px;border-radius:6px;cursor:pointer}.tier b.on{background:#141d24;color:#fff;box-shadow:inset 0 0 0 1px var(--steel)}
+.gatecard{position:relative;border:1px solid var(--line2);border-radius:15px;background:radial-gradient(circle at 50% 25%, #11192a, #06090b 75%);padding:24px 18px;text-align:center;overflow:hidden}
+.gatecard .lk{width:42px;height:42px;border-radius:12px;background:rgba(243,185,79,.14);border:1px solid rgba(243,185,79,.4);display:inline-flex;align-items:center;justify-content:center;margin-bottom:11px;color:var(--gold)}
+.gatecard .gt{font-family:var(--disp);font-weight:800;font-size:19px;color:#fff;letter-spacing:.3px}
+.gatecard .gs{font-size:11.5px;color:var(--mut);margin-top:6px;line-height:1.55}.gatecard .gs b{color:var(--gold)}
+.gatebtn{display:inline-block;margin-top:14px;background:var(--gold);color:#1a1408;font-family:var(--disp);font-weight:800;font-size:14px;letter-spacing:.3px;padding:11px 24px;border-radius:11px;cursor:pointer}
+.lockstrip{display:flex;align-items:center;gap:11px;margin:8px 14px 0;padding:12px 13px;border:1px dashed var(--line2);border-radius:11px}
+.lockstrip .lkic{width:30px;height:30px;border-radius:8px;background:rgba(243,185,79,.1);border:1px solid rgba(243,185,79,.3);display:flex;align-items:center;justify-content:center;color:var(--gold);flex:0 0 auto}
+.lockstrip .lt{font-family:var(--disp);font-weight:800;font-size:14px;color:#cfd7e2}.lockstrip .ls{font-family:var(--mono);font-size:10px;color:var(--mut);margin-top:1px}
+.lockstrip .u{margin-left:auto;font-family:var(--mono);font-size:11px;font-weight:600;color:var(--gold)}
+/* empty states + demo switcher */
+.estate{margin:8px 14px 0;border:1px dashed var(--line2);border-radius:12px;padding:20px 16px;text-align:center}
+.estate .et{font-family:var(--disp);font-weight:800;font-size:14px;color:#cfd7e2}
+.estate .es{font-size:11px;color:var(--mut);margin-top:5px;font-family:var(--mono);line-height:1.45}
+.hero .heh{font-family:var(--disp);font-weight:800;font-size:19px;color:#fff;margin-top:14px}
+.hero .hes{font-size:11.5px;color:var(--mut);margin-top:7px;font-family:var(--mono);line-height:1.55;margin-bottom:4px}
+#content,#freecontent,.offblock{padding-bottom:150px}
+.demobar{position:fixed;bottom:56px;left:50%;transform:translateX(-50%);width:100%;max-width:460px;display:flex;align-items:center;gap:6px;padding:6px 11px;background:rgba(8,12,16,.96);backdrop-filter:blur(8px);border-top:1px dashed var(--line2);font-family:var(--mono);font-size:9px;z-index:5}
+.demobar>span{color:var(--gold);font-weight:700;letter-spacing:.6px}
+.demobar b{color:var(--mut);padding:4px 9px;border-radius:6px;border:1px solid var(--line2);cursor:pointer}.demobar b.on{background:#141d24;color:#fff;border-color:var(--steel)}
+.nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:460px;display:flex;justify-content:space-around;padding:7px 4px;background:rgba(0,0,0,.96);backdrop-filter:blur(12px);border-top:1px solid var(--line)}
+.nav a{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:8.5px;font-weight:600;color:var(--mut)}.nav a.on{color:var(--gold)}.nav .i{font-size:15px;height:18px;display:flex;align-items:center}
+.dbars rect{animation:eq 1.1s ease-in-out infinite}.db1{fill:var(--green)}.db2{fill:var(--red);animation-delay:.18s}.db3{fill:var(--green);animation-delay:.36s}.db4{fill:var(--red);animation-delay:.54s}
+@keyframes eq{0%,100%{height:5px;y:13px}50%{height:13px;y:5px}}
 `;
