@@ -1,229 +1,288 @@
-// OddsPage.jsx — the "Odds Shop" line-shopping page.
-//
-// Shows EVERY US book's moneyline + total price per game, side by side, with the
-// best available price in each market highlighted. The point: let CLV-minded
-// subscribers shop for the best number themselves — the honest, $7 alternative to
-// the expensive odds-screen tools. Read-only; data from /api/odds/mlb (90s cache,
-// refresh-on-view). Best price = highest American number on each side; over/under
-// "best" is judged only among books on the consensus total line.
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-import { oddsApi, subscriptionApi } from "../lib/api";
-import Sidebar from "./Sidebar";
-import TerminalShell from "./TerminalShell";
-import BottomNav from "./BottomNav";
+import { oddsApi, edgesApi, subscriptionApi } from "../lib/api";
 
-const fmtOdds = (p) => (p == null ? "—" : p > 0 ? `+${p}` : `${p}`);
-const nick = (name) => {
-  const parts = String(name || "").trim().split(" ");
-  return parts.length > 1 ? parts[parts.length - 1] : (name || "");
+const TEAMCOL = {
+  ARI:"#A71930",ATL:"#CE1141",BAL:"#DF4601",BOS:"#BD3039",CHC:"#0E3386",CWS:"#27251F",CHW:"#27251F",
+  CIN:"#C6011F",CLE:"#00385D",COL:"#33006F",DET:"#0C2340",HOU:"#EB6E1F",KC:"#004687",LAA:"#BA0021",
+  LAD:"#005A9C",MIA:"#00A3E0",MIL:"#FFC52F",MIN:"#002B5C",NYM:"#FF5910",NYY:"#0C2340",OAK:"#003831",
+  ATH:"#003831",PHI:"#E81828",PIT:"#FDB827",SD:"#2F241D",SF:"#FD5A1E",SEA:"#0C2C56",STL:"#C41E3A",
+  TB:"#092C5C",TEX:"#003278",TOR:"#134A8E",WSH:"#AB0003",WAS:"#AB0003"
 };
-const fmtTime = (iso) => {
-  if (!iso) return "";
-  try {
-    return new Date(iso).toLocaleString("en-US", { weekday: "short", hour: "numeric", minute: "2-digit" });
-  } catch { return ""; }
+const NAME2ABBR = {
+  arizonadiamondbacks:"ARI",atlantabraves:"ATL",baltimoreorioles:"BAL",bostonredsox:"BOS",chicagocubs:"CHC",
+  chicagowhitesox:"CWS",cincinnatireds:"CIN",clevelandguardians:"CLE",coloradorockies:"COL",detroittigers:"DET",
+  houstonastros:"HOU",kansascityroyals:"KC",losangelesangels:"LAA",losangelesdodgers:"LAD",miamimarlins:"MIA",
+  milwaukeebrewers:"MIL",minnesotatwins:"MIN",newyorkmets:"NYM",newyorkyankees:"NYY",oaklandathletics:"OAK",
+  athletics:"ATH",philadelphiaphillies:"PHI",pittsburghpirates:"PIT",sandiegopadres:"SD",sanfranciscogiants:"SF",
+  seattlemariners:"SEA",stlouiscardinals:"STL",tampabayrays:"TB",texasrangers:"TEX",torontobluejays:"TOR",washingtonnationals:"WSH"
 };
+const normName = (s) => String(s||"").toLowerCase().replace(/[^a-z]/g,"");
+const shortTeam = (t) => { const m = String(t||"").match(/[A-Z]{2,3}/); return m ? m[0] : String(t||"").slice(0,3).toUpperCase(); };
+const abbrOf = (name) => NAME2ABBR[normName(name)] || shortTeam(name) || String(name||"").slice(0,3).toUpperCase();
+const teamCol = (ab) => TEAMCOL[String(ab||"").toUpperCase()] || "#3a4a57";
+const fmtOdds = (a) => (a==null || isNaN(a)) ? "—" : (Math.round(Number(a))>0 ? "+"+Math.round(Number(a)) : ""+Math.round(Number(a)));
+const amCents = (o) => { if(o==null||isNaN(o)) return null; const n=Number(o); return n>=100?n-100:n<=-100?n+100:0; };
+const isTotalEdge = (e) => e.side==="over" || e.side==="under";
 
-function BestCell({ price, isBest, note }) {
-  return (
-    <td style={{
-      padding: "8px 10px", textAlign: "center", fontVariantNumeric: "tabular-nums",
-      fontSize: 13, fontWeight: isBest ? 800 : 500,
-      color: isBest ? "#1D9E75" : "#cbd2da",
-      background: isBest ? "rgba(29,158,117,0.10)" : "transparent",
-      borderRadius: isBest ? 4 : 0, whiteSpace: "nowrap",
-    }}>
-      {fmtOdds(price)}
-      {note ? <span style={{ fontSize: 9, color: "#6b7280", fontWeight: 500 }}> {note}</span> : null}
-    </td>
-  );
+function Logo({ ab }) {
+  const col = teamCol(ab);
+  return <span className="lg" style={{ background:`radial-gradient(circle at 50% 30%, ${col}, #0c1018 85%)`, boxShadow:`inset 0 0 0 1.5px ${col}` }}>{ab}</span>;
 }
 
-function GameCard({ game }) {
-  const cl = game.consensusTotalLine;
-  const best = game.best || {};
-  const thStyle = { padding: "8px 10px", fontSize: 10, letterSpacing: "0.04em", color: "#6b7280", fontWeight: 700, textTransform: "uppercase", whiteSpace: "nowrap" };
-
-  return (
-    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 16, marginBottom: 16 }}>
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, marginBottom: 4, flexWrap: "wrap" }}>
-        <div style={{ fontSize: 15, fontWeight: 700, color: "#e4e7eb" }}>{game.away} <span style={{ color: "#6b7280", fontWeight: 500 }}>@</span> {game.home}</div>
-        <div style={{ fontSize: 11, color: "#6b7280" }}>{fmtTime(game.commenceTime)}{cl != null ? ` · Total ${cl}` : ""}</div>
-      </div>
-
-      {/* Best-price callout — the quick line-shop answer */}
-      <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 14px", margin: "6px 0 12px", fontSize: 11, color: "#9ca3af" }}>
-        {best.awayML && <span><strong style={{ color: "#1D9E75" }}>{nick(game.away)} {fmtOdds(best.awayML.price)}</strong> @ {best.awayML.book}</span>}
-        {best.homeML && <span><strong style={{ color: "#1D9E75" }}>{nick(game.home)} {fmtOdds(best.homeML.price)}</strong> @ {best.homeML.book}</span>}
-        {best.over && <span><strong style={{ color: "#1D9E75" }}>O{cl} {fmtOdds(best.over.price)}</strong> @ {best.over.book}</span>}
-        {best.under && <span><strong style={{ color: "#1D9E75" }}>U{cl} {fmtOdds(best.under.price)}</strong> @ {best.under.book}</span>}
-      </div>
-
-      {/* Full book-by-book table (scrolls horizontally on small screens) */}
-      <div style={{ overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 460 }}>
-          <thead>
-            <tr style={{ borderBottom: "1px solid #1f2937" }}>
-              <th style={{ ...thStyle, textAlign: "left" }}>Book</th>
-              <th style={thStyle}>{nick(game.away)} ML</th>
-              <th style={thStyle}>{nick(game.home)} ML</th>
-              <th style={thStyle}>Over{cl != null ? ` ${cl}` : ""}</th>
-              <th style={thStyle}>Under{cl != null ? ` ${cl}` : ""}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {game.books.map((b, i) => {
-              const onLine = cl != null && b.totalLine === cl;
-              const lineNote = (b.totalLine != null && cl != null && b.totalLine !== cl) ? `@${b.totalLine}` : null;
-              return (
-                <tr key={i} style={{ borderBottom: i < game.books.length - 1 ? "1px solid #141a22" : "none" }}>
-                  <td style={{ padding: "8px 10px", fontSize: 12, fontWeight: 600, color: "#e4e7eb", whiteSpace: "nowrap" }}>{b.book}</td>
-                  <BestCell price={b.awayML} isBest={b.awayML != null && best.awayML && b.awayML === best.awayML.price} />
-                  <BestCell price={b.homeML} isBest={b.homeML != null && best.homeML && b.homeML === best.homeML.price} />
-                  <BestCell price={b.over} isBest={onLine && best.over && b.over === best.over.price} note={lineNote} />
-                  <BestCell price={b.under} isBest={onLine && best.under && b.under === best.under.price} note={lineNote} />
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-export default function OddsPage() {
-  const { user, signOut } = useAuth();
+export default function MarketPage() {
   const navigate = useNavigate();
-  const [plan, setPlan] = useState({ tier: "free", isAdmin: false });
-  const [data, setData] = useState(null);
+  const { user } = useAuth();
+  const [plan, setPlan] = useState({ tier:"free", isAdmin:false });
+  const [odds, setOdds] = useState(null);
+  const [edges, setEdges] = useState(null);
+  const [oddsHist, setOddsHist] = useState(null);
+  const [marketRead, setMarketRead] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [view, setView] = useState("odds");
+  const [sel, setSel] = useState(null);
 
-  const isAdmin = plan.isAdmin === true;
-  const isPro = plan.tier === "pro" || plan.tier === "elite";
-  const hasFullAccess = isAdmin || isPro;
-
-  useEffect(() => { subscriptionApi.getMyPlan().then(setPlan).catch(() => {}); }, []);
-
+  useEffect(() => { subscriptionApi.getMyPlan().then(setPlan).catch(()=>{}); }, []);
   useEffect(() => {
-    (async () => {
+    let c = false;
+    const load = async () => {
       try {
-        const res = await oddsApi.getMLB();
-        setData(res);
-      } catch (_) {
-        setData(null);
-      }
-      setLoading(false);
-    })();
+        const [o, e, h, m] = await Promise.all([
+          oddsApi.getMLB().catch(()=>null),
+          edgesApi.getMLB().catch(()=>null),
+          edgesApi.getOddsHistory().catch(()=>null),
+          edgesApi.getMarketRead().catch(()=>null),
+        ]);
+        if (c) return;
+        setOdds(o); setEdges(e); setOddsHist(h?.games||h||[]); setMarketRead(m?.games||m||[]);
+      } catch(_){}
+      if (!c) setLoading(false);
+    };
+    load(); const id = setInterval(load, 90000);
+    return () => { c = true; clearInterval(id); };
   }, []);
 
-  const games = (data && Array.isArray(data.games)) ? data.games : [];
+  const oddsGames = Array.isArray(odds) ? odds : (odds?.games || []);
+  const e = edges || {};
+  const games = e.games || [];
+  const histByKey = {}; (oddsHist||[]).forEach(g=>{ histByKey[normName(g.away_team)+"|"+normName(g.home_team)] = g; });
+  const findHist = (gm) => gm ? (histByKey[normName(gm.away)+"|"+normName(gm.home)] || null) : null;
+  const seriesFor = (edge) => { const gm = games.find(x=>x.id===edge.gameId); const h = findHist(gm); if(!h) return null; return (isTotalEdge(edge) ? h.total?.[edge.side] : h.ml?.[edge.side]) || null; };
+  const moverPool = [...(e.moneylineEdges||[]),...(e.totalsEdges||[]),...(e.spreadEdges||[])].map(x=>{
+    const ser = seriesFor(x); const open = (ser&&ser.length)?ser[0].o:null; const now = (ser&&ser.length)?ser[ser.length-1].o:null;
+    const delta = (open!=null&&now!=null) ? (amCents(now)-amCents(open)) : null;
+    return { ...x, _open:open, _now:now, _delta:delta };
+  });
+  const movers = moverPool.filter(m=>m._delta!=null && m._delta!==0).sort((a,b)=>Math.abs(b._delta)-Math.abs(a._delta));
+  const moverPick = (x) => isTotalEdge(x) ? `${x.side==="over"?"Over":"Under"} ${x.line??""}`.trim() : `${x.teamAbbr||shortTeam(x.matchup||"")} ML`;
+  const moverMatch = (x) => { if(x.matchup) return x.matchup; const g=games.find(gm=>gm.id===x.gameId); return g ? `${g.awayAbbr||shortTeam(g.away)} @ ${g.homeAbbr||shortTeam(g.home)}` : ""; };
+
+  const consensus = marketRead || [];
+
+  const VIEWS = [["odds","Odds"],["movers","Movers"],["consensus","Consensus"]];
 
   return (
-    <TerminalShell active="/odds" plan={plan} navigate={navigate}>
-    <div style={{ minHeight: "100vh", background: "#0a0e14", color: "#e4e7eb", fontFamily: "'Inter',system-ui,-apple-system,sans-serif" }}>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
-        *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-        @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
-        @keyframes spin{to{transform:rotate(360deg)}}
-        @keyframes slideIn{from{transform:translateX(-100%)}to{transform:translateX(0)}}
-        ::-webkit-scrollbar{width:6px;height:6px}
-        ::-webkit-scrollbar-thumb{background:#1f2937;border-radius:3px}
-        .hamburger-btn{display:none}
-        .mobile-only{display:none}
-        .desktop-sidebar{display:block}
-         (min-width: 1024px) {
-          .desktop-sidebar{display:none!important}
-          .main-content{margin-left:0!important}
-        }
-
-        @media (min-width: 1024px) {
-          .desktop-sidebar{display:none!important}
-          .main-content{margin-left:0!important}
-        }
-        @media (max-width: 768px) {
-          .desktop-sidebar{display:none!important}
-          .main-content{margin-left:0!important;padding-top:0!important}
-          .hamburger-btn{display:flex!important}
-          .mobile-only{display:flex!important}
-          .od-content{padding:16px 14px 60px!important}
-          h1{font-size:22px!important}
-        }
-      `}</style>
-
-      <BottomNav />
-      <div className="desktop-sidebar">
-        <Sidebar user={user} plan={plan} signOut={signOut} navigate={navigate} />
-      </div>
-
-      {drawerOpen && (
-        <>
-          <div onClick={() => setDrawerOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 49 }} />
-          <div style={{ position: "fixed", top: 0, left: 0, bottom: 0, animation: "slideIn .2s ease-out", zIndex: 51 }}>
-            <Sidebar user={user} plan={plan} signOut={signOut} navigate={(path) => { setDrawerOpen(false); navigate(path); }} />
-          </div>
-        </>
-      )}
-
-      <div className="mobile-only" style={{ display: "none", position: "sticky", top: 0, zIndex: 40, background: "#0a0e14", borderBottom: "1px solid #1a1f28", padding: "10px 14px", alignItems: "center", justifyContent: "space-between" }}>
-        <button onClick={() => setDrawerOpen(true)} className="hamburger-btn" style={{ background: "none", border: "none", color: "#e4e7eb", fontSize: 22, padding: 4, cursor: "pointer", display: "none", alignItems: "center" }}>☰</button>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#1D9E75", display: "inline-block", animation: "pulse 2s infinite" }} />
-          <span style={{ fontSize: 15, fontWeight: 800 }}>Wize<span style={{ color: "#1D9E75" }}>Picks</span></span>
+    <div className="app"><style>{CSS}</style>
+      <div className="hd">
+        <div className="hrow">
+          <div className="logo"><span className="w">Wize</span>Picks</div>
+          <span className="open">{"\u25cf"} OPEN</span>
+          <div className="sp"/>
+          <div className="ibtn" onClick={()=>navigate("/settings")}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></div>
         </div>
-        <div style={{ width: 30 }} />
-      </div>
-
-      <div className="main-content" style={{ marginLeft: 200 }}>
-        <div className="od-content" style={{ maxWidth: 860, margin: "0 auto", padding: "24px 24px 60px" }}>
-          <div onClick={() => navigate(-1)} style={{ color: "#6b7280", fontSize: 13, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6, marginBottom: 14, userSelect: "none" }}>← Back</div>
-          <div style={{ marginBottom: 6 }}>
-            <h1 style={{ margin: 0, fontSize: 26, fontWeight: 700 }}>💹 Market Price</h1>
-          </div>
-          <p style={{ margin: "0 0 22px", fontSize: 13, color: "#9ca3af", lineHeight: 1.6 }}>
-            Every major US book's price, side by side — so you can grab the <strong style={{ color: "#cbd2da" }}>best number</strong> before you bet.
-            The <span style={{ color: "#1D9E75", fontWeight: 700 }}>highlighted</span> price is the best available in each market. Shopping the best line is the simplest edge there is.
-          </p>
-
-          {loading ? (
-            <div style={{ display: "flex", justifyContent: "center", padding: "60px 0" }}>
-              <div style={{ width: 26, height: 26, border: "3px solid #1f2937", borderTopColor: "#1D9E75", borderRadius: "50%", animation: "spin .8s linear infinite" }} />
-            </div>
-          ) : !hasFullAccess ? (
-            <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 28, textAlign: "center" }}>
-              <div style={{ fontSize: 15, fontWeight: 700, color: "#e4e7eb", marginBottom: 8 }}>🔒 Market Price is an All-Access feature</div>
-              <p style={{ fontSize: 13, color: "#9ca3af", lineHeight: 1.6, maxWidth: 460, margin: "0 auto 18px" }}>
-                Compare every US sportsbook's line in one place and always bet the best price — the kind of tool other sites charge a fortune for.
-              </p>
-              <button onClick={() => navigate("/pricing")} style={{ background: "#1D9E75", color: "#fff", border: "none", borderRadius: 6, padding: "10px 22px", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
-                Get All-Access — $7/mo
-              </button>
-            </div>
-          ) : games.length === 0 ? (
-            <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 28, textAlign: "center", color: "#9ca3af", fontSize: 13 }}>
-              No games with odds right now. Check back closer to game day.
-            </div>
-          ) : (
-            <>
-              {data?.updatedAt && (
-                <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 12 }}>
-                  {games.length} game{games.length === 1 ? "" : "s"} · prices update every ~90 seconds
-                </div>
-              )}
-              {games.map((g) => <GameCard key={g.id} game={g} />)}
-              <p style={{ fontSize: 11, color: "#6b7280", lineHeight: 1.6, marginTop: 18 }}>
-                Odds move fast and vary by location — always confirm the price in your sportsbook before betting. WizePicks is an analytics tool, not a sportsbook.
-              </p>
-            </>
-          )}
+        <div className="sports">
+          {[["MLB","mlb"],["NBA","nba"],["NHL","nhl"],["NFL","nfl"],["CFB","cfb"]].map(([lb,key])=>(
+            <b key={key} className={key==="mlb"?"on":""} onClick={()=>{ if(key==="nba")navigate("/nba"); else if(key!=="mlb")navigate(`/${key}-games`); }}><span className="dot"/>{lb}</b>
+          ))}
         </div>
+        <div className="subnav">{VIEWS.map(v=><b key={v[0]} className={v[0]===view?"on":""} onClick={()=>setView(v[0])}>{v[1]}</b>)}</div>
       </div>
+
+      <div id="wrap">
+        {loading ? <div className="estate"><div className="et">Loading market…</div><div className="es">Pulling every book’s lines.</div></div> : <>
+          {view==="odds" && (oddsGames.length ? <>
+            <div className="cap">Best available price across all books for each game. Tap any game for the full book-by-book grid.</div>
+            {oddsGames.map((g,i)=><OddsCard key={i} g={g} onOpen={()=>setSel(g)}/>)}
+          </> : <div className="estate"><div className="et">No games posted</div><div className="es">Lines appear as books open.</div></div>)}
+
+          {view==="movers" && (movers.length ? <>
+            <div className="cap">Every line move today, ranked by cents. Open to now · updates as books adjust.</div>
+            {movers.map((m,r)=><MoverRow key={r} rank={r+1} pick={moverPick(m)} match={moverMatch(m)} open={m._open} now={m._now} cents={m._delta}/>)}
+          </> : <div className="estate"><div className="et">No moves yet</div><div className="es">Line moves populate through the day as books adjust.</div></div>)}
+
+          {view==="consensus" && (consensus.length ? <>
+            <div className="cap">What the books collectively lean — a read, not a guarantee. The dot shows whether our model agrees with the market.</div>
+            {consensus.map((g,i)=><ConsensusCard key={i} g={g} games={games}/>)}
+          </> : <div className="estate"><div className="et">No consensus yet</div><div className="es">Cross-book reads appear once lines are live.</div></div>)}
+        </>}
+      </div>
+
+      <nav className="nav">
+        <a onClick={()=>navigate("/dashboard")}><span className="i"><svg className="dbars" viewBox="0 0 24 24" width="18" height="18"><rect x="2" y="13" width="4" height="5" rx="1"/><rect x="7.3" y="9" width="4" height="9" rx="1"/><rect x="12.6" y="11" width="4" height="7" rx="1"/><rect x="18" y="6" width="4" height="12" rx="1"/></svg></span>Dashboard</a>
+        <a onClick={()=>navigate("/games")}><span className="i">{"\u25a6"}</span>Games</a>
+        <a onClick={()=>navigate("/props")}><span className="i">{"\u25c8"}</span>Props</a>
+        <a className="on"><span className="i">{"\u25d0"}</span>Market</a>
+        <a onClick={()=>navigate("/performance")}><span className="i">{"\u25b2"}</span>Performance</a>
+        <a onClick={()=>navigate("/settings")}><span className="i">{"\u25cd"}</span>Account</a>
+      </nav>
+
+      {sel && <GridSheet g={sel} onClose={()=>setSel(null)}/>}
     </div>
-    </TerminalShell>
   );
 }
+
+function OddsCard({ g, onOpen }) {
+  const aAb = g.awayAbbr || abbrOf(g.away), hAb = g.homeAbbr || abbrOf(g.home);
+  const best = g.best || {}; const cl = g.consensusTotalLine;
+  const nBooks = (g.books||[]).length;
+  return (
+    <div className="oc" onClick={onOpen}>
+      <div className="och"><div className="lgs"><Logo ab={aAb}/><Logo ab={hAb}/></div><div className="mt">{aAb} @ {hAb}</div><div className="tm2">{nBooks} books</div></div>
+      <div className="bestrow">
+        <div className="bp"><div className="k">BEST {aAb} ML</div><div className="v"><span className="pr">{fmtOdds(best.awayML?.price)}</span></div><div className="bk">{best.awayML?.book || "—"}</div></div>
+        <div className="bp"><div className="k">BEST {hAb} ML</div><div className="v"><span className="pr">{fmtOdds(best.homeML?.price)}</span></div><div className="bk">{best.homeML?.book || "—"}</div></div>
+        <div className="bp"><div className="k">BEST O {cl ?? ""}</div><div className="v"><span className="pr">{fmtOdds(best.over?.price)}</span></div><div className="bk">{best.over?.book || "—"}</div></div>
+      </div>
+    </div>
+  );
+}
+
+function GridSheet({ g, onClose }) {
+  const aAb = g.awayAbbr || abbrOf(g.away), hAb = g.homeAbbr || abbrOf(g.home);
+  const best = g.best || {}; const cl = g.consensusTotalLine; const books = g.books || [];
+  const cell = (val, isBest) => <td className={isBest ? "best" : ""}>{fmtOdds(val)}</td>;
+  return (
+    <>
+      <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.55)",zIndex:60}}/>
+      <div className="sheet open" style={{zIndex:61}}>
+        <div className="shead"><div className="x" onClick={onClose}>{"\u2039"}</div><div><div className="t">{aAb} @ {hAb}</div><div className="ts">Line shopping · {books.length} books</div></div></div>
+        <div className="sbody">
+          <div className="gridblk">
+            <div className="bl">FULL ODDS — {aAb} @ {hAb}</div>
+            <table className="otbl">
+              <thead><tr><th>Book</th><th>{aAb} ML</th><th>{hAb} ML</th><th>O {cl ?? ""}</th><th>U {cl ?? ""}</th></tr></thead>
+              <tbody>
+                {books.map((b,i)=>(
+                  <tr key={i} className={/pinnacle/i.test(b.book||"") ? "pinrow" : ""}>
+                    <td className="bk">{b.book}</td>
+                    {cell(b.awayML, b.awayML!=null && best.awayML && b.awayML===best.awayML.price)}
+                    {cell(b.homeML, b.homeML!=null && best.homeML && b.homeML===best.homeML.price)}
+                    {cell(b.over, b.over!=null && best.over && b.over===best.over.price)}
+                    {cell(b.under, b.under!=null && best.under && b.under===best.under.price)}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="legend"><span className="bx">green</span> = best available price · Pinnacle (gold) = sharp reference · — = book hasn’t posted this market</div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function MoverRow({ rank, pick, match, open, now, cents }) {
+  const dir = cents>=0 ? "up" : "dn";
+  return (
+    <div className="mvrow">
+      <div className="rk">{rank}</div>
+      <div className="mp"><div className="mpk">{pick}</div><div className="mmu">{match}</div></div>
+      <div><div className={"mo "+dir}>{fmtOdds(open)} <span className="a">{"\u2192"}</span> {fmtOdds(now)}</div><div className={"mc "+dir}>{cents>=0?"+":"\u2212"}{Math.abs(cents)} cents</div></div>
+    </div>
+  );
+}
+
+function ConsensusCard({ g, games }) {
+  const aAb = g.awayAbbr || abbrOf(g.away || g.awayTeam || ""), hAb = g.homeAbbr || abbrOf(g.home || g.homeTeam || "");
+  const legs = [];
+  if (g.win) { const w=g.win; const agrees = w.model ? !!w.model.agrees : !!w.agrees;
+    legs.push(["Win", w.favTeam||w.team||w.side||"—", `${fmtOdds(w.consensus??w.odds)}${w.tier?" · "+w.tier:""}`, agrees]); }
+  if (g.cover && (g.cover.favTeam||g.cover.side)) { const c=g.cover; const agrees=!!c.agrees;
+    legs.push(["Cover", `${c.favTeam||c.side}${c.line!=null?" "+(c.line>0?"+":"")+c.line:""}`, `${fmtOdds(c.odds??c.consensus)}${c.tier?" · "+c.tier:""}`, agrees]); }
+  if (g.total && (g.total.lean||g.total.side||g.total.favTeam)) { const t=g.total; const agrees=!!t.agrees;
+    const side=String(t.lean||t.side||t.favTeam).toUpperCase();
+    legs.push(["Total", `${side}${t.line!=null?" "+t.line:""}`, `${fmtOdds(t.odds??t.consensus)}${t.tier?" · "+t.tier:""}`, agrees]); }
+  if (!legs.length) return null;
+  return (
+    <div className="cc">
+      <div className="och"><div className="lgs"><Logo ab={aAb}/><Logo ab={hAb}/></div><div className="mt">{aAb} @ {hAb}</div></div>
+      {legs.map((r,i)=>(
+        <div className="crow" key={i}>
+          <span className={"cd "+(r[3]?"ag":"df")}/>
+          <span className="ck">{r[0]}</span>
+          <span className="cv"><b>{r[1]}</b> · {r[2]}</span>
+          {r[3] ? <span className="ca ag">{"\u2713"} agrees</span> : <span className="ca df">{"\u2260"} differs</span>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+const CSS = `@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700;800&display=swap');
+:root{--mono:'IBM Plex Mono',ui-monospace,monospace}
+
+:root{--bg:#06090b;--panel:#0b1117;--line:#16202a;--line2:#1d2a36;--gold:#f3b94f;--green:#33e991;--neg:#ff5d4d;--red:#ff5d4d;--steel:#2674b0;--blue:#5da9e8;--mut:#7d8a98;--mut2:#4a5663;--disp:'Barlow Condensed',sans-serif;--ui:'Inter',sans-serif;--mono:'JetBrains Mono',monospace}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoothing:antialiased}
+.app{max-width:460px;margin:0 auto;min-height:100vh;position:relative;padding-bottom:96px}
+.hd{position:sticky;top:0;z-index:10;background:rgba(6,9,11,.94);backdrop-filter:blur(12px);border-bottom:1px solid var(--line);padding:0 14px}
+.hrow{display:flex;align-items:center;gap:9px;padding:12px 0 9px}
+.logo{font-family:var(--disp);font-weight:800;font-size:21px;letter-spacing:.4px;color:#fff}.logo .w{color:var(--gold)}
+.open{font-family:var(--mono);font-size:9px;font-weight:700;color:var(--green);border:1px solid rgba(51,233,145,.32);background:rgba(51,233,145,.08);border-radius:999px;padding:3px 8px}
+.sp{flex:1}.ibtn{width:30px;height:30px;border-radius:9px;border:1px solid var(--line2);display:flex;align-items:center;justify-content:center;color:var(--mut)}
+.sports{display:flex;gap:6px;padding:0 0 9px;overflow-x:auto;scrollbar-width:none}.sports::-webkit-scrollbar{display:none}
+.sports b{flex:0 0 auto;font-family:var(--disp);font-weight:700;font-size:13px;letter-spacing:.4px;color:var(--mut);border:1px solid var(--line2);border-radius:999px;padding:6px 13px;display:inline-flex;align-items:center;gap:6px;cursor:pointer}
+.sports b.on{color:#fff;border-color:var(--steel);background:#0e1822}
+.sports b .dot{width:6px;height:6px;border-radius:50%;background:#2a3640}.sports b.on .dot{background:var(--green)}
+.subnav{display:flex;gap:0;border:1px solid var(--line2);border-radius:10px;overflow:hidden;margin:11px 14px 0}
+.subnav b{flex:1;text-align:center;font-family:var(--disp);font-weight:800;font-size:13px;letter-spacing:.4px;color:var(--mut);padding:9px;cursor:pointer}
+.subnav b.on{background:#141d24;color:#fff}
+.cap{font-family:var(--mono);font-size:10px;color:var(--mut2);margin:10px 14px 0;line-height:1.4}
+/* odds (line shop) card */
+.oc{margin:9px 14px 0;border:1px solid var(--line);border-radius:14px;background:linear-gradient(180deg,#0c1218,#080c11);padding:12px;cursor:pointer;transition:border-color .15s}.oc:active{border-color:var(--steel)}
+.oc .och{display:flex;align-items:center;gap:9px;margin-bottom:11px}
+.lg{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#0c1018;border:1px solid #000;font-family:var(--disp);font-weight:800;font-size:8px;color:#fff;flex:0 0 auto}.lg img{width:19px;height:19px;object-fit:contain}
+.lgs{display:flex}.lgs .lg{margin-left:-5px}.lgs .lg:first-child{margin-left:0}
+.oc .mt{font-family:var(--disp);font-weight:800;font-size:16px;color:#fff}.oc .tm2{font-family:var(--mono);font-size:9px;color:var(--mut2);margin-left:auto}
+.bestrow{display:flex;gap:7px}
+.bp{flex:1;border:1px solid var(--line2);border-radius:9px;background:#0e1620;padding:8px;text-align:center}
+.bp .k{font-family:var(--mono);font-size:8px;color:var(--mut2);font-weight:600}
+.bp .v{font-family:var(--disp);font-weight:800;font-size:15px;color:#fff;margin-top:3px}.bp .v .pr{color:var(--green)}
+.bp .bk{font-family:var(--mono);font-size:8px;color:var(--gold);font-weight:700;margin-top:2px}
+/* movers */
+.mvrow{display:flex;align-items:center;gap:11px;margin:8px 14px 0;border:1px solid var(--line);border-radius:12px;background:linear-gradient(180deg,#0c1218,#080c11);padding:11px 13px}
+.mvrow .rk{font-family:var(--disp);font-weight:800;font-size:13px;color:var(--mut2);width:18px;flex:0 0 auto}
+.mvrow .mp{flex:1;min-width:0}.mvrow .mpk{font-family:var(--disp);font-weight:800;font-size:15px;color:#fff}.mvrow .mmu{font-family:var(--mono);font-size:9px;color:var(--mut2);margin-top:1px}
+.mvrow .mo{font-family:var(--mono);font-size:13px;font-weight:600;text-align:right;flex:0 0 auto}.mo.up{color:var(--green)}.mo.dn{color:var(--neg)}.mo .a{color:var(--mut2)}
+.mvrow .mc{font-family:var(--mono);font-size:10px;font-weight:600;margin-top:2px}.mc.up{color:var(--green)}.mc.dn{color:var(--neg)}
+/* consensus */
+.cc{margin:9px 14px 0;border:1px solid var(--line);border-radius:14px;background:linear-gradient(180deg,#0c1218,#080c11);padding:12px}
+.cc .och{display:flex;align-items:center;gap:9px;margin-bottom:9px}
+.crow{display:flex;align-items:center;gap:9px;padding:8px 0;border-top:1px solid rgba(255,255,255,.05)}.crow:first-of-type{border-top:none}
+.crow .cd{width:8px;height:8px;border-radius:50%;flex:0 0 auto}.cd.strong{background:var(--green)}.cd.soft{background:var(--gold)}.cd.split{background:var(--mut)}
+.crow .ck{font-family:var(--disp);font-weight:800;font-size:12px;color:var(--mut);width:50px;flex:0 0 auto}
+.crow .cv{font-family:var(--mono);font-size:11px;color:#cdd7e1;flex:1}.crow .cv b{color:#fff}
+.crow .ca{font-family:var(--mono);font-size:10px;font-weight:600;flex:0 0 auto}.ca.ag{color:var(--green)}.ca.df{color:var(--gold)}
+.seclbl{font-family:var(--disp);font-weight:800;font-size:13px;letter-spacing:1px;color:var(--mut);margin:16px 14px 2px}
+.estate{margin:40px 14px;border:1px dashed var(--line2);border-radius:14px;padding:36px 18px;text-align:center}.estate .et{font-family:var(--disp);font-weight:800;font-size:18px;color:#cfd7e2}.estate .es{font-size:12px;color:var(--mut);margin-top:6px;font-family:var(--mono)}
+.nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:460px;display:flex;justify-content:space-around;padding:7px 4px;background:rgba(0,0,0,.96);backdrop-filter:blur(12px);border-top:1px solid var(--line);z-index:20}
+.nav a{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;font-family:var(--disp);font-weight:700;font-size:10px;letter-spacing:.3px;color:var(--mut2);text-decoration:none}
+.nav a.on{color:var(--gold)}.nav a .i{font-size:15px;line-height:1}.nav a .dbars rect{fill:var(--mut2)}
+/* sheet: full odds grid */
+.sheet{position:fixed;top:0;bottom:0;left:50%;width:100%;max-width:460px;z-index:200;background:var(--bg);overflow-y:auto;transform:translate(-50%,100%);transition:transform .28s cubic-bezier(.4,0,.2,1);visibility:hidden}
+.sheet.open{transform:translate(-50%,0);visibility:visible}
+.shead{position:sticky;top:0;background:#080c11;border-bottom:1px solid var(--line);padding:12px 14px;display:flex;align-items:center;gap:11px;z-index:2}
+.shead .x{width:32px;height:32px;border-radius:9px;border:1px solid var(--line2);display:flex;align-items:center;justify-content:center;color:#cdd7e1;font-size:19px;cursor:pointer;flex:0 0 auto}
+.shead .t{font-family:var(--disp);font-weight:800;font-size:19px;color:#fff;line-height:1}.shead .ts{font-family:var(--mono);font-size:10px;color:var(--mut);margin-top:2px}
+.sbody{padding:13px 14px 80px}
+.gridblk{border:1px solid var(--line);border-radius:13px;background:var(--panel);padding:11px;margin-top:11px;overflow-x:auto}
+.gridblk .bl{font-family:var(--disp);font-weight:800;font-size:12px;letter-spacing:.6px;color:var(--mut);margin-bottom:9px}
+.otbl{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11px;min-width:330px}
+.otbl th{color:var(--mut2);font-weight:500;font-size:8.5px;padding:5px 4px;text-align:center;border-bottom:1px solid var(--line)}.otbl th:first-child{text-align:left}
+.otbl td{padding:7px 4px;text-align:center;color:#cdd7e1;border-bottom:1px solid rgba(255,255,255,.04)}
+.otbl td.bk{text-align:left;font-family:var(--ui);font-weight:600;color:#eaf1ee;font-size:11px}
+.otbl td.best{color:var(--green);font-weight:700;background:rgba(51,233,145,.08);border-radius:5px}
+.otbl tr.pinrow td{color:var(--gold)}
+.legend{font-family:var(--mono);font-size:9px;color:var(--mut2);margin-top:9px}.legend .bx{color:var(--green)}
+`;
