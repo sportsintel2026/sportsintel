@@ -1,344 +1,202 @@
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { subscriptionApi } from "../lib/api";
-import Sidebar from "./Sidebar";
-import TerminalShell from "./TerminalShell";
-import BottomNav from "./BottomNav";
+
 const API_BASE = import.meta.env.VITE_API_URL || "https://sportsintel-production.up.railway.app";
+const RNGS = ["7D", "30D", "Season", "All"];
+const TIER_ORDER = [["HIGH", "HIGH"], ["MEDIUM", "MED"], ["LOW", "LOW"], ["NEUTRAL", "NEUTRAL"]];
+const MKT_NAME = {
+  moneyline:"Moneyline", total:"Totals", run_line:"Run Line", spread:"Spread",
+  hr_prop:"HR Props", player_hits:"Hits Props", player_strikeouts:"K Props",
+  player_points:"Points Props", player_rebounds:"Rebounds Props", player_assists:"Assists Props",
+  player_threes:"3PT Props", player_props:"Player Props",
+};
+const prettyMkt = (k) => MKT_NAME[k] || String(k||"").replace(/_/g," ").replace(/\b\w/g,c=>c.toUpperCase());
+const fmtDate = (iso) => { if(!iso) return ""; try { const d = new Date(String(iso).slice(0,10)+"T00:00:00"); return d.toLocaleDateString("en-US",{month:"short",day:"numeric"}); } catch { return String(iso); } };
+
+function UnitsChart({ series }) {
+  const W = 320, H = 120;
+  const s = (series && series.length) ? series : [0, 0];
+  const mn = Math.min(0, ...s), mx = Math.max(0, ...s), rng = (mx - mn) || 1;
+  const X = (i) => (s.length>1 ? i/(s.length-1) : 0) * W, Y = (v) => H - 6 - ((v - mn) / rng) * (H - 14);
+  const ln = s.map((v,i)=>`${i?"L":"M"}${X(i).toFixed(1)} ${Y(v).toFixed(1)}`).join(" ");
+  const ar = ln + `L${W} ${H} L0 ${H} Z`;
+  const zeroY = Y(0); const end = s[s.length-1]; const col = end>=0 ? "var(--green)" : "var(--neg)";
+  return (
+    <div className="chartwrap">
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" height="120" preserveAspectRatio="none">
+        <defs><linearGradient id="ug" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={col} stopOpacity=".28"/><stop offset="100%" stopColor={col} stopOpacity="0"/></linearGradient></defs>
+        <line x1="0" y1={zeroY.toFixed(1)} x2={W} y2={zeroY.toFixed(1)} stroke="#2a3640" strokeWidth="1" strokeDasharray="3 3"/>
+        <path d={ar} fill="url(#ug)"/>
+        <path d={ln} fill="none" stroke={col} strokeWidth="2.2" strokeLinejoin="round" vectorEffect="non-scaling-stroke"/>
+      </svg>
+    </div>
+  );
+}
+
 export default function PerformancePage() {
-  const { user, signOut } = useAuth();
   const navigate = useNavigate();
-  const [plan, setPlan] = useState({ tier: "free", isAdmin: false });
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const { user } = useAuth();
+  const [plan, setPlan] = useState({ tier:"free", isAdmin:false });
+  const [league, setLeague] = useState("mlb");
+  const [range, setRange] = useState("Season");
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
-  const [league, setLeague] = useState("mlb");
-  useEffect(() => { subscriptionApi.getMyPlan().then(setPlan).catch(() => {}); }, []);
+
+  useEffect(() => { subscriptionApi.getMyPlan().then(setPlan).catch(()=>{}); }, []);
   useEffect(() => {
+    let c = false;
     setLoading(true); setError(false); setData(null);
     fetch(`${API_BASE}/api/performance/${league}`)
-      .then(r => { if (!r.ok) throw new Error("bad"); return r.json(); })
-      .then(d => { setData(d); setLoading(false); })
-      .catch(() => { setError(true); setLoading(false); });
+      .then(r => { if(!r.ok) throw new Error("bad"); return r.json(); })
+      .then(d => { if(!c){ setData(d); setLoading(false); } })
+      .catch(() => { if(!c){ setError(true); setLoading(false); } });
+    return () => { c = true; };
   }, [league]);
-  return (
-    <TerminalShell active="/performance" plan={plan} navigate={navigate}>
-    <div style={{ minHeight: "100vh", background: "#0a0e14", color: "#e4e7eb", fontFamily: "'Inter',system-ui,-apple-system,sans-serif" }}>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
-        *{box-sizing:border-box}
-        @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
-        @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
-        @keyframes spin{to{transform:rotate(360deg)}}
-        @keyframes slideIn{from{transform:translateX(-100%)}to{transform:translateX(0)}}
-        .mobile-only{display:none}
-        .desktop-sidebar{display:block}
-         (min-width: 1024px) {
-          .desktop-sidebar{display:none!important}
-          .main-content{margin-left:0!important}
-        }
 
-        @media (min-width: 1024px) {
-          .desktop-sidebar{display:none!important}
-          .main-content{margin-left:0!important}
-        }
-        @media (max-width: 768px) {
-          .desktop-sidebar{display:none!important}
-          .main-content{margin-left:0!important}
-          .mobile-only{display:flex!important}
-          .perf-grid{grid-template-columns:1fr!important}
-          .perf-content{padding:16px 14px 60px!important}
-          h1{font-size:24px!important}
-        }
-      `}</style>
-      <BottomNav />
-      <div className="desktop-sidebar">
-        <Sidebar user={user} plan={plan} signOut={signOut} navigate={navigate} />
+  const D = data || {};
+  const d = (D.ranges && D.ranges[range]) || null;
+  const tiers = TIER_ORDER.map(([k,lbl]) => { const b = D.byConfidence?.[k]; return b ? [lbl, b.roi ?? 0, `${b.wins}-${b.losses}`] : null; }).filter(Boolean);
+  const markets = [
+    ...Object.entries(D.byMarket || {}).map(([k,b]) => [prettyMkt(k), b.roi ?? 0, `${b.wins}-${b.losses}`]),
+    ...Object.entries(D.props?.byMarket || {}).map(([k,b]) => [prettyMkt(k), b.roi ?? 0, `${b.hits}-${b.misses}`]),
+  ];
+  const recent = D.recent || [];
+  const tmax = Math.max(1, ...tiers.map(t => Math.abs(t[1])));
+
+  return (
+    <div className="app"><style>{CSS}</style>
+      <div className="hd">
+        <div className="hrow">
+          <div className="logo"><span className="w">Wize</span>Picks</div>
+          <span className="open">{"\u25cf"} OPEN</span>
+          <div className="sp"/>
+          <div className="ibtn" onClick={()=>navigate("/settings")}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></div>
+        </div>
+        <div className="sports">
+          <b className={league==="mlb"?"on":""} onClick={()=>setLeague("mlb")}><span className="dot"/>MLB</b>
+          <b className={league==="nba"?"on":""} onClick={()=>setLeague("nba")}><span className="dot"/>NBA</b>
+        </div>
       </div>
-      {drawerOpen && (
-        <>
-          <div onClick={() => setDrawerOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 49 }} />
-          <div style={{ position: "fixed", top: 0, left: 0, bottom: 0, animation: "slideIn .2s ease-out", zIndex: 51 }}>
-            <Sidebar user={user} plan={plan} signOut={signOut} navigate={(path) => { setDrawerOpen(false); navigate(path); }} />
+
+      <div className="ranges">{RNGS.map(r=><b key={r} className={r===range?"on":""} onClick={()=>setRange(r)}>{r}</b>)}</div>
+
+      <div id="wrap">
+        {loading ? <div className="estate"><div className="et">Loading record…</div><div className="es">Pulling every graded pick.</div></div>
+        : error ? <div className="estate"><div className="et">Couldn’t load performance</div><div className="es">Try again in a moment.</div></div>
+        : !d ? <div className="estate"><div className="et">No tracked record yet</div><div className="es">Graded picks for {league.toUpperCase()} will appear here.</div></div>
+        : <>
+          <div className="kpis">
+            <div className="kpi"><div className="k">ROI</div><div className={"v "+(d.roi>=0?"g":"r")}>{d.roi>=0?"+":""}{d.roi}%</div><div className="sub">{d.n} settled picks</div></div>
+            <div className="kpi"><div className="k">UNITS</div><div className={"v "+(d.units>=0?"g":"r")}>{d.units>=0?"+":""}{d.units}u</div><div className="sub">1u flat staking</div></div>
+            <div className="kpi"><div className="k">RECORD</div><div className="v">{d.w}-{d.l}<span style={{fontSize:16,color:"var(--mut)"}}>-{d.p}</span></div><div className="sub">W-L-push · {(d.w+d.l)>0 ? (d.w/(d.w+d.l)*100).toFixed(1) : "0.0"}% win</div></div>
+            <div className="kpi"><div className="k">CLV</div><div className={"v "+(d.clv>=0?"g":"r")}>{d.clv>=0?"+":""}{d.clv}%</div><div className="sub">beat close · {d.bc}%</div></div>
           </div>
-        </>
-      )}
-      <div className="mobile-only" style={{ display: "none", position: "sticky", top: 0, zIndex: 40, background: "#0a0e14", borderBottom: "1px solid #1a1f28", padding: "10px 14px", alignItems: "center", justifyContent: "space-between" }}>
-        <button onClick={() => setDrawerOpen(true)} style={{ background: "none", border: "none", color: "#e4e7eb", fontSize: 22, padding: 4, cursor: "pointer" }}>☰</button>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e", animation: "pulse 2s infinite" }} />
-          <span style={{ fontSize: 15, fontWeight: 800 }}>Wize<span style={{ color: "#ef4444" }}>Picks</span></span>
-        </div>
-        <div style={{ width: 30 }} />
-      </div>
-      <div className="main-content" style={{ marginLeft: 200 }}>
-        <div className="perf-content" style={{ maxWidth: 900, margin: "0 auto", padding: "32px 24px 80px", animation: "fadeIn .3s ease" }}>
-          <div onClick={() => navigate(-1)} style={{ color: "#6b7280", fontSize: 13, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6, marginBottom: 14, userSelect: "none" }}>← Back</div>
-          <h1 style={{ margin: "0 0 8px", fontSize: 28, fontWeight: 700, letterSpacing: "-0.01em" }}>Model Performance</h1>
-          <p style={{ margin: "0 0 20px", fontSize: 13, color: "#9ca3af" }}>
-            How the model's edges have actually performed · each sport tracked separately
-          </p>
-          <SportTabs league={league} setLeague={setLeague} />
-          {loading && <Loader />}
-          {error && !loading && <ErrorState />}
-          {!loading && !error && data && <PerfBody data={data} league={league} />}
-        </div>
-      </div>
-    </div>
-    </TerminalShell>
-  );
-}
-const SPORTS = [
-  { key: "mlb", label: "MLB", icon: "" },
-  { key: "nba", label: "NBA", icon: "" },
-  { key: "nfl", label: "NFL", icon: "" },
-  { key: "cfb", label: "CFB", icon: "" },
-];
-function SportTabs({ league, setLeague }) {
-  return (
-    <div style={{ display: "flex", gap: 8, marginBottom: 24, flexWrap: "wrap" }}>
-      {SPORTS.map(s => {
-        const active = s.key === league;
-        return (
-          <button key={s.key} onClick={() => setLeague(s.key)} style={{ display: "flex", alignItems: "center", gap: 6, background: active ? "#ef4444" : "#0f1419", color: active ? "#fff" : "#9ca3af", border: `1px solid ${active ? "#ef4444" : "#1f2937"}`, borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", transition: "all .15s" }}>
-            {s.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-function PerfBody({ data, league }) {
-  const graded = data.totalGraded || 0;
-  const pending = data.pendingCount || 0;
-  const full = data.fullSample || null;
-  const excluded = data.filter?.excludedCount || 0;
-  if (graded === 0) {
-    return (
-      <div>
-        <ClvCard clv={data.clv} />
-        <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 40, textAlign: "center" }}>
-          <div style={{ fontSize: 40, marginBottom: 14 }}></div>
-          <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>Building the track record</div>
-          <p style={{ fontSize: 13, color: "#9ca3af", maxWidth: 420, margin: "0 auto", lineHeight: 1.7 }}>
-            The model is recording its predictions now. Once today's games finish, results start posting here.
-            {pending > 0 && ` ${pending} prediction${pending === 1 ? "" : "s"} currently tracking.`}
-          </p>
-          <div style={{ marginTop: 20, fontSize: 11, color: "#6b7280" }}>
-            A meaningful sample takes a few weeks. Every day adds data.
+
+          <div className="blk"><div className="bl">UNITS OVER TIME <span className="bx">{range} · cumulative</span></div><UnitsChart series={d.series}/></div>
+
+          {tiers.length>0 && <div className="blk"><div className="bl">BY CONVICTION <span className="bx">season · the core signal</span></div>
+            {tiers.map((t,i)=>{ const pos=t[1]>=0, w=Math.abs(t[1])/tmax*50; return (
+              <div className="dbar" key={i}>
+                <div className="nm"><div className="n">{t[0]}</div><div className="r">{t[2]}</div></div>
+                <div className="track"><div className="z"/><div className={"f "+(pos?"pos":"neg")} style={pos?{left:"50%",width:w+"%"}:{right:"50%",width:w+"%"}}/></div>
+                <div className={"v "+(pos?"pos":"neg")}>{pos?"+":""}{t[1]}%</div>
+              </div>); })}
+          </div>}
+
+          {markets.length>0 && <div className="blk"><div className="bl">BY MARKET <span className="bx">season ROI</span></div>
+            {markets.map((m,i)=>{ const pos=m[1]>=0; return (
+              <div className="mrow" key={i}><div><div className="mn">{m[0]}</div><div className="mr">{m[2]}</div></div><div style={{flex:1}}/><div className={"mv "+(pos?"pos":"neg")}>{pos?"+":""}{m[1]}%</div></div>); })}
+          </div>}
+
+          <div className="blk"><div className="bl">CLOSING LINE VALUE <span className="bx">are we beating the close?</span></div>
+            <div className="clvgrid">
+              <div className="c"><div className="k">AVG CLV</div><div className={"v "+(d.clv>=0?"g":"")}>{d.clv>=0?"+":""}{d.clv}%</div></div>
+              <div className="c"><div className="k">BEAT CLOSE</div><div className="v">{d.bc}%</div></div>
+              <div className="c"><div className="k">PICKS</div><div className="v">{d.n}</div></div>
+            </div>
+            <div className="clvnote">CLV measures whether our number beat the line’s final price. Positive CLV over a large sample is the strongest sign an edge is real — independent of short-term wins and losses.</div>
           </div>
-        </div>
+
+          {recent.length>0 && <div className="blk"><div className="bl">RECENT RESULTS <span className="bx">last graded picks</span></div>
+            {recent.map((r,i)=>{
+              const cents = r.clvCents!=null ? `${r.clvCents>=0?"+":""}${r.clvCents}c` : (r.clvPct!=null ? `${r.clvPct>=0?"+":""}${r.clvPct}%` : "—");
+              const chipPos = (r.clvCents!=null ? r.clvCents>0 : (r.clvPct!=null ? r.clvPct>0 : null));
+              return (
+                <div className="rrow" key={i}>
+                  <div className={"rres "+r.result}>{r.result}</div>
+                  <div className="rp"><div className="rpk">{r.pick}</div><div className="rd">{fmtDate(r.date)}{r.edge!=null ? ` · +${r.edge}% edge` : ""}</div></div>
+                  <div className={"rclv "+(chipPos===true?"p":chipPos===false?"n":"")}>{cents}</div>
+                </div>); })}
+          </div>}
+
+          <div className="disc">All results are model picks graded at settled prices, 1-unit flat. Past performance does not guarantee future results. Bet responsibly.</div>
+        </>}
       </div>
-    );
-  }
-  return (
-    <div>
-      {/* Disclaimer */}
-      <div style={{ background: "#1a1410", border: "1px solid #f5970022", borderLeft: "3px solid #f59700", borderRadius: 6, padding: "10px 14px", marginBottom: 20, fontSize: 12, color: "#fbbf24" }}>
-        <strong>Qualified picks.</strong> <span style={{ color: "#a8915c" }}>
-          Showing the model's {graded} graded higher-conviction play{graded === 1 ? "" : "s"}
-          {(excluded > 0 || pending > 0)
-            ? ` (${excluded > 0 ? `${excluded} low-conviction set aside` : ""}${excluded > 0 && pending > 0 ? "; " : ""}${pending > 0 ? `${pending} more still pending` : ""})`
-            : ""}
-          {full && full.overall && full.overall.total
-            ? ` · full sample: ${full.overall.wins}-${full.overall.losses}, ${full.overall.winPct}% win`
-            : ""}. Small samples are noisy — a few weeks of data is where this gets meaningful.
-        </span>
-      </div>
-      {graded > 0 && graded < 25 && (
-        <div style={{ background: "#1a1410", border: "1px solid #f5970022", borderRadius: 6, padding: "8px 12px", marginBottom: 16, fontSize: 11.5, color: "#fbbf24" }}>
-          Very early sample ({graded} graded pick{graded === 1 ? "" : "s"}) — treat these as noise, not a track record yet.
-        </div>
-      )}
-      {/* CLV — led as the most reliable signal of edge */}
-      <ClvCard clv={data.clv} />
-      {/* Overall record — ROI demoted + contextualized, shown below CLV */}
-      <OverallCard o={data.overall} />
-      {/* By market */}
-      <SectionTitle>By market</SectionTitle>
-      <div className="perf-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 24 }}>
-        {Object.entries(data.byMarket || {}).map(([market, b]) => (
-          <StatCard key={market} label={marketLabel(market)} b={b} />
-        ))}
-      </div>
-      {/* Tracked prop: HITS ONLY — the one prop with proven edge. HR & strikeout
-          props are speculative: shown on the Edges page, recorded silently for our
-          own calibration, but NOT displayed/tracked here. (Strikeouts can graduate
-          to a tracked prop once recalibrated.) */}
-      <TrackedPropCard p={data.props || data.hrProps} league={league} />
-      {/* By confidence */}
-      <SectionTitle>By confidence tier</SectionTitle>
-      <div className="perf-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        {["HIGH", "MEDIUM", "LOW", "NEUTRAL"]
-          .filter(c => data.byConfidence?.[c])
-          .map(c => <StatCard key={c} label={c} b={data.byConfidence[c]} accent={confColor(c)} />)}
-      </div>
+
+      <nav className="nav">
+        <a onClick={()=>navigate("/dashboard")}><span className="i"><svg className="dbars" viewBox="0 0 24 24" width="18" height="18"><rect x="2" y="13" width="4" height="5" rx="1"/><rect x="7.3" y="9" width="4" height="9" rx="1"/><rect x="12.6" y="11" width="4" height="7" rx="1"/><rect x="18" y="6" width="4" height="12" rx="1"/></svg></span>Dashboard</a>
+        <a onClick={()=>navigate("/games")}><span className="i">{"\u25a6"}</span>Games</a>
+        <a onClick={()=>navigate("/props")}><span className="i">{"\u25c8"}</span>Props</a>
+        <a onClick={()=>navigate("/odds")}><span className="i">{"\u25d0"}</span>Market</a>
+        <a className="on"><span className="i">{"\u25b2"}</span>Performance</a>
+        <a onClick={()=>navigate("/settings")}><span className="i">{"\u25cd"}</span>Account</a>
+      </nav>
     </div>
   );
 }
-function ClvCard({ clv }) {
-  // No CLV data yet (closing lines accumulate going forward only).
-  if (!clv || !clv.sample) {
-    return (
-      <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 12, padding: 20, marginBottom: 24 }}>
-        <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 10 }}>Closing line value (CLV)</div>
-        <p style={{ fontSize: 12.5, color: "#9ca3af", lineHeight: 1.7, margin: 0 }}>
-          CLV measures whether our picks got a better price than the market's closing line — the single strongest
-          indicator of a real edge. It's collecting now and will appear here once games with tracked picks have started.
-        </p>
-      </div>
-    );
-  }
-  const positive = clv.avgClvPct >= 0;
-  return (
-    <div style={{ background: "linear-gradient(180deg,#0f1419,#0a0e14)", border: "1px solid #22c55e33", borderLeft: "3px solid #22c55e", borderRadius: 12, padding: 24, marginBottom: 24 }}>
-      <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 4 }}>Closing line value (CLV)</div>
-      <div style={{ fontSize: 12, color: "#22c55e", fontWeight: 600, marginBottom: 16 }}>Our most reliable early signal of edge</div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 16 }}>
-        <Metric
-          label="Beat the close"
-          value={`${clv.beatClosePct}%`}
-          color={clv.beatClosePct >= 50 ? "#22c55e" : "#e4e7eb"}
-        />
-        <Metric
-          label="Avg CLV"
-          value={`${positive ? "+" : ""}${clv.avgClvPct}%`}
-          color={positive ? "#22c55e" : "#ef4444"}
-        />
-      </div>
-      <div style={{ marginTop: 14, fontSize: 11, color: "#6b7280", lineHeight: 1.6 }}>
-        Across {clv.sample} qualified pick{clv.sample === 1 ? "" : "s"} with a captured closing line. CLV is how much
-        better our price was than the market's close — consistently positive CLV is the best early sign of genuine edge,
-        even before win/loss results stabilize. Small samples are still noisy.
-      </div>
-    </div>
-  );
-}
-function OverallCard({ o }) {
-  if (!o || o.total === 0) return null;
-  const profit = o.units >= 0;
-  // When the win rate sits below the -110 break-even line yet ROI is still
-  // positive, it's because the model's winners skew toward plus-money underdogs
-  // (a +150 winner pays more than a -150 winner costs). Surface that so the
-  // pairing doesn't read as a contradiction to a sharp eye.
-  const belowBreakeven = o.winPct != null && o.winPct < 52.4;
-  const showUnderdogNote = belowBreakeven && profit;
-  return (
-    <div style={{ background: "linear-gradient(180deg,#0f1419,#0a0e14)", border: "1px solid #1f2937", borderRadius: 12, padding: 24, marginBottom: 24 }}>
-      <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 16 }}>Overall record</div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16 }}>
-        <Metric label="Record" value={`${o.wins}-${o.losses}`} />
-        <Metric label="Win %" value={o.winPct != null ? `${o.winPct}%` : "—"} color={o.winPct >= 52.4 ? "#22c55e" : "#e4e7eb"} />
-        <div>
-          <div style={{ fontSize: 10, color: "#6b7280", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 600, marginBottom: 6 }}>ROI</div>
-          <div style={{ fontSize: 28, fontWeight: 800, color: profit ? "#22c55e" : "#ef4444", lineHeight: 1 }}>{o.roi != null ? `${profit ? "+" : ""}${o.roi}%` : "—"}</div>
-          <div style={{ fontSize: 9.5, color: "#a8915c", marginTop: 5, fontWeight: 600, letterSpacing: "0.02em" }}>early sample · expect regression</div>
-        </div>
-      </div>
-      <div style={{ marginTop: 14, fontSize: 11, color: "#6b7280", lineHeight: 1.6 }}>
-        Win % above ~52.4% is the break-even line for standard -110 odds. ROI assumes 1 unit per play
-        {showUnderdogNote ? " — it reads positive despite a sub-break-even win rate because the model's winners skew toward plus-money underdogs, which pay out more than they cost" : ""}.
-        {o.total != null ? ` Over ${o.total} play${o.total === 1 ? "" : "s"}, ROI is still volatile — closing-line value above is the steadier read on real edge.` : ""}
-      </div>
-    </div>
-  );
-}
-function StatCard({ label, b, accent }) {
-  if (!b || b.total === 0) return null;
-  const profit = b.units >= 0;
-  return (
-    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: 16 }}>
-      <div style={{ fontSize: 12, fontWeight: 700, color: accent || "#e4e7eb", marginBottom: 12 }}>{label}</div>
-      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-        <span style={{ fontSize: 11, color: "#6b7280" }}>Record</span>
-        <span style={{ fontSize: 13, fontWeight: 600 }}>{b.wins}-{b.losses}</span>
-      </div>
-      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-        <span style={{ fontSize: 11, color: "#6b7280" }}>Win %</span>
-        <span style={{ fontSize: 13, fontWeight: 600, color: b.winPct >= 52.4 ? "#22c55e" : "#e4e7eb" }}>{b.winPct != null ? `${b.winPct}%` : "—"}</span>
-      </div>
-      <div style={{ display: "flex", justifyContent: "space-between" }}>
-        <span style={{ fontSize: 11, color: "#6b7280" }}>ROI</span>
-        <span style={{ fontSize: 13, fontWeight: 600, color: profit ? "#22c55e" : "#ef4444" }}>{b.roi != null ? `${profit ? "+" : ""}${b.roi}%` : "—"}</span>
-      </div>
-    </div>
-  );
-}
-function TrackedPropCard({ p, league }) {
-  // Feature ONLY the hits prop (proven +EV). HR & strikeouts are deliberately not
-  // shown here — they're speculative and live on the Edges page. The blended prop
-  // ROI (mixing a +EV prop with losing ones) was meaningless and has been removed.
-  const hits = p && p.byMarket && p.byMarket.player_hits;
-  const decisions = hits ? ((hits.hits || 0) + (hits.misses || 0)) : 0;
-  if (!hits || !decisions) return null;
-  const profit = hits.roi >= 0;
-  return (
-    <>
-      <SectionTitle>Tracked prop</SectionTitle>
-      <div style={{ background: "linear-gradient(180deg,#0c1a14,#0a0e14)", border: "1px solid #1D9E7555", borderLeft: "3px solid #1D9E75", borderRadius: 12, padding: 24, marginBottom: 24 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-          <span style={{ fontSize: 16, fontWeight: 700, color: "#e4e7eb" }}>Hits</span>
-          <span style={{ background: "#1D9E7522", color: "#3FD39B", fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", padding: "3px 9px", borderRadius: 6, textTransform: "uppercase" }}>Sharpest prop</span>
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16 }}>
-          <Metric label="Hit rate" value={`${hits.hitRatePct}%`} color="#3FD39B" />
-          <Metric label="Hit / Missed" value={`${hits.hits}-${hits.misses}`} />
-          <div>
-            <div style={{ fontSize: 10, color: "#6b7280", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 600, marginBottom: 6 }}>ROI</div>
-            <div style={{ fontSize: 28, fontWeight: 800, color: profit ? "#22c55e" : "#ef4444", lineHeight: 1 }}>{`${profit ? "+" : ""}${hits.roi}%`}</div>
-            <div style={{ fontSize: 9.5, color: "#6b7280", marginTop: 5, fontWeight: 600 }}>{decisions} graded</div>
-          </div>
-        </div>
-        <div style={{ marginTop: 14, fontSize: 11, color: "#6b7280", lineHeight: 1.6 }}>
-          Our sharpest prop. Tracked and counted. Other prop types are shown on the Edges page but kept out of this record while they're calibrated.
-        </div>
-      </div>
-    </>
-  );
-}
-function Metric({ label, value, color }) {
-  return (
-    <div>
-      <div style={{ fontSize: 10, color: "#6b7280", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 600, marginBottom: 6 }}>{label}</div>
-      <div style={{ fontSize: 28, fontWeight: 800, color: color || "#e4e7eb", lineHeight: 1 }}>{value}</div>
-    </div>
-  );
-}
-function SectionTitle({ children }) {
-  return <div style={{ fontSize: 11, letterSpacing: "0.1em", color: "#6b7280", fontWeight: 700, textTransform: "uppercase", marginBottom: 12 }}>{children}</div>;
-}
-function propsDisplayLabel(p) {
-  const mkts = p && p.byMarket ? Object.keys(p.byMarket) : [];
-  if (mkts.length === 1) return marketLabel(mkts[0]); // only one type graded -> name it honestly (e.g. "HR props")
-  return (p && p.label) || "Player props";
-}
-function marketLabel(m) {
-  const map = {
-    moneyline: "Moneyline", total: "Totals", run_line: "Run line", spread: "Spread",
-    hr_prop: "HR props", player_strikeouts: "Strikeouts", player_hits: "Hits", player_points: "Points", player_rebounds: "Rebounds",
-    player_assists: "Assists", player_threes: "3PT made", player_props: "Player props",
-  };
-  return map[m] || m;
-}
-function confColor(c) {
-  return c === "HIGH" ? "#22c55e" : c === "MEDIUM" ? "#f59e0b" : "#9ca3af";
-}
-function Loader() {
-  return (
-    <div style={{ textAlign: "center", padding: 64 }}>
-      <div style={{ width: 30, height: 30, border: "3px solid #1f2937", borderTopColor: "#ef4444", borderRadius: "50%", animation: "spin .8s linear infinite", margin: "0 auto 14px" }} />
-      <div style={{ fontSize: 13, color: "#6b7280" }}>Loading track record...</div>
-    </div>
-  );
-}
-function ErrorState() {
-  return (
-    <div style={{ textAlign: "center", padding: 48, background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10 }}>
-      <div style={{ fontSize: 28, marginBottom: 10 }}></div>
-      <div style={{ fontSize: 14, fontWeight: 600 }}>Couldn't load performance</div>
-      <div style={{ fontSize: 12, color: "#6b7280", marginTop: 6 }}>The tracker may still be warming up. Check back shortly.</div>
-    </div>
-  );
-}
+
+const CSS = `@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700;800&display=swap');
+:root{--mono:'IBM Plex Mono',ui-monospace,monospace}
+
+:root{--bg:#06090b;--panel:#0b1117;--line:#16202a;--line2:#1d2a36;--gold:#f3b94f;--green:#33e991;--neg:#ff5d4d;--red:#ff5d4d;--steel:#2674b0;--blue:#5da9e8;--mut:#7d8a98;--mut2:#4a5663;--disp:'Barlow Condensed',sans-serif;--ui:'Inter',sans-serif;--mono:'JetBrains Mono',monospace}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoothing:antialiased}
+.app{max-width:460px;margin:0 auto;min-height:100vh;position:relative;padding-bottom:96px}
+.hd{position:sticky;top:0;z-index:10;background:rgba(6,9,11,.94);backdrop-filter:blur(12px);border-bottom:1px solid var(--line);padding:0 14px}
+.hrow{display:flex;align-items:center;gap:9px;padding:12px 0 9px}
+.logo{font-family:var(--disp);font-weight:800;font-size:21px;letter-spacing:.4px;color:#fff}.logo .w{color:var(--gold)}
+.open{font-family:var(--mono);font-size:9px;font-weight:700;color:var(--green);border:1px solid rgba(51,233,145,.32);background:rgba(51,233,145,.08);border-radius:999px;padding:3px 8px}
+.sp{flex:1}.ibtn{width:30px;height:30px;border-radius:9px;border:1px solid var(--line2);display:flex;align-items:center;justify-content:center;color:var(--mut)}
+.sports{display:flex;gap:6px;padding:0 0 11px;overflow-x:auto;scrollbar-width:none}.sports::-webkit-scrollbar{display:none}
+.sports b{flex:0 0 auto;font-family:var(--disp);font-weight:700;font-size:13px;letter-spacing:.4px;color:var(--mut);border:1px solid var(--line2);border-radius:999px;padding:6px 13px;display:inline-flex;align-items:center;gap:6px;cursor:pointer}
+.sports b.on{color:#fff;border-color:var(--steel);background:#0e1822}
+.sports b .dot{width:6px;height:6px;border-radius:50%;background:#2a3640}.sports b.on .dot{background:var(--green)}
+.ranges{display:flex;gap:7px;padding:11px 14px 2px}
+.ranges b{flex:0 0 auto;font-family:var(--mono);font-size:11px;font-weight:600;color:var(--mut);border:1px solid var(--line2);border-radius:8px;padding:6px 13px;cursor:pointer}
+.ranges b.on{color:#06090b;background:var(--gold);border-color:var(--gold);font-weight:700}
+.kpis{display:grid;grid-template-columns:1fr 1fr;gap:9px;padding:11px 14px 0}
+.kpi{border:1px solid var(--line);border-radius:13px;background:linear-gradient(180deg,#0c1218,#080c11);padding:13px}
+.kpi .k{font-family:var(--mono);font-size:9px;color:var(--mut);font-weight:600;letter-spacing:.3px}
+.kpi .v{font-family:var(--disp);font-weight:800;font-size:30px;color:#fff;margin-top:4px;line-height:1}.kpi .v.g{color:var(--green)}.kpi .v.gold{color:var(--gold)}.kpi .v.r{color:var(--neg)}
+.kpi .sub{font-family:var(--mono);font-size:9px;color:var(--mut2);margin-top:4px}
+.blk{margin:14px 14px 0;border:1px solid var(--line);border-radius:14px;background:var(--panel);padding:13px}
+.bl{font-family:var(--disp);font-weight:800;font-size:13px;letter-spacing:.7px;color:var(--mut);margin-bottom:11px;display:flex;align-items:center;justify-content:space-between}
+.bl .bx{font-family:var(--mono);font-size:9px;color:var(--mut2);letter-spacing:0;font-weight:500}
+.chartwrap{position:relative}
+.cylab{position:absolute;left:0;font-family:var(--mono);font-size:8px;color:var(--mut2)}
+.dbar{display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid rgba(255,255,255,.05)}.dbar:first-of-type{border-top:none}
+.dbar .nm{width:78px;flex:0 0 auto}.dbar .nm .n{font-family:var(--disp);font-weight:800;font-size:14px;color:#dbe4e2}.dbar .nm .r{font-family:var(--mono);font-size:8.5px;color:var(--mut2);margin-top:1px}
+.dbar .track{flex:1;height:20px;position:relative;background:#0e1620;border-radius:5px;border:1px solid var(--line)}
+.dbar .track .z{position:absolute;left:50%;top:0;bottom:0;width:1px;background:#39454f}
+.dbar .track .f{position:absolute;top:1px;bottom:1px;border-radius:3px}
+.dbar .track .f.pos{background:linear-gradient(90deg,#1f6b3f,#33e991)}.dbar .track .f.neg{background:linear-gradient(90deg,#ff5d4d,#a23b32)}
+.dbar .v{width:52px;text-align:right;font-family:var(--disp);font-weight:800;font-size:16px;flex:0 0 auto}.dbar .v.pos{color:var(--green)}.dbar .v.neg{color:var(--neg)}
+.mrow{display:flex;align-items:center;gap:9px;padding:9px 0;border-top:1px solid rgba(255,255,255,.05)}.mrow:first-of-type{border-top:none}
+.mrow .mn{font-family:var(--disp);font-weight:800;font-size:14px;color:#dbe4e2;flex:1}.mrow .mr{font-family:var(--mono);font-size:9px;color:var(--mut)}
+.mrow .mv{font-family:var(--disp);font-weight:800;font-size:16px;width:54px;text-align:right;flex:0 0 auto}.mv.pos{color:var(--green)}.mv.neg{color:var(--neg)}
+.clvgrid{display:flex;gap:9px}.clvgrid .c{flex:1;text-align:center;border:1px solid var(--line);border-radius:10px;padding:11px 6px}.clvgrid .c .k{font-family:var(--mono);font-size:8px;color:var(--mut2);font-weight:600}.clvgrid .c .v{font-family:var(--disp);font-weight:800;font-size:22px;color:#cfe2f5;margin-top:3px}.clvgrid .c .v.g{color:var(--green)}
+.clvnote{font-family:var(--ui);font-size:10.5px;color:var(--mut);margin-top:10px;line-height:1.5}
+.rrow{display:flex;align-items:center;gap:9px;padding:9px 0;border-top:1px solid rgba(255,255,255,.05)}.rrow:first-of-type{border-top:none}
+.rres{width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-family:var(--disp);font-weight:800;font-size:11px;flex:0 0 auto}.rres.W{background:rgba(51,233,145,.16);color:var(--green)}.rres.L{background:rgba(255,93,77,.16);color:var(--neg)}.rres.P{background:#1a242e;color:var(--mut)}
+.rrow .rp{flex:1;min-width:0}.rrow .rpk{font-weight:600;font-size:13px;color:#eaf1ee;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.rrow .rd{font-family:var(--mono);font-size:9px;color:var(--mut2)}
+.rrow .re{font-family:var(--mono);font-size:11px;color:var(--green);font-weight:600;flex:0 0 auto}
+.rrow .rclv{font-family:var(--mono);font-size:9px;width:42px;text-align:right;flex:0 0 auto}.rclv.p{color:var(--green)}.rclv.n{color:var(--mut)}
+.disc{font-family:var(--ui);font-size:10px;color:var(--mut2);margin:14px 14px 0;line-height:1.5;text-align:center}
+.estate{margin:40px 14px;border:1px dashed var(--line2);border-radius:14px;padding:36px 18px;text-align:center}.estate .et{font-family:var(--disp);font-weight:800;font-size:18px;color:#cfd7e2}.estate .es{font-size:12px;color:var(--mut);margin-top:6px;font-family:var(--mono)}
+.nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:460px;display:flex;justify-content:space-around;padding:7px 4px;background:rgba(0,0,0,.96);backdrop-filter:blur(12px);border-top:1px solid var(--line);z-index:20}
+.nav a{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;font-family:var(--disp);font-weight:700;font-size:10px;letter-spacing:.3px;color:var(--mut2);text-decoration:none}
+.nav a.on{color:var(--gold)}.nav a .i{font-size:15px;line-height:1}.nav a .dbars rect{fill:var(--mut2)}
+`;
