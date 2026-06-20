@@ -3,556 +3,290 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { supabase, scoresApi } from "../lib/api";
 
+const API_BASE = import.meta.env.VITE_API_URL || "https://sportsintel-production.up.railway.app";
 const ADMIN_EMAIL = "r7002g@gmail.com";
-
-// Sports offered when tagging an expert pick / parlay leg.
-const SPORTS = [
-  { id: "mlb",    label: "⚾ MLB" },
-  { id: "nba",    label: "🏀 NBA" },
-  { id: "nfl",    label: "🏈 NFL" },
-  { id: "nhl",    label: "🏒 NHL" },
-  { id: "ncaafb", label: "🏟️ CFB" },
-  { id: "ncaamb", label: "🎓 CBB" },
-];
-
-// ── American odds helpers (match the WizePlays page) ─────────────────────
-function americanToDecimal(odds) {
-  const n = Number(odds);
-  if (!n || Number.isNaN(n)) return null;
-  return n > 0 ? n / 100 + 1 : 100 / Math.abs(n) + 1;
-}
-function decimalToAmerican(dec) {
-  if (!dec || dec <= 1) return null;
-  return dec >= 2 ? Math.round((dec - 1) * 100) : Math.round(-100 / (dec - 1));
-}
-function combinedAmerican(legs) {
-  if (!legs || legs.length === 0) return null;
-  let d = 1;
-  for (const leg of legs) {
-    const dec = americanToDecimal(leg.odds);
-    if (dec == null) return null; // a leg is missing/blank odds
-    d *= dec;
-  }
-  return decimalToAmerican(d);
-}
-function fmtOdds(v) {
-  const n = Number(v);
-  if (v === "" || v == null || Number.isNaN(n)) return "—";
-  return n > 0 ? `+${n}` : `${n}`;
-}
-
-// ── Team/game picker ────────────────────────────────────────────────────────
-// Schedules come from the scores feed, which currently covers MLB and NBA.
-// Other sports fall back to typing the matchup in. Cached per league so we don't
-// refetch for every leg.
-const SCHEDULE_LEAGUES = new Set(["mlb", "nba"]);
-const scheduleCache = {}; // league -> [{ value, label, id, away, home }]
-
-function useSchedule(league) {
-  const [games, setGames] = useState(scheduleCache[league] || null);
-  useEffect(() => {
-    let cancelled = false;
-    if (!SCHEDULE_LEAGUES.has(league)) { setGames([]); return; }
-    if (scheduleCache[league]) { setGames(scheduleCache[league]); return; }
-    (async () => {
-      try {
-        const d = await scoresApi.getScores(league);
-        const all = [...(d.live || []), ...(d.upcoming || []), ...(d.final || [])];
-        const opts = all
-          .filter((g) => g.away && g.home && g.away.abbrev && g.home.abbrev)
-          .map((g) => {
-            const away = g.away.abbrev, home = g.home.abbrev;
-            const matchup = `${away} @ ${home}`;
-            return {
-              value: matchup,
-              label: g.statusDetail ? `${matchup} · ${g.statusDetail}` : matchup,
-              id: g.id != null ? String(g.id) : "",
-              away,
-              home,
-            };
-          });
-        scheduleCache[league] = opts;
-        if (!cancelled) setGames(opts);
-      } catch (_) {
-        if (!cancelled) setGames([]);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [league]);
-  return games; // null = loading, [] = none, [...] = options
-}
-
-// Dropdown that quick-fills the matchup field from the day's scheduled games.
-// Always visible for MLB/NBA (with Loading / No-games states) so it can't
-// silently disappear; hidden only for sports that have no schedule feed.
-// onPick(value) → matchup string (existing behaviour, unchanged).
-// onGame(option) → optional: full game option { value, label, id, away, home }
-//   so callers that need it (straight bets, for auto-grading) can capture the
-//   game id + abbreviations. Callers that don't pass onGame are unaffected.
-function GamePicker({ league, onPick, onGame }) {
-  const sched = useSchedule(league);
-  if (!SCHEDULE_LEAGUES.has(league)) return null; // no feed for this sport → type-in only
-  const ready = Array.isArray(sched) && sched.length > 0;
-  const placeholder =
-    sched === null ? "Loading today's games…"
-    : (Array.isArray(sched) && sched.length === 0) ? "No games to load — type below"
-    : "⚡ Load today's game…";
-  return (
-    <select
-      value=""
-      disabled={!ready}
-      onChange={(e) => {
-        if (!e.target.value) return;
-        onPick(e.target.value);
-        if (onGame) {
-          const opt = (Array.isArray(sched) ? sched : []).find((o) => o.value === e.target.value);
-          if (opt) onGame(opt);
-        }
-      }}
-      style={{ marginBottom: 8, opacity: ready ? 1 : 0.7 }}
-    >
-      <option value="">{placeholder}</option>
-      {ready && sched.map((o, i) => <option key={i} value={o.value}>{o.label}</option>)}
-    </select>
-  );
-}
+const todayISO = () => new Date().toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
+const fmtOdds = (o) => { const n = Number(o); if(!n||isNaN(n)) return String(o||""); return n>0?"+"+n:""+n; };
+const unitProfit = (o) => { const n = Number(o); if(!n||isNaN(n)) return 1; return n>0 ? n/100 : 100/Math.abs(n); };
+const resState = (r) => { const s = String(r==null?"":r).trim().toLowerCase(); if(s===""||s==="pending") return "pending"; if(s==="won"||s==="win") return "won"; if(s==="lost"||s==="loss") return "lost"; return "push"; };
 
 export default function AdminPage() {
-  const { user } = useAuth();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isAdmin = user?.email === ADMIN_EMAIL;
 
-  useEffect(() => {
-    if (user && user.email !== ADMIN_EMAIL) {
-      navigate("/home");
-    }
-  }, [user, navigate]);
-
-  return (
-    <div className="admin-wrap" style={{ minHeight: "100vh", background: "#080810", color: "#e2e8f0", fontFamily: "'Inter',system-ui,sans-serif", padding: 24 }}>
-      <style>{`
-        *{box-sizing:border-box}
-        input,textarea,select{background:#0a0a14;border:1px solid #1a1a2e;color:#e2e8f0;border-radius:8px;padding:10px 12px;font-family:inherit;font-size:13px;width:100%;outline:none}
-        input:focus,textarea:focus,select:focus{border-color:#ef4444}
-        @media (max-width: 600px){
-          .admin-wrap{padding:14px!important}
-          .admin-3col{grid-template-columns:1fr!important}
-        }
-      `}</style>
-
-      <div style={{ maxWidth: 760, margin: "0 auto" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
-          <div>
-            <div style={{ fontSize: 11, color: "#475569", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.08em" }}>Admin Panel</div>
-            <div style={{ fontSize: 22, fontWeight: 800, color: "#fff" }}>WizePlays Manager</div>
-          </div>
-          <a href="/home" style={{ color: "#475569", textDecoration: "none", fontSize: 13 }}>← Home</a>
-        </div>
-
-        <ExpertPicksManager />
-      </div>
-    </div>
-  );
-}
-
-
-// ============================================================================
-// WIZEPLAYS MANAGER — writes to expert_picks (the WizePlays page).
-// Supports straight bets and parlays (any number of legs), each tagged by sport.
-// ============================================================================
-function ExpertPicksManager() {
-  const [items, setItems] = useState([]);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [today] = useState(todayISO());
+  const [picks, setPicks] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [rec, setRec] = useState({ w:0, l:0, p:0, u:0 });
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  // Use Eastern date so it matches what the WizePlays page reads.
-  const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+  // new-play form
+  const [sport, setSport] = useState("mlb");
+  const [games, setGames] = useState([]);
+  const [gameIdx, setGameIdx] = useState(-1);
+  const [market, setMarket] = useState("moneyline");
+  const [selection, setSelection] = useState("");
+  const [line, setLine] = useState("");
+  const [odds, setOdds] = useState("");
+  const [units, setUnits] = useState("");
+  const [conv, setConv] = useState("Strong");
+  const [write, setWrite] = useState("");
+
+  useEffect(() => { if (!isAdmin) navigate("/dashboard"); }, [isAdmin]);
+
+  const loadToday = async () => {
+    try {
+      const { data } = await supabase.from("expert_picks").select("*").eq("date", today).maybeSingle();
+      setPicks(data?.picks ? JSON.parse(data.picks) : []);
+    } catch(_) { setPicks([]); }
+    setLoading(false);
+  };
+  const loadRecord = async () => {
+    try {
+      const { data } = await supabase.from("expert_picks").select("picks");
+      let w=0,l=0,p=0,u=0;
+      for (const row of (data||[])) {
+        let arr=[]; try { arr = JSON.parse(row.picks||"[]"); } catch(_) {}
+        for (const pk of arr) {
+          const st = resState(pk.result); if (st==="pending") continue;
+          if (st==="won") { w++; u += (Number(pk.units)||1)*unitProfit(pk.odds); }
+          else if (st==="lost") { l++; u -= (Number(pk.units)||1); }
+          else p++;
+        }
+      }
+      setRec({ w, l, p, u: Math.round(u*10)/10 });
+    } catch(_) {}
+  };
+  useEffect(() => { if(isAdmin){ loadToday(); loadRecord(); } }, [isAdmin]);
 
   useEffect(() => {
-    (async () => {
-      try {
-        const { data } = await supabase.from("expert_picks").select("*").eq("date", today).maybeSingle();
-        if (data?.picks) {
-          const parsed = JSON.parse(data.picks);
-          // normalize into editable form (result null -> "")
-          setItems(parsed.map(normalizeForEdit));
-        }
-      } catch (e) {}
-      setLoading(false);
-    })();
-  }, [today]);
+    let cancelled = false;
+    scoresApi.getScores(sport).then(d => {
+      if (cancelled) return;
+      const list = (Array.isArray(d) ? d : (d?.games||[])).map(g => ({
+        gameId: g.id || g.gameId || g.espnId, awayAbbr: g.awayAbbr || g.away, homeAbbr: g.homeAbbr || g.home,
+        label: `${g.awayAbbr||g.away||"?"} @ ${g.homeAbbr||g.home||"?"}${g.time?" · "+g.time:""}`,
+      }));
+      setGames(list); setGameIdx(-1); setSelection("");
+    }).catch(()=>setGames([]));
+    return () => { cancelled = true; };
+  }, [sport, sheetOpen]);
 
-  const save = async () => {
+  const save = async (next) => {
     setSaving(true);
-    try {
-      const cleaned = items.map(serializeForSave);
-      const { error } = await supabase.from("expert_picks").upsert({
-        date: today,
-        picks: JSON.stringify(cleaned),
-      }, { onConflict: "date" });
-      if (error) throw error;
-      setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
-    } catch (e) {
-      alert("Error saving expert picks: " + e.message);
-    }
+    try { await supabase.from("expert_picks").upsert({ date: today, picks: JSON.stringify(next) }, { onConflict: "date" }); setPicks(next); }
+    catch(e) { alert("Save failed: " + (e?.message||e)); }
     setSaving(false);
   };
 
-  const update = (i, patch) => {
-    const next = [...items];
-    next[i] = { ...next[i], ...patch };
-    setItems(next);
-  };
-  const remove = (i) => setItems(items.filter((_, j) => j !== i));
-  const addStraight = () => setItems([...items, { type: "straight", sport: "mlb", pick: "", game: "", odds: "", confidence: "HIGH", analysis: "", result: "", market: "moneyline", selection: "", line: "", gameId: "", awayAbbr: "", homeAbbr: "", pickEdited: false, gameEdited: false }]);
-  const addParlay = () => setItems([...items, { type: "parlay", confidence: "HIGH", analysis: "", result: "", legs: [emptyLeg("mlb"), emptyLeg("nba")] }]);
-
-  // leg helpers
-  const updateLeg = (i, li, patch) => {
-    const next = [...items];
-    const legs = [...next[i].legs];
-    legs[li] = { ...legs[li], ...patch };
-    next[i] = { ...next[i], legs };
-    setItems(next);
-  };
-  const addLeg = (i) => {
-    const next = [...items];
-    next[i] = { ...next[i], legs: [...next[i].legs, emptyLeg("mlb")] };
-    setItems(next);
-  };
-  const removeLeg = (i, li) => {
-    const next = [...items];
-    next[i] = { ...next[i], legs: next[i].legs.filter((_, j) => j !== li) };
-    setItems(next);
+  const selLabel = (g, sel) => sel==="away" ? (g?.awayAbbr||"Away") : sel==="home" ? (g?.homeAbbr||"Home") : sel==="over" ? "Over" : "Under";
+  const buildPickText = (g) => {
+    if (market==="total") return `${selection==="under"?"Under":"Over"} ${line}`;
+    if (market==="moneyline") return `${selLabel(g,selection)} ML`;
+    return `${selLabel(g,selection)} ${line!==""?(Number(line)>0?"+":"")+line:""}`.trim();
   };
 
-  if (loading) return <div style={{ color: "#475569", fontSize: 13, padding: 20 }}>Loading...</div>;
-
-  return (
-    <div>
-      <div style={{ background: "#ef444415", border: "1px solid #ef444430", borderRadius: 12, padding: "12px 16px", marginBottom: 20, fontSize: 13, color: "#f87171" }}>
-        🎯 These show on the <strong>WizePlays</strong> page · editing today ({today})
-      </div>
-
-      {items.length === 0 && (
-        <div style={{ background: "#0a0a14", border: "1px dashed #1a1a2e", borderRadius: 14, padding: 28, textAlign: "center", color: "#475569", fontSize: 13, marginBottom: 16 }}>
-          No expert picks for today yet. Add a straight bet or a parlay below.
-        </div>
-      )}
-
-      <div style={{ display: "flex", flexDirection: "column", gap: 16, marginBottom: 20 }}>
-        {items.map((it, i) =>
-          it.type === "parlay"
-            ? <ParlayEditor key={i} item={it} index={i} update={update} remove={remove} updateLeg={updateLeg} addLeg={addLeg} removeLeg={removeLeg} />
-            : <StraightEditor key={i} item={it} index={i} update={update} remove={remove} />
-        )}
-      </div>
-
-      <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
-        <button onClick={addStraight} style={ghostBtn}>+ Add straight bet</button>
-        <button onClick={addParlay} style={ghostBtn}>+ Add parlay</button>
-      </div>
-
-      <button onClick={save} disabled={saving}
-        style={{ width: "100%", background: saved ? "#22c55e" : "#ef4444", color: "#fff", border: "none", borderRadius: 10, padding: "12px 32px", fontSize: 14, fontWeight: 700, cursor: saving ? "wait" : "pointer", fontFamily: "inherit", marginBottom: 28 }}>
-        {saving ? "Saving..." : (saved ? "✓ Saved!" : "Save & Publish WizePlays")}
-      </button>
-
-      <div style={{ background: "#0a0a14", border: "1px solid #1a1a2e", borderRadius: 12, padding: 16, fontSize: 12, color: "#475569", lineHeight: 1.6 }}>
-        <strong style={{ color: "#e2e8f0" }}>Grading:</strong> after a game finishes, set each pick's <strong style={{ color: "#e2e8f0" }}>Result</strong> to Won / Lost / Push and Save.
-        Your record and units on the WizePlays page update automatically — only graded picks count, so nothing is ever inflated.
-        <br /><br />
-        <strong style={{ color: "#1D9E75" }}>Auto-grade (MLB/NBA):</strong> on a straight bet, link a game from the dropdown and choose the bet type + side. Picks linked this way are set up to grade themselves automatically once that feature is switched on. Leaving them blank still works — you just grade those by hand. (Parlays are always graded by hand.)
-      </div>
-    </div>
-  );
-}
-
-function StraightEditor({ item, index, update, remove }) {
-  const market = item.market || "moneyline";
-  const selectionOptions = market === "total"
-    ? [{ v: "over", label: "Over" }, { v: "under", label: "Under" }]
-    : [
-        { v: "away", label: item.awayAbbr ? `${item.awayAbbr} (away)` : "Away team" },
-        { v: "home", label: item.homeAbbr ? `${item.homeAbbr} (home)` : "Home team" },
-      ];
-  const linked = !!item.gameId && !!item.selection;
-
-  // Build the human-readable pick label from the structured fields.
-  const deriveLabel = (it) => {
-    const m = it.market || "moneyline";
-    if (m === "total") {
-      const s = it.selection === "over" ? "Over" : it.selection === "under" ? "Under" : "";
-      if (!s) return "";
-      return it.line ? `${s} ${it.line}` : s;
-    }
-    const abbr = it.selection === "away" ? it.awayAbbr : it.selection === "home" ? it.homeAbbr : "";
-    return abbr ? `${abbr} ML` : "";
-  };
-
-  // Apply a structured-field change, and auto-fill the Pick label / Game text
-  // from it — UNLESS the owner has already typed over those fields by hand.
-  const setStructured = (patch, matchup) => {
-    const merged = { ...item, ...patch };
-    const out = { ...patch };
-    // A total's label is fully defined by side + line, so always keep it in sync —
-    // otherwise an edited pick (pickEdited=true on load) freezes a bare "Over"/"Under"
-    // and the line number gets dropped. Moneyline still respects manual edits.
-    const isTotal = (merged.market || "moneyline") === "total";
-    if (!item.pickEdited || isTotal) {
-      const lbl = deriveLabel(merged);
-      if (lbl) out.pick = lbl;
-    }
-    if (matchup != null && !item.gameEdited) out.game = matchup;
-    update(index, out);
-  };
-
-  return (
-    <div style={{ background: "#0a0a14", border: "1px solid #1a1a2e", borderRadius: 14, padding: 20 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>Straight bet</div>
-        <button onClick={() => remove(index)} style={xBtn}>×</button>
-      </div>
-      <div className="admin-3col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
-        <div>
-          <Label>Sport</Label>
-          <select value={item.sport} onChange={e => update(index, { sport: e.target.value })}>
-            {SPORTS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
-          </select>
-        </div>
-        <div>
-          <Label>Confidence</Label>
-          <select value={item.confidence} onChange={e => update(index, { confidence: e.target.value })}>
-            <option>HIGH</option><option>MEDIUM</option><option>LOW</option>
-          </select>
-        </div>
-        <div>
-          <Label>Result</Label>
-          <select value={item.result || ""} onChange={e => update(index, { result: e.target.value })}>
-            <option value="">Pending</option>
-            <option value="win">Won</option>
-            <option value="loss">Lost</option>
-            <option value="push">Push</option>
-          </select>
-        </div>
-      </div>
-
-      {/* Auto-grade link (MLB/NBA). Optional & additive — leave blank to grade by hand. */}
-      <div style={{ borderLeft: "3px solid #1D9E75", borderRadius: 0, background: "#080810", padding: "14px 16px", marginBottom: 12 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.06em", background: "#0F6E5633", color: "#1D9E75", border: "1px solid #1D9E7555", borderRadius: 4, padding: "2px 8px" }}>AUTO-GRADE</span>
-          <span style={{ fontSize: 11, color: linked ? "#1D9E75" : "#64748b" }}>
-            {linked ? "✓ Linked — set up to grade itself (MLB/NBA)" : "Link a game + pick a side to set up auto-grading (MLB/NBA). Optional."}
-          </span>
-        </div>
-        <div className="admin-3col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 0.8fr", gap: 12, marginBottom: 10 }}>
-          <div>
-            <Label>Bet type</Label>
-            <select value={market} onChange={e => setStructured({ market: e.target.value, selection: "" })}>
-              <option value="moneyline">Moneyline</option>
-              <option value="total">Total (O/U)</option>
-            </select>
-          </div>
-          <div>
-            <Label>Side</Label>
-            <select value={item.selection || ""} onChange={e => setStructured({ selection: e.target.value })}>
-              <option value="">— pick side —</option>
-              {selectionOptions.map(o => <option key={o.v} value={o.v}>{o.label}</option>)}
-            </select>
-          </div>
-          <div>
-            <Label>Line</Label>
-            <input
-              value={item.line ?? ""}
-              onChange={e => setStructured({ line: e.target.value })}
-              placeholder={market === "total" ? "8.5" : "—"}
-              disabled={market !== "total"}
-              style={{ opacity: market === "total" ? 1 : 0.5 }}
-            />
-          </div>
-        </div>
-        <Label>Link game (loads today's MLB/NBA games)</Label>
-        <GamePicker
-          league={item.sport}
-          onPick={() => {}}
-          onGame={(opt) => setStructured({ gameId: opt.id, awayAbbr: opt.away, homeAbbr: opt.home, selection: "" }, opt.value)}
-        />
-        {item.gameId ? (
-          <div style={{ fontSize: 10, color: "#475569" }}>Linked: {item.awayAbbr} @ {item.homeAbbr} (id {item.gameId})</div>
-        ) : null}
-      </div>
-
-      <div className="admin-3col" style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 0.7fr", gap: 12 }}>
-        <div>
-          <Label>Pick label (auto-fills · editable)</Label>
-          <input value={item.pick} onChange={e => update(index, { pick: e.target.value, pickEdited: true })} placeholder="Dodgers ML" />
-        </div>
-        <div>
-          <Label>Game / matchup (auto-fills · editable)</Label>
-          <input value={item.game} onChange={e => update(index, { game: e.target.value, gameEdited: true })} placeholder="LAD @ SF" />
-        </div>
-        <div>
-          <Label>Odds</Label>
-          <input value={item.odds} onChange={e => update(index, { odds: e.target.value })} placeholder="-135" />
-        </div>
-      </div>
-      <div style={{ marginTop: 12 }}>
-        <Label>Analysis (optional)</Label>
-        <textarea value={item.analysis} onChange={e => update(index, { analysis: e.target.value })} placeholder="Why you like it..." rows={2} style={{ resize: "vertical" }} />
-      </div>
-    </div>
-  );
-}
-
-function ParlayEditor({ item, index, update, remove, updateLeg, addLeg, removeLeg }) {
-  const combined = combinedAmerican(item.legs);
-  return (
-    <div style={{ background: "#0a0a14", border: "1px solid #ef444433", borderLeft: "3px solid #ef4444", borderRadius: 14, padding: 20 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>Parlay · {item.legs.length} legs</div>
-        <button onClick={() => remove(index)} style={xBtn}>×</button>
-      </div>
-
-      <Label>Legs</Label>
-      <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
-        {item.legs.map((leg, li) => (
-          <LegEditor key={li} leg={leg} index={index} li={li} updateLeg={updateLeg} removeLeg={removeLeg} canRemove={item.legs.length > 1} />
-        ))}
-      </div>
-
-      <button onClick={() => addLeg(index)} style={{ ...ghostBtn, width: "100%", borderStyle: "dashed", marginBottom: 14 }}>+ Add another leg</button>
-
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#080810", border: "1px solid #1a1a2e", borderRadius: 8, padding: "10px 14px", marginBottom: 14 }}>
-        <span style={{ fontSize: 12, color: "#94a3b8" }}>Combined odds (auto)</span>
-        <span style={{ fontSize: 18, fontWeight: 800, color: combined != null ? "#22c55e" : "#475569" }}>{fmtOdds(combined)}</span>
-      </div>
-
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
-        <div>
-          <Label>Confidence</Label>
-          <select value={item.confidence} onChange={e => update(index, { confidence: e.target.value })}>
-            <option>HIGH</option><option>MEDIUM</option><option>LOW</option>
-          </select>
-        </div>
-        <div>
-          <Label>Result</Label>
-          <select value={item.result || ""} onChange={e => update(index, { result: e.target.value })}>
-            <option value="">Pending</option>
-            <option value="win">Won</option>
-            <option value="loss">Lost</option>
-            <option value="push">Push</option>
-          </select>
-        </div>
-      </div>
-      <div>
-        <Label>Analysis (optional)</Label>
-        <textarea value={item.analysis} onChange={e => update(index, { analysis: e.target.value })} placeholder="Why you like this parlay..." rows={2} style={{ resize: "vertical" }} />
-      </div>
-    </div>
-  );
-}
-
-function LegEditor({ leg, index, li, updateLeg, removeLeg, canRemove }) {
-  return (
-    <div style={{ background: "#080810", border: "1px solid #1a1a2e", borderRadius: 10, padding: 12 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-        <div style={{ width: 20, height: 20, borderRadius: "50%", background: "#ef444415", border: "1px solid #ef444440", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 800, color: "#ef4444" }}>{li + 1}</div>
-        <div style={{ width: 130 }}>
-          <select value={leg.sport} onChange={e => updateLeg(index, li, { sport: e.target.value })} style={{ padding: "7px 10px" }}>
-            {SPORTS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
-          </select>
-        </div>
-        <div style={{ flex: 1 }} />
-        {canRemove && <button onClick={() => removeLeg(index, li)} style={xBtn}>×</button>}
-      </div>
-      <GamePicker league={leg.sport} onPick={(v) => updateLeg(index, li, { game: v })} />
-      <div className="admin-3col" style={{ display: "grid", gridTemplateColumns: "1.6fr 1.1fr 0.7fr", gap: 8 }}>
-        <input value={leg.pick} onChange={e => updateLeg(index, li, { pick: e.target.value })} placeholder="Dodgers ML" />
-        <input value={leg.game} onChange={e => updateLeg(index, li, { game: e.target.value })} placeholder="LAD @ SF" />
-        <input value={leg.odds} onChange={e => updateLeg(index, li, { odds: e.target.value })} placeholder="-135" />
-      </div>
-    </div>
-  );
-}
-
-function Label({ children }) {
-  return <div style={{ fontSize: 11, color: "#475569", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.06em" }}>{children}</div>;
-}
-
-const ghostBtn = { background: "#0a0a14", border: "1px solid #1a1a2e", color: "#94a3b8", borderRadius: 10, padding: "10px 20px", fontSize: 13, cursor: "pointer", fontFamily: "inherit" };
-const xBtn = { background: "none", border: "none", color: "#475569", cursor: "pointer", fontSize: 18, fontFamily: "inherit" };
-
-function emptyLeg(sport) { return { sport, pick: "", game: "", odds: "" }; }
-
-// Convert a stored pick into editable shape (numbers -> strings, null result -> "").
-function normalizeForEdit(p) {
-  if (p.type === "parlay") {
-    return {
-      type: "parlay",
-      confidence: p.confidence || "HIGH",
-      analysis: p.analysis || "",
-      result: p.result || "",
-      legs: (p.legs || []).map(l => ({ sport: l.sport || "mlb", pick: l.pick || "", game: l.game || "", odds: l.odds != null ? String(l.odds) : "" })),
+  const publish = async () => {
+    const g = games[gameIdx] || {};
+    if (!selection) { alert("Pick a selection (side / over-under)."); return; }
+    if ((market==="total"||market==="run_line"||market==="spread") && line==="") { alert("Enter the line."); return; }
+    const pick = {
+      type: "straight", sport, gameId: g.gameId || "", game: g.label || "", awayAbbr: g.awayAbbr || "", homeAbbr: g.homeAbbr || "",
+      market, selection, line: line===""?null:Number(line),
+      pick: buildPickText(g), odds: odds || "-110", units: Number(units)||1,
+      conviction: conv, write: write.trim(), result: "",
     };
-  }
-  return {
-    type: "straight",
-    sport: p.sport || "mlb",
-    pick: p.pick || "",
-    game: p.game || "",
-    odds: p.odds != null ? String(p.odds) : "",
-    confidence: p.confidence || "HIGH",
-    analysis: p.analysis || "",
-    result: p.result || "",
-    market: p.market || "moneyline",
-    selection: p.selection || "",
-    line: p.line != null ? String(p.line) : "",
-    gameId: p.gameId != null ? String(p.gameId) : "",
-    awayAbbr: p.awayAbbr || "",
-    homeAbbr: p.homeAbbr || "",
-    pickEdited: true,
-    gameEdited: true,
+    await save([pick, ...picks]);
+    setSheetOpen(false);
+    setSelection(""); setLine(""); setOdds(""); setUnits(""); setWrite(""); setGameIdx(-1);
   };
+
+  const gradePick = async (idx, result) => {
+    const next = picks.map((p,i) => i===idx ? { ...p, result } : p);
+    await save(next);
+    loadRecord();
+  };
+
+  const active = picks.map((p,i)=>({p,i})).filter(o => resState(o.p.result)==="pending");
+  const settled = picks.map((p,i)=>({p,i})).filter(o => resState(o.p.result)!=="pending");
+  const winPct = (rec.w+rec.l)>0 ? (rec.w/(rec.w+rec.l)*100).toFixed(1) : "0.0";
+
+  const marketSels = market==="total" ? [["over","Over"],["under","Under"]] : [["away","Away"],["home","Home"]];
+  const needsLine = market==="total" || market==="run_line" || market==="spread";
+
+  const runGrading = async () => {
+    try { const r = await fetch(`${API_BASE}/api/expert-grade?write=1`); const j = await r.json(); alert("Grading run.\n" + JSON.stringify(j).slice(0,300)); loadToday(); loadRecord(); }
+    catch(e) { alert("Grading failed: " + (e?.message||e)); }
+  };
+  const clearCache = async () => {
+    const tok = window.prompt("Admin token (x-admin-token):"); if(!tok) return;
+    try { const r = await fetch(`${API_BASE}/api/cache`, { method:"DELETE", headers:{ "x-admin-token": tok } }); alert(r.ok ? "Cache cleared." : "Failed ("+r.status+")"); }
+    catch(e) { alert("Failed: " + (e?.message||e)); }
+  };
+
+  if (!isAdmin) return null;
+
+  const Play = ({ p, i, isActive }) => {
+    const st = resState(p.result);
+    const stCls = st;
+    return (
+      <div className={"play"+(isActive?" pending":"")}>
+        <div className="ph"><div className="ppick">{p.pick}<span className="u">{p.units}u @ {fmtOdds(p.odds)}</span></div><span className={"pst "+stCls}>{(isActive?"PENDING":st).toUpperCase()}</span></div>
+        <div className="pmu">{p.game}{p.conviction?` · ${p.conviction} conviction`:""}</div>
+        {p.write ? <div className="pwrite">{p.write}</div> : null}
+        {isActive && <div className="grade"><b className="w" onClick={()=>gradePick(i,"won")}>Mark Won</b><b className="l" onClick={()=>gradePick(i,"lost")}>Mark Lost</b><b onClick={()=>gradePick(i,"push")}>Void</b></div>}
+      </div>
+    );
+  };
+
+  return (
+    <div className="app"><style>{CSS}</style>
+      <div className="hd"><div className="hrow"><div className="logo"><span className="w">Wize</span>Picks</div><div className="htitle">ADMIN</div></div></div>
+
+      <div className="blk"><div className="prof"><div className="av">MG</div><div><div className="pn">Master G</div><div className="pe">owner · wizepicks.com</div><div className="pp">{"\u25cf"} OWNER · ALL-ACCESS</div></div></div></div>
+
+      <div className="blk"><div className="bl">WIZEPLAYS STUDIO <span className="bx">straight bets · auto-graded hourly</span></div>
+        <div className="wprec">
+          <div className="r"><div className="k">RECORD</div><div className="v">{rec.w}-{rec.l}-{rec.p}</div></div>
+          <div className="r"><div className="k">UNITS</div><div className={"v "+(rec.u>=0?"g":"")}>{rec.u>=0?"+":""}{rec.u}u</div></div>
+          <div className="r"><div className="k">WIN %</div><div className="v gold">{winPct}%</div></div>
+        </div>
+        <div className="newbtn" onClick={()=>setSheetOpen(true)}><span style={{fontSize:18}}>+</span> New WizePlay</div>
+        <div className="sub2">ACTIVE PLAYS</div>
+        {loading ? <div className="placeholder">Loading…</div> : active.length ? active.map(o=><Play key={o.i} p={o.p} i={o.i} isActive/>) : <div className="placeholder">No active plays today. Add one above.</div>}
+        <div className="sub2">RECENTLY SETTLED</div>
+        {settled.length ? settled.slice(0,8).map(o=><Play key={o.i} p={o.p} i={o.i}/>) : <div className="placeholder">Nothing settled yet today.</div>}
+      </div>
+
+      <div className="blk"><div className="bl">SUBSCRIBERS <span className="bx">Stripe stats not wired yet</span></div>
+        <div className="mini"><div className="m"><div className="k">ACTIVE</div><div className="v">—</div></div><div className="m"><div className="k">MRR</div><div className="v">—</div></div><div className="m"><div className="k">NEW / WK</div><div className="v">—</div></div></div>
+        <div className="placeholder">Subscriber &amp; revenue figures need a Stripe admin-stats endpoint — not wired yet. Manage subscribers directly in the Stripe dashboard for now.</div>
+      </div>
+
+      <div className="blk"><div className="bl">SYSTEM <span className="bx">admin only</span></div>
+        <div className="lrow" onClick={runGrading}><div className="li">{"\u25f7"}</div><div className="lt">Run grading now<div className="ls">settle pending straight bets</div></div><div className="lc">{"\u203a"}</div></div>
+        <div className="lrow" onClick={()=>window.open(`${API_BASE}/api/grade-now?probe=1`,"_blank")}><div className="li">{"\u2261"}</div><div className="lt">Model diagnostics<div className="ls">/api/grade-now · feeds audit</div></div><div className="lc">{"\u203a"}</div></div>
+        <div className="lrow" onClick={clearCache}><div className="li">{"\u2327"}</div><div className="lt">Clear cache<div className="ls">DELETE /api/cache · admin token</div></div><div className="lc">{"\u203a"}</div></div>
+      </div>
+
+      {sheetOpen && <>
+        <div onClick={()=>setSheetOpen(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.55)",zIndex:60}}/>
+        <div className="sheet open" style={{zIndex:61}}>
+          <div className="shead"><div className="x" onClick={()=>setSheetOpen(false)}>{"\u2039"}</div><div className="t">New WizePlay</div></div>
+          <div className="sbody">
+            <div className="fld"><label>SPORT</label><div className="segf">{[["mlb","MLB"],["nba","NBA"]].map(([k,l])=><b key={k} className={sport===k?"on":""} onClick={()=>setSport(k)}>{l}</b>)}</div></div>
+            <div className="fld"><label>GAME (auto-grades when linked)</label>
+              <select value={gameIdx} onChange={e=>{setGameIdx(Number(e.target.value)); setSelection("");}}>
+                <option value={-1}>{games.length ? "Select a game…" : "No games loaded"}</option>
+                {games.map((g,i)=><option key={i} value={i}>{g.label}</option>)}
+              </select>
+            </div>
+            <div className="row2">
+              <div className="fld"><label>MARKET</label><select value={market} onChange={e=>{setMarket(e.target.value); setSelection(""); setLine("");}}>
+                <option value="moneyline">Moneyline</option><option value="total">Total</option><option value="run_line">Run Line</option><option value="spread">Spread</option>
+              </select></div>
+              <div className="fld"><label>SELECTION</label><select value={selection} onChange={e=>setSelection(e.target.value)}>
+                <option value="">—</option>
+                {marketSels.map(([v,lbl])=><option key={v} value={v}>{v==="away"?(games[gameIdx]?.awayAbbr||"Away"):v==="home"?(games[gameIdx]?.homeAbbr||"Home"):lbl}</option>)}
+              </select></div>
+            </div>
+            <div className="row2">
+              {needsLine ? <div className="fld"><label>LINE</label><input value={line} onChange={e=>setLine(e.target.value)} placeholder="8.5 / -1.5" inputMode="decimal"/></div>
+                : <div className="fld"><label>LINE</label><input value="" placeholder="—" disabled/></div>}
+              <div className="fld"><label>ODDS</label><input value={odds} onChange={e=>setOdds(e.target.value)} placeholder="-130"/></div>
+            </div>
+            <div className="row2">
+              <div className="fld"><label>UNITS</label><input value={units} onChange={e=>setUnits(e.target.value)} placeholder="1.5" inputMode="decimal"/></div>
+              <div className="fld"><label>CONVICTION</label><div className="segf">{["Lean","Strong","Max"].map(c=><b key={c} className={conv===c?"on":""} onClick={()=>setConv(c)}>{c}</b>)}</div></div>
+            </div>
+            <div className="fld"><label>WRITE-UP (optional)</label><textarea value={write} onChange={e=>setWrite(e.target.value)} placeholder="Why this play…" rows={3}/></div>
+            <div className="newbtn" onClick={publish} style={{opacity:saving?.6:1}}>{saving?"Publishing…":"Publish WizePlay"}</div>
+          </div>
+        </div>
+      </>}
+
+      <nav className="nav">
+        <a onClick={()=>navigate("/dashboard")}><span className="i"><svg className="dbars" viewBox="0 0 24 24" width="18" height="18"><rect x="2" y="13" width="4" height="5" rx="1"/><rect x="7.3" y="9" width="4" height="9" rx="1"/><rect x="12.6" y="11" width="4" height="7" rx="1"/><rect x="18" y="6" width="4" height="12" rx="1"/></svg></span>Dashboard</a>
+        <a onClick={()=>navigate("/games")}><span className="i">{"\u25a6"}</span>Games</a>
+        <a onClick={()=>navigate("/props")}><span className="i">{"\u25c8"}</span>Props</a>
+        <a onClick={()=>navigate("/odds")}><span className="i">{"\u25d0"}</span>Market</a>
+        <a onClick={()=>navigate("/performance")}><span className="i">{"\u25b2"}</span>Performance</a>
+        <a onClick={()=>navigate("/settings")}><span className="i">{"\u25cd"}</span>Account</a>
+      </nav>
+    </div>
+  );
 }
 
-// Convert editable shape into the stored format (odds -> numbers, "" result -> null,
-// parlay combinedOdds computed and stored).
-function serializeForSave(p) {
-  if (p.type === "parlay") {
-    const legs = p.legs.map(l => ({ sport: l.sport, pick: l.pick, game: l.game, odds: l.odds === "" ? null : Number(l.odds) }));
-    return {
-      type: "parlay",
-      confidence: p.confidence,
-      analysis: p.analysis,
-      result: p.result || null,
-      combinedOdds: combinedAmerican(p.legs),
-      legs,
-    };
-  }
-  // For totals, the label is fully described by side + line. Rebuild it at save time
-  // so the line number can never be dropped, no matter how the label was edited.
-  let pick = p.pick;
-  if ((p.market || "moneyline") === "total") {
-    const side = p.selection === "over" ? "Over" : p.selection === "under" ? "Under" : "";
-    const lineStr = (p.line === "" || p.line == null) ? "" : String(p.line);
-    const rebuilt = [side, lineStr].filter(Boolean).join(" ");
-    if (rebuilt) pick = rebuilt;
-  }
-  return {
-    type: "straight",
-    sport: p.sport,
-    pick: pick,
-    game: p.game,
-    odds: p.odds === "" ? null : Number(p.odds),
-    confidence: p.confidence,
-    analysis: p.analysis,
-    result: p.result || null,
-    market: p.market || "moneyline",
-    selection: p.selection || null,
-    line: (p.line === "" || p.line == null) ? null : Number(p.line),
-    gameId: p.gameId || null,
-    awayAbbr: p.awayAbbr || null,
-    homeAbbr: p.homeAbbr || null,
-  };
-}
+const CSS = `@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700;800&display=swap');
+:root{--mono:'IBM Plex Mono',ui-monospace,monospace}
+.fld{margin-bottom:12px}.fld label{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.5px;color:#7d8a98;margin-bottom:6px}
+.fld select,.fld input,.fld textarea{width:100%;box-sizing:border-box;background:#0c1219;border:1px solid #1e2a36;border-radius:9px;color:#e8eef3;font:600 14px Inter;padding:11px 12px;outline:none}
+.fld textarea{resize:vertical;font-weight:500}
+.row2{display:flex;gap:10px}.row2 .fld{flex:1}
+.segf{display:flex;gap:0;border:1px solid #1e2a36;border-radius:9px;overflow:hidden}
+.segf b{flex:1;text-align:center;font:800 12px 'Barlow Condensed';letter-spacing:.4px;color:#7d8a98;padding:10px;cursor:pointer}
+.segf b.on{background:#141d24;color:#fff}
+
+:root{--bg:#06090b;--panel:#0b1117;--line:#16202a;--line2:#1d2a36;--gold:#f3b94f;--green:#33e991;--neg:#ff5d4d;--red:#ff5d4d;--steel:#2674b0;--blue:#5da9e8;--mut:#7d8a98;--mut2:#4a5663;--disp:'Barlow Condensed',sans-serif;--ui:'Inter',sans-serif;--mono:'JetBrains Mono',monospace}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoothing:antialiased}
+.app{max-width:460px;margin:0 auto;min-height:100vh;position:relative;padding-bottom:96px}
+.hd{position:sticky;top:0;z-index:10;background:rgba(6,9,11,.94);backdrop-filter:blur(12px);border-bottom:1px solid var(--line);padding:0 14px}
+.hrow{display:flex;align-items:center;gap:9px;padding:12px 0}
+.logo{font-family:var(--disp);font-weight:800;font-size:21px;letter-spacing:.4px;color:#fff}.logo .w{color:var(--gold)}
+.htitle{font-family:var(--disp);font-weight:800;font-size:13px;letter-spacing:1px;color:var(--gold);margin-left:auto;border:1px solid rgba(243,185,79,.35);background:rgba(243,185,79,.08);border-radius:999px;padding:4px 11px}
+.blk{margin:13px 14px 0;border:1px solid var(--line);border-radius:14px;background:var(--panel);padding:14px}
+.bl{font-family:var(--disp);font-weight:800;font-size:12px;letter-spacing:.7px;color:var(--mut);margin-bottom:12px;display:flex;align-items:center;justify-content:space-between}
+.bl .bx{font-family:var(--mono);font-size:9px;color:var(--mut2);letter-spacing:0;font-weight:500}
+.prof{display:flex;align-items:center;gap:13px}
+.prof .av{width:50px;height:50px;border-radius:50%;background:radial-gradient(circle at 50% 30%,#f3b94f,#9a6a18);display:flex;align-items:center;justify-content:center;font-family:var(--disp);font-weight:800;font-size:20px;color:#1a1408;flex:0 0 auto}
+.prof .pn{font-family:var(--disp);font-weight:800;font-size:20px;color:#fff}
+.prof .pe{font-family:var(--mono);font-size:11px;color:var(--mut);margin-top:2px}
+.prof .pp{display:inline-flex;align-items:center;gap:5px;margin-top:6px;font-family:var(--mono);font-size:9px;font-weight:700;color:var(--green);border:1px solid rgba(51,233,145,.35);background:rgba(51,233,145,.1);border-radius:999px;padding:3px 9px}
+/* wizeplays record */
+.wprec{display:flex;gap:9px;margin-bottom:11px}
+.wprec .r{flex:1;border:1px solid var(--line);border-radius:11px;background:#0d141b;padding:11px;text-align:center}
+.wprec .r .k{font-family:var(--mono);font-size:8px;color:var(--mut2);font-weight:600}.wprec .r .v{font-family:var(--disp);font-weight:800;font-size:22px;color:#fff;margin-top:3px}.wprec .r .v.g{color:var(--green)}.wprec .r .v.gold{color:var(--gold)}
+.newbtn{text-align:center;font-family:var(--disp);font-weight:800;font-size:15px;color:#06090b;background:var(--gold);border-radius:11px;padding:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px}
+.sub2{font-family:var(--disp);font-weight:800;font-size:11px;letter-spacing:.6px;color:var(--mut2);margin:14px 0 0}
+.play{border:1px solid var(--line);border-radius:12px;background:#0d141b;padding:11px;margin-top:9px}
+.play.pending{border-color:rgba(243,185,79,.22)}
+.play .ph{display:flex;align-items:center;gap:8px}
+.play .ppick{font-family:var(--disp);font-weight:800;font-size:17px;color:#fff}.play .ppick .u{font-family:var(--mono);font-size:11px;color:var(--gold);font-weight:600;margin-left:6px}
+.play .pst{margin-left:auto;font-family:var(--mono);font-size:9px;font-weight:700;border-radius:5px;padding:3px 8px;flex:0 0 auto}
+.pst.pending{color:var(--gold);background:rgba(243,185,79,.12)}.pst.won{color:var(--green);background:rgba(51,233,145,.14)}.pst.lost{color:var(--neg);background:rgba(255,93,77,.14)}.pst.push{color:var(--mut);background:#1a242e}
+.play .pmu{font-family:var(--mono);font-size:9px;color:var(--mut2);margin-top:3px}
+.play .pwrite{font-size:11.5px;color:#aeb9c8;margin-top:8px;line-height:1.45}
+.play .grade{display:flex;gap:7px;margin-top:10px}
+.play .grade b{flex:1;text-align:center;font-family:var(--disp);font-weight:700;font-size:12px;border-radius:8px;padding:8px;cursor:pointer;border:1px solid var(--line2);color:var(--mut)}
+.play .grade b.w{color:var(--green);border-color:rgba(51,233,145,.3)}.play .grade b.l{color:var(--neg);border-color:rgba(255,93,77,.3)}
+.play .ed{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--blue);cursor:pointer}
+.lrow{display:flex;align-items:center;gap:11px;padding:12px 0;border-top:1px solid rgba(255,255,255,.05);cursor:pointer}.lrow:first-of-type{border-top:none}
+.lrow .li{width:30px;height:30px;border-radius:8px;border:1px solid var(--line2);background:#0e1620;display:flex;align-items:center;justify-content:center;color:var(--gold);flex:0 0 auto;font-size:14px}
+.lrow .lt{flex:1;font-weight:600;font-size:14px;color:#dbe4e2}.lrow .lt .ls{font-family:var(--mono);font-size:9px;color:var(--mut2);font-weight:400;margin-top:1px}.lrow .lc{color:var(--mut2);font-size:16px}.lrow .lv{font-family:var(--mono);font-size:12px;color:#cdd7e1;font-weight:600}
+.mini{display:flex;gap:9px;margin-bottom:4px}
+.mini .m{flex:1;border:1px solid var(--line);border-radius:11px;background:#0d141b;padding:11px;text-align:center}
+.mini .m .k{font-family:var(--mono);font-size:8px;color:var(--mut2);font-weight:600}.mini .m .v{font-family:var(--disp);font-weight:800;font-size:21px;color:#fff;margin-top:3px}.mini .m .v.g{color:var(--green)}
+.placeholder{font-family:var(--mono);font-size:9px;color:var(--mut2);text-align:center;margin-top:8px}
+.signout{margin:14px 14px 0;text-align:center;font-family:var(--disp);font-weight:800;font-size:14px;color:#dbe4e2;border:1px solid var(--line2);border-radius:12px;padding:13px;cursor:pointer}
+.ver{text-align:center;font-family:var(--mono);font-size:9px;color:var(--mut2);margin:16px 0 0}
+.nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:460px;display:flex;justify-content:space-around;padding:7px 4px;background:rgba(0,0,0,.96);backdrop-filter:blur(12px);border-top:1px solid var(--line);z-index:20}
+.nav a{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;font-family:var(--disp);font-weight:700;font-size:10px;letter-spacing:.3px;color:var(--mut2);text-decoration:none}.nav a.on{color:var(--gold)}.nav a .i{font-size:15px;line-height:1}.nav a .dbars rect{fill:var(--mut2)}
+/* new-play sheet */
+.sheet{position:fixed;top:0;bottom:0;left:50%;width:100%;max-width:460px;z-index:200;background:var(--bg);overflow-y:auto;transform:translate(-50%,100%);transition:transform .28s cubic-bezier(.4,0,.2,1);visibility:hidden}
+.sheet.open{transform:translate(-50%,0);visibility:visible}
+.shead{position:sticky;top:0;background:#080c11;border-bottom:1px solid var(--line);padding:12px 14px;display:flex;align-items:center;gap:11px;z-index:2}
+.shead .x{width:32px;height:32px;border-radius:9px;border:1px solid var(--line2);display:flex;align-items:center;justify-content:center;color:#cdd7e1;font-size:19px;cursor:pointer;flex:0 0 auto}
+.shead .t{font-family:var(--disp);font-weight:800;font-size:19px;color:#fff}
+.sbody{padding:14px 14px 90px}
+.fld{margin-top:13px}.fld label{font-family:var(--mono);font-size:10px;color:var(--mut);font-weight:600;display:block;margin-bottom:6px;letter-spacing:.3px}
+.fld input,.fld textarea,.fld select{width:100%;background:#0e1620;border:1px solid var(--line2);border-radius:9px;padding:12px;color:#fff;font-family:var(--ui);font-size:14px}
+.fld textarea{min-height:74px;resize:vertical;font-size:13px;line-height:1.4}
+.fld input::placeholder,.fld textarea::placeholder{color:var(--mut2)}
+.row2{display:flex;gap:9px}.row2 .fld{flex:1}
+.segf{display:flex;border:1px solid var(--line2);border-radius:9px;overflow:hidden}.segf b{flex:1;text-align:center;font-family:var(--disp);font-weight:700;font-size:13px;color:var(--mut);padding:10px;cursor:pointer}.segf b.on{background:#141d24;color:#fff}
+.pubbtn{margin-top:16px;text-align:center;font-family:var(--disp);font-weight:800;font-size:15px;color:#06090b;background:var(--gold);border-radius:11px;padding:14px;cursor:pointer}
+.draftbtn{margin-top:9px;text-align:center;font-family:var(--disp);font-weight:800;font-size:14px;color:#dbe4e2;border:1px solid var(--line2);border-radius:11px;padding:12px;cursor:pointer}
+`;
