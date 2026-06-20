@@ -325,8 +325,8 @@ async function getGameDetail(league, gameId) {
     };
   }
 
-  // home plate umpire (from the officials list in gameInfo). Name only — no
-  // tendency data (not reliably available without a paid feed).
+  // home plate umpire (from the officials list in gameInfo). We enrich the bare
+  // name with our own season tendencies (umpire_games table) just below.
   let umpire = null;
   const officials =
     (summary.gameInfo && summary.gameInfo.officials) ||
@@ -337,6 +337,19 @@ async function getGameDetail(league, gameId) {
   );
   if (hp && hp.displayName) umpire = hp.displayName;
 
+  // Enrich to { name, favor, runs, k, bb } for the game page's umpire block. Lazy
+  // require + try/catch so a lookup miss or error degrades to the bare name and can
+  // never break the detail feed.
+  let umpireOut = null;
+  if (umpire) {
+    try {
+      const { getUmpireDisplay } = require("./umpireStore");
+      umpireOut = await getUmpireDisplay(umpire);
+    } catch (_) {
+      umpireOut = { name: umpire };
+    }
+  }
+
   const out = {
     league,
     gameId: String(gameId),
@@ -344,7 +357,7 @@ async function getGameDetail(league, gameId) {
     bucket: bucketFor(status.state || "pre"),
     statusDetail: status.shortDetail || status.detail || "",
     series,
-    umpire,
+    umpire: umpireOut,
     lineScore: parseLineScore(summary),
     players: parsePlayers(summary),
     generatedAt: new Date().toISOString(),
