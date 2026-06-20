@@ -15,8 +15,8 @@ const colFor = (ab) => TEAMCOL[(ab||"").toUpperCase()] || "#2674b0";
 const nick = (s) => String(s||"").trim().split(/\s+/).pop().toLowerCase();
 const fmtOdds = (o) => o==null||o===""||isNaN(+o) ? "—" : (+o>0 ? "+"+(+o) : ""+(+o));
 const shortTeam = (s) => (s||"").trim().split(/\s+/).slice(-1)[0].slice(0,3).toUpperCase();
-const fmtTime = (t) => { if(!t) return ""; if(typeof t==="string" && !t.includes("T")) return t;
-  try { return new Date(t).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit",timeZone:"America/New_York"}).replace(" ","")+" ET"; } catch { return String(t); } };
+const fmtTime = (t) => { if(!t) return ""; if(typeof t==="string"){ if(/invalid/i.test(t)) return ""; if(!/^\d{4}-\d{2}-\d{2}T/.test(t)) return t; }
+  const d=new Date(t); if(isNaN(d.getTime())) return ""; return d.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit",timeZone:"America/New_York"}).replace(" ","")+" ET"; };
 const implied = (o) => { if(o==null||isNaN(+o)) return null; o=+o; return o>0 ? 100/(o+100) : (-o)/(-o+100); };
 const pct = (x) => x==null ? null : Math.round(x*100);
 
@@ -216,12 +216,18 @@ const scoresGame_venue = (g) => g?.venue || "";
 const venueChip = (v) => v ? <span className="ch">{v}</span> : null;
 
 function PitcherCard({ ab, col, p }) {
-  return <div className="pcard"><LogoP ab={ab} col={col}/>
-    <div><div className="pn">{p?.name || "TBD"}</div><div className="ph">{ab}{p?.wins!=null?` · ${p.wins}-${p.losses??0}`:""}</div></div>
+  const [imgErr,setImgErr]=useState(false);
+  const pid=p?.id||null;
+  const head = (pid && !imgErr)
+    ? <span className="pl" style={{background:`radial-gradient(circle at 50% 28%, ${col}, #0c1018 82%)`}}><img src={`https://midfield.mlbstatic.com/v1/people/${pid}/spots/120`} alt="" onError={()=>setImgErr(true)} style={{width:"100%",height:"100%",objectFit:"cover",borderRadius:"50%"}}/></span>
+    : <LogoP ab={ab} col={col}/>;
+  const era=p?.stats?.era, whip=p?.stats?.whip, k9=p?.stats?.strikeoutsPer9;
+  return <div className="pcard">{head}
+    <div><div className="pn">{p?.name || "TBD"}</div><div className="ph">{p?.hand?`${p.hand}HP · `:""}{ab}</div></div>
     <div className="pstats">
-      <div className="st"><div className="k">ERA</div><div className="v">{p?.era ?? "—"}</div></div>
-      <div className="st"><div className="k">WHIP</div><div className="v">{p?.whip ?? "—"}</div></div>
-      <div className="st"><div className="k">K/9</div><div className="v">{p?.k9 ?? "—"}</div></div>
+      <div className="st"><div className="k">ERA</div><div className="v">{era!=null?Number(era).toFixed(2):"—"}</div></div>
+      <div className="st"><div className="k">WHIP</div><div className="v">{whip!=null?Number(whip).toFixed(2):"—"}</div></div>
+      <div className="st"><div className="k">K/9</div><div className="v">{k9!=null?Number(k9).toFixed(1):"—"}</div></div>
     </div>
   </div>;
 }
