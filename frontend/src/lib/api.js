@@ -63,6 +63,10 @@ export const scoresApi = {
   getGameDetail: (league, gameId) => apiFetch(`/api/scores/${league}/${gameId}`),
   getStandings: (league) => apiFetch(`/api/scores/${league}/standings`),
 };
+// NEW — per-game matchups: projected lineups + batter-vs-pitcher (keyed by gamePk)
+export const matchupsApi = {
+  getMLB: (gameId) => apiFetch(`/api/matchups/mlb/${gameId}`),
+};
 export const subscriptionApi = {
   getMyPlan: () => apiFetch("/api/subscriptions/me"),
   checkout: (priceKey) => apiFetch("/api/subscriptions/checkout", {
