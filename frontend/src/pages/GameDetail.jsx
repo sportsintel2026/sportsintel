@@ -152,9 +152,9 @@ function SheetPre({ game, aAb, hAb, gEdges, mlPick, totPick, bestEdge, mr, detai
   const parkTxt = game.parkRunFactor!=null ? ((game.parkRunFactor>1?"+":"")+Math.round((game.parkRunFactor-1)*100)+"% runs") : "—";
 
   const reads = [];
-  if (mr?.win) reads.push(["Win", mr.win.model?.agrees, mr.win.favTeam, fmtOdds(mr.win.consensus), mr.win.model?.agrees]);
-  if (mr?.cover?.favTeam) reads.push(["Cover", mr.cover.agrees, mr.cover.favTeam, fmtOdds(mr.cover.odds), mr.cover.agrees]);
-  if (mr?.total && (mr.total.lean||mr.total.side)) reads.push(["Total", mr.total.agrees, String(mr.total.lean||mr.total.side).toUpperCase()+(mr.total.line!=null?" "+mr.total.line:""), fmtOdds(mr.total.odds), mr.total.agrees]);
+  if (mr?.win) { const w=mr.win; reads.push({ k:"WIN", lean:w.favTeam, odds:fmtOdds(w.consensus ?? w.bestPrice), prob:(w.favProb ?? w.model?.prob ?? null), mv:(w.move?{toward:w.move.towardFav,cents:w.move.cents,team:w.favTeam}:null), agrees:w.model?.agrees }); }
+  if (mr?.cover?.favTeam) { const c=mr.cover; reads.push({ k:"COVER", lean:c.favTeam, odds:fmtOdds(c.bestPrice ?? c.odds), prob:(c.favProb ?? c.model?.prob ?? null), mv:null, agrees:(c.model?.agrees ?? c.agrees) }); }
+  if (mr?.total && (mr.total.lean||mr.total.side)) { const tt=mr.total; reads.push({ k:"TOTAL", lean:String(tt.lean||tt.side).toUpperCase()+(tt.line!=null?" "+tt.line:""), odds:fmtOdds(tt.bestOver ?? tt.odds), prob:(tt.favProb ?? tt.model?.prob ?? null), mv:null, agrees:(tt.model?.agrees ?? tt.agrees) }); }
 
   return (<>
     <TeamHead aAb={aAb} hAb={hAb} aCol={aCol} hCol={hCol} aRec={game.awayRecord} hRec={game.homeRecord}/>
@@ -202,7 +202,7 @@ function SheetPre({ game, aAb, hAb, gEdges, mlPick, totPick, bestEdge, mr, detai
     </Block>}
 
     {reads.length>0 && <Block label="MARKET READ" bx="books' collective lean">
-      {reads.map((r,i)=><div key={i} className="mr"><span className={"md "+(r[1]?"ag":"df")}/><span className="mk">{r[0]}</span><span className="mv"><b>{r[2]}</b> · {r[3]}</span><Agree ok={r[4]}/></div>)}
+      {reads.map((r,i)=><div key={i} className="mr"><span className={"md "+(r.agrees?"strong":"split")}/><span className="mk">{r.k}</span><div className="mv"><div className="mvtop"><b>{r.lean}</b>{r.odds&&r.odds!=="—"?` · ${r.odds}`:""}{r.prob!=null?` · ${r.prob}%`:""}</div>{r.mv&&<div className={"mvmoney "+(r.mv.toward?"toward":"off")}>{r.mv.toward?`money coming in on ${r.mv.team}`:`money drifting off ${r.mv.team}`} · {r.mv.cents}{"\u00a2"} since open</div>}</div><Agree ok={r.agrees}/></div>)}
     </Block>}
 
     <Block label="CONTEXT"><div className="ctx">
@@ -218,17 +218,16 @@ const venueChip = (v) => v ? <span className="ch">{v}</span> : null;
 function PitcherCard({ ab, col, p }) {
   const [imgErr,setImgErr]=useState(false);
   const pid=p?.id||null;
+  const s=p?.stats||{};
   const head = (pid && !imgErr)
     ? <span className="pl" style={{background:`radial-gradient(circle at 50% 28%, ${col}, #0c1018 82%)`}}><img src={`https://midfield.mlbstatic.com/v1/people/${pid}/spots/120`} alt="" onError={()=>setImgErr(true)} style={{width:"100%",height:"100%",objectFit:"cover",borderRadius:"50%"}}/></span>
     : <LogoP ab={ab} col={col}/>;
-  const era=p?.stats?.era, whip=p?.stats?.whip, k9=p?.stats?.strikeoutsPer9;
-  return <div className="pcard">{head}
-    <div><div className="pn">{p?.name || "TBD"}</div><div className="ph">{p?.hand?`${p.hand}HP · `:""}{ab}</div></div>
-    <div className="pstats">
-      <div className="st"><div className="k">ERA</div><div className="v">{era!=null?Number(era).toFixed(2):"—"}</div></div>
-      <div className="st"><div className="k">WHIP</div><div className="v">{whip!=null?Number(whip).toFixed(2):"—"}</div></div>
-      <div className="st"><div className="k">K/9</div><div className="v">{k9!=null?Number(k9).toFixed(1):"—"}</div></div>
-    </div>
+  const wl = (s.wins!=null||s.losses!=null) ? `${s.wins??0}-${s.losses??0}` : null;
+  const num=(x,d)=> x!=null ? (d!=null?Number(x).toFixed(d):x) : "—";
+  const tiles=[["ERA",num(s.era,2)],["WHIP",num(s.whip,2)],["K/9",num(s.strikeoutsPer9,1)],["K",num(s.strikeouts)],["H",num(s.hits)],["HR",num(s.homeRuns)]];
+  return <div className="pcard">
+    <div className="prow">{head}<div className="pmeta"><div className="pn">{p?.name || "TBD"}</div><div className="ph">{p?.hand?`${p.hand}HP · `:""}{ab}{wl?` · ${wl}`:""}{s.inningsPitched!=null?` · ${Number(s.inningsPitched).toFixed(1)} IP`:""}</div></div></div>
+    {(p?.name)&&<div className="pgrid">{tiles.map(([k,v],i)=><div key={i} className="pg"><div className="k">{k}</div><div className="v">{v}</div></div>)}</div>}
   </div>;
 }
 function Lineups({ aAb, hAb, aCol, hCol, luA, luH }) {
@@ -380,7 +379,13 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .orow .ol{font-family:var(--disp);font-weight:800;font-size:14px;color:#dbe4e2;width:64px;flex:0 0 auto}
 .orow .os{font-family:var(--mono);font-size:11px;color:#aeb9c8;flex:1}.orow .os b{color:#fff}
 .orow .oe{font-family:var(--disp);font-weight:800;font-size:15px;flex:0 0 auto}.oe.pos{color:var(--green)}.oe.neg{color:var(--mut)}
-.pcard{display:flex;gap:11px;padding:10px 0;border-top:1px solid rgba(255,255,255,.05)}.pcard:first-of-type{border-top:none}
+.pcard{padding:11px 0;border-top:1px solid rgba(255,255,255,.05)}
+.pcard .prow{display:flex;gap:11px;align-items:center}
+.pcard .pmeta{flex:1}
+.pgrid{display:grid;grid-template-columns:repeat(6,1fr);gap:5px;margin-top:10px}
+.pgrid .pg{text-align:center;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.05);border-radius:7px;padding:6px 2px}
+.pgrid .pg .k{font-family:var(--mono);font-size:7.5px;color:var(--mut2);letter-spacing:.3px}
+.pgrid .pg .v{font-family:var(--disp);font-weight:800;font-size:15px;color:#cfe2f5;margin-top:1px}.pcard:first-of-type{border-top:none}
 .pcard .pl{width:34px;height:34px;border-radius:50%;background:#0c1018;border:1px solid #000;display:flex;align-items:center;justify-content:center;overflow:hidden;flex:0 0 auto}.pcard .pl img{width:27px;height:27px;object-fit:contain}
 .pcard .pn{font-weight:700;font-size:13px;color:#eaf1ee}.pcard .ph{font-family:var(--mono);font-size:9px;color:var(--mut)}
 .pcard .pstats{display:flex;gap:13px;margin-left:auto;text-align:right}
@@ -388,7 +393,7 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .mr{display:flex;align-items:center;gap:9px;padding:8px 0;border-top:1px solid rgba(255,255,255,.05)}.mr:first-of-type{border-top:none}
 .mr .md{width:8px;height:8px;border-radius:50%;flex:0 0 auto}.md.strong{background:var(--green)}.md.soft{background:var(--gold)}.md.split{background:var(--mut)}
 .mr .mk{font-family:var(--disp);font-weight:800;font-size:11px;color:var(--mut);width:42px;flex:0 0 auto}
-.mr .mv{font-family:var(--mono);font-size:11px;color:#cdd7e1;flex:1}.mr .mv b{color:#fff}
+.mr .mv{flex:1}.mr .mvtop{font-family:var(--mono);font-size:11px;color:#cdd7e1}.mr .mvtop b{color:#fff}.mr .mvmoney{font-family:var(--mono);font-size:9.5px;margin-top:2px;color:var(--mut)}.mr .mvmoney.toward{color:var(--green)}.mr .mvmoney.off{color:var(--gold)}
 .mr .ma{font-family:var(--mono);font-size:10px;font-weight:600;flex:0 0 auto}.ma.ag{color:var(--green)}.ma.df{color:var(--gold)}
 .ctx{display:flex;flex-wrap:wrap;gap:7px}
 .ctx .ch{font-family:var(--mono);font-size:10px;color:#aeb9c8;background:#0e1620;border:1px solid var(--line2);border-radius:7px;padding:5px 9px}.ctx .ch b{color:#fff}
