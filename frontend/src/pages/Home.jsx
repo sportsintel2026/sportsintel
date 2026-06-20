@@ -191,7 +191,8 @@ export default function HomePage(){
   const scoreOf=(g,side)=>{ const c=side==="a"?[g.awayScore,g.awayRuns,g.away_runs,g.aScore,g.runsAway]:[g.homeScore,g.homeRuns,g.home_runs,g.hScore,g.runsHome]; const v=c.find(x=>x!=null); return v!=null?v:null; };
   const tapeLive=(live||[]).map(g=>({ id:g.gameId, a:g.awayAbbr||shortTeam(g.away||""), h:g.homeAbbr||shortTeam(g.home||""), as:scoreOf(g,"a"), hs:scoreOf(g,"h"), state:`${g.half==="bottom"?"Bot":"Top"} ${g.inning||""}`.trim(), live:true }));
   const tapeFinal=games.filter(g=>g.status==="final").slice(0,8).map(g=>({ id:g.id, a:g.awayAbbr||shortTeam(g.away||""), h:g.homeAbbr||shortTeam(g.home||""), as:scoreOf(g,"a"), hs:scoreOf(g,"h"), state:"Final", live:false }));
-  const scoreTape=[...tapeLive,...tapeFinal];
+  const tapeUpcoming=games.filter(g=>g.status!=="final"&&g.time).slice(0,10).map(g=>({ id:g.id, a:g.awayAbbr||shortTeam(g.away||""), h:g.homeAbbr||shortTeam(g.home||""), as:null, hs:null, state:fmtTime(g.time), live:false }));
+  const scoreTape=(tapeLive.length||tapeFinal.length)?[...tapeLive,...tapeFinal]:tapeUpcoming;
 
   if(isDesktop) return <HomeDesktop edges={edges} games={games} movers={movers} live={live||[]} abbrById={abbrById} topProps={topProps} propList={propList} propsByType={propsByType} hero={hero} hasFull={hasFull} planLoaded={planLoaded} lineSeries={lineSeries} moveByPick={moveByPick} wpRecord={wpRecord} navigate={navigate} plan={plan} sport={sport} setSport={(k)=>{setSport(k);setBoard("ml");}} marketsLive={marketsLive} anyLive={anyLive} marketRead={marketRead} />;
 
@@ -249,7 +250,7 @@ export default function HomePage(){
       </div>
 
       {scoreTape.length>0 && (
-        <div className="scoretape"><span className="lvpill"><span className="d"/>{scoreTape.some(t=>t.live)?"LIVE":"SCORES"}</span>
+        <div className="scoretape"><span className="lvpill"><span className="d"/>{scoreTape.some(t=>t.live)?"LIVE":scoreTape.some(t=>t.as!=null)?"SCORES":"TODAY"}</span>
           <div className="stwrap"><div className="sttrack">{[...scoreTape,...scoreTape].map((s,i)=>(
             <span key={i}><span className="g">{s.a}</span> {s.as!=null?<span className="sc">{s.as}</span>:null} <span className="g">{s.h}</span> {s.hs!=null?<span className="sc">{s.hs}</span>:null} <span className="st">{s.state}</span></span>
           ))}</div></div>
