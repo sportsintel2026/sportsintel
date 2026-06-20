@@ -199,7 +199,7 @@ const CSS = `
 .mrtabs button{flex:0 0 auto;font-family:inherit;font-size:13px;font-weight:700;color:#8a99a2;background:#0b0f14;border:1px solid rgba(255,255,255,.08);border-radius:9px;padding:8px 16px;cursor:pointer}
 .mrtabs button.on{color:#fff;background:linear-gradient(90deg,rgba(29,158,117,.18),rgba(29,158,117,.05));border-color:rgba(29,158,117,.32)}
 .mrgrid{display:flex;flex-direction:column;gap:12px}
-.mrcard{border:1px solid rgba(255,255,255,.08);border-radius:14px;background:#0b0f14;padding:14px 16px}
+.mrcard{border:1px solid rgba(255,255,255,.08);border-radius:14px;background:linear-gradient(180deg,#0c1218,#080c11);padding:14px 16px}
 .mrtop{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
 .mrmatch{font-size:14px;font-weight:700;color:#e9eff2}.mrmatch .at{color:#54616b}.mrmatch .ln{color:#54616b;font-weight:500}
 .mrtier{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;color:#aeb9c8}
