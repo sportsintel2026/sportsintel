@@ -247,10 +247,10 @@ function SheetPre({ game, aAb, hAb, gEdges, mlPick, totPick, bestEdge, mr, detai
       <PitcherCard ab={hAb} col={hCol} p={ph}/>
     </Block>
 
-    <Collapse label="LINEUPS" bx="projected batting order" sub={(luA.length||luH.length) ? `${aAb} vs ${hAb}` : "not posted"}>
+    <Collapse label="LINEUPS" bx="batting order" sub={(luA.length||luH.length) ? `${aAb} vs ${hAb}` : "not posted"}>
       {(luA.length>0 || luH.length>0) ? <>
-        <div className="lusub">{aAb}</div>{luA.map((x,i)=><div key={"a"+i} className="lurowf"><span className="o">{luOrd(x)}</span><span className="nm">{luName(x)}</span><span className="po">{luPos(x)}</span></div>)}
-        <div className="lusub">{hAb}</div>{luH.map((x,i)=><div key={"h"+i} className="lurowf"><span className="o">{luOrd(x)}</span><span className="nm">{luName(x)}</span><span className="po">{luPos(x)}</span></div>)}
+        <div className="lusub">{aAb}{luA.length>0 && (_lu.awayConfirmed ? <span className="luok">{"\u2713 confirmed"}</span> : <span className="luproj">projected</span>)}</div>{luA.map((x,i)=><div key={"a"+i} className="lurowf"><span className="o">{luOrd(x)}</span><span className="nm">{luName(x)}</span><span className="po">{luPos(x)}</span></div>)}
+        <div className="lusub">{hAb}{luH.length>0 && (_lu.homeConfirmed ? <span className="luok">{"\u2713 confirmed"}</span> : <span className="luproj">projected</span>)}</div>{luH.map((x,i)=><div key={"h"+i} className="lurowf"><span className="o">{luOrd(x)}</span><span className="nm">{luName(x)}</span><span className="po">{luPos(x)}</span></div>)}
       </> : <div className="estate" style={{padding:"4px 2px"}}><div className="es">Lineups confirm ~90 min before first pitch.</div></div>}
     </Collapse>
 
@@ -521,6 +521,8 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .exbtn .cv{display:inline-block;transition:transform .2s}.exbtn.open .cv{transform:rotate(90deg)}
 .exwrap{display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}.exwrap.open{display:block}
 .lusub{font-family:var(--disp);font-weight:800;font-size:12px;letter-spacing:.4px;color:var(--gold);margin:11px 0 3px}.lusub:first-child{margin-top:0}
+.lusub .luok{color:#33e991;font-family:var(--mono);font-size:8.5px;font-weight:700;margin-left:7px;letter-spacing:.3px}
+.lusub .luproj{color:var(--mut2);font-family:var(--mono);font-size:8.5px;font-weight:500;margin-left:7px;letter-spacing:.3px}
 .lurowf{display:flex;align-items:center;gap:9px;padding:5px 0;border-top:1px solid rgba(255,255,255,.04)}
 .lurowf .o{font-family:var(--mono);font-size:10px;color:var(--mut2);width:14px;flex:0 0 auto}
 .lurowf .nm{font-family:var(--ui);font-weight:600;font-size:12px;color:#dbe4e2;flex:1}
