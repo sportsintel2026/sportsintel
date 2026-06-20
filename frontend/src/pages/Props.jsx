@@ -189,7 +189,7 @@ function PlayerSheet({ p, card, loading, onClose }) {
   return (
     <>
       <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.55)",zIndex:60}}/>
-      <div className="sheet open" style={{zIndex:61}}>
+      <div className="sheet show" style={{zIndex:61}}>
         <div className="shead"><div className="x" onClick={onClose}>{"\u2039"}</div><div><div className="t">{p.pl[0]}</div><div className="ts">{p.g} · {p.line}</div></div></div>
         <div className="sbody">
           <div className="dblk"><div className="recline">
@@ -308,7 +308,7 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .nav a.on{color:var(--gold)}.nav a .i{font-size:15px;line-height:1}.nav a .dbars rect{fill:var(--mut2)}
 /* detail sheet */
 .sheet{position:fixed;top:0;bottom:0;left:50%;width:100%;max-width:460px;z-index:200;background:var(--bg);overflow-y:auto;transform:translate(-50%,100%);transition:transform .28s cubic-bezier(.4,0,.2,1);visibility:hidden}
-.sheet.open{transform:translate(-50%,0);visibility:visible}
+.sheet.show{transform:translate(-50%,0);visibility:visible}
 .shead{position:sticky;top:0;background:#080c11;backdrop-filter:blur(12px);border-bottom:1px solid var(--line);padding:12px 14px;display:flex;align-items:center;gap:11px;z-index:2}
 .shead .x{width:32px;height:32px;border-radius:9px;border:1px solid var(--line2);display:flex;align-items:center;justify-content:center;color:#cdd7e1;font-size:19px;cursor:pointer;flex:0 0 auto}
 .shead .t{font-family:var(--disp);font-weight:800;font-size:19px;color:#fff;line-height:1}.shead .ts{font-family:var(--mono);font-size:10px;color:var(--mut);margin-top:2px}
