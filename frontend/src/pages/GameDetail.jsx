@@ -77,6 +77,9 @@ export default function GameDetailPage() {
           k: r.strikeouts ?? 0,
           avg: r.avg,
           ops: r.ops,
+          sznAvg: r.season?.avg ?? null,
+          sznOps: r.season?.ops ?? null,
+          sznHr: r.season?.homeRuns ?? null,
         });
         setBvpData({
           awayBattersVsHomePitcher: (m.awayBattersVsHomePitcher||[]).map(mapRow),
@@ -328,7 +331,7 @@ function BvpTable({ rows }) {
         <tbody>
           {rows.map((b,i)=>(
             <tr key={i}>
-              <td className="nm">{b.batter}{b.pos?<span className="po"> {b.pos}</span>:null}</td>
+              <td className="nm">{b.batter}{b.pos?<span className="po"> {b.pos}</span>:null}{(b.sznAvg!=null||b.sznHr!=null)?<div className="szn">SZN {f3(b.sznAvg)} / {f3(b.sznOps)} · {b.sznHr ?? 0} HR</div>:null}</td>
               <td>{b.pa}</td><td>{b.h}</td>
               <td className={b.hr>0?"hot":""}>{b.hr}</td>
               <td>{b.rbi}</td><td>{b.bb}</td><td>{b.k}</td>
@@ -505,6 +508,7 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .bvptbl td{padding:6px 7px;text-align:right;color:#cfe2f5;white-space:nowrap;border-top:1px solid rgba(255,255,255,.05)}
 .bvptbl td.nm{font-family:var(--ui);font-weight:700;color:#eaf1ee;min-width:104px}
 .bvptbl td.nm .po{font-family:var(--mono);font-weight:400;color:var(--mut2);font-size:9px;margin-left:3px}
+.bvptbl td.nm .szn{display:block;font-family:var(--mono);font-weight:400;color:var(--mut2);font-size:8.5px;margin-top:2px;letter-spacing:.2px}
 .bvptbl td.hot{color:var(--gold);font-weight:700}
 .bvp{display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid rgba(255,255,255,.05)}.bvp:first-of-type{border-top:none}
 .bvp .bn{font-family:var(--ui);font-weight:700;font-size:12px;color:#eaf1ee}.bvp .bvs{font-family:var(--mono);color:var(--mut2);font-size:9px;margin-top:1px}
