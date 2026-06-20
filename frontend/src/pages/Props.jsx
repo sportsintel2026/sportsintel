@@ -16,6 +16,18 @@ const formatOdds = (o) => o==null||o==="" ? "—" : (Number(o)>0 ? "+"+Number(o)
 const initialsOf = (name) => { const parts = String(name||"").trim().split(/\s+/); const s = parts.map(w=>w[0]).join("").slice(0,2); return s || String(name||"").slice(0,2); };
 const pctOf = (x) => x==null ? null : (x<=1 ? Math.round(x*100) : Math.round(x));
 
+function Avatar({ pid, initials, color, cls }) {
+  const [err, setErr] = useState(false);
+  const src = pid ? `https://midfield.mlbstatic.com/v1/people/${pid}/spots/120` : null;
+  return (
+    <div className={cls} style={{ background:`radial-gradient(circle at 50% 28%, ${color}, #0c1018 82%)`, boxShadow:`inset 0 0 0 2px ${color}` }}>
+      {src && !err
+        ? <img src={src} alt="" onError={()=>setErr(true)} style={{ width:"100%", height:"100%", objectFit:"cover", borderRadius:"50%" }}/>
+        : initials}
+    </div>
+  );
+}
+
 export default function PropsPage() {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
@@ -58,7 +70,7 @@ export default function PropsPage() {
     mk, conv: convOf(p),
     model: p.modelProb!=null ? Math.round(p.modelProb*100) : null,
     mkt: p.marketProb!=null ? Math.round(p.marketProb*100) : (p.impliedProb!=null ? Math.round(p.impliedProb*100) : null),
-    gameId: p.gameId, id: p.playerId || p.id, teamRaw: p.team
+    gameId: p.gameId, id: p.playerId || p.id, teamRaw: p.team, pid: p.playerId
   });
   const allProps = [
     ...(M.hrPropEdges||[]).map(p => toP(p,"HR","HR")),
@@ -119,7 +131,7 @@ function PropRow({ p, onOpen }) {
   return (
     <div className="prow" onClick={()=>onOpen(p)}>
       <div className={"rail "+p.conv}/>
-      <div className="av" style={{ background:`radial-gradient(circle at 50% 28%, ${p.pl[2]}, #0c1018 82%)`, boxShadow:`inset 0 0 0 2px ${p.pl[2]}` }}>{p.pl[1]}</div>
+      <Avatar pid={p.pid} initials={p.pl[1]} color={p.pl[2]} cls="av"/>
       <div className="pinfo">
         <div className="pn">{p.pl[0]}</div>
         <div className="pmu">{p.g}{p.pos ? " · "+p.pos : ""}</div>
@@ -174,7 +186,7 @@ function PlayerSheet({ p, card, loading, onClose }) {
         <div className="shead"><div className="x" onClick={onClose}>{"\u2039"}</div><div><div className="t">{p.pl[0]}</div><div className="ts">{p.g} · {p.line}</div></div></div>
         <div className="sbody">
           <div className="dblk"><div className="recline">
-            <div className="av2" style={{background:`radial-gradient(circle at 50% 28%, ${p.pl[2]}, #0c1018 82%)`, boxShadow:`inset 0 0 0 2px ${p.pl[2]}`}}>{p.pl[1]}</div>
+            <Avatar pid={p.pid} initials={p.pl[1]} color={p.pl[2]} cls="av2"/>
             <div className="rl"><div className="bet">{p.line}</div><div className="sub">{shortTeam(p.teamRaw||p.g)} · best <b>{p.odds}</b></div></div>
             <div className="edg"><div className="e">+{p.edge.toFixed(1)}%</div><div className="c">{p.conv.toUpperCase()} CONV</div></div>
           </div><MMbar model={p.model} mkt={p.mkt}/></div>
