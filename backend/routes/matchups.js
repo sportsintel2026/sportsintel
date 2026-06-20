@@ -14,6 +14,7 @@ const {
   getScheduleForDate,
   getTeamRoster,
   getProjectedLineup,
+  getTeamLineup,
   getBatterSeasonStats,
   getTeamHittingAsOf,
   getPitcherEraAsOf,
@@ -147,10 +148,12 @@ router.get("/mlb/:gameId", async (req, res) => {
       awayPitcher ? rosterVsPitcher(game.homeId, awayPitcher.id) : Promise.resolve([]),
     ]);
 
-    // Projected lineups (most-recent confirmed batting order per team).
-    const [awayLineup, homeLineup] = await Promise.all([
-      game.awayId ? getProjectedLineup(game.awayId).catch(() => []) : Promise.resolve([]),
-      game.homeId ? getProjectedLineup(game.homeId).catch(() => []) : Promise.resolve([]),
+    // Lineups for THIS game: tier-1 confirmed (boxscore battingOrder, posted ~hours
+    // before first pitch) → tier-2 recent-game proxy. source tells the UI which.
+    const NONE = { lineup: [], source: "none" };
+    const [awayLU, homeLU] = await Promise.all([
+      game.awayId ? getTeamLineup(game.awayId, gameId).catch(() => NONE) : Promise.resolve(NONE),
+      game.homeId ? getTeamLineup(game.homeId, gameId).catch(() => NONE) : Promise.resolve(NONE),
     ]);
 
     const result = {
@@ -160,8 +163,12 @@ router.get("/mlb/:gameId", async (req, res) => {
       homePitcher: homePitcher ? { id: homePitcher.id, name: homePitcher.name } : null,
       awayPitcher: awayPitcher ? { id: awayPitcher.id, name: awayPitcher.name } : null,
       lineups: {
-        away: (awayLineup || []).map((b, i) => ({ ...b, order: i + 1 })),
-        home: (homeLineup || []).map((b, i) => ({ ...b, order: i + 1 })),
+        away: (awayLU.lineup || []).map((b, i) => ({ ...b, order: i + 1 })),
+        home: (homeLU.lineup || []).map((b, i) => ({ ...b, order: i + 1 })),
+        awayConfirmed: awayLU.source === "confirmed",
+        homeConfirmed: homeLU.source === "confirmed",
+        awaySource: awayLU.source,
+        homeSource: homeLU.source,
       },
       // batters from away team who have faced the home starter
       awayBattersVsHomePitcher: awayBattersVsHomeP,
