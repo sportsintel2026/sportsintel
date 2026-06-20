@@ -212,9 +212,10 @@ function SheetPre({ game, aAb, hAb, gEdges, mlPick, totPick, bestEdge, mr, detai
   const bvpA = bvpData?.awayBattersVsHomePitcher || [];
   const bvpH = bvpData?.homeBattersVsAwayPitcher || [];
   const bvpTotal = bvpA.length + bvpH.length;
-  const wx = game.weather ? (game.weather.indoor ? "Dome · roof closed"
-      : [game.weather.tempF!=null?Math.round(game.weather.tempF)+"°F":null, game.weather.windMph?game.weather.windMph+" mph":null].filter(Boolean).join(" · ")) : "";
+  const w = game.weather || {};
   const parkTxt = game.parkRunFactor!=null ? ((game.parkRunFactor>1?"+":"")+Math.round((game.parkRunFactor-1)*100)+"% runs") : "—";
+  const parkHrTxt = game.parkHRFactor!=null ? ((game.parkHRFactor>1?"+":"")+Math.round((game.parkHRFactor-1)*100)+"% HR") : null;
+  const windCls = w.windEffect==="out" ? "wout" : w.windEffect==="in" ? "win" : "";
 
   const reads = [];
   if (mr?.win) { const w=mr.win; reads.push({ k:"WIN", lean:w.favTeam, odds:fmtOdds(w.consensus ?? w.bestPrice), prob:(w.favProb ?? w.model?.prob ?? null), mv:(w.move?{toward:w.move.towardFav,cents:w.move.cents,team:w.favTeam}:null), agrees:w.model?.agrees }); }
@@ -275,8 +276,15 @@ function SheetPre({ game, aAb, hAb, gEdges, mlPick, totPick, bestEdge, mr, detai
       {reads.map((r,i)=><div key={i} className="mr"><span className={"md "+(r.agrees?"strong":"split")}/><span className="mk">{r.k}</span><div className="mv"><div className="mvtop"><b>{r.lean}</b>{r.odds&&r.odds!=="—"?` · ${r.odds}`:""}{r.prob!=null?` · ${r.prob}%`:""}</div>{r.mv&&<div className={"mvmoney "+(r.mv.toward?"toward":"off")}>{r.mv.toward?`money coming in on ${r.mv.team}`:`money drifting off ${r.mv.team}`} · {r.mv.cents}{"\u00a2"} since open</div>}</div><Agree ok={r.agrees}/></div>)}
     </Block>}
 
-    <Block label="CONTEXT"><div className="ctx">
-      {venueChip(game.venue||scoresGame_venue(game))}{wx && <span className="ch">{wx}</span>}<span className="ch">Park: <b>{parkTxt}</b></span>
+    <Block label="PARK &amp; WEATHER" bx={!w.indoor && w.forecastAtGameTime ? "at first pitch" : "conditions"}><div className="ctx">
+      {venueChip(game.venue||scoresGame_venue(game))}
+      <span className="ch">Runs: <b>{parkTxt}</b></span>
+      {parkHrTxt && <span className="ch">HR: <b>{parkHrTxt}</b></span>}
+      {w.indoor ? <span className="ch">Dome · roof closed</span> : <>
+        {w.tempF!=null && <span className="ch">{w.tempF}°F{w.tempEffect&&w.tempEffect!=="neutral"?` · ${w.tempEffect}`:""}</span>}
+        {w.windLabel && <span className={"ch "+windCls}>{w.windLabel}</span>}
+        {(w.conditions||w.isRaining) && <span className="ch">{w.conditions||""}{w.isRaining?" · rain":""}</span>}
+      </>}
     </div></Block>
 
     {bestEdge?.reason && <div className="dblk"><div className="why"><span className="wl">WHY THE EDGE</span>{bestEdge.reason}</div></div>}
@@ -294,7 +302,8 @@ function PitcherCard({ ab, col, p }) {
     : <LogoP ab={ab} col={col}/>;
   const wl = (s.wins!=null||s.losses!=null) ? `${s.wins??0}-${s.losses??0}` : null;
   const num=(x,d)=> x!=null ? (d!=null?Number(x).toFixed(d):x) : "—";
-  const tiles=[["ERA",num(s.era,2)],["WHIP",num(s.whip,2)],["K/9",num(s.strikeoutsPer9,1)],["K",num(s.strikeouts)],["H",num(s.hits)],["HR",num(s.homeRuns)]];
+  const f3p=(v)=> v==null ? "—" : Number(v).toFixed(3).replace(/^0(?=\.)/,"");
+  const tiles=[["ERA",num(s.era,2)],["WHIP",num(s.whip,2)],["K/9",num(s.strikeoutsPer9,1)],["BB/9",num(s.walksPer9,1)],["HR/9",num(s.homeRunsPer9,1)],["K/BB",num(s.strikeoutWalkRatio,2)],["BAA",f3p(s.battingAvgAgainst)],["SLG-A",f3p(s.sluggingAgainst)],["GS",num(s.gamesStarted)],["K",num(s.strikeouts)],["BB",num(s.walks)],["HR",num(s.homeRuns)]];
   return <div className="pcard">
     <div className="prow">{head}<div className="pmeta"><div className="pn">{p?.name || "TBD"}</div><div className="ph">{p?.hand?`${p.hand}HP · `:""}{ab}{wl?` · ${wl}`:""}{s.inningsPitched!=null?` · ${Number(s.inningsPitched).toFixed(1)} IP`:""}</div></div></div>
     {(p?.name)&&<div className="pgrid">{tiles.map(([k,v],i)=><div key={i} className="pg"><div className="k">{k}</div><div className="v">{v}</div></div>)}</div>}
@@ -481,6 +490,7 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .mr .ma{font-family:var(--mono);font-size:10px;font-weight:600;flex:0 0 auto}.ma.ag{color:var(--green)}.ma.df{color:var(--gold)}
 .ctx{display:flex;flex-wrap:wrap;gap:7px}
 .ctx .ch{font-family:var(--mono);font-size:10px;color:#aeb9c8;background:#0e1620;border:1px solid var(--line2);border-radius:7px;padding:5px 9px}.ctx .ch b{color:#fff}
+.ctx .ch.wout{color:#7ee0a8;border-color:rgba(126,224,168,.32)}.ctx .ch.win{color:#ff8f80;border-color:rgba(255,143,128,.32)}
 .why{font-size:12.5px;color:#c4cfd9;line-height:1.55}.why .wl{font-family:var(--disp);font-weight:800;font-size:11px;letter-spacing:.5px;color:var(--gold);display:block;margin-bottom:4px}
 
 .lurow{display:flex;align-items:center;gap:9px;padding:8px 0;border-top:1px solid rgba(255,255,255,.05)}.lurow:first-of-type{border-top:none}
