@@ -69,17 +69,33 @@ export default function SettingsPage() {
           <div><div className="pn">{name}</div><div className="pe">{email}</div><div className="pp">{planBadge}</div></div>
         </div></div>
 
-        <div className="blk"><div className="bl">SUBSCRIPTION</div>
-          {TIERS.map((t,i)=>(
-            <div key={i} className={"plan"+(i===currentIdx?" cur":"")} onClick={()=>pickTier(i)}>
-              {i===currentIdx ? <span className="badge cur">CURRENT</span> : (t.best ? <span className="badge best">BEST VALUE</span> : null)}
-              <div className="pt"><div className="pname">{t.name}</div><div className="price">{t.price}<span className="per">{t.per}</span></div></div>
-              <div className="pf">{t.foot}{t.save ? <span className="save">{t.save}</span> : null}</div>
+        {isAdmin && (
+          <div className="blk"><div className="bl">ADMIN</div>
+            <div className="lrow" onClick={()=>navigate("/admin")}><div className="li">{"\u270e"}</div><div className="lt">Manage WizePlays</div><div className="lc">{"\u203a"}</div></div>
+            <div className="lrow" onClick={()=>navigate("/expert-picks")}><div className="li">{"\u25c8"}</div><div className="lt">View posted picks</div><div className="lc">{"\u203a"}</div></div>
+          </div>
+        )}
+
+        {isAdmin ? (
+          <div className="blk"><div className="bl">ACCESS</div>
+            <div className="ownerbox">
+              <div className="ot">Owner · all features unlocked</div>
+              <div className="os">You have full admin access — no subscription or billing. The plans below are what subscribers see.</div>
             </div>
-          ))}
-          <div className="mng" onClick={openPortal}>{portalLoading ? "Opening…" : paid ? "Manage subscription" : "See all plans"}</div>
-          <div className="billnote">Billing handled securely by Stripe · receipts emailed</div>
-        </div>
+          </div>
+        ) : (
+          <div className="blk"><div className="bl">SUBSCRIPTION</div>
+            {TIERS.map((t,i)=>(
+              <div key={i} className={"plan"+(i===currentIdx?" cur":"")} onClick={()=>pickTier(i)}>
+                {i===currentIdx ? <span className="badge cur">CURRENT</span> : (t.best ? <span className="badge best">BEST VALUE</span> : null)}
+                <div className="pt"><div className="pname">{t.name}</div><div className="price">{t.price}<span className="per">{t.per}</span></div></div>
+                <div className="pf">{t.foot}{t.save ? <span className="save">{t.save}</span> : null}</div>
+              </div>
+            ))}
+            <div className="mng" onClick={openPortal}>{portalLoading ? "Opening…" : paid ? "Manage subscription" : "See all plans"}</div>
+            <div className="billnote">Billing handled securely by Stripe · receipts emailed</div>
+          </div>
+        )}
 
         <div className="blk"><div className="bl">NOTIFICATIONS</div>
           <div className="srow"><div className="sl"><div className="sn">Sharp line moves</div><div className="ss">when a pick’s line moves ≥15¢</div></div><Toggle on={nSharp} set={setNSharp}/></div>
@@ -157,6 +173,9 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .plan .save{color:var(--green);font-weight:700}
 .mng{margin-top:11px;text-align:center;font-family:var(--disp);font-weight:800;font-size:14px;color:#06090b;background:var(--gold);border-radius:11px;padding:11px;cursor:pointer}
 .billnote{font-family:var(--mono);font-size:9px;color:var(--mut2);text-align:center;margin-top:8px}
+.ownerbox{border:1px solid rgba(243,185,79,.3);background:rgba(243,185,79,.05);border-radius:12px;padding:14px}
+.ownerbox .ot{font-family:var(--disp);font-weight:800;font-size:16px;color:var(--gold)}
+.ownerbox .os{font-size:13px;color:var(--mut);margin-top:5px;line-height:1.4}
 /* setting rows */
 .srow{display:flex;align-items:center;gap:11px;padding:11px 0;border-top:1px solid rgba(255,255,255,.05)}.srow:first-of-type{border-top:none}
 .srow .sl{flex:1;min-width:0}.srow .sn{font-weight:600;font-size:14px;color:#eaf1ee}.srow .ss{font-family:var(--mono);font-size:9.5px;color:var(--mut2);margin-top:1px}
