@@ -172,7 +172,7 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .kpi .k{font-family:var(--mono);font-size:9px;color:var(--mut);font-weight:600;letter-spacing:.3px}
 .kpi .v{font-family:var(--disp);font-weight:800;font-size:30px;color:#fff;margin-top:4px;line-height:1}.kpi .v.g{color:var(--green)}.kpi .v.gold{color:var(--gold)}.kpi .v.r{color:var(--neg)}
 .kpi .sub{font-family:var(--mono);font-size:9px;color:var(--mut2);margin-top:4px}
-.blk{margin:14px 14px 0;border:1px solid var(--line);border-radius:14px;background:var(--panel);padding:13px}
+.blk{margin:14px 14px 0;border:1px solid var(--line);border-radius:14px;background:linear-gradient(180deg,#0c1218,#080c11);padding:13px}
 .bl{font-family:var(--disp);font-weight:800;font-size:13px;letter-spacing:.7px;color:var(--mut);margin-bottom:11px;display:flex;align-items:center;justify-content:space-between}
 .bl .bx{font-family:var(--mono);font-size:9px;color:var(--mut2);letter-spacing:0;font-weight:500}
 .chartwrap{position:relative}
