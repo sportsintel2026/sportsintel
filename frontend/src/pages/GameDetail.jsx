@@ -65,11 +65,18 @@ export default function GameDetailPage() {
       // BVP + projected lineups come from the matchups endpoint (keyed by gamePk = URL id).
       matchupsApi.getMLB(gameId).then(m => {
         if (cancelled || !m) return;
-        const fmtAvg = (a) => a==null ? "" : Number(a).toFixed(3).replace(/^0/,"");
         const mapRow = (r) => ({
           batter: r.batterName || r.name,
-          vs: `${r.atBats ?? 0} AB${r.avg!=null?` · ${fmtAvg(r.avg)}`:""}`,
-          stat: `${r.hits ?? 0}-${r.atBats ?? 0}${r.homeRuns?`, ${r.homeRuns} HR`:""}`,
+          pos: r.position || "",
+          pa: r.plateAppearances ?? r.atBats ?? 0,
+          ab: r.atBats ?? 0,
+          h: r.hits ?? 0,
+          hr: r.homeRuns ?? 0,
+          rbi: r.rbi ?? 0,
+          bb: r.walks ?? 0,
+          k: r.strikeouts ?? 0,
+          avg: r.avg,
+          ops: r.ops,
         });
         setBvpData({
           awayBattersVsHomePitcher: (m.awayBattersVsHomePitcher||[]).map(mapRow),
@@ -204,7 +211,7 @@ function SheetPre({ game, aAb, hAb, gEdges, mlPick, totPick, bestEdge, mr, detai
   const ump = detail?.umpire || null;
   const bvpA = bvpData?.awayBattersVsHomePitcher || [];
   const bvpH = bvpData?.homeBattersVsAwayPitcher || [];
-  const bvp = [...(bvpA||[]), ...(bvpH||[])].slice(0,4);
+  const bvpTotal = bvpA.length + bvpH.length;
   const wx = game.weather ? (game.weather.indoor ? "Dome · roof closed"
       : [game.weather.tempF!=null?Math.round(game.weather.tempF)+"°F":null, game.weather.windMph?game.weather.windMph+" mph":null].filter(Boolean).join(" · ")) : "";
   const parkTxt = game.parkRunFactor!=null ? ((game.parkRunFactor>1?"+":"")+Math.round((game.parkRunFactor-1)*100)+"% runs") : "—";
@@ -246,8 +253,9 @@ function SheetPre({ game, aAb, hAb, gEdges, mlPick, totPick, bestEdge, mr, detai
       </> : <div className="estate" style={{padding:"4px 2px"}}><div className="es">Lineups confirm ~90 min before first pitch.</div></div>}
     </Collapse>
 
-    {bvp.length>0 && <Collapse label="BATTER vs PITCHER" bx="career" sub={`${bvp.length} w/ history`}>
-      {bvp.map((b,i)=><div key={i} className="bvp"><div><div className="bn">{b.batter||b.name||b[0]}</div><div className="bvs">{b.vs||b.line||b[2]||""}</div></div><div className="bl"><b>{b.stat||b.slash||b[1]||""}</b></div></div>)}
+    {bvpTotal>0 && <Collapse label="BATTER vs PITCHER" bx="career" sub={`${bvpTotal} w/ history`}>
+      {bvpA.length>0 && <><div className="bvpgrp">{aAb} batters vs {ph?.name || "opp SP"}</div><BvpTable rows={bvpA}/></>}
+      {bvpH.length>0 && <><div className="bvpgrp">{hAb} batters vs {pa?.name || "opp SP"}</div><BvpTable rows={bvpH}/></>}
     </Collapse>}
 
     {(formA||formH) && <Block label="TEAM FORM" bx="last 5 · runs/game"><div className="formgrid">
@@ -300,11 +308,34 @@ function FormCol({ ab, f }) {
   </div>;
 }
 
+function BvpTable({ rows }) {
+  const f3 = (v) => v==null ? "—" : Number(v).toFixed(3).replace(/^0(?=\.)/,"");
+  return (
+    <div className="bvpwrap">
+      <table className="bvptbl">
+        <thead><tr>
+          <th className="nm">Batter</th><th>PA</th><th>H</th><th>HR</th><th>RBI</th><th>BB</th><th>K</th><th>AVG</th><th>OPS</th>
+        </tr></thead>
+        <tbody>
+          {rows.map((b,i)=>(
+            <tr key={i}>
+              <td className="nm">{b.batter}{b.pos?<span className="po"> {b.pos}</span>:null}</td>
+              <td>{b.pa}</td><td>{b.h}</td>
+              <td className={b.hr>0?"hot":""}>{b.hr}</td>
+              <td>{b.rbi}</td><td>{b.bb}</td><td>{b.k}</td>
+              <td>{f3(b.avg)}</td><td>{f3(b.ops)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 function LineScore({ ls }) {
   if (!ls || !ls.length) return null;
-  const innings = Math.max(...ls.map(r => (r[1]||[]).length), 0);
+  const innings = Math.max(...ls.map(r => (r.periods||[]).length), 0);
   return <table className="lsc"><thead><tr><th style={{textAlign:"left"}}>&nbsp;</th>{Array.from({length:innings}).map((_,i)=><th key={i}>{i+1}</th>)}<th>R</th></tr></thead>
-    <tbody>{ls.map((r,ri)=><tr key={ri}><td className="tm">{r[0]}</td>{Array.from({length:innings}).map((_,i)=><td key={i}>{r[1]?.[i]!=null?r[1][i]:""}</td>)}<td className="rh">{r[2]}</td></tr>)}</tbody></table>;
+    <tbody>{ls.map((r,ri)=><tr key={ri}><td className="tm">{r.abbrev||r.homeAway||""}</td>{Array.from({length:innings}).map((_,i)=><td key={i}>{r.periods?.[i]!=null?r.periods[i]:""}</td>)}<td className="rh">{r.total!=null?r.total:""}</td></tr>)}</tbody></table>;
 }
 function SheetLive({ game, scoresGame, aAb, hAb, gEdges, detail }) {
   const aCol=colFor(aAb), hCol=colFor(hAb);
@@ -312,7 +343,12 @@ function SheetLive({ game, scoresGame, aAb, hAb, gEdges, detail }) {
   const wlA = pct(ml.awayWinProb), wlH = pct(ml.homeWinProb);
   const aS = game.awayScore ?? scoresGame?.away?.score ?? 0;
   const hS = game.homeScore ?? scoresGame?.home?.score ?? 0;
-  const state = (game.half==="bottom"?"Bot ":"Top ")+(game.inning||"");
+  // game.inning may already be a formatted half+number ("Top 6") or a bare number.
+  // Only add the half when it isn't already present, so we never render "Top Top 6".
+  const _inn = String(game.inning ?? "").trim();
+  const state = /^(top|bot|bottom|mid|end)/i.test(_inn)
+    ? _inn.replace(/^bottom/i,"Bot").replace(/^top/i,"Top")
+    : ((game.half==="bottom"?"Bot ":"Top ")+_inn);
   const ls = detail?.lineScore || scoresGame?.lineScore || null;
   return (<>
     <div className="dblk"><div className="mst">
@@ -450,6 +486,16 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .lurow{display:flex;align-items:center;gap:9px;padding:8px 0;border-top:1px solid rgba(255,255,255,.05)}.lurow:first-of-type{border-top:none}
 .lurow .ln{font-family:var(--disp);font-weight:800;font-size:14px;color:#dbe4e2;flex:1}
 .lustat{font-family:var(--mono);font-size:10px;font-weight:700;border-radius:6px;padding:3px 9px}.lustat.c{color:var(--green);background:rgba(51,233,145,.12)}.lustat.p{color:var(--gold);background:rgba(243,185,79,.12)}
+.bvpgrp{font-family:var(--mono);font-size:9px;letter-spacing:.04em;text-transform:uppercase;color:var(--mut2);margin:12px 0 4px;padding-top:9px;border-top:1px solid rgba(255,255,255,.06)}
+.bvpgrp:first-of-type{border-top:none;padding-top:0;margin-top:2px}
+.bvpwrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin-top:2px}
+.bvptbl{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11px}
+.bvptbl th{font-weight:600;color:var(--mut2);text-transform:uppercase;font-size:8.5px;letter-spacing:.04em;padding:4px 7px;text-align:right;white-space:nowrap}
+.bvptbl th.nm,.bvptbl td.nm{text-align:left;position:sticky;left:0;background:#0c1014}
+.bvptbl td{padding:6px 7px;text-align:right;color:#cfe2f5;white-space:nowrap;border-top:1px solid rgba(255,255,255,.05)}
+.bvptbl td.nm{font-family:var(--ui);font-weight:700;color:#eaf1ee;min-width:104px}
+.bvptbl td.nm .po{font-family:var(--mono);font-weight:400;color:var(--mut2);font-size:9px;margin-left:3px}
+.bvptbl td.hot{color:var(--gold);font-weight:700}
 .bvp{display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid rgba(255,255,255,.05)}.bvp:first-of-type{border-top:none}
 .bvp .bn{font-family:var(--ui);font-weight:700;font-size:12px;color:#eaf1ee}.bvp .bvs{font-family:var(--mono);color:var(--mut2);font-size:9px;margin-top:1px}
 .bvp .bl{margin-left:auto;font-family:var(--mono);font-size:11px;color:#cfe2f5;font-weight:600}.bvp .bl b{color:var(--gold)}
