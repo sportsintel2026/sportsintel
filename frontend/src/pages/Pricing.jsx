@@ -30,7 +30,12 @@ export default function PricingPage() {
   const sel = PLANS.find((p) => p.key === selected) || PLANS[1];
 
   const subscribe = async () => {
-    if (!user) return navigate("/signup");
+    if (!user) {
+      // Remember the picked plan so checkout auto-resumes right after signup,
+      // instead of dropping the new user on /home with their choice forgotten.
+      try { sessionStorage.setItem("wzp_resume_plan", selected); } catch (_) {}
+      return navigate("/signup");
+    }
     setLoading(true);
     try {
       const { url } = await subscriptionApi.checkout(selected);
