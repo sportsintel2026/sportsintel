@@ -276,4 +276,34 @@ router.get("/probe-batted-ball", async (req, res) => {
   }
 });
 
+// ── EXTENDED BATTED-BALL PROBE (read-only; confirm columns before wiring Wave 2) ─
+// Savant's /leaderboard/custom returns ONLY the selected columns, so we must confirm
+// which extra selection keys it accepts (and their exact header names) before adding
+// them to the live BB_URL. Hit once, paste columnsPresent + headerLine.
+router.get("/probe-bb-extended", async (req, res) => {
+  const y = new Date().getFullYear();
+  const SELS = "pa,pull_percent,straightaway_percent,opposite_percent,hard_hit_percent,groundballs_percent,flyballs_percent,linedrives_percent,popups_percent";
+  const url = `${SAV}/leaderboard/custom?year=${y}&type=batter&filter=&min=q&selections=${SELS}&sort=pa&sortDir=desc&csv=true`;
+  try {
+    const r = await axios.get(url, {
+      timeout: 15000, responseType: "text", transformResponse: (x) => x, validateStatus: () => true,
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; WizePicks/1.0)", Accept: "text/csv,text/plain,*/*" },
+    });
+    const body = typeof r.data === "string" ? r.data : "";
+    const lines = body.split(/\r?\n/).filter((l) => l.length > 0);
+    const looksCsv = lines.length > 1 && !/^\s*<(!doctype|html)/i.test(body);
+    const cols = looksCsv ? parseCsvLine(lines[0]).map((c) => c.trim()) : [];
+    const present = {};
+    SELS.split(",").forEach((w) => { present[w] = cols.includes(w); });
+    res.json({
+      ok: looksCsv, httpStatus: r.status,
+      headerLine: looksCsv ? lines[0] : body.slice(0, 220),
+      firstDataRow: looksCsv ? lines[1] : null,
+      columnsPresent: present, allColumns: cols, requestedUrl: url,
+    });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 module.exports = router;
