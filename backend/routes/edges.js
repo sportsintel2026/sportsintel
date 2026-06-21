@@ -997,4 +997,146 @@ router.get("/market-read/mlb", async (req, res) => {
   }
 });
 
+// ── TEMP DIAGNOSTIC: K-prop + TB-shadow grade backtests (read-only) ──────────
+// These re-measure the 2026-06-17 model tuning against GRADED history in
+// model_predictions. Read-only: they query, bucket, and summarize — they write
+// nothing and price nothing. REMOVE once we've read what we need.
+//
+// ROI convention: 1 unit staked per resolved pick; pushes are excluded from both
+// the numerator and the denominator (stake refunded). Profit on a win uses the
+// pick's stored American odds. calibrationGap = mean(model_prob of the picked
+// side) − actual win rate; POSITIVE = the model was overconfident.
+
+// American odds → decimal profit returned on a 1-unit win (e.g. -110 → 0.909).
+function _winProfit(odds) {
+  const n = Number(odds);
+  if (!isFinite(n) || n === 0) return null;
+  return n > 0 ? n / 100 : 100 / Math.abs(n);
+}
+
+// Summarize a set of graded rows into n / W-L-P / win% / ROI / mean-prob / gap.
+function _summarizeGraded(rows) {
+  let w = 0, l = 0, p = 0, profit = 0, probSum = 0, probN = 0;
+  for (const r of rows) {
+    if (r.result === "push") { p++; continue; }
+    if (r.result === "win") {
+      w++;
+      const wp = _winProfit(r.odds);
+      if (wp != null) profit += wp;
+    } else if (r.result === "loss") {
+      l++;
+      profit -= 1;
+    } else {
+      continue; // pending/other — ignore
+    }
+    if (r.model_prob != null) { probSum += Number(r.model_prob); probN++; }
+  }
+  const decided = w + l;
+  const winRate = decided ? w / decided : null;
+  const meanProb = probN ? probSum / probN : null;
+  return {
+    n: decided, wins: w, losses: l, pushes: p,
+    winRate: winRate != null ? round4(winRate) : null,
+    roi: decided ? round4(profit / decided) : null,
+    meanModelProb: meanProb != null ? round4(meanProb) : null,
+    calibrationGap: (meanProb != null && winRate != null) ? round4(meanProb - winRate) : null,
+  };
+}
+
+// Pull ALL graded rows for a market (paginated; Supabase caps at 1000/req).
+async function _fetchGraded(sb, market, since) {
+  const out = [];
+  const PAGE = 1000;
+  for (let from = 0; ; from += PAGE) {
+    let q = sb.from("model_predictions")
+      .select("market,selection,line,edge,odds,model_prob,result,actual_value,game_date,confidence")
+      .eq("league", "mlb")
+      .eq("market", market)
+      .in("result", ["win", "loss", "push"])
+      .order("game_date", { ascending: true })
+      .range(from, from + PAGE - 1);
+    if (since) q = q.gte("game_date", since);
+    const { data, error } = await q;
+    if (error) throw new Error(error.message);
+    if (!data || data.length === 0) break;
+    out.push(...data);
+    if (data.length < PAGE) break;
+  }
+  return out;
+}
+
+// GET /api/edges/kgrade[?since=YYYY-MM-DD]
+// Strikeout-prop backtest. Overall + by edge band + by side. The 2026-06-17
+// K_MIN_EDGE=0.10 gate should leave the [0.05,0.10) band EMPTY for picks recorded
+// after the deploy — pass ?since=2026-06-17 to confirm, and watch ROI move toward
+// break-even and calibrationGap shrink from its prior +0.121.
+router.get("/kgrade", async (req, res) => {
+  try {
+    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) {
+      return res.status(500).json({ error: "Supabase env not set" });
+    }
+    const { createClient } = require("@supabase/supabase-js");
+    const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+    const since = req.query.since || null;
+    const rows = await _fetchGraded(sb, "player_strikeouts", since);
+
+    const BANDS = [[0.05, 0.10], [0.10, 0.15], [0.15, 0.20], [0.20, Infinity]];
+    const byBand = BANDS.map(([lo, hi]) => ({
+      band: hi === Infinity ? `>=${lo}` : `${lo}-${hi}`,
+      ...(_summarizeGraded(rows.filter(r => r.edge != null && r.edge >= lo && r.edge < hi))),
+    }));
+    const sideOf = (r) => { const c = String(r.selection || "").lastIndexOf(":"); return c >= 0 ? r.selection.slice(c + 1).toUpperCase() : "OVER"; };
+
+    res.json({
+      ok: true, market: "player_strikeouts", since: since || "all",
+      dateRange: rows.length ? { first: rows[0].game_date, last: rows[rows.length - 1].game_date } : null,
+      overall: _summarizeGraded(rows),
+      bySide: {
+        OVER: _summarizeGraded(rows.filter(r => sideOf(r) === "OVER")),
+        UNDER: _summarizeGraded(rows.filter(r => sideOf(r) === "UNDER")),
+      },
+      byEdgeBand: byBand,
+      note: "ROI per resolved pick (pushes excluded). calibrationGap = meanModelProb - winRate; positive = overconfident. Want ROI toward 0 and the 0.05-0.10 band empty for post-deploy picks.",
+    });
+  } catch (e) {
+    console.error("[kgrade] error:", e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// GET /api/edges/tbgrade[?since=YYYY-MM-DD]
+// Total-bases shadow backtest, split by line (0.5 vs 1.5). All TB-shadow rows are
+// the OVER side, so winRate = how often the claimed over actually cashed, and
+// calibrationGap = claimed overProb − that rate (the overconfidence we're hunting).
+// NOTE: TB-shadow logs odds at a flat -110, so its ROI is purely a win-rate proxy.
+// After the 2026-06-17 haircut, the 1.5-line overconfidence gap should shrink.
+router.get("/tbgrade", async (req, res) => {
+  try {
+    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) {
+      return res.status(500).json({ error: "Supabase env not set" });
+    }
+    const { createClient } = require("@supabase/supabase-js");
+    const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+    const since = req.query.since || null;
+    const rows = await _fetchGraded(sb, "player_total_bases_shadow", since);
+
+    const lineBucket = (v) => (v === 0.5 ? "0.5" : v === 1.5 ? "1.5" : `other(${v})`);
+    const buckets = {};
+    for (const r of rows) { (buckets[lineBucket(r.line)] ||= []).push(r); }
+    const byLine = {};
+    for (const k of Object.keys(buckets)) byLine[k] = _summarizeGraded(buckets[k]);
+
+    res.json({
+      ok: true, market: "player_total_bases_shadow", since: since || "all",
+      dateRange: rows.length ? { first: rows[0].game_date, last: rows[rows.length - 1].game_date } : null,
+      overall: _summarizeGraded(rows),
+      byLine,
+      note: "All rows are the OVER side, so winRate = actual over-hit rate and calibrationGap = claimed overProb - that rate (positive = overconfident). Odds are a flat -110, so ROI here is a win-rate proxy. Watch the 1.5-line gap shrink after the haircut.",
+    });
+  } catch (e) {
+    console.error("[tbgrade] error:", e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 module.exports = router;
