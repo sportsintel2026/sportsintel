@@ -1007,6 +1007,9 @@ router.get("/market-read/mlb", async (req, res) => {
 // pick's stored American odds. calibrationGap = mean(model_prob of the picked
 // side) − actual win rate; POSITIVE = the model was overconfident.
 
+// Local rounder (predictionTracker has its own; edges.js needs its own copy).
+function _round4(n) { return n == null ? null : Math.round(n * 10000) / 10000; }
+
 // American odds → decimal profit returned on a 1-unit win (e.g. -110 → 0.909).
 function _winProfit(odds) {
   const n = Number(odds);
@@ -1036,10 +1039,10 @@ function _summarizeGraded(rows) {
   const meanProb = probN ? probSum / probN : null;
   return {
     n: decided, wins: w, losses: l, pushes: p,
-    winRate: winRate != null ? round4(winRate) : null,
-    roi: decided ? round4(profit / decided) : null,
-    meanModelProb: meanProb != null ? round4(meanProb) : null,
-    calibrationGap: (meanProb != null && winRate != null) ? round4(meanProb - winRate) : null,
+    winRate: winRate != null ? _round4(winRate) : null,
+    roi: decided ? _round4(profit / decided) : null,
+    meanModelProb: meanProb != null ? _round4(meanProb) : null,
+    calibrationGap: (meanProb != null && winRate != null) ? _round4(meanProb - winRate) : null,
   };
 }
 
