@@ -96,6 +96,20 @@ export default function HomePage(){
   useEffect(()=>{ setBoard("all"); },[]);
 
   useEffect(()=>{ subscriptionApi.getMyPlan().then(setPlan).catch(()=>{}).finally(()=>setPlanLoaded(true)); },[]);
+  // Auto-resume checkout after signup: if a logged-out visitor picked a plan on
+  // /pricing, we stashed it and sent them to /signup. They land here logged in —
+  // pick the stash back up and send them straight to Stripe. Clear the key first
+  // so it fires exactly once (no loop, no double-charge attempt on refresh).
+  const resumed=useRef(false);
+  useEffect(()=>{ if(resumed.current||!user)return;
+    let key; try{ key=sessionStorage.getItem("wzp_resume_plan"); }catch(_){ key=null; }
+    if(!key)return;
+    resumed.current=true;
+    try{ sessionStorage.removeItem("wzp_resume_plan"); }catch(_){}
+    subscriptionApi.checkout(key)
+      .then(({url})=>{ if(url) window.location.href=url; })
+      .catch(()=>{ /* stay on /home; the paywall + subscribe button remain available */ });
+  },[user]);
   useEffect(()=>{(async()=>{ try{
     const { data }=await supabase.from("expert_picks").select("*").order("date",{ascending:false});
     const rows=(data||[]).map(r=>{ let picks=[]; try{picks=r.picks?JSON.parse(r.picks):[];}catch(_){picks=[];} return {date:r.date,picks}; });
