@@ -28,6 +28,7 @@ export default function LiveScoresPage({ league = "mlb" }) {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const [plan, setPlan] = useState({ tier: "free", isAdmin: false });
+  const [filter, setFilter] = useState("All");
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -62,6 +63,12 @@ export default function LiveScoresPage({ league = "mlb" }) {
   const final = data?.final || [];
   const total = live.length + upcoming.length + final.length;
   const off = getOffSeason(activeLeague);
+  // Filter chips mirror the MLB Games page (All / Live / Upcoming / Final).
+  const FILTS = ["All", "Live", "Upcoming", "Final"];
+  const showLive = (filter === "All" || filter === "Live") && live.length > 0;
+  const showPre  = (filter === "All" || filter === "Upcoming") && upcoming.length > 0;
+  const showFin  = (filter === "All" || filter === "Final") && final.length > 0;
+  const nothing  = !loading && !error && total > 0 && !(showLive || showPre || showFin);
 
   // Sport pills route the same way the MLB Games page does: MLB → /games (that
   // page), NBA → /nba (its own edges page), everything else → /{key}-games (this
@@ -89,6 +96,9 @@ export default function LiveScoresPage({ league = "mlb" }) {
         </div>
       </div>
 
+
+      <div className="chips">{FILTS.map(f => <b key={f} className={f === filter ? "on" : ""} onClick={() => setFilter(f)}>{f}</b>)}</div>
+
       <div id="wrap">
         <div className="seclbl" style={{marginTop:14}}>{meta.title.toUpperCase()}
           {refreshedAt && <span className="c" style={{marginLeft:"auto"}}>updated {refreshedAt.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"})} · auto-refreshes</span>}
@@ -102,21 +112,22 @@ export default function LiveScoresPage({ league = "mlb" }) {
         )}
         {!loading && !error && total > 0 && (
           <>
-            {live.length > 0 && (
+            {showLive && (
               <Section title="LIVE NOW" color="var(--red)" count={live.length} defaultOpen liveDot>
                 {live.map((g) => <GameCard key={g.id} g={g} league={activeLeague} meta={meta} />)}
               </Section>
             )}
-            {upcoming.length > 0 && (
+            {showPre && (
               <Section title="UPCOMING" color="var(--mut)" count={upcoming.length} defaultOpen>
                 {upcoming.map((g) => <GameCard key={g.id} g={g} league={activeLeague} meta={meta} />)}
               </Section>
             )}
-            {final.length > 0 && (
+            {showFin && (
               <Section title="FINAL" color="var(--green)" count={final.length} defaultOpen={live.length === 0}>
                 {final.map((g) => <GameCard key={g.id} g={g} league={activeLeague} meta={meta} />)}
               </Section>
             )}
+            {nothing && <div className="estate"><div className="et">Nothing here yet</div><div className="es">No {filter.toLowerCase()} games right now.</div></div>}
           </>
         )}
       </div>
