@@ -2,179 +2,161 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { subscriptionApi } from "../lib/api";
-const PICKS = [
-  { league:"⚾ MLB", matchup:"Yankees vs Rays", pick:"Yankees -1.5", confidence:"HIGH" },
-  { league:"🏀 NBA", matchup:"Knicks vs Cavaliers", pick:"Knicks ML", confidence:"HIGH" },
-  { league:"🏈 NFL", matchup:"Chiefs vs Bills", pick:"Over 54.5", confidence:"MEDIUM" },
-];
-const COMPETITORS = [
-  { name:"Picks Sites", price:"$20–$100+/mo", note:"Sell you picks. No guarantees." },
-  { name:"ESPN+", price:"$10.99/mo", note:"Scores only. No deep stats." },
-  { name:"WizePicks", price:"From $7/wk", highlight:true, note:"Everything you need to make your OWN picks." },
-];
+
 const PLANS = [
-  { key:"weekly",  label:"Weekly",  price:"$7",   per:"/wk", sub:"Billed weekly · cancel anytime" },
-  { key:"monthly", label:"Monthly", price:"$25",  per:"/mo", sub:"Billed monthly · cancel anytime", popular:true },
-  { key:"yearly",  label:"Yearly",  price:"$199", per:"/yr", sub:"Just $16.58/mo · billed annually", best:true, badge:"SAVE 34%" },
+  { key: "weekly",  name: "Weekly",  price: "$7",   per: "/wk", sub: "Billed weekly" },
+  { key: "monthly", name: "Monthly", price: "$25",  per: "/mo", sub: "Billed monthly", pop: true },
+  { key: "yearly",  name: "Yearly",  price: "$199", per: "/yr", sub: "$16.58/mo · save 34%", best: true },
 ];
+
+const INCLUDED = [
+  "Full edge board",
+  "Player props & profiles",
+  "Live scores & box scores",
+  "Market prices & line moves",
+  "Performance, tracked honestly",
+  "Zero ads",
+];
+
+const Check = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+);
+
 export default function PricingPage() {
-  const [loading, setLoading] = useState(false);
-  const [selected, setSelected] = useState("monthly");
   const { user } = useAuth();
   const navigate = useNavigate();
-  const handleSubscribe = async (key) => {
+  const [selected, setSelected] = useState("monthly");
+  const [loading, setLoading] = useState(false);
+  const sel = PLANS.find((p) => p.key === selected) || PLANS[1];
+
+  const subscribe = async () => {
     if (!user) return navigate("/signup");
     setLoading(true);
     try {
-      const { url } = await subscriptionApi.checkout(key);
+      const { url } = await subscriptionApi.checkout(selected);
       window.location.href = url;
-    } catch (err) {
-      alert("Something went wrong. Please try again.");
+    } catch (e) {
       setLoading(false);
+      alert("Couldn't start checkout. Please try again.");
     }
   };
-  const sel = PLANS.find(p => p.key === selected) || PLANS[1];
+
   return (
-    <div style={{minHeight:"100vh",background:"#080810",color:"#e2e8f0",fontFamily:"'Inter',system-ui,sans-serif",padding:"40px 24px"}}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Barlow+Condensed:wght@700;800;900&display=swap');*{box-sizing:border-box;margin:0;padding:0}`}</style>
-      <div style={{maxWidth:560,margin:"0 auto"}}>
-        {/* Logo */}
-        <div style={{textAlign:"center",marginBottom:36}}>
-          <Link to="/" style={{textDecoration:"none",display:"inline-flex",alignItems:"center",gap:9}}>
-            <span style={{width:9,height:9,borderRadius:"50%",background:"#1D9E75",display:"inline-block"}}></span>
-            <span style={{fontFamily:"'Barlow Condensed'",fontSize:26,fontWeight:900,color:"#fff",letterSpacing:"0.1em"}}>WIZE<span style={{color:"#1D9E75"}}>PICKS</span></span>
-          </Link>
-        </div>
-        {/* Hero pitch */}
-        <div style={{textAlign:"center",marginBottom:36}}>
-          <div style={{display:"inline-flex",alignItems:"center",gap:8,background:"#ef444420",border:"1px solid #ef444440",borderRadius:20,padding:"6px 16px",marginBottom:20,fontSize:12,color:"#ef4444",fontWeight:700,letterSpacing:"0.06em"}}>
-            🔥 THE SMARTER WAY TO BET
-          </div>
-          <h1 style={{fontFamily:"'Barlow Condensed'",fontSize:"clamp(32px,7vw,52px)",fontWeight:900,color:"#fff",lineHeight:1.1,marginBottom:16}}>
-            STOP PAYING FOR PICKS.<br/>
-            <span style={{color:"#ef4444"}}>START MAKING YOUR OWN.</span>
-          </h1>
-          <p style={{fontSize:15,color:"#64748b",lineHeight:1.8,maxWidth:480,margin:"0 auto"}}>
-            Other sites charge <strong style={{color:"#e2e8f0"}}>$20 to $100+ a month</strong> to sell you picks that aren't guaranteed. There's no such thing as a guaranteed pick in sports — but there <em style={{color:"#e2e8f0"}}>is</em> such a thing as being better informed than everyone else.
-          </p>
-          <p style={{fontSize:15,color:"#64748b",lineHeight:1.8,maxWidth:480,margin:"16px auto 0"}}>
-            Starting at just <strong style={{color:"#ef4444"}}>$7/week</strong>, WizePicks gives you the <strong style={{color:"#e2e8f0"}}>exact same data the pros use</strong> — live scores, H2H records, player matchup stats, weather conditions, and betting lines — so you can make smarter picks yourself.
-          </p>
-        </div>
-        {/* Competitor comparison */}
-        <div style={{marginBottom:28}}>
-          <div style={{fontSize:11,color:"#475569",fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:12,textAlign:"center"}}>Why WizePicks wins</div>
-          <div style={{display:"flex",flexDirection:"column",gap:8}}>
-            {COMPETITORS.map((c,i)=>(
-              <div key={i} style={{background:c.highlight?"linear-gradient(135deg,#ef444418,#ef444408)":"#0d0d1a",border:`1px solid ${c.highlight?"#ef444450":"#1e2235"}`,borderRadius:12,padding:"14px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
-                <div>
-                  <div style={{fontSize:14,fontWeight:700,color:c.highlight?"#fff":"#64748b"}}>{c.name}</div>
-                  <div style={{fontSize:12,color:c.highlight?"#94a3b8":"#334155",marginTop:2}}>{c.note}</div>
-                </div>
-                <div style={{textAlign:"right",flexShrink:0}}>
-                  <div style={{fontFamily:"'Barlow Condensed'",fontSize:20,fontWeight:900,color:c.highlight?"#ef4444":"#475569"}}>{c.price}</div>
-                  {c.highlight&&<div style={{fontSize:10,color:"#22c55e",fontWeight:700}}>BEST VALUE ✓</div>}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-        {/* Main plan card */}
-        <div style={{background:"linear-gradient(135deg,#0f0f1f,#0d0d1a)",border:"1px solid #ef444450",borderRadius:24,padding:"36px 28px",textAlign:"center",marginBottom:20,position:"relative"}}>
-          <div style={{position:"absolute",top:-14,left:"50%",transform:"translateX(-50%)",background:"#ef4444",color:"#fff",fontSize:11,fontWeight:800,padding:"4px 20px",borderRadius:20,letterSpacing:"0.08em",whiteSpace:"nowrap"}}>
-            ONE MEMBERSHIP · PICK YOUR PLAN
-          </div>
-          <h2 style={{fontFamily:"'Barlow Condensed'",fontSize:36,fontWeight:900,color:"#fff",marginBottom:4,marginTop:8,lineHeight:1}}>ALL-ACCESS MEMBERSHIP</h2>
-          <div style={{color:"#475569",fontSize:13,marginBottom:4}}>Same full access on every plan — just pick how you pay.</div>
-          <div style={{display:"flex",flexDirection:"column",gap:9,margin:"20px 0 8px"}}>
-            {PLANS.map(p=>{
-              const on=selected===p.key;
-              return (
-                <div key={p.key} onClick={()=>setSelected(p.key)} style={{cursor:"pointer",textAlign:"left",background:on?"#ef444412":"#080810",border:`2px solid ${on?"#ef4444":"#1e2235"}`,borderRadius:14,padding:"13px 15px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
-                  <div style={{display:"flex",alignItems:"center",gap:11}}>
-                    <span style={{width:19,height:19,borderRadius:"50%",border:`2px solid ${on?"#ef4444":"#334155"}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{on&&<span style={{width:9,height:9,borderRadius:"50%",background:"#ef4444"}}/>}</span>
-                    <div>
-                      <div style={{fontSize:14,fontWeight:800,color:"#fff",display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}>{p.label}{p.popular&&<span style={{fontSize:9,fontWeight:800,color:"#ef4444",background:"#ef444420",borderRadius:5,padding:"1px 6px",letterSpacing:"0.04em"}}>POPULAR</span>}{p.best&&<span style={{fontSize:9,fontWeight:800,color:"#22c55e",background:"#22c55e20",borderRadius:5,padding:"1px 6px",letterSpacing:"0.04em"}}>{p.badge}</span>}</div>
-                      <div style={{fontSize:11.5,color:"#475569",marginTop:2}}>{p.sub}</div>
-                    </div>
+    <div className="wzpr">
+      <style>{CSS}</style>
+      <div className="wrap">
+        <header className="top">
+          <Link to="/" className="logo"><span className="dot" />Wize<b>Picks</b></Link>
+          <Link to="/" className="close">← back</Link>
+        </header>
+
+        <div className="eyebrow">Membership</div>
+        <h1>One membership.<br /><em>Pick how you pay.</em></h1>
+        <p className="lede">
+          Every plan unlocks the full board — edges, player props, live scores and
+          market prices. The only thing that changes is how often you're billed.
+        </p>
+
+        <div className="plans" role="radiogroup" aria-label="Billing plan">
+          {PLANS.map((p) => {
+            const on = selected === p.key;
+            return (
+              <div
+                key={p.key}
+                className={"plan" + (on ? " on" : "")}
+                role="radio"
+                aria-checked={on}
+                tabIndex={0}
+                onClick={() => setSelected(p.key)}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelected(p.key); } }}
+              >
+                <span className="radio"><i /></span>
+                <div className="pinfo">
+                  <div className="pname">
+                    {p.name}
+                    {p.pop && <span className="tag pop">Popular</span>}
+                    {p.best && <span className="tag best">Best value</span>}
                   </div>
-                  <div style={{textAlign:"right",flexShrink:0,whiteSpace:"nowrap"}}>
-                    <span style={{fontFamily:"'Barlow Condensed'",fontSize:30,fontWeight:900,color:on?"#ef4444":"#94a3b8"}}>{p.price}</span>
-                    <span style={{fontSize:12,color:"#475569",fontWeight:700}}>{p.per}</span>
-                  </div>
+                  <div className="psub">{p.sub}</div>
                 </div>
-              );
-            })}
-          </div>
-          <div style={{textAlign:"left",marginBottom:28,background:"#080810",borderRadius:12,padding:"16px"}}>
-            <div style={{fontSize:11,color:"#475569",fontWeight:700,letterSpacing:"0.08em",marginBottom:12,textTransform:"uppercase"}}>Everything included:</div>
-            {[
-              ["🎯","Expert Picks","Curated straight bets & parlays to help guide your decisions"],
-              ["⚾🏀🏈","All Major Leagues","MLB, NBA, NFL — all in one place"],
-              ["⚡","Live Scores","Updated every 5 minutes during games"],
-              ["📊","Full Box Scores","Complete player and team stats"],
-              ["⚔️","H2H Records","All-time and recent head-to-head history"],
-              ["🎯","Player Matchup Stats","Career stats vs today's specific opponent"],
-              ["🌤","Weather Analysis","Real conditions + game impact breakdown"],
-              ["💰","Betting Lines & Odds","Live lines so you always know the market"],
-              ["🔔","Push Notifications","Alerts for your favorite teams"],
-              ["🚫","Zero Ads","Clean, distraction-free experience"],
-            ].map(([icon,title,desc],i)=>(
-              <div key={i} style={{display:"flex",gap:10,marginBottom:10,alignItems:"flex-start"}}>
-                <span style={{fontSize:16,flexShrink:0,marginTop:1}}>{icon}</span>
-                <div>
-                  <span style={{fontSize:13,fontWeight:700,color:"#e2e8f0"}}>{title} </span>
-                  <span style={{fontSize:12,color:"#475569"}}>{desc}</span>
-                </div>
+                <div className="price"><span className="amt">{p.price}</span><span className="per">{p.per}</span></div>
               </div>
-            ))}
-          </div>
-          <button onClick={()=>handleSubscribe(selected)} disabled={loading}
-            style={{width:"100%",background:"linear-gradient(135deg,#ef4444,#dc2626)",color:"#fff",border:"none",borderRadius:12,padding:"18px",fontSize:18,fontWeight:800,cursor:loading?"wait":"pointer",fontFamily:"inherit",boxShadow:"0 8px 32px #ef444440",marginBottom:12}}>
-            {loading?"Redirecting...":`Get All-Access — ${sel.price}${sel.per} →`}
-          </button>
-          <div style={{fontSize:12,color:"#334155"}}>Instant access · Cancel anytime · No hidden fees</div>
+            );
+          })}
         </div>
-        {/* Picks preview */}
-        <div style={{background:"#0d0d1a",border:"1px solid #22c55e40",borderRadius:20,padding:"24px",marginBottom:20}}>
-          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
-            <span style={{fontSize:22}}>🎯</span>
-            <div>
-              <div style={{fontSize:15,fontWeight:800,color:"#fff"}}>Today's Picks Preview</div>
-              <div style={{fontSize:12,color:"#475569"}}>Members get full picks + analysis daily</div>
-            </div>
-            <div style={{marginLeft:"auto",background:"#22c55e20",border:"1px solid #22c55e40",borderRadius:8,padding:"3px 10px",fontSize:10,fontWeight:700,color:"#22c55e",whiteSpace:"nowrap"}}>MEMBERS ONLY</div>
-          </div>
-          <div style={{display:"flex",flexDirection:"column",gap:8}}>
-            {PICKS.map((p,i)=>(
-              <div key={i} style={{background:"#080810",borderRadius:10,padding:"12px 14px",display:"flex",alignItems:"center",justifyContent:"space-between",filter:"blur(4px)",userSelect:"none"}}>
-                <div>
-                  <div style={{fontSize:11,color:"#475569",fontWeight:600,marginBottom:2}}>{p.league} · {p.matchup}</div>
-                  <div style={{fontSize:14,fontWeight:800,color:"#fff"}}>{p.pick}</div>
-                </div>
-                <div style={{background:p.confidence==="HIGH"?"#22c55e20":"#f59e0b20",border:`1px solid ${p.confidence==="HIGH"?"#22c55e40":"#f59e0b40"}`,borderRadius:6,padding:"3px 8px",fontSize:10,fontWeight:700,color:p.confidence==="HIGH"?"#22c55e":"#f59e0b"}}>
-                  {p.confidence}
-                </div>
-              </div>
-            ))}
-          </div>
-          <div style={{textAlign:"center",marginTop:14,fontSize:13,color:"#64748b"}}>
-            🔒 Subscribe to unlock today's full picks & analysis
-          </div>
+
+        <div className="incl">
+          <div className="lbl">Included on every plan</div>
+          <ul>
+            {INCLUDED.map((t, i) => (<li key={i}><Check />{t}</li>))}
+          </ul>
         </div>
-        {/* Bottom CTA */}
-        <div style={{background:"linear-gradient(135deg,#ef444412,#ef444406)",border:"1px solid #ef444430",borderRadius:16,padding:"24px",textAlign:"center",marginBottom:24}}>
-          <div style={{fontSize:16,fontWeight:800,color:"#fff",marginBottom:8}}>Ready to bet smarter?</div>
-          <div style={{fontSize:13,color:"#64748b",marginBottom:16,lineHeight:1.6}}>Join thousands of sports bettors who use WizePicks to make more informed picks every single day.</div>
-          <button onClick={()=>handleSubscribe(selected)} disabled={loading}
-            style={{background:"#ef4444",color:"#fff",border:"none",borderRadius:10,padding:"13px 40px",fontSize:15,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>
-            Start Today — {sel.price}{sel.per} →
-          </button>
-        </div>
-        <div style={{textAlign:"center",fontSize:13,color:"#475569"}}>
-          Just want free scores? <Link to="/signup" style={{color:"#ef4444",textDecoration:"none",fontWeight:600}}>Create free account →</Link>
-        </div>
+
+        <button className="cta" onClick={subscribe} disabled={loading}>
+          {loading ? "Starting checkout…" : `Get all-access — ${sel.price}${sel.per}`}
+        </button>
+        <div className="trust">Cancel anytime · Secure checkout by Stripe · No hidden fees</div>
+
+        <div className="free">Just want free scores? <Link to="/signup">Create a free account →</Link></div>
       </div>
     </div>
   );
 }
+
+const CSS = `
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
+.wzpr{--bg:#07140F;--panel:#0C1D16;--ink:#E7F1EC;--mut:#7E9A8E;--dim:#48584F;
+  --teal:#1D9E75;--mint:#38E1A0;--red:#ef4444;--line:rgba(56,225,160,.14);
+  --disp:'Space Grotesk',sans-serif;--body:'Inter',sans-serif;--mono:'JetBrains Mono',monospace;
+  background:var(--bg);color:var(--ink);font-family:var(--body);min-height:100vh;
+  -webkit-font-smoothing:antialiased;padding:32px 20px 56px}
+.wzpr *{box-sizing:border-box;margin:0;padding:0}
+.wzpr .wrap{max-width:500px;margin:0 auto;animation:wzfade .5s ease both}
+@keyframes wzfade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.wzpr a{text-decoration:none}
+.wzpr .top{display:flex;align-items:center;justify-content:space-between;margin-bottom:44px}
+.wzpr .logo{font-family:var(--disp);font-weight:700;font-size:18px;letter-spacing:-.01em;display:inline-flex;align-items:center;gap:8px;color:var(--ink)}
+.wzpr .logo .dot{width:8px;height:8px;border-radius:50%;background:var(--mint);box-shadow:0 0 10px rgba(56,225,160,.6)}
+.wzpr .logo b{color:var(--teal);font-weight:700}
+.wzpr .close{font-family:var(--mono);font-size:12px;color:var(--mut);letter-spacing:.03em}
+.wzpr .close:hover{color:var(--ink)}
+.wzpr .eyebrow{font-family:var(--mono);font-size:11.5px;letter-spacing:.24em;text-transform:uppercase;color:var(--mint);display:flex;align-items:center;gap:11px;margin-bottom:18px}
+.wzpr .eyebrow::before{content:"";width:24px;height:1px;background:var(--mint);opacity:.6}
+.wzpr h1{font-family:var(--disp);font-weight:700;font-size:clamp(30px,8.5vw,42px);line-height:1.04;letter-spacing:-.022em;margin-bottom:16px}
+.wzpr h1 em{font-style:normal;color:var(--teal)}
+.wzpr .lede{font-size:14.5px;line-height:1.62;color:var(--mut);max-width:31em;margin-bottom:34px}
+.wzpr .plans{display:flex;flex-direction:column;gap:10px;margin-bottom:26px}
+.wzpr .plan{position:relative;display:flex;align-items:center;gap:14px;background:var(--panel);border:1.5px solid var(--line);border-radius:15px;padding:16px 18px;cursor:pointer;transition:border-color .15s,background .15s}
+.wzpr .plan:hover{border-color:rgba(56,225,160,.32)}
+.wzpr .plan:focus-visible{outline:2px solid var(--mint);outline-offset:2px}
+.wzpr .plan.on{border-color:var(--teal);background:linear-gradient(180deg,rgba(29,158,117,.13),rgba(29,158,117,.03))}
+.wzpr .radio{width:20px;height:20px;border-radius:50%;border:2px solid var(--dim);flex:0 0 auto;display:flex;align-items:center;justify-content:center;transition:border-color .15s}
+.wzpr .plan.on .radio{border-color:var(--mint)}
+.wzpr .radio i{width:9px;height:9px;border-radius:50%;background:var(--mint);transform:scale(0);transition:transform .15s}
+.wzpr .plan.on .radio i{transform:scale(1)}
+.wzpr .pinfo{flex:1 1 auto;min-width:0}
+.wzpr .pname{font-family:var(--mono);font-size:12.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink);font-weight:600;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.wzpr .psub{font-size:12px;color:var(--mut);margin-top:4px}
+.wzpr .tag{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;padding:2px 7px;border-radius:5px;line-height:1.5}
+.wzpr .tag.pop{color:var(--mint);background:rgba(56,225,160,.12);border:1px solid rgba(56,225,160,.3)}
+.wzpr .tag.best{color:#06140E;background:var(--mint)}
+.wzpr .price{font-family:var(--disp);font-weight:700;flex:0 0 auto;text-align:right;white-space:nowrap;color:var(--ink)}
+.wzpr .price .amt{font-size:27px;letter-spacing:-.01em}
+.wzpr .price .per{font-family:var(--mono);font-size:12px;color:var(--mut);font-weight:500;margin-left:1px}
+.wzpr .plan.on .price .amt{color:var(--mint)}
+.wzpr .incl{border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:20px 2px;margin-bottom:26px}
+.wzpr .incl .lbl{font-family:var(--mono);font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--dim);margin-bottom:15px}
+.wzpr .incl ul{list-style:none;display:grid;grid-template-columns:1fr 1fr;gap:12px 18px}
+.wzpr .incl li{display:flex;align-items:flex-start;gap:9px;font-size:13px;color:#C5D7CD;line-height:1.35}
+.wzpr .incl li svg{flex:0 0 auto;margin-top:2px;color:var(--mint)}
+.wzpr .cta{width:100%;background:var(--red);color:#fff;border:none;border-radius:13px;padding:17px;font-family:var(--disp);font-weight:700;font-size:16.5px;letter-spacing:-.01em;cursor:pointer;transition:transform .1s,background .15s;box-shadow:0 12px 30px -10px rgba(239,68,68,.55)}
+.wzpr .cta:hover{background:#dc2626}
+.wzpr .cta:active{transform:translateY(1px)}
+.wzpr .cta:disabled{opacity:.6;cursor:wait}
+.wzpr .trust{text-align:center;font-family:var(--mono);font-size:11px;color:var(--dim);letter-spacing:.03em;margin-top:14px}
+.wzpr .free{text-align:center;margin-top:30px;font-size:13px;color:var(--mut)}
+.wzpr .free a{color:var(--teal);font-weight:600}
+.wzpr .free a:hover{color:var(--mint)}
+@media (max-width:380px){.wzpr .incl ul{grid-template-columns:1fr}}
+@media (prefers-reduced-motion:reduce){.wzpr *,.wzpr .wrap{animation:none!important;transition:none!important}}
+`;
