@@ -100,6 +100,9 @@ export function LoginPage() {
       <div style={{textAlign:"center",fontSize:13,color:"#475569"}}>
         Don't have an account? <Link to="/signup" style={{color:"#ef4444",fontWeight:600,textDecoration:"none"}}>Sign up free</Link>
       </div>
+      <div style={{textAlign:"center",marginTop:12}}>
+        <Link to="/pricing" style={{color:"#64748b",fontWeight:600,fontSize:12.5,textDecoration:"none"}}>See plans →</Link>
+      </div>
     </AuthLayout>
   );
 }
@@ -138,6 +141,9 @@ export function SignupPage() {
       </button>
       <div style={{textAlign:"center",marginTop:20,fontSize:13,color:"#475569"}}>
         Already have an account? <Link to="/login" style={{color:"#ef4444",fontWeight:600,textDecoration:"none"}}>Sign in</Link>
+      </div>
+      <div style={{textAlign:"center",marginTop:12}}>
+        <Link to="/pricing" style={{color:"#64748b",fontWeight:600,fontSize:12.5,textDecoration:"none"}}>See plans →</Link>
       </div>
     </AuthLayout>
   );
