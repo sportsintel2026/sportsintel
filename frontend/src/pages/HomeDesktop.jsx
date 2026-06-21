@@ -150,8 +150,8 @@ export default function HomeDesktop(props) {
           <div className="spacer" />
           <div className="upsell">
             <div className="h">{hasFull ? "All-Access" : "Go All-Access"}</div>
-            <div className="d">{hasFull ? "Your plan is active — every edge unlocked." : "Every edge, prop & live play — $7/mo."}</div>
-            <button onClick={() => navigate(hasFull ? "/settings" : "/pricing")}>{hasFull ? "Manage plan" : "Unlock — $7/mo"}</button>
+            <div className="d">{hasFull ? "Your plan is active — every edge unlocked." : "Every edge, prop & live play — from $7/wk."}</div>
+            <button onClick={() => navigate(hasFull ? "/settings" : "/pricing")}>{hasFull ? "Manage plan" : "Unlock — from $7/wk"}</button>
           </div>
         </nav>
 
@@ -190,7 +190,7 @@ export default function HomeDesktop(props) {
             {!planLoaded
               ? <div className="empty">Loading the board…</div>
               : !hasFull
-              ? <Lock title="Edges are an All-Access feature" sub={<>Every edge across the slate, ranked by conviction. <b>$7/mo</b></>} navigate={navigate} />
+              ? <Lock title="Edges are an All-Access feature" sub={<>Every edge across the slate, ranked by conviction. <b>From $7/wk</b></>} navigate={navigate} />
               : rows.length === 0
                 ? <div className="empty">No {market === "ml" ? "moneyline" : market === "spread" ? "spread" : "totals"} edges on the board yet — fills in closer to first pitch.</div>
                 : (
@@ -230,7 +230,7 @@ export default function HomeDesktop(props) {
             <div className="panel">
               <div className="phead"><div className="t">Market Read</div><div className="right" onClick={() => navigate("/market-read")} style={{ cursor: "pointer" }}>who the books lean · all markets →</div></div>
               {!hasFull
-                ? <Lock title="Market Read is an All-Access feature" sub={<>See what every book is saying on every game. <b>$7/mo</b></>} navigate={navigate} />
+                ? <Lock title="Market Read is an All-Access feature" sub={<>See what every book is saying on every game. <b>From $7/wk</b></>} navigate={navigate} />
                 : (
                   <table className="tbl mrtbl">
                     <thead><tr><th>Matchup</th><th>Market read</th><th className="c">Win %</th><th className="c">Confidence</th><th className="c">Model</th></tr></thead>
@@ -299,7 +299,7 @@ export default function HomeDesktop(props) {
             {!planLoaded
               ? <div className="empty">Loading…</div>
               : !hasFull
-              ? <Lock title="Player props are an All-Access feature" sub={<>Model probabilities on every batter &amp; pitcher prop. <b>$7/mo</b></>} navigate={navigate} />
+              ? <Lock title="Player props are an All-Access feature" sub={<>Model probabilities on every batter &amp; pitcher prop. <b>From $7/wk</b></>} navigate={navigate} />
               : propRows.length === 0
               ? <div className="empty">No {propTab === "hr" ? "home run" : propTab === "ks" ? "strikeout" : "hits"} props posted yet — they fill in closer to first pitch.</div>
               : <>
@@ -360,7 +360,7 @@ export default function HomeDesktop(props) {
             {!planLoaded
               ? <div className="empty">Loading…</div>
               : !hasFull
-              ? <Lock title="Movers locked" sub={<><b>$7/mo</b></>} navigate={navigate} />
+              ? <Lock title="Movers locked" sub={<><b>From $7/wk</b></>} navigate={navigate} />
               : movers.filter((m) => m._delta != null).length === 0
                 ? <div className="empty">Line moves fill in as books post.</div>
                 : <div className="rmv">
