@@ -3,8 +3,16 @@ const { supabase } = require("../middleware/auth");
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
-// ── Price IDs (create these in Stripe dashboard) ──────────────────────────────
+// ── Price IDs (set these in Railway env from your Stripe dashboard) ────────────
+// One all-access membership, three billing intervals. The three *_PRICE_ID vars
+// below are what the new pricing page uses. The legacy keys are kept so any
+// existing checkout flow / old links keep resolving and current subscribers are
+// unaffected.
 const PRICES = {
+  weekly:  process.env.STRIPE_WEEKLY_PRICE_ID,
+  monthly: process.env.STRIPE_MONTHLY_PRICE_ID,
+  yearly:  process.env.STRIPE_YEARLY_PRICE_ID,
+  // legacy (pre-2026-06 model) — leave wired so existing subs/links don't break
   pro_monthly:   process.env.STRIPE_PRO_MONTHLY_PRICE_ID,
   pro_yearly:    process.env.STRIPE_PRO_YEARLY_PRICE_ID,
   elite_monthly: process.env.STRIPE_ELITE_MONTHLY_PRICE_ID,
@@ -150,9 +158,16 @@ async function handleWebhookEvent(event) {
 }
 
 function getTierFromPriceId(priceId) {
-  if (priceId === PRICES.elite_monthly || priceId === PRICES.elite_yearly) return "elite";
-  if (priceId === PRICES.pro_monthly || priceId === PRICES.pro_yearly) return "pro";
-  return "free";
+  if (!priceId) return "free";
+  // Every paid price is the same full all-access membership — stored as "pro"
+  // because the access gating unlocks everything for pro/elite. Includes the three
+  // current billing intervals plus any legacy price IDs (so existing subscribers,
+  // whatever they bought under the old model, keep full access).
+  const paid = [
+    PRICES.weekly, PRICES.monthly, PRICES.yearly,
+    PRICES.pro_monthly, PRICES.pro_yearly, PRICES.elite_monthly, PRICES.elite_yearly,
+  ].filter(Boolean);
+  return paid.includes(priceId) ? "pro" : "free";
 }
 
 module.exports = {
