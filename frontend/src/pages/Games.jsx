@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-import { edgesApi, subscriptionApi } from "../lib/api";
+import { edgesApi, scoresApi, subscriptionApi } from "../lib/api";
 
 // ---- helpers ----
 const TEAMCOL = {
@@ -42,13 +42,23 @@ export default function GamesPage() {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const [edges, setEdges] = useState(null);
+  const [scores, setScores] = useState(null);
   const [loading, setLoading] = useState(true);
   const [plan, setPlan] = useState({ tier:"free", isAdmin:false });
   const [filter, setFilter] = useState("All");
 
   useEffect(() => { subscriptionApi.getMyPlan().then(setPlan).catch(()=>{}); }, []);
   const load = useCallback(async () => {
-    try { const d = await edgesApi.getMLB(); setEdges(d); } catch(e){ setEdges(null); }
+    try {
+      // Edges board = rich upcoming (probables/lines/edges) but it ROLLS to the next
+      // slate once today's games are no longer scheduled, dropping today's live/final.
+      // The scores feed keeps today's live + final, so we fetch both and merge below.
+      const [d, s] = await Promise.all([
+        edgesApi.getMLB(),
+        scoresApi.getScores("mlb").catch(() => null),
+      ]);
+      setEdges(d); setScores(s);
+    } catch(e){ setEdges(null); }
     setLoading(false);
   }, []);
   useEffect(() => { load(); const id=setInterval(load,45000); return ()=>clearInterval(id); }, [load]);
@@ -85,9 +95,33 @@ export default function GamesPage() {
     };
   };
   const cards = games.map(toCard);
-  const live = cards.filter(c=>c.st==="live");
+  // The edges board rolls to the next slate once today's games are no longer
+  // "scheduled", which drops today's LIVE and FINAL games from it (e.g. late at night
+  // the board shows tomorrow's upcoming, so Live/Final go empty). The scores feed keeps
+  // them, so supplement any live/final games the edges cards are missing — deduped by id
+  // (scores games carry detailId = the edges gamePk when the two slates align).
+  const haveIds = new Set(cards.map(c => String(c.id)));
+  const scoreCard = (sg) => {
+    const st = sg.bucket === "live" ? "live" : "final";
+    const aAb = sg.away?.abbrev || "TBD", hAb = sg.home?.abbrev || "TBD";
+    const aS = sg.away?.score, hS = sg.home?.score;
+    return {
+      id: sg.detailId || sg.id, st, fromScores: true,
+      a:{ ab:aAb, col:colFor(aAb), rec:"", s:aS },
+      h:{ ab:hAb, col:colFor(hAb), rec:"", s:hS },
+      time:"", ou:"—", aml:"", hml:"",
+      asp:["—","","—"], hsp:["—","","—"],
+      state: sg.bucket==="live" ? (sg.statusDetail || "Live") : "",
+      lean:"", edge:"",
+      win: sg.bucket==="final" ? (((aS||0)>(hS||0))?"a":"h") : null,
+    };
+  };
+  const extra = [...(scores?.live||[]), ...(scores?.final||[])]
+    .filter(sg => !haveIds.has(String(sg.detailId || sg.id)))
+    .map(scoreCard);
+  const live = [...cards.filter(c=>c.st==="live"), ...extra.filter(c=>c.st==="live")];
   const pre = cards.filter(c=>c.st==="pre");
-  const fin = cards.filter(c=>c.st==="final");
+  const fin = [...cards.filter(c=>c.st==="final"), ...extra.filter(c=>c.st==="final")];
   const FILTS = ["All","Live","Upcoming","Final"];
   const showLive = (filter==="All"||filter==="Live") && live.length;
   const showPre  = (filter==="All"||filter==="Upcoming") && pre.length;
