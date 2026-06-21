@@ -53,7 +53,7 @@ function barrelTier(rate) {
 // player_id, pa, pull_percent, straightaway_percent, opposite_percent (PERCENT units).
 // min=1 = all batters (gate low-PA as thin); fetched once/day and cached like barrels.
 const BB_URL = (y) =>
-  `${SAV}/leaderboard/custom?year=${y}&type=batter&filter=&min=1&selections=pa,pull_percent,straightaway_percent,opposite_percent&sort=pull_percent&sortDir=desc&csv=true`;
+  `${SAV}/leaderboard/custom?year=${y}&type=batter&filter=&min=1&selections=pa,pull_percent,straightaway_percent,opposite_percent,hard_hit_percent,groundballs_percent,flyballs_percent,linedrives_percent,popups_percent&sort=pull_percent&sortDir=desc&csv=true`;
 let _bbCache = { date: null, map: null };
 async function getBattedBallMap() {
   const today = getEasternDate(0);
@@ -70,7 +70,10 @@ async function getBattedBallMap() {
     const cols = parseCsvLine(lines[0]).map((c) => c.trim());
     const iId = cols.indexOf("player_id"), iPa = cols.indexOf("pa"),
       iPull = cols.indexOf("pull_percent"), iStr = cols.indexOf("straightaway_percent"),
-      iOppo = cols.indexOf("opposite_percent");
+      iOppo = cols.indexOf("opposite_percent"),
+      iHard = cols.indexOf("hard_hit_percent"), iGB = cols.indexOf("groundballs_percent"),
+      iFB = cols.indexOf("flyballs_percent"), iLD = cols.indexOf("linedrives_percent"),
+      iPU = cols.indexOf("popups_percent");
     if (iId < 0 || iPull < 0) return null;
     const map = new Map();
     for (let r = 1; r < lines.length; r++) {
@@ -84,6 +87,11 @@ async function getBattedBallMap() {
         straightPct: iStr >= 0 ? (parseFloat(f[iStr]) || null) : null,
         oppoPct: iOppo >= 0 ? (parseFloat(f[iOppo]) || null) : null,
         pa: iPa >= 0 ? (parseInt(f[iPa], 10) || null) : null,
+        hardHitPct: iHard >= 0 ? (parseFloat(f[iHard]) || null) : null,
+        gbPct: iGB >= 0 ? (parseFloat(f[iGB]) || null) : null,
+        fbPct: iFB >= 0 ? (parseFloat(f[iFB]) || null) : null,
+        ldPct: iLD >= 0 ? (parseFloat(f[iLD]) || null) : null,
+        puPct: iPU >= 0 ? (parseFloat(f[iPU]) || null) : null,
       });
     }
     if (map.size > 0) { _bbCache = { date: today, map }; return map; }
@@ -220,7 +228,8 @@ router.get("/mlb/:playerId", async (req, res) => {
       },
       modelVsMarket,
       battedBall: bb
-        ? { pullPct: bb.pullPct, straightPct: bb.straightPct, oppoPct: bb.oppoPct, pa: bb.pa, thin: (bb.pa ?? 0) < THIN_BB_PA }
+        ? { pullPct: bb.pullPct, straightPct: bb.straightPct, oppoPct: bb.oppoPct, pa: bb.pa, thin: (bb.pa ?? 0) < THIN_BB_PA,
+            hardHitPct: bb.hardHitPct, gbPct: bb.gbPct, fbPct: bb.fbPct, ldPct: bb.ldPct, puPct: bb.puPct }
         : null,
       pitcher: pw
         ? { kPct: pw.kPct, whiffPct: pw.whiffPct, bbPct: pw.bbPct, swingPct: pw.swingPct }
