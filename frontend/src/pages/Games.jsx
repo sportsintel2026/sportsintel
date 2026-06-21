@@ -100,7 +100,12 @@ export default function GamesPage() {
   // the board shows tomorrow's upcoming, so Live/Final go empty). The scores feed keeps
   // them, so supplement any live/final games the edges cards are missing — deduped by id
   // (scores games carry detailId = the edges gamePk when the two slates align).
-  const haveIds = new Set(cards.map(c => String(c.id)));
+  // Dedup the scores supplement only against edges games that are THEMSELVES live/final
+  // — never against upcoming ones. detailId is keyed by matchup (team nicknames), so a
+  // game that's live today and the SAME matchup scheduled again tomorrow share a detailId.
+  // Past midnight ET the edges board rolls to tomorrow's slate, so deduping against its
+  // upcoming games would wrongly drop today's live/final games (the bug this fixes).
+  const haveIds = new Set(cards.filter(c => c.st==="live" || c.st==="final").map(c => String(c.id)));
   const scoreCard = (sg) => {
     const st = sg.bucket === "live" ? "live" : "final";
     const aAb = sg.away?.abbrev || "TBD", hAb = sg.home?.abbrev || "TBD";
