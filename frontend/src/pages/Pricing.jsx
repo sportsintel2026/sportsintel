@@ -10,23 +10,30 @@ const PICKS = [
 const COMPETITORS = [
   { name:"Picks Sites", price:"$20–$100+/mo", note:"Sell you picks. No guarantees." },
   { name:"ESPN+", price:"$10.99/mo", note:"Scores only. No deep stats." },
-  { name:"WizePicks", price:"$7/mo", highlight:true, note:"Everything you need to make your OWN picks." },
+  { name:"WizePicks", price:"From $7/wk", highlight:true, note:"Everything you need to make your OWN picks." },
+];
+const PLANS = [
+  { key:"weekly",  label:"Weekly",  price:"$7",   per:"/wk", sub:"Billed weekly · cancel anytime" },
+  { key:"monthly", label:"Monthly", price:"$25",  per:"/mo", sub:"Billed monthly · cancel anytime", popular:true },
+  { key:"yearly",  label:"Yearly",  price:"$199", per:"/yr", sub:"Just $16.58/mo · billed annually", best:true, badge:"SAVE 34%" },
 ];
 export default function PricingPage() {
   const [loading, setLoading] = useState(false);
+  const [selected, setSelected] = useState("monthly");
   const { user } = useAuth();
   const navigate = useNavigate();
-  const handleSubscribe = async () => {
+  const handleSubscribe = async (key) => {
     if (!user) return navigate("/signup");
     setLoading(true);
     try {
-      const { url } = await subscriptionApi.checkout("elite_monthly");
+      const { url } = await subscriptionApi.checkout(key);
       window.location.href = url;
     } catch (err) {
       alert("Something went wrong. Please try again.");
+      setLoading(false);
     }
-    setLoading(false);
   };
+  const sel = PLANS.find(p => p.key === selected) || PLANS[1];
   return (
     <div style={{minHeight:"100vh",background:"#080810",color:"#e2e8f0",fontFamily:"'Inter',system-ui,sans-serif",padding:"40px 24px"}}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Barlow+Condensed:wght@700;800;900&display=swap');*{box-sizing:border-box;margin:0;padding:0}`}</style>
@@ -51,7 +58,7 @@ export default function PricingPage() {
             Other sites charge <strong style={{color:"#e2e8f0"}}>$20 to $100+ a month</strong> to sell you picks that aren't guaranteed. There's no such thing as a guaranteed pick in sports — but there <em style={{color:"#e2e8f0"}}>is</em> such a thing as being better informed than everyone else.
           </p>
           <p style={{fontSize:15,color:"#64748b",lineHeight:1.8,maxWidth:480,margin:"16px auto 0"}}>
-            For just <strong style={{color:"#ef4444"}}>$7/month</strong>, WizePicks gives you the <strong style={{color:"#e2e8f0"}}>exact same data the pros use</strong> — live scores, H2H records, player matchup stats, weather conditions, and betting lines — so you can make smarter picks yourself.
+            Starting at just <strong style={{color:"#ef4444"}}>$7/week</strong>, WizePicks gives you the <strong style={{color:"#e2e8f0"}}>exact same data the pros use</strong> — live scores, H2H records, player matchup stats, weather conditions, and betting lines — so you can make smarter picks yourself.
           </p>
         </div>
         {/* Competitor comparison */}
@@ -75,11 +82,30 @@ export default function PricingPage() {
         {/* Main plan card */}
         <div style={{background:"linear-gradient(135deg,#0f0f1f,#0d0d1a)",border:"1px solid #ef444450",borderRadius:24,padding:"36px 28px",textAlign:"center",marginBottom:20,position:"relative"}}>
           <div style={{position:"absolute",top:-14,left:"50%",transform:"translateX(-50%)",background:"#ef4444",color:"#fff",fontSize:11,fontWeight:800,padding:"4px 20px",borderRadius:20,letterSpacing:"0.08em",whiteSpace:"nowrap"}}>
-            ONE PLAN · EVERYTHING INCLUDED
+            ONE MEMBERSHIP · PICK YOUR PLAN
           </div>
           <h2 style={{fontFamily:"'Barlow Condensed'",fontSize:36,fontWeight:900,color:"#fff",marginBottom:4,marginTop:8,lineHeight:1}}>ALL-ACCESS MEMBERSHIP</h2>
-          <div style={{fontFamily:"'Barlow Condensed'",fontSize:64,fontWeight:900,color:"#ef4444",lineHeight:1,marginBottom:2}}>$7.00</div>
-          <div style={{color:"#475569",fontSize:13,marginBottom:24}}>per month · cancel anytime · no contracts</div>
+          <div style={{color:"#475569",fontSize:13,marginBottom:4}}>Same full access on every plan — just pick how you pay.</div>
+          <div style={{display:"flex",flexDirection:"column",gap:9,margin:"20px 0 8px"}}>
+            {PLANS.map(p=>{
+              const on=selected===p.key;
+              return (
+                <div key={p.key} onClick={()=>setSelected(p.key)} style={{cursor:"pointer",textAlign:"left",background:on?"#ef444412":"#080810",border:`2px solid ${on?"#ef4444":"#1e2235"}`,borderRadius:14,padding:"13px 15px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
+                  <div style={{display:"flex",alignItems:"center",gap:11}}>
+                    <span style={{width:19,height:19,borderRadius:"50%",border:`2px solid ${on?"#ef4444":"#334155"}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{on&&<span style={{width:9,height:9,borderRadius:"50%",background:"#ef4444"}}/>}</span>
+                    <div>
+                      <div style={{fontSize:14,fontWeight:800,color:"#fff",display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}>{p.label}{p.popular&&<span style={{fontSize:9,fontWeight:800,color:"#ef4444",background:"#ef444420",borderRadius:5,padding:"1px 6px",letterSpacing:"0.04em"}}>POPULAR</span>}{p.best&&<span style={{fontSize:9,fontWeight:800,color:"#22c55e",background:"#22c55e20",borderRadius:5,padding:"1px 6px",letterSpacing:"0.04em"}}>{p.badge}</span>}</div>
+                      <div style={{fontSize:11.5,color:"#475569",marginTop:2}}>{p.sub}</div>
+                    </div>
+                  </div>
+                  <div style={{textAlign:"right",flexShrink:0,whiteSpace:"nowrap"}}>
+                    <span style={{fontFamily:"'Barlow Condensed'",fontSize:30,fontWeight:900,color:on?"#ef4444":"#94a3b8"}}>{p.price}</span>
+                    <span style={{fontSize:12,color:"#475569",fontWeight:700}}>{p.per}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
           <div style={{textAlign:"left",marginBottom:28,background:"#080810",borderRadius:12,padding:"16px"}}>
             <div style={{fontSize:11,color:"#475569",fontWeight:700,letterSpacing:"0.08em",marginBottom:12,textTransform:"uppercase"}}>Everything included:</div>
             {[
@@ -103,9 +129,9 @@ export default function PricingPage() {
               </div>
             ))}
           </div>
-          <button onClick={handleSubscribe} disabled={loading}
+          <button onClick={()=>handleSubscribe(selected)} disabled={loading}
             style={{width:"100%",background:"linear-gradient(135deg,#ef4444,#dc2626)",color:"#fff",border:"none",borderRadius:12,padding:"18px",fontSize:18,fontWeight:800,cursor:loading?"wait":"pointer",fontFamily:"inherit",boxShadow:"0 8px 32px #ef444440",marginBottom:12}}>
-            {loading?"Redirecting...":"Get All-Access for $7/mo →"}
+            {loading?"Redirecting...":`Get All-Access — ${sel.price}${sel.per} →`}
           </button>
           <div style={{fontSize:12,color:"#334155"}}>Instant access · Cancel anytime · No hidden fees</div>
         </div>
@@ -140,9 +166,9 @@ export default function PricingPage() {
         <div style={{background:"linear-gradient(135deg,#ef444412,#ef444406)",border:"1px solid #ef444430",borderRadius:16,padding:"24px",textAlign:"center",marginBottom:24}}>
           <div style={{fontSize:16,fontWeight:800,color:"#fff",marginBottom:8}}>Ready to bet smarter?</div>
           <div style={{fontSize:13,color:"#64748b",marginBottom:16,lineHeight:1.6}}>Join thousands of sports bettors who use WizePicks to make more informed picks every single day.</div>
-          <button onClick={handleSubscribe} disabled={loading}
+          <button onClick={()=>handleSubscribe(selected)} disabled={loading}
             style={{background:"#ef4444",color:"#fff",border:"none",borderRadius:10,padding:"13px 40px",fontSize:15,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>
-            Start Today — $7/mo →
+            Start Today — {sel.price}{sel.per} →
           </button>
         </div>
         <div style={{textAlign:"center",fontSize:13,color:"#475569"}}>
