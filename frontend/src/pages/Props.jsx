@@ -244,6 +244,13 @@ function PlayerSheet({ p, card, loading, onClose }) {
   const haveBB = pull!=null && straight!=null && oppo!=null;
   const lean = haveBB ? (pull>=straight && pull>=oppo ? ["Heavy Pull","pull-side power is the HR signal"]
               : oppo>=pull && oppo>=straight ? ["Oppo","uses the whole field"] : ["Spray","balanced batted-ball spread"]) : null;
+  const gb = pctOf(bb.gbPct), ld = pctOf(bb.ldPct), fb = pctOf(bb.fbPct), pu = pctOf(bb.puPct);
+  const haveType = gb!=null && fb!=null && ld!=null;
+  const typeRead = haveType ? (
+      fb>=32 ? ["Fly-ball","elevates the ball — the HR-friendly profile"]
+    : gb>=48 ? ["Ground-ball","keeps it down — caps HR upside"]
+    : ld>=25 ? ["Line-drive","squares it up — hits over pop"]
+    : ["Balanced","even batted-ball mix"]) : null;
   const meas = c.factors?.measured || {};
   const pit = c.pitcher || {};
   const recent = meas.recent15 || {};
@@ -375,13 +382,14 @@ function PlayerSheet({ p, card, loading, onClose }) {
                 {park.factor!=null && <div className="hpWs full"><div className="hpWt"><span className="k">Park{park.venue?` · ${park.venue}`:""}</span>{parkPct!=null&&parkPct>0&&<span className="hpBd gold">+HR</span>}</div><div className="hpWv">{parkPct!=null?(parkPct>=0?"+":"")+parkPct+"%":"—"}</div></div>}
               </div>
 
-              {(barrelV!=null || meas.xwoba!=null || meas.xba!=null || meas.xslg!=null) && <>
+              {(barrelV!=null || meas.xwoba!=null || meas.xba!=null || meas.xslg!=null || bb.hardHitPct!=null) && <>
                 <div className="hpSl">QUALITY OF CONTACT</div>
                 <div className="dblk qcwrap">
                   <QCBar label="Barrel%" val={barrelV} txt={barrelV!=null?barrelV.toFixed(1)+"%":"—"} lo={0} hi={24} lg={8}/>
                   <QCBar label="xwOBA" val={meas.xwoba} txt={fmt3(meas.xwoba)} lo={0.250} hi={0.450} lg={0.315}/>
                   <QCBar label="xBA" val={meas.xba} txt={fmt3(meas.xba)} lo={0.200} hi={0.330} lg={0.245}/>
                   <QCBar label="xSLG" val={meas.xslg} txt={fmt3(meas.xslg)} lo={0.300} hi={0.620} lg={0.410}/>
+                  <QCBar label="Hard-Hit%" val={bb.hardHitPct} txt={bb.hardHitPct!=null?bb.hardHitPct.toFixed(1)+"%":"—"} lo={25} hi={60} lg={38}/>
                   <div className="qcnote"><span className="qctk"/> league avg · green = above</div>
                 </div>
               </>}
@@ -400,6 +408,14 @@ function PlayerSheet({ p, card, loading, onClose }) {
                     <div className="bbleg"><span><i style={{background:"#33e991"}}/>Pull {pull}%</span><span><i style={{background:"#3a4756"}}/>Straight {straight}%</span><span><i style={{background:"#5da9e8"}}/>Oppo {oppo}%</span></div>
                     {lean && <div className="bbread"><b>{lean[0]}</b> hitter — {lean[1]}</div>}
                   </div>
+                  {haveType && <>
+                  <div className="hpSl">BATTED-BALL TYPE</div>
+                  <div className="hpChart">
+                    <div className="bbbar"><i style={{width:gb+"%",background:"#5a4a3a"}}/><i style={{width:ld+"%",background:"#5da9e8"}}/><i style={{width:fb+"%",background:"#33e991"}}/><i style={{width:pu+"%",background:"#2c3640"}}/></div>
+                    <div className="bbleg"><span><i style={{background:"#5a4a3a"}}/>GB {gb}%</span><span><i style={{background:"#5da9e8"}}/>LD {ld}%</span><span><i style={{background:"#33e991"}}/>FB {fb}%</span><span><i style={{background:"#2c3640"}}/>PU {pu}%</span></div>
+                    {typeRead && <div className="bbread"><b>{typeRead[0]}</b> hitter — {typeRead[1]}</div>}
+                  </div>
+                  </>}
                 </>
               )}
 
