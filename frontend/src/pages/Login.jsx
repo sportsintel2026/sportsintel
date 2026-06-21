@@ -5,31 +5,30 @@ import { supabase } from "../lib/api";
 
 function AuthLayout({ title, subtitle, children }) {
   return (
-    <div style={{minHeight:"100vh",background:"#080810",display:"flex",alignItems:"center",justifyContent:"center",padding:24,fontFamily:"'Inter',system-ui,sans-serif"}}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Barlow+Condensed:wght@800&display=swap');*{box-sizing:border-box}`}</style>
-      <div style={{width:"100%",maxWidth:400}}>
-        <div style={{textAlign:"center",marginBottom:36}}>
-          <Link to="/" style={{textDecoration:"none",display:"inline-flex",alignItems:"center",gap:9}}>
-            <span style={{width:9,height:9,borderRadius:"50%",background:"#1D9E75",display:"inline-block"}}></span>
-            <span style={{fontFamily:"'Barlow Condensed'",fontSize:26,fontWeight:800,color:"#fff",letterSpacing:"0.1em"}}>WIZE<span style={{color:"#1D9E75"}}>PICKS</span></span>
-          </Link>
-          <div style={{fontSize:22,fontWeight:800,color:"#fff",marginTop:24,marginBottom:8}}>{title}</div>
-          <div style={{fontSize:14,color:"#64748b"}}>{subtitle}</div>
+    <div className="wzau">
+      <style>{CSS}</style>
+      <div className="card-wrap">
+        <div className="head">
+          <Link to="/" className="logo"><span className="dot" />Wize<b>Picks</b></Link>
+          <h1>{title}</h1>
+          <p className="sub">{subtitle}</p>
         </div>
-        <div style={{background:"#0d0d1a",border:"1px solid #1e2235",borderRadius:16,padding:32}}>
-          {children}
-        </div>
+        <div className="card">{children}</div>
       </div>
     </div>
   );
 }
 
-function Input({ label, type="text", value, onChange, placeholder }) {
+function Input({ label, type = "text", value, onChange, placeholder }) {
   return (
-    <div style={{marginBottom:16}}>
-      <label style={{display:"block",fontSize:12,fontWeight:600,color:"#64748b",marginBottom:6,letterSpacing:"0.04em",textTransform:"uppercase"}}>{label}</label>
-      <input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder}
-        style={{width:"100%",background:"#080810",border:"1px solid #1e2235",borderRadius:8,padding:"12px 14px",color:"#e2e8f0",fontSize:14,fontFamily:"inherit",outline:"none"}}/>
+    <div className="field">
+      <label>{label}</label>
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+      />
     </div>
   );
 }
@@ -40,7 +39,6 @@ export function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [resetSent, setResetSent] = useState(false);
-  const [showReset, setShowReset] = useState(false);
   const { signIn } = useAuth();
   const navigate = useNavigate();
 
@@ -73,10 +71,10 @@ export function LoginPage() {
   if (resetSent) {
     return (
       <AuthLayout title="Check your email" subtitle="Password reset link sent">
-        <div style={{textAlign:"center",padding:"20px 0"}}>
-          <div style={{fontSize:48,marginBottom:16}}>📬</div>
-          <div style={{fontSize:14,color:"#64748b",lineHeight:1.7}}>We sent a password reset link to <strong style={{color:"#e2e8f0"}}>{email}</strong></div>
-          <button onClick={()=>setResetSent(false)} style={{marginTop:24,background:"none",border:"none",color:"#ef4444",cursor:"pointer",fontFamily:"inherit",fontSize:14,fontWeight:600}}>Back to Sign In</button>
+        <div className="sent">
+          <div className="ic">📬</div>
+          <p>We sent a password reset link to <b>{email}</b></p>
+          <button className="ghost" onClick={() => setResetSent(false)}>← Back to sign in</button>
         </div>
       </AuthLayout>
     );
@@ -84,25 +82,15 @@ export function LoginPage() {
 
   return (
     <AuthLayout title="Welcome back" subtitle="Sign in to your account">
-      <Input label="Email" type="email" value={email} onChange={setEmail} placeholder="you@example.com"/>
-      <Input label="Password" type="password" value={password} onChange={setPassword} placeholder="••••••••"/>
-      {error && <div style={{background:"#ef444420",border:"1px solid #ef444440",borderRadius:8,padding:"10px 14px",fontSize:13,color:"#ef4444",marginBottom:16}}>{error}</div>}
-      <button onClick={handleSubmit} disabled={loading}
-        style={{width:"100%",background:"#ef4444",color:"#fff",border:"none",borderRadius:8,padding:"13px",fontSize:15,fontWeight:700,cursor:loading?"not-allowed":"pointer",opacity:loading?0.7:1,fontFamily:"inherit",marginBottom:12}}>
-        {loading?"Signing in...":"Sign In"}
+      <Input label="Email" type="email" value={email} onChange={setEmail} placeholder="you@example.com" />
+      <Input label="Password" type="password" value={password} onChange={setPassword} placeholder="••••••••" />
+      {error && <div className="err">{error}</div>}
+      <button className="btn" onClick={handleSubmit} disabled={loading}>
+        {loading ? "Signing in…" : "Sign in"}
       </button>
-      <div style={{textAlign:"center",marginBottom:16}}>
-        <button onClick={handleReset} disabled={loading}
-          style={{background:"none",border:"none",color:"#64748b",cursor:"pointer",fontFamily:"inherit",fontSize:13}}>
-          Forgot your password?
-        </button>
-      </div>
-      <div style={{textAlign:"center",fontSize:13,color:"#475569"}}>
-        Don't have an account? <Link to="/signup" style={{color:"#ef4444",fontWeight:600,textDecoration:"none"}}>Sign up free</Link>
-      </div>
-      <div style={{textAlign:"center",marginTop:12}}>
-        <Link to="/pricing" style={{color:"#64748b",fontWeight:600,fontSize:12.5,textDecoration:"none"}}>See plans →</Link>
-      </div>
+      <button className="ghost" onClick={handleReset} disabled={loading}>Forgot your password?</button>
+      <div className="foot">Don't have an account? <Link to="/signup" className="lk">Sign up free</Link></div>
+      <div className="seeplans"><Link to="/pricing">See plans →</Link></div>
     </AuthLayout>
   );
 }
@@ -131,22 +119,60 @@ export function SignupPage() {
 
   return (
     <AuthLayout title="Create your account" subtitle="Start free, no credit card needed">
-      <Input label="Full Name" value={name} onChange={setName} placeholder="John Smith"/>
-      <Input label="Email" type="email" value={email} onChange={setEmail} placeholder="you@example.com"/>
-      <Input label="Password" type="password" value={password} onChange={setPassword} placeholder="Min. 8 characters"/>
-      {error && <div style={{background:"#ef444420",border:"1px solid #ef444440",borderRadius:8,padding:"10px 14px",fontSize:13,color:"#ef4444",marginBottom:16}}>{error}</div>}
-      <button onClick={handleSubmit} disabled={loading}
-        style={{width:"100%",background:"#ef4444",color:"#fff",border:"none",borderRadius:8,padding:"13px",fontSize:15,fontWeight:700,cursor:loading?"not-allowed":"pointer",opacity:loading?0.7:1,fontFamily:"inherit"}}>
-        {loading?"Creating account...":"Create Free Account"}
+      <Input label="Full Name" value={name} onChange={setName} placeholder="John Smith" />
+      <Input label="Email" type="email" value={email} onChange={setEmail} placeholder="you@example.com" />
+      <Input label="Password" type="password" value={password} onChange={setPassword} placeholder="Min. 8 characters" />
+      {error && <div className="err">{error}</div>}
+      <button className="btn" onClick={handleSubmit} disabled={loading}>
+        {loading ? "Creating account…" : "Create free account"}
       </button>
-      <div style={{textAlign:"center",marginTop:20,fontSize:13,color:"#475569"}}>
-        Already have an account? <Link to="/login" style={{color:"#ef4444",fontWeight:600,textDecoration:"none"}}>Sign in</Link>
-      </div>
-      <div style={{textAlign:"center",marginTop:12}}>
-        <Link to="/pricing" style={{color:"#64748b",fontWeight:600,fontSize:12.5,textDecoration:"none"}}>See plans →</Link>
-      </div>
+      <div className="foot t1">Already have an account? <Link to="/login" className="lk">Sign in</Link></div>
+      <div className="seeplans"><Link to="/pricing">See plans →</Link></div>
     </AuthLayout>
   );
 }
 
 export default LoginPage;
+
+const CSS = `
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
+.wzau{--bg:#07140F;--card:#0C1D16;--inset:#081711;--ink:#E7F1EC;--mut:#7E9A8E;--dim:#48584F;
+  --teal:#1D9E75;--mint:#38E1A0;--red:#ef4444;--line:rgba(56,225,160,.14);
+  --disp:'Space Grotesk',sans-serif;--body:'Inter',sans-serif;--mono:'JetBrains Mono',monospace;
+  min-height:100vh;background:var(--bg);color:var(--ink);font-family:var(--body);
+  display:flex;align-items:center;justify-content:center;padding:24px;-webkit-font-smoothing:antialiased}
+.wzau *{box-sizing:border-box;margin:0;padding:0}
+.wzau .card-wrap{width:100%;max-width:400px;animation:wzau-in .45s ease both}
+@keyframes wzau-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.wzau .head{text-align:center;margin-bottom:30px}
+.wzau .logo{font-family:var(--disp);font-weight:700;font-size:20px;letter-spacing:-.01em;display:inline-flex;align-items:center;gap:8px;text-decoration:none;color:var(--ink)}
+.wzau .logo .dot{width:8px;height:8px;border-radius:50%;background:var(--mint);box-shadow:0 0 10px rgba(56,225,160,.6)}
+.wzau .logo b{color:var(--teal)}
+.wzau h1{font-family:var(--disp);font-weight:700;font-size:26px;letter-spacing:-.02em;margin-top:24px;margin-bottom:7px}
+.wzau .sub{font-size:14px;color:var(--mut)}
+.wzau .card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:30px 26px}
+.wzau .field{margin-bottom:16px}
+.wzau .field label{display:block;font-family:var(--mono);font-size:10.5px;font-weight:600;color:var(--dim);margin-bottom:7px;letter-spacing:.14em;text-transform:uppercase}
+.wzau .field input{width:100%;background:var(--inset);border:1.5px solid var(--line);border-radius:10px;padding:13px 14px;color:var(--ink);font-size:14.5px;font-family:var(--body);outline:none;transition:border-color .15s}
+.wzau .field input::placeholder{color:#3C4A43}
+.wzau .field input:focus{border-color:var(--teal)}
+.wzau .btn{width:100%;background:var(--red);color:#fff;border:none;border-radius:11px;padding:14px;font-family:var(--disp);font-weight:700;font-size:15.5px;letter-spacing:-.01em;cursor:pointer;transition:background .15s,transform .1s}
+.wzau .btn:hover{background:#dc2626}
+.wzau .btn:active{transform:translateY(1px)}
+.wzau .btn:disabled{opacity:.55;cursor:not-allowed}
+.wzau .err{background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.35);border-radius:9px;padding:10px 14px;font-size:13px;color:#f8a3a3;margin-bottom:16px}
+.wzau .ghost{display:block;width:100%;text-align:center;background:none;border:none;color:var(--mut);cursor:pointer;font-family:var(--body);font-size:13px;margin-top:14px}
+.wzau .ghost:hover{color:var(--ink)}
+.wzau .ghost:disabled{opacity:.55;cursor:not-allowed}
+.wzau .foot{text-align:center;font-size:13px;color:var(--mut);margin-top:18px}
+.wzau .lk{color:var(--teal);font-weight:600;text-decoration:none}
+.wzau .lk:hover{color:var(--mint)}
+.wzau .seeplans{text-align:center;margin-top:12px}
+.wzau .seeplans a{font-family:var(--mono);font-size:11.5px;color:var(--mut);text-decoration:none;letter-spacing:.03em}
+.wzau .seeplans a:hover{color:var(--ink)}
+.wzau .sent{text-align:center;padding:14px 0}
+.wzau .sent .ic{font-size:42px;margin-bottom:14px}
+.wzau .sent p{font-size:14px;color:var(--mut);line-height:1.7}
+.wzau .sent b{color:var(--ink)}
+@media (prefers-reduced-motion:reduce){.wzau *{animation:none!important;transition:none!important}}
+`;
