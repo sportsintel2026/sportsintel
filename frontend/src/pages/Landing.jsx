@@ -141,7 +141,7 @@ export default function LandingPage(){
               <Link className="btn btn-pri" to="/signup">Start free →</Link>
               <Link className="btn btn-ghost" to="/home">See live edges</Link>
             </div>
-            <div className="price-note">$7/mo · all sports · cancel anytime</div>
+            <div className="price-note">From $7/week · all sports · cancel anytime</div>
           </div>
           <div>
             <div className="edgecard">
@@ -362,7 +362,7 @@ export default function LandingPage(){
         <div className="stats3">
           <div className="stat"><div className="n">60.2%</div><div className="l">totals win rate (tracked)</div></div>
           <div className="stat"><div className="n">62.4%</div><div className="u">+24.3 units</div><div className="l">WizePlays win rate<br/>handpicked by our own analytics</div></div>
-          <div className="stat"><div className="n">$7</div><div className="l">flat monthly — no upsells</div></div>
+          <div className="stat"><div className="n">$7</div><div className="l">per week to start — no upsells</div></div>
         </div>
       </div></div>
 
