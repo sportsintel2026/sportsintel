@@ -36,6 +36,11 @@ let edgesCache = null;
 let edgesCacheAt = 0;
 let edgesCacheDate = null; // which ET date the cached payload is for
 const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
+// Coalescing: true while a full board recompute is in progress, so concurrent cold
+// requests wait for that single build instead of each launching their own (stampede +
+// duplicate Odds API calls). Released in the handler's finally, so it can never get
+// stuck set (no deadlock) even if the build throws.
+let edgesBuilding = false;
 // Team name normalization
 function normalizeTeam(name) {
   if (!name) return "";
@@ -269,6 +274,7 @@ function summarizeHrFeeds(edges) {
 }
 
 router.get("/mlb", async (req, res) => {
+  let weBuild = false;
   try {
     const { date: slateDate, rolled } = await resolveSlateDate();
 
@@ -276,6 +282,30 @@ router.get("/mlb", async (req, res) => {
     if (!req.query.hits_debug && !req.query.edges_debug && !req.query.hr_audit && !req.query.tb_shadow && edgesCache && edgesCacheDate === slateDate && (Date.now() - edgesCacheAt) < CACHE_TTL_MS) {
       console.log(`[Edges] Returning cached results for ${slateDate}`);
       return res.json({ ...edgesCache, cached: true });
+    }
+
+    // Request coalescing — normal board requests only (debug modes bypass and compute
+    // their own output). If another request is already rebuilding this slate, wait for
+    // it to fill the cache instead of starting a duplicate recompute (which would also
+    // duplicate Odds API calls). Bounded wait + finally-released flag => never stampedes
+    // and never deadlocks.
+    const isDebugQ = !!(req.query.hits_debug || req.query.edges_debug || req.query.hr_audit || req.query.tb_shadow);
+    if (!isDebugQ) {
+      if (edgesBuilding) {
+        const t0 = Date.now();
+        while (edgesBuilding && (Date.now() - t0) < 45000) {
+          await new Promise((r) => setTimeout(r, 200));
+          if (edgesCache && edgesCacheDate === slateDate && (Date.now() - edgesCacheAt) < CACHE_TTL_MS) {
+            console.log(`[Edges] Coalesced onto in-flight build for ${slateDate}`);
+            return res.json({ ...edgesCache, cached: true, coalesced: true });
+          }
+        }
+        // Builder finished — serve its cache if present; else fall through and build.
+        if (edgesCache && edgesCacheDate === slateDate && (Date.now() - edgesCacheAt) < CACHE_TTL_MS) {
+          return res.json({ ...edgesCache, cached: true, coalesced: true });
+        }
+      }
+      if (!edgesBuilding) { edgesBuilding = true; weBuild = true; }
     }
 
     console.log(`[Edges] Computing edges for ${slateDate}${rolled ? " (rolled over to next day)" : ""}`);
@@ -605,6 +635,8 @@ router.get("/mlb", async (req, res) => {
   } catch (err) {
     console.error("[Edges] Error:", err);
     res.status(500).json({ error: "Failed to compute edges", details: err.message });
+  } finally {
+    if (weBuild) edgesBuilding = false;
   }
 });
 // Debug endpoint — clear cache
