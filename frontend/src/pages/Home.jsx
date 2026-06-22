@@ -30,7 +30,7 @@ const colFor=(ab,sport)=> sport==="nba" ? (NBACOL[String(ab||"").toUpperCase()]|
 const SPORTS={
   mlb:{ feed:()=>edgesApi.getMLB(), lg:"mlb", markets:[["ml","ML"],["totals","Totals"]], propsCopy:"Every prop with an edge — HR, hits & strikeouts", hasLive:true, hasHist:true, hasParks:true, hasProps:true },
   nba:{ feed:()=>edgesApi.getNBA(), lg:"nba", markets:[["ml","ML"],["spread","Spread"],["totals","Totals"]], propsCopy:"", hasLive:false, hasHist:false, hasParks:false, hasProps:false },
-  nfl:{ feed:()=>edgesApi.getNFL(), lg:"nfl", markets:[["ml","ML"],["spread","Spread"],["totals","Totals"]], propsCopy:"", hasLive:false, hasHist:false, hasParks:false, hasProps:false, provisional:true },
+  nfl:{ feed:(phase)=>edgesApi.getNFL(phase), lg:"nfl", markets:[["ml","ML"],["spread","Spread"],["totals","Totals"]], propsCopy:"", hasLive:false, hasHist:false, hasParks:false, hasProps:false, provisional:true },
 };
 // Edge display differs by sport: MLB edge is a fraction (×100 → %); NBA ML edge is
 // already a % figure, and NBA spread/totals edges are POINT projections.
@@ -77,6 +77,8 @@ export default function HomePage(){
   const navigate=useNavigate();
   const { user, signOut }=useAuth();
   const [edges,setEdges]=useState(null);
+  const [nflPhase,setNflPhase]=useState(null); // null=auto; "preseason"|"regular" when user picks
+  const [phaseAvail,setPhaseAvail]=useState([]); // which phase sub-tabs to show
   const [loading,setLoading]=useState(true);
   const [plan,setPlan]=useState({tier:"free",isAdmin:false});
   const [planLoaded,setPlanLoaded]=useState(false);
@@ -116,10 +118,11 @@ export default function HomePage(){
     const rows=(data||[]).map(r=>{ let picks=[]; try{picks=r.picks?JSON.parse(r.picks):[];}catch(_){picks=[];} return {date:r.date,picks}; });
     setWpRecord(computeRecord(rows));
   }catch(_){ setWpRecord(null); } })();},[]);
-  const load=useCallback(async()=>{ try{ const d=await SPORTS[sport].feed();
+  const load=useCallback(async()=>{ try{ const d=await (sport==="nfl"?SPORTS.nfl.feed(nflPhase):SPORTS[sport].feed());
+    if(sport==="nfl"&&d&&d.phase){ setPhaseAvail(d.phase.available||[]); if(nflPhase==null&&d.phase.selected) setNflPhase(d.phase.selected); }
     const f={}; [...(d.moneylineEdges||[]),...(d.totalsEdges||[]),...(d.spreadEdges||[])].forEach(e=>{ const k=e.gameId+e.side; if(prev.current[k]!=null&&prev.current[k]!==e.odds)f[k]=e.odds>prev.current[k]?"up":"dn"; prev.current[k]=e.odds; });
     setFlash(f); setEdges(d);
-  }catch(e){} setLoading(false); },[sport]);
+  }catch(e){} setLoading(false); },[sport,nflPhase]);
   useEffect(()=>{ setEdges(null); setLoading(true); prev.current={}; load(); const id=setInterval(load,45000); return ()=>clearInterval(id); },[load]);
   useEffect(()=>{ if(!SPORTS[sport].hasLive){ setLive([]); return; } let t; const pull=async()=>{ try{ const d=await liveApi.getMLB(); setLive(d?.games||[]); }catch(_){ setLive([]); } t=setTimeout(pull,60000); }; pull(); return ()=>clearTimeout(t); },[sport]);
   useEffect(()=>{ if(!SPORTS[sport].hasHist){ setOddsHist([]); return; } let t; const pull=async()=>{ try{ const d=await edgesApi.getOddsHistory(); setOddsHist(d?.games||[]); }catch(_){ setOddsHist([]); } t=setTimeout(pull,300000); }; pull(); return ()=>clearTimeout(t); },[sport]);
@@ -267,6 +270,14 @@ export default function HomePage(){
       {sport==="nfl" && (
         <div style={{margin:"0 14px 10px",padding:"9px 12px",border:"1px solid #6b4a16",background:"linear-gradient(180deg,#1a1305,#0d0a02)",borderRadius:10,fontFamily:"var(--mono)",fontSize:11,lineHeight:1.45,color:"#f3b94f"}}>
           ⚠ NFL MODEL IN TRAINING — preseason preview. Ratings are seeded from 2025 results and are <b>not yet calibrated</b> against 2026 games. Edges shown are provisional, for preview only — not betting advice until validated in-season.
+        </div>
+      )}
+      {sport==="nfl" && phaseAvail.length>1 && (
+        <div style={{display:"flex",gap:8,margin:"0 14px 10px"}}>
+          {[["preseason","Preseason"],["regular","Regular Season"]].filter(([k])=>phaseAvail.includes(k)).map(([k,lb])=>(
+            <span key={k} onClick={()=>{ if(k!==nflPhase){ setNflPhase(k); setEdges(null); setLoading(true); } }}
+              style={{cursor:"pointer",fontFamily:"var(--mono)",fontSize:11.5,padding:"6px 13px",borderRadius:999,border:"1px solid "+(nflPhase===k?"#1d9e75":"#22303a"),color:nflPhase===k?"#38e1a0":"#7d8a98",background:nflPhase===k?"rgba(29,158,117,0.12)":"transparent"}}>{lb}</span>
+          ))}
         </div>
       )}
 
