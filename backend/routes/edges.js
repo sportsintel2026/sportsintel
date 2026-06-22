@@ -1264,8 +1264,13 @@ router.get("/nflratings", async (req, res) => {
 router.get("/nfl", async (req, res) => {
   try {
     const season = parseInt(req.query.season, 10) || 2025;
+    // weeks: default 1 (show only the next NFL week so each team appears once,
+    // like the MLB board). ?weeks=0 returns the full multi-week lookahead slate.
+    const weeksParam = req.query.weeks != null ? parseInt(req.query.weeks, 10) : 1;
+    const weeks = Number.isFinite(weeksParam) && weeksParam >= 0 ? weeksParam : 1;
+    const phase = (req.query.phase === "preseason" || req.query.phase === "regular") ? req.query.phase : null;
     const { runNFLSlate } = require("../services/nflEdges");
-    const slate = await runNFLSlate({ season });
+    const slate = await runNFLSlate({ season, weeks, phase });
 
     // Surface only games that produced at least one model edge value, plus the
     // full board for transparency. Sort published edges by size (desc).
@@ -1345,6 +1350,8 @@ router.get("/nfl", async (req, res) => {
       preseason: true,            // ← lines are lookahead/preseason; ratings are a 2025 seed
       provisional: true,          // ← dashboard reads this to show the "in training" banner
       ratingsSeed: slate.ratingsMeta,
+      weekWindow: slate.weekWindow,   // the slate window the board is filtered to
+      phase: slate.phase,             // { selected, available } → drives Preseason|Regular sub-tabs
       teamMatch: slate.match,     // coverage of odds-team → rating resolution
       edgeCount: edges.length,
       edges,
