@@ -1216,4 +1216,20 @@ router.get("/nflseasonprobe", async (req, res) => {
   }
 });
 
+// ── TEMP DIAGNOSTIC: NFL points-for/against source probe (read-only) ─────────
+// Finds a clean PF/PA source (core-API record + core standings) since the site
+// standings came back empty. Read-only inspection.
+//   /api/edges/nflpointsprobe[?season=2025]
+router.get("/nflpointsprobe", async (req, res) => {
+  try {
+    const season = parseInt(req.query.season, 10) || 2025;
+    const { fetchPointsProbe } = require("../services/nflDataSource");
+    const result = await fetchPointsProbe(season);
+    res.json({ ok: true, ...result });
+  } catch (e) {
+    console.error("[nflpointsprobe] error:", e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 module.exports = router;
