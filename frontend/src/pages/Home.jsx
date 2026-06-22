@@ -672,7 +672,7 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .gr.med .pbar .of{background:#e0b050}
 .pble{display:flex;justify-content:space-between;margin-top:5px;font-family:var(--mono);font-size:8.5px;color:#76838f}
 .pble .g{color:#33e991;font-weight:700}.gr.med .pble .g{color:#cdb878}
-.pfoot{display:flex;align-items:center;justify-content:space-between}
+.pfoot{display:flex;align-items:center;justify-content:space-between;border-top:1px solid #1c2734;margin:0 -15px;padding:13px 15px 0}
 .pconv{display:flex;align-items:center;gap:7px}
 .pmeter{display:flex;gap:2px}.pmeter i{width:6px;height:12px;background:#222c36;border-radius:1.5px;display:block}
 .pmeter i.on{background:#33e991}.gr.med .pmeter i.on{background:#e0b050}
