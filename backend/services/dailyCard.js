@@ -151,31 +151,32 @@ async function getOrGenerateDailyCard(scope = "mix") {
   // Single = best value pick.
   const single = legFrom(rows[0]);
 
-  // Parlay = best picks from DISTINCT games (2-3 legs).
-  const legs = [];
+  // Parlay legs = best value picks from DISTINCT games. Build a POOL of up to 12 so
+  // the Quick Spin page can let users dial the parlay length up to 12 legs. The
+  // TRACKED parlay stays the canonical first 3 (or 2), so the record never changes
+  // shape; the rest of the pool is candidate legs the user can extend into.
+  const pool = [];
   const usedGames = new Set();
   for (const p of rows) {
     if (usedGames.has(p.game_id)) continue;
     usedGames.add(p.game_id);
-    legs.push(legFrom(p));
-    if (legs.length >= 3) break;
+    pool.push(legFrom(p));
+    if (pool.length >= 12) break;
   }
-  let parlay = null;
-  if (legs.length >= 2) {
-    const used = legs.slice(0, legs.length >= 3 ? 3 : 2);
+  const parlayFrom = (used) => {
     const bookDec = used.reduce((a, l) => a * toDecimal(l.odds), 1);
     const combinedModelProb = used.reduce((a, l) => a * l.modelProb, 1);
-    const bookImplied = 1 / bookDec;
-    parlay = {
+    return {
       legs: used,
       bookOdds: toAmerican(bookDec),
       fairOdds: toAmerican(1 / combinedModelProb),
       modelProb: round4(combinedModelProb),
-      edge: round4(combinedModelProb - bookImplied), // + = model sees value vs the book payout
+      edge: round4(combinedModelProb - (1 / bookDec)), // + = model sees value vs the book payout
     };
-  }
+  };
+  const parlay = pool.length >= 2 ? parlayFrom(pool.slice(0, Math.min(3, pool.length))) : null;
 
-  const card = { game_date: date, scope, single, parlay, single_result: "pending", parlay_result: "pending" };
+  const card = { game_date: date, scope, single, parlay, parlay_pool: pool, single_result: "pending", parlay_result: "pending" };
   await supabase.from("daily_card").upsert(card, { onConflict: "game_date,scope" });
   return card;
 }
