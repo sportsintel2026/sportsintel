@@ -163,6 +163,60 @@ async function getFinalScore(gameId, dateStr) {
  * the standings + a team-statistics endpoint for the given season and reports the
  * raw field names/sample values it finds. Writes nothing; inspection only.
  * Remove once the rating seed is built from the confirmed shape. */
+/* ---- READ-ONLY PROBE #2: find a clean points-for / points-against source ----
+ * The site standings came back empty and a team's own statistics block has no
+ * "points allowed". Points-for AND points-against are the foundation of a real
+ * power rating, so this probe targets the two endpoints most likely to carry them
+ * directly: (1) the core-API team RECORD (often has pointsFor/pointsAgainst as
+ * record stats) and (2) the core-API standings. Reports raw field names so we pick
+ * the clean source instead of approximating from yards. Inspection only. */
+async function fetchPointsProbe(season = 2025) {
+  const out = { season, endpoints: {} };
+
+  // First resolve a real team id from the teams list (Arizona = 22 historically).
+  let teamId = "22", teamName = null;
+  try {
+    const t = await espnGet(`${BASE}/teams`);
+    const first = t.sports?.[0]?.leagues?.[0]?.teams?.[0]?.team;
+    if (first?.id) { teamId = first.id; teamName = first.displayName; }
+  } catch (_) {}
+
+  // 1) Core-API team RECORD — commonly carries pointsFor/pointsAgainst/avgPointsFor.
+  const recordUrl = `https://sports.core.api.espn.com/v2/sports/football/leagues/nfl/seasons/${season}/types/2/teams/${teamId}/record`;
+  try {
+    const data = await espnGet(recordUrl);
+    // shape: { items: [{ type:'total', stats:[{name,value,displayValue}] }, ...] }
+    const items = data.items || [];
+    out.endpoints.record = {
+      url: recordUrl, ok: true, teamId, teamName,
+      recordTypes: items.map((it) => ({
+        type: it.type || it.name || it.description,
+        stats: (it.stats || []).map((s) => ({ name: s.name, abbr: s.abbreviation, value: s.value, display: s.displayValue })),
+      })),
+    };
+  } catch (e) {
+    out.endpoints.record = { url: recordUrl, ok: false, error: e.message };
+  }
+
+  // 2) Core-API standings — different host/shape than the empty site standings.
+  const coreStandingsUrl = `https://sports.core.api.espn.com/v2/sports/football/leagues/nfl/seasons/${season}/types/2/standings`;
+  try {
+    const data = await espnGet(coreStandingsUrl);
+    // core standings is paginated by $ref; report the top-level shape + first ref.
+    out.endpoints.coreStandings = {
+      url: coreStandingsUrl, ok: true,
+      keys: Object.keys(data || {}),
+      count: data.count, pageCount: data.pageCount,
+      firstItemRef: (data.items && data.items[0] && data.items[0].$ref) || null,
+      note: "If this returns $ref items, standings are a second hop; record endpoint above is the simpler source if it has PF/PA.",
+    };
+  } catch (e) {
+    out.endpoints.coreStandings = { url: coreStandingsUrl, ok: false, error: e.message };
+  }
+
+  return out;
+}
+
 async function fetchSeasonProbe(season = 2025) {
   const out = { season, endpoints: {} };
 
@@ -245,6 +299,7 @@ module.exports = {
   getUpcomingGames,
   getFinalScore,
   fetchSeasonProbe,
+  fetchPointsProbe,
   statMap,
   parseRecords,
   LEAGUE_AVG_PPG,
