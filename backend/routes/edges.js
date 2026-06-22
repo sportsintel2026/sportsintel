@@ -1342,6 +1342,30 @@ router.get("/nfl", async (req, res) => {
     spreadEdges.sort((a, b) => (b.edge ?? -1) - (a.edge ?? -1));
     totalsEdges.sort((a, b) => (b.edge ?? -1) - (a.edge ?? -1));
 
+    // ── Market Read + best prices per game (already parsed; surface for the board) ─
+    // marketRead = the books' consensus lean (win/cover/total) per game; bestPrices
+    // = the best available number + which book, for line shopping. Both are live data
+    // from parseFballOddsEvent — no extra fetch. Keyed by eventId for the UI to join.
+    const marketByGame = {};
+    for (const g of allGames) {
+      marketByGame[g.eventId] = {
+        matchup: g.matchup,
+        marketRead: g.marketRead || null,
+        bestPrices: {
+          ml: g.moneyline?.book || null,
+          total: g.total?.book || null,
+          spread: g.spread?.book || null,
+        },
+      };
+    }
+
+    // ── Market movers (line movement history; empty until ticks accumulate) ──────
+    let movers = [];
+    try {
+      const { getNFLMarketMovers } = require("../services/nflEdges");
+      movers = await getNFLMarketMovers({ limit: 12 });
+    } catch (e) { console.error("[edges/nfl] movers read failed:", e.message); }
+
     res.json({
       ok: true,
       league: "nfl",
@@ -1352,6 +1376,8 @@ router.get("/nfl", async (req, res) => {
       ratingsSeed: slate.ratingsMeta,
       weekWindow: slate.weekWindow,   // the slate window the board is filtered to
       phase: slate.phase,             // { selected, available } → drives Preseason|Regular sub-tabs
+      marketByGame,                   // per-game Market Read + best prices (line shopping)
+      marketMovers: movers,           // line-movement history (fills in as ticks accumulate)
       teamMatch: slate.match,     // coverage of odds-team → rating resolution
       edgeCount: edges.length,
       edges,
