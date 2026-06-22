@@ -20,6 +20,8 @@ const {
   getMLBDoublesPropsForAllEvents,
   getMLBTriplesPropsForAllEvents,
   probeOddsCoverage,
+  getNFLMainOdds,
+  getCFBMainOdds,
 } = require("../services/oddsApi");
 const {
   calculateGameEdges,
@@ -1163,6 +1165,35 @@ router.get("/oddsprobe", async (req, res) => {
     res.json(result);
   } catch (e) {
     console.error("[oddsprobe] error:", e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ── TEMP DIAGNOSTIC: parsed football odds (read-only) ────────────────────────
+// Shows what getNFLMainOdds/getCFBMainOdds actually produce through the full
+// parser (best-price line shop + consensus lines + Market Read) — the exact shape
+// the football edge model will consume. Confirms the parser works on LIVE data,
+// not just the unit test. Read-only; uses the 30-min cache like the board does.
+//   /api/edges/fballodds            → NFL, first 5 parsed games
+//   /api/edges/fballodds?league=cfb → CFB
+//   &n=10                           → show more games
+router.get("/fballodds", async (req, res) => {
+  try {
+    const league = (req.query.league || "nfl").toLowerCase();
+    const n = Math.min(Math.max(parseInt(req.query.n, 10) || 5, 1), 30);
+    const games = league === "cfb" ? await getCFBMainOdds() : await getNFLMainOdds();
+    // Summarize: how many games have each market priced (the "is it flowing" signal).
+    const withMl = games.filter(g => g.h2h.away != null && g.h2h.home != null).length;
+    const withTot = games.filter(g => g.totals.line != null).length;
+    const withSpr = games.filter(g => g.spreads.awayLine != null).length;
+    res.json({
+      ok: true, league, totalGames: games.length,
+      priced: { moneyline: withMl, totals: withTot, spreads: withSpr },
+      sample: games.slice(0, n),
+      note: "READ-ONLY parsed odds via the same parser the football edge model will use. priced.* = how many games have a usable line for that market (the flowing check). h2h/totals/spreads carry best price + book; marketRead = the books' consensus lean per market.",
+    });
+  } catch (e) {
+    console.error("[fballodds] error:", e.message);
     res.status(500).json({ ok: false, error: e.message });
   }
 });
