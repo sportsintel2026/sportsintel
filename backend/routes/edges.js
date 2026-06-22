@@ -1253,4 +1253,55 @@ router.get("/nflratings", async (req, res) => {
   }
 });
 
+// ── NFL EDGES (Phase 2 — runs the full slate through the model) ──────────────
+// Ties odds (F2) + power ratings (F3c) + model (F3a) into a predicted slate with
+// edges. GATED FOR HONESTY: ratings are a 2025 seed against (currently) preseason
+// 2026 lines, so nothing here is calibrated — the response carries calibrated:false
+// and preseason flags, and the model only marks value:true on a rated, trustworthy,
+// meaningful edge. This is the data the NFL dashboard will render (F4b), behind a
+// clear "preseason / uncalibrated" label. Read-only.
+//   /api/edges/nfl[?season=2025]
+router.get("/nfl", async (req, res) => {
+  try {
+    const season = parseInt(req.query.season, 10) || 2025;
+    const { runNFLSlate } = require("../services/nflEdges");
+    const slate = await runNFLSlate({ season });
+
+    // Surface only games that produced at least one model edge value, plus the
+    // full board for transparency. Sort published edges by size (desc).
+    const allGames = slate.games || [];
+    const edges = [];
+    for (const g of allGames) {
+      for (const mkt of ["moneyline", "spread", "total"]) {
+        const m = g[mkt];
+        if (m && m.value && m.edge != null) {
+          edges.push({
+            matchup: g.matchup, market: mkt, edge: m.edge,
+            pick: m.pickTeam || m.pick, dataQuality: g.dataQuality,
+            commenceTime: g.commenceTime,
+          });
+        }
+      }
+    }
+    edges.sort((a, b) => (b.edge ?? 0) - (a.edge ?? 0));
+
+    res.json({
+      ok: true,
+      league: "nfl",
+      season,
+      calibrated: false,          // ← no graded results yet; do NOT treat as live advice
+      preseason: true,            // ← lines are lookahead/preseason; ratings are a 2025 seed
+      ratingsSeed: slate.ratingsMeta,
+      teamMatch: slate.match,     // coverage of odds-team → rating resolution
+      edgeCount: edges.length,
+      edges,
+      games: allGames,            // full predicted board (for the dashboard)
+      disclaimer: "PROVISIONAL: 2025-seeded ratings vs preseason lines. Not calibrated — no graded NFL results yet. For build/validation only; not betting advice until shadow-graded in-season.",
+    });
+  } catch (e) {
+    console.error("[edges/nfl] error:", e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 module.exports = router;
