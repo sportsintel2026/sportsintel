@@ -736,7 +736,7 @@ function kProjection(pitcherStats, recentStarts, oppTeamStats, savantK) {
     oppFactor = Math.max(0.82, Math.min(1.18, oppFactor)); // one stat shouldn't swing it wildly
   }
   const lambda = kRate * expBF * oppFactor;
-  return { lambda: lambda > 0 ? lambda : null, expIP: round2(expIP), kRate: round3(kRate), expBF: round2(expBF), usedSavant: haveSavant };
+  return { lambda: lambda > 0 ? lambda : null, expIP: round2(expIP), kRate: round3(kRate), expBF: round2(expBF), oppFactor: round3(oppFactor), usedSavant: haveSavant };
 }
 
 function expectedKsFor(pitcherStats, recentStarts, savantK) {
@@ -1730,6 +1730,61 @@ async function calculateStrikeoutPropEdges(games, kOddsByEvent) {
     .sort((a, b) => (b.edge ?? -1) - (a.edge ?? -1));
 }
 
+// Pitcher strikeout projection SHADOW (log-only, like the TB shadow). Records EVERY
+// probable starter's K projection — not just edge-passing picks, and regardless of
+// over/under side — so the strikeout overprojection can be measured directly against
+// graded results. The live K pick path (calculateStrikeoutPropEdges) is untouched and
+// only bets unders; that selected slice can't reveal the over-side leak, so this logs
+// the full population: expectedKs (operative lambda, opponent-adjusted), projIP, kRate,
+// pitcherK9, oppFactor, and a representative line + over prob. Graded later vs actual
+// Ks AND actual IP, so the bias decomposes into innings vs rate at the source.
+async function calculateStrikeoutShadow(games, kOddsByEvent) {
+  const targetGames = games.slice(0, MAX_K_GAMES);
+  const out = [];
+  let whiffMap = null;
+  try { whiffMap = await getPitcherWhiffStats(); } catch (e) { whiffMap = null; }
+  for (const game of targetGames) {
+    const eventId = findEventIdForGame(game, kOddsByEvent);
+    const kOdds = eventId ? kOddsByEvent[eventId] : null;
+    if (!kOdds || kOdds.length === 0) continue;
+    const [awayTeam, homeTeam] = await Promise.all([
+      getTeamSeasonStats(game.awayId),
+      getTeamSeasonStats(game.homeId),
+    ]);
+    const seen = new Set(); // one row per pitcher per slate (projection is side/line-independent)
+    for (const propOdds of kOdds) {
+      const pitcher = findProbableStarter(propOdds.player, game);
+      if (!pitcher) continue;
+      if (seen.has(pitcher.id)) continue;
+      const pitcherStats = regressThinSample(await getPitcherSeasonStats(pitcher.id));
+      if (!pitcherStats) continue;
+      const recentStarts = await getPitcherRecentStarts(pitcher.id, 5).catch(() => []);
+      const savantK = whiffMap ? (whiffMap.get(Number(pitcher.id)) || null) : null;
+      const onAwayTeam = pitcher.teamId === game.awayId;
+      const oppTeamStats = onAwayTeam ? homeTeam : awayTeam; // the lineup he faces
+      // Operative projection — opponent-adjusted, the SAME lambda that prices the pick.
+      const proj = kProjection(pitcherStats, recentStarts, oppTeamStats, savantK);
+      if (!proj || !(proj.lambda > 0)) continue;
+      seen.add(pitcher.id);
+      const overProb = round3(1 - kNegBinomCdf(Math.floor(propOdds.line ?? 0), proj.lambda, K_DISPERSION_PHI));
+      out.push({
+        gameId: game.id,
+        playerId: pitcher.id,
+        player: propOdds.player,
+        game: `${game.awayAbbr} @ ${game.homeAbbr}`,
+        line: propOdds.line ?? null,
+        overProb,
+        expectedKs: round2(proj.lambda),
+        projIP: proj.expIP ?? null,
+        kRate: proj.kRate ?? null,
+        oppFactor: proj.oppFactor ?? null,
+        pitcherK9: pitcherStats.strikeoutsPer9 ?? null,
+      });
+    }
+  }
+  return out;
+}
+
 const MAX_HITS_GAMES = 20; // process all games we have odds for. Coverage/cost gated in edges.js (getMLBHitsPropsForAllEvents maxEvents — currently 10). Keep >= that.
 
 // Batter hits prop edges. Two-sided market — de-vig and take the better side.
@@ -2297,6 +2352,7 @@ module.exports = {
   calculateGameEdges,
   calculateHRPropEdges,
   calculateStrikeoutPropEdges,
+  calculateStrikeoutShadow,
   calculateHitsPropEdges,
   calculateTotalBasesShadow,
   calculateDoublesBoard,
