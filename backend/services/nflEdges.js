@@ -169,6 +169,9 @@ async function runNFLSlate({ season = 2025, weeks = 1, phase = null } = {}) {
     // Carry the books' Market Read (consensus lean) through onto the prediction so
     // the board can show it alongside the model's edge (facts vs model claim).
     pred.marketRead = ev.marketRead || null;
+    // Carry the book-by-book line-shopping grid through so the Odds page renders
+    // NFL's per-book table (ML / total / spread) exactly like MLB.
+    pred.oddsGrid = ev.oddsGrid || null;
     return pred;
   });
 
