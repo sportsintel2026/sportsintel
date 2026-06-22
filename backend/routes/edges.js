@@ -19,6 +19,7 @@ const {
   getMLBTotalBasesPropsForAllEvents,
   getMLBDoublesPropsForAllEvents,
   getMLBTriplesPropsForAllEvents,
+  probeOddsCoverage,
 } = require("../services/oddsApi");
 const {
   calculateGameEdges,
@@ -1138,6 +1139,30 @@ router.get("/tbgrade", async (req, res) => {
     });
   } catch (e) {
     console.error("[tbgrade] error:", e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ── TEMP DIAGNOSTIC: odds coverage probe (read-only) ─────────────────────────
+// Answers ONE question before any football build starts: does The Odds API
+// actually return lines for a given sport through THIS key/plan right now?
+// Calls the existing probeOddsCoverage() — reads once, writes nothing, prices
+// nothing. Defaults to NFL since that's the Phase-2 question on the table.
+//   /api/edges/oddsprobe                         → NFL (americanfootball_nfl)
+//   /api/edges/oddsprobe?sport=americanfootball_ncaaf   → CFB
+//   /api/edges/oddsprobe?sport=icehockey_nhl            → NHL
+//   /api/edges/oddsprobe?sport=baseball_mlb             → MLB (sanity check)
+//   &regions=us,us2,eu &markets=h2h,totals,spreads      → widen coverage
+// A 422 in the response = that sport isn't enabled on the current plan.
+router.get("/oddsprobe", async (req, res) => {
+  try {
+    const sport = req.query.sport || "americanfootball_nfl";
+    const regions = req.query.regions || "us";
+    const markets = req.query.markets || "h2h,totals,spreads";
+    const result = await probeOddsCoverage({ sport, regions, markets });
+    res.json(result);
+  } catch (e) {
+    console.error("[oddsprobe] error:", e.message);
     res.status(500).json({ ok: false, error: e.message });
   }
 });
