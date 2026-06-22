@@ -867,6 +867,7 @@ async function getGamePitcherStrikeouts(gamePk) {
     const teams = data && data.teams;
     if (!teams || !teams.home || !teams.away) return { ok: false, ks: null };
     const ks = new Map();
+    const ips = new Map();
     let pitchingObjectsSeen = 0;
     for (const side of ["home", "away"]) {
       const players = teams[side] && teams[side].players;
@@ -878,12 +879,16 @@ async function getGamePitcherStrikeouts(gamePk) {
         if (!name) continue;
         if (pitching && typeof pitching === "object" && pitching.strikeOuts != null) {
           pitchingObjectsSeen++;
-          ks.set(normPlayerName(name), parseIntSafe(pitching.strikeOuts) || 0);
+          const nm = normPlayerName(name);
+          ks.set(nm, parseIntSafe(pitching.strikeOuts) || 0);
+          // Convert baseball innings notation (6.1 = 6⅓) to true decimal so it
+          // compares apples-to-apples with the model's decimal proj_ip.
+          ips.set(nm, Math.round((ipToOuts(pitching.inningsPitched) / 3) * 100) / 100);
         }
       }
     }
     if (pitchingObjectsSeen === 0) return { ok: false, ks: null };
-    return { ok: true, ks };
+    return { ok: true, ks, ips };
   } catch (e) {
     return { ok: false, ks: null };
   }
