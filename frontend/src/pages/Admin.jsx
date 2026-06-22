@@ -177,7 +177,7 @@ export default function AdminPage() {
         <div className="ph"><div className="ppick">{p.pick}<span className="u">{p.units}u @ {fmtOdds(p.odds)}</span></div><span className={"pst "+stCls}>{(isActive?"PENDING":st).toUpperCase()}</span></div>
         <div className="pmu">{p.game}{p.conviction?` · ${p.conviction} conviction`:""}</div>
         {p.write ? <div className="pwrite">{p.write}</div> : null}
-        {isActive && <div className="grade"><b className="w" onClick={()=>gradePick(i,"won")}>Mark Won</b><b className="l" onClick={()=>gradePick(i,"lost")}>Mark Lost</b><b onClick={()=>gradePick(i,"push")}>Void</b></div>}
+        {isActive && <div className="grade"><b className="w" onClick={()=>gradePick(i,"win")}>Mark Won</b><b className="l" onClick={()=>gradePick(i,"loss")}>Mark Lost</b><b onClick={()=>gradePick(i,"push")}>Void</b></div>}
       </div>
     );
   };
