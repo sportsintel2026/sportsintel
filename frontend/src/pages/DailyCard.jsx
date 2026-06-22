@@ -284,7 +284,7 @@ function CardBody({ card, record, navigate }) {
       {bonus && !spinning && (
         <div style={{ marginTop: 12 }}>
           {bonus.single && <AltPick pick={bonus.single} navigate={navigate} />}
-          {bonus.parlay && <BonusParlay parlay={bonus.parlay} navigate={navigate} />}
+          {bonus.parlay && <BonusParlay parlay={bonus.parlay} pool={bonus.parlay_pool} navigate={navigate} />}
         </div>
       )}
 
@@ -528,15 +528,41 @@ function ParlayCard({ parlay, pool, result, navigate }) {
 
 // The free-spin bonus parlay: same layout as the tracked parlay but clearly
 // marked NOT TRACKED — it never enters the graded record.
-function BonusParlay({ parlay, navigate }) {
+function BonusParlay({ parlay, pool, navigate }) {
+  const fullPool = (pool && pool.length >= 2) ? pool : (parlay.legs || []);
+  const baseLen = (parlay.legs || []).length || 3;
+  const maxLegs = Math.min(12, fullPool.length);
+  const [n, setN] = useState(Math.min(baseLen, maxLegs));
+  const N = Math.min(Math.max(n, 2), maxLegs);
+  const legs = fullPool.slice(0, N);
+
+  const bookDec = legs.reduce((a, l) => a * (toDecimal(l.odds) || 1), 1);
+  const modelProbProd = legs.reduce((a, l) => a * (l.modelProb || 1), 1);
+  const bookOdds = toAmerican(bookDec);
+  const fairOdds = toAmerican(1 / modelProbProd);
+  const edge = Math.round((modelProbProd - 1 / bookDec) * 10000) / 10000;
+  const canAdjust = maxLegs > 2;
+
   return (
     <div style={{ background: "#0f1419", border: "1px dashed #3a4250", borderRadius: 12, padding: 18, marginTop: 12 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-        <span style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 700, textTransform: "uppercase" }}>🎰 Bonus parlay · {(parlay.legs || []).length} legs</span>
+        <span style={{ fontSize: 11, letterSpacing: "0.1em", color: "#9ca3af", fontWeight: 700, textTransform: "uppercase" }}>🎰 Bonus parlay · {N} legs</span>
         <span style={{ fontSize: 9, color: "#6b7280", fontWeight: 700, border: "1px solid #1f2937", borderRadius: 5, padding: "2px 7px" }}>NOT TRACKED</span>
       </div>
-      {(parlay.legs || []).map((leg, i) => (
-        <div key={i} onClick={() => leg.gameId && navigate(`/game/${leg.league || "mlb"}/${leg.gameId}`)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: i < parlay.legs.length - 1 ? "1px solid #1a1f28" : "none", cursor: leg.gameId ? "pointer" : "default" }}>
+
+      {canAdjust && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#0a0e14", border: "1px solid #1f2937", borderRadius: 10, padding: "10px 12px", marginBottom: 14 }}>
+          <span style={{ fontSize: 11, color: "#9ca3af", fontWeight: 600, letterSpacing: "0.04em" }}>PARLAY SIZE</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <button onClick={() => setN(v => Math.max(2, Math.min(v, maxLegs) - 1))} disabled={N <= 2} style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid #1f2937", background: N <= 2 ? "#0a0e14" : "#141d24", color: N <= 2 ? "#374151" : "#e4e7eb", fontSize: 18, fontWeight: 800, cursor: N <= 2 ? "default" : "pointer", fontFamily: "inherit", lineHeight: 1 }}>−</button>
+            <span style={{ minWidth: 54, textAlign: "center", fontSize: 15, fontWeight: 700, color: "#fff", fontVariantNumeric: "tabular-nums" }}>{N} {N === 1 ? "leg" : "legs"}</span>
+            <button onClick={() => setN(v => Math.min(maxLegs, Math.min(v, maxLegs) + 1))} disabled={N >= maxLegs} style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid #1f2937", background: N >= maxLegs ? "#0a0e14" : "#141d24", color: N >= maxLegs ? "#374151" : "#e4e7eb", fontSize: 18, fontWeight: 800, cursor: N >= maxLegs ? "default" : "pointer", fontFamily: "inherit", lineHeight: 1 }}>+</button>
+          </div>
+        </div>
+      )}
+
+      {legs.map((leg, i) => (
+        <div key={i} onClick={() => leg.gameId && navigate(`/game/${leg.league || "mlb"}/${leg.gameId}`)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: i < legs.length - 1 ? "1px solid #1a1f28" : "none", cursor: leg.gameId ? "pointer" : "default" }}>
           <div>
             <div style={{ fontSize: 14, fontWeight: 700, color: "#fff" }}>{leg.description} <span style={{ color: "#9ca3af", fontWeight: 600 }}>{formatOdds(leg.odds)}</span></div>
             <div style={{ fontSize: 11, color: "#6b7280", marginTop: 1 }}>{leg.matchup}</div>
@@ -544,21 +570,21 @@ function BonusParlay({ parlay, navigate }) {
           <span style={{ fontSize: 11, color: "#22c55e", fontWeight: 700 }}>{signedPct(leg.edge)}</span>
         </div>
       ))}
-      <div style={{ background: parlay.edge > 0 ? "#0a1f15" : "#0a0e14", border: `1px solid ${parlay.edge > 0 ? "#22c55e30" : "#1f2937"}`, borderRadius: 10, padding: 14, marginTop: 14 }}>
+      <div style={{ background: edge > 0 ? "#0a1f15" : "#0a0e14", border: `1px solid ${edge > 0 ? "#22c55e30" : "#1f2937"}`, borderRadius: 10, padding: 14, marginTop: 14 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
           <span style={{ fontSize: 11, color: "#9ca3af", fontWeight: 600 }}>PARLAY PAYS</span>
-          <span style={{ fontSize: 24, fontWeight: 800, color: parlay.edge > 0 ? "#22c55e" : "#e4e7eb" }}>{formatOdds(parlay.bookOdds)}</span>
+          <span style={{ fontSize: 24, fontWeight: 800, color: edge > 0 ? "#22c55e" : "#e4e7eb" }}>{formatOdds(bookOdds)}</span>
         </div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <span style={{ fontSize: 11, color: "#6b7280" }}>Model fair value</span>
           <span style={{ fontSize: 12, color: "#e4e7eb", fontWeight: 700 }}>
-            {formatOdds(parlay.fairOdds)}
-            <span style={{ color: parlay.edge > 0 ? "#22c55e" : "#9ca3af", fontWeight: 600 }}> · {parlay.edge > 0 ? `+EV ${signedPct(parlay.edge)}` : "no value vs the book"}</span>
+            {formatOdds(fairOdds)}
+            <span style={{ color: edge > 0 ? "#22c55e" : "#9ca3af", fontWeight: 600 }}> · {edge > 0 ? `+EV ${signedPct(edge)}` : "no value vs the book"}</span>
           </span>
         </div>
       </div>
       <div style={{ marginTop: 10, fontSize: 11, color: "#6b7280", lineHeight: 1.5 }}>
-        Just for you — not part of the tracked record. Parlays are high variance by nature, so size them small.
+        Just for you — not part of the tracked record. {canAdjust ? "Adding legs raises the payout and the variance fast — size it small." : "Parlays are high variance by nature, so size them small."}
       </div>
     </div>
   );
