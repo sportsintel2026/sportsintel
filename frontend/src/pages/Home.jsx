@@ -10,6 +10,11 @@ import Sidebar from "./Sidebar";
 import HomeDesktop from "./HomeDesktop";
 
 function formatOdds(a){ if(a==null||isNaN(a))return "—"; const n=Math.round(Number(a)); return n>0?`+${n}`:`${n}`; }
+// Fair American odds implied by the model's win/cover/hit probability (e.g. 49% -> +105).
+function fairAmerican(pct){ if(pct==null||isNaN(pct))return null; const p=Number(pct)/100; if(p<=0||p>=1)return null; const dec=1/p; return dec>=2?Math.round((dec-1)*100):Math.round(-100/(dec-1)); }
+// Team nicknames so the pick reads in plain English ("Take the Angels to win") instead
+// of jargon ("LAA ML"). MLB-complete; other leagues fall back to the abbreviation.
+const NICK={ARI:"Diamondbacks",AZ:"Diamondbacks",ATL:"Braves",BAL:"Orioles",BOS:"Red Sox",CHC:"Cubs",CWS:"White Sox",CHW:"White Sox",CIN:"Reds",CLE:"Guardians",COL:"Rockies",DET:"Tigers",HOU:"Astros",KC:"Royals",LAA:"Angels",LAD:"Dodgers",MIA:"Marlins",MIL:"Brewers",MIN:"Twins",NYM:"Mets",NYY:"Yankees",OAK:"Athletics",ATH:"Athletics",PHI:"Phillies",PIT:"Pirates",SD:"Padres",SF:"Giants",SEA:"Mariners",STL:"Cardinals",TB:"Rays",TEX:"Rangers",TOR:"Blue Jays",WSH:"Nationals",WAS:"Nationals"};
 // American odds are discontinuous at the +100/-100 line (-101 and +101 are
 // adjacent in reality but 202 apart numerically). Map to a continuous "cents from
 // even" scale so a move like -110 -> +105 reads as ~15 cents, not 215.
@@ -426,23 +431,54 @@ function HeroSlide({h,i,navigate,sport}){ const lg=(SPORTS[sport]||SPORTS.mlb).l
   </div></div>);
 }
 function BoardRow({d,i,open,onToggle,navigate,sport}){ const lg=(SPORTS[sport]||SPORTS.mlb).lg;
-  const mvCell=d.delta!=null?(d.delta>0?"\u25b2":d.delta<0?"\u25bc":"\u2014")+(d.delta!=null?Math.abs(d.delta):""):"\u2014";
   const av=<div className="av"><LogoM ab={d.h?d.h[0]:d.a[0]} col={d.h?d.h[1]:d.a[1]} lg={lg}/></div>;
   const leg=(name,L)=> L?(<div className="rdrow"><span className="leg">{name}</span><span className={"tier "+String(L[0]).toLowerCase()}>{L[0]}</span><span className="pk">{L[1]} {"\u00b7"} {L[2]}</span><span className={"ag "+(L[3]?"y":"n")}>{L[3]?"\u2713 agrees":"differs"}</span></div>):null;
+  const conv=d.conv||"";
+  const tok=String(d.p||"").trim().split(/\s+/);
+  const isTot=tok[0]==="Over"||tok[0]==="Under";
+  const teamNm=NICK[tok[0]]||tok[0];
+  const rest=tok.slice(1).join(" ");
+  const fairStr=formatOdds(fairAmerican(d.model));
+  const mktW=Math.min(100,Math.max(0,d.mkt||0));
+  const ohW=Math.min(Math.max(0,100-mktW),(d.model!=null&&d.mkt!=null)?Math.max(0,d.model-d.mkt):0);
+  const convN=conv==="high"?3:conv==="med"?2:1;
+  const money=d.delta>0?["up","money \u25b2 toward us"]:d.delta<0?["dn","money \u25bc off us"]:["","money holding"];
+  const hitWord=isTot?"to hit":(tok[1]==="ML"?"to win":"to cover");
+  const tail=<>{"\u2014"} at <em>{d.odds}</em> {"\u00b7"} {d.g}{d.starts?" "+d.starts:""}</>;
+  const psub = isTot
+    ? <>Take the <b>{tok[0].toLowerCase()} {rest}</b> {tail}</>
+    : (tok[1]==="ML"
+        ? <>Take the <b>{teamNm}</b> to win {tail}</>
+        : <>Take <b>{teamNm}</b> {rest} {tail}</>);
   return (
-    <div className={"gr "+(d.conv||"")+(open?" sel":"")} onClick={onToggle}>
-      <div className="r1">
-        <div className="lgs"><LogoM ab={d.a[0]} col={d.a[1]} lg={lg}/><LogoM ab={d.h[0]} col={d.h[1]} lg={lg}/></div>
-        <span className="pick">{d.p}</span>{d.mk&&<span className="mk">{d.mk}</span>}
-        {d.mv&&<SparkM dir={d.mv[2]} seed={i}/>}
-        <span className={"edge "+(d.edge<0?"neg":"pos")} style={{marginLeft:d.mv?"8px":"auto"}}>{d.edge>=0?"+":""}{d.edge.toFixed(1)}</span>
+    <div className={"gr "+conv+(open?" sel":"")} onClick={onToggle}>
+      <div className="pband">
+        <div className="pbtop">
+          <div className="pbL">
+            <div className="lgs"><LogoM ab={d.a[0]} col={d.a[1]} lg={lg}/><LogoM ab={d.h[0]} col={d.h[1]} lg={lg}/></div>
+            <div>
+              <div className="ptag"><span className="pchk">{"\u2713"}</span><span className="plbl">THE PLAY</span></div>
+              <div className="ppick">{d.p}</div>
+            </div>
+          </div>
+          <div className="pedge"><div className={"pev "+(d.edge<0?"neg":"pos")}>{d.edge>=0?"+":""}{d.edge.toFixed(1)}<span>%</span></div><div className="pee">EDGE</div></div>
+        </div>
+        <div className="psub">{psub}</div>
       </div>
-      <div className="r2">
-        <span className="game">{d.g}</span>
-        <span className={"cell cw "+d.conv}>{d.conv?d.conv.toUpperCase():""}</span>
-        <span className="cell odds">{d.odds}</span>
-        <span className={"cell move "+(d.delta>0?"up":d.delta<0?"dn":"")}>{mvCell}</span>
-        <span className="cell clv"><span className="a">{"\u2014"}</span></span>
+      <div className="pbody">
+        <div className="pval">
+          <div className="pvrow">
+            <div className="pvc"><div className="pvl">YOU GET</div><div className="pvn">{d.odds}</div></div>
+            <span className="pvar">{"\u2192"}</span>
+            <div className="pvc r"><div className="pvl g">FAIR PRICE</div><div className="pvn g">{fairStr}</div></div>
+          </div>
+          <div className="pbar"><i className="bf" style={{width:mktW+"%"}}/><i className="of" style={{left:mktW+"%",width:ohW+"%"}}/></div>
+          <div className="pble"><span>MARKET {d.mkt!=null?d.mkt+"%":"\u2014"}</span><span className="g">MODEL {d.model!=null?d.model+"%":"\u2014"} {hitWord}</span></div>
+        </div>
+        <div className="pfoot">
+          <div className="pconv"><span className="pmeter"><i className={convN>=1?"on":""}/><i className={convN>=2?"on":""}/><i className={convN>=3?"on":""}/></span><span className="pcl">{conv?conv.toUpperCase():""} CONVICTION</span></div>
+          <div className="pmoney">{d.mv&&<SparkM dir={d.mv[2]} seed={i}/>}<span className={"pmt "+money[0]}>{money[1]}</span></div>
+        </div>
       </div>
       <div className="det"><div className="dwrap">
         <div className="dhead">{av}<div><div className="nm">{d.g}</div><div className="mu">{d.p}</div></div>{d.starts&&<div className="st">{d.starts}</div>}</div>
@@ -599,10 +635,51 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .chipf{font-family:var(--mono);font-size:10px;color:var(--mut);border:1px solid var(--line2);border-radius:999px;padding:4px 10px;white-space:nowrap;cursor:pointer}.chipf.on{color:#06202a;background:var(--blue);border-color:var(--blue);font-weight:600}
 
 .grid{margin:6px 14px 0}
-.gr{position:relative;padding:13px 4px 13px 14px;border-bottom:1px solid var(--line);cursor:pointer}
-.gr::before{content:"";position:absolute;left:0;top:9px;bottom:9px;width:3px;border-radius:3px;background:var(--mut2)}
-.gr.high::before{background:var(--green)}.gr.med::before{background:var(--gold)}.gr.low::before{background:var(--mut2)}
-.gr:active{background:rgba(255,255,255,.015)}.gr.sel{background:rgba(93,169,232,.05)}
+.gr{position:relative;margin-bottom:12px;background:#11171f;border:1px solid #222d39;border-radius:16px;overflow:hidden;cursor:pointer;box-shadow:0 1px 0 rgba(255,255,255,.03) inset}
+.gr::before{content:"";position:absolute;left:0;right:0;top:0;height:3px;background:var(--mut2);z-index:2}
+.gr.high::before{background:linear-gradient(90deg,#1D9E75,#33e991)}.gr.med::before{background:linear-gradient(90deg,#b08a30,#e0b050)}.gr.low::before{background:var(--mut2)}
+.gr.sel{border-color:#2f3d4c}
+.pband{padding:13px 15px;background:linear-gradient(180deg,#ffffff,#f1f7f4);border-bottom:1px solid #11171f}
+.gr.med .pband{background:linear-gradient(180deg,#ffffff,#fbf6ec)}
+.pbtop{display:flex;align-items:center;justify-content:space-between}
+.pbL{display:flex;align-items:center;gap:11px}
+.pband .lgs .lg{border-color:#fff}
+.ptag{display:flex;align-items:center;gap:6px;margin-bottom:2px}
+.pchk{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#15875f;color:#fff;font-size:9px;font-weight:900;line-height:1}
+.gr.med .pchk{background:#a07818}
+.plbl{font-family:var(--mono);font-size:8.5px;color:#15875f;letter-spacing:1.5px;font-weight:700}
+.gr.med .plbl{color:#a07818}
+.ppick{font-family:var(--disp);font-size:22px;font-weight:800;color:#0c1116;letter-spacing:-.5px;line-height:1}
+.pedge{text-align:right;flex:0 0 auto}
+.pev{font-family:var(--disp);font-size:22px;font-weight:800;color:#15875f;letter-spacing:-.6px;line-height:.9;font-variant-numeric:tabular-nums}
+.gr.med .pev{color:#a07818}.pev.neg{color:#d8795a}.pev span{font-size:13px}
+.pee{font-family:var(--mono);font-size:8px;color:#9aa7b3;letter-spacing:1.5px;font-weight:700;margin-top:2px}
+.psub{font-size:11.5px;color:#5a6672;margin-top:9px;line-height:1.45}
+.psub b{color:#0c1116;font-weight:700}.psub em{color:#15875f;font-style:normal;font-weight:700}
+.gr.med .psub em{color:#a07818}
+.pbody{padding:13px 15px 15px}
+.pval{background:#0b1015;border:1px solid #1c2734;border-radius:11px;padding:11px 12px;margin-bottom:13px}
+.pvrow{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.pvc{flex:1}.pvc.r{text-align:right}
+.pvl{font-family:var(--mono);font-size:8px;color:#6b7886;letter-spacing:1px;font-weight:700}
+.pvl.g{color:#2c7d5c}.gr.med .pvl.g{color:#9a7d3c}
+.pvn{font-family:var(--disp);font-size:18px;font-weight:800;color:#fff;letter-spacing:-.5px}
+.pvn.g{color:#33e991}.gr.med .pvn.g{color:#e0b050}
+.pvar{color:#33e991;font-size:13px;padding:0 8px}.gr.med .pvar{color:#e0b050}
+.pbar{position:relative;height:8px;background:#10171e;border-radius:4px;overflow:hidden}
+.pbar .bf{position:absolute;left:0;top:0;height:100%;background:#2a3744}
+.pbar .of{position:absolute;top:0;height:100%;background:#33e991}
+.gr.med .pbar .of{background:#e0b050}
+.pble{display:flex;justify-content:space-between;margin-top:5px;font-family:var(--mono);font-size:8.5px;color:#76838f}
+.pble .g{color:#33e991;font-weight:700}.gr.med .pble .g{color:#cdb878}
+.pfoot{display:flex;align-items:center;justify-content:space-between}
+.pconv{display:flex;align-items:center;gap:7px}
+.pmeter{display:flex;gap:2px}.pmeter i{width:6px;height:12px;background:#222c36;border-radius:1.5px;display:block}
+.pmeter i.on{background:#33e991}.gr.med .pmeter i.on{background:#e0b050}
+.pcl{font-size:10.5px;font-weight:800;color:#33e991;letter-spacing:.3px}.gr.med .pcl{color:#e0b050}
+.pmoney{display:flex;align-items:center;gap:6px}
+.pmt{font-family:var(--mono);font-size:9px;color:#7d8a98}.pmt.up{color:#33e991}.pmt.dn{color:#d8795a}
+.gr .dwrap{margin:0 15px;padding-bottom:14px}
 .r1{display:flex;align-items:baseline;gap:7px}
 .lgs{display:flex;flex:0 0 auto}.lg{width:19px;height:19px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--disp);font-weight:800;font-size:7px;color:#fff;margin-left:-5px;border:1.5px solid #000;overflow:hidden;background:#0c1018}.lg:first-child{margin-left:0}.lg img{width:14px;height:14px;object-fit:contain}
 .pick{font-family:var(--disp);font-weight:800;font-size:18px;color:#fff;line-height:1}
