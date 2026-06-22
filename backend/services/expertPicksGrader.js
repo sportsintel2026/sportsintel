@@ -15,7 +15,7 @@
 //   settle a pending pick of a finished game to its true result (which is the goal).
 
 const { createClient } = require("@supabase/supabase-js");
-const { getGameDetail } = require("./liveScores");
+const { getGameDetail, getFinalScoreByMatchup } = require("./liveScores");
 
 const GRADEABLE_LEAGUES = new Set(["mlb", "nba"]);
 
@@ -116,15 +116,22 @@ async function gradeExpertPicks({ dryRun = true, days = 14 } = {}) {
       if (!isGradeable(pick)) continue;
       checked++;
 
-      let detail;
+      // The stored gameId is the Odds-API edges id, which ESPN's id-keyed lookup
+      // can't resolve — so bridge to the final by the pick's date + team matchup
+      // (stable across feeds). Falls back through abbr → full-name as available.
+      let scores;
       try {
-        detail = await getGameDetail(String(pick.sport).toLowerCase(), String(pick.gameId));
+        scores = await getFinalScoreByMatchup(
+          String(pick.sport).toLowerCase(),
+          row.date,
+          pick.awayAbbr || pick.away || "",
+          pick.homeAbbr || pick.home || ""
+        );
       } catch (e) {
         decisions.push({ date: row.date, pick: pick.pick, status: "lookup-failed", error: e.message });
         continue;
       }
 
-      const scores = finalScores(detail);
       if (!scores) {
         decisions.push({ date: row.date, pick: pick.pick, status: "not-final-yet" });
         continue;
