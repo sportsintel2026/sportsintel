@@ -1122,8 +1122,224 @@ async function getPinnacleAnchorComparison({ sport = "baseball_mlb", regions = "
   }
 }
 
+// ── NFL / CFB Moneyline + Totals + Spreads (Phase 2 — football) ───────────────
+// Mirrors getMLBMainOdds EXACTLY in shape and discipline (best-price line shop,
+// consensus line, per-book Market Read pairs, stampede coalescing, 30-min cache)
+// so the football edge model + edge route can consume it identically to MLB.
+// The ONE structural difference vs MLB: football spreads are real variable point
+// spreads (-7, +3.5, -10.5), not a fixed ±1.5 run line — so the spread parser
+// finds the CONSENSUS spread line and shops best price AT that line, the same way
+// totals are handled, rather than MLB's ±1.5 matched-pair logic. MLB code above
+// is untouched. computeWinRead/computeTotalRead are price-only and reused as-is;
+// cover read is football-specific (computeFballCoverRead) since the MLB one is
+// hardcoded to ±1.5 semantics.
+
+// Football sanity bands — deliberately wide: pass every real price, reject only
+// clearly-broken book outliers (a stale/suspended quote winning "best price"
+// would poison edge/ROI/CLV, same failure mode the MLB guards prevent).
+function plausibleFballMlOdds(price) {
+  // NFL/CFB moneylines can run long on big mismatches (esp. CFB), but never these extremes.
+  return price != null && price < 3000 && price > -3000;
+}
+function plausibleFballSideOdds(price) {
+  // Spread/total prices sit near even money (±100 to ~±140 typical); reject wild rungs.
+  return price != null && price < 250 && price > -350;
+}
+// Real football game totals: NFL ~30–60, CFB can reach ~80. Reject ladder junk outside this.
+const FBALL_TOTAL_LINE_MIN = 24;
+const FBALL_TOTAL_LINE_MAX = 90;
+function plausibleFballTotalLine(point) {
+  return typeof point === "number" && point >= FBALL_TOTAL_LINE_MIN && point <= FBALL_TOTAL_LINE_MAX;
+}
+// Real football spreads: roughly ±0.5 to ±35 (blowout CFB lines). Reject outside.
+function plausibleFballSpreadLine(point) {
+  return typeof point === "number" && Math.abs(point) >= 0.5 && Math.abs(point) <= 40;
+}
+
+// Football cover read: variable spread version of the MLB ±1.5 cover read. Takes
+// matched per-book spread pairs at the SAME (consensus) line and de-vigs to a
+// cover probability for the side the market leans. Mirrors computeTotalRead's
+// median+de-vig math; produces the same shape computeCoverRead returns.
+function computeFballCoverRead(spreadQuotes, awayTeam, homeTeam, consensusAwayLine) {
+  if (!spreadQuotes || spreadQuotes.length < 2) return null;
+  const atLine = spreadQuotes.filter(q => q.awayLine === consensusAwayLine);
+  if (atLine.length < 2) return null;
+  const awayP = atLine.map(q => q.away).filter(p => p != null);
+  const homeP = atLine.map(q => q.home).filter(p => p != null);
+  if (awayP.length < 2 || homeP.length < 2) return null;
+  const awayImp = mrMedian(awayP.map(americanToImpliedProb));
+  const homeImp = mrMedian(homeP.map(americanToImpliedProb));
+  const sum = awayImp + homeImp;
+  if (!sum) return null;
+  const awayCover = awayImp / sum, homeCover = homeImp / sum;
+  const awayFavored = awayCover >= homeCover;
+  const chosenPrices = awayFavored ? awayP : homeP;
+  const chosenProb = awayFavored ? awayCover : homeCover;
+  const chosenLine = awayFavored ? consensusAwayLine : -consensusAwayLine;
+  const chosenImps = chosenPrices.map(americanToImpliedProb);
+  const spreadPts = (Math.max(...chosenImps) - Math.min(...chosenImps)) * 100;
+  return {
+    favSide: awayFavored ? "away" : "home",
+    favTeam: awayFavored ? awayTeam : homeTeam,
+    favLine: chosenLine,
+    favProb: Math.round(chosenProb * 100),
+    agreementPts: Math.round(spreadPts),
+  };
+}
+
+// Football event parser — identical OUTPUT shape to parseMainOddsEvent
+// (eventId, commenceTime, homeTeam, awayTeam, h2h, totals, spreads, marketRead, h2hQuotes)
+// so downstream model/route code is sport-interchangeable.
+function parseFballOddsEvent(ev) {
+  const h2h = { away: null, home: null, awayBook: null, homeBook: null };
+  const totals = { line: null, over: null, under: null, overBook: null, underBook: null };
+  const spreads = { awayLine: null, away: null, awayBook: null, homeLine: null, home: null, homeBook: null };
+
+  const totalsQuotes = []; // { line, over, overBook, under, underBook }
+  const spreadQuotes = []; // matched same-book pairs: { awayLine, away, awayBook, homeLine, home, homeBook }
+  const h2hQuotes = [];    // per-book ML pairs for Market Read
+
+  for (const bm of ev.bookmakers || []) {
+    if (!PREFERRED_BOOKS_MAIN.includes(bm.key)) continue;
+    for (const m of bm.markets || []) {
+      if (m.key === "h2h") {
+        const awayOutcome = m.outcomes?.find(o => o.name === ev.away_team);
+        const homeOutcome = m.outcomes?.find(o => o.name === ev.home_team);
+        if (awayOutcome && plausibleFballMlOdds(awayOutcome.price) && (h2h.away == null || awayOutcome.price > h2h.away)) {
+          h2h.away = awayOutcome.price; h2h.awayBook = bm.title;
+        }
+        if (homeOutcome && plausibleFballMlOdds(homeOutcome.price) && (h2h.home == null || homeOutcome.price > h2h.home)) {
+          h2h.home = homeOutcome.price; h2h.homeBook = bm.title;
+        }
+        if (awayOutcome && homeOutcome
+            && plausibleFballMlOdds(awayOutcome.price) && plausibleFballMlOdds(homeOutcome.price)) {
+          h2hQuotes.push({ away: awayOutcome.price, home: homeOutcome.price, book: bm.title });
+        }
+      } else if (m.key === "totals" && m.outcomes?.length >= 2) {
+        const byPoint = new Map();
+        for (const o of m.outcomes || []) {
+          if (o.point == null || !plausibleFballTotalLine(o.point)) continue;
+          const slot = byPoint.get(o.point) || {};
+          if (o.name === "Over") slot.over = o.price;
+          else if (o.name === "Under") slot.under = o.price;
+          byPoint.set(o.point, slot);
+        }
+        for (const [point, slot] of byPoint) {
+          if (slot.over != null && slot.under != null
+              && plausibleFballSideOdds(slot.over) && plausibleFballSideOdds(slot.under)) {
+            totalsQuotes.push({ line: point, over: slot.over, overBook: bm.title, under: slot.under, underBook: bm.title });
+          }
+        }
+      } else if (m.key === "spreads" && m.outcomes?.length >= 2) {
+        // Football spread: a book quotes the two sides as a matched pair at the SAME
+        // magnitude, opposite sign (e.g. away +3.5 / home -3.5). Keep them together
+        // and only if both prices are plausible and the line is real — no stitching
+        // across books (that would fabricate an impossible line).
+        const byMag = new Map();
+        for (const o of m.outcomes || []) {
+          if (o.point == null || !plausibleFballSpreadLine(o.point)) continue;
+          const key = Math.abs(o.point);
+          const slot = byMag.get(key) || {};
+          if (o.name === ev.away_team) { slot.awayLine = o.point; slot.away = o.price; }
+          else if (o.name === ev.home_team) { slot.homeLine = o.point; slot.home = o.price; }
+          byMag.set(key, slot);
+        }
+        for (const [, slot] of byMag) {
+          if (slot.awayLine != null && slot.homeLine != null
+              && slot.awayLine === -slot.homeLine
+              && plausibleFballSideOdds(slot.away) && plausibleFballSideOdds(slot.home)) {
+            spreadQuotes.push({
+              awayLine: slot.awayLine, away: slot.away, awayBook: bm.title,
+              homeLine: slot.homeLine, home: slot.home, homeBook: bm.title,
+            });
+          }
+        }
+      }
+    }
+  }
+
+  // Consensus totals line, then best over & best under AT that line.
+  if (totalsQuotes.length > 0) {
+    const lineCounts = {};
+    for (const q of totalsQuotes) lineCounts[q.line] = (lineCounts[q.line] || 0) + 1;
+    const consensusLine = Number(Object.entries(lineCounts).sort((a, b) => b[1] - a[1])[0][0]);
+    totals.line = consensusLine;
+    for (const q of totalsQuotes) {
+      if (q.line !== consensusLine) continue;
+      if (totals.over == null || q.over > totals.over) { totals.over = q.over; totals.overBook = q.overBook; }
+      if (totals.under == null || q.under > totals.under) { totals.under = q.under; totals.underBook = q.underBook; }
+    }
+  }
+
+  // Consensus spread line (by away-line magnitude), then best price each side AT that line.
+  let consensusAwayLine = null;
+  if (spreadQuotes.length > 0) {
+    const lineCounts = {};
+    for (const q of spreadQuotes) lineCounts[q.awayLine] = (lineCounts[q.awayLine] || 0) + 1;
+    consensusAwayLine = Number(Object.entries(lineCounts).sort((a, b) => b[1] - a[1])[0][0]);
+    spreads.awayLine = consensusAwayLine;
+    spreads.homeLine = -consensusAwayLine;
+    for (const q of spreadQuotes) {
+      if (q.awayLine !== consensusAwayLine) continue;
+      if (spreads.away == null || q.away > spreads.away) { spreads.away = q.away; spreads.awayBook = q.awayBook; }
+      if (spreads.home == null || q.home > spreads.home) { spreads.home = q.home; spreads.homeBook = q.homeBook; }
+    }
+  }
+
+  const marketRead = {
+    win: computeWinRead(h2hQuotes, ev.away_team, ev.home_team),
+    total: computeTotalRead(totalsQuotes),
+    cover: computeFballCoverRead(spreadQuotes, ev.away_team, ev.home_team, consensusAwayLine),
+  };
+
+  return {
+    eventId: ev.id,
+    commenceTime: ev.commence_time,
+    homeTeam: ev.home_team,
+    awayTeam: ev.away_team,
+    h2h, totals, spreads, marketRead, h2hQuotes,
+  };
+}
+
+// Generic football main-odds fetch (NFL or CFB) — sportKey decides which.
+// Mirrors getMLBMainOdds: 30-min cache, coalesced, best-price, graceful fallback.
+async function getFballMainOdds(sportKey, { forceFresh = false } = {}) {
+  const cacheKey = `fball_main_${sportKey}`;
+  const cached = cache.get(cacheKey);
+  if (!forceFresh && isCacheValid(cached)) {
+    console.log(`[OddsAPI] Returning cached ${sportKey} main odds`);
+    return cached.data;
+  }
+  return coalesce(cacheKey, async () => {
+    const fresh = cache.get(cacheKey);
+    if (!forceFresh && isCacheValid(fresh)) return fresh.data;
+    try {
+      const data = await oddsGet(`/sports/${sportKey}/odds`, {
+        regions: "us",
+        markets: "h2h,totals,spreads",
+        oddsFormat: "american",
+        dateFormat: "iso",
+      });
+      const games = (data || []).map(parseFballOddsEvent);
+      cache.set(cacheKey, { data: games, fetchedAt: Date.now() });
+      return games;
+    } catch (e) {
+      console.error(`[OddsAPI] ${sportKey} main odds error:`, e.message);
+      if (cached) return cached.data;
+      return [];
+    }
+  });
+}
+
+async function getNFLMainOdds(opts = {})  { return getFballMainOdds("americanfootball_nfl", opts); }
+async function getCFBMainOdds(opts = {})  { return getFballMainOdds("americanfootball_ncaaf", opts); }
+
+
 module.exports = {
   getMLBMainOdds,
+  getNFLMainOdds,
+  getCFBMainOdds,
+  getFballMainOdds,
   getPinnacleAnchorComparison,
   getMLBLiveOdds,
   getMLBHRPropsForEvent,
