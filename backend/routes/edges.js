@@ -1198,4 +1198,22 @@ router.get("/fballodds", async (req, res) => {
   }
 });
 
+// ── TEMP DIAGNOSTIC: NFL 2025 season-stats shape probe (read-only) ───────────
+// Reveals the REAL ESPN field names for 2025 team strength data (standings PF/PA,
+// per-team offensive/defensive stat categories) so the power-rating seed is built
+// on confirmed fields, not guesses. Read-only inspection; writes nothing.
+//   /api/edges/nflseasonprobe            → 2025
+//   /api/edges/nflseasonprobe?season=2024
+router.get("/nflseasonprobe", async (req, res) => {
+  try {
+    const season = parseInt(req.query.season, 10) || 2025;
+    const { fetchSeasonProbe } = require("../services/nflDataSource");
+    const result = await fetchSeasonProbe(season);
+    res.json({ ok: true, ...result });
+  } catch (e) {
+    console.error("[nflseasonprobe] error:", e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 module.exports = router;
