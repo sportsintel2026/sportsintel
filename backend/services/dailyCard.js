@@ -348,18 +348,19 @@ async function getAlternatePlay(scope = "mix") {
   const pool = rows.slice(0, 8);
   const single = legFrom(pool[Math.floor(Math.random() * pool.length)]);
 
-  // Bonus parlay: best value picks from DISTINCT games (2-3 legs), same math as the tracked parlay.
-  const legs = [];
+  // Bonus parlay: best value picks from DISTINCT games. Build a POOL of up to 12 so
+  // the bonus parlay gets the same up-to-12 leg selector as the tracked card parlay.
+  const bonusPool = [];
   const usedGames = new Set();
   for (const p of rows) {
     if (usedGames.has(p.game_id)) continue;
     usedGames.add(p.game_id);
-    legs.push(legFrom(p));
-    if (legs.length >= 3) break;
+    bonusPool.push(legFrom(p));
+    if (bonusPool.length >= 12) break;
   }
   let parlay = null;
-  if (legs.length >= 2) {
-    const used = legs.slice(0, legs.length >= 3 ? 3 : 2);
+  if (bonusPool.length >= 2) {
+    const used = bonusPool.slice(0, Math.min(3, bonusPool.length));
     const bookDec = used.reduce((a, l) => a * toDecimal(l.odds), 1);
     const combinedModelProb = used.reduce((a, l) => a * l.modelProb, 1);
     const bookImplied = 1 / bookDec;
@@ -371,7 +372,7 @@ async function getAlternatePlay(scope = "mix") {
       edge: round4(combinedModelProb - bookImplied),
     };
   }
-  return { single, parlay, allStarted: false };
+  return { single, parlay, parlay_pool: bonusPool, allStarted: false };
 }
 
 module.exports = { getOrGenerateDailyCard, gradeDailyCard, getDailyCardRecord, getAlternatePick, getAlternatePlay };
