@@ -165,7 +165,11 @@ async function runNFLSlate({ season = 2025, weeks = 1, phase = null } = {}) {
     const ctx = (ratingsLoaded && homeT && awayT)
       ? { home: { rating: homeT.rating }, away: { rating: awayT.rating } }
       : {};
-    return predictGame(ev, ctx);
+    const pred = predictGame(ev, ctx);
+    // Carry the books' Market Read (consensus lean) through onto the prediction so
+    // the board can show it alongside the model's edge (facts vs model claim).
+    pred.marketRead = ev.marketRead || null;
+    return pred;
   });
 
   return {
@@ -186,4 +190,80 @@ async function runNFLSlate({ season = 2025, weeks = 1, phase = null } = {}) {
   };
 }
 
-module.exports = { runNFLSlate, _internal: { normName, resolveTeam, buildResolver } };
+module.exports = { runNFLSlate, captureNFLOddsTicks, getNFLMarketMovers, _internal: { normName, resolveTeam, buildResolver, nflPhaseFor, nflRegularSeasonStart } };
+
+// ── NFL odds-tick snapshots (line-movement history) ──────────────────────────
+// Mirrors MLB captureOddsTicks but writes to its OWN table (nfl_odds_ticks) so the
+// MLB pipeline is untouched and the two leagues' 4-day prune sweeps never collide.
+// Snapshots best ML/total/spread prices per pre-game NFL event each run so Market
+// Movers can show open→now movement. In the offseason lookahead lines barely move,
+// so this accumulates slowly — that's expected; it comes alive as the season nears.
+// Cache-respecting fetch (shares the 30-min odds cache) → ~no extra API credits.
+const { createClient } = require("@supabase/supabase-js");
+function nflDb() { return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY); }
+
+async function captureNFLOddsTicks() {
+  let events = [];
+  try { events = await getNFLMainOdds(); }
+  catch (e) { console.error("[NFL Ticks] odds fetch failed:", e.message); return 0; }
+  if (!events || !events.length) { console.log("[NFL Ticks] no events"); return 0; }
+
+  const supabase = nflDb();
+  const now = new Date().toISOString();
+  const rows = [];
+  for (const ev of events) {
+    const away = ev.awayTeam, home = ev.homeTeam;
+    if (!away || !home) continue;
+    // Only snapshot PRE-GAME prices (skip anything already started).
+    if (ev.commenceTime && new Date(ev.commenceTime).getTime() <= Date.now()) continue;
+    const base = { captured_at: now, away_team: away, home_team: home };
+    if (ev.h2h?.away != null)   rows.push({ ...base, market: "ml",     side: "away",  line: null, odds: ev.h2h.away });
+    if (ev.h2h?.home != null)   rows.push({ ...base, market: "ml",     side: "home",  line: null, odds: ev.h2h.home });
+    if (ev.totals?.over != null)  rows.push({ ...base, market: "total",  side: "over",  line: ev.totals.line ?? null,  odds: ev.totals.over });
+    if (ev.totals?.under != null) rows.push({ ...base, market: "total",  side: "under", line: ev.totals.line ?? null,  odds: ev.totals.under });
+    if (ev.spreads?.away != null) rows.push({ ...base, market: "spread", side: "away",  line: ev.spreads.awayLine ?? null, odds: ev.spreads.away });
+    if (ev.spreads?.home != null) rows.push({ ...base, market: "spread", side: "home",  line: ev.spreads.homeLine ?? null, odds: ev.spreads.home });
+  }
+  if (!rows.length) return 0;
+  const { error } = await supabase.from("nfl_odds_ticks").insert(rows);
+  if (error) { console.error("[NFL Ticks] insert failed:", error.message); return 0; }
+  // Keep ~10 days (NFL games are weekly, so a longer window than MLB's 4d).
+  try { await supabase.from("nfl_odds_ticks").delete().lt("captured_at", new Date(Date.now() - 10 * 864e5).toISOString()); } catch (_) {}
+  console.log(`[NFL Ticks] saved ${rows.length} snapshots`);
+  return rows.length;
+}
+
+// Read movement: for each event+market+side, compare the EARLIEST stored price
+// (open) to the latest (now). Returns movers sorted by absolute cent move, so the
+// dashboard can show "Steelers ML -105 → -130 ▼25". Empty until ticks accumulate.
+function amCents(odds) { // american odds → "cents" distance from pick'em for comparable movement
+  if (odds == null) return null;
+  return odds > 0 ? odds : odds; // keep raw american; movement is delta of these
+}
+async function getNFLMarketMovers({ limit = 12 } = {}) {
+  const supabase = nflDb();
+  // pull recent ticks (last 10 days), then reduce in JS to open/now per key.
+  const { data, error } = await supabase
+    .from("nfl_odds_ticks")
+    .select("away_team,home_team,market,side,line,odds,captured_at")
+    .order("captured_at", { ascending: true })
+    .limit(5000);
+  if (error) { console.error("[NFL Movers] read failed:", error.message); return []; }
+  if (!data || !data.length) return [];
+  const byKey = new Map(); // key → { open, now, ... }
+  for (const r of data) {
+    const key = `${r.away_team}@${r.home_team}|${r.market}|${r.side}|${r.line ?? ""}`;
+    const slot = byKey.get(key) || { matchup: `${r.away_team} @ ${r.home_team}`, market: r.market, side: r.side, line: r.line, open: r.odds, openAt: r.captured_at };
+    slot.now = r.odds; slot.nowAt = r.captured_at;
+    byKey.set(key, slot);
+  }
+  const movers = [];
+  for (const s of byKey.values()) {
+    if (s.open == null || s.now == null) continue;
+    const delta = amCents(s.now) - amCents(s.open);
+    if (delta === 0) continue; // no movement
+    movers.push({ ...s, delta, dir: delta > 0 ? "up" : "dn" });
+  }
+  movers.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
+  return movers.slice(0, limit);
+}
