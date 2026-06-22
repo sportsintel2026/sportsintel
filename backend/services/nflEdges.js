@@ -59,12 +59,90 @@ function resolveTeam(resolver, oddsTeamName) {
   return null;
 }
 
+// Compute the NFL regular-season opener for a given year: Week 1 kicks off the
+// Thursday AFTER US Labor Day (Labor Day = first Monday of September). Derived in
+// code so it auto-rolls year to year — no brittle hardcoded date. Returns a Date
+// at that Thursday 00:00 UTC (good enough as a phase boundary).
+function nflRegularSeasonStart(year) {
+  // first Monday of September
+  const sept1 = new Date(Date.UTC(year, 8, 1));
+  const dow = sept1.getUTCDay(); // 0=Sun..6=Sat
+  const firstMonday = 1 + ((8 - dow) % 7); // day-of-month of first Monday
+  // Labor Day Monday → Week 1 Thursday is Labor Day + 3 days
+  const thursday = firstMonday + 3;
+  return new Date(Date.UTC(year, 8, thursday, 0, 0, 0));
+}
+
+// Tag a commence time as the NFL season phase. Anything before that season's
+// regular opener is preseason; on/after is regular. (Postseason in Jan/Feb is
+// folded into "regular" for board purposes — separate tab not needed now.)
+function nflPhaseFor(commenceISO) {
+  if (!commenceISO) return "regular";
+  const d = new Date(commenceISO);
+  if (isNaN(d)) return "regular";
+  // A game's season YEAR is its calendar year, except Jan/Feb playoffs belong to
+  // the prior year's season — treat those as regular of (year-1).
+  const month = d.getUTCMonth(); // 0=Jan
+  const seasonYear = month <= 1 ? d.getUTCFullYear() - 1 : d.getUTCFullYear();
+  const regStart = nflRegularSeasonStart(seasonYear);
+  return d.getTime() < regStart.getTime() ? "preseason" : "regular";
+}
+
 // Run the full NFL slate: returns { ratingsMeta, games:[prediction...], match:{...} }.
-async function runNFLSlate({ season = 2025 } = {}) {
-  const [events, ratings] = await Promise.all([
+// `weeks` limits output to the next N NFL weeks (default 1) so the board shows one
+// slate at a time — each team appears once — instead of every lookahead game at
+// once. The window is anchored to the EARLIEST upcoming game in the feed (rolls
+// forward like the MLB board): week = [earliest, earliest + 7d*weeks). Pass
+// weeks=0 to disable the filter and return the full multi-week slate.
+async function runNFLSlate({ season = 2025, weeks = 1, phase = null } = {}) {
+  const [eventsRaw, ratings] = await Promise.all([
     getNFLMainOdds(),
     buildTeamRatings(season),
   ]);
+
+  let events = Array.isArray(eventsRaw) ? eventsRaw.slice() : [];
+
+  // ── Season phase (preseason vs regular), derived from each game's date ───────
+  // Tag every game, then figure out which phases still have UPCOMING games so the
+  // UI can show a phase tab ONLY when it has games left (auto-disappears when a
+  // phase ends). If no phase is requested, default to the earliest phase that
+  // still has upcoming games (preseason first, then regular).
+  const now = Date.now();
+  for (const e of events) e._phase = nflPhaseFor(e.commenceTime);
+  const phasesUpcoming = { preseason: false, regular: false };
+  for (const e of events) {
+    const t = e.commenceTime ? new Date(e.commenceTime).getTime() : null;
+    if (t != null && t >= now && phasesUpcoming[e._phase] != null) phasesUpcoming[e._phase] = true;
+  }
+  const availablePhases = ["preseason", "regular"].filter(p => phasesUpcoming[p]);
+  // Selected phase: requested (if it has games) else first available else "regular".
+  let selectedPhase = phase && phasesUpcoming[phase] ? phase
+    : (availablePhases[0] || "regular");
+  // If literally nothing is upcoming (deep offseason), don't phase-filter — show
+  // whatever the feed has so the board isn't empty for testing.
+  const anyUpcoming = availablePhases.length > 0;
+  if (anyUpcoming) {
+    events = events.filter(e => e._phase === selectedPhase);
+  }
+
+  // ── Week filter (Option B: anchor to earliest upcoming game, roll forward) ──
+  let weekWindow = null;
+  if (weeks > 0 && events.length) {
+    const DAY = 86400000;
+    const times = events
+      .map(e => ({ e, t: e.commenceTime ? new Date(e.commenceTime).getTime() : null }))
+      .filter(x => x.t != null);
+    // Prefer games still upcoming; if none are upcoming (deep offseason), fall back
+    // to the earliest game in the feed so the board is never empty.
+    const upcoming = times.filter(x => x.t >= now);
+    const pool = upcoming.length ? upcoming : times;
+    if (pool.length) {
+      const anchor = Math.min(...pool.map(x => x.t));
+      const windowEnd = anchor + DAY * 7 * weeks;
+      events = times.filter(x => x.t >= anchor && x.t < windowEnd).map(x => x.e);
+      weekWindow = { fromISO: new Date(anchor).toISOString(), toISO: new Date(windowEnd).toISOString(), weeks };
+    }
+  }
 
   const resolver = buildResolver(ratings.teams);
   const ratingsLoaded = (ratings.rated || 0) > 0;
@@ -92,6 +170,8 @@ async function runNFLSlate({ season = 2025 } = {}) {
 
   return {
     season,
+    weekWindow,
+    phase: { selected: selectedPhase, available: availablePhases },
     ratingsMeta: {
       loaded: ratingsLoaded,
       rated: ratings.rated || 0,
