@@ -1187,9 +1187,123 @@ function computeFballCoverRead(spreadQuotes, awayTeam, homeTeam, consensusAwayLi
   };
 }
 
+// Football per-book line-shopping grid — the football twin of buildComparisonGame
+// (the MLB grid that feeds the Odds page's book-by-book table). Same emitted shape
+// — { consensusTotalLine, books[], best } — PLUS a spread block, because the point
+// spread is football's headline market and discarding it would hide the most-shopped
+// line. One row per book (only PREFERRED_BOOKS_MAIN, same filter the parser uses),
+// each carrying that book's ML / total / spread quote. "Best" = highest American
+// number per side (best payout), compared only at the consensus line for over/under
+// and spread so it stays apples-to-apples. Returns null if no book quoted anything.
+function buildFballGrid(ev) {
+  if (!ev || !ev.home_team || !ev.away_team) return null;
+  const away = ev.away_team, home = ev.home_team;
+
+  const books = [];
+  const totalLineCounts = {};
+  const spreadMagCounts = {};
+
+  for (const bm of ev.bookmakers || []) {
+    if (!PREFERRED_BOOKS_MAIN.includes(bm.key)) continue;
+    const h2h = (bm.markets || []).find(m => m.key === "h2h");
+    const tot = (bm.markets || []).find(m => m.key === "totals");
+    const spr = (bm.markets || []).find(m => m.key === "spreads");
+
+    // Moneyline
+    let awayML = null, homeML = null;
+    for (const o of (h2h?.outcomes || [])) {
+      if (o.name === away && plausibleFballMlOdds(o.price)) awayML = o.price;
+      else if (o.name === home && plausibleFballMlOdds(o.price)) homeML = o.price;
+    }
+
+    // Totals — take this book's first fully-quoted (both sides plausible) line.
+    let totalLine = null, over = null, under = null;
+    if (tot) {
+      const byPoint = new Map();
+      for (const o of (tot.outcomes || [])) {
+        if (o.point == null || !plausibleFballTotalLine(o.point)) continue;
+        const slot = byPoint.get(o.point) || {};
+        if (o.name === "Over") slot.over = o.price;
+        else if (o.name === "Under") slot.under = o.price;
+        byPoint.set(o.point, slot);
+      }
+      for (const [point, slot] of byPoint) {
+        if (slot.over != null && slot.under != null
+            && plausibleFballSideOdds(slot.over) && plausibleFballSideOdds(slot.under)) {
+          totalLine = point; over = slot.over; under = slot.under;
+          totalLineCounts[point] = (totalLineCounts[point] || 0) + 1;
+          break;
+        }
+      }
+    }
+
+    // Spreads — matched same-magnitude opposite-sign pair from this book.
+    let awaySpread = null, awaySpreadPrice = null, homeSpread = null, homeSpreadPrice = null;
+    if (spr) {
+      const byMag = new Map();
+      for (const o of (spr.outcomes || [])) {
+        if (o.point == null || !plausibleFballSpreadLine(o.point)) continue;
+        const key = Math.abs(o.point);
+        const slot = byMag.get(key) || {};
+        if (o.name === away) { slot.awayLine = o.point; slot.away = o.price; }
+        else if (o.name === home) { slot.homeLine = o.point; slot.home = o.price; }
+        byMag.set(key, slot);
+      }
+      for (const [, slot] of byMag) {
+        if (slot.awayLine != null && slot.homeLine != null
+            && slot.awayLine === -slot.homeLine
+            && plausibleFballSideOdds(slot.away) && plausibleFballSideOdds(slot.home)) {
+          awaySpread = slot.awayLine; awaySpreadPrice = slot.away;
+          homeSpread = slot.homeLine; homeSpreadPrice = slot.home;
+          spreadMagCounts[Math.abs(slot.awayLine)] = (spreadMagCounts[Math.abs(slot.awayLine)] || 0) + 1;
+          break;
+        }
+      }
+    }
+
+    if (awayML == null && homeML == null && over == null && under == null && awaySpread == null) continue;
+    books.push({
+      book: bm.title || bm.key,
+      awayML, homeML,
+      totalLine, over, under,
+      awaySpread, awaySpreadPrice, homeSpread, homeSpreadPrice,
+    });
+  }
+  if (!books.length) return null;
+
+  // Consensus total line + consensus spread magnitude = the value the most books agree on.
+  let consensusTotalLine = null, mt = 0;
+  for (const [line, n] of Object.entries(totalLineCounts)) if (n > mt) { mt = n; consensusTotalLine = Number(line); }
+  let consensusSpreadMag = null, ms = 0;
+  for (const [mag, n] of Object.entries(spreadMagCounts)) if (n > ms) { ms = n; consensusSpreadMag = Number(mag); }
+
+  // Best price per market. Over/under and spread compared ONLY at the consensus line.
+  const best = { awayML: null, homeML: null, over: null, under: null, awaySpread: null, homeSpread: null };
+  for (const r of books) {
+    if (r.awayML != null && (best.awayML == null || r.awayML > best.awayML.price)) best.awayML = { price: r.awayML, book: r.book };
+    if (r.homeML != null && (best.homeML == null || r.homeML > best.homeML.price)) best.homeML = { price: r.homeML, book: r.book };
+    if (consensusTotalLine != null && r.totalLine === consensusTotalLine) {
+      if (r.over != null && (best.over == null || r.over > best.over.price)) best.over = { price: r.over, book: r.book };
+      if (r.under != null && (best.under == null || r.under > best.under.price)) best.under = { price: r.under, book: r.book };
+    }
+    if (consensusSpreadMag != null && r.awaySpread != null && Math.abs(r.awaySpread) === consensusSpreadMag) {
+      if (r.awaySpreadPrice != null && (best.awaySpread == null || r.awaySpreadPrice > best.awaySpread.price)) best.awaySpread = { price: r.awaySpreadPrice, line: r.awaySpread, book: r.book };
+      if (r.homeSpreadPrice != null && (best.homeSpread == null || r.homeSpreadPrice > best.homeSpread.price)) best.homeSpread = { price: r.homeSpreadPrice, line: r.homeSpread, book: r.book };
+    }
+  }
+
+  return {
+    consensusTotalLine,
+    consensusSpreadMag,
+    books: books.sort((a, b) => a.book.localeCompare(b.book)),
+    best,
+  };
+}
+
 // Football event parser — identical OUTPUT shape to parseMainOddsEvent
 // (eventId, commenceTime, homeTeam, awayTeam, h2h, totals, spreads, marketRead, h2hQuotes)
-// so downstream model/route code is sport-interchangeable.
+// so downstream model/route code is sport-interchangeable. Now also carries oddsGrid
+// (the book-by-book line-shopping table) so the Odds page renders NFL like MLB.
 function parseFballOddsEvent(ev) {
   const h2h = { away: null, home: null, awayBook: null, homeBook: null };
   const totals = { line: null, over: null, under: null, overBook: null, underBook: null };
@@ -1298,6 +1412,7 @@ function parseFballOddsEvent(ev) {
     homeTeam: ev.home_team,
     awayTeam: ev.away_team,
     h2h, totals, spreads, marketRead, h2hQuotes,
+    oddsGrid: buildFballGrid(ev),
   };
 }
 
