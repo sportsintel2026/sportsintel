@@ -395,6 +395,10 @@ function ParlayCard({ parlay }) {
   );
 }
 
+// Normalize result values: the auto-grader writes "win"/"loss"/"push", but older
+// manual grades may be stored as "won"/"lost". Fold them so every graded pick shows.
+function normRes(r) { const s = String(r == null ? "" : r).trim().toLowerCase(); return s === "won" ? "win" : s === "lost" ? "loss" : s; }
+
 function ResultBadge({ result }) {
   if (!result) return null;
   const map = {
@@ -402,7 +406,7 @@ function ResultBadge({ result }) {
     loss: { fg: "#ef4444", bg: "#ef444415", border: "#ef444430", text: "LOST" },
     push: { fg: "#9ca3af", bg: "#1f2937",   border: "#374151",   text: "PUSH" },
   };
-  const c = map[result];
+  const c = map[normRes(result)];
   if (!c) return null;
   return (
     <span style={{ fontSize: 9, fontWeight: 800, padding: "3px 8px", borderRadius: 4, background: c.bg, color: c.fg, border: `1px solid ${c.border}`, letterSpacing: "0.06em" }}>
@@ -427,11 +431,12 @@ function computeRecord(rows) {
   let wins = 0, losses = 0, pushes = 0, units = 0, parlayWins = 0, parlayTotal = 0;
   for (const r of rows) {
     for (const p of r.picks || []) {
+      const res = normRes(p.result);
       if (p.type === "parlay") {
-        if (p.result === "win" || p.result === "loss" || p.result === "push") parlayTotal += 1;
-        if (p.result === "win") parlayWins += 1;
+        if (res === "win" || res === "loss" || res === "push") parlayTotal += 1;
+        if (res === "win") parlayWins += 1;
       }
-      if (p.result === "win") {
+      if (res === "win") {
         wins += 1;
         let dec;
         if (p.type === "parlay") {
@@ -441,10 +446,10 @@ function computeRecord(rows) {
           dec = americanToDecimal(p.odds);
         }
         units += dec ? dec - 1 : 0;
-      } else if (p.result === "loss") {
+      } else if (res === "loss") {
         losses += 1;
         units -= 1;
-      } else if (p.result === "push") {
+      } else if (res === "push") {
         pushes += 1;
       }
     }
