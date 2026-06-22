@@ -155,10 +155,96 @@ async function getFinalScore(gameId, dateStr) {
   return { state: g.state, home: g.home, away: g.away };
 }
 
+/* ---- READ-ONLY PROBE: discover the 2025 season-stats shape for ratings ----
+ * The model's power ratings need a real seed: 2025 final team strength (points
+ * for/against, offensive/defensive efficiency). ESPN's NFL stat KEYS are
+ * unverified (this file deferred team-context for exactly that reason), so before
+ * writing any rating math we inspect what ESPN actually returns. This probe tries
+ * the standings + a team-statistics endpoint for the given season and reports the
+ * raw field names/sample values it finds. Writes nothing; inspection only.
+ * Remove once the rating seed is built from the confirmed shape. */
+async function fetchSeasonProbe(season = 2025) {
+  const out = { season, endpoints: {} };
+
+  // 1) Standings — usually carries W-L + points for/against per team cleanly.
+  const standingsUrl = `${BASE}/standings?season=${season}`;
+  try {
+    const data = await espnGet(standingsUrl);
+    // ESPN nests standings under children[].standings.entries[] (by conference/division).
+    const groups = data.children || data.groups || [];
+    let sampleEntry = null, statNames = [];
+    const firstGroup = groups[0];
+    const entries = firstGroup?.standings?.entries || data.standings?.entries || [];
+    if (entries[0]) {
+      const e = entries[0];
+      statNames = (e.stats || []).map((s) => s.name || s.abbreviation).filter(Boolean);
+      sampleEntry = {
+        team: e.team?.displayName || e.team?.abbreviation || null,
+        stats: (e.stats || []).map((s) => ({
+          name: s.name, abbr: s.abbreviation, value: s.value, display: s.displayValue,
+        })),
+      };
+    }
+    out.endpoints.standings = {
+      url: standingsUrl, ok: true,
+      groupCount: groups.length,
+      entriesInFirstGroup: entries.length,
+      statNames, sampleEntry,
+    };
+  } catch (e) {
+    out.endpoints.standings = { url: standingsUrl, ok: false, error: e.message };
+  }
+
+  // 2) Teams list — to confirm team ids we'd loop for per-team statistics.
+  const teamsUrl = `${BASE}/teams`;
+  try {
+    const data = await espnGet(teamsUrl);
+    const teams = data.sports?.[0]?.leagues?.[0]?.teams || [];
+    out.endpoints.teams = {
+      url: teamsUrl, ok: true, teamCount: teams.length,
+      sample: teams.slice(0, 3).map((t) => ({
+        id: t.team?.id, abbr: t.team?.abbreviation, name: t.team?.displayName,
+      })),
+    };
+  } catch (e) {
+    out.endpoints.teams = { url: teamsUrl, ok: false, error: e.message };
+  }
+
+  // 3) Per-team season statistics via the core API (richer offensive/defensive
+  // splits). Probe ONE team (first from the teams list, else a known id) so we
+  // can read the real stat category/field names without 32 calls.
+  let probeTeamId = null;
+  try {
+    const t = await espnGet(`${BASE}/teams`);
+    probeTeamId = t.sports?.[0]?.leagues?.[0]?.teams?.[0]?.team?.id || null;
+  } catch (_) {}
+  if (probeTeamId) {
+    const coreUrl = `https://sports.core.api.espn.com/v2/sports/football/leagues/nfl/seasons/${season}/types/2/teams/${probeTeamId}/statistics`;
+    try {
+      const data = await espnGet(coreUrl);
+      const cats = data.splits?.categories || [];
+      out.endpoints.teamStatistics = {
+        url: coreUrl, ok: true, teamId: probeTeamId,
+        categories: cats.map((c) => ({
+          name: c.name, displayName: c.displayName,
+          statSample: (c.stats || []).slice(0, 8).map((s) => ({
+            name: s.name, abbr: s.abbreviation, value: s.value, display: s.displayValue,
+          })),
+        })),
+      };
+    } catch (e) {
+      out.endpoints.teamStatistics = { url: coreUrl, ok: false, error: e.message };
+    }
+  }
+
+  return out;
+}
+
 module.exports = {
   fetchScoreboard,
   getUpcomingGames,
   getFinalScore,
+  fetchSeasonProbe,
   statMap,
   parseRecords,
   LEAGUE_AVG_PPG,
