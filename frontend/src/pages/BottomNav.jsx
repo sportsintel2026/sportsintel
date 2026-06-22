@@ -7,12 +7,12 @@
 import { useNavigate, useLocation } from "react-router-dom";
 
 const TABS = [
-  { label: "Dashboard",   icon: "🏠", path: "/home",        match: (p) => p === "/" || p === "/home" },
-  { label: "Games",       icon: "🗓️", path: "/games",       match: (p) => p.includes("games") },
-  { label: "Props",       icon: "🔥", path: "/props",       match: (p) => p === "/props" },
-  { label: "Market",      icon: "💹", path: "/odds",        match: (p) => p === "/odds" },
-  { label: "Performance", icon: "📈", path: "/performance", match: (p) => p === "/performance" },
-  { label: "Account",     icon: "👤", path: "/settings",    match: (p) => p === "/settings" },
+  { label: "Dashboard",   icon: "\u25a6", path: "/home",        match: (p) => p === "/" || p === "/home" },
+  { label: "Games",       icon: "\u25a6", path: "/games",       match: (p) => p.includes("games") },
+  { label: "Props",       icon: "\u25c8", path: "/props",       match: (p) => p === "/props" },
+  { label: "Market",      icon: "\u25d0", path: "/odds",        match: (p) => p === "/odds" },
+  { label: "Performance", icon: "\u25b2", path: "/performance", match: (p) => p === "/performance" },
+  { label: "Account",     icon: "\u25cd", path: "/settings",    match: (p) => p === "/settings" },
 ];
 
 export default function BottomNav({ desktop = false }) {
