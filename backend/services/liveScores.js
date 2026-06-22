@@ -430,4 +430,42 @@ async function getStandings(league) {
   return map;
 }
 
-module.exports = { getScores, getGameDetail, getStandings, parseEvent, parseLineScore, parsePlayers };
+// ── Final score by date + team matchup ───────────────────────────────────────
+// The Expert-Picks grader stores the Odds-API-derived edges id on each pick, but
+// ESPN's getGameDetail is keyed by ESPN's own event id — a direct lookup never
+// lands (the same cross-feed gap the detail page bridges). So instead of looking a
+// game up by id, resolve its FINAL score by the pick's date + team matchup, which is
+// stable across both feeds. Returns { away, home } final numbers, or null if there's
+// no FINAL game matching those teams on that date. dateStr = "YYYY-MM-DD".
+const ABBR_ALIAS = {
+  CHW: "CWS", CWS: "CWS", WAS: "WSH", WSH: "WSH", SDP: "SD", SD: "SD",
+  SFG: "SF", SF: "SF", TBR: "TB", TB: "TB", KCR: "KC", KC: "KC", ARI: "AZ", AZ: "AZ",
+};
+const canonAbbr = (s) => { const u = String(s || "").trim().toUpperCase(); return ABBR_ALIAS[u] || u; };
+
+async function getFinalScoreByMatchup(league, dateStr, awayName, homeName) {
+  if (!PATHS[league]) return null;
+  const ymd = String(dateStr || "").replace(/-/g, "").slice(0, 8);
+  if (ymd.length !== 8) return null;
+
+  let games;
+  try { games = await fetchScoreboardRaw(league, ymd); } catch (_) { return null; }
+
+  const wantAabbr = canonAbbr(awayName), wantHabbr = canonAbbr(homeName);
+  const wantAnick = nick(awayName), wantHnick = nick(homeName);
+
+  for (const g of games) {
+    if (g.bucket !== "final") continue;
+    const a = g.away || {}, h = g.home || {};
+    const hit =
+      (canonAbbr(a.abbrev) === wantAabbr && canonAbbr(h.abbrev) === wantHabbr) ||
+      (nick(a.name) === wantAnick && nick(h.name) === wantHnick) ||
+      (nick(a.abbrev) === wantAnick && nick(h.abbrev) === wantHnick);
+    if (!hit) continue;
+    if (a.score == null || h.score == null) return null; // final but no score yet — skip
+    return { away: Number(a.score), home: Number(h.score) };
+  }
+  return null;
+}
+
+module.exports = { getScores, getGameDetail, getStandings, parseEvent, parseLineScore, parsePlayers, getFinalScoreByMatchup };
