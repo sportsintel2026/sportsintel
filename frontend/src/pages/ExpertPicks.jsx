@@ -170,7 +170,7 @@ export default function ExpertPicksPage() {
         <div className="ep-content" style={{ maxWidth: 1000, margin: "0 auto", padding: "24px 24px 60px" }}>
           <div onClick={() => navigate(-1)} style={{ color: "#6b7280", fontSize: 13, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6, marginBottom: 14, userSelect: "none" }}>← Back</div>
           <div style={{ marginBottom: 6 }}>
-            <h1 style={{ margin: 0, fontSize: 26, fontWeight: 700 }}>🎯 WizePlays</h1>
+            <h1 style={{ margin: 0, fontSize: 26, fontWeight: 800, letterSpacing: "-0.5px" }}>Wize<span style={{ color: "#ef4444" }}>Plays</span></h1>
           </div>
           <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: "14px 16px", margin: "0 0 14px", fontSize: 13, color: "#9ca3af", lineHeight: 1.6 }}>
             <p style={{ margin: "0 0 10px" }}>Handpicked by our analysts — a fresh slate of plays every day, across MLB, NBA, NFL, NHL &amp; college.</p>
@@ -242,7 +242,6 @@ function PerformanceStrip({ record }) {
       <Stat label="Record" value={`${record.wins}-${record.losses}${record.pushes ? `-${record.pushes}` : ""}`} />
       <Stat label="Win rate" value={`${winPct}%`} />
       <Stat label="Units" value={`${unitsSign}${record.units.toFixed(2)}u`} color={unitsColor} />
-      <Stat label="Parlays hit" value={`${record.parlayWins}/${record.parlayTotal}`} />
     </div>
   );
 }
