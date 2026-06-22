@@ -35,6 +35,7 @@ export default function MarketPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [plan, setPlan] = useState({ tier:"free", isAdmin:false });
+  const [sport, setSport] = useState("mlb");
   const [odds, setOdds] = useState(null);
   const [edges, setEdges] = useState(null);
   const [oddsHist, setOddsHist] = useState(null);
@@ -48,20 +49,44 @@ export default function MarketPage() {
     let c = false;
     const load = async () => {
       try {
-        const [o, e, h, m] = await Promise.all([
-          oddsApi.getMLB().catch(()=>null),
-          edgesApi.getMLB().catch(()=>null),
-          edgesApi.getOddsHistory().catch(()=>null),
-          edgesApi.getMarketRead().catch(()=>null),
-        ]);
-        if (c) return;
-        setOdds(o); setEdges(e); setOddsHist(h?.games||h||[]); setMarketRead(m?.games||m||[]);
+        if (sport === "nfl") {
+          // NFL market data rides inside the edges feed (odds, edges, marketByGame,
+          // marketMovers all in one). No separate odds/history/market-read calls.
+          const nfl = await edgesApi.getNFL().catch(()=>null);
+          if (c) return;
+          setOdds(null); setEdges(nfl);
+          // Build the Movers + Consensus view shapes from the NFL feed.
+          setOddsHist([]);
+          // Consensus rows from marketByGame.
+          const cons = [];
+          if (nfl && nfl.marketByGame) {
+            for (const id in nfl.marketByGame) {
+              const mb = nfl.marketByGame[id]; const mr = mb && mb.marketRead; if (!mr) continue;
+              cons.push({
+                gameId: id, matchup: mb.matchup,
+                win: mr.win ? { tier: mr.win.tier, favTeam: mr.win.favTeam, consensus: mr.win.consensus, model: null } : null,
+                cover: mr.cover ? { tier: "", favTeam: mr.cover.favTeam, line: mr.cover.favLine, agrees: false } : null,
+                total: mr.total ? { tier: mr.total.tier, side: mr.total.favSide, line: mr.total.line, odds: mr.total.consensus, agrees: false } : null,
+              });
+            }
+          }
+          setMarketRead(cons);
+        } else {
+          const [o, e, h, m] = await Promise.all([
+            oddsApi.getMLB().catch(()=>null),
+            edgesApi.getMLB().catch(()=>null),
+            edgesApi.getOddsHistory().catch(()=>null),
+            edgesApi.getMarketRead().catch(()=>null),
+          ]);
+          if (c) return;
+          setOdds(o); setEdges(e); setOddsHist(h?.games||h||[]); setMarketRead(m?.games||m||[]);
+        }
       } catch(_){}
       if (!c) setLoading(false);
     };
     load(); const id = setInterval(load, 90000);
     return () => { c = true; clearInterval(id); };
-  }, []);
+  }, [sport]);
 
   const oddsGames = Array.isArray(odds) ? odds : (odds?.games || []);
   const e = edges || {};
@@ -74,8 +99,15 @@ export default function MarketPage() {
     const delta = (open!=null&&now!=null) ? (amCents(now)-amCents(open)) : null;
     return { ...x, _open:open, _now:now, _delta:delta };
   });
-  const movers = moverPool.filter(m=>m._delta!=null && m._delta!==0).sort((a,b)=>Math.abs(b._delta)-Math.abs(a._delta));
-  const moverPick = (x) => isTotalEdge(x) ? `${x.side==="over"?"Over":"Under"} ${x.line??""}`.trim() : `${x.teamAbbr||shortTeam(x.matchup||"")} ML`;
+  const movers = (sport === "nfl")
+    ? ((e.marketMovers || []).map(m => ({
+        matchup: m.matchup, side: m.side, line: m.line,
+        teamAbbr: shortTeam((m.matchup||"").split(" @ ")[m.side==="home"?1:0] || ""),
+        _open: m.open, _now: m.now, _delta: m.delta,
+        isTotal: m.market === "total",
+      })))
+    : moverPool.filter(m=>m._delta!=null && m._delta!==0).sort((a,b)=>Math.abs(b._delta)-Math.abs(a._delta));
+  const moverPick = (x) => (x.isTotal || isTotalEdge(x)) ? `${x.side==="over"?"Over":"Under"} ${x.line??""}`.trim() : `${x.teamAbbr||shortTeam(x.matchup||"")} ML`;
   const moverMatch = (x) => { if(x.matchup) return x.matchup; const g=games.find(gm=>gm.id===x.gameId); return g ? `${g.awayAbbr||shortTeam(g.away)} @ ${g.homeAbbr||shortTeam(g.home)}` : ""; };
 
   const consensus = marketRead || [];
@@ -93,7 +125,7 @@ export default function MarketPage() {
         </div>
         <div className="sports">
           {[["MLB","mlb"],["NBA","nba"],["NHL","nhl"],["NFL","nfl"],["CFB","cfb"]].map(([lb,key])=>(
-            <b key={key} className={key==="mlb"?"on":""} onClick={()=>{ if(key==="nba")navigate("/nba"); else if(key!=="mlb")navigate(`/${key}-games`); }}><span className="dot"/>{lb}</b>
+            <b key={key} className={key===sport?"on":""} onClick={()=>{ if(key==="mlb"||key==="nfl"){ if(key!==sport){setSport(key);setLoading(true);setView("movers");} } else if(key==="nba")navigate("/nba"); else navigate(`/${key}-games`); }}><span className="dot"/>{lb}</b>
           ))}
         </div>
         <div className="subnav">{VIEWS.map(v=><b key={v[0]} className={v[0]===view?"on":""} onClick={()=>setView(v[0])}>{v[1]}</b>)}</div>
@@ -101,10 +133,18 @@ export default function MarketPage() {
 
       <div id="wrap">
         {loading ? <div className="estate"><div className="et">Loading market…</div><div className="es">Pulling every book’s lines.</div></div> : <>
-          {view==="odds" && (oddsGames.length ? <>
+          {sport==="nfl" && (
+            <div style={{margin:"0 0 10px",padding:"9px 12px",border:"1px solid #6b4a16",background:"linear-gradient(180deg,#1a1305,#0d0a02)",borderRadius:10,fontFamily:"var(--mono)",fontSize:11,lineHeight:1.45,color:"#f3b94f"}}>
+              ⚠ NFL preview — market data is live, but the model behind it is uncalibrated (2025 seed). Movement history fills in as books adjust toward the season.
+            </div>
+          )}
+
+          {view==="odds" && (sport==="nfl"
+            ? <div className="estate"><div className="et">Per-book grid coming soon for NFL</div><div className="es">Use Movers and Consensus for NFL market data right now.</div></div>
+            : (oddsGames.length ? <>
             <div className="cap">Best available price across all books for each game. Tap any game for the full book-by-book grid.</div>
             {oddsGames.map((g,i)=><OddsCard key={i} g={g} onOpen={()=>setSel(g)}/>)}
-          </> : <div className="estate"><div className="et">No games posted</div><div className="es">Lines appear as books open.</div></div>)}
+          </> : <div className="estate"><div className="et">No games posted</div><div className="es">Lines appear as books open.</div></div>))}
 
           {view==="movers" && (movers.length ? <>
             <div className="cap">Every line move today, ranked by cents. Open to now · updates as books adjust.</div>
