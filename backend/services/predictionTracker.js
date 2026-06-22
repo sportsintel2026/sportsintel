@@ -8,7 +8,7 @@ const { createClient } = require("@supabase/supabase-js");
 const { getEasternDate, getScheduleForDate, getGameHRHitters, getGamePitcherStrikeouts, getGameBatterHits, getGameBatterTotalBases, getLinescore, getGameStatusAndScore, normPlayerName } = require("./mlbStatsApi");
 const { fetchGamelog } = require("./nbaGamelog");
 const { fetchScoreboard } = require("./nbaDataSource");
-const { getMLBMainOdds } = require("./oddsApi");
+const { getMLBMainOdds, getMLBPinnacleClose } = require("./oddsApi");
 
 function db() {
   return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
@@ -143,8 +143,13 @@ async function captureClosingLines() {
   // the last pre-game price wins and a missed tick is recovered next tick.
   const dates = [...new Set(pending.map(p => p.game_date))];
   const CLOSING_WINDOW_MS = 120 * 60 * 1000;
+  // Pinnacle (sharp CLV) fires only in the FINAL 30 min before first pitch — the truest
+  // "close", and gating it this tight keeps the extra eu-region credits minimal (Pinnacle
+  // gets pulled a couple times per game instead of every tick across the 120-min window).
+  const PIN_WINDOW_MS = 30 * 60 * 1000;
   const now = Date.now();
   const closingWindowGameIds = new Set();
+  const pinWindowGameIds = new Set();
   const gameNames = {};
   for (const date of dates) {
     try {
@@ -155,6 +160,9 @@ async function captureClosingLines() {
         const msToStart = new Date(g.startTimeUTC).getTime() - now;
         if (msToStart > 0 && msToStart <= CLOSING_WINDOW_MS) {
           closingWindowGameIds.add(String(g.id));
+        }
+        if (msToStart > 0 && msToStart <= PIN_WINDOW_MS) {
+          pinWindowGameIds.add(String(g.id));
         }
       }
     } catch (e) { console.error(`[CLV] schedule ${date} failed:`, e.message); }
@@ -169,6 +177,15 @@ async function captureClosingLines() {
   let oddsEvents = [];
   try { oddsEvents = await getMLBMainOdds({ forceFresh: true }); }
   catch (e) { console.error("[CLV] odds fetch failed:", e.message); return 0; }
+
+  // Pinnacle (sharp) close — only when a game is in the final 30-min window, and never
+  // allowed to break the US capture: a failure here just leaves pinnacle_* null. ~2 eu
+  // credits, fired sparingly. This is the benchmark that actually validates edge.
+  let pinEvents = [];
+  if (pinWindowGameIds.size > 0) {
+    try { pinEvents = await getMLBPinnacleClose({ forceFresh: true }); }
+    catch (e) { console.error("[CLV] Pinnacle close fetch failed:", e.message); pinEvents = []; }
+  }
 
   let captured = 0;
   // Miss instrumentation: when coverage is < 100%, these counters name the cause
@@ -198,19 +215,46 @@ async function captureClosingLines() {
       ? round4(closeImplied - pickImplied)
       : null;
 
-    // RATCHET: skip the write if the price is unchanged from what we already
-    // stored — keeps the last pre-game price as the close without churning rows.
-    if (pick.closing_odds != null && pick.closing_odds === closing.thisOdds) continue;
+    // Build the update incrementally so US and Pinnacle CLV write independently —
+    // a pick can get its sharp CLV even on a tick where the US best price didn't move.
+    const upd = {};
 
+    // US best-of-books CLV — RATCHET: only (re)write when the price changed, keeping
+    // the last pre-game best price as the close without churning rows.
+    if (!(pick.closing_odds != null && pick.closing_odds === closing.thisOdds)) {
+      upd.closing_odds = closing.thisOdds;
+      upd.closing_opp_odds = closing.oppOdds;
+      upd.clv = clv;
+      upd.beat_close = clv != null ? clv > 0 : null;
+      upd.closing_captured_at = new Date().toISOString();
+    }
+
+    // SHARP CLV vs Pinnacle's de-vigged close (only for games in the tight window).
+    // De-vig Pinnacle's two-sided price to a fair no-vig probability for our side, then
+    // CLV = fairProb − our taken price's implied prob. Positive = we got a longer price
+    // than the sharpest book's fair line → genuinely beat the close. Guarded end-to-end.
+    if (pinEvents.length && pinWindowGameIds.has(String(pick.game_id)) && pickImplied != null) {
+      const pinEv = matchPickToOddsEvent(names, pinEvents);
+      const pc = pinEv ? closingOddsForPick(pick, pinEv) : null;
+      if (pc && pc.thisOdds != null && pc.oppOdds != null) {
+        const ti = americanToImpliedProb(pc.thisOdds);
+        const oi = americanToImpliedProb(pc.oppOdds);
+        const pinFair = (ti != null && oi != null && ti + oi > 0) ? round4(ti / (ti + oi)) : null;
+        if (pinFair != null
+            && !(pick.pinnacle_closing_odds != null && pick.pinnacle_closing_odds === pc.thisOdds)) {
+          const pinClv = round4(pinFair - pickImplied);
+          upd.pinnacle_closing_odds = pc.thisOdds;
+          upd.pinnacle_fair_prob = pinFair;
+          upd.pinnacle_clv = pinClv;
+          upd.pinnacle_beat_close = pinClv > 0;
+        }
+      }
+    }
+
+    if (Object.keys(upd).length === 0) continue; // nothing new this tick
     const { error: upErr } = await supabase
       .from("model_predictions")
-      .update({
-        closing_odds: closing.thisOdds,
-        closing_opp_odds: closing.oppOdds,
-        clv,
-        beat_close: clv != null ? clv > 0 : null,
-        closing_captured_at: new Date().toISOString(),
-      })
+      .update(upd)
       .eq("id", pick.id);
     if (!upErr) captured++;
   }
