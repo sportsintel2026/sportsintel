@@ -36,6 +36,7 @@ const umpiresRoutes = require("./routes/umpires");
 
 const { refreshDailyGames } = require("./services/sportsData");
 const { gradeFinishedGames, captureClosingLines, captureNbaClosingLines, captureOddsTicks, voidUnmatchedProps } = require("./services/predictionTracker");
+const { captureNFLOddsTicks } = require("./services/nflEdges");
 const { backfillUmpireGames } = require("./services/umpireStore");
 const { getEasternDate } = require("./services/mlbStatsApi");
 const { gradeExpertPicks } = require("./services/expertPicksGrader");
@@ -191,6 +192,18 @@ cron.schedule("*/15 11-23,0-2 * * *", async () => {
     await captureOddsTicks();
   } catch (err) {
     console.error("[CRON] Odds tick capture failed:", err.message);
+  }
+}, { timezone: "America/New_York" });
+
+// NFL odds-tick capture — banks line-movement history for NFL Market Movers. Runs
+// less often than MLB (twice an hour is plenty for weekly games) and on its own
+// table (nfl_odds_ticks) so it never touches the MLB pipeline. Cheap: shares the
+// 30-min odds cache. Sparse in the offseason; comes alive as the season nears.
+cron.schedule("5,35 11-23,0-2 * * *", async () => {
+  try {
+    await captureNFLOddsTicks();
+  } catch (err) {
+    console.error("[CRON] NFL odds tick capture failed:", err.message);
   }
 }, { timezone: "America/New_York" });
 
