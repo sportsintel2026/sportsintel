@@ -225,7 +225,7 @@ async function captureClosingLines() {
       upd.closing_odds = closing.thisOdds;
       upd.closing_opp_odds = closing.oppOdds;
       upd.clv = clv;
-      upd.beat_close = clv != null ? clv > 0 : null;
+      upd.beat_close = beatFlag(clv);
       upd.closing_captured_at = new Date().toISOString();
     }
 
@@ -246,7 +246,7 @@ async function captureClosingLines() {
           upd.pinnacle_closing_odds = pc.thisOdds;
           upd.pinnacle_fair_prob = pinFair;
           upd.pinnacle_clv = pinClv;
-          upd.pinnacle_beat_close = pinClv > 0;
+          upd.pinnacle_beat_close = beatFlag(pinClv);
         }
       }
     }
@@ -373,6 +373,9 @@ function matchPickToOddsEvent(names, oddsEvents) {
 }
 
 function round4(n) { return Math.round(n * 10000) / 10000; }
+// Tie-aware beat flag: >0 = beat, <0 = worse, exactly 0 (flat price, no movement) = a
+// TIE, stored as null rather than false so ties never masquerade as losses in the column.
+function beatFlag(v) { return v == null ? null : (v > 0 ? true : (v < 0 ? false : null)); }
 
 // ── RECORD (MLB) ────────────────────────────────────────────────────────────────
 // Snapshots every edge the model surfaced today. Only records games that are
