@@ -95,6 +95,59 @@ async function getMLBMainOdds({ forceFresh = false } = {}) {
   });
 }
 
+// Pinnacle CLOSING prices (eu region) for SHARP CLV benchmarking. Pinnacle is the
+// lowest-vig, sharpest book — the line that actually defines "the close" — so CLV
+// measured against its de-vigged close validates edge far better than best-of-US
+// (a max statistic that barely moves). Returns one row per event with Pinnacle's
+// two-sided h2h + totals in the SAME shape getMLBMainOdds emits (awayTeam/homeTeam/
+// h2h/totals), so the closing-capture matcher and closingOddsForPick consume it
+// identically — no parallel matching code. eu region = ~2 credits/call; the caller
+// gates this to the final pre-game window so it fires only a couple times per game.
+async function getMLBPinnacleClose({ forceFresh = false } = {}) {
+  const cacheKey = "mlb_pinnacle_close";
+  const cached = cache.get(cacheKey);
+  if (!forceFresh && isCacheValid(cached)) return cached.data;
+  try {
+    const data = await oddsGet("/sports/baseball_mlb/odds", {
+      regions: "eu", markets: "h2h,totals", oddsFormat: "american", dateFormat: "iso",
+    });
+    const events = [];
+    for (const g of (data || [])) {
+      const away = g.away_team, home = g.home_team;
+      if (!away || !home) continue;
+      const pin = (g.bookmakers || []).find(b => b.key === "pinnacle");
+      if (!pin) continue; // no Pinnacle line for this game → can't benchmark it
+      const h2hM = (pin.markets || []).find(m => m.key === "h2h");
+      const totM = (pin.markets || []).find(m => m.key === "totals");
+      const h2h = { away: null, home: null };
+      if (h2hM) {
+        const ao = (h2hM.outcomes || []).find(o => o.name === away);
+        const ho = (h2hM.outcomes || []).find(o => o.name === home);
+        if (ao && plausibleMlOdds(ao.price)) h2h.away = ao.price;
+        if (ho && plausibleMlOdds(ho.price)) h2h.home = ho.price;
+      }
+      const totals = { line: null, over: null, under: null };
+      if (totM) {
+        const ov = (totM.outcomes || []).find(o => o.name === "Over");
+        const un = (totM.outcomes || []).find(o => o.name === "Under");
+        const line = ov?.point ?? un?.point ?? null;
+        if (plausibleTotalLine(line)) {
+          totals.line = line;
+          if (ov && plausibleTotalOdds(ov.price)) totals.over = ov.price;
+          if (un && plausibleTotalOdds(un.price)) totals.under = un.price;
+        }
+      }
+      events.push({ awayTeam: away, homeTeam: home, commenceTime: g.commence_time, h2h, totals });
+    }
+    cache.set(cacheKey, { data: events, fetchedAt: Date.now() });
+    return events;
+  } catch (e) {
+    console.error("[OddsAPI] Pinnacle close fetch error:", e.message);
+    if (cached) return cached.data;
+    return [];
+  }
+}
+
 // Live-game odds: SAME data shape as getMLBMainOdds, but a much shorter cache so
 // in-game lines stay fresh for the live-edge route. Pre-game uses the 30-min
 // cache above; only the live route should call this. 3-min cache keeps in-game
@@ -1452,6 +1505,7 @@ async function getCFBMainOdds(opts = {})  { return getFballMainOdds("americanfoo
 
 module.exports = {
   getMLBMainOdds,
+  getMLBPinnacleClose,
   getNFLMainOdds,
   getCFBMainOdds,
   getFballMainOdds,
