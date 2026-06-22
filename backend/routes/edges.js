@@ -1232,4 +1232,25 @@ router.get("/nflpointsprobe", async (req, res) => {
   }
 });
 
+// ── TEMP DIAGNOSTIC: NFL power ratings (read-only) ───────────────────────────
+// Runs buildTeamRatings over all 32 teams and returns the seeded power ratings
+// (league-centered, regressed points differential from 2025). Confirms the
+// 32-team loop flows cleanly before ratings are wired into the model. Read-only.
+//   /api/edges/nflratings[?season=2025]
+router.get("/nflratings", async (req, res) => {
+  try {
+    const season = parseInt(req.query.season, 10) || 2025;
+    const { buildTeamRatings } = require("../services/nflDataSource");
+    const result = await buildTeamRatings(season);
+    // Sort teams by rating (best → worst) for an at-a-glance sanity check.
+    const ranked = Object.values(result.teams || {})
+      .sort((a, b) => (b.rating ?? -99) - (a.rating ?? -99))
+      .map(t => ({ abbr: t.abbr, name: t.name, rating: t.rating, rawRating: Math.round(t.rawRating * 100) / 100, record: `${t.wins}-${t.losses}`, pf: t.pf, pa: t.pa, diff: t.diff }));
+    res.json({ ok: true, season: result.season, rated: result.rated, meanRawDiffPerGame: result.meanRawDiffPerGame, regression: result.regression, note: result.note, ranked });
+  } catch (e) {
+    console.error("[nflratings] error:", e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 module.exports = router;
