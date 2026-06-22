@@ -27,13 +27,14 @@ const {
   calculateGameEdges,
   calculateHRPropEdges,
   calculateStrikeoutPropEdges,
+  calculateStrikeoutShadow,
   calculateHitsPropEdges,
   calculateTotalBasesShadow,
   calculateDoublesBoard,
   calculateTriplesBoard,
   debugHitsProps,
 } = require("../services/edgesModel");
-const { recordPredictions, recordTotalBasesShadow } = require("../services/predictionTracker");
+const { recordPredictions, recordTotalBasesShadow, recordStrikeoutShadow } = require("../services/predictionTracker");
 // In-memory cache
 let edgesCache = null;
 let edgesCacheAt = 0;
@@ -512,6 +513,7 @@ router.get("/mlb", async (req, res) => {
     let tbAutoEventIds = [];
     let tbAutoGames = [];
     let tbBoardResult = null; // computed TB shadow rows, reused by persistence below
+    let kShadowResult = null; // computed K shadow rows, reused by persistence below
     try {
       // Take the first 5 not-yet-started games WITH ODDS for HR props.
       // Skip live/final games (sportsbooks pull or re-price HR props once underway).
@@ -531,6 +533,11 @@ router.get("/mlb", async (req, res) => {
         }
         const kOddsByEvent = await getMLBStrikeoutPropsForAllEvents(eventIds, 10);
         kPropEdges = await calculateStrikeoutPropEdges(topGamesForHR, kOddsByEvent);
+        // K projection SHADOW (log-only): reuse the SAME K odds (no extra fetch) to
+        // project every starter's Ks regardless of side/edge, for the overprojection
+        // diagnostic. Never blocks the response; persisted fire-and-forget below.
+        try { kShadowResult = await calculateStrikeoutShadow(topGamesForHR, kOddsByEvent); }
+        catch (e) { console.error("[Edges] K-shadow compute failed:", e.message); kShadowResult = null; }
         const hitsOddsByEvent = await getMLBHitsPropsForAllEvents(eventIds, 10);
         if (req.query.hits_debug) {
           const dbg = await debugHitsProps(topGamesForHR, hitsOddsByEvent);
@@ -630,6 +637,25 @@ router.get("/mlb", async (req, res) => {
           await recordTotalBasesShadow(tbShadow, slateDate);
         } catch (e) {
           console.error("[Edges] TB-shadow auto-run failed:", e.message);
+        }
+      })();
+    }
+
+    // K projection SHADOW (log-only): persist every starter's K projection so the
+    // strikeout overprojection accumulates for grading vs actual Ks AND IP. Reuses
+    // the rows computed above (same K odds, no extra fetch); recomputes only if that
+    // path didn't run, so grading never starves. Fire-and-forget; prices nothing.
+    if (typeof tbAutoEventIds !== "undefined" && tbAutoEventIds.length > 0) {
+      (async () => {
+        try {
+          let kShadow = kShadowResult;
+          if (!kShadow) {
+            const kOddsByEvent2 = await getMLBStrikeoutPropsForAllEvents(tbAutoEventIds, 10);
+            kShadow = await calculateStrikeoutShadow(tbAutoGames, kOddsByEvent2);
+          }
+          await recordStrikeoutShadow(kShadow, slateDate);
+        } catch (e) {
+          console.error("[Edges] K-shadow auto-run failed:", e.message);
         }
       })();
     }
