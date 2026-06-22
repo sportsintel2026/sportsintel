@@ -189,6 +189,20 @@ export default function HomePage(){
 
   // ---- Redesign derived data (presentation only; reads existing engine vars) ----
   const mrByGame={}; (marketRead||[]).forEach(g=>{ if(g&&g.gameId!=null) mrByGame[g.gameId]=g; });
+  // NFL market read rides inside the edges feed (edges.marketByGame), not the
+  // separate MLB market-read call. Map it into the same shape the board renderer
+  // expects (win/cover/total with tier+favTeam+consensus) so NFL shows the same
+  // "BOOKS LEAN" box. Keyed by eventId (= gameId on NFL board rows).
+  if(sport==="nfl"&&edges&&edges.marketByGame){
+    for(const id in edges.marketByGame){
+      const mr=edges.marketByGame[id]&&edges.marketByGame[id].marketRead; if(!mr) continue;
+      mrByGame[id]={
+        win: mr.win?{tier:mr.win.tier,favTeam:mr.win.favTeam,consensus:mr.win.consensus,model:null}:null,
+        cover: mr.cover?{tier:"",favTeam:mr.cover.favTeam,odds:null,agrees:false,line:mr.cover.favLine}:null,
+        total: mr.total?{tier:mr.total.tier,side:mr.total.favSide,line:mr.total.line,odds:mr.total.consensus,agrees:false}:null,
+      };
+    }
+  }
   const gameById={}; games.forEach(g=>{ if(g&&g.id!=null) gameById[g.id]=g; });
   const kpiList=boardEdges||[];
   const kpiCount=kpiList.length;
