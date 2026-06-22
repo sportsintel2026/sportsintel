@@ -18,17 +18,39 @@ const NAME2ABBR = {
   athletics:"ATH",philadelphiaphillies:"PHI",pittsburghpirates:"PIT",sandiegopadres:"SD",sanfranciscogiants:"SF",
   seattlemariners:"SEA",stlouiscardinals:"STL",tampabayrays:"TB",texasrangers:"TEX",torontobluejays:"TOR",washingtonnationals:"WSH"
 };
+// NFL team → abbr + on-dark-visible color (football board reuses the MLB grid UI
+// but needs its own name map; MLB's slice-3 fallback collides — "New England" and
+// "New York" both → "NEW"). Keys are normName(full name).
+const NFL_ABBR = {
+  arizonacardinals:"ARI",atlantafalcons:"ATL",baltimoreravens:"BAL",buffalobills:"BUF",
+  carolinapanthers:"CAR",chicagobears:"CHI",cincinnatibengals:"CIN",clevelandbrowns:"CLE",
+  dallascowboys:"DAL",denverbroncos:"DEN",detroitlions:"DET",greenbaypackers:"GB",
+  houstontexans:"HOU",indianapoliscolts:"IND",jacksonvillejaguars:"JAX",kansascitychiefs:"KC",
+  lasvegasraiders:"LV",losangeleschargers:"LAC",losangelesrams:"LAR",miamidolphins:"MIA",
+  minnesotavikings:"MIN",newenglandpatriots:"NE",neworleanssaints:"NO",newyorkgiants:"NYG",
+  newyorkjets:"NYJ",philadelphiaeagles:"PHI",pittsburghsteelers:"PIT",sanfrancisco49ers:"SF",
+  seattleseahawks:"SEA",tampabaybuccaneers:"TB",tennesseetitans:"TEN",washingtoncommanders:"WAS"
+};
+const NFL_COL = {
+  ARI:"#E64A6B",ATL:"#E0203D",BAL:"#7B5FE0",BUF:"#1D8FE0",CAR:"#0FA0DC",CHI:"#E8642A",CIN:"#FB4F14",
+  CLE:"#FF5A1F",DAL:"#4F8FE0",DEN:"#FB6A2A",DET:"#2AA3E0",GB:"#3FA86A",HOU:"#D43B52",IND:"#3A6FD0",
+  JAX:"#1FA0B0",KC:"#F23847",LV:"#B9C0C4",LAC:"#22A6E0",LAR:"#4F7DE0",MIA:"#19C4CC",MIN:"#7B4FD0",
+  NE:"#E0344F",NO:"#D3BC8D",NYG:"#3A5BD0",NYJ:"#2E9A6A",PHI:"#1F8A7A",PIT:"#FFB612",SF:"#E0342A",
+  SEA:"#69BE28",TB:"#F23A2A",TEN:"#4B92DB",WAS:"#FFB612"
+};
 const normName = (s) => String(s||"").toLowerCase().replace(/[^a-z]/g,"");
 const shortTeam = (t) => { const m = String(t||"").match(/[A-Z]{2,3}/); return m ? m[0] : String(t||"").slice(0,3).toUpperCase(); };
 const abbrOf = (name) => NAME2ABBR[normName(name)] || shortTeam(name) || String(name||"").slice(0,3).toUpperCase();
+const abbrNFL = (name) => NFL_ABBR[normName(name)] || shortTeam(name) || String(name||"").slice(0,3).toUpperCase();
 const teamCol = (ab) => TEAMCOL[String(ab||"").toUpperCase()] || "#3a4a57";
+const nflCol = (ab) => NFL_COL[String(ab||"").toUpperCase()] || "#3a4a57";
 const fmtOdds = (a) => (a==null || isNaN(a)) ? "—" : (Math.round(Number(a))>0 ? "+"+Math.round(Number(a)) : ""+Math.round(Number(a)));
 const amCents = (o) => { if(o==null||isNaN(o)) return null; const n=Number(o); return n>=100?n-100:n<=-100?n+100:0; };
 const isTotalEdge = (e) => e.side==="over" || e.side==="under";
 
-function Logo({ ab }) {
-  const col = teamCol(ab);
-  return <span className="lg" style={{ background:`radial-gradient(circle at 50% 30%, ${col}, #0c1018 85%)`, boxShadow:`inset 0 0 0 1.5px ${col}` }}>{ab}</span>;
+function Logo({ ab, col }) {
+  const c = col || teamCol(ab);
+  return <span className="lg" style={{ background:`radial-gradient(circle at 50% 30%, ${c}, #0c1018 85%)`, boxShadow:`inset 0 0 0 1.5px ${c}` }}>{ab}</span>;
 }
 
 export default function MarketPage() {
@@ -112,6 +134,29 @@ export default function MarketPage() {
 
   const consensus = marketRead || [];
 
+  // NFL line-shopping grid rides inside the edges feed: each game now carries an
+  // oddsGrid (book-by-book ML / total / spread) built server-side. Reshape it into
+  // the same card/sheet contract the MLB odds view uses, with football colors + abbrs
+  // and a spread block (isFball flag turns on the ATS columns in the grid sheet).
+  const nflOddsGames = (sport === "nfl")
+    ? (games || [])
+        .filter(g => g.oddsGrid && Array.isArray(g.oddsGrid.books) && g.oddsGrid.books.length)
+        .map(g => {
+          const aAb = abbrNFL(g.awayTeam), hAb = abbrNFL(g.homeTeam);
+          return {
+            away: g.awayTeam, home: g.homeTeam,
+            awayAbbr: aAb, homeAbbr: hAb,
+            awayCol: nflCol(aAb), homeCol: nflCol(hAb),
+            best: g.oddsGrid.best || {},
+            consensusTotalLine: g.oddsGrid.consensusTotalLine,
+            consensusSpreadMag: g.oddsGrid.consensusSpreadMag,
+            books: g.oddsGrid.books,
+            isFball: true,
+          };
+        })
+    : [];
+  const oddsList = (sport === "nfl") ? nflOddsGames : oddsGames;
+
   const VIEWS = [["odds","Odds"],["movers","Movers"],["consensus","Consensus"]];
 
   return (
@@ -139,12 +184,10 @@ export default function MarketPage() {
             </div>
           )}
 
-          {view==="odds" && (sport==="nfl"
-            ? <div className="estate"><div className="et">Per-book grid coming soon for NFL</div><div className="es">Use Movers and Consensus for NFL market data right now.</div></div>
-            : (oddsGames.length ? <>
-            <div className="cap">Best available price across all books for each game. Tap any game for the full book-by-book grid.</div>
-            {oddsGames.map((g,i)=><OddsCard key={i} g={g} onOpen={()=>setSel(g)}/>)}
-          </> : <div className="estate"><div className="et">No games posted</div><div className="es">Lines appear as books open.</div></div>))}
+          {view==="odds" && (oddsList.length ? <>
+            <div className="cap">Best available price across all books for each game. Tap any game for the full book-by-book grid{sport==="nfl"?" — moneyline, spread and total":""}.</div>
+            {oddsList.map((g,i)=><OddsCard key={i} g={g} onOpen={()=>setSel(g)}/>)}
+          </> : <div className="estate"><div className="et">{sport==="nfl"?"No NFL lines posted yet":"No games posted"}</div><div className="es">Lines appear as books open.</div></div>)}
 
           {view==="movers" && (movers.length ? <>
             <div className="cap">Every line move today, ranked by cents. Open to now · updates as books adjust.</div>
@@ -178,7 +221,7 @@ function OddsCard({ g, onOpen }) {
   const nBooks = (g.books||[]).length;
   return (
     <div className="oc" onClick={onOpen}>
-      <div className="och"><div className="lgs"><Logo ab={aAb}/><Logo ab={hAb}/></div><div className="mt">{aAb} @ {hAb}</div><div className="tm2">{nBooks} books</div></div>
+      <div className="och"><div className="lgs"><Logo ab={aAb} col={g.awayCol}/><Logo ab={hAb} col={g.homeCol}/></div><div className="mt">{aAb} @ {hAb}</div><div className="tm2">{nBooks} books</div></div>
       <div className="bestrow">
         <div className="bp"><div className="k">BEST {aAb} ML</div><div className="v"><span className="pr">{fmtOdds(best.awayML?.price)}</span></div><div className="bk">{best.awayML?.book || "—"}</div></div>
         <div className="bp"><div className="k">BEST {hAb} ML</div><div className="v"><span className="pr">{fmtOdds(best.homeML?.price)}</span></div><div className="bk">{best.homeML?.book || "—"}</div></div>
@@ -191,7 +234,17 @@ function OddsCard({ g, onOpen }) {
 function GridSheet({ g, onClose }) {
   const aAb = g.awayAbbr || abbrOf(g.away), hAb = g.homeAbbr || abbrOf(g.home);
   const best = g.best || {}; const cl = g.consensusTotalLine; const books = g.books || [];
+  // Football carries a spread block (best.awaySpread/homeSpread) → show ATS columns.
+  const fball = !!(g.isFball || best.awaySpread || best.homeSpread);
+  const sMag = g.consensusSpreadMag;
   const cell = (val, isBest) => <td className={isBest ? "best" : ""}>{fmtOdds(val)}</td>;
+  // Spread cell: book's own line + price (lines vary by book — that's the shop). Best
+  // is highlighted only at the consensus magnitude so it's an apples-to-apples compare.
+  const spCell = (line, price, isBest) => (
+    <td className={isBest ? "best" : ""}>
+      {line==null ? "\u2014" : <>{(line>0?"+":"")+line}<span style={{color:"var(--mut2)",marginLeft:3}}>{fmtOdds(price)}</span></>}
+    </td>
+  );
   return (
     <>
       <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.55)",zIndex:60}}/>
@@ -200,21 +253,27 @@ function GridSheet({ g, onClose }) {
         <div className="sbody">
           <div className="gridblk">
             <div className="bl">FULL ODDS — {aAb} @ {hAb}</div>
-            <table className="otbl">
-              <thead><tr><th>Book</th><th>{aAb} ML</th><th>{hAb} ML</th><th>O {cl ?? ""}</th><th>U {cl ?? ""}</th></tr></thead>
+            <table className="otbl" style={fball ? {minWidth:430} : undefined}>
+              <thead><tr>
+                <th>Book</th><th>{aAb} ML</th><th>{hAb} ML</th>
+                {fball && <th>{aAb} ATS</th>}{fball && <th>{hAb} ATS</th>}
+                <th>O {cl ?? ""}</th><th>U {cl ?? ""}</th>
+              </tr></thead>
               <tbody>
                 {books.map((b,i)=>(
                   <tr key={i} className={/pinnacle/i.test(b.book||"") ? "pinrow" : ""}>
                     <td className="bk">{b.book}</td>
                     {cell(b.awayML, b.awayML!=null && best.awayML && b.awayML===best.awayML.price)}
                     {cell(b.homeML, b.homeML!=null && best.homeML && b.homeML===best.homeML.price)}
+                    {fball && spCell(b.awaySpread, b.awaySpreadPrice, b.awaySpread!=null && best.awaySpread && sMag!=null && Math.abs(b.awaySpread)===sMag && b.awaySpreadPrice===best.awaySpread.price)}
+                    {fball && spCell(b.homeSpread, b.homeSpreadPrice, b.homeSpread!=null && best.homeSpread && sMag!=null && Math.abs(b.homeSpread)===sMag && b.homeSpreadPrice===best.homeSpread.price)}
                     {cell(b.over, b.over!=null && best.over && b.over===best.over.price)}
                     {cell(b.under, b.under!=null && best.under && b.under===best.under.price)}
                   </tr>
                 ))}
               </tbody>
             </table>
-            <div className="legend"><span className="bx">green</span> = best available price · Pinnacle (gold) = sharp reference · — = book hasn’t posted this market</div>
+            <div className="legend"><span className="bx">green</span> = best available price{fball ? " (spreads compared at the consensus line)" : " · Pinnacle (gold) = sharp reference"} · {"\u2014"} = book hasn’t posted this market</div>
           </div>
         </div>
       </div>
