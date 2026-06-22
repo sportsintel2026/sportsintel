@@ -167,7 +167,7 @@ export default function HomePage(){
   const propArr=propTab==="hr"?hrP:propTab==="hits"?hitsP:propTab==="ks"?ksP:[];
   const mkProp=(p,kind)=>{
     const b={k:kind+(p.playerId||p.player),id:p.playerId,name:p.player,team:p.team,game:p.game,edge:p.edge??0,odds:p.odds};
-    if(kind==="hr") return {...b,market:"HR",betSide:"O 0.5 HR"};
+    if(kind==="hr") return {...b,market:"HR",betSide:"Anytime HR"};
     if(kind==="hits") return {...b,market:"HITS",betSide:(p.line===0.5?"1+ Hits":`${p.side==="under"?"U":"O"} ${p.line} Hits`)};
     return {...b,market:"K",betSide:`K ${p.side==="under"?"U":"O"}${p.line}`};
   };
@@ -239,7 +239,12 @@ export default function HomePage(){
     const model=x.modelProb!=null?+(x.modelProb*100).toFixed(1):null;
     const mkt=+(((impliedFromAmerican(x.odds)||0)*100)).toFixed(1);
     const flags=[];
-    if(mr&&mr.win&&mr.win.model)flags.push(mr.win.model.agrees?["ok","\u2713 model agrees"]:["warn","model differs"]);
+    // Top flag describes THE PICK, not the books' who-wins lean — surfacing the win
+    // read here made value-dog edges (e.g. NYM ML at +160 while books favor PHI) read
+    // as "model agrees" and contradict themselves. The Market Read box below still shows
+    // the separate who-wins lens. ML only: model<50 = value on the underdog (that's the
+    // whole point of the edge), model>=50 = model favors the side it's backing.
+    if(mkOf(x)==="ML"&&model!=null)flags.push(model>=50?["ok","\u2713 model favors this side"]:["info","value on the underdog"]);
     if(x._moveFlag==="toward")flags.push(["ok","\u2198 money coming in"]);
     if(x._moveFlag==="against")flags.push(["warn","market moving against"]);
     if(x.inflation&&x.inflation.inflated)flags.push(["warn","market inflated"]);
