@@ -1285,17 +1285,74 @@ router.get("/nfl", async (req, res) => {
     }
     edges.sort((a, b) => (b.edge ?? 0) - (a.edge ?? 0));
 
+    // ── Dashboard-compatible shape ───────────────────────────────────────────
+    // The Home board consumes moneylineEdges/spreadEdges/totalsEdges arrays with
+    // { gameId, side, matchup, edge, odds, modelProb, line, convictionScore, ... }
+    // (same contract as the NBA feed: edge is already a % number for non-MLB).
+    // We flatten the per-game model output into those arrays so the existing board
+    // renders NFL with no frontend special-casing. value:false rows are included
+    // so the board isn't empty, but every edge is provisional (calibrated:false).
+    const moneylineEdges = [], spreadEdges = [], totalsEdges = [];
+    const teamsOf = (matchup) => { const p = String(matchup || "").split(" @ "); return { away: p[0] || "", home: p[1] || "" }; };
+    for (const g of allGames) {
+      const { away, home } = teamsOf(g.matchup);
+      const ml = g.moneyline;
+      if (ml && ml.edge != null && ml.fair) {
+        const pickHome = (ml.homeWinProb ?? 0) - (ml.fair.home ?? 0) >= (ml.awayWinProb ?? 0) - (ml.fair.away ?? 0);
+        moneylineEdges.push({
+          gameId: g.eventId, side: pickHome ? "home" : "away",
+          matchup: g.matchup, teamAbbr: pickHome ? home : away,
+          edge: ml.edge, odds: pickHome ? ml.book?.home : ml.book?.away,
+          modelProb: (pickHome ? ml.homeWinProb : ml.awayWinProb) / 100,
+          line: null, convictionScore: null, conviction: null,
+          provisional: true,
+        });
+      }
+      const sp = g.spread;
+      if (sp && sp.edge != null && sp.fair) {
+        const pickHome = (sp.homeCoverProb ?? 0) >= 50;
+        spreadEdges.push({
+          gameId: g.eventId, side: pickHome ? "home" : "away",
+          matchup: g.matchup, teamAbbr: pickHome ? home : away,
+          edge: sp.edge, odds: pickHome ? sp.book?.home : sp.book?.away,
+          modelProb: (pickHome ? sp.homeCoverProb : (100 - sp.homeCoverProb)) / 100,
+          line: pickHome ? sp.line : -sp.line, convictionScore: null, conviction: null,
+          provisional: true,
+        });
+      }
+      const tot = g.total;
+      if (tot && tot.edge != null && tot.fair) {
+        const pickOver = (tot.overProb ?? 50) >= 50;
+        totalsEdges.push({
+          gameId: g.eventId, side: pickOver ? "over" : "under",
+          matchup: g.matchup,
+          edge: tot.edge, odds: pickOver ? tot.book?.over : tot.book?.under,
+          modelProb: (pickOver ? tot.overProb : (100 - tot.overProb)) / 100,
+          line: tot.line, convictionScore: null, conviction: null,
+          provisional: true,
+        });
+      }
+    }
+    moneylineEdges.sort((a, b) => (b.edge ?? -1) - (a.edge ?? -1));
+    spreadEdges.sort((a, b) => (b.edge ?? -1) - (a.edge ?? -1));
+    totalsEdges.sort((a, b) => (b.edge ?? -1) - (a.edge ?? -1));
+
     res.json({
       ok: true,
       league: "nfl",
       season,
       calibrated: false,          // ← no graded results yet; do NOT treat as live advice
       preseason: true,            // ← lines are lookahead/preseason; ratings are a 2025 seed
+      provisional: true,          // ← dashboard reads this to show the "in training" banner
       ratingsSeed: slate.ratingsMeta,
       teamMatch: slate.match,     // coverage of odds-team → rating resolution
       edgeCount: edges.length,
       edges,
-      games: allGames,            // full predicted board (for the dashboard)
+      // dashboard board contract:
+      games: allGames,
+      moneylineEdges, spreadEdges, totalsEdges,
+      runLineEdges: [], hrPropEdges: [], kPropEdges: [], hitsPropEdges: [],
+      computedAt: new Date().toISOString(),
       disclaimer: "PROVISIONAL: 2025-seeded ratings vs preseason lines. Not calibrated — no graded NFL results yet. For build/validation only; not betting advice until shadow-graded in-season.",
     });
   } catch (e) {
