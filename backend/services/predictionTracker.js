@@ -550,6 +550,46 @@ async function recordTotalBasesShadow(tbShadow, gameIso) {
     console.error("[Tracker] TB-shadow record exception:", e.message);
   }
 }
+
+// Pitcher strikeout projection SHADOW recorder (log-only, mirrors recordTotalBasesShadow).
+// Snapshots EVERY probable starter's K projection (from calculateStrikeoutShadow) so the
+// strikeout overprojection can be measured against graded actuals. Stores the projection
+// components — expected_ks (operative lambda), proj_ip, k_rate, pitcher_k9 — alongside the
+// usual fields. Graded later by the player_strikeouts_shadow branch vs actual Ks AND IP.
+// Market string is distinct (player_strikeouts_shadow) so it never touches live K picks.
+async function recordStrikeoutShadow(kShadow, gameIso) {
+  if (!Array.isArray(kShadow) || kShadow.length === 0) return;
+  const supabase = db();
+  // gameIso is already an ET "YYYY-MM-DD" slate date — same handling as recordTotalBasesShadow
+  // (do NOT re-parse through etDate(); a bare date string rolls back a day in Eastern).
+  const gameDate = gameIso || getEasternDate(0);
+  const rows = [];
+  for (const p of kShadow) {
+    if (!p.playerId || p.expectedKs == null) continue;
+    rows.push({
+      game_id: String(p.gameId), game_date: gameDate, league: "mlb",
+      matchup: p.game, market: "player_strikeouts_shadow",
+      selection: `${p.player}:OVER`,
+      description: `${p.player} K shadow (expK ${p.expectedKs}, projIP ${p.projIP}, K9 ${p.pitcherK9})`,
+      model_prob: p.overProb ?? null, odds: -110,
+      edge: null, confidence: p.overProb ?? null, line: p.line ?? null,
+      expected_ks: p.expectedKs ?? null,
+      proj_ip: p.projIP ?? null,
+      k_rate: p.kRate ?? null,
+      pitcher_k9: p.pitcherK9 ?? null,
+    });
+  }
+  if (rows.length === 0) return;
+  try {
+    const { error } = await supabase
+      .from("model_predictions")
+      .upsert(rows, { onConflict: "game_id,market,selection,game_date", ignoreDuplicates: true });
+    if (error) console.error("[Tracker] K-shadow record error:", error.message);
+    else console.log(`[Tracker] Snapshotted ${rows.length} K-shadow projections for ${gameDate} (dups ignored)`);
+  } catch (e) {
+    console.error("[Tracker] K-shadow record exception:", e.message);
+  }
+}
 // Snapshots PRE-GAME NBA team-market edges so Quick Picks can use them. The NBA
 // model emits its spread/total edges in POINTS (not probabilities), so here we
 // convert all three markets to the same currency as everything else — a
@@ -845,8 +885,8 @@ async function gradeMlb(supabase, pending) {
       }
 
       let outcome;
-      if (p.market === "player_strikeouts") {
-        // Per-pitcher Ks from the official boxscore; cache one fetch per game.
+      if (p.market === "player_strikeouts" || p.market === "player_strikeouts_shadow") {
+        // Per-pitcher Ks (and IP) from the official boxscore; cache one fetch per game.
         if (!kCache.has(p.game_id)) {
           kCache.set(p.game_id, await getGamePitcherStrikeouts(p.game_id));
         }
@@ -857,11 +897,15 @@ async function gradeMlb(supabase, pending) {
         const side = (ci >= 0 ? p.selection.slice(ci + 1) : "OVER").toUpperCase();
         const { found, k } = resolveK(box.ks, pname);
         if (!found) continue;                          // pitcher not located → never false-loss
-        if (p.line != null && k === p.line) outcome = { result: "push", actual: k };
+        // Actual IP (true decimal) for the same pitcher, via the parallel ips map. resolveK
+        // is a generic name→number matcher, so it resolves IP with identical matching to Ks.
+        const ipRes = box.ips ? resolveK(box.ips, pname) : { k: null };
+        const actualIp = ipRes && ipRes.k != null ? ipRes.k : null;
+        if (p.line != null && k === p.line) outcome = { result: "push", actual: k, actualIp };
         else {
           const over = k > (p.line ?? 0);
           const win = side === "OVER" ? over : !over;
-          outcome = { result: win ? "win" : "loss", actual: k };
+          outcome = { result: win ? "win" : "loss", actual: k, actualIp };
         }
       } else if (p.market === "player_hits") {
         if (!hitsCache.has(p.game_id)) {
@@ -929,9 +973,11 @@ async function gradeMlb(supabase, pending) {
       }
       if (!outcome) continue;
 
+      const upd = { result: outcome.result, actual_value: outcome.actual, graded_at: new Date().toISOString() };
+      if (outcome.actualIp != null) upd.actual_ip = outcome.actualIp;
       const { error: upErr } = await supabase
         .from("model_predictions")
-        .update({ result: outcome.result, actual_value: outcome.actual, graded_at: new Date().toISOString() })
+        .update(upd)
         .eq("id", p.id);
       if (!upErr) graded++;
     }
@@ -1145,7 +1191,7 @@ async function captureOddsTicks() {
 // and the player is provably absent. Unreadable boxes are left pending to retry; any
 // player who is present grades normally and is never touched. Covers every recorded
 // prop market — extend PROP here (one place) when a new prop market starts recording.
-const VOID_PROP_MARKETS = new Set(["hr_prop", "player_strikeouts", "player_hits", "player_total_bases_shadow"]);
+const VOID_PROP_MARKETS = new Set(["hr_prop", "player_strikeouts", "player_strikeouts_shadow", "player_hits", "player_total_bases_shadow"]);
 
 async function voidUnmatchedProps() {
   const supabase = db();
@@ -1208,4 +1254,4 @@ async function voidUnmatchedProps() {
   return { finalPropsChecked: finalChecked, voided, details };
 }
 
-module.exports = { recordPredictions, recordTotalBasesShadow, recordNbaPropPredictions, recordNbaTeamPredictions, gradeFinishedGames, gradeNbaProp, captureClosingLines, captureNbaClosingLines, captureOddsTicks, voidUnmatchedProps };
+module.exports = { recordPredictions, recordTotalBasesShadow, recordStrikeoutShadow, recordNbaPropPredictions, recordNbaTeamPredictions, gradeFinishedGames, gradeNbaProp, captureClosingLines, captureNbaClosingLines, captureOddsTicks, voidUnmatchedProps };
