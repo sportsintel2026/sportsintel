@@ -294,12 +294,124 @@ async function fetchSeasonProbe(season = 2025) {
   return out;
 }
 
+/* ---- POWER RATINGS: per-team strength seeded from real points data ----------
+ * buildTeamRatings(season) loops all 32 teams' core-API record endpoints and
+ * computes a points-differential power rating — the gold-standard simple rating
+ * (a.k.a. SRS base): how many points better/worse than a league-average team.
+ *
+ *   rawRating = (pointsFor - pointsAgainst) / gamesPlayed
+ *
+ * Then REGRESSED toward 0 (league average) by RATING_REGRESSION, because a
+ * 17-game sample is noisy at the extremes — this stops a 3-14 team from being
+ * treated as a permanent -8pt monster and keeps the model honest about how much
+ * the seed really knows. The result feeds nflModel.ratingMargin() via
+ * ctx.home.rating / ctx.away.rating (rating diff = expected neutral-field margin).
+ *
+ * HONESTY GATES:
+ *   - A team with gamesPlayed < MIN_GAMES_FOR_RATING is skipped (offseason / not
+ *     enough sample) — no rating invented from noise.
+ *   - If NO team has enough games (true offseason for `season`), returns {} so the
+ *     model stays in market-only mode rather than rating on emptiness.
+ *
+ * NOT YET INCLUDED (clean slots for the next layers, each its own data dep):
+ *   - Strength of Schedule: needs each team's opponent list (schedule fetch).
+ *   - Conference strength: vsconf record is carried through for that layer.
+ * 30-min cache; ~32 core-API calls per refresh (cached, so rare). */
+const RATING_REGRESSION = 0.75;       // keep 75% of raw differential, shrink 25% to mean
+const MIN_GAMES_FOR_RATING = 4;       // need a real sample before rating a team
+const RATINGS_TTL_MS = 30 * 60 * 1000;
+
+function recStat(statsArr, name) {
+  if (!Array.isArray(statsArr)) return null;
+  const s = statsArr.find((x) => x.name === name);
+  return s && s.value != null ? Number(s.value) : null;
+}
+
+async function buildTeamRatings(season = 2025) {
+  const key = `nflRatings:${season}`;
+  const cached = cacheGet(key);
+  if (cached) return cached;
+
+  // 1) team list (id, abbr, name)
+  let teams = [];
+  try {
+    const t = await espnGet(`${BASE}/teams`);
+    teams = (t.sports?.[0]?.leagues?.[0]?.teams || []).map((x) => x.team).filter(Boolean);
+  } catch (e) {
+    return { season, teams: {}, rated: 0, error: `teams fetch failed: ${e.message}` };
+  }
+  if (!teams.length) return { season, teams: {}, rated: 0, error: "no teams returned" };
+
+  // 2) fetch each team's record, compute raw rating. Tolerate individual failures.
+  const recordUrl = (id) =>
+    `https://sports.core.api.espn.com/v2/sports/football/leagues/nfl/seasons/${season}/types/2/teams/${id}/record`;
+
+  const raw = {};
+  await Promise.all(
+    teams.map(async (tm) => {
+      try {
+        const data = await espnGet(recordUrl(tm.id));
+        const total = (data.items || []).find((it) => (it.type || "").toLowerCase() === "total");
+        const conf = (data.items || []).find((it) => (it.type || "").toLowerCase() === "vsconf");
+        if (!total) return;
+        const stats = total.stats || [];
+        const gp = recStat(stats, "gamesPlayed");
+        const pf = recStat(stats, "pointsFor");
+        const pa = recStat(stats, "pointsAgainst");
+        const wins = recStat(stats, "wins");
+        const losses = recStat(stats, "losses");
+        if (gp == null || pf == null || pa == null || gp < MIN_GAMES_FOR_RATING) return;
+        raw[tm.id] = {
+          abbr: tm.abbreviation, name: tm.displayName,
+          gp, pf, pa, wins, losses,
+          diff: pf - pa,
+          rawRating: (pf - pa) / gp, // points/game better than average
+          confRecord: conf
+            ? { wins: recStat(conf.stats, "wins"), losses: recStat(conf.stats, "losses") }
+            : null,
+        };
+      } catch (_) { /* skip this team; others still rate */ }
+    })
+  );
+
+  const ratedIds = Object.keys(raw);
+  if (ratedIds.length === 0) {
+    // True offseason for this season — return empty so the model stays market-only.
+    const empty = { season, teams: {}, rated: 0, note: "No team has enough games yet — model stays market-only." };
+    cacheSet(key, empty, RATINGS_TTL_MS);
+    return empty;
+  }
+
+  // 3) center ratings so the league mean is exactly 0 (removes any scoring-era
+  // drift), then regress toward the mean to tame small-sample extremes.
+  const meanRaw = ratedIds.reduce((s, id) => s + raw[id].rawRating, 0) / ratedIds.length;
+  const teamsOut = {};
+  for (const id of ratedIds) {
+    const centered = raw[id].rawRating - meanRaw;
+    teamsOut[id] = {
+      ...raw[id],
+      rating: Math.round(centered * RATING_REGRESSION * 100) / 100, // regressed, league-centered
+      regressed: true,
+      sosApplied: false,  // clean slot: SoS layer flips this true later
+    };
+  }
+
+  const result = {
+    season, rated: ratedIds.length, meanRawDiffPerGame: Math.round(meanRaw * 100) / 100,
+    regression: RATING_REGRESSION, teams: teamsOut,
+    note: "Power ratings = league-centered, regressed points differential per game (2025 seed). SoS/conference layers not yet applied.",
+  };
+  cacheSet(key, result, RATINGS_TTL_MS);
+  return result;
+}
+
 module.exports = {
   fetchScoreboard,
   getUpcomingGames,
   getFinalScore,
   fetchSeasonProbe,
   fetchPointsProbe,
+  buildTeamRatings,
   statMap,
   parseRecords,
   LEAGUE_AVG_PPG,
