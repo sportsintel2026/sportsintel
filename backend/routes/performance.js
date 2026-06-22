@@ -139,21 +139,48 @@ router.get("/:league", async (req, res) => {
     // A sport with no captured closing lines simply returns clv = null.
     const { data: clvData } = await supabase
       .from("model_predictions")
-      .select("confidence, clv, beat_close, game_date")
+      .select("confidence, clv, beat_close, game_date, pinnacle_clv, pinnacle_beat_close")
       .eq("league", league)
       .in("market", cfg.clv)
       .not("clv", "is", null);
     const clvRows = (clvData || []).filter(isQualified);
     let clvSummary = null;
     if (clvRows.length > 0) {
-      const beat = clvRows.filter(r => r.beat_close === true).length;
+      // Report beat / tied / worse separately. A flat best-of-books price (clv === 0)
+      // is a TIE, not a loss — folding ties into "didn't beat" mechanically depresses
+      // the beat rate below 50%, so we split them out and report the decisive rate too.
+      const beat = clvRows.filter(r => Number(r.clv) > 0).length;
+      const worse = clvRows.filter(r => Number(r.clv) < 0).length;
+      const tied = clvRows.length - beat - worse;
+      const decisive = beat + worse;
       const avgClv = clvRows.reduce((s, r) => s + (Number(r.clv) || 0), 0) / clvRows.length;
       clvSummary = {
         sample: clvRows.length,
+        beat, tied, worse,
         beatClose: beat,
         beatClosePct: Math.round((beat / clvRows.length) * 1000) / 10,
+        beatDecisivePct: decisive ? Math.round((beat / decisive) * 1000) / 10 : null,
         avgClvPct: Math.round(avgClv * 10000) / 100,
       };
+
+      // SHARP CLV vs Pinnacle — the benchmark that actually validates edge (de-vigged
+      // close from the lowest-vig book vs the price we took). Null until enough picks
+      // have been captured in the final-30-min window post-deploy.
+      const pinRows = clvRows.filter(r => r.pinnacle_clv != null);
+      if (pinRows.length > 0) {
+        const pBeat = pinRows.filter(r => Number(r.pinnacle_clv) > 0).length;
+        const pWorse = pinRows.filter(r => Number(r.pinnacle_clv) < 0).length;
+        const pTied = pinRows.length - pBeat - pWorse;
+        const pDecisive = pBeat + pWorse;
+        const pAvg = pinRows.reduce((s, r) => s + (Number(r.pinnacle_clv) || 0), 0) / pinRows.length;
+        clvSummary.pinnacle = {
+          sample: pinRows.length,
+          beat: pBeat, tied: pTied, worse: pWorse,
+          beatClosePct: Math.round((pBeat / pinRows.length) * 1000) / 10,
+          beatDecisivePct: pDecisive ? Math.round((pBeat / pDecisive) * 1000) / 10 : null,
+          avgClvPct: Math.round(pAvg * 10000) / 100,
+        };
+      }
     }
 
     // ── Range windows — headline KPIs + cumulative units curve + CLV per window ─
