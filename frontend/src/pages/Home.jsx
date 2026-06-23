@@ -7,6 +7,7 @@
 // HOME-SWAP-PULSE-KPIS-2026-06-23
 // HOME-REORDER-WP-MOVERS-2026-06-23
 // HOME-SPIN-PROPS-2026-06-23
+// HOME-RM-UPCOMING-2026-06-23
 // Blueprint structure (vertical scroll + swipe carousels) translated to inline styles, wired to real data.
 // Honest live: LIVE pulse reflects real game state; odds flash on real change; HR shows chance-to-homer,
 // not a fake +EV badge; the line-movement chart fills into a full curve once tick storage lands.
@@ -421,8 +422,7 @@ export default function HomePage(){
         <div className="seclbl">HOW TO USE WIZEPICKS</div>
         <div className="guide" onClick={()=>navigate("/guide")}><div className="gi"/><div className="gt"><div className="gh">New here? Start with the basics</div><div className="gs">Edges, props, line shopping &amp; the full board {"\u2014"} a quick walkthrough.</div></div><div className="ga">{"\u203a"}</div></div>
 
-        <div className="seclbl">UPCOMING GAMES <span className="lk" onClick={()=>navigate("/games")}>view all {"\u203a"}</span></div>
-        <Swiper cls="car" dotcls="dots">{(upcoming||[]).map((g,i)=>{const a=g.awayAbbr||shortTeam(g.away||"");const h=g.homeAbbr||shortTeam(g.home||"");const gid=g.id||g.gameId;return <div key={i} className="gm" onClick={()=>gid&&navigate(`/game/${sport}/${gid}`)}><div className="mt">{a} <span className="x">v</span> {h}</div><div className="tm">{fmtTime(g.time)}{g.totals&&g.totals.projected!=null?" \u00b7 O/U "+g.totals.projected:""}</div></div>;})}</Swiper>
+
       </div>
 
       <nav className="nav">
