@@ -1,5 +1,5 @@
 /**
-// CFB-SRS-SOS-LAYER-LIVE-2026-06-22
+// CFB-SRS-SOS-WEIGHT-080-2026-06-23
  * cfbDataSource.js  —  WizePicks College Football data layer (ESPN hidden API)
  *
  * Mirrors nflDataSource.js. Same offseason-safe scoreboard core; the model-facing
@@ -348,7 +348,7 @@ const RATINGS_BATCH = 14;                  // concurrency cap so we don't hammer
 const CFB_MOV_CAP = 28;                     // clip per-game margin (4 TD) — tames blowout/cupcake inflation at the GAME level
 const CFB_SRS_ITERS = 12;                   // SoS fixpoint iterations (converges fast for ~146 teams)
 const CFB_FCS_LEVEL = -28;                  // rating credited for an FCS/unrated opponent (below the worst FBS team)
-const SOS_WEIGHT = 1.0;                     // 1.0 = full SRS; lower dampens schedule influence (conservative lever)
+const SOS_WEIGHT = 0.80;                    // 1.0 = full SRS; lower dampens schedule influence (conservative lever)
 
 function recStat(statsArr, name) {
   if (!Array.isArray(statsArr)) return null;
