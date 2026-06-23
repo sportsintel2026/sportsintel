@@ -1,5 +1,6 @@
 // WizePicks Home — live dashboard hub. Reads the existing /api/edges/mlb feed (no extra Odds cost).
 // CFB-BOARD-WIRED-MOBILE-INTRAINING-2026-06-22
+// HOME-PREMIUM-DARK-RESKIN-2026-06-23
 // Blueprint structure (vertical scroll + swipe carousels) translated to inline styles, wired to real data.
 // Honest live: LIVE pulse reflects real game state; odds flash on real change; HR shows chance-to-homer,
 // not a fake +EV badge; the line-movement chart fills into a full curve once tick storage lands.
@@ -554,15 +555,15 @@ const S={ shell:{minHeight:"100vh",background:"#0b0d11",color:"#f2f6f4",fontFami
 
 const CSS=`@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700;800&display=swap');
 
-:root{--bg:#0b0d11;--panel:#0a0e13;--panel2:#0c1219;--line:#141b22;--line2:#1f2832;
---gold:#f3b94f;--red:#ff5d4d;--blue:#5da9e8;--steel:#2674B0;--green:#33e991;--neg:#ff6a5a;--tx:#eef2f7;--mut:#7d8a98;--mut2:#46505c;
---disp:'Barlow Condensed',sans-serif;--mono:'IBM Plex Mono',ui-monospace,monospace;--ui:'Inter',system-ui,sans-serif;}
+:root{--bg:#0A0B0D;--panel:#14171B;--panel2:#1B2025;--line:rgba(255,255,255,.06);--line2:rgba(255,255,255,.12);
+--gold:#C9A86A;--red:#E2655C;--blue:#5DA9E8;--steel:#2A6F97;--green:#3FCB91;--neg:#E2655C;--tx:#ECEFF2;--mut:#99A2AA;--mut2:#5B646C;
+--disp:'Barlow Condensed',sans-serif;--mono:'IBM Plex Mono',ui-monospace,monospace;--ui:'Inter',system-ui,sans-serif;--serif:Georgia,'Times New Roman',serif;}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}html,body{margin:0}
 body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-webkit-font-smoothing:antialiased}
 .app{max-width:460px;margin:0 auto;min-height:100vh;padding-bottom:64px}
 .hd{position:sticky;top:0;z-index:20;background:#0b0d11;padding:11px 14px 0}
 .hrow{display:flex;align-items:center;gap:8px}
-.brand{font-family:var(--disp);font-weight:800;font-size:21px}.brand b{color:#fff}.brand i{color:var(--red);font-style:normal}
+.brand{font-family:var(--serif);font-weight:600;font-size:22px;letter-spacing:-.2px}.brand b{color:var(--tx);font-weight:500}.brand i{color:var(--gold);font-style:normal;font-weight:600}
 .pill{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line2);border-radius:999px;padding:3px 8px;font-size:9px;font-weight:800;letter-spacing:.4px;color:#d2ebe2}
 .pill .d{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pl 1.7s infinite}
 @keyframes pl{0%{box-shadow:0 0 0 0 rgba(51,233,145,.5)}70%{box-shadow:0 0 0 5px rgba(51,233,145,0)}100%{box-shadow:0 0 0 0 rgba(51,233,145,0)}}
@@ -570,7 +571,7 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .ibtn{width:30px;height:30px;border:1px solid var(--line2);border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;background:var(--panel);color:var(--mut)}
 .sports{display:flex;gap:6px;padding:11px 0 11px;overflow-x:auto;scrollbar-width:none}.sports::-webkit-scrollbar{display:none}
 .sports b{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:11px;font-weight:600;color:var(--mut);border:1px solid var(--line2);border-radius:999px;padding:4px 11px;white-space:nowrap;cursor:pointer}
-.sports b.on{color:#fff;background:rgba(38,116,176,.18);border-color:var(--steel)}
+.sports b.on{color:var(--tx);background:rgba(63,203,145,.12);border-color:rgba(63,203,145,.4)}
 .sports b .o{width:5px;height:5px;border-radius:50%;background:var(--mut2)}.sports b.l2 .o{background:var(--green)}
 .ticker{overflow:hidden;border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:#070a0e}
 .ticker .tk{display:inline-flex;gap:20px;white-space:nowrap;font-family:var(--mono);font-size:11px;color:var(--mut);padding:7px 0;animation:tick 28s linear infinite}
