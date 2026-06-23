@@ -1278,6 +1278,26 @@ router.get("/cfbpointsprobe", async (req, res) => {
   }
 });
 
+// ── CFB POWER RATINGS (read-only) ───────────────────────────────────────────
+// Runs buildTeamRatings over the ~146 FBS teams and returns the seeded ratings,
+// ranked best→worst, so the loop + PF/PA seed can be sanity-checked (do the real
+// powers land on top?) BEFORE the model consumes them. 2025 seed, FBS only.
+//   /api/edges/cfbratings[?season=2025]
+router.get("/cfbratings", async (req, res) => {
+  try {
+    const season = parseInt(req.query.season, 10) || 2025;
+    const { buildTeamRatings } = require("../services/cfbDataSource");
+    const result = await buildTeamRatings(season);
+    const ranked = Object.values(result.teams || {})
+      .sort((a, b) => (b.rating ?? -99) - (a.rating ?? -99))
+      .map(t => ({ abbr: t.abbr, name: t.name, rating: t.rating, rawRating: Math.round(t.rawRating * 100) / 100, record: `${t.wins}-${t.losses}`, pf: t.pf, pa: t.pa, diff: t.diff }));
+    res.json({ ok: true, season: result.season, fbsListed: result.fbsListed, rated: result.rated, meanRawDiffPerGame: result.meanRawDiffPerGame, regression: result.regression, note: result.note, ranked });
+  } catch (e) {
+    console.error("[cfbratings] error:", e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // ── TEMP DIAGNOSTIC: NFL points-for/against source probe (read-only) ─────────
 // Finds a clean PF/PA source (core-API record + core standings) since the site
 // standings came back empty. Read-only inspection.
