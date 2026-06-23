@@ -1,5 +1,6 @@
 // PROPS-TB-BOARD-WIRED-2026-06-23
 // PROPS-PREMIUM-DARK-RESKIN-2026-06-23
+// PROPS-PLAYERCARD-GREEN-2026-06-23
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
@@ -198,7 +199,7 @@ function QCBar({ label, val, txt, lo, hi, lg }) {
     <div className="qcrow">
       <div className="qclab">{label}</div>
       <div className="qctrack">
-        <div className="qcfill" style={{width:pct+"%",background:good?"#33e991":"#5da9e8"}}/>
+        <div className="qcfill" style={{width:pct+"%",background:good?"#3FCB91":"#5da9e8"}}/>
         <div className="qctick" style={{left:lgPct+"%"}}/>
       </div>
       <div className="qcval">{txt}</div>
@@ -214,8 +215,8 @@ function SprayField({ bats, pull, straight, oppo, wind }) {
   const wedge = (a, b, r=R) => `M${hx},${hy} L${xy(a,r)} A${r},${r} 0 0 1 ${xy(b,r)} Z`;
   const mx = Math.max(pull||0, straight||0, oppo||0, 1);
   const op = (v) => (0.16 + 0.62*((v||0)/mx)).toFixed(2);
-  const left  = isR ? { l:"PULL", v:pull, c:"#33e991" } : { l:"OPPO", v:oppo, c:"#5da9e8" };
-  const right = isR ? { l:"OPPO", v:oppo, c:"#5da9e8" } : { l:"PULL", v:pull, c:"#33e991" };
+  const left  = isR ? { l:"PULL", v:pull, c:"#3FCB91" } : { l:"OPPO", v:oppo, c:"#5da9e8" };
+  const right = isR ? { l:"OPPO", v:oppo, c:"#5da9e8" } : { l:"PULL", v:pull, c:"#3FCB91" };
   const ctr   = { l:"CTR", v:straight, c:"#8b97a4" };
   const pullSec = isR ? [-45,-15] : [15,45];
   const lp = (d) => pt(d, R*0.62);
@@ -227,7 +228,7 @@ function SprayField({ bats, pull, straight, oppo, wind }) {
   const we = wind && !wind.indoor ? wind.windEffect : null;
   let windEl = null;
   if (we==="out" || we==="in") {
-    const col = we==="out" ? "#33e991" : "#ff7a6c";
+    const col = we==="out" ? "#3FCB91" : "#ff7a6c";
     const yTop=hy-116, yBot=hy-84;
     windEl = we==="out"
       ? <g opacity="0.95"><line x1={hx} y1={yBot} x2={hx} y2={yTop+5} stroke={col} strokeWidth="2.6" strokeLinecap="round"/><polygon points={`${hx-4.5},${yTop+6} ${hx+4.5},${yTop+6} ${hx},${yTop-1}`} fill={col}/></g>
@@ -241,7 +242,7 @@ function SprayField({ bats, pull, straight, oppo, wind }) {
       <path d={wedge(-45,-15)} fill={left.c} opacity={op(left.v)}/>
       <path d={wedge(-15,15)} fill={ctr.c} opacity={op(ctr.v)}/>
       <path d={wedge(15,45)} fill={right.c} opacity={op(right.v)}/>
-      <path d={wedge(pullSec[0],pullSec[1])} fill="none" stroke="#33e991" strokeWidth="1.3" opacity="0.7"/>
+      <path d={wedge(pullSec[0],pullSec[1])} fill="none" stroke="#3FCB91" strokeWidth="1.3" opacity="0.7"/>
       <path d={`M${xy(-45,R)} A${R},${R} 0 0 1 ${xy(45,R)}`} stroke="#3f5340" strokeWidth="2.2" fill="none"/>
       <path d={`M${xy(-45,R-6)} A${R-6},${R-6} 0 0 1 ${xy(45,R-6)}`} stroke="#26331f" strokeWidth="3" fill="none" opacity="0.5"/>
       <path d={`M${hx},${hy} L${xy(-45,R)} M${hx},${hy} L${xy(45,R)}`} stroke="#cdd7c8" strokeWidth="1.2" fill="none" opacity="0.5"/>
@@ -429,15 +430,15 @@ function PlayerSheet({ p, card, loading, onClose }) {
                   </div>
                   <div className="hpSl">BATTED-BALL PROFILE</div>
                   <div className="hpChart">
-                    <div className="bbbar"><i className="pull" style={{width:pull+"%",background:"#33e991"}}/><i className="straight" style={{width:straight+"%",background:"#3a4756"}}/><i className="oppo" style={{width:oppo+"%",background:"#5da9e8"}}/></div>
-                    <div className="bbleg"><span><i style={{background:"#33e991"}}/>Pull {pull}%</span><span><i style={{background:"#3a4756"}}/>Straight {straight}%</span><span><i style={{background:"#5da9e8"}}/>Oppo {oppo}%</span></div>
+                    <div className="bbbar"><i className="pull" style={{width:pull+"%",background:"#3FCB91"}}/><i className="straight" style={{width:straight+"%",background:"#3a4756"}}/><i className="oppo" style={{width:oppo+"%",background:"#5da9e8"}}/></div>
+                    <div className="bbleg"><span><i style={{background:"#3FCB91"}}/>Pull {pull}%</span><span><i style={{background:"#3a4756"}}/>Straight {straight}%</span><span><i style={{background:"#5da9e8"}}/>Oppo {oppo}%</span></div>
                     {lean && <div className="bbread"><b>{lean[0]}</b> hitter — {lean[1]}</div>}
                   </div>
                   {haveType && <>
                   <div className="hpSl">BATTED-BALL TYPE</div>
                   <div className="hpChart">
-                    <div className="bbbar"><i style={{width:gb+"%",background:"#5a4a3a"}}/><i style={{width:ld+"%",background:"#5da9e8"}}/><i style={{width:fb+"%",background:"#33e991"}}/><i style={{width:pu+"%",background:"#2c3640"}}/></div>
-                    <div className="bbleg"><span><i style={{background:"#5a4a3a"}}/>GB {gb}%</span><span><i style={{background:"#5da9e8"}}/>LD {ld}%</span><span><i style={{background:"#33e991"}}/>FB {fb}%</span><span><i style={{background:"#2c3640"}}/>PU {pu}%</span></div>
+                    <div className="bbbar"><i style={{width:gb+"%",background:"#5a4a3a"}}/><i style={{width:ld+"%",background:"#5da9e8"}}/><i style={{width:fb+"%",background:"#3FCB91"}}/><i style={{width:pu+"%",background:"#2c3640"}}/></div>
+                    <div className="bbleg"><span><i style={{background:"#5a4a3a"}}/>GB {gb}%</span><span><i style={{background:"#5da9e8"}}/>LD {ld}%</span><span><i style={{background:"#3FCB91"}}/>FB {fb}%</span><span><i style={{background:"#2c3640"}}/>PU {pu}%</span></div>
                     {typeRead && <div className="bbread"><b>{typeRead[0]}</b> hitter — {typeRead[1]}</div>}
                   </div>
                   </>}
@@ -544,7 +545,7 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .orow{display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid rgba(255,255,255,.05)}.orow:first-of-type{border-top:none}
 .orow .ol{font-family:var(--disp);font-weight:800;font-size:13px;color:#dbe4e2;flex:1}.orow .ov{font-family:var(--mono);font-size:11px;color:#cdd7e1}.orow .ov b{color:#fff}
 .ctx{display:flex;flex-wrap:wrap;gap:7px}.ctx .ch{font-family:var(--mono);font-size:10px;color:#aeb9c8;background:#0e1620;border:1px solid var(--line2);border-radius:7px;padding:5px 9px}.ctx .ch b{color:#fff}
-.ctx .ch.wout{color:#7ee0a8;border-color:rgba(126,224,168,.32)}.ctx .ch.win{color:#ff8f80;border-color:rgba(255,143,128,.32)}
+.ctx .ch.wout{color:#46E0A9;border-color:rgba(126,224,168,.32)}.ctx .ch.win{color:#ff8f80;border-color:rgba(255,143,128,.32)}
 .bbgrid{display:flex;gap:8px}.bbgrid .bb{flex:1;text-align:center;border:1px solid var(--line);border-radius:9px;padding:8px 4px}.bbgrid .bb .k{font-family:var(--mono);font-size:8px;color:var(--mut2);font-weight:600}.bbgrid .bb .v{font-family:var(--disp);font-weight:800;font-size:16px;color:#cfe2f5;margin-top:2px}
 .hpSpray{display:flex;flex-direction:column;align-items:center;gap:5px;margin:2px 0 6px}.hpSpray svg{width:100%;max-width:306px;display:block}
 .qcwrap{padding:15px 14px}
@@ -557,7 +558,7 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .qcnote{font-family:var(--mono);font-size:8.5px;color:var(--mut2);margin-top:11px;display:flex;align-items:center;gap:6px}
 .qcnote .qctk{display:inline-block;width:2px;height:9px;background:#e8eef3;opacity:.55}
 .hpSprayCap{font-family:var(--mono);font-size:9px;color:var(--mut2);letter-spacing:.3px}
-.hpWind{font-family:var(--mono);font-size:9.5px;letter-spacing:.2px;color:#aeb9c8;margin-top:2px;text-align:center}.hpWind .ar{font-weight:800;font-size:11px}.hpWind.wout{color:#7ee0a8}.hpWind.win{color:#ff8f80}
+.hpWind{font-family:var(--mono);font-size:9.5px;letter-spacing:.2px;color:#aeb9c8;margin-top:2px;text-align:center}.hpWind .ar{font-weight:800;font-size:11px}.hpWind.wout{color:#46E0A9}.hpWind.win{color:#ff8f80}
 .histrow{display:flex;align-items:center;gap:10px}.histrow .hv{font-family:var(--disp);font-weight:800;font-size:22px;color:var(--green)}.histrow .ht{font-family:var(--mono);font-size:11px;color:#cdd7e1}.histrow .ht b{color:#fff}
 .why{font-size:12.5px;color:#c4cfd9;line-height:1.55}.why .wl{font-family:var(--disp);font-weight:800;font-size:11px;letter-spacing:.5px;color:var(--gold);display:block;margin-bottom:4px}
 .estate{margin:40px 14px;border:1px dashed var(--line2);border-radius:14px;padding:36px 18px;text-align:center}.estate .et{font-family:var(--disp);font-weight:800;font-size:18px;color:#cfd7e2}.estate .es{font-size:12px;color:var(--mut);margin-top:6px;font-family:var(--mono)}
@@ -570,7 +571,7 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .hpMu{font-size:13px;color:#7d8a98;margin:2px 0}
 .hpLn{font-family:var(--mono);font-size:12px;color:#b9c6cf}.hpLn b{color:#fff}
 .hpTo{text-align:right;flex:0 0 auto}
-.hpTo .v{font-family:var(--disp);font-weight:800;font-size:34px;color:#33e991;line-height:1}
+.hpTo .v{font-family:var(--disp);font-weight:800;font-size:34px;color:#3FCB91;line-height:1}
 .hpTo .v small{font-size:17px}
 .hpTo .l{font-family:var(--mono);font-size:9px;color:#7d8a98;letter-spacing:.08em;margin-top:2px}
 .hpTvs{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--panel);border:1px solid var(--line2);border-radius:13px;padding:12px 15px;margin-bottom:14px}
@@ -579,13 +580,13 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .hpHand{font-family:var(--mono);font-size:11px;font-weight:700;color:#5da9e8;border:1px solid rgba(93,169,232,.4);border-radius:8px;padding:6px 10px;white-space:nowrap}
 .hpPlat{font-size:11px;font-weight:700;color:var(--green);border:1px solid rgba(63,203,145,.4);background:rgba(63,203,145,.08);border-radius:8px;padding:6px 10px;white-space:nowrap}
 .hpSl{display:flex;align-items:center;gap:8px;font-family:var(--disp);font-weight:800;font-size:13px;letter-spacing:.06em;color:#7d8a98;margin:4px 2px 11px}
-.hpSl::before{content:"";width:7px;height:7px;border-radius:50%;background:#33e991;flex:0 0 auto}
+.hpSl::before{content:"";width:7px;height:7px;border-radius:50%;background:#3FCB91;flex:0 0 auto}
 .hpHvh{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-bottom:18px}
 .hpHv{position:relative;background:var(--panel);border:1px solid var(--line2);border-radius:13px;padding:15px 14px}
 .hpHv.on{border-color:rgba(63,203,145,.5);background:rgba(63,203,145,.06)}
 .hpTn{position:absolute;top:-9px;left:50%;transform:translateX(-50%);font-family:var(--mono);font-size:9px;font-weight:700;color:#1a0907;background:#ff5d4d;padding:3px 9px;border-radius:7px;letter-spacing:.05em}
 .hpHl{font-family:var(--disp);font-weight:800;font-size:14px;color:#7d8a98}
-.hpHv.on .hpHl{color:#33e991}
+.hpHv.on .hpHl{color:#3FCB91}
 .hpOps{font-family:var(--disp);font-weight:800;font-size:33px;line-height:1;margin:4px 0 1px;color:#fff}
 .hpOpl{font-family:var(--mono);font-size:9px;color:#7d8a98;letter-spacing:.1em}
 .hpG4r{display:flex;justify-content:space-between;margin-top:13px}
@@ -597,22 +598,22 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .hpChd{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:14px;gap:8px}
 .hpChd .t{font-size:13px;color:#7d8a98}
 .hpChd .r{font-family:var(--disp);font-weight:800;font-size:15px;white-space:nowrap}
-.hpChd .r .m{color:#33e991}.hpChd .r .x{color:#7d8a98}.hpChd .r .k{color:#5da9e8}
+.hpChd .r .m{color:#3FCB91}.hpChd .r .x{color:#7d8a98}.hpChd .r .k{color:#5da9e8}
 .hpCwrap{display:flex;align-items:flex-end;gap:9px;height:140px;border-bottom:1px solid #1d2a36}
 .hpCol{flex:1;position:relative;height:100%;display:flex;align-items:flex-end;justify-content:center}
-.hpBar{width:52%;max-width:19px;border-radius:3px 3px 0 0;background:#33e991}
+.hpBar{width:52%;max-width:19px;border-radius:3px 3px 0 0;background:#3FCB91}
 .hpBar.under{background:rgba(63,203,145,.2)}
 .hpMkt{position:absolute;left:50%;transform:translateX(-50%);width:66%;max-width:25px;height:3px;border-radius:2px;background:#5da9e8}
 .hpDots{display:flex;gap:6px;margin-top:9px}
 .hpDot{flex:1;display:flex;justify-content:center}
 .hpDot i{width:11px;height:11px;border-radius:50%}
-.hpDot i.y{background:#33e991}
+.hpDot i.y{background:#3FCB91}
 .hpDot i.n{border:1.5px solid #4a5663}
 .hpLeg{display:flex;justify-content:center;gap:18px;margin:13px 0 4px;font-size:11px;color:#7d8a98}
 .hpLeg span{display:flex;align-items:center;gap:6px}
-.hpLeg i{width:11px;height:11px;border-radius:3px;background:#33e991}
+.hpLeg i{width:11px;height:11px;border-radius:3px;background:#3FCB91}
 .hpLeg i.ln{height:4px;border-radius:2px;background:#5da9e8}
-.hpLeg i.rnd{border-radius:50%;background:#33e991}
+.hpLeg i.rnd{border-radius:50%;background:#3FCB91}
 .hpCap{text-align:center;font-size:11px;color:#4a5663;margin-top:4px}
 .hpWms{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-bottom:18px}
 .hpWs{background:var(--panel);border:1px solid var(--line2);border-radius:13px;padding:14px}
@@ -620,11 +621,11 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .hpWt{display:flex;justify-content:space-between;align-items:center;gap:6px}
 .hpWt .k{font-size:13px;color:#7d8a98}
 .hpBd{font-family:var(--mono);font-size:9px;font-weight:700;color:#9aa7b2;background:rgba(255,255,255,.06);padding:3px 8px;border-radius:6px;white-space:nowrap}
-.hpBd.g{color:#06140d;background:#33e991}
+.hpBd.g{color:#06140d;background:#3FCB91}
 .hpBd.gold{color:#1a1407;background:#f3b94f}
 .hpWv{font-family:var(--disp);font-weight:800;font-size:25px;margin-top:7px;color:#fff}
 .hpWsub{font-family:var(--mono);font-size:11px;color:#7d8a98;margin-top:3px}
 .hpPbar{height:6px;border-radius:4px;background:rgba(255,255,255,.06);margin-top:10px;overflow:hidden}
-.hpPbar i{display:block;height:100%;border-radius:4px;background:#33e991}
-.hpFoot{text-align:center;font-size:12px;color:#7d8a98;margin:16px 0 6px}.hpFoot b{color:#33e991}
+.hpPbar i{display:block;height:100%;border-radius:4px;background:#3FCB91}
+.hpFoot{text-align:center;font-size:12px;color:#7d8a98;margin:16px 0 6px}.hpFoot b{color:#3FCB91}
 `;
