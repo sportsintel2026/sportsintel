@@ -1,5 +1,6 @@
 // MarketRead.jsx — "what the books are collectively saying" per game, as a
 // CFB-MARKETREAD-PAGE-WIRED-2026-06-23
+// MARKETREAD-PREMIUM-DARK-RESKIN-2026-06-23
 // confidence call. Reads cross-book consensus + agreement (Strong/Soft/Split),
 // shows the model as a second opinion, the best price to back the lean, and an
 // honest market-move read. Guidance, not a guarantee. Desktop wraps in
@@ -17,9 +18,9 @@ import TerminalShell from "./TerminalShell";
 function fmtOdds(a) { if (a == null || isNaN(a)) return "—"; const n = Math.round(Number(a)); return n > 0 ? `+${n}` : `${n}`; }
 
 const TIER = {
-  Strong: { dot: "#1D9E75", label: "Strong", word: "confident in" },
-  Soft: { dot: "#EF9F27", label: "Soft", word: "leaning" },
-  Split: { dot: "#E24B4A", label: "Split", word: "split on" },
+  Strong: { dot: "#3FCB91", label: "Strong", word: "confident in" },
+  Soft: { dot: "#C9A86A", label: "Soft", word: "leaning" },
+  Split: { dot: "#E2655C", label: "Split", word: "split on" },
 };
 
 // Build the headline sentence for each market from the read.
@@ -255,40 +256,40 @@ const CSS = `
 .mrback{color:#6b7280;font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;margin-bottom:14px;user-select:none}
 .mrhdr{margin-bottom:16px}
 .mrtitle{font-size:30px;font-weight:800;font-family:'Barlow Condensed',sans-serif;letter-spacing:.3px}
-.mrtitle .b{color:#ff5247}
+.mrtitle .b{color:#C9A86A}
 .mrtag{font-size:12.5px;color:#6b7681;font-weight:500;margin-top:4px;line-height:1.5}
 .mrsports{display:flex;gap:6px;margin-bottom:10px}
-.mrsports button{flex:0 0 auto;font-family:inherit;font-size:12px;font-weight:700;color:#8a99a2;background:#0b0f14;border:1px solid rgba(255,255,255,.08);border-radius:999px;padding:6px 14px;cursor:pointer}
-.mrsports button.on{color:#fff;background:rgba(38,116,176,.18);border-color:rgba(38,116,176,.45)}
+.mrsports button{flex:0 0 auto;font-family:inherit;font-size:12px;font-weight:700;color:#99A2AA;background:#14171B;border:1px solid rgba(255,255,255,.08);border-radius:999px;padding:6px 14px;cursor:pointer}
+.mrsports button.on{color:#ECEFF2;background:rgba(63,203,145,.12);border-color:rgba(63,203,145,.4)}
 .mrtabs{display:flex;gap:6px;margin-bottom:16px}
-.mrtabs button{flex:0 0 auto;font-family:inherit;font-size:13px;font-weight:700;color:#8a99a2;background:#0b0f14;border:1px solid rgba(255,255,255,.08);border-radius:9px;padding:8px 16px;cursor:pointer}
-.mrtabs button.on{color:#fff;background:linear-gradient(90deg,rgba(29,158,117,.18),rgba(29,158,117,.05));border-color:rgba(29,158,117,.32)}
+.mrtabs button{flex:0 0 auto;font-family:inherit;font-size:13px;font-weight:700;color:#99A2AA;background:#14171B;border:1px solid rgba(255,255,255,.08);border-radius:9px;padding:8px 16px;cursor:pointer}
+.mrtabs button.on{color:#ECEFF2;background:rgba(63,203,145,.12);border-color:rgba(63,203,145,.34)}
 .mrgrid{display:flex;flex-direction:column;gap:12px}
-.mrcard{border:1px solid rgba(255,255,255,.08);border-radius:14px;background:linear-gradient(180deg,#0c0c0e,#020203);padding:14px 16px}
+.mrcard{border:1px solid rgba(255,255,255,.06);border-radius:14px;background:#14171B;padding:14px 16px}
 .mrtop{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
 .mrmatch{font-size:14px;font-weight:700;color:#e9eff2}.mrmatch .at{color:#54616b}.mrmatch .ln{color:#54616b;font-weight:500}
 .mrtier{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;color:#aeb9c8}
 .mrtier .td{width:9px;height:9px;border-radius:50%}
 .mrhead{font-size:16px;font-weight:600;color:#f2f6f4;line-height:1.4;margin-bottom:4px}
-.mrhead b{font-weight:700;color:#5fd6a0}
+.mrhead b{font-weight:700;color:#46E0A9}
 .mrsub{font-size:13px;color:#8a99a2;line-height:1.5;margin-bottom:10px}.mrsub b{color:#e9eff2;font-weight:600}
 .mrmove{display:flex;align-items:center;gap:7px;font-size:12.5px;line-height:1.4;border-radius:9px;padding:8px 11px;margin-bottom:10px}
 .mrmove .mi{font-size:14px}
-.mrmove.up{background:rgba(29,158,117,.1);color:#7af0c4}
-.mrmove.dn{background:rgba(255,82,71,.1);color:#ff9a8f}
+.mrmove.up{background:rgba(63,203,145,.12);color:#7FDCC0}
+.mrmove.dn{background:rgba(226,101,92,.12);color:#ff9a8f}
 .mrmove.flat{background:rgba(255,255,255,.03);color:#6b7681}
 .mrmove b{font-weight:700}
 .mrmodel{display:flex;align-items:center;justify-content:space-between;gap:10px;border-top:1px solid rgba(255,255,255,.07);padding-top:10px}
 .mrmodel .mm{font-size:12.5px;font-weight:500;display:inline-flex;align-items:center;gap:5px}
 .mrmodel .mm .ic{font-weight:800}
-.mrmodel .mm.ok{color:#9aa7b2}.mrmodel .mm.ok .ic{color:#1D9E75}
-.mrmodel .mm.warn{color:#f3b94f}
+.mrmodel .mm.ok{color:#9aa7b2}.mrmodel .mm.ok .ic{color:#3FCB91}
+.mrmodel .mm.warn{color:#C9A86A}
 .mrmodel .mm.muted{color:#6b7681}
 .mrmodel .mbest{font-size:12.5px;color:#8a99a2}.mrmodel .mbest b{color:#e9eff2;font-weight:600}
-.mrlock{border:1px solid rgba(155,123,255,.3);border-radius:14px;background:linear-gradient(180deg,rgba(155,123,255,.08),rgba(155,123,255,.02));padding:22px 18px;text-align:center}
+.mrlock{border:1px solid rgba(192,139,255,.3);border-radius:14px;background:rgba(192,139,255,.05);padding:22px 18px;text-align:center}
 .mrlock .lh{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:20px;color:#cdbcff}
 .mrlock .ls{font-size:12.5px;color:#9aa7b2;margin:6px 0 14px;line-height:1.5}
-.mrlock button{font-family:inherit;border:0;border-radius:9px;background:#1D9E75;color:#04130d;font-weight:800;font-size:13px;padding:10px 18px;cursor:pointer}
+.mrlock button{font-family:inherit;border:0;border-radius:9px;background:#3FCB91;color:#04130d;font-weight:800;font-size:13px;padding:10px 18px;cursor:pointer}
 .mrempty{padding:36px 12px;text-align:center;color:#6b7681;font-size:13px;font-weight:600}
 .mrnote{font-size:10.5px;color:#54616b;font-weight:600;margin-top:16px;line-height:1.4;text-align:center}
 .mrsb{display:none}
