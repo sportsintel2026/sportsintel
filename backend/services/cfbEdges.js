@@ -20,6 +20,8 @@
  * preseason 2026 lines — directionally reasonable but NOT calibrated. FBS-vs-FCS
  * games keep the unrated (FCS) side market-only, which is correct. Every pick ships
  * provisional behind the route's "IN TRAINING" fence until shadow-graded in-season.
+ *
+ * Cmd-F build token: CFB-EDGES-ALIASES-MASSACHUSETTS-SAMHOUSTON-VERIFIED-2026-06-22
  */
 
 const { getCFBMainOdds } = require("./oddsApi");
@@ -52,6 +54,9 @@ function schoolKey(normalized) {
 // real misses appear (do not guess blind).
 const ALIASES = {
   // "normalized odds name": "normalized espn name"
+  // Verified against the live /cfbratings dump (2026-06-22), not guessed:
+  "umass minutemen": "massachusetts minutemen",     // Odds "UMass" → ESPN "Massachusetts"
+  "sam houston state bearkats": "sam houston bearkats", // ESPN dropped "State" on the 2023 FBS move
 };
 
 // Build lookup maps from the ratings map. bySchool marks collisions as null so an
