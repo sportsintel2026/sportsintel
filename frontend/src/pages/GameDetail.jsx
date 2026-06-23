@@ -2,6 +2,7 @@
 // GAMEDETAIL-CARDS-POLISH-2026-06-23
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+const PERF_API_BASE = import.meta.env.VITE_API_URL || "https://sportsintel-production.up.railway.app";
 import { useAuth } from "../hooks/useAuth";
 import { edgesApi, subscriptionApi, scoresApi, matchupsApi } from "../lib/api";
 
@@ -131,7 +132,7 @@ export default function GameDetailPage() {
         {loading && <div className="estate"><div className="et">Loading matchup…</div></div>}
         {!loading && !game && <div className="estate"><div className="et">Game not found</div><div className="es">It may have rolled off today's slate.</div></div>}
         {!loading && game && st==="pre"   && <SheetPre   game={game} aAb={aAb} hAb={hAb} gEdges={gEdges} mlPick={mlPick} totPick={totPick} bestEdge={bestEdge} mr={mr} detail={detail} bvpData={bvpData} lineups={lineups} hasFull={hasFull} navigate={navigate}/>}
-        {!loading && game && st==="live"  && <SheetLive  game={game} scoresGame={scoresGame} aAb={aAb} hAb={hAb} gEdges={gEdges} detail={detail}/>}
+        {!loading && game && st==="live"  && <SheetLive  game={game} gameId={gameId} scoresGame={scoresGame} aAb={aAb} hAb={hAb} gEdges={gEdges} detail={detail}/>}
         {!loading && game && st==="final" && <SheetFinal game={game} scoresGame={scoresGame} aAb={aAb} hAb={hAb} bestEdge={bestEdge} detail={detail} venue={venue}/>}
       </div>
       <nav className="nav">
@@ -351,7 +352,64 @@ function LineScore({ ls }) {
   return <table className="lsc"><thead><tr><th style={{textAlign:"left"}}>&nbsp;</th>{Array.from({length:innings}).map((_,i)=><th key={i}>{i+1}</th>)}<th>R</th></tr></thead>
     <tbody>{ls.map((r,ri)=><tr key={ri}><td className="tm">{r.abbrev||r.homeAway||""}</td>{Array.from({length:innings}).map((_,i)=><td key={i}>{r.periods?.[i]!=null?r.periods[i]:""}</td>)}<td className="rh">{r.total!=null?r.total:""}</td></tr>)}</tbody></table>;
 }
-function SheetLive({ game, scoresGame, aAb, hAb, gEdges, detail }) {
+// LIVE-WINPROB-GRAPH-GD-2026-06-23 — crossing win-probability lines for the
+// matchup page. Read-only: fetches /api/live-winprob/:gamePk (0 odds credits).
+// Wider layout than the dashboard card. Live odds line = parked (P3, after lazy-props).
+function WinProbGraphGD({gamePk,homeAb,awayAb,homeCol,awayCol}){
+  const [wp,setWp]=useState(null);
+  useEffect(()=>{ if(!gamePk)return; let dead=false,t;
+    const pull=async()=>{ try{
+      const r=await fetch(`${PERF_API_BASE}/api/live-winprob/${gamePk}`);
+      const d=await r.json();
+      if(!dead && d && d.winProb && d.winProb.available) setWp(d.winProb);
+      else if(!dead) setWp(false);
+    }catch(_){ if(!dead) setWp(false); }
+      t=setTimeout(pull,60000); };
+    pull(); return ()=>{ dead=true; clearTimeout(t); };
+  },[gamePk]);
+  if(wp===null) return <div className="gdwpg-load">loading win probability{"\u2026"}</div>;
+  if(wp===false || !wp.series || wp.series.length<2)
+    return <div className="gdwpg-load">Win probability posts once the game is underway.</div>;
+  const series=wp.series, n=series.length;
+  const W=320, H=120, PT=6, PB=6;
+  const ix=(i)=> (i/(n-1))*W;
+  const iy=(v)=> PT + (1-(v/100))*(H-PT-PB);
+  const awayPts=series.map((d,i)=>`${i===0?"M":"L"}${ix(i).toFixed(1)} ${iy(d.awayWP).toFixed(1)}`).join(" ");
+  const homePts=series.map((d,i)=>`${i===0?"M":"L"}${ix(i).toFixed(1)} ${iy(d.homeWP).toFixed(1)}`).join(" ");
+  const mid=iy(50);
+  const cur=wp.current||series[n-1];
+  const awayLead=(cur.awayWP||0)>=50;
+  const fillPts=series.map((d,i)=>`${ix(i).toFixed(1)} ${iy(d.awayWP).toFixed(1)}`).join(" ");
+  const fillPath=`M0 ${mid.toFixed(1)} L${fillPts} L${W} ${mid.toFixed(1)} Z`;
+  const swings=(wp.topSwings||[]).slice(0,4);
+  // inning boundary ticks (where the inning number changes)
+  const ticks=[];
+  for(let i=1;i<n;i++){ if(series[i].inning!==series[i-1].inning) ticks.push({x:ix(i),inn:series[i].inning}); }
+  return (
+    <div className="gdwpg">
+      <div className="gdwpghead">
+        <span className="wl" style={{color:awayCol}}>{awayAb} {cur.awayWP!=null?Math.round(cur.awayWP)+"%":""}</span>
+        <span className="wl wr" style={{color:homeCol}}>{homeAb} {cur.homeWP!=null?Math.round(cur.homeWP)+"%":""}</span>
+      </div>
+      <svg className="gdwpgsvg" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
+        {ticks.map((t,k)=><line key={"t"+k} x1={t.x} y1="0" x2={t.x} y2={H} className="gdwptick"/>)}
+        <line x1="0" y1={mid} x2={W} y2={mid} className="gdwpmid"/>
+        <path d={fillPath} className="gdwpfill" style={{fill:awayLead?awayCol:homeCol}}/>
+        <path d={homePts} className="gdwpline" style={{stroke:homeCol,opacity:.55}}/>
+        <path d={awayPts} className="gdwpline" style={{stroke:awayCol}}/>
+        {swings.map((sw,k)=>{const d=series[sw.i];if(!d)return null;return <circle key={k} cx={ix(sw.i)} cy={iy(d.awayWP)} r="3" className="gdwpsw"/>;})}
+      </svg>
+      <div className="gdwpgticks">{ticks.map((t,k)=><span key={k} style={{left:`${(t.x/W)*100}%`}}>{t.inn}</span>)}</div>
+      <div className="gdwpgfoot">
+        <span>first {Math.round(series[0].awayWP)}{"\u2013"}{Math.round(series[0].homeWP)}</span>
+        <span className="gdsep">{"\u00b7"}</span>
+        <span>{n} plays</span>
+        {swings[0]&&swings[0].desc&&<><span className="gdsep">{"\u00b7"}</span><span className="gdbig">big swing ({swings[0].wpAdded>0?"+":""}{swings[0].wpAdded}%): {swings[0].desc}</span></>}
+      </div>
+    </div>
+  );
+}
+function SheetLive({ game, gameId, scoresGame, aAb, hAb, gEdges, detail }) {
   const aCol=colFor(aAb), hCol=colFor(hAb);
   const ml = game.moneyline || {};
   const wlA = pct(ml.awayWinProb), wlH = pct(ml.homeWinProb);
@@ -370,7 +428,7 @@ function SheetLive({ game, scoresGame, aAb, hAb, gEdges, detail }) {
       <div className="bigscore">{aS}</div><div className="at" style={{fontSize:11}}>{state}</div><div className="bigscore">{hS}</div>
       <div className="tm"><LogoB ab={hAb} col={hCol}/><div className="ab">{hAb}</div></div>
     </div></div>
-    {(wlA!=null&&wlH!=null) && <Block label="LIVE WIN PROBABILITY"><div className="wprow"><div className="s aw" style={{width:wlA+"%"}}>{aAb} {wlA}%</div><div className="s hm" style={{width:wlH+"%"}}>{hAb} {wlH}%</div></div></Block>}
+    <Block label="LIVE WIN PROBABILITY" bx="in-game"><WinProbGraphGD gamePk={gameId} homeAb={hAb} awayAb={aAb} homeCol={hCol} awayCol={aCol}/></Block>
     {gEdges.length>0 && <Block label="LIVE EDGES" bx="in-game">{gEdges.map((e,i)=><div key={i} className="orow"><div className="ol">{e.teamAbbr||""} {String(e.market||"").toUpperCase()}</div><div className="os">{e.modelProb!=null?Math.round(e.modelProb*100)+"%":""} · <b>{fmtOdds(e.odds)}</b></div><div className="oe pos">{(e.edge>=0?"+":"")+(e.edge*100).toFixed(1)}%</div></div>)}</Block>}
     {ls && <Block label="LINE SCORE"><LineScore ls={ls}/></Block>}
     <UmpBlock detail={detail}/>
@@ -470,6 +528,21 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .wprow .s{display:flex;align-items:center;font-family:var(--disp);font-weight:800;font-size:13px;padding:0 10px}
 .wprow .aw{background:rgba(45,111,151,.32);color:#cfe2f5}
 .wprow .hm{background:rgba(63,203,145,.22);color:#d6ffe8;justify-content:flex-end;margin-left:auto}
+.gdwpg-load{font-family:var(--mono);font-size:11px;color:var(--mut2);text-align:center;padding:18px 0}
+.gdwpghead{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.gdwpghead .wl{font-family:var(--disp);font-weight:800;font-size:15px;font-variant-numeric:tabular-nums}
+.gdwpghead .wr{text-align:right}
+.gdwpgsvg{display:block;width:100%;height:120px}
+.gdwptick{stroke:rgba(255,255,255,.05);stroke-width:1}
+.gdwpmid{stroke:rgba(255,255,255,.14);stroke-width:.8;stroke-dasharray:4 4}
+.gdwpfill{opacity:.12}
+.gdwpline{fill:none;stroke-width:2;vector-effect:non-scaling-stroke;stroke-linejoin:round}
+.gdwpsw{fill:#fff;stroke:rgba(0,0,0,.55);stroke-width:.6}
+.gdwpgticks{position:relative;height:12px;margin-top:1px}
+.gdwpgticks span{position:absolute;transform:translateX(-50%);font-family:var(--mono);font-size:8px;color:var(--mut2)}
+.gdwpgfoot{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:8px;font-family:var(--mono);font-size:10px;color:var(--mut2)}
+.gdwpgfoot .gdbig{color:var(--mut)}
+.gdsep{opacity:.5}
 .wpcap{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10px;color:var(--mut);margin-top:6px}
 .proj{display:flex;justify-content:space-around;text-align:center;margin-top:12px;padding-top:11px;border-top:1px solid var(--line)}
 .proj .p .k{font-family:var(--mono);font-size:8.5px;color:var(--mut2);font-weight:600}.proj .p .v{font-family:var(--disp);font-weight:800;font-size:19px;color:#fff;margin-top:2px}.proj .p .v.g{color:var(--green)}
