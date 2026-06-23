@@ -3,6 +3,7 @@
 // HOME-PREMIUM-DARK-RESKIN-2026-06-23
 // HOME-FLAT-STATS-DEPLOY2-2026-06-23
 // HOME-WHITEPANEL-DARK-2026-06-23
+// HOME-BOARD-COLLAPSE-2026-06-23
 // Blueprint structure (vertical scroll + swipe carousels) translated to inline styles, wired to real data.
 // Honest live: LIVE pulse reflects real game state; odds flash on real change; HR shows chance-to-homer,
 // not a fake +EV badge; the line-movement chart fills into a full curve once tick storage lands.
@@ -484,19 +485,20 @@ function BoardRow({d,i,open,onToggle,navigate,sport}){ const lg=(SPORTS[sport]||
         : <>Take <b>{teamNm}</b> {rest} {tail}</>);
   return (
     <div className={"gr "+conv+(open?" sel":"")} onClick={onToggle}>
-      <div className="pband">
-        <div className="pbtop">
-          <div className="pbL">
-            <div className="lgs"><LogoM ab={d.a[0]} col={d.a[1]} lg={lg}/><LogoM ab={d.h[0]} col={d.h[1]} lg={lg}/></div>
-            <div>
-              <div className="ptag"><span className="pchk">{"\u2713"}</span><span className="plbl">THE PLAY</span></div>
-              <div className="ppick">{d.p}</div>
-            </div>
-          </div>
-          <div className="pedge"><div className={"pev "+(d.edge<0?"neg":"pos")}>{d.edge>=0?"+":""}{d.edge.toFixed(1)}<span>%</span></div><div className="pee">EDGE</div></div>
+      <div className="ghead">
+        <div className="lgs"><LogoM ab={d.a[0]} col={d.a[1]} lg={lg}/><LogoM ab={d.h[0]} col={d.h[1]} lg={lg}/></div>
+        <div className="ghm">
+          <div className="ghpick">{d.p}<span className="ghmk">{d.mk}</span></div>
+          <div className="ghmu">{d.g}{d.starts?" \u00b7 "+d.starts:""}</div>
         </div>
-        <div className="psub">{psub}</div>
+        <div className="ghr">
+          <div className={"ghedge "+(d.edge<0?"neg":"pos")}>{d.edge>=0?"+":""}{d.edge.toFixed(1)}<i>%</i></div>
+          {conv&&<span className={"ghconv "+conv}>{conv.toUpperCase()}</span>}
+          <span className="ghchev">{open?"\u25b4":"\u25be"}</span>
+        </div>
       </div>
+      <div className="gbody">
+        <div className="psub">{psub}</div>
       <div className="pval">
           <div className="pvrow">
             <div className="pvc"><div className="pvl">YOU GET</div><div className="pvn">{d.odds}</div></div>
@@ -510,8 +512,7 @@ function BoardRow({d,i,open,onToggle,navigate,sport}){ const lg=(SPORTS[sport]||
             <div className="pmoney">{d.mv&&<SparkM dir={d.mv[2]} seed={i}/>}<span className={"pmt "+money[0]}>{money[1]}</span></div>
           </div>
       </div>
-      <div className="popen"><span className="pol">TAP FOR MARKET READ & BREAKDOWN</span><span className="poc">{open?"▲":"▼"}</span></div>
-      <div className="det"><div className="dwrap">
+      <div className="dwrap">
         <div className="dhead">{av}<div><div className="nm">{d.g}</div><div className="mu">{d.p}</div></div>{d.starts&&<div className="st">{d.starts}</div>}</div>
         {d.model!=null&&<div className="mvm"><div className="lbls"><span className="ml">model {d.model}%</span><span className="mk2">market {d.mkt}%</span></div><div className="bar"><i style={{width:d.model+"%"}}/></div></div>}
         <div className="dchips">
@@ -525,7 +526,8 @@ function BoardRow({d,i,open,onToggle,navigate,sport}){ const lg=(SPORTS[sport]||
         {d.read&&<div className="rdbox"><div className="rl">MARKET READ {"\u2014"} BOOKS LEAN</div>{leg("Win",d.read.win)}{leg("Cover",d.read.cover)}{leg("Total",d.read.total)}</div>}
         {d.why&&<div className="why"><b>Why&nbsp;&nbsp;</b>{d.why}</div>}
         <span className="dlink" onClick={(ev)=>{ev.stopPropagation();d.gameId&&navigate(`/game/${sport}/${d.gameId}`);}}>Full matchup breakdown {"\u203a"}</span>
-      </div></div>
+      </div>
+      </div>
     </div>
   );
 }
@@ -665,9 +667,25 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .chipf{font-family:var(--mono);font-size:10px;color:var(--mut);border:1px solid var(--line2);border-radius:999px;padding:4px 10px;white-space:nowrap;cursor:pointer}.chipf.on{color:#06202a;background:var(--blue);border-color:var(--blue);font-weight:600}
 
 .grid{margin:6px 14px 0}
-.gr{position:relative;margin-bottom:13px;background:var(--panel);border:1px solid var(--line2);border-radius:16px;overflow:hidden;cursor:pointer}
-.gr::before{content:"";position:absolute;left:0;right:0;top:0;height:3px;background:var(--mut2);z-index:2}
-.gr.high::before{background:var(--green)}.gr.med::before{background:var(--gold)}.gr.low::before{background:var(--mut2)}
+.gr{position:relative;margin-bottom:13px;background:var(--panel);border-radius:16px;overflow:hidden;cursor:pointer}
+.gr::before{content:"";position:absolute;left:0;right:0;top:0;height:2px;background:var(--mut2);z-index:2}
+.gr.high::before{background:rgba(63,203,145,.5)}.gr.med::before{background:rgba(201,168,106,.55)}.gr.low::before{background:var(--mut2)}
+.ghead{display:flex;align-items:center;gap:11px;padding:12px 14px;cursor:pointer}
+.ghead .lgs{flex:0 0 auto}
+.ghm{flex:1;min-width:0}
+.ghpick{font-family:var(--disp);font-weight:800;font-size:19px;color:#fff;line-height:1;letter-spacing:-.3px;display:flex;align-items:center;gap:7px}
+.ghmk{font-family:var(--mono);font-size:8.5px;font-weight:600;color:var(--mut);border:1px solid var(--line2);border-radius:4px;padding:1px 5px}
+.ghmu{font-family:var(--mono);font-size:10.5px;color:var(--mut);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ghr{display:flex;align-items:center;gap:9px;flex:0 0 auto}
+.ghedge{font-family:var(--disp);font-weight:800;font-size:20px;line-height:1;font-variant-numeric:tabular-nums}.ghedge.pos{color:var(--green)}.ghedge.neg{color:var(--neg)}.ghedge i{font-size:11px;font-style:normal;color:inherit}
+.ghconv{font-family:var(--mono);font-size:8px;font-weight:700;letter-spacing:.5px;padding:3px 7px;border-radius:999px;white-space:nowrap}
+.ghconv.high{color:var(--gold);background:rgba(201,168,106,.12);border:1px solid rgba(201,168,106,.3)}
+.ghconv.med{color:var(--green);background:rgba(63,203,145,.12);border:1px solid rgba(63,203,145,.3)}
+.ghconv.low{color:var(--mut);background:rgba(255,255,255,.04);border:1px solid var(--line2)}
+.ghchev{color:var(--mut2);font-size:10px;width:12px;text-align:center;flex:0 0 auto;transition:transform .25s}.gr.sel .ghchev{color:var(--mut)}
+.gbody{max-height:0;overflow:hidden;transition:max-height .34s ease}
+.gr.sel .gbody{max-height:1100px}
+.gr .gbody>.psub{padding:2px 15px 12px;margin:0}
 .gr.sel{border-color:#3a4350}
 .pband{padding:13px 15px 14px;background:#000}
 .pbtop{display:flex;align-items:center;justify-content:space-between}
@@ -687,7 +705,7 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .psub b{color:#fff;font-weight:700}.psub em{color:#33e991;font-style:normal;font-weight:700}
 .gr.med .psub em{color:#e0b050}
 .pbody{padding:13px 15px 15px}
-.pval{background:var(--panel2);padding:13px 15px}
+.pval{background:transparent;padding:13px 15px}
 .pvrow{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
 .pvc{flex:1}.pvc.r{text-align:right}
 .pvl{font-family:var(--mono);font-size:8px;color:var(--mut);letter-spacing:1px;font-weight:700}
