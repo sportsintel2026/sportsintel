@@ -1,4 +1,5 @@
 // LIVESCORES-PREMIUM-DARK-RESKIN-2026-06-23
+// LIVESCORES-CARDS-POLISH-2026-06-23
 // LiveScores.jsx — shared live scores view for MLB / NBA / NFL / CFB / NHL.
 // Splits games into Live / Upcoming / Final with a blinking LIVE dot, refreshes
 // every 30s. Tapping a game opens its full matchup page (scoreboard + box score
@@ -179,7 +180,7 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .gtop .ou{font-family:var(--mono);font-size:10px;color:var(--mut)}.gtop .ou b{color:#cdd7e1;font-weight:600}
 .team{display:flex;align-items:center;gap:10px;padding:9px 13px}
 .team+.team{border-top:1px solid rgba(255,255,255,.04)}
-.lg{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#0c1018;border:1px solid #000;font-family:var(--disp);font-weight:800;font-size:9px;color:#fff;flex:0 0 auto}.lg img{width:21px;height:21px;object-fit:contain}
+.lg{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#1B2025;border:1px solid var(--line2);font-family:var(--disp);font-weight:800;font-size:9px;color:#fff;flex:0 0 auto}.lg img{width:21px;height:21px;object-fit:contain}
 .team .nm{font-family:var(--disp);font-weight:800;font-size:18px;color:#eef3f5;line-height:1}
 .team .rec{font-family:var(--mono);font-size:9px;color:var(--mut2);margin-top:2px}
 .team .tw{flex:1;min-width:0}
@@ -211,7 +212,7 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .dblk .bl .bx{font-family:var(--mono);font-size:9px;color:var(--mut2);letter-spacing:0;font-weight:500}
 .mst{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .mst .tm{display:flex;flex-direction:column;align-items:center;gap:6px;flex:1}
-.mst .tm .lgb{width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#0c1018;border:1px solid #000}.mst .tm .lgb img{width:38px;height:38px;object-fit:contain}
+.mst .tm .lgb{width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#1B2025;border:1px solid var(--line2)}.mst .tm .lgb img{width:38px;height:38px;object-fit:contain}
 .mst .tm .ab{font-family:var(--disp);font-weight:800;font-size:18px;color:#fff;margin-top:2px}.mst .tm .rc{font-family:var(--mono);font-size:9px;color:var(--mut2)}
 .mst .at{font-family:var(--disp);font-weight:700;font-size:13px;color:var(--mut2)}
 .bigscore{font-family:var(--disp);font-weight:800;font-size:34px;color:#fff;font-variant-numeric:tabular-nums}.bigscore.win{color:var(--green)}
@@ -228,7 +229,7 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .orow .os{font-family:var(--mono);font-size:11px;color:#aeb9c8;flex:1}.orow .os b{color:#fff}
 .orow .oe{font-family:var(--disp);font-weight:800;font-size:15px;flex:0 0 auto}.oe.pos{color:var(--green)}.oe.neg{color:var(--mut)}
 .pcard{display:flex;gap:11px;padding:10px 0;border-top:1px solid rgba(255,255,255,.05)}.pcard:first-of-type{border-top:none}
-.pcard .pl{width:34px;height:34px;border-radius:50%;background:#0c1018;border:1px solid #000;display:flex;align-items:center;justify-content:center;overflow:hidden;flex:0 0 auto}.pcard .pl img{width:27px;height:27px;object-fit:contain}
+.pcard .pl{width:34px;height:34px;border-radius:50%;background:#1B2025;border:1px solid var(--line2);display:flex;align-items:center;justify-content:center;overflow:hidden;flex:0 0 auto}.pcard .pl img{width:27px;height:27px;object-fit:contain}
 .pcard .pn{font-weight:700;font-size:13px;color:#eaf1ee}.pcard .ph{font-family:var(--mono);font-size:9px;color:var(--mut)}
 .pcard .pstats{display:flex;gap:13px;margin-left:auto;text-align:right}
 .pcard .pstats .st .k{font-family:var(--mono);font-size:8px;color:var(--mut2)}.pcard .pstats .st .v{font-family:var(--disp);font-weight:800;font-size:15px;color:#cfe2f5}
@@ -238,7 +239,7 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .mr .mv{font-family:var(--mono);font-size:11px;color:#cdd7e1;flex:1}.mr .mv b{color:#fff}
 .mr .ma{font-family:var(--mono);font-size:10px;font-weight:600;flex:0 0 auto}.ma.ag{color:var(--green)}.ma.df{color:var(--gold)}
 .ctx{display:flex;flex-wrap:wrap;gap:7px}
-.ctx .ch{font-family:var(--mono);font-size:10px;color:#aeb9c8;background:#0e1620;border:1px solid var(--line2);border-radius:7px;padding:5px 9px}.ctx .ch b{color:#fff}
+.ctx .ch{font-family:var(--mono);font-size:10px;color:#aeb9c8;background:#1B2025;border:1px solid var(--line2);border-radius:7px;padding:5px 9px}.ctx .ch b{color:#fff}
 .why{font-size:12.5px;color:#c4cfd9;line-height:1.55}.why .wl{font-family:var(--disp);font-weight:800;font-size:11px;letter-spacing:.5px;color:var(--gold);display:block;margin-bottom:4px}
 
 .lurow{display:flex;align-items:center;gap:9px;padding:8px 0;border-top:1px solid rgba(255,255,255,.05)}.lurow:first-of-type{border-top:none}
