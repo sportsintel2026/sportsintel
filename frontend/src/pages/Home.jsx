@@ -2,6 +2,7 @@
 // CFB-BOARD-WIRED-MOBILE-INTRAINING-2026-06-22
 // HOME-PREMIUM-DARK-RESKIN-2026-06-23
 // HOME-FLAT-STATS-DEPLOY2-2026-06-23
+// HOME-WHITEPANEL-DARK-2026-06-23
 // Blueprint structure (vertical scroll + swipe carousels) translated to inline styles, wired to real data.
 // Honest live: LIVE pulse reflects real game state; odds flash on real change; HR shows chance-to-homer,
 // not a fake +EV badge; the line-movement chart fills into a full curve once tick storage lands.
@@ -248,7 +249,7 @@ export default function HomePage(){
   const tapeUpcoming=games.filter(g=>g.status!=="final"&&g.time).slice(0,10).map(g=>({ id:g.id, a:g.awayAbbr||shortTeam(g.away||""), h:g.homeAbbr||shortTeam(g.home||""), as:null, hs:null, state:fmtTime(g.time), live:false }));
   const scoreTape=(tapeLive.length||tapeFinal.length)?[...tapeLive,...tapeFinal]:tapeUpcoming;
 
-  if(isDesktop) return <HomeDesktop edges={edges} games={games} movers={movers} live={live||[]} abbrById={abbrById} topProps={topProps} propList={propList} propsByType={propsByType} hero={hero} hasFull={hasFull} planLoaded={planLoaded} lineSeries={lineSeries} moveByPick={moveByPick} wpRecord={wpRecord} navigate={navigate} plan={plan} sport={sport} setSport={(k)=>{setSport(k);setBoard("ml");}} marketsLive={marketsLive} anyLive={anyLive} marketRead={marketRead} />;
+  if(isDesktop) return <HomeDesktop edges={edges} games={games} movers={movers} live={live||[]} abbrById={abbrById} topProps={topProps} propList={propList} propsByType={propsByType} hero={hero} hasFull={hasFull} planLoaded={planLoaded} lineSeries={lineSeries} moveByPick={moveByPick} wpRecord={wpRecord} navigate={navigate} plan={plan} sport={sport} setSport={(k)=>{setSport(k);setBoard("ml");}} marketsLive={marketsLive} anyLive={anyLive} marketRead={marketRead} perf={perf} />;
 
   // ============ ADAPTERS: real data -> v11 mock shapes ============
   const edgeNum=(x)=> sport==="mlb" ? (x.edge??0)*100 : (x.edge??0);
@@ -686,27 +687,27 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .psub b{color:#fff;font-weight:700}.psub em{color:#33e991;font-style:normal;font-weight:700}
 .gr.med .psub em{color:#e0b050}
 .pbody{padding:13px 15px 15px}
-.pval{background:#fff;padding:13px 15px}
+.pval{background:var(--panel2);padding:13px 15px}
 .pvrow{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
 .pvc{flex:1}.pvc.r{text-align:right}
-.pvl{font-family:var(--mono);font-size:8px;color:#8a96a3;letter-spacing:1px;font-weight:700}
-.pvl.g{color:#15875f}.gr.med .pvl.g{color:#a07818}
-.pvn{font-family:var(--disp);font-size:18px;font-weight:800;color:#0c1116;letter-spacing:-.5px}
-.pvn.g{color:#15875f}.gr.med .pvn.g{color:#a07818}
-.pvar{color:#15875f;font-size:13px;padding:0 8px}.gr.med .pvar{color:#a07818}
-.pbar{position:relative;height:8px;background:#e6e9ee;border-radius:4px;overflow:hidden}
-.pbar .bf{position:absolute;left:0;top:0;height:100%;background:#b9c2cd}
-.pbar .of{position:absolute;top:0;height:100%;background:#1D9E75}
-.gr.med .pbar .of{background:#e0b050}
-.pble{display:flex;justify-content:space-between;margin-top:5px;font-family:var(--mono);font-size:8.5px;color:#8a96a3}
-.pble .g{color:#15875f;font-weight:700}.gr.med .pble .g{color:#a07818}
-.pfoot{display:flex;align-items:center;justify-content:space-between;border-top:1px solid #e6e9ee;margin:11px -15px 0;padding:11px 15px 0}
+.pvl{font-family:var(--mono);font-size:8px;color:var(--mut);letter-spacing:1px;font-weight:700}
+.pvl.g{color:var(--green)}.gr.med .pvl.g{color:var(--gold)}
+.pvn{font-family:var(--disp);font-size:18px;font-weight:800;color:var(--tx);letter-spacing:-.5px}
+.pvn.g{color:var(--green)}.gr.med .pvn.g{color:var(--gold)}
+.pvar{color:var(--green);font-size:13px;padding:0 8px}.gr.med .pvar{color:var(--gold)}
+.pbar{position:relative;height:8px;background:var(--bg);border-radius:4px;overflow:hidden}
+.pbar .bf{position:absolute;left:0;top:0;height:100%;background:#39454f}
+.pbar .of{position:absolute;top:0;height:100%;background:var(--green)}
+.gr.med .pbar .of{background:var(--gold)}
+.pble{display:flex;justify-content:space-between;margin-top:5px;font-family:var(--mono);font-size:8.5px;color:var(--mut)}
+.pble .g{color:var(--green);font-weight:700}.gr.med .pble .g{color:var(--gold)}
+.pfoot{display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--line2);margin:11px -15px 0;padding:11px 15px 0}
 .pconv{display:flex;align-items:center;gap:7px}
-.pmeter{display:flex;gap:2px}.pmeter i{width:6px;height:12px;background:#dfe3e8;border-radius:1.5px;display:block}
-.pmeter i.on{background:#1D9E75}.gr.med .pmeter i.on{background:#e0b050}
-.pcl{font-size:10.5px;font-weight:800;color:#15875f;letter-spacing:.3px}.gr.med .pcl{color:#a07818}
+.pmeter{display:flex;gap:2px}.pmeter i{width:6px;height:12px;background:#2a313b;border-radius:1.5px;display:block}
+.pmeter i.on{background:var(--green)}.gr.med .pmeter i.on{background:var(--gold)}
+.pcl{font-size:10.5px;font-weight:800;color:var(--green);letter-spacing:.3px}.gr.med .pcl{color:var(--gold)}
 .pmoney{display:flex;align-items:center;gap:6px}
-.pmt{font-family:var(--mono);font-size:9px;color:#8a96a3}.pmt.up{color:#3f9f6e}.pmt.dn{color:#b06a4a}
+.pmt{font-family:var(--mono);font-size:9px;color:var(--mut)}.pmt.up{color:var(--green)}.pmt.dn{color:var(--neg)}
 .popen{display:flex;align-items:center;justify-content:center;gap:7px;background:#14171d;border-top:1px solid #232a34;padding:10px;cursor:pointer}
 .pol{font-family:var(--mono);font-size:9px;color:#8a96a3;letter-spacing:1.5px;font-weight:700}
 .poc{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:rgba(51,233,145,.14);color:#33e991;font-size:9px}
