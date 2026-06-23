@@ -1,5 +1,6 @@
 // Edges route — the main endpoint powering the analytics dashboard
 // CFB-ROUTE-SOS-PROBE-DISCLAIMER-2026-06-22
+// EDGES-RARE2B3B-GATED-2026-06-23
 //
 // GET /api/edges/mlb
 //   Returns today's MLB games with model projections, sportsbook odds, and edges.
@@ -554,10 +555,17 @@ router.get("/mlb", async (req, res) => {
           const tbOddsByEvent = await getMLBTotalBasesPropsForAllEvents(eventIds, 10);
           tbBoardResult = await calculateTotalBasesShadow(topGamesForHR, tbOddsByEvent);
           tbPropEdges = [...tbBoardResult].sort((a, b) => (b.overProb ?? 0) - (a.overProb ?? 0));
-          const dblOddsByEvent = await getMLBDoublesPropsForAllEvents(eventIds, 10);
-          doublesPropEdges = await calculateDoublesBoard(topGamesForHR, dblOddsByEvent);
-          const triOddsByEvent = await getMLBTriplesPropsForAllEvents(eventIds, 10);
-          triplesPropEdges = await calculateTriplesBoard(topGamesForHR, triOddsByEvent);
+          // Doubles/Triples are EXPERIMENTAL/uncalibrated and were never surfaced in the UI,
+          // yet their odds were fetched on EVERY board build (incl. the 12-min warm-cache cron)
+          // — pure Odds-API burn against the 20k/mo cap. Gated behind ?rare2b3b=1 so the
+          // capability is preserved for on-demand eval without the routine cost. (TB stays
+          // unconditional: it feeds the calibration shadow AND the now-live TB board.)
+          if (req.query.rare2b3b) {
+            const dblOddsByEvent = await getMLBDoublesPropsForAllEvents(eventIds, 10);
+            doublesPropEdges = await calculateDoublesBoard(topGamesForHR, dblOddsByEvent);
+            const triOddsByEvent = await getMLBTriplesPropsForAllEvents(eventIds, 10);
+            triplesPropEdges = await calculateTriplesBoard(topGamesForHR, triOddsByEvent);
+          }
         } catch (e) {
           console.error("[Edges] rare-hit boards (TB/2B/3B) failed:", e.message);
         }
