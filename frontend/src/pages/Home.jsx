@@ -1,6 +1,7 @@
 // WizePicks Home — live dashboard hub. Reads the existing /api/edges/mlb feed (no extra Odds cost).
 // CFB-BOARD-WIRED-MOBILE-INTRAINING-2026-06-22
 // HOME-PREMIUM-DARK-RESKIN-2026-06-23
+// HOME-FLAT-STATS-DEPLOY2-2026-06-23
 // Blueprint structure (vertical scroll + swipe carousels) translated to inline styles, wired to real data.
 // Honest live: LIVE pulse reflects real game state; odds flash on real change; HR shows chance-to-homer,
 // not a fake +EV badge; the line-movement chart fills into a full curve once tick storage lands.
@@ -10,6 +11,9 @@ import { useAuth } from "../hooks/useAuth";
 import { edgesApi, subscriptionApi, liveApi, supabase } from "../lib/api";
 import Sidebar from "./Sidebar";
 import HomeDesktop from "./HomeDesktop";
+
+// Tracked-record feed (same source the Performance page reads).
+const PERF_API_BASE = import.meta.env.VITE_API_URL || "https://sportsintel-production.up.railway.app";
 
 function formatOdds(a){ if(a==null||isNaN(a))return "—"; const n=Math.round(Number(a)); return n>0?`+${n}`:`${n}`; }
 // Fair American odds implied by the model's win/cover/hit probability (e.g. 49% -> +105).
@@ -94,6 +98,7 @@ export default function HomePage(){
   const [board,setBoard]=useState("ml");
   const [propTab,setPropTab]=useState("hr");
   const [wpRecord,setWpRecord]=useState(null);
+  const [perf,setPerf]=useState(null);
   const [live,setLive]=useState(null);
   const [oddsHist,setOddsHist]=useState(null);
   const [marketRead,setMarketRead]=useState(null);
@@ -135,6 +140,15 @@ export default function HomePage(){
   useEffect(()=>{ if(!SPORTS[sport].hasLive){ setLive([]); return; } let t; const pull=async()=>{ try{ const d=await liveApi.getMLB(); setLive(d?.games||[]); }catch(_){ setLive([]); } t=setTimeout(pull,60000); }; pull(); return ()=>clearTimeout(t); },[sport]);
   useEffect(()=>{ if(!SPORTS[sport].hasHist){ setOddsHist([]); return; } let t; const pull=async()=>{ try{ const d=await edgesApi.getOddsHistory(); setOddsHist(d?.games||[]); }catch(_){ setOddsHist([]); } t=setTimeout(pull,300000); }; pull(); return ()=>clearTimeout(t); },[sport]);
   useEffect(()=>{ if(sport!=="mlb"){ setMarketRead([]); return; } let t; const pull=async()=>{ try{ const d=await edgesApi.getMarketRead(); setMarketRead(d?.games||[]); }catch(_){ setMarketRead([]); } t=setTimeout(pull,120000); }; pull(); return ()=>clearTimeout(t); },[sport]);
+  // Tracked record (ROI / win rate / CLV) for the stats row, per current sport.
+  // Honest: only real graded numbers; falls back to em-dashes if a league has none yet.
+  useEffect(()=>{ let c=false; setPerf(null);
+    fetch(`${PERF_API_BASE}/api/performance/${sport}`)
+      .then(r=>r.ok?r.json():null)
+      .then(d=>{ if(!c) setPerf(d||null); })
+      .catch(()=>{ if(!c) setPerf(null); });
+    return ()=>{ c=true; };
+  },[sport]);
 
   if(loading&&!edges) return <div style={S.shell}><style>{CSS}</style><div style={{padding:40,textAlign:"center",color:"#8a99a2"}}>Loading the board…</div></div>;
   const e=edges||{}; const games=e.games||[];
@@ -276,6 +290,16 @@ export default function HomePage(){
   const kpiHas=boardItems.length>0;
   const kAvg=kpiHas?(boardItems.reduce((a,x)=>a+x.edge,0)/boardItems.length).toFixed(1):null;
   const kBest=kpiHas?Math.max(...boardItems.map(x=>x.edge)).toFixed(1):null;
+  // Real tracked-record stats: high-conviction ROI when present, honest beat-close CLV.
+  const perfStats=(()=>{ const d=perf; if(!d) return null;
+    const hi=d.byConfidence&&d.byConfidence.HIGH?d.byConfidence.HIGH:null;
+    const roi=(hi&&hi.roi!=null)?hi.roi:(d.roi!=null?d.roi:null);
+    const roiLbl=(hi&&hi.roi!=null)?"high-conv":"all picks";
+    let w=0,l=0; if(d.byConfidence){ for(const k in d.byConfidence){ const b=d.byConfidence[k]; if(b){ w+=b.wins||0; l+=b.losses||0; } } }
+    const winRate=(w+l)>0?(w/(w+l)*100):null;
+    const graded=d.n!=null?d.n:((w+l)||null);
+    return { roi, roiLbl, winRate, graded, clv:(d.clv!=null?d.clv:null) };
+  })();
   const BF=[["All","all"],["ML","ml"],["Spread","spread"],["Totals","totals"]];
 
   return (
@@ -339,10 +363,9 @@ export default function HomePage(){
         </div>
 
         {hasFull && <div className="kpis">
-          <div className="kpi"><div className="k">EDGES</div><div className="v">{boardItems.length}</div></div>
-          <div className="kpi"><div className="k">AVG EDGE</div><div className={"v "+(kpiHas?"g":"")}>{kpiHas?"+"+kAvg+"%":"\u2014"}</div></div>
-          <div className="kpi"><div className="k">BEST</div><div className={"v "+(kpiHas?"gold":"")}>{kpiHas?"+"+kBest+"%":"\u2014"}</div></div>
-          <div className="kpi"><div className="k">LIVE</div><div className={"v "+(liveItems.length?"red":"")}>{liveItems.length}</div></div>
+          <div className="kpi"><div className="k">ROI</div><div className={"v "+(perfStats&&perfStats.roi!=null?(perfStats.roi>=0?"g":"red"):"")}>{perfStats&&perfStats.roi!=null?(perfStats.roi>=0?"+":"")+perfStats.roi+"%":"\u2014"}</div><div className="ksub">{perfStats?perfStats.roiLbl:"tracked"}</div></div>
+          <div className="kpi"><div className="k">WIN RATE</div><div className="v">{perfStats&&perfStats.winRate!=null?perfStats.winRate.toFixed(1)+"%":"\u2014"}</div><div className="ksub">{perfStats&&perfStats.graded!=null?perfStats.graded+" graded":"tracking"}</div></div>
+          <div className="kpi"><div className="k">CLV</div><div className={"v "+(perfStats&&perfStats.clv!=null?(perfStats.clv>=0?"g":"red"):"")}>{perfStats&&perfStats.clv!=null?(perfStats.clv>=0?"+":"")+perfStats.clv+"%":"\u2014"}</div><div className="ksub">beat close</div></div>
         </div>}
 
         {liveItems.length>0 && <div id="livesec">
@@ -607,13 +630,12 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 /* hero */
 .herocar{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;margin-top:11px}.herocar::-webkit-scrollbar{display:none}
 .hslide{flex:0 0 100%;scroll-snap-align:start;padding:0 14px}
-.hero{border:1px solid rgba(243,185,79,.34);border-radius:15px;background:linear-gradient(180deg,#14110a,#06090b);position:relative;overflow:hidden;animation:glow 3.6s ease-in-out infinite}
-@keyframes glow{0%,100%{box-shadow:inset 0 0 22px rgba(243,185,79,.07);border-color:rgba(243,185,79,.3)}50%{box-shadow:inset 0 0 40px rgba(243,185,79,.2);border-color:rgba(243,185,79,.55)}}
-.hero::before{content:"";position:absolute;inset:0;background:radial-gradient(150% 120% at 50% -12%,rgba(243,185,79,.18),transparent 55%);pointer-events:none}.hero>*{position:relative}
+.hero{border:1px solid rgba(201,168,106,.32);border-radius:15px;background:var(--panel);position:relative;overflow:hidden}
+.hero>*{position:relative}
 .htop{display:flex;align-items:center;justify-content:space-between;padding:12px 14px 0}.eb{font-size:11px;font-weight:800;color:var(--gold)}
-.hbadges{display:flex;gap:7px}.hedge{font-family:var(--disp);font-weight:800;font-size:15px;color:var(--green);background:rgba(51,233,145,.1);border:1px solid rgba(51,233,145,.38);border-radius:8px;padding:3px 9px}
+.hbadges{display:flex;gap:7px}.hedge{font-family:var(--disp);font-weight:800;font-size:15px;color:var(--green);background:rgba(63,203,145,.12);border:1px solid rgba(63,203,145,.4);border-radius:8px;padding:3px 9px}
 .hot{font-size:9px;font-weight:800;color:var(--red);border:1px solid rgba(255,93,77,.4);background:rgba(255,93,77,.12);border-radius:999px;padding:2px 7px}
-.hpick{font-family:var(--disp);font-weight:800;font-size:34px;color:#fff;line-height:.9;padding:8px 14px 0}.hpick .mk{font-family:var(--mono);font-size:9px;color:var(--gold);border:1px solid rgba(243,185,79,.4);border-radius:4px;padding:1px 5px;margin-left:7px;vertical-align:middle}
+.hpick{font-family:var(--disp);font-weight:800;font-size:34px;color:#fff;line-height:.9;padding:8px 14px 0}.hpick .mk{font-family:var(--mono);font-size:9px;color:var(--gold);border:1px solid rgba(201,168,106,.4);border-radius:4px;padding:1px 5px;margin-left:7px;vertical-align:middle}
 .hpg{font-size:12px;color:var(--mut);font-weight:600;padding:3px 14px 0}
 .hmid{display:flex;gap:8px;padding:10px 14px 0;align-items:stretch}
 .hcell{border:1px solid rgba(255,255,255,.08);border-radius:9px;padding:6px 9px;flex:1}.hcell .k{font-size:8px;color:var(--mut);font-weight:800}.hcell .v{font-family:var(--mono);font-size:12.5px;color:#fff;margin-top:2px}.hcell .v .up{color:var(--green)}
@@ -623,28 +645,28 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .hdots{display:flex;gap:6px;justify-content:center;margin-top:9px}.hdots i{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.2)}.hdots i.on{background:var(--gold);width:16px;border-radius:3px}
 
 /* WizePlays (alone) */
-.wpbar{display:flex;align-items:center;gap:11px;margin:13px 14px 0;border:1px solid rgba(243,185,79,.42);border-radius:13px;background:linear-gradient(180deg,#1a1408,#06090b);padding:13px;cursor:pointer}
+.wpbar{display:flex;align-items:center;gap:11px;margin:13px 14px 0;border:1px solid rgba(201,168,106,.34);border-radius:13px;background:var(--panel);padding:13px;cursor:pointer}
 .wpbar .ic{width:36px;height:36px;border-radius:10px;background:rgba(243,185,79,.16);border:1px solid rgba(243,185,79,.42);display:flex;align-items:center;justify-content:center;color:var(--gold);font-family:var(--disp);font-weight:800;font-size:18px}
 .wpbar .tx{flex:1;min-width:0}.wpbar .h{font-family:var(--disp);font-weight:800;font-size:15px;color:#fff;letter-spacing:.3px}.wpbar .h .new{font-size:8px;font-weight:800;background:var(--gold);color:#1a1408;border-radius:4px;padding:1px 4px;margin-left:6px;vertical-align:middle;font-family:var(--ui)}
 .wpbar .s{font-size:11px;color:var(--mut);margin-top:2px}.wpbar .rec{text-align:right}.wpbar .rec .r{font-family:var(--disp);font-weight:800;font-size:20px;color:#fff;line-height:1}.wpbar .rec .u{font-family:var(--mono);font-size:11px;color:var(--green);margin-top:1px}
 
 /* WizeSpin (alone) */
-.spincard{position:relative;margin:13px 14px 0;border:1px solid rgba(243,185,79,.4);border-radius:13px;background:linear-gradient(180deg,#1a1408,#06090b);padding:14px;min-height:84px;cursor:pointer;overflow:hidden}
+.spincard{position:relative;margin:13px 14px 0;border:1px solid rgba(201,168,106,.32);border-radius:13px;background:var(--panel);padding:14px;min-height:84px;cursor:pointer;overflow:hidden}
 .spincard .h{font-family:var(--disp);font-weight:800;font-size:15px;color:#fff;letter-spacing:.3px}.spincard .h .new{font-size:8px;font-weight:800;background:var(--gold);color:#1a1408;border-radius:4px;padding:1px 4px;margin-left:6px;vertical-align:middle;font-family:var(--ui)}
 .spincard .d{font-size:11px;color:var(--mut);margin-top:7px;max-width:64%;line-height:1.4}.spincard .cta{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--gold);margin-top:9px}
 .wheel{width:52px;height:52px;border-radius:50%;position:absolute;top:24px;right:16px;background:radial-gradient(circle,#3a2c0a,#14110a 72%);border:2px solid var(--gold);animation:spin 7s linear infinite}.wheel::before{content:"";position:absolute;inset:6px;border-radius:50%;border:1px dashed rgba(243,185,79,.6)}
 @keyframes spin{to{transform:rotate(360deg)}}
 
-.kpis{display:flex;gap:8px;margin:13px 14px 0}.kpi{flex:1;border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:8px 9px;text-align:center}
-.kpi .k{font-family:var(--mono);font-size:8px;color:var(--mut);letter-spacing:.3px}.kpi .v{font-family:var(--disp);font-weight:800;font-size:18px;color:#fff;margin-top:2px;line-height:1}.kpi .v.g{color:var(--green)}.kpi .v.gold{color:var(--gold)}.kpi .v.red{color:var(--red)}
+.kpis{display:flex;gap:9px;margin:13px 14px 0}.kpi{flex:1;border:1px solid var(--line);border-radius:11px;background:var(--panel);padding:10px 12px;text-align:left}
+.kpi .k{font-family:var(--mono);font-size:8.5px;color:var(--mut2);letter-spacing:.5px}.kpi .v{font-family:var(--mono);font-weight:600;font-size:19px;color:var(--tx);margin-top:5px;line-height:1}.kpi .v.g{color:var(--green)}.kpi .v.gold{color:var(--gold)}.kpi .v.red{color:var(--red)}.kpi .ksub{font-family:var(--mono);font-size:8.5px;color:var(--mut2);margin-top:3px}
 
 .chips{display:flex;align-items:center;gap:7px;padding:8px 14px 0;overflow-x:auto;scrollbar-width:none}.chips::-webkit-scrollbar{display:none}
 .chipf{font-family:var(--mono);font-size:10px;color:var(--mut);border:1px solid var(--line2);border-radius:999px;padding:4px 10px;white-space:nowrap;cursor:pointer}.chipf.on{color:#06202a;background:var(--blue);border-color:var(--blue);font-weight:600}
 
 .grid{margin:6px 14px 0}
-.gr{position:relative;margin-bottom:13px;background:#14171d;border:1px solid #2a313b;border-radius:16px;overflow:hidden;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.4)}
+.gr{position:relative;margin-bottom:13px;background:var(--panel);border:1px solid var(--line2);border-radius:16px;overflow:hidden;cursor:pointer}
 .gr::before{content:"";position:absolute;left:0;right:0;top:0;height:3px;background:var(--mut2);z-index:2}
-.gr.high::before{background:linear-gradient(90deg,#1D9E75,#33e991)}.gr.med::before{background:linear-gradient(90deg,#b08a30,#e0b050)}.gr.low::before{background:var(--mut2)}
+.gr.high::before{background:var(--green)}.gr.med::before{background:var(--gold)}.gr.low::before{background:var(--mut2)}
 .gr.sel{border-color:#3a4350}
 .pband{padding:13px 15px 14px;background:#000}
 .pbtop{display:flex;align-items:center;justify-content:space-between}
@@ -750,12 +772,12 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .caption{font-family:var(--mono);font-size:10px;color:var(--mut2);margin:9px 14px 0;line-height:1.4}
 .seeall{margin:11px 14px 0;text-align:center;font-family:var(--disp);font-weight:800;font-size:14px;color:var(--blue);border:1px solid rgba(93,169,232,.3);border-radius:11px;padding:11px;background:rgba(93,169,232,.06);cursor:pointer}
 /* mover card */
-.mvc{width:188px;border:1px solid var(--line);border-radius:13px;background:linear-gradient(180deg,#0c0c0e,#020203);padding:12px}
+.mvc{width:188px;border:1px solid var(--line2);border-radius:13px;background:var(--panel);padding:12px}
 .mvc .pk{font-family:var(--disp);font-weight:800;font-size:18px;color:#fff;line-height:1}.mvc .mu{font-family:var(--mono);font-size:10px;color:var(--mut);margin-top:3px}
 .mvc .od{font-family:var(--mono);font-size:14px;font-weight:600;margin-top:10px}.mvc .od .a{color:var(--mut2)}.mvc .od.up{color:var(--green)}.mvc .od.dn{color:var(--neg)}
 .mvc .ct2{font-family:var(--mono);font-size:11px;font-weight:600;margin-top:4px}.mvc .ct2.up{color:var(--green)}.mvc .ct2.dn{color:var(--neg)}
 /* prop card */
-.prc{width:138px;border:1px solid rgba(93,169,232,.22);border-radius:14px;background:linear-gradient(180deg,rgba(93,169,232,.06),rgba(93,169,232,.01));padding:12px 9px 11px;position:relative;display:flex;flex-direction:column;align-items:center;text-align:center}
+.prc{width:138px;border:1px solid rgba(93,169,232,.22);border-radius:14px;background:var(--panel);padding:12px 9px 11px;position:relative;display:flex;flex-direction:column;align-items:center;text-align:center}
 .prc .rk{position:absolute;top:7px;left:7px;width:19px;height:19px;border-radius:6px;background:var(--steel);color:#fff;font-family:var(--disp);font-weight:800;font-size:11px;display:flex;align-items:center;justify-content:center}
 .prc .av{width:58px;height:58px;border-radius:50%;display:flex;align-items:flex-end;justify-content:center;font-family:var(--disp);font-weight:800;font-size:18px;color:#fff;margin-top:4px}
 .prc .nm{font-weight:800;font-size:13px;color:#eaf1ee;margin-top:8px;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -765,7 +787,7 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .prc .bet{margin-top:9px;width:100%;display:flex;align-items:center;justify-content:space-between;border:1px solid rgba(93,169,232,.3);border-radius:8px;background:rgba(93,169,232,.07);padding:6px 8px}
 .prc .bet span{font-family:var(--mono);font-weight:600;font-size:10px;color:#dbe4e2}.prc .bet .o{color:var(--blue)}
 /* park card */
-.pkc{width:200px;border:1px solid var(--line);border-radius:13px;background:linear-gradient(180deg,#0c0c0e,#020203);padding:12px}
+.pkc{width:200px;border:1px solid var(--line2);border-radius:13px;background:var(--panel);padding:12px}
 .pkc.h{border-color:rgba(243,185,79,.26)}.pkc.p{border-color:rgba(93,169,232,.2)}
 .pkc .r1{display:flex;align-items:center;justify-content:space-between}.pkc .vn{font-family:var(--disp);font-weight:800;font-size:15px;color:#fff}.pkc .tm{font-family:var(--mono);font-size:9px;color:var(--mut);margin-top:1px}
 .pkc .lg{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--disp);font-weight:800;font-size:8px;color:#fff;flex:0 0 auto;overflow:hidden;background:#0c1018}.pkc .lg img{width:20px;height:20px;object-fit:contain}
@@ -773,7 +795,7 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .pkc .bs{display:flex;gap:10px;margin-top:9px}.pkc .b .kk{font-family:var(--mono);font-size:8px;color:var(--mut);font-weight:600}.pkc .b .vv{font-family:var(--disp);font-weight:800;font-size:20px;color:var(--green)}.pkc .b .vv.dn{color:var(--neg)}
 .pkc .wx{font-family:var(--mono);font-size:10px;color:#aeb9c8;margin-top:9px;padding-top:8px;border-top:1px solid var(--line)}
 
-.guide{display:flex;align-items:center;gap:12px;margin:6px 14px 0;padding:14px 15px;border-radius:14px;border:1px solid rgba(51,233,145,.28);background:linear-gradient(180deg,rgba(51,233,145,.08),rgba(51,233,145,.02));cursor:pointer}
+.guide{display:flex;align-items:center;gap:12px;margin:6px 14px 0;padding:14px 15px;border-radius:14px;border:1px solid rgba(63,203,145,.26);background:var(--panel);cursor:pointer}
 .guide .gi{width:40px;height:40px;border-radius:11px;background:rgba(51,233,145,.12);border:1px solid rgba(51,233,145,.25);flex:0 0 auto}
 .guide .gt{flex:1}.guide .gh{font-weight:800;font-size:13.5px;color:#fff}.guide .gs{font-size:11px;color:#9aa6b2;margin-top:3px;line-height:1.4}.guide .ga{color:var(--green);font-weight:800;font-size:17px}
 .upcrow{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding:6px 14px 0}.upcrow::-webkit-scrollbar{display:none}
