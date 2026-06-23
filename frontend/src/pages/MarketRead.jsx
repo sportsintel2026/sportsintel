@@ -1,4 +1,5 @@
 // MarketRead.jsx — "what the books are collectively saying" per game, as a
+// CFB-MARKETREAD-PAGE-WIRED-2026-06-23
 // confidence call. Reads cross-book consensus + agreement (Strong/Soft/Split),
 // shows the model as a second opinion, the best price to back the lean, and an
 // honest market-move read. Guidance, not a guarantee. Desktop wraps in
@@ -79,6 +80,55 @@ function ModelLine({ model, leanTeam, bestPrice, bestBook, bestLabel, marketNoun
   );
 }
 
+// CFB market read rides inside /api/edges/cfb as marketByGame (keyed by eventId) +
+// a games[] array (carrying the model's projected winner). Reshape both into the exact
+// MLB getMarketRead() game shape so Card/CSS render unchanged. CFB win + total reads are
+// solid (real favProb/tier/nBooks); cover is omitted because CFB's cover favProb is a
+// flat 50 (no real cover-probability) — better empty than fake. Best prices come from
+// bestPrices; book names aren't in the feed, so bestBook stays null. Move is null until
+// cfb_odds_ticks accumulates. Works for any football feed with this shape (e.g. NFL).
+function marketReadFromFootball(resp) {
+  const mbg = (resp && resp.marketByGame) || {};
+  const modelById = {};
+  for (const gm of (resp && resp.games) || []) {
+    const ml = gm.moneyline || {};
+    modelById[gm.eventId] = {
+      projWinnerSide: ml.modelMargin != null ? (ml.modelMargin > 0 ? "home" : "away") : null,
+      homeTeam: gm.homeTeam, awayTeam: gm.awayTeam,
+    };
+  }
+  const games = [];
+  for (const [id, entry] of Object.entries(mbg)) {
+    const mr = entry.marketRead || {};
+    const bp = entry.bestPrices || {};
+    const parts = String(entry.matchup || "").split(" @ ");
+    const md = modelById[id] || {};
+    const out = { gameId: id, awayAbbr: parts[0] || "", homeAbbr: parts[1] || "" };
+    if (mr.win) {
+      const w = mr.win;
+      let model = null;
+      if (md.projWinnerSide) {
+        model = { agrees: md.projWinnerSide === w.favSide, favTeam: md.projWinnerSide === "home" ? md.homeTeam : md.awayTeam, favSide: md.projWinnerSide };
+      }
+      out.win = {
+        tier: w.tier, favTeam: w.favTeam, favProb: w.favProb, centSpread: w.centSpread, nBooks: w.nBooks,
+        bestPrice: w.favSide === "home" ? (bp.ml && bp.ml.home) : (bp.ml && bp.ml.away),
+        bestBook: null, move: null, model,
+      };
+    }
+    if (mr.total) {
+      const t = mr.total;
+      out.total = {
+        tier: t.tier, favSide: t.favSide, line: t.line, favProb: t.favProb, centSpread: t.centSpread, lineSplit: t.lineSplit,
+        bestOver: bp.total && bp.total.over, bestUnder: bp.total && bp.total.under,
+        bestOverBook: null, bestUnderBook: null, model: null,
+      };
+    }
+    if (out.win || out.total) games.push(out);
+  }
+  return { games };
+}
+
 function Card({ g, market }) {
   let read, headline, modelLeanTeam, bestPrice, bestBook, bestLabel, subline, move = null, favTeamForMove;
   if (market === "win") {
@@ -128,19 +178,25 @@ export default function MarketReadPage() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [market, setMarket] = useState("win");
+  const [sport, setSport] = useState("mlb");
 
   useEffect(() => { subscriptionApi.getMyPlan().then(setPlan).catch(() => {}); }, []);
   useEffect(() => {
     let on = true;
     const load = async () => {
-      try { const d = await edgesApi.getMarketRead(); if (on) setData(d); }
+      try {
+        const d = sport === "cfb"
+          ? marketReadFromFootball(await edgesApi.getCFB())
+          : await edgesApi.getMarketRead();
+        if (on) setData(d);
+      }
       catch (_) { if (on) setData({ games: [] }); }
       if (on) setLoading(false);
     };
     load();
     const id = setInterval(load, 60000);
     return () => { on = false; clearInterval(id); };
-  }, []);
+  }, [sport]);
 
   const games = data?.games || [];
   const has = (g) => market === "win" ? g.win : market === "cover" ? g.cover : g.total;
@@ -159,8 +215,14 @@ export default function MarketReadPage() {
           <div className="mrtag">What every book’s price is saying, how confident the market is, and where it’s moving. A read, not a guarantee.</div>
         </div>
 
+        <div className="mrsports">
+          {[["mlb", "MLB"], ["cfb", "CFB"]].map(([k, lb]) => (
+            <button key={k} className={sport === k ? "on" : ""} onClick={() => { if (k !== sport) { setSport(k); setLoading(true); if (k === "cfb" && market === "cover") setMarket("win"); } }}>{lb}</button>
+          ))}
+        </div>
+
         <div className="mrtabs">
-          {[["win", "Win"], ["cover", "Cover"], ["total", "Total"]].map(([k, lb]) => (
+          {[["win", "Win"], ["cover", "Cover"], ["total", "Total"]].filter(([k]) => !(sport === "cfb" && k === "cover")).map(([k, lb]) => (
             <button key={k} className={market === k ? "on" : ""} onClick={() => setMarket(k)}>{lb}</button>
           ))}
         </div>
@@ -195,6 +257,9 @@ const CSS = `
 .mrtitle{font-size:30px;font-weight:800;font-family:'Barlow Condensed',sans-serif;letter-spacing:.3px}
 .mrtitle .b{color:#ff5247}
 .mrtag{font-size:12.5px;color:#6b7681;font-weight:500;margin-top:4px;line-height:1.5}
+.mrsports{display:flex;gap:6px;margin-bottom:10px}
+.mrsports button{flex:0 0 auto;font-family:inherit;font-size:12px;font-weight:700;color:#8a99a2;background:#0b0f14;border:1px solid rgba(255,255,255,.08);border-radius:999px;padding:6px 14px;cursor:pointer}
+.mrsports button.on{color:#fff;background:rgba(38,116,176,.18);border-color:rgba(38,116,176,.45)}
 .mrtabs{display:flex;gap:6px;margin-bottom:16px}
 .mrtabs button{flex:0 0 auto;font-family:inherit;font-size:13px;font-weight:700;color:#8a99a2;background:#0b0f14;border:1px solid rgba(255,255,255,.08);border-radius:9px;padding:8px 16px;cursor:pointer}
 .mrtabs button.on{color:#fff;background:linear-gradient(90deg,rgba(29,158,117,.18),rgba(29,158,117,.05));border-color:rgba(29,158,117,.32)}
