@@ -35,6 +35,7 @@ const oddsRoutes = require("./routes/odds");
 const playerCardRoutes = require("./routes/playerCard");
 const umpiresRoutes = require("./routes/umpires");
 const liveProbeRoutes = require("./routes/liveProbe");
+const liveWinProbRoutes = require("./routes/liveWinProb");
 
 const { refreshDailyGames } = require("./services/sportsData");
 const { gradeFinishedGames, captureClosingLines, captureNbaClosingLines, captureOddsTicks, voidUnmatchedProps } = require("./services/predictionTracker");
@@ -138,6 +139,7 @@ app.use("/api/odds", oddsRoutes);
 app.use("/api/player-card", playerCardRoutes);
 app.use("/api/umpires", umpiresRoutes);
 app.use("/api/live-probe", liveProbeRoutes);
+app.use("/api/live-winprob", liveWinProbRoutes);
 
 // Health check
 app.get("/api/health", (req, res) => {
