@@ -115,6 +115,9 @@ export default function PropsPage() {
   const sortKey = (p) => p.lk
     ? -1000 + (p.model ?? 0)
     : (sortBy==="edge" ? (p.edge ?? 0) : (rank[p.conv]||0)*1000 + (p.edge ?? 0));
+  // Only surface POSITIVE-edge picks. TB rows (lk:true) are model-probability, not
+  // edge-gated, so they're exempt; everything else must beat the market (edge > 0).
+  list = list.filter(p => p.lk || (p.edge!=null && p.edge > 0));
   list = [...list].sort((a,b) => sortKey(b) - sortKey(a));
   const edged = list.filter(p => !p.lk && p.edge!=null);
   const avg = (edged.reduce((s,p)=>s+p.edge,0)/Math.max(edged.length,1)).toFixed(1);
