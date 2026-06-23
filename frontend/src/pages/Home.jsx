@@ -4,6 +4,7 @@
 // HOME-FLAT-STATS-DEPLOY2-2026-06-23
 // HOME-WHITEPANEL-DARK-2026-06-23
 // HOME-BOARD-COLLAPSE-2026-06-23
+// HOME-SWAP-PULSE-KPIS-2026-06-23
 // Blueprint structure (vertical scroll + swipe carousels) translated to inline styles, wired to real data.
 // Honest live: LIVE pulse reflects real game state; odds flash on real change; HR shows chance-to-homer,
 // not a fake +EV badge; the line-movement chart fills into a full curve once tick storage lands.
@@ -300,7 +301,9 @@ export default function HomePage(){
     let w=0,l=0; if(d.byConfidence){ for(const k in d.byConfidence){ const b=d.byConfidence[k]; if(b){ w+=b.wins||0; l+=b.losses||0; } } }
     const winRate=(w+l)>0?(w/(w+l)*100):null;
     const graded=d.n!=null?d.n:((w+l)||null);
-    return { roi, roiLbl, winRate, graded, clv:(d.clv!=null?d.clv:null) };
+    const rng=(d.ranges&&(d.ranges.Season||d.ranges[Object.keys(d.ranges)[0]]))||null;
+    const clvNum=(rng&&typeof rng.clv==="number")?rng.clv:(typeof d.clv==="number"?d.clv:null);
+    return { roi, roiLbl, winRate, graded, clv:clvNum };
   })();
   const BF=[["All","all"],["ML","ml"],["Spread","spread"],["Totals","totals"]];
 
@@ -347,7 +350,11 @@ export default function HomePage(){
         </div>
       )}
 
-      {hasFull && pulseAlerts.length>0 && <MarketPulse alerts={pulseAlerts}/>}
+        {hasFull && <div className="kpis">
+          <div className="kpi"><div className="k">ROI</div><div className={"v "+(perfStats&&perfStats.roi!=null?(perfStats.roi>=0?"g":"red"):"")}>{perfStats&&perfStats.roi!=null?(perfStats.roi>=0?"+":"")+perfStats.roi+"%":"\u2014"}</div><div className="ksub">{perfStats?perfStats.roiLbl:"tracked"}</div></div>
+          <div className="kpi"><div className="k">WIN RATE</div><div className="v">{perfStats&&perfStats.winRate!=null?perfStats.winRate.toFixed(1)+"%":"\u2014"}</div><div className="ksub">{perfStats&&perfStats.graded!=null?perfStats.graded+" graded":"tracking"}</div></div>
+          <div className="kpi"><div className="k">CLV</div><div className={"v "+(perfStats&&perfStats.clv!=null?(perfStats.clv>=0?"g":"red"):"")}>{perfStats&&perfStats.clv!=null?(perfStats.clv>=0?"+":"")+perfStats.clv+"%":"\u2014"}</div><div className="ksub">beat close</div></div>
+        </div>}
 
       <div id="content">
         {hasFull
@@ -364,11 +371,7 @@ export default function HomePage(){
             : <div className="rec"><div className="r" style={{fontSize:13,color:"#f3b94f"}}>View {"\u203a"}</div></div>}
         </div>
 
-        {hasFull && <div className="kpis">
-          <div className="kpi"><div className="k">ROI</div><div className={"v "+(perfStats&&perfStats.roi!=null?(perfStats.roi>=0?"g":"red"):"")}>{perfStats&&perfStats.roi!=null?(perfStats.roi>=0?"+":"")+perfStats.roi+"%":"\u2014"}</div><div className="ksub">{perfStats?perfStats.roiLbl:"tracked"}</div></div>
-          <div className="kpi"><div className="k">WIN RATE</div><div className="v">{perfStats&&perfStats.winRate!=null?perfStats.winRate.toFixed(1)+"%":"\u2014"}</div><div className="ksub">{perfStats&&perfStats.graded!=null?perfStats.graded+" graded":"tracking"}</div></div>
-          <div className="kpi"><div className="k">CLV</div><div className={"v "+(perfStats&&perfStats.clv!=null?(perfStats.clv>=0?"g":"red"):"")}>{perfStats&&perfStats.clv!=null?(perfStats.clv>=0?"+":"")+perfStats.clv+"%":"\u2014"}</div><div className="ksub">beat close</div></div>
-        </div>}
+      {hasFull && pulseAlerts.length>0 && <MarketPulse alerts={pulseAlerts}/>}
 
         {liveItems.length>0 && <div id="livesec">
           <div className="seclbl">LIVE EDGES <span className="ct">in-game {"\u00b7"} updates 60s</span><span className="lk">swipe {"\u203a"}</span></div>
