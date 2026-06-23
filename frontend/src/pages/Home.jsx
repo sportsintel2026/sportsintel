@@ -635,14 +635,14 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .chipf{font-family:var(--mono);font-size:10px;color:var(--mut);border:1px solid var(--line2);border-radius:999px;padding:4px 10px;white-space:nowrap;cursor:pointer}.chipf.on{color:#06202a;background:var(--blue);border-color:var(--blue);font-weight:600}
 
 .grid{margin:6px 14px 0}
-.gr{position:relative;margin-bottom:12px;background:#0a0b0e;border:1px solid rgba(255,255,255,.72);border-radius:16px;overflow:hidden;cursor:pointer}
+.gr{position:relative;margin-bottom:12px;background:#14171d;border:1px solid rgba(255,255,255,.6);border-radius:16px;overflow:hidden;cursor:pointer}
 .gr::before{content:"";position:absolute;left:0;right:0;top:0;height:3px;background:var(--mut2);z-index:2}
 .gr.high::before{background:linear-gradient(90deg,#1D9E75,#33e991)}.gr.med::before{background:linear-gradient(90deg,#b08a30,#e0b050)}.gr.low::before{background:var(--mut2)}
-.gr.sel{border-color:rgba(255,255,255,.92)}
-.pband{padding:13px 15px;background:#121418;border-bottom:1px solid #1d1f25}
+.gr.sel{border-color:rgba(255,255,255,.85)}
+.pband{padding:13px 15px;background:#1a1f27;border-bottom:1px solid #232a34}
 .pbtop{display:flex;align-items:center;justify-content:space-between}
 .pbL{display:flex;align-items:center;gap:11px}
-.pband .lgs .lg{border-color:#121418}
+.pband .lgs .lg{border-color:#1a1f27}
 .ptag{display:flex;align-items:center;gap:6px;margin-bottom:2px}
 .pchk{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#33e991;color:#06241a;font-size:9px;font-weight:900;line-height:1}
 .gr.med .pchk{background:#e0b050;color:#2a2008}
@@ -653,11 +653,11 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .pev{font-family:var(--disp);font-size:22px;font-weight:800;color:#33e991;letter-spacing:-.6px;line-height:.9;font-variant-numeric:tabular-nums}
 .gr.med .pev{color:#e0b050}.pev.neg{color:#ff6a5a}.pev span{font-size:13px}
 .pee{font-family:var(--mono);font-size:8px;color:#5e6b79;letter-spacing:1.5px;font-weight:700;margin-top:2px}
-.psub{font-size:11.5px;color:#8a96a3;margin-top:9px;line-height:1.45}
+.psub{font-size:11.5px;color:#9aa6b3;margin-top:9px;line-height:1.45}
 .psub b{color:#fff;font-weight:700}.psub em{color:#33e991;font-style:normal;font-weight:700}
 .gr.med .psub em{color:#e0b050}
 .pbody{padding:13px 15px 15px}
-.pval{background:#060708;border:1px solid #191c21;border-radius:11px;padding:11px 12px}
+.pval{background:#0b0e13;border:1px solid #1f262f;border-radius:11px;padding:11px 12px}
 .pvrow{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
 .pvc{flex:1}.pvc.r{text-align:right}
 .pvl{font-family:var(--mono);font-size:8px;color:#5e6b79;letter-spacing:1px;font-weight:700}
@@ -665,29 +665,29 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .pvn{font-family:var(--disp);font-size:18px;font-weight:800;color:#fff;letter-spacing:-.5px}
 .pvn.g{color:#33e991}.gr.med .pvn.g{color:#e0b050}
 .pvar{color:#33e991;font-size:13px;padding:0 8px}.gr.med .pvar{color:#e0b050}
-.pbar{position:relative;height:8px;background:#0f1218;border-radius:4px;overflow:hidden}
-.pbar .bf{position:absolute;left:0;top:0;height:100%;background:#2a3038}
+.pbar{position:relative;height:8px;background:#141a22;border-radius:4px;overflow:hidden}
+.pbar .bf{position:absolute;left:0;top:0;height:100%;background:#2f3a46}
 .pbar .of{position:absolute;top:0;height:100%;background:#33e991}
 .gr.med .pbar .of{background:#e0b050}
 .pble{display:flex;justify-content:space-between;margin-top:5px;font-family:var(--mono);font-size:8.5px;color:#76838f}
 .pble .g{color:#33e991;font-weight:700}.gr.med .pble .g{color:#cdb878}
-.pfoot{display:flex;align-items:center;justify-content:space-between;border-top:1px solid #191c21;margin:11px -12px 0;padding:11px 12px 0}
+.pfoot{display:flex;align-items:center;justify-content:space-between;border-top:1px solid #1f262f;margin:11px -12px 0;padding:11px 12px 0}
 .pconv{display:flex;align-items:center;gap:7px}
-.pmeter{display:flex;gap:2px}.pmeter i{width:6px;height:12px;background:#212630;border-radius:1.5px;display:block}
+.pmeter{display:flex;gap:2px}.pmeter i{width:6px;height:12px;background:#2c3340;border-radius:1.5px;display:block}
 .pmeter i.on{background:#33e991}.gr.med .pmeter i.on{background:#e0b050}
 .pcl{font-size:10.5px;font-weight:800;color:#33e991;letter-spacing:.3px}.gr.med .pcl{color:#e0b050}
 .pmoney{display:flex;align-items:center;gap:6px}
 .pmt{font-family:var(--mono);font-size:9px;color:#7d8a98}.pmt.up{color:#33e991}.pmt.dn{color:#d8795a}
-.gr .dwrap{margin:0 15px;padding-bottom:14px;border-top-color:#1c2027}
+.gr .dwrap{margin:0 15px;padding-bottom:14px;border-top-color:#232a34}
 .gr .dhead .nm{color:#fff}.gr .dhead .mu{color:#7d8a98}.gr .dhead .st{color:#7d8a98}
 .gr .mvm .lbls .ml{color:#33e991}.gr .mvm .lbls .mk2{color:#7d8a98}
-.gr .mvm .bar{background:#0f1218}.gr .mvm .bar i{background:#33e991}
-.gr .dchip{color:#cfd7e2;border-color:#1c1f26;background:#0a0c10}.gr .dchip b{color:#7d8a98}.gr .dchip.g{color:#33e991}.gr .dchip.gold{color:#e0b050}
+.gr .mvm .bar{background:#141a22}.gr .mvm .bar i{background:#33e991}
+.gr .dchip{color:#cfd7e2;border-color:#232a34;background:#0e1218}.gr .dchip b{color:#7d8a98}.gr .dchip.g{color:#33e991}.gr .dchip.gold{color:#e0b050}
 .gr .flags .ok{color:#33e991}.gr .flags .warn{color:#ff6a5a}.gr .flags .info{color:#5da9e8}.gr .flags .mu{color:#7d8a98}
 .gr .why{color:#b9c2cc}.gr .why b{color:#7d8a98}
-.gr .rdbox{border-color:#1c1f26;background:#0a0c10}
-.gr .rdbox .rl{color:#7d8a98;background:#070809}
-.gr .rdrow{border-top-color:#191c21}.gr .rdrow .leg{color:#5e6b79}.gr .rdrow .pk{color:#cfd7e2}
+.gr .rdbox{border-color:#232a34;background:#0e1218}
+.gr .rdbox .rl{color:#7d8a98;background:#0b0e13}
+.gr .rdrow{border-top-color:#1f262f}.gr .rdrow .leg{color:#5e6b79}.gr .rdrow .pk{color:#cfd7e2}
 .gr .tier.strong{color:#33e991}.gr .tier.soft{color:#e0b050}.gr .tier.split{color:#ff6a5a}
 .gr .ag.y{color:#33e991}.gr .ag.n{color:#7d8a98}
 .gr .dlink{color:#e0b050}
