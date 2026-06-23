@@ -314,12 +314,136 @@ async function fetchPointsProbe(season = 2025) {
   return out;
 }
 
+/* ---- POWER RATINGS: per-team strength seeded from real points data (FBS) -------
+ * buildTeamRatings(season) loops the ~146 FBS teams' core-API record endpoints and
+ * computes a points-differential power rating (SRS base: points/game better or worse
+ * than a league-average FBS team):
+ *
+ *   rawRating = (pointsFor - pointsAgainst) / gamesPlayed
+ *
+ * Then league-centered (mean = 0) and REGRESSED toward 0 by RATING_REGRESSION. CFB
+ * gets slightly MORE regression than NFL because cupcake/FCS scheduling inflates raw
+ * differentials (a team can post +35/game beating up tomato cans), so the seed should
+ * be humble about the extremes. FBS-only: the membership comes from ESPN's core
+ * group-80 list (the /teams?groups=80 site filter is broken — returns D-II/D-III).
+ *
+ * COST: ~146 core-API record calls per refresh, run in concurrency-capped batches and
+ * cached 6h (ratings move weekly at most). Names are a best-effort bulk lookup.
+ *
+ * HONESTY GATES (same as NFL): a team with gamesPlayed < MIN_GAMES_FOR_RATING is
+ * skipped; if NO team has a sample (true offseason), returns {} so the model stays
+ * market-only rather than rating on emptiness.
+ *
+ * NOT YET INCLUDED (clean slots for later layers): strength-of-schedule (huge in CFB
+ * given scheduling disparity) and conference strength (vsconf record carried through).*/
+const RATING_REGRESSION = 0.72;            // keep 72% of raw differential, shrink 28% to mean
+const MIN_GAMES_FOR_RATING = 4;            // need a real sample before rating a team
+const RATINGS_TTL_MS = 6 * 60 * 60 * 1000; // 6h — refresh is ~146 calls; ratings move weekly
+const RATINGS_BATCH = 14;                  // concurrency cap so we don't hammer ESPN at once
+
+function recStat(statsArr, name) {
+  if (!Array.isArray(statsArr)) return null;
+  const s = statsArr.find((x) => x.name === name);
+  return s && s.value != null ? Number(s.value) : null;
+}
+
+async function buildTeamRatings(season = 2025) {
+  const key = `cfbRatings:${season}`;
+  const cached = cacheGet(key);
+  if (cached) return cached;
+
+  const CORE = `https://sports.core.api.espn.com/v2/sports/football/leagues/college-football/seasons/${season}/types/2`;
+
+  // 1) FBS membership (ids) from the core group-80 list — the real ~146 to rate.
+  let fbsIds = [];
+  try {
+    const data = await espnGet(`${CORE}/groups/80/teams?limit=200`);
+    fbsIds = (data.items || []).map((it) => {
+      const m = String(it.$ref || "").match(/teams\/(\d+)/);
+      return m ? m[1] : null;
+    }).filter(Boolean);
+  } catch (e) {
+    return { season, teams: {}, rated: 0, error: `FBS team list fetch failed: ${e.message}` };
+  }
+  if (!fbsIds.length) return { season, teams: {}, rated: 0, error: "no FBS teams returned" };
+
+  // 2) id -> {abbr, name} via the bulk site /teams list (one call). The groups=80
+  //    filter is ignored here, so we pull a wide list and key by id; names are
+  //    best-effort (a missing one falls back to the id, ratings still compute).
+  const nameById = {};
+  try {
+    const t = await espnGet(`${BASE}/teams?limit=900`);
+    for (const x of (t.sports?.[0]?.leagues?.[0]?.teams || [])) {
+      const tm = x.team;
+      if (tm && tm.id) nameById[String(tm.id)] = { abbr: tm.abbreviation || null, name: tm.displayName || tm.name || null };
+    }
+  } catch (_) { /* names best-effort */ }
+
+  // 3) each FBS team's record → raw points-diff rating, in concurrency-capped batches.
+  const recordUrl = (id) => `${CORE}/teams/${id}/record`;
+  const raw = {};
+  for (let i = 0; i < fbsIds.length; i += RATINGS_BATCH) {
+    const batch = fbsIds.slice(i, i + RATINGS_BATCH);
+    await Promise.all(batch.map(async (id) => {
+      try {
+        const data = await espnGet(recordUrl(id));
+        const items = data.items || [];
+        const total = items.find((it) => (it.type || "").toLowerCase() === "total");
+        const conf = items.find((it) => (it.type || "").toLowerCase() === "vsconf");
+        if (!total) return;
+        const stats = total.stats || [];
+        const gp = recStat(stats, "gamesPlayed");
+        const pf = recStat(stats, "pointsFor");
+        const pa = recStat(stats, "pointsAgainst");
+        if (gp == null || pf == null || pa == null || gp < MIN_GAMES_FOR_RATING) return;
+        const meta = nameById[String(id)] || {};
+        raw[id] = {
+          id: String(id), abbr: meta.abbr || String(id), name: meta.name || `Team ${id}`,
+          gp, pf, pa, wins: recStat(stats, "wins"), losses: recStat(stats, "losses"),
+          diff: pf - pa, rawRating: (pf - pa) / gp,
+          confRecord: conf ? { wins: recStat(conf.stats, "wins"), losses: recStat(conf.stats, "losses") } : null,
+        };
+      } catch (_) { /* skip this team; others still rate */ }
+    }));
+  }
+
+  const ratedIds = Object.keys(raw);
+  if (ratedIds.length === 0) {
+    const empty = { season, teams: {}, rated: 0, fbsListed: fbsIds.length, note: "No FBS team has enough games yet — model stays market-only." };
+    cacheSet(key, empty, RATINGS_TTL_MS);
+    return empty;
+  }
+
+  // 4) center on the league mean (kills scoring-era drift), then regress to tame
+  //    small-sample + cupcake-inflated extremes.
+  const meanRaw = ratedIds.reduce((s, id) => s + raw[id].rawRating, 0) / ratedIds.length;
+  const teamsOut = {};
+  for (const id of ratedIds) {
+    const centered = raw[id].rawRating - meanRaw;
+    teamsOut[id] = {
+      ...raw[id],
+      rating: Math.round(centered * RATING_REGRESSION * 100) / 100,
+      regressed: true, sosApplied: false,
+    };
+  }
+
+  const result = {
+    season, rated: ratedIds.length, fbsListed: fbsIds.length,
+    meanRawDiffPerGame: Math.round(meanRaw * 100) / 100,
+    regression: RATING_REGRESSION, teams: teamsOut,
+    note: "CFB power ratings = league-centered, regressed points differential per game (2025 seed). FBS only; SoS/conference layers not yet applied. Cupcake-inflated diffs partly tamed by regression.",
+  };
+  cacheSet(key, result, RATINGS_TTL_MS);
+  return result;
+}
+
 module.exports = {
   fetchScoreboard,
   getUpcomingGames,
   getFinalScore,
   fetchSeasonProbe,
   fetchPointsProbe,
+  buildTeamRatings,
   statMap,
   parseRecords,
   LEAGUE_AVG_PPG,
