@@ -1,3 +1,4 @@
+// PROPS-TB-BOARD-WIRED-2026-06-23
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
@@ -82,17 +83,39 @@ export default function PropsPage() {
     mkt: p.marketProb!=null ? Math.round(p.marketProb*100) : (p.impliedProb!=null ? Math.round(p.impliedProb*100) : null),
     gameId: p.gameId, id: p.playerId || p.id, teamRaw: p.team, pid: p.playerId
   });
+  // Total Bases: a CALIBRATED likelihood board (overProb is the validated signal — see
+  // TB calibration, n=501). Unlike HR/Hits/K it is not edge-filtered or conviction-tiered,
+  // so it's surfaced honestly: model probability is the headline (lk:true), with the
+  // model-vs-market edge shown only when present. Pre-ranked by overProb from the backend.
+  const toTB = (p) => ({
+    pl: [ p.player || "—", initialsOf(p.player||""), teamCol(shortTeam(p.team||p.game||"")) ],
+    g: p.game || p.team || "", pos: "",
+    line: lineOf({ line: p.line }, "TB"), odds: formatOdds(p.odds),
+    edge: p.edgeOverShadow!=null ? p.edgeOverShadow*100 : null,
+    mk: "TB", conv: "", lk: true,
+    model: p.overProb!=null ? Math.round(p.overProb*100) : null,
+    mkt: p.marketFairOver!=null ? Math.round(p.marketFairOver*100) : null,
+    gameId: p.gameId, id: p.playerId, teamRaw: p.team, pid: p.playerId,
+    expTB: p.expTB ?? null,
+  });
   const allProps = [
     ...(M.hrPropEdges||[]).map(p => toP(p,"HR","HR")),
     ...(M.hitsPropEdges||[]).map(p => toP(p,"HITS","Hits")),
     ...((M.kPropEdges||M.ksPropEdges||[])).map(p => toP(p,"K","Ks")),
+    ...(M.tbPropEdges||[]).map(toTB),
   ];
-  const FILT = ["All","HR","Hits","K"];
-  const fmap = { HR:"HR", Hits:"HITS", K:"K" };
+  const FILT = ["All","HR","Hits","K","TB"];
+  const fmap = { HR:"HR", Hits:"HITS", K:"K", TB:"TB" };
   let list = mfilter==="All" ? allProps : allProps.filter(p => p.mk === fmap[mfilter]);
   const rank = { high:3, med:2, low:1 };
-  list = [...list].sort((a,b) => sortBy==="edge" ? b.edge-a.edge : ((rank[b.conv]-rank[a.conv]) || b.edge-a.edge));
-  const avg = (list.reduce((s,p)=>s+p.edge,0)/Math.max(list.length,1)).toFixed(1);
+  // Null-safe sort. TB rows (lk) carry no validated edge/tier, so they rank by model prob
+  // and sit below the edge-filtered picks; never let a null edge produce NaN ordering.
+  const sortKey = (p) => p.lk
+    ? -1000 + (p.model ?? 0)
+    : (sortBy==="edge" ? (p.edge ?? 0) : (rank[p.conv]||0)*1000 + (p.edge ?? 0));
+  list = [...list].sort((a,b) => sortKey(b) - sortKey(a));
+  const edged = list.filter(p => !p.lk && p.edge!=null);
+  const avg = (edged.reduce((s,p)=>s+p.edge,0)/Math.max(edged.length,1)).toFixed(1);
 
   return (
     <div className="app"><style>{CSS}</style>
@@ -113,7 +136,7 @@ export default function PropsPage() {
       {!hasFull ? <Gate navigate={navigate}/> : <>
         <div className="chips">{FILT.map(f=><b key={f} className={f===mfilter?"on":""} onClick={()=>setMfilter(f)}>{f}</b>)}</div>
         <div className="bar">
-          <span>{list.length} props · avg edge +{avg}%</span>
+          <span>{list.length} props · {mfilter==="TB" ? "ranked by model probability" : `avg edge +${avg}%`}</span>
           <span className="sort"><b className={sortBy==="edge"?"on":""} onClick={()=>setSortBy("edge")}>Edge</b><b className={sortBy==="conv"?"on":""} onClick={()=>setSortBy("conv")}>Conviction</b></span>
         </div>
         <div id="wrap">
@@ -140,7 +163,7 @@ export default function PropsPage() {
 function PropRow({ p, onOpen }) {
   return (
     <div className="prow" onClick={()=>onOpen(p)}>
-      <div className={"rail "+p.conv}/>
+      <div className={"rail "+(p.conv||(p.lk?"lk":""))}/>
       <Avatar pid={p.pid} initials={p.pl[1]} color={p.pl[2]} cls="av"/>
       <div className="pinfo">
         <div className="pn">{p.pl[0]}</div>
@@ -148,8 +171,9 @@ function PropRow({ p, onOpen }) {
         <div className="pline">{p.line}<span className="od">{p.odds}</span></div>
       </div>
       <div className="pr">
-        <div className="ped">+{p.edge.toFixed(1)}%</div>
-        <div className="plb">EDGE</div>
+        {p.lk
+          ? <><div className="ped">{p.model!=null?p.model+"%":"\u2014"}</div><div className="plb">MODEL</div></>
+          : <><div className="ped">+{(p.edge??0).toFixed(1)}%</div><div className="plb">EDGE</div></>}
         <div className={"ptag "+p.mk}>{p.mk}</div>
       </div>
     </div>
@@ -310,7 +334,7 @@ function PlayerSheet({ p, card, loading, onClose }) {
               <div className="dblk"><div className="recline">
                 <Avatar pid={p.pid} initials={p.pl[1]} color={p.pl[2]} cls="av2"/>
                 <div className="rl"><div className="bet">{p.line}</div><div className="sub">{shortTeam(p.teamRaw||p.g)} · best <b>{p.odds}</b></div></div>
-                <div className="edg"><div className="e">+{p.edge.toFixed(1)}%</div><div className="c">{p.conv.toUpperCase()} CONV</div></div>
+                <div className="edg"><div className="e">{p.edge!=null?`+${p.edge.toFixed(1)}%`:(p.model!=null?p.model+"%":"\u2014")}</div><div className="c">{p.conv?p.conv.toUpperCase()+" CONV":"MODEL"}</div></div>
               </div><MMbar model={p.model} mkt={p.mkt}/></div>
               <div className="dblk"><div className="bl">PITCHING <span className="bx">season rates</span></div>
                 <div className="stiles">
@@ -469,7 +493,7 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .bar .sort b{padding:5px 10px;color:var(--mut);cursor:pointer;font-weight:600}.bar .sort b.on{background:#141d24;color:#fff}
 .prow{position:relative;display:flex;align-items:center;gap:11px;margin:8px 14px 0;border:1px solid var(--line);border-radius:13px;background:linear-gradient(180deg,#0c0c0e,#020203);padding:11px 13px 11px 16px;overflow:hidden;cursor:pointer;transition:border-color .15s}
 .prow:active{border-color:var(--steel)}
-.prow .rail{position:absolute;left:0;top:0;bottom:0;width:4px}.rail.high{background:var(--green)}.rail.med{background:var(--gold)}.rail.low{background:#39454f}
+.prow .rail{position:absolute;left:0;top:0;bottom:0;width:4px}.rail.high{background:var(--green)}.rail.med{background:var(--gold)}.rail.low{background:#39454f}.rail.lk{background:#2a6f97}
 .prow .av{width:42px;height:42px;border-radius:50%;display:flex;align-items:flex-end;justify-content:center;font-family:var(--disp);font-weight:800;font-size:15px;color:#fff;flex:0 0 auto;overflow:hidden}
 .prow .pinfo{flex:1;min-width:0}
 .prow .pn{font-weight:700;font-size:14px;color:#eef3f5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -479,7 +503,7 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .prow .ped{font-family:var(--disp);font-weight:800;font-size:22px;color:var(--green);line-height:1}
 .prow .plb{font-family:var(--mono);font-size:8px;color:var(--mut);font-weight:700;margin-top:2px;letter-spacing:.3px}
 .prow .ptag{display:inline-block;font-family:var(--mono);font-size:8px;font-weight:700;border-radius:5px;padding:2px 6px;margin-top:5px}
-.ptag.HR{color:var(--gold);background:rgba(243,185,79,.12)}.ptag.HITS{color:var(--blue);background:rgba(93,169,232,.12)}.ptag.K{color:#c08bff;background:rgba(155,123,255,.14)}
+.ptag.HR{color:var(--gold);background:rgba(243,185,79,.12)}.ptag.HITS{color:var(--blue);background:rgba(93,169,232,.12)}.ptag.K{color:#c08bff;background:rgba(155,123,255,.14)}.ptag.TB{color:#7fdcc0;background:rgba(45,160,120,.16)}
 .seclbl{font-family:var(--disp);font-weight:800;font-size:13px;letter-spacing:1px;color:var(--mut);margin:18px 14px 2px}
 #wrap{padding-bottom:96px}
 .nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:460px;display:flex;justify-content:space-around;padding:7px 4px;background:rgba(0,0,0,.96);backdrop-filter:blur(12px);border-top:1px solid var(--line);z-index:20}
