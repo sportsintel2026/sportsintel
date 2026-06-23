@@ -1242,6 +1242,25 @@ router.get("/nflseasonprobe", async (req, res) => {
   }
 });
 
+// ── TEMP DIAGNOSTIC: CFB 2025 season-stats shape probe (read-only) ───────────
+// The college-football ratings seed needs real per-team PF/PA, but CFB has ~134 FBS
+// teams across ~11 conferences. This reveals ESPN's college standings shape and —
+// crucially — whether ONE standings call carries PF/PA for every FBS team (cheap
+// seed) vs needing a 134-team loop. Read-only inspection; writes nothing.
+//   /api/edges/cfbseasonprobe            → 2025
+//   /api/edges/cfbseasonprobe?season=2024
+router.get("/cfbseasonprobe", async (req, res) => {
+  try {
+    const season = parseInt(req.query.season, 10) || 2025;
+    const { fetchSeasonProbe } = require("../services/cfbDataSource");
+    const result = await fetchSeasonProbe(season);
+    res.json({ ok: true, league: "cfb", ...result });
+  } catch (e) {
+    console.error("[cfbseasonprobe] error:", e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // ── TEMP DIAGNOSTIC: NFL points-for/against source probe (read-only) ─────────
 // Finds a clean PF/PA source (core-API record + core standings) since the site
 // standings came back empty. Read-only inspection.
