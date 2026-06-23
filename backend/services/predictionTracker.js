@@ -8,6 +8,7 @@ const { createClient } = require("@supabase/supabase-js");
 const { getEasternDate, getScheduleForDate, getGameHRHitters, getGamePitcherStrikeouts, getGameBatterHits, getGameBatterTotalBases, getLinescore, getGameStatusAndScore, normPlayerName } = require("./mlbStatsApi");
 const { fetchGamelog } = require("./nbaGamelog");
 const { fetchScoreboard } = require("./nbaDataSource");
+const { fetchScoreboard: fetchNflScoreboard } = require("./nflDataSource");
 const { getMLBMainOdds, getMLBPinnacleClose } = require("./oddsApi");
 
 function db() {
@@ -765,6 +766,94 @@ async function recordNbaTeamPredictions(predictions) {
   }
 }
 
+// NFL model-pick SHADOW recorder (Phase-2 F5 calibration harness). Logs the model's
+// actual picks (the positive-edge `value:true` side) for ML/spread/total to
+// model_predictions as league:"nfl" so they auto-grade once games go final, building
+// a graded track record to calibrate against. Two deliberate gates:
+//   • IMMINENCE — only games kicking off within NFL_IMMINENT_DAYS are logged. Off-
+//     season / far-future Week-1 lines are 60+ days out, so this is a NO-OP until the
+//     season is near; that prevents logging stale far-future picks (the pick is then
+//     always snapshotted against ratings current at ~game week, not months stale).
+//   • RATED — only games whose model actually ran on ratings (dataQuality "rated").
+// Consumes the runNFLSlate() output (slate.games), mirroring how the /api/edges/nfl
+// route flattens per-game model output. Idempotent (game_id+market+selection+date).
+// NOTE: NFL has no conviction tiering yet, so confidence/conviction are null — the
+// calibration read groups by edge bucket. Grading matches by team-name+date (the
+// Odds-API event id ≠ ESPN scoreboard id), so the matchup string is load-bearing.
+const NFL_IMMINENT_DAYS = 7;
+async function recordNFLPredictions(slate) {
+  if (!slate || !Array.isArray(slate.games) || slate.games.length === 0) return;
+  const supabase = db();
+  const now = Date.now();
+  const rows = [];
+  for (const g of slate.games) {
+    if (g.dataQuality !== "rated") continue;            // model didn't run on ratings → skip
+    if (!g.commenceTime) continue;
+    const daysOut = (new Date(g.commenceTime).getTime() - now) / 864e5;
+    if (daysOut > NFL_IMMINENT_DAYS || daysOut < 0) continue; // not within the pre-game window
+    const gameDate = etDate(g.commenceTime) || getEasternDate(0);
+    const matchup = g.matchup;
+
+    // Moneyline — log only the side the model flags as value (positive edge).
+    const ml = g.moneyline;
+    if (ml && ml.value === true && (ml.pick === "home" || ml.pick === "away") && ml.book) {
+      const home = ml.pick === "home";
+      rows.push({
+        game_id: String(g.eventId), game_date: gameDate, league: "nfl", matchup,
+        market: "moneyline", selection: ml.pick,
+        description: `${ml.pickTeam || (home ? g.homeTeam : g.awayTeam)} ML`,
+        model_prob: round3((home ? ml.homeWinProb : ml.awayWinProb) / 100),
+        odds: home ? ml.book.home : ml.book.away,
+        edge: round3((ml.edge || 0) / 100),
+        confidence: null, conviction: null, conviction_score: null, line: null,
+      });
+    }
+
+    // Spread — line is that side's signed number (home line as-is, away line negated).
+    const sp = g.spread;
+    if (sp && sp.value === true && (sp.pick === "home" || sp.pick === "away") && sp.book && sp.line != null) {
+      const home = sp.pick === "home";
+      const line = home ? sp.line : -sp.line;
+      rows.push({
+        game_id: String(g.eventId), game_date: gameDate, league: "nfl", matchup,
+        market: "spread", selection: sp.pick,
+        description: `${sp.pickTeam || (home ? g.homeTeam : g.awayTeam)} ${line > 0 ? "+" : ""}${line}`,
+        model_prob: round3((home ? sp.homeCoverProb : (100 - sp.homeCoverProb)) / 100),
+        odds: home ? sp.book.home : sp.book.away,
+        edge: round3((sp.edge || 0) / 100),
+        confidence: null, conviction: null, conviction_score: null, line,
+      });
+    }
+
+    // Total — only logs if the model flags value (NFL totals echo the market today,
+    // so value is false and nothing logs; kept so it activates for free once a real
+    // points model lands).
+    const tot = g.total;
+    if (tot && tot.value === true && (tot.pick === "over" || tot.pick === "under") && tot.book && tot.line != null) {
+      const over = tot.pick === "over";
+      rows.push({
+        game_id: String(g.eventId), game_date: gameDate, league: "nfl", matchup,
+        market: "total", selection: tot.pick,
+        description: `${over ? "Over" : "Under"} ${tot.line}`,
+        model_prob: round3((over ? tot.overProb : (100 - tot.overProb)) / 100),
+        odds: over ? tot.book.over : tot.book.under,
+        edge: round3((tot.edge || 0) / 100),
+        confidence: null, conviction: null, conviction_score: null, line: tot.line,
+      });
+    }
+  }
+  if (rows.length === 0) return;
+  try {
+    const { error } = await supabase
+      .from("model_predictions")
+      .upsert(rows, { onConflict: "game_id,market,selection,game_date", ignoreDuplicates: true });
+    if (error) console.error("[Tracker] nfl record error:", error.message);
+    else console.log(`[Tracker] Snapshotted ${rows.length} NFL model picks for ${[...new Set(rows.map(r => r.game_date))].join(", ")} (dups ignored)`);
+  } catch (e) {
+    console.error("[Tracker] nfl record exception:", e.message);
+  }
+}
+
 // ── GRADE ─────────────────────────────────────────────────────────────────────
 // Finds pending predictions for finished games and marks them. MLB is graded
 // from team scores via the schedule; NBA props from each player's gamelog.
@@ -780,7 +869,8 @@ async function gradeFinishedGames() {
   const pendingRows = pending || [];
 
   const nbaPending = pendingRows.filter(p => p.league === "nba");
-  const mlbPending = pendingRows.filter(p => p.league !== "nba");
+  const nflPending = pendingRows.filter(p => p.league === "nfl");
+  const mlbPending = pendingRows.filter(p => p.league !== "nba" && p.league !== "nfl");
 
   // Backfill: HR props were previously stamped "push" (no-action) because grading
   // couldn't read per-player HRs. Now that it can, re-grade recent ones. They flip
@@ -801,6 +891,7 @@ async function gradeFinishedGames() {
   let graded = 0;
   graded += await gradeMlb(supabase, mlbPending);
   graded += await gradeNba(supabase, nbaPending);
+  graded += await gradeNFL(supabase, nflPending);
 
   console.log(`[Tracker] Graded ${graded} predictions`);
   return graded;
@@ -1105,6 +1196,49 @@ async function gradeNba(supabase, pending) {
 
 // Grades an NBA team-market pick (moneyline / spread / total) from final scores.
 // Mirrors the MLB logic; half-point lines never push, whole-number lines can.
+// NFL grading — team markets only (ML/spread/total), settled off ESPN final scores.
+// Unlike NBA, the stored game_id is the Odds-API event id, which does NOT match the
+// ESPN scoreboard id, so we match by TEAM NAME + DATE (±1 for UTC/ET bucketing).
+// Reuses the pure gradeNbaTeam outcome logic (market-agnostic team grading).
+async function gradeNFL(supabase, pending) {
+  if (!pending.length) return 0;
+  let graded = 0;
+  const TEAM = new Set(["moneyline", "spread", "total"]);
+  const normTeam = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  const sbCache = {};
+  const boardFor = async (date) => {
+    if (sbCache[date] !== undefined) return sbCache[date];
+    try { sbCache[date] = await fetchNflScoreboard(date); }
+    catch (e) { sbCache[date] = null; } // transient → retry next run
+    return sbCache[date];
+  };
+  for (const p of pending) {
+    if (!TEAM.has(p.market)) continue;
+    const parts = String(p.matchup || "").split(" @ ");
+    if (parts.length !== 2) continue;            // need "Away @ Home" to match by name
+    const awayN = normTeam(parts[0]), homeN = normTeam(parts[1]);
+    if (!awayN || !homeN) continue;
+    let g = null;
+    for (const d of [p.game_date, shiftYmd(p.game_date, -1), shiftYmd(p.game_date, 1)]) {
+      const games = await boardFor(d);
+      g = (games || []).find(x => x.home && x.away &&
+        normTeam(x.home.displayName) === homeN && normTeam(x.away.displayName) === awayN);
+      if (g) break;
+    }
+    if (!g || g.state !== "post") continue;       // not found / not final → stay pending
+    const hs = g.home?.score, as = g.away?.score;
+    if (hs == null || as == null) continue;
+    const outcome = gradeNbaTeam(p, hs, as);      // pure team-market grader, reused
+    if (!outcome) continue;
+    const { error: upErr } = await supabase
+      .from("model_predictions")
+      .update({ result: outcome.result, actual_value: outcome.actual, graded_at: new Date().toISOString() })
+      .eq("id", p.id);
+    if (!upErr) graded++;
+  }
+  return graded;
+}
+
 function gradeNbaTeam(p, homeScore, awayScore) {
   const margin = homeScore - awayScore; // + = home won
   const total = homeScore + awayScore;
@@ -1301,4 +1435,4 @@ async function voidUnmatchedProps() {
   return { finalPropsChecked: finalChecked, voided, details };
 }
 
-module.exports = { recordPredictions, recordTotalBasesShadow, recordStrikeoutShadow, recordNbaPropPredictions, recordNbaTeamPredictions, gradeFinishedGames, gradeNbaProp, captureClosingLines, captureNbaClosingLines, captureOddsTicks, voidUnmatchedProps };
+module.exports = { recordPredictions, recordTotalBasesShadow, recordStrikeoutShadow, recordNbaPropPredictions, recordNbaTeamPredictions, recordNFLPredictions, gradeFinishedGames, gradeNbaProp, captureClosingLines, captureNbaClosingLines, captureOddsTicks, voidUnmatchedProps };
