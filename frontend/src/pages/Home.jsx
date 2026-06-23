@@ -5,6 +5,7 @@
 // HOME-WHITEPANEL-DARK-2026-06-23
 // HOME-BOARD-COLLAPSE-2026-06-23
 // HOME-SWAP-PULSE-KPIS-2026-06-23
+// HOME-REORDER-WP-MOVERS-2026-06-23
 // Blueprint structure (vertical scroll + swipe carousels) translated to inline styles, wired to real data.
 // Honest live: LIVE pulse reflects real game state; odds flash on real change; HR shows chance-to-homer,
 // not a fake +EV badge; the line-movement chart fills into a full curve once tick storage lands.
@@ -357,12 +358,6 @@ export default function HomePage(){
         </div>}
 
       <div id="content">
-        {hasFull
-          ? (heroItems.length>0
-              ? <Swiper cls="herocar" dotcls="hdots">{heroItems.map((h,i)=><HeroSlide key={i} h={h} i={i} navigate={navigate} sport={sport}/>)}</Swiper>
-              : <div className="herocar"><div className="hslide"><div className="hero" style={{textAlign:"center"}}><div className="eb">BEST EDGE RIGHT NOW</div><div className="heh">Edges post soon</div><div className="hes">Top edges appear ~2 hrs before first pitch.</div></div></div></div>)
-          : <Gate title="Today's top edge is locked" navigate={navigate}/>}
-
         <div className="wpbar" onClick={()=>navigate("/expert-picks")}>
           <div className="ic">W</div>
           <div className="tx"><div className="h">WIZEPLAYS <span className="new">CURATED</span></div><div className="s">{hasFull?"Hand-picked after extra review":"See every pick"}</div></div>
@@ -371,7 +366,18 @@ export default function HomePage(){
             : <div className="rec"><div className="r" style={{fontSize:13,color:"#f3b94f"}}>View {"\u203a"}</div></div>}
         </div>
 
+        {hasFull
+          ? (heroItems.length>0
+              ? <Swiper cls="herocar" dotcls="hdots">{heroItems.map((h,i)=><HeroSlide key={i} h={h} i={i} navigate={navigate} sport={sport}/>)}</Swiper>
+              : <div className="herocar"><div className="hslide"><div className="hero" style={{textAlign:"center"}}><div className="eb">BEST EDGE RIGHT NOW</div><div className="heh">Edges post soon</div><div className="hes">Top edges appear ~2 hrs before first pitch.</div></div></div></div>)
+          : <Gate title="Today's top edge is locked" navigate={navigate}/>}
+
       {hasFull && pulseAlerts.length>0 && <MarketPulse alerts={pulseAlerts}/>}
+
+        {hasFull && moverItems.length>0 && <>
+          <div className="seclbl">MARKET MOVERS <span className="ct">all {moverItems.length} moves {"\u00b7"} ranked by {"\u00a2"}</span><span className="lk">swipe {"\u203a"}</span></div>
+          <Swiper cls="car" dotcls="dots">{moverItems.map((d,i)=><MoverCard key={i} d={d}/>)}</Swiper>
+        </>}
 
         {liveItems.length>0 && <div id="livesec">
           <div className="seclbl">LIVE EDGES <span className="ct">in-game {"\u00b7"} updates 60s</span><span className="lk">swipe {"\u203a"}</span></div>
@@ -391,10 +397,7 @@ export default function HomePage(){
             </>
           : <Gate title="Edges are an All-Access feature" navigate={navigate}/>}
 
-        {hasFull && moverItems.length>0 && <>
-          <div className="seclbl">MARKET MOVERS <span className="ct">all {moverItems.length} moves {"\u00b7"} ranked by {"\u00a2"}</span><span className="lk">swipe {"\u203a"}</span></div>
-          <Swiper cls="car" dotcls="dots">{moverItems.map((d,i)=><MoverCard key={i} d={d}/>)}</Swiper>
-        </>}
+
 
         {sp.hasProps && hasFull && propItems.length>0 && <>
           <div className="seclbl">PLAYER PROPS <span className="lk">swipe {"\u203a"}</span></div>
