@@ -1261,6 +1261,23 @@ router.get("/cfbseasonprobe", async (req, res) => {
   }
 });
 
+// ── TEMP DIAGNOSTIC: CFB FBS-list + PF/PA source probe (read-only) ───────────
+// Probe #1 showed site standings empty + /teams?groups=80 unfiltered, so this
+// confirms the real FBS membership (core group-80 teams ~134) and a clean per-team
+// points-for/against (core record endpoint) before the ratings seed is built.
+//   /api/edges/cfbpointsprobe[?season=2025]
+router.get("/cfbpointsprobe", async (req, res) => {
+  try {
+    const season = parseInt(req.query.season, 10) || 2025;
+    const { fetchPointsProbe } = require("../services/cfbDataSource");
+    const result = await fetchPointsProbe(season);
+    res.json({ ok: true, league: "cfb", ...result });
+  } catch (e) {
+    console.error("[cfbpointsprobe] error:", e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // ── TEMP DIAGNOSTIC: NFL points-for/against source probe (read-only) ─────────
 // Finds a clean PF/PA source (core-API record + core standings) since the site
 // standings came back empty. Read-only inspection.
