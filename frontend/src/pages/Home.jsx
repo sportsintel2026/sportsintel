@@ -1,4 +1,5 @@
 // WizePicks Home — live dashboard hub. Reads the existing /api/edges/mlb feed (no extra Odds cost).
+// CFB-BOARD-WIRED-MOBILE-INTRAINING-2026-06-22
 // Blueprint structure (vertical scroll + swipe carousels) translated to inline styles, wired to real data.
 // Honest live: LIVE pulse reflects real game state; odds flash on real change; HR shows chance-to-homer,
 // not a fake +EV badge; the line-movement chart fills into a full curve once tick storage lands.
@@ -36,6 +37,7 @@ const SPORTS={
   mlb:{ feed:()=>edgesApi.getMLB(), lg:"mlb", markets:[["ml","ML"],["totals","Totals"]], propsCopy:"Every prop with an edge — HR, hits & strikeouts", hasLive:true, hasHist:true, hasParks:true, hasProps:true },
   nba:{ feed:()=>edgesApi.getNBA(), lg:"nba", markets:[["ml","ML"],["spread","Spread"],["totals","Totals"]], propsCopy:"", hasLive:false, hasHist:false, hasParks:false, hasProps:false },
   nfl:{ feed:(phase)=>edgesApi.getNFL(phase), lg:"nfl", markets:[["ml","ML"],["spread","Spread"],["totals","Totals"]], propsCopy:"", hasLive:false, hasHist:false, hasParks:false, hasProps:false, provisional:true },
+  cfb:{ feed:()=>edgesApi.getCFB(), lg:"cfb", markets:[["ml","ML"],["spread","Spread"],["totals","Totals"]], propsCopy:"", hasLive:false, hasHist:false, hasParks:false, hasProps:false, provisional:true },
 };
 // Edge display differs by sport: MLB edge is a fraction (×100 → %); NBA ML edge is
 // already a % figure, and NBA spread/totals edges are POINT projections.
@@ -198,7 +200,7 @@ export default function HomePage(){
   // separate MLB market-read call. Map it into the same shape the board renderer
   // expects (win/cover/total with tier+favTeam+consensus) so NFL shows the same
   // "BOOKS LEAN" box. Keyed by eventId (= gameId on NFL board rows).
-  if(sport==="nfl"&&edges&&edges.marketByGame){
+  if((sport==="nfl"||sport==="cfb")&&edges&&edges.marketByGame){
     for(const id in edges.marketByGame){
       const mr=edges.marketByGame[id]&&edges.marketByGame[id].marketRead; if(!mr) continue;
       mrByGame[id]={
@@ -285,8 +287,8 @@ export default function HomePage(){
           <div className="ibtn" onClick={()=>navigate("/settings")}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></div>
         </div>
         <div className="sports">
-          {[["MLB","mlb",true],["NBA","nba",true],["NHL","nhl",false],["NFL","nfl",true],["CFB","cfb",false]].map(([lb,key,ins])=>(
-            <b key={key} className={(ins?"l2 ":"")+(sport===key?"on":"")} onClick={()=>{ if(key==="mlb"||key==="nba"||key==="nfl"){ if(key!==sport){setSport(key);setBoard("all");} } else navigate(`/${key}-games`); }}><span className="o"/>{lb}</b>
+          {[["MLB","mlb",true],["NBA","nba",true],["NHL","nhl",false],["NFL","nfl",true],["CFB","cfb",true]].map(([lb,key,ins])=>(
+            <b key={key} className={(ins?"l2 ":"")+(sport===key?"on":"")} onClick={()=>{ if(key==="mlb"||key==="nba"||key==="nfl"||key==="cfb"){ if(key!==sport){setSport(key);setBoard("all");} } else navigate(`/${key}-games`); }}><span className="o"/>{lb}</b>
           ))}
         </div>
       </div>
@@ -294,6 +296,11 @@ export default function HomePage(){
       {sport==="nfl" && (
         <div style={{margin:"0 14px 10px",padding:"9px 12px",border:"1px solid #6b4a16",background:"linear-gradient(180deg,#1a1305,#0d0a02)",borderRadius:10,fontFamily:"var(--mono)",fontSize:11,lineHeight:1.45,color:"#f3b94f"}}>
           ⚠ NFL MODEL IN TRAINING — preseason preview. Ratings are seeded from 2025 results and are <b>not yet calibrated</b> against 2026 games. Edges shown are provisional, for preview only — not betting advice until validated in-season.
+        </div>
+      )}
+      {sport==="cfb" && (
+        <div style={{margin:"0 14px 10px",padding:"9px 12px",border:"1px solid #6b4a16",background:"linear-gradient(180deg,#1a1305,#0d0a02)",borderRadius:10,fontFamily:"var(--mono)",fontSize:11,lineHeight:1.45,color:"#f3b94f"}}>
+          ⚠ CFB MODEL IN TRAINING — preseason preview. FBS power ratings are seeded from 2025 results with <b>no strength-of-schedule layer</b> yet, and are not yet calibrated against 2026 games. Edges shown are provisional, for preview only — not betting advice until validated in-season.
         </div>
       )}
       {sport==="nfl" && phaseAvail.length>1 && (
