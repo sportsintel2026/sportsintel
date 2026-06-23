@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+// CFB-EDGES-API-GETCFB-WIRED-2026-06-22
 export const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
   import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -30,6 +31,7 @@ export const edgesApi = {
   getMLB: () => apiFetch("/api/edges/mlb"),
   getNBA: () => apiFetch("/api/edges/nba"),
   getNFL: (phase) => apiFetch(`/api/edges/nfl${phase?`?phase=${phase}`:""}`),
+  getCFB: () => apiFetch("/api/edges/cfb"),
   getNBAProps: () => apiFetch("/api/edges/nba/props"),
   getOddsHistory: () => apiFetch("/api/edges/odds-history/mlb"),
   getMarketRead: () => apiFetch("/api/edges/market-read/mlb"),
