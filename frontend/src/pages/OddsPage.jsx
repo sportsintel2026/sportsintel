@@ -1,3 +1,4 @@
+// ODDSPAGE-PREMIUM-DARK-RESKIN-2026-06-23
 import { useState, useEffect } from "react";
 // CFB-ODDSPAGE-MARKET-WIRED-2026-06-23
 import { useNavigate } from "react-router-dom";
@@ -168,7 +169,7 @@ export default function MarketPage() {
     <div className="app"><style>{CSS}</style>
       <div className="hd">
         <div className="hrow">
-          <div className="logo"><span className="w">Wize</span>Picks</div>
+          <div className="logo">Wize<span className="w">Picks</span></div>
           <span className="opbadge">{"\u25cf"} OPEN</span>
           <div className="sp"/>
           <div className="ibtn" onClick={()=>navigate("/settings")}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></div>
@@ -331,25 +332,25 @@ function ConsensusCard({ g, games }) {
 const CSS = `@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700;800&display=swap');
 :root{--mono:'IBM Plex Mono',ui-monospace,monospace}
 
-:root{--bg:#06090b;--panel:#0b1117;--line:#16202a;--line2:#1d2a36;--gold:#f3b94f;--green:#33e991;--neg:#ff5d4d;--red:#ff5d4d;--steel:#2674b0;--blue:#5da9e8;--mut:#7d8a98;--mut2:#4a5663;--disp:'Barlow Condensed',sans-serif;--ui:'Inter',sans-serif;--mono:'JetBrains Mono',monospace}
+:root{--bg:#0A0B0D;--panel:#14171B;--line:rgba(255,255,255,.06);--line2:rgba(255,255,255,.12);--gold:#C9A86A;--green:#3FCB91;--neg:#E2655C;--red:#E2655C;--steel:#2A6F97;--blue:#5DA9E8;--mut:#99A2AA;--mut2:#5B646C;--disp:'Barlow Condensed',sans-serif;--ui:'Inter',sans-serif;--mono:'IBM Plex Mono',ui-monospace,monospace;--serif:Georgia,'Times New Roman',serif}
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoothing:antialiased}
 .app{max-width:460px;margin:0 auto;min-height:100vh;position:relative;padding-bottom:96px}
 .hd{position:sticky;top:0;z-index:10;background:rgba(6,9,11,.94);backdrop-filter:blur(12px);border-bottom:1px solid var(--line);padding:0 14px}
 .hrow{display:flex;align-items:center;gap:9px;padding:12px 0 9px}
-.logo{font-family:var(--disp);font-weight:800;font-size:21px;letter-spacing:.4px;color:#fff}.logo .w{color:var(--gold)}
-.opbadge{font-family:var(--mono);font-size:9px;font-weight:700;color:var(--green);border:1px solid rgba(51,233,145,.32);background:rgba(51,233,145,.08);border-radius:999px;padding:3px 8px}
+.logo{font-family:var(--serif);font-weight:600;font-size:22px;letter-spacing:-.2px;color:var(--tx)}.logo .w{color:var(--gold)}
+.opbadge{font-family:var(--mono);font-size:9px;font-weight:700;color:var(--green);border:1px solid rgba(63,203,145,.34);background:rgba(63,203,145,.1);border-radius:999px;padding:3px 8px}
 .sp{flex:1}.ibtn{width:30px;height:30px;border-radius:9px;border:1px solid var(--line2);display:flex;align-items:center;justify-content:center;color:var(--mut)}
 .sports{display:flex;gap:6px;padding:0 0 9px;overflow-x:auto;scrollbar-width:none}.sports::-webkit-scrollbar{display:none}
 .sports b{flex:0 0 auto;font-family:var(--disp);font-weight:700;font-size:13px;letter-spacing:.4px;color:var(--mut);border:1px solid var(--line2);border-radius:999px;padding:6px 13px;display:inline-flex;align-items:center;gap:6px;cursor:pointer}
-.sports b.on{color:#fff;border-color:var(--steel);background:#0e1822}
+.sports b.on{color:var(--tx);border-color:rgba(63,203,145,.4);background:rgba(63,203,145,.12)}
 .sports b .dot{width:6px;height:6px;border-radius:50%;background:#2a3640}.sports b.on .dot{background:var(--green)}
 .subnav{display:flex;gap:0;border:1px solid var(--line2);border-radius:10px;overflow:hidden;margin:11px 14px 0}
 .subnav b{flex:1;text-align:center;font-family:var(--disp);font-weight:800;font-size:13px;letter-spacing:.4px;color:var(--mut);padding:9px;cursor:pointer}
 .subnav b.on{background:#141d24;color:#fff}
 .cap{font-family:var(--mono);font-size:10px;color:var(--mut2);margin:10px 14px 0;line-height:1.4}
 /* odds (line shop) card */
-.oc{margin:9px 14px 0;border:1px solid var(--line);border-radius:14px;background:linear-gradient(180deg,#0c0c0e,#020203);padding:12px;cursor:pointer;transition:border-color .15s}.oc:active{border-color:var(--steel)}
+.oc{margin:9px 14px 0;border:1px solid var(--line);border-radius:14px;background:var(--panel);padding:12px;cursor:pointer;transition:border-color .15s}.oc:active{border-color:var(--steel)}
 .oc .och{display:flex;align-items:center;gap:9px;margin-bottom:11px}
 .lg{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#0c1018;border:1px solid #000;font-family:var(--disp);font-weight:800;font-size:8px;color:#fff;flex:0 0 auto}.lg img{width:19px;height:19px;object-fit:contain}
 .lgs{display:flex}.lgs .lg{margin-left:-5px}.lgs .lg:first-child{margin-left:0}
@@ -360,13 +361,13 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .bp .v{font-family:var(--disp);font-weight:800;font-size:15px;color:#fff;margin-top:3px}.bp .v .pr{color:var(--green)}
 .bp .bk{font-family:var(--mono);font-size:8px;color:var(--gold);font-weight:700;margin-top:2px}
 /* movers */
-.mvrow{display:flex;align-items:center;gap:11px;margin:8px 14px 0;border:1px solid var(--line);border-radius:12px;background:linear-gradient(180deg,#0c0c0e,#020203);padding:11px 13px}
+.mvrow{display:flex;align-items:center;gap:11px;margin:8px 14px 0;border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:11px 13px}
 .mvrow .rk{font-family:var(--disp);font-weight:800;font-size:13px;color:var(--mut2);width:18px;flex:0 0 auto}
 .mvrow .mp{flex:1;min-width:0}.mvrow .mpk{font-family:var(--disp);font-weight:800;font-size:15px;color:#fff}.mvrow .mmu{font-family:var(--mono);font-size:9px;color:var(--mut2);margin-top:1px}
 .mvrow .mo{font-family:var(--mono);font-size:13px;font-weight:600;text-align:right;flex:0 0 auto}.mo.up{color:var(--green)}.mo.dn{color:var(--neg)}.mo .a{color:var(--mut2)}
 .mvrow .mc{font-family:var(--mono);font-size:10px;font-weight:600;margin-top:2px}.mc.up{color:var(--green)}.mc.dn{color:var(--neg)}
 /* consensus */
-.cc{margin:9px 14px 0;border:1px solid var(--line);border-radius:14px;background:linear-gradient(180deg,#0c0c0e,#020203);padding:12px}
+.cc{margin:9px 14px 0;border:1px solid var(--line);border-radius:14px;background:var(--panel);padding:12px}
 .cc .och{display:flex;align-items:center;gap:9px;margin-bottom:9px}
 .crow{display:flex;align-items:center;gap:9px;padding:8px 0;border-top:1px solid rgba(255,255,255,.05)}.crow:first-of-type{border-top:none}
 .crow .cd{width:8px;height:8px;border-radius:50%;flex:0 0 auto}.cd.strong{background:var(--green)}.cd.soft{background:var(--gold)}.cd.split{background:var(--mut)}
@@ -385,13 +386,13 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .shead .x{width:32px;height:32px;border-radius:9px;border:1px solid var(--line2);display:flex;align-items:center;justify-content:center;color:#cdd7e1;font-size:19px;cursor:pointer;flex:0 0 auto}
 .shead .t{font-family:var(--disp);font-weight:800;font-size:19px;color:#fff;line-height:1}.shead .ts{font-family:var(--mono);font-size:10px;color:var(--mut);margin-top:2px}
 .sbody{padding:13px 14px 80px}
-.gridblk{border:1px solid var(--line);border-radius:13px;background:linear-gradient(180deg,#0c0c0e,#020203);padding:11px;margin-top:11px;overflow-x:auto}
+.gridblk{border:1px solid var(--line);border-radius:13px;background:var(--panel);padding:11px;margin-top:11px;overflow-x:auto}
 .gridblk .bl{font-family:var(--disp);font-weight:800;font-size:12px;letter-spacing:.6px;color:var(--mut);margin-bottom:9px}
 .otbl{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11px;min-width:330px}
 .otbl th{color:var(--mut2);font-weight:500;font-size:8.5px;padding:5px 4px;text-align:center;border-bottom:1px solid var(--line)}.otbl th:first-child{text-align:left}
 .otbl td{padding:7px 4px;text-align:center;color:#cdd7e1;border-bottom:1px solid rgba(255,255,255,.04)}
 .otbl td.bk{text-align:left;font-family:var(--ui);font-weight:600;color:#eaf1ee;font-size:11px}
-.otbl td.best{color:var(--green);font-weight:700;background:rgba(51,233,145,.08);border-radius:5px}
+.otbl td.best{color:var(--green);font-weight:700;background:rgba(63,203,145,.1);border-radius:5px}
 .otbl tr.pinrow td{color:var(--gold)}
 .legend{font-family:var(--mono);font-size:9px;color:var(--mut2);margin-top:9px}.legend .bx{color:var(--green)}
 `;
