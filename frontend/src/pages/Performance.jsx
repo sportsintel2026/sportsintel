@@ -1,4 +1,5 @@
 // PERFORMANCE-PREMIUM-DARK-RESKIN-2026-06-23
+// PERFORMANCE-RECENT-REMOVED-2026-06-23
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
@@ -121,17 +122,7 @@ export default function PerformancePage() {
             <div className="clvnote">CLV measures whether our number beat the line’s final price. Positive CLV over a large sample is the strongest sign an edge is real — independent of short-term wins and losses.</div>
           </div>
 
-          {recent.length>0 && <div className="blk"><div className="bl">RECENT RESULTS <span className="bx">last graded picks</span></div>
-            {recent.map((r,i)=>{
-              const cents = r.clvCents!=null ? `${r.clvCents>=0?"+":""}${r.clvCents}c` : (r.clvPct!=null ? `${r.clvPct>=0?"+":""}${r.clvPct}%` : "—");
-              const chipPos = (r.clvCents!=null ? r.clvCents>0 : (r.clvPct!=null ? r.clvPct>0 : null));
-              return (
-                <div className="rrow" key={i}>
-                  <div className={"rres "+r.result}>{r.result}</div>
-                  <div className="rp"><div className="rpk">{r.pick}</div><div className="rd">{fmtDate(r.date)}{r.edge!=null ? ` · +${r.edge}% edge` : ""}</div></div>
-                  <div className={"rclv "+(chipPos===true?"p":chipPos===false?"n":"")}>{cents}</div>
-                </div>); })}
-          </div>}
+
 
           <div className="disc">All results are model picks graded at settled prices, 1-unit flat. Past performance does not guarantee future results. Bet responsibly.</div>
         </>}
