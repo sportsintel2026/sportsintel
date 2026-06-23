@@ -1,3 +1,4 @@
+// PERFORMANCE-PREMIUM-DARK-RESKIN-2026-06-23
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
@@ -70,7 +71,7 @@ export default function PerformancePage() {
     <div className="app"><style>{CSS}</style>
       <div className="hd">
         <div className="hrow">
-          <div className="logo"><span className="w">Wize</span>Picks</div>
+          <div className="logo">Wize<span className="w">Picks</span></div>
           <span className="open">{"\u25cf"} OPEN</span>
           <div className="sp"/>
           <div className="ibtn" onClick={()=>navigate("/settings")}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></div>
@@ -151,28 +152,28 @@ export default function PerformancePage() {
 const CSS = `@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700;800&display=swap');
 :root{--mono:'IBM Plex Mono',ui-monospace,monospace}
 
-:root{--bg:#06090b;--panel:#0b1117;--line:#16202a;--line2:#1d2a36;--gold:#f3b94f;--green:#33e991;--neg:#ff5d4d;--red:#ff5d4d;--steel:#2674b0;--blue:#5da9e8;--mut:#7d8a98;--mut2:#4a5663;--disp:'Barlow Condensed',sans-serif;--ui:'Inter',sans-serif;--mono:'JetBrains Mono',monospace}
+:root{--bg:#0A0B0D;--panel:#14171B;--line:rgba(255,255,255,.06);--line2:rgba(255,255,255,.12);--gold:#C9A86A;--green:#3FCB91;--neg:#E2655C;--red:#E2655C;--steel:#2A6F97;--blue:#5DA9E8;--mut:#99A2AA;--mut2:#5B646C;--disp:'Barlow Condensed',sans-serif;--ui:'Inter',sans-serif;--mono:'IBM Plex Mono',ui-monospace,monospace;--serif:Georgia,'Times New Roman',serif}
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoothing:antialiased}
 .app{max-width:460px;margin:0 auto;min-height:100vh;position:relative;padding-bottom:96px}
 .hd{position:sticky;top:0;z-index:10;background:rgba(6,9,11,.94);backdrop-filter:blur(12px);border-bottom:1px solid var(--line);padding:0 14px}
 .hrow{display:flex;align-items:center;gap:9px;padding:12px 0 9px}
-.logo{font-family:var(--disp);font-weight:800;font-size:21px;letter-spacing:.4px;color:#fff}.logo .w{color:var(--gold)}
-.open{font-family:var(--mono);font-size:9px;font-weight:700;color:var(--green);border:1px solid rgba(51,233,145,.32);background:rgba(51,233,145,.08);border-radius:999px;padding:3px 8px}
+.logo{font-family:var(--serif);font-weight:600;font-size:22px;letter-spacing:-.2px;color:var(--tx)}.logo .w{color:var(--gold)}
+.open{font-family:var(--mono);font-size:9px;font-weight:700;color:var(--green);border:1px solid rgba(63,203,145,.34);background:rgba(63,203,145,.1);border-radius:999px;padding:3px 8px}
 .sp{flex:1}.ibtn{width:30px;height:30px;border-radius:9px;border:1px solid var(--line2);display:flex;align-items:center;justify-content:center;color:var(--mut)}
 .sports{display:flex;gap:6px;padding:0 0 11px;overflow-x:auto;scrollbar-width:none}.sports::-webkit-scrollbar{display:none}
 .sports b{flex:0 0 auto;font-family:var(--disp);font-weight:700;font-size:13px;letter-spacing:.4px;color:var(--mut);border:1px solid var(--line2);border-radius:999px;padding:6px 13px;display:inline-flex;align-items:center;gap:6px;cursor:pointer}
-.sports b.on{color:#fff;border-color:var(--steel);background:#0e1822}
+.sports b.on{color:var(--tx);border-color:rgba(63,203,145,.4);background:rgba(63,203,145,.12)}
 .sports b .dot{width:6px;height:6px;border-radius:50%;background:#2a3640}.sports b.on .dot{background:var(--green)}
 .ranges{display:flex;gap:7px;padding:11px 14px 2px}
 .ranges b{flex:0 0 auto;font-family:var(--mono);font-size:11px;font-weight:600;color:var(--mut);border:1px solid var(--line2);border-radius:8px;padding:6px 13px;cursor:pointer}
 .ranges b.on{color:#06090b;background:var(--gold);border-color:var(--gold);font-weight:700}
 .kpis{display:grid;grid-template-columns:1fr 1fr;gap:9px;padding:11px 14px 0}
-.kpi{border:1px solid var(--line);border-radius:13px;background:linear-gradient(180deg,#0c0c0e,#020203);padding:13px}
+.kpi{border:1px solid var(--line);border-radius:13px;background:var(--panel);padding:13px}
 .kpi .k{font-family:var(--mono);font-size:9px;color:var(--mut);font-weight:600;letter-spacing:.3px}
 .kpi .v{font-family:var(--disp);font-weight:800;font-size:30px;color:#fff;margin-top:4px;line-height:1}.kpi .v.g{color:var(--green)}.kpi .v.gold{color:var(--gold)}.kpi .v.r{color:var(--neg)}
 .kpi .sub{font-family:var(--mono);font-size:9px;color:var(--mut2);margin-top:4px}
-.blk{margin:14px 14px 0;border:1px solid var(--line);border-radius:14px;background:linear-gradient(180deg,#0c0c0e,#020203);padding:13px}
+.blk{margin:14px 14px 0;border:1px solid var(--line);border-radius:14px;background:var(--panel);padding:13px}
 .bl{font-family:var(--disp);font-weight:800;font-size:13px;letter-spacing:.7px;color:var(--mut);margin-bottom:11px;display:flex;align-items:center;justify-content:space-between}
 .bl .bx{font-family:var(--mono);font-size:9px;color:var(--mut2);letter-spacing:0;font-weight:500}
 .chartwrap{position:relative}
@@ -182,7 +183,7 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .dbar .track{flex:1;height:20px;position:relative;background:#0e1620;border-radius:5px;border:1px solid var(--line)}
 .dbar .track .z{position:absolute;left:50%;top:0;bottom:0;width:1px;background:#39454f}
 .dbar .track .f{position:absolute;top:1px;bottom:1px;border-radius:3px}
-.dbar .track .f.pos{background:linear-gradient(90deg,#1f6b3f,#33e991)}.dbar .track .f.neg{background:linear-gradient(90deg,#ff5d4d,#a23b32)}
+.dbar .track .f.pos{background:var(--green)}.dbar .track .f.neg{background:var(--neg)}
 .dbar .v{width:52px;text-align:right;font-family:var(--disp);font-weight:800;font-size:16px;flex:0 0 auto}.dbar .v.pos{color:var(--green)}.dbar .v.neg{color:var(--neg)}
 .mrow{display:flex;align-items:center;gap:9px;padding:9px 0;border-top:1px solid rgba(255,255,255,.05)}.mrow:first-of-type{border-top:none}
 .mrow .mn{font-family:var(--disp);font-weight:800;font-size:14px;color:#dbe4e2;flex:1}.mrow .mr{font-family:var(--mono);font-size:9px;color:var(--mut)}
@@ -190,7 +191,7 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .clvgrid{display:flex;gap:9px}.clvgrid .c{flex:1;text-align:center;border:1px solid var(--line);border-radius:10px;padding:11px 6px}.clvgrid .c .k{font-family:var(--mono);font-size:8px;color:var(--mut2);font-weight:600}.clvgrid .c .v{font-family:var(--disp);font-weight:800;font-size:22px;color:#cfe2f5;margin-top:3px}.clvgrid .c .v.g{color:var(--green)}
 .clvnote{font-family:var(--ui);font-size:10.5px;color:var(--mut);margin-top:10px;line-height:1.5}
 .rrow{display:flex;align-items:center;gap:9px;padding:9px 0;border-top:1px solid rgba(255,255,255,.05)}.rrow:first-of-type{border-top:none}
-.rres{width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-family:var(--disp);font-weight:800;font-size:11px;flex:0 0 auto}.rres.W{background:rgba(51,233,145,.16);color:var(--green)}.rres.L{background:rgba(255,93,77,.16);color:var(--neg)}.rres.P{background:#1a242e;color:var(--mut)}
+.rres{width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-family:var(--disp);font-weight:800;font-size:11px;flex:0 0 auto}.rres.W{background:rgba(63,203,145,.18);color:var(--green)}.rres.L{background:rgba(226,101,92,.18);color:var(--neg)}.rres.P{background:#1B2025;color:var(--mut)}
 .rrow .rp{flex:1;min-width:0}.rrow .rpk{font-weight:600;font-size:13px;color:#eaf1ee;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.rrow .rd{font-family:var(--mono);font-size:9px;color:var(--mut2)}
 .rrow .re{font-family:var(--mono);font-size:11px;color:var(--green);font-weight:600;flex:0 0 auto}
 .rrow .rclv{font-family:var(--mono);font-size:9px;width:42px;text-align:right;flex:0 0 auto}.rclv.p{color:var(--green)}.rclv.n{color:var(--mut)}
