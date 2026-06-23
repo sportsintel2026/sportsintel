@@ -742,9 +742,9 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 
 .grid{margin:6px 14px 0}
 .gr{position:relative;margin-bottom:13px;background:var(--panel);border-radius:16px;overflow:hidden;cursor:pointer}
-.gr::before{content:"";position:absolute;left:0;right:0;top:0;height:2px;background:var(--mut2);z-index:2}
-.gr.high::before{background:rgba(63,203,145,.5)}.gr.med::before{background:rgba(201,168,106,.55)}.gr.low::before{background:var(--mut2)}
-.ghead{display:flex;align-items:center;gap:11px;padding:12px 14px;cursor:pointer}
+.gr::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--mut2);z-index:2}
+.gr.high::before{background:var(--gold)}.gr.med::before{background:var(--green)}.gr.low::before{background:var(--mut2)}
+.ghead{display:flex;align-items:center;gap:11px;padding:12px 14px 12px 17px;cursor:pointer}
 .ghead .lgs{flex:0 0 auto}
 .ghm{flex:1;min-width:0}
 .ghpick{font-family:var(--disp);font-weight:800;font-size:19px;color:#fff;line-height:1;letter-spacing:-.3px;display:flex;align-items:center;gap:7px}
@@ -759,7 +759,7 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .ghchev{color:var(--mut2);font-size:10px;width:12px;text-align:center;flex:0 0 auto;transition:transform .25s}.gr.sel .ghchev{color:var(--mut)}
 .gbody{max-height:0;overflow:hidden;transition:max-height .34s ease}
 .gr.sel .gbody{max-height:1100px}
-.gr .gbody>.psub{padding:2px 15px 12px;margin:0}
+.gr .gbody>.psub{padding:2px 15px 12px 18px;margin:0}
 .gr.sel{border-color:#3a4350}
 .pband{padding:13px 15px 14px;background:#000}
 .pbtop{display:flex;align-items:center;justify-content:space-between}
