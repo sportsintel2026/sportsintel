@@ -155,10 +155,107 @@ async function getFinalScore(gameId, dateStr) {
   return { state: g.state, home: g.home, away: g.away };
 }
 
+/* ---- READ-ONLY PROBE: discover the CFB season-stats shape for the ratings seed ----
+ * CFB ratings need real per-team points-for / points-against, but college has ~134 FBS
+ * teams across ~11 conferences (vs NFL's 32 in 8 divisions), so looping per-team record
+ * endpoints the way NFL does would be ~134 ESPN calls. This probe's MAIN job: confirm
+ * whether the STANDINGS endpoint returns PF/PA for EVERY FBS team in a SINGLE call (the
+ * cheap seed) — by reporting how many conference groups + total entries come back, the
+ * real stat field names, and a flag for whether PF/PA are present. Also samples /teams
+ * (to confirm the FBS team count ~134) and one team's core-API statistics block as a
+ * fallback source. Writes nothing; inspection only. Remove once the seed is built. */
+async function fetchSeasonProbe(season = 2025) {
+  const out = { season, endpoints: {} };
+
+  // 1) Standings (FBS) — the prize: does ONE call carry W-L + PF/PA for all teams?
+  //    CFB standings nest by conference (and sometimes division) under
+  //    children[].standings.entries[], so we walk the tree to count + sample.
+  const standingsUrl = `${BASE}/standings?season=${season}&group=${FBS_GROUP}`;
+  try {
+    const data = await espnGet(standingsUrl);
+    const groups = data.children || data.groups || [];
+    let totalEntries = 0;
+    const collect = (node) => {
+      totalEntries += (node?.standings?.entries || []).length;
+      for (const child of (node?.children || [])) collect(child);
+    };
+    if (groups.length) for (const g of groups) collect(g);
+    else totalEntries = (data.standings?.entries || []).length;
+
+    // First available entry anywhere in the conference tree.
+    let firstEntry = null;
+    const findFirst = (node) => {
+      if (firstEntry) return;
+      const entries = node?.standings?.entries || [];
+      if (entries[0]) { firstEntry = entries[0]; return; }
+      for (const child of (node?.children || [])) findFirst(child);
+    };
+    if (groups.length) for (const g of groups) findFirst(g);
+    else firstEntry = (data.standings?.entries || [])[0] || null;
+
+    const statNames = firstEntry ? (firstEntry.stats || []).map((s) => s.name || s.abbreviation).filter(Boolean) : [];
+    const hasPF = statNames.some((n) => /point.*for|avgpointsfor/i.test(n));
+    const hasPA = statNames.some((n) => /point.*against|avgpointsagainst/i.test(n));
+    out.endpoints.standings = {
+      url: standingsUrl, ok: true,
+      conferenceGroups: groups.length,
+      totalFbsEntries: totalEntries,
+      pfPaInStandings: hasPF && hasPA, // ⭐ true → seed all ratings from this ONE call
+      statNames,
+      sampleEntry: firstEntry ? {
+        team: firstEntry.team?.displayName || firstEntry.team?.abbreviation || null,
+        stats: (firstEntry.stats || []).map((s) => ({ name: s.name, abbr: s.abbreviation, value: s.value, display: s.displayValue })),
+      } : null,
+    };
+  } catch (e) {
+    out.endpoints.standings = { url: standingsUrl, ok: false, error: e.message };
+  }
+
+  // 2) Teams list (FBS) — confirm the count we'd rate (~134, not 250+ incl. FCS).
+  const teamsUrl = `${BASE}/teams?groups=${FBS_GROUP}&limit=400`;
+  try {
+    const data = await espnGet(teamsUrl);
+    const teams = data.sports?.[0]?.leagues?.[0]?.teams || [];
+    out.endpoints.teams = {
+      url: teamsUrl, ok: true, teamCount: teams.length,
+      sample: teams.slice(0, 3).map((t) => ({ id: t.team?.id, abbr: t.team?.abbreviation, name: t.team?.displayName })),
+    };
+  } catch (e) {
+    out.endpoints.teams = { url: teamsUrl, ok: false, error: e.message };
+  }
+
+  // 3) One team's core-API statistics — category/field names for richer offensive/
+  //    defensive splits, the fallback if standings lacks clean PF/PA.
+  let probeTeamId = null;
+  try {
+    const t = await espnGet(teamsUrl);
+    probeTeamId = t.sports?.[0]?.leagues?.[0]?.teams?.[0]?.team?.id || null;
+  } catch (_) {}
+  if (probeTeamId) {
+    const coreUrl = `https://sports.core.api.espn.com/v2/sports/football/leagues/college-football/seasons/${season}/types/2/teams/${probeTeamId}/statistics`;
+    try {
+      const data = await espnGet(coreUrl);
+      const cats = data.splits?.categories || [];
+      out.endpoints.teamStatistics = {
+        url: coreUrl, ok: true, teamId: probeTeamId,
+        categories: cats.map((c) => ({
+          name: c.name, displayName: c.displayName,
+          statSample: (c.stats || []).slice(0, 8).map((s) => ({ name: s.name, abbr: s.abbreviation, value: s.value, display: s.displayValue })),
+        })),
+      };
+    } catch (e) {
+      out.endpoints.teamStatistics = { url: coreUrl, ok: false, error: e.message };
+    }
+  }
+
+  return out;
+}
+
 module.exports = {
   fetchScoreboard,
   getUpcomingGames,
   getFinalScore,
+  fetchSeasonProbe,
   statMap,
   parseRecords,
   LEAGUE_AVG_PPG,
