@@ -348,6 +348,10 @@ function BvpTable({ rows }) {
 }
 function LineScore({ ls }) {
   if (!ls || !ls.length) return null;
+  // Standard box score: AWAY on top, HOME below. Feed order isn't guaranteed, so sort
+  // by homeAway when present (away first); leave as-is if the field is missing.
+  const rank = (r) => { const v=String(r.homeAway||"").toLowerCase(); return v==="away"?0 : v==="home"?1 : 0.5; };
+  ls = [...ls].sort((a,b) => rank(a) - rank(b));
   const innings = Math.max(...ls.map(r => (r.periods||[]).length), 0);
   return <table className="lsc"><thead><tr><th style={{textAlign:"left"}}>&nbsp;</th>{Array.from({length:innings}).map((_,i)=><th key={i}>{i+1}</th>)}<th>R</th></tr></thead>
     <tbody>{ls.map((r,ri)=><tr key={ri}><td className="tm">{r.abbrev||r.homeAway||""}</td>{Array.from({length:innings}).map((_,i)=><td key={i}>{r.periods?.[i]!=null?r.periods[i]:""}</td>)}<td className="rh">{r.total!=null?r.total:""}</td></tr>)}</tbody></table>;
