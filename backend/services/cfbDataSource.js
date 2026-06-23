@@ -1,5 +1,5 @@
 /**
-// CFB-SCHEDULE-PROBE-SOS-DISCOVERY-2026-06-22
+// CFB-SRS-SOS-LAYER-LIVE-2026-06-22
  * cfbDataSource.js  —  WizePicks College Football data layer (ESPN hidden API)
  *
  * Mirrors nflDataSource.js. Same offseason-safe scoreboard core; the model-facing
@@ -341,6 +341,14 @@ const RATING_REGRESSION = 0.72;            // keep 72% of raw differential, shri
 const MIN_GAMES_FOR_RATING = 4;            // need a real sample before rating a team
 const RATINGS_TTL_MS = 6 * 60 * 60 * 1000; // 6h — refresh is ~146 calls; ratings move weekly
 const RATINGS_BATCH = 14;                  // concurrency cap so we don't hammer ESPN at once
+// ── Strength-of-schedule (SRS) layer ────────────────────────────────────────
+// Aggregate point differential is schedule-blind: +35/game vs cupcakes scores the
+// same as +35 vs the SEC. SRS fixes this — rating = capped MOV + avg opponent rating,
+// solved as a fixpoint. This is what collapses the G5-vs-P5 phantom spread edges.
+const CFB_MOV_CAP = 28;                     // clip per-game margin (4 TD) — tames blowout/cupcake inflation at the GAME level
+const CFB_SRS_ITERS = 12;                   // SoS fixpoint iterations (converges fast for ~146 teams)
+const CFB_FCS_LEVEL = -28;                  // rating credited for an FCS/unrated opponent (below the worst FBS team)
+const SOS_WEIGHT = 1.0;                     // 1.0 = full SRS; lower dampens schedule influence (conservative lever)
 
 function recStat(statsArr, name) {
   if (!Array.isArray(statsArr)) return null;
@@ -415,24 +423,73 @@ async function buildTeamRatings(season = 2025) {
     return empty;
   }
 
-  // 4) center on the league mean (kills scoring-era drift), then regress to tame
-  //    small-sample + cupcake-inflated extremes.
+  // 4) SoS LAYER (SRS). The aggregate (pf-pa)/gp seed above is schedule-blind, so a
+  //    cupcake-padded differential looks identical to a battle-tested one. Fix it by
+  //    fetching each rated team's per-game results, computing a margin-CAPPED MOV, then
+  //    solving the SRS fixpoint:  rating = MOV + W * avg(opponent rating).
+  //    Opponents that aren't rated (FCS, or FBS below the games gate) credit CFB_FCS_LEVEL.
+  const scheduleUrl = (id) => `${BASE}/teams/${id}/schedule?season=${season}`;
+  const games = {}; // id -> [{ oppId, margin(capped) }] over completed games only
+  for (let i = 0; i < ratedIds.length; i += RATINGS_BATCH) {
+    const batch = ratedIds.slice(i, i + RATINGS_BATCH);
+    await Promise.all(batch.map(async (id) => {
+      try {
+        const sch = await espnGet(scheduleUrl(id));
+        const parsed = parseScheduleEvents(sch.events || [], id)
+          .filter((p) => p.completed && p.teamScore != null && p.oppScore != null);
+        games[id] = parsed.map((p) => ({
+          oppId: p.opponentId,
+          margin: Math.max(-CFB_MOV_CAP, Math.min(CFB_MOV_CAP, p.teamScore - p.oppScore)),
+        }));
+      } catch (_) { games[id] = []; }
+    }));
+  }
+
+  // MOV per team from capped margins (fallback to the aggregate seed if a schedule fails).
+  const mov = {};
+  for (const id of ratedIds) {
+    const g = games[id] || [];
+    mov[id] = g.length ? g.reduce((s, x) => s + x.margin, 0) / g.length : raw[id].rawRating;
+  }
+  const ratingOf = (srs, oppId) => (oppId && srs[oppId] != null ? srs[oppId] : CFB_FCS_LEVEL);
+
+  // Iterative SRS fixpoint, re-centered each pass (SRS is identifiable only up to an
+  // additive constant; FCS sits at a FIXED CFB_FCS_LEVEL below the centered FBS mean).
+  let srs = {};
+  for (const id of ratedIds) srs[id] = mov[id];
+  for (let k = 0; k < CFB_SRS_ITERS; k++) {
+    const next = {};
+    for (const id of ratedIds) {
+      const g = games[id] || [];
+      const sos = g.length ? g.reduce((s, x) => s + ratingOf(srs, x.oppId), 0) / g.length : 0;
+      next[id] = mov[id] + SOS_WEIGHT * sos;
+    }
+    const m = ratedIds.reduce((s, id) => s + next[id], 0) / ratedIds.length;
+    for (const id of ratedIds) next[id] = next[id] - m;
+    srs = next;
+  }
+
+  // 5) emit: SRS rating (already centered) tamed by the existing regression. Keep the
+  //    old aggregate fields (rawRating/diff/pf/pa) so the SoS shift is auditable.
   const meanRaw = ratedIds.reduce((s, id) => s + raw[id].rawRating, 0) / ratedIds.length;
   const teamsOut = {};
   for (const id of ratedIds) {
-    const centered = raw[id].rawRating - meanRaw;
     teamsOut[id] = {
       ...raw[id],
-      rating: Math.round(centered * RATING_REGRESSION * 100) / 100,
-      regressed: true, sosApplied: false,
+      mov: Math.round(mov[id] * 100) / 100,
+      sosGames: (games[id] || []).length,
+      preSosRating: Math.round((raw[id].rawRating - meanRaw) * RATING_REGRESSION * 100) / 100,
+      rating: Math.round(srs[id] * RATING_REGRESSION * 100) / 100,
+      regressed: true, sosApplied: true,
     };
   }
 
   const result = {
     season, rated: ratedIds.length, fbsListed: fbsIds.length,
     meanRawDiffPerGame: Math.round(meanRaw * 100) / 100,
-    regression: RATING_REGRESSION, teams: teamsOut,
-    note: "CFB power ratings = league-centered, regressed points differential per game (2025 seed). FBS only; SoS/conference layers not yet applied. Cupcake-inflated diffs partly tamed by regression.",
+    regression: RATING_REGRESSION, movCap: CFB_MOV_CAP, srsIters: CFB_SRS_ITERS, fcsLevel: CFB_FCS_LEVEL, sosWeight: SOS_WEIGHT,
+    teams: teamsOut, sosApplied: true,
+    note: "CFB power ratings = league-centered SRS (margin-capped MOV + strength-of-schedule), regressed, 2025 seed. FBS only. SoS collapses cupcake-padded G5 differentials; FCS opponents credit a fixed below-FBS level. preSosRating shows each team's pre-SoS value for audit.",
   };
   cacheSet(key, result, RATINGS_TTL_MS);
   return result;
