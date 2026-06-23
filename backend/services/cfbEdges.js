@@ -1,4 +1,5 @@
 /**
+// CFB-EDGES-SOSAPPLIED-META-2026-06-22
  * cfbEdges.js — WizePicks CFB edge slate runner (Phase 2).
  *
  * Mirrors nflEdges, wiring the three CFB pieces together:
@@ -16,7 +17,7 @@
  *   - an ALIASES map handles abbreviation-style mismatches (App State vs Appalachian
  *     State, etc.); it starts small and is extended from the live unmatched list.
  *
- * HONESTY: 2025-seeded ratings with no strength-of-schedule layer, against (now)
+ * HONESTY: 2025-seeded SRS ratings (strength-of-schedule applied), against (now)
  * preseason 2026 lines — directionally reasonable but NOT calibrated. FBS-vs-FCS
  * games keep the unrated (FCS) side market-only, which is correct. Every pick ships
  * provisional behind the route's "IN TRAINING" fence until shadow-graded in-season.
@@ -158,6 +159,7 @@ async function runCFBSlate({ season = 2025, weeks = 1 } = {}) {
       loaded: ratingsLoaded,
       rated: ratings.rated || 0,
       fbsListed: ratings.fbsListed || null,
+      sosApplied: ratings.sosApplied || false,
       note: ratings.note || null,
     },
     match: {
