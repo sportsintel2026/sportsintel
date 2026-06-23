@@ -6,6 +6,7 @@
 // HOME-BOARD-COLLAPSE-2026-06-23
 // HOME-SWAP-PULSE-KPIS-2026-06-23
 // HOME-REORDER-WP-MOVERS-2026-06-23
+// HOME-SPIN-PROPS-2026-06-23
 // Blueprint structure (vertical scroll + swipe carousels) translated to inline styles, wired to real data.
 // Honest live: LIVE pulse reflects real game state; odds flash on real change; HR shows chance-to-homer,
 // not a fake +EV badge; the line-movement chart fills into a full curve once tick storage lands.
@@ -366,6 +367,11 @@ export default function HomePage(){
             : <div className="rec"><div className="r" style={{fontSize:13,color:"#f3b94f"}}>View {"\u203a"}</div></div>}
         </div>
 
+        <div className="spincard" onClick={()=>navigate("/daily-card")}>
+          <div className="h">WIZE SPIN <span className="new">NEW</span></div><div className="wheel"/>
+          <div className="d">Need a play fast? Spin for a model-qualified pick.</div><div className="cta">Spin the wheel {"\u203a"}</div>
+        </div>
+
         {hasFull
           ? (heroItems.length>0
               ? <Swiper cls="herocar" dotcls="hdots">{heroItems.map((h,i)=><HeroSlide key={i} h={h} i={i} navigate={navigate} sport={sport}/>)}</Swiper>
@@ -410,10 +416,7 @@ export default function HomePage(){
           <Swiper cls="car" dotcls="dots">{parkItems.map((d,i)=><ParkCardM key={i} d={d}/>)}</Swiper>
         </>}
 
-        <div className="spincard" onClick={()=>navigate("/daily-card")}>
-          <div className="h">WIZE SPIN <span className="new">NEW</span></div><div className="wheel"/>
-          <div className="d">Need a play fast? Spin for a model-qualified pick.</div><div className="cta">Spin the wheel {"\u203a"}</div>
-        </div>
+
 
         <div className="seclbl">HOW TO USE WIZEPICKS</div>
         <div className="guide" onClick={()=>navigate("/guide")}><div className="gi"/><div className="gt"><div className="gh">New here? Start with the basics</div><div className="gs">Edges, props, line shopping &amp; the full board {"\u2014"} a quick walkthrough.</div></div><div className="ga">{"\u203a"}</div></div>
@@ -802,14 +805,15 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .mvc .od{font-family:var(--mono);font-size:14px;font-weight:600;margin-top:10px}.mvc .od .a{color:var(--mut2)}.mvc .od.up{color:var(--green)}.mvc .od.dn{color:var(--neg)}
 .mvc .ct2{font-family:var(--mono);font-size:11px;font-weight:600;margin-top:4px}.mvc .ct2.up{color:var(--green)}.mvc .ct2.dn{color:var(--neg)}
 /* prop card */
-.prc{width:138px;border:1px solid rgba(93,169,232,.22);border-radius:14px;background:var(--panel);padding:12px 9px 11px;position:relative;display:flex;flex-direction:column;align-items:center;text-align:center}
+.prc{width:132px;border:1px solid rgba(93,169,232,.22);border-radius:14px;background:var(--panel);padding:10px 9px 10px;position:relative;display:flex;flex-direction:column;align-items:center;text-align:center}
 .prc .rk{position:absolute;top:7px;left:7px;width:19px;height:19px;border-radius:6px;background:var(--steel);color:#fff;font-family:var(--disp);font-weight:800;font-size:11px;display:flex;align-items:center;justify-content:center}
 .prc .av{width:58px;height:58px;border-radius:50%;display:flex;align-items:flex-end;justify-content:center;font-family:var(--disp);font-weight:800;font-size:18px;color:#fff;margin-top:4px}
-.prc .nm{font-weight:800;font-size:13px;color:#eaf1ee;margin-top:8px;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prc .av2{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;overflow:hidden;font-family:var(--disp);font-weight:800;font-size:14px;color:#fff;margin-top:2px}.prc .av2 img{width:100%;height:100%;object-fit:cover}
+.prc .nm{font-weight:800;font-size:13px;color:#eaf1ee;margin-top:6px;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .prc .mu{font-family:var(--mono);font-size:9px;color:var(--mut);margin-top:2px}
-.prc .ed{font-family:var(--disp);font-weight:800;font-size:24px;color:var(--green);margin-top:7px;line-height:1}
+.prc .ed{font-family:var(--disp);font-weight:800;font-size:21px;color:var(--green);margin-top:5px;line-height:1}
 .prc .lb{font-size:7.5px;letter-spacing:.3px;color:var(--mut);font-weight:800;margin-top:1px}
-.prc .bet{margin-top:9px;width:100%;display:flex;align-items:center;justify-content:space-between;border:1px solid rgba(93,169,232,.3);border-radius:8px;background:rgba(93,169,232,.07);padding:6px 8px}
+.prc .bet{margin-top:7px;width:100%;display:flex;align-items:center;justify-content:space-between;border:1px solid rgba(93,169,232,.3);border-radius:8px;background:rgba(93,169,232,.07);padding:5px 8px}
 .prc .bet span{font-family:var(--mono);font-weight:600;font-size:10px;color:#dbe4e2}.prc .bet .o{color:var(--blue)}
 /* park card */
 .pkc{width:200px;border:1px solid var(--line2);border-radius:13px;background:var(--panel);padding:12px}
