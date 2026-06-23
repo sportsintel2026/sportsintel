@@ -1476,4 +1476,124 @@ router.get("/nfl", async (req, res) => {
   }
 });
 
+// ── CFB EDGES (Phase 2 — runs the full college slate through the model) ───────
+// Same contract as /nfl: ties odds + FBS power ratings + cfbModel into a predicted
+// slate with edges, board-flattened (moneylineEdges/spreadEdges/totalsEdges) so the
+// dashboard renders CFB with no frontend special-casing. GATED FOR HONESTY: 2025
+// seed, no SoS layer, uncalibrated → calibrated:false + provisional flags, behind an
+// "IN TRAINING" banner. teamMatch coverage is EXPECTED below 100% (FBS-vs-FCS games
+// keep the FCS side market-only). Read-only.
+//   /api/edges/cfb[?season=2025][&weeks=1]
+router.get("/cfb", async (req, res) => {
+  try {
+    const season = parseInt(req.query.season, 10) || 2025;
+    const weeksParam = req.query.weeks != null ? parseInt(req.query.weeks, 10) : 1;
+    const weeks = Number.isFinite(weeksParam) && weeksParam >= 0 ? weeksParam : 1;
+    const { runCFBSlate } = require("../services/cfbEdges");
+    const slate = await runCFBSlate({ season, weeks });
+
+    const allGames = slate.games || [];
+    const edges = [];
+    for (const g of allGames) {
+      for (const mkt of ["moneyline", "spread", "total"]) {
+        const m = g[mkt];
+        if (m && m.value && m.edge != null) {
+          edges.push({
+            matchup: g.matchup, market: mkt, edge: m.edge,
+            pick: m.pickTeam || m.pick, dataQuality: g.dataQuality,
+            commenceTime: g.commenceTime,
+          });
+        }
+      }
+    }
+    edges.sort((a, b) => (b.edge ?? 0) - (a.edge ?? 0));
+
+    const moneylineEdges = [], spreadEdges = [], totalsEdges = [];
+    const teamsOf = (matchup) => { const p = String(matchup || "").split(" @ "); return { away: p[0] || "", home: p[1] || "" }; };
+    for (const g of allGames) {
+      const { away, home } = teamsOf(g.matchup);
+      const ml = g.moneyline;
+      if (ml && ml.edge != null && ml.fair) {
+        const pickHome = (ml.homeWinProb ?? 0) - (ml.fair.home ?? 0) >= (ml.awayWinProb ?? 0) - (ml.fair.away ?? 0);
+        moneylineEdges.push({
+          gameId: g.eventId, side: pickHome ? "home" : "away",
+          matchup: g.matchup, teamAbbr: pickHome ? home : away,
+          edge: ml.edge, odds: pickHome ? ml.book?.home : ml.book?.away,
+          modelProb: (pickHome ? ml.homeWinProb : ml.awayWinProb) / 100,
+          line: null, convictionScore: null, conviction: null, provisional: true,
+        });
+      }
+      const sp = g.spread;
+      if (sp && sp.edge != null && sp.fair) {
+        const pickHome = (sp.homeCoverProb ?? 0) >= 50;
+        spreadEdges.push({
+          gameId: g.eventId, side: pickHome ? "home" : "away",
+          matchup: g.matchup, teamAbbr: pickHome ? home : away,
+          edge: sp.edge, odds: pickHome ? sp.book?.home : sp.book?.away,
+          modelProb: (pickHome ? sp.homeCoverProb : (100 - sp.homeCoverProb)) / 100,
+          line: pickHome ? sp.line : -sp.line, convictionScore: null, conviction: null, provisional: true,
+        });
+      }
+      const tot = g.total;
+      if (tot && tot.edge != null && tot.fair) {
+        const pickOver = (tot.overProb ?? 50) >= 50;
+        totalsEdges.push({
+          gameId: g.eventId, side: pickOver ? "over" : "under",
+          matchup: g.matchup,
+          edge: tot.edge, odds: pickOver ? tot.book?.over : tot.book?.under,
+          modelProb: (pickOver ? tot.overProb : (100 - tot.overProb)) / 100,
+          line: tot.line, convictionScore: null, conviction: null, provisional: true,
+        });
+      }
+    }
+    moneylineEdges.sort((a, b) => (b.edge ?? -1) - (a.edge ?? -1));
+    spreadEdges.sort((a, b) => (b.edge ?? -1) - (a.edge ?? -1));
+    totalsEdges.sort((a, b) => (b.edge ?? -1) - (a.edge ?? -1));
+
+    const marketByGame = {};
+    for (const g of allGames) {
+      marketByGame[g.eventId] = {
+        matchup: g.matchup,
+        marketRead: g.marketRead || null,
+        bestPrices: {
+          ml: g.moneyline?.book || null,
+          total: g.total?.book || null,
+          spread: g.spread?.book || null,
+        },
+      };
+    }
+
+    let movers = [];
+    try {
+      const { getCFBMarketMovers } = require("../services/cfbEdges");
+      movers = await getCFBMarketMovers({ limit: 12 });
+    } catch (e) { console.error("[edges/cfb] movers read failed:", e.message); }
+
+    res.json({
+      ok: true,
+      league: "cfb",
+      season,
+      calibrated: false,
+      preseason: true,
+      provisional: true,
+      ratingsSeed: slate.ratingsMeta,
+      weekWindow: slate.weekWindow,
+      phase: slate.phase,
+      marketByGame,
+      marketMovers: movers,
+      teamMatch: slate.match,
+      edgeCount: edges.length,
+      edges,
+      games: allGames,
+      moneylineEdges, spreadEdges, totalsEdges,
+      runLineEdges: [], hrPropEdges: [], kPropEdges: [], hitsPropEdges: [],
+      computedAt: new Date().toISOString(),
+      disclaimer: "PROVISIONAL: 2025-seeded FBS ratings (no strength-of-schedule layer) vs preseason lines. Not calibrated — no graded CFB results yet. For build/validation only; not betting advice until shadow-graded in-season.",
+    });
+  } catch (e) {
+    console.error("[edges/cfb] error:", e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 module.exports = router;
