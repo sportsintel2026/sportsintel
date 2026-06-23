@@ -1,4 +1,5 @@
 /**
+// CFB-SCHEDULE-PROBE-SOS-DISCOVERY-2026-06-22
  * cfbDataSource.js  —  WizePicks College Football data layer (ESPN hidden API)
  *
  * Mirrors nflDataSource.js. Same offseason-safe scoreboard core; the model-facing
@@ -437,6 +438,117 @@ async function buildTeamRatings(season = 2025) {
   return result;
 }
 
+/* ---- READ-ONLY PROBE: discover the per-team SCHEDULE/opponent shape for SoS ----
+ * buildTeamRatings seeds from each team's season-aggregate PF/PA (the /record
+ * endpoint), which has NO opponent breakdown — so a cupcake-padded differential
+ * looks identical to a battle-tested one. A strength-of-schedule layer needs each
+ * team's opponent list (+ margins). This probe confirms the site schedule endpoint
+ *   {BASE}/teams/{id}/schedule?season=YYYY
+ * actually carries opponent id + home/away + final score per game, and that a
+ * parser can read them, BEFORE any SoS math is wired. Writes nothing.
+ * Samples a few human-recognizable teams (G5 phantom-edge offenders + a P5 anchor)
+ * so the parsed output is eyeball-verifiable, with a raw first-event dump as a
+ * fallback in case any field name differs from the expectation.
+ *   /api/edges/cfbscheduleprobe[?season=2025] */
+function scoreVal(c) {
+  if (c == null) return null;
+  const s = c.score;
+  if (s == null) return null;
+  if (typeof s === "number") return s;
+  if (typeof s === "string") { const n = Number(s); return Number.isFinite(n) ? n : null; }
+  if (typeof s === "object") { const n = Number(s.value != null ? s.value : s.displayValue); return Number.isFinite(n) ? n : null; }
+  return null;
+}
+
+function parseScheduleEvents(events, selfId) {
+  const out = [];
+  for (const ev of (events || [])) {
+    const comp = (ev.competitions || [])[0];
+    if (!comp) continue;
+    const cs = comp.competitors || [];
+    const me = cs.find((c) => String(c.id || c.team?.id) === String(selfId));
+    const opp = cs.find((c) => String(c.id || c.team?.id) !== String(selfId));
+    const completed = !!(comp.status?.type?.completed);
+    out.push({
+      week: ev.week?.number ?? null,
+      opponentId: opp ? String(opp.id || opp.team?.id || "") : null,
+      opponentName: opp ? (opp.team?.displayName || opp.team?.name || opp.team?.abbreviation || null) : null,
+      homeAway: me ? (me.homeAway || null) : null,
+      teamScore: scoreVal(me),
+      oppScore: scoreVal(opp),
+      completed,
+      neutralSite: !!comp.neutralSite,
+    });
+  }
+  return out;
+}
+
+async function fetchSchedulesProbe(season = 2025) {
+  // 1) FBS membership + names (same two calls buildTeamRatings uses) so we can pick
+  //    recognizable teams by name and report opponent names, not bare ids.
+  const CORE = `https://sports.core.api.espn.com/v2/sports/football/leagues/college-football/seasons/${season}/types/2`;
+  let fbsIds = [];
+  try {
+    const data = await espnGet(`${CORE}/groups/80/teams?limit=200`);
+    fbsIds = (data.items || []).map((it) => { const m = String(it.$ref || "").match(/teams\/(\d+)/); return m ? m[1] : null; }).filter(Boolean);
+  } catch (e) {
+    return { season, error: `FBS team list fetch failed: ${e.message}` };
+  }
+  const nameById = {};
+  try {
+    const t = await espnGet(`${BASE}/teams?limit=900`);
+    for (const x of (t.sports?.[0]?.leagues?.[0]?.teams || [])) {
+      const tm = x.team;
+      if (tm && tm.id) nameById[String(tm.id)] = tm.displayName || tm.name || null;
+    }
+  } catch (_) { /* names best-effort */ }
+
+  // 2) pick recognizable sample teams: the two G5 phantom-edge offenders + a P5
+  //    anchor. Fall back to the first FBS ids if name lookup missed.
+  const want = ["Toledo", "North Texas", "Ohio State"];
+  const idByName = {};
+  for (const [id, nm] of Object.entries(nameById)) { if (nm) idByName[nm] = id; }
+  let sampleIds = want.map((w) => Object.keys(idByName).find((nm) => nm.includes(w))).filter(Boolean).map((nm) => idByName[nm]);
+  sampleIds = sampleIds.filter((id) => fbsIds.includes(id));
+  if (sampleIds.length < 3) {
+    for (const id of fbsIds) { if (sampleIds.length >= 3) break; if (!sampleIds.includes(id)) sampleIds.push(id); }
+  }
+
+  // 3) fetch each sample team's schedule, parse opponent + score per game.
+  const teams = [];
+  let rawSampleFirstEvent = null;
+  for (const id of sampleIds) {
+    try {
+      const sch = await espnGet(`${BASE}/teams/${id}/schedule?season=${season}`);
+      const events = sch.events || [];
+      if (rawSampleFirstEvent == null && events.length) {
+        const comp = (events[0].competitions || [])[0] || {};
+        rawSampleFirstEvent = { week: events[0].week, competitors: (comp.competitors || []).map((c) => ({ id: c.id, homeAway: c.homeAway, score: c.score, winner: c.winner, team: c.team ? { id: c.team.id, displayName: c.team.displayName, abbreviation: c.team.abbreviation } : null })), status: comp.status?.type };
+      }
+      const parsed = parseScheduleEvents(events, id);
+      teams.push({
+        id, name: nameById[String(id)] || `Team ${id}`,
+        gameCount: events.length,
+        completedCount: parsed.filter((p) => p.completed).length,
+        parsableOpponents: parsed.filter((p) => p.opponentId).length,
+        parsableScores: parsed.filter((p) => p.teamScore != null && p.oppScore != null).length,
+        games: parsed,
+      });
+    } catch (e) {
+      teams.push({ id, name: nameById[String(id)] || `Team ${id}`, error: e.message });
+    }
+  }
+
+  return {
+    season,
+    endpointTried: `${BASE}/teams/{id}/schedule?season=${season}`,
+    sampleTeamIds: sampleIds,
+    note: "If parsableOpponents and parsableScores ≈ gameCount for each team, the schedule endpoint feeds SoS cleanly (opponent id + final score per game). Then buildTeamRatings can do one SRS pass: adjusted = ownDiff + W * avg(opponent rating). rawSampleFirstEvent shows the live field names if any parse looks off.",
+    rawSampleFirstEvent,
+    teams,
+  };
+}
+
 module.exports = {
   fetchScoreboard,
   getUpcomingGames,
@@ -444,6 +556,7 @@ module.exports = {
   fetchSeasonProbe,
   fetchPointsProbe,
   buildTeamRatings,
+  fetchSchedulesProbe,
   statMap,
   parseRecords,
   LEAGUE_AVG_PPG,
