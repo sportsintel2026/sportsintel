@@ -2,6 +2,7 @@
 // mobile keeps its own layout untouched. Reads the same data HomePage already
 // fetched (passed as props) — no extra API calls. All figures are real: edges,
 // modelProb, conviction from /api/edges; weather/pitchers ride along on games.
+// HOMEDESKTOP-PREMIUM-DARK-RESKIN-2026-06-23
 import { useState, useEffect, useRef } from "react";
 
 // ---- self-contained helpers (kept local so this file stands alone) ----
@@ -45,8 +46,18 @@ function Lock({ title, sub, navigate }) {
 
 export default function HomeDesktop(props) {
   const { edges, games = [], movers = [], live = [], abbrById = {}, topProps = [], propList = [], propsByType = {}, hero, hasFull, planLoaded = true, lineSeries = {}, moveByPick = {},
-    wpRecord, navigate, plan = {}, sport = "mlb", setSport, marketsLive, anyLive, marketRead = [] } = props;
+    wpRecord, navigate, plan = {}, sport = "mlb", setSport, marketsLive, anyLive, marketRead = [], perf = null } = props;
   const lg = sport === "nba" ? "nba" : "mlb";
+  // Real tracked-record stats for the index cards (high-conviction ROI, honest beat-close CLV).
+  const perfStats = (() => { const d = perf; if (!d) return null;
+    const hi = d.byConfidence && d.byConfidence.HIGH ? d.byConfidence.HIGH : null;
+    const roi = (hi && hi.roi != null) ? hi.roi : (d.roi != null ? d.roi : null);
+    const roiLbl = (hi && hi.roi != null) ? "high-conv" : "all picks";
+    let w = 0, l = 0; if (d.byConfidence) { for (const k in d.byConfidence) { const b = d.byConfidence[k]; if (b) { w += b.wins || 0; l += b.losses || 0; } } }
+    const winRate = (w + l) > 0 ? (w / (w + l) * 100) : null;
+    const graded = d.n != null ? d.n : ((w + l) || null);
+    return { roi, roiLbl, winRate, graded, clv: (d.clv != null ? d.clv : null) };
+  })();
   const [market, setMarket] = useState("ml");
   const [propTab, setPropTab] = useState("hits");
   const [propSort, setPropSort] = useState({ key: "edge", dir: -1 });
@@ -166,18 +177,11 @@ export default function HomeDesktop(props) {
           </div>
 
           {/* INDEX ROW */}
-          <div className="indices">
-            <div className="idx teal"><div className="k">Edges Today</div><div className="v num">{edgeCount}</div><div className="chg">{market.toUpperCase()} board · {rows.length} shown</div></div>
-            <div className="idx green"><div className="k">Best Edge</div>
-              {!planLoaded ? <><div className="v num">…</div><div className="chg">loading</div></>
-                : hasFull ? <><div className="v num">{bestEdge}</div><div className="chg">{hero ? `${edgeLabel(hero)} · ${hero.conviction || ""}` : "top of the board"}</div></>
-                : <><div className="v num lockv"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div><div className="chg">All-Access</div></>}
-            </div>
-            <div className="idx amber"><div className="k">Live Now</div><div className="v num">{liveStrip.length}</div><div className="chg">{anyLive ? "in-game models running" : "no games live"}</div></div>
-            <div className="idx purple"><div className="k">WizePlays · Tracked</div>
-              <div className="v num">{units != null ? `${units >= 0 ? "+" : ""}${units.toFixed(1)}u` : wl}</div>
-              <div className="chg">{winPct != null ? `${winPct}% · ${wl}` : "record on the board"}</div>
-            </div>
+                    <div className="indices">
+            <div className="idx teal"><div className="k">ROI</div><div className="v num">{perfStats && perfStats.roi != null ? `${perfStats.roi >= 0 ? "+" : ""}${perfStats.roi}%` : "—"}</div><div className="chg">{perfStats ? perfStats.roiLbl : "tracked record"}</div></div>
+            <div className="idx green"><div className="k">Win Rate</div><div className="v num">{perfStats && perfStats.winRate != null ? `${perfStats.winRate.toFixed(1)}%` : "—"}</div><div className="chg">{perfStats && perfStats.graded != null ? `${perfStats.graded} graded` : "tracking"}</div></div>
+            <div className="idx amber"><div className="k">CLV</div><div className="v num">{perfStats && perfStats.clv != null ? `${perfStats.clv >= 0 ? "+" : ""}${perfStats.clv}%` : "—"}</div><div className="chg">beat close</div></div>
+            <div className="idx purple"><div className="k">Edges Live</div><div className="v num">{edgeCount}</div><div className="chg">{market.toUpperCase()} board · {rows.length} shown</div></div>
           </div>
 
           {/* EDGE BOARD */}
@@ -402,13 +406,13 @@ export default function HomeDesktop(props) {
 }
 
 const TCSS = `
-.wpterm{--ink:#06080d;--panel:#0b0e16;--line:#1a2030;--line2:#232c3d;--teal:#1D9E75;--up:#2bd47d;--dn:#ff5247;--model:#9b7bff;--amber:#f3b94f;--cold:#5aa9ff;--tx:#e8edf4;--mut:#6b7888;--mut2:#485364;--mono:'IBM Plex Mono',ui-monospace,monospace;--disp:'Barlow Condensed',sans-serif;
+.wpterm{--ink:#0A0B0D;--panel:#14171B;--line:rgba(255,255,255,.06);--line2:rgba(255,255,255,.12);--teal:#3FCB91;--up:#46E0A9;--dn:#E2655C;--model:#C08BFF;--amber:#C9A86A;--cold:#5DA9E8;--tx:#ECEFF2;--mut:#99A2AA;--mut2:#5B646C;--mono:'IBM Plex Mono',ui-monospace,monospace;--disp:'Barlow Condensed',sans-serif;--serif:Georgia,'Times New Roman',serif;
   position:relative;min-height:100vh;width:100%;background:var(--ink);color:var(--tx);font-family:'Inter',system-ui,sans-serif;display:flex;flex-direction:column;
-  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(38,116,176,.06),transparent 60%),radial-gradient(900px 500px at 0% 110%,rgba(29,158,117,.06),transparent 55%)}
+  background-image:none}
 .wpterm .num{font-family:var(--mono);font-variant-numeric:tabular-nums}
-.wpterm .status{position:sticky;top:0;z-index:30;flex:0 0 52px;display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:18px;height:52px;padding:0 18px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,#0a0d15,#080a11)}
+.wpterm .status{position:sticky;top:0;z-index:30;flex:0 0 52px;display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:18px;height:52px;padding:0 18px;border-bottom:1px solid var(--line);background:#0E1013}
 .wpterm .brand{display:flex;align-items:center;gap:9px}
-.wpterm .logo{font-family:var(--disp);font-weight:800;font-size:23px}.wpterm .logo .b{color:var(--dn)}
+.wpterm .logo{font-family:var(--serif);font-weight:600;font-size:23px;letter-spacing:-.3px}.wpterm .logo .b{color:var(--amber)}
 .wpterm .tag{font-size:9px;font-weight:700;letter-spacing:1.5px;color:var(--mut);border:1px solid var(--line2);border-radius:4px;padding:2px 6px}
 .wpterm .tape{overflow:hidden;position:relative;height:100%;display:flex;align-items:center;border-left:1px solid var(--line);border-right:1px solid var(--line)}
 .wpterm .tape::before,.wpterm .tape::after{content:"";position:absolute;top:0;bottom:0;width:46px;z-index:2;pointer-events:none}
@@ -426,17 +430,17 @@ const TCSS = `
 .wpterm .mkt.off .ldot{background:var(--mut2);animation:none}
 @keyframes wppulse{0%{box-shadow:0 0 0 0 rgba(43,212,125,.5)}70%{box-shadow:0 0 0 7px rgba(43,212,125,0)}100%{box-shadow:0 0 0 0 rgba(43,212,125,0)}}
 .wpterm .clock{font-family:var(--mono);font-size:12px;color:var(--mut)}
-.wpterm .avatar{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,#1b2740,#0e1422);border:1px solid var(--line2);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;color:#9fb0c4;cursor:pointer}
+.wpterm .avatar{width:30px;height:30px;border-radius:8px;background:#1B2025;border:1px solid var(--line2);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;color:var(--mut);cursor:pointer}
 .wpterm .body{flex:1 0 auto;display:grid;grid-template-columns:clamp(176px,11vw,210px) minmax(0,1fr) clamp(286px,22vw,360px);align-items:start}
 .wpterm .nav{position:sticky;top:52px;align-self:start;height:calc(100vh - 52px);border-right:1px solid var(--line);background:#080a11;display:flex;flex-direction:column;padding:12px 10px;gap:3px;overflow:auto}
 .wpterm .nav .grp{font-size:9.5px;font-weight:800;letter-spacing:1.4px;color:var(--mut2);padding:12px 10px 5px}
 .wpterm .nav a{display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:9px;color:#aeb9c8;font-size:13px;font-weight:600;cursor:pointer;border:1px solid transparent;position:relative}
 .wpterm .nav a .i{width:17px;text-align:center;font-size:14px}
 .wpterm .nav a:hover{background:#0e1320;color:#fff}
-.wpterm .nav a.on{background:linear-gradient(90deg,rgba(29,158,117,.16),rgba(29,158,117,.04));color:#fff;border-color:rgba(29,158,117,.28)}
+.wpterm .nav a.on{background:rgba(201,168,106,.1);color:var(--tx);border-color:rgba(201,168,106,.32)}
 .wpterm .nav a.on::before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:3px;border-radius:0 3px 3px 0;background:var(--teal)}
 .wpterm .nav .spacer{flex:1}
-.wpterm .nav .upsell{margin:8px 4px 4px;border:1px solid rgba(38,116,176,.3);border-radius:11px;background:linear-gradient(180deg,rgba(38,116,176,.1),rgba(38,116,176,.02));padding:12px}
+.wpterm .nav .upsell{margin:8px 4px 4px;border:1px solid rgba(201,168,106,.28);border-radius:11px;background:rgba(201,168,106,.05);padding:12px}
 .wpterm .nav .upsell .h{font-family:var(--disp);font-weight:800;font-size:16px;color:#cdbcff}
 .wpterm .nav .upsell .d{font-size:10.5px;color:var(--mut);margin:4px 0 9px;line-height:1.4}
 .wpterm .nav .upsell button{width:100%;border:0;border-radius:8px;background:var(--teal);color:#04130d;font-weight:800;font-size:12px;padding:8px;cursor:pointer;font-family:inherit}
@@ -451,12 +455,12 @@ const TCSS = `
 .wpterm .sportbar .sp.on{color:#fff;border-color:var(--line2);background:#111726}.wpterm .sportbar .sp.on .d{background:var(--up)}
 .wpterm .sportbar .sp .d{width:6px;height:6px;border-radius:50%;background:var(--mut2)}
 .wpterm .indices{display:grid;grid-template-columns:repeat(4,1fr);gap:11px}
-.wpterm .idx{border:1px solid var(--line);border-radius:13px;background:linear-gradient(180deg,var(--panel),#080b12);padding:12px 14px}
+.wpterm .idx{border:1px solid var(--line);border-radius:13px;background:var(--panel);padding:12px 14px}
 .wpterm .idx .k{font-size:10px;font-weight:800;letter-spacing:.8px;color:var(--mut);text-transform:uppercase}
-.wpterm .idx .v{font-family:var(--disp);font-weight:800;font-size:clamp(22px,1.95vw,29px);line-height:1.05;margin-top:4px}
+.wpterm .idx .v{font-family:var(--mono);font-weight:600;font-size:clamp(20px,1.8vw,27px);line-height:1.05;margin-top:5px}
 .wpterm .idx .v.lockv{font-size:22px}
 .wpterm .idx .chg{font-family:var(--mono);font-size:11px;font-weight:600;margin-top:3px;color:var(--mut)}
-.wpterm .idx.teal .v{color:#7af0c4}.wpterm .idx.green .v{color:#7af0c4}.wpterm .idx.amber .v{color:#ffd584}.wpterm .idx.purple .v{color:#7af0c4}
+.wpterm .idx.teal .v{color:var(--up)}.wpterm .idx.green .v{color:var(--tx)}.wpterm .idx.amber .v{color:var(--amber)}.wpterm .idx.purple .v{color:var(--tx)}
 .wpterm .panel{border:1px solid var(--line);border-radius:14px;background:var(--panel);overflow:hidden}
 .wpterm .phead{display:flex;align-items:center;gap:12px;padding:11px 15px;border-bottom:1px solid var(--line)}
 .wpterm .phead .t{font-family:var(--disp);font-weight:800;font-size:clamp(13px,1vw,15.5px);letter-spacing:.4px;display:flex;align-items:center;gap:8px}
@@ -487,7 +491,7 @@ const TCSS = `
 .wpterm .tbl thead th .ca{font-family:var(--mono);font-size:9px;color:var(--teal);margin-left:3px}
 .wpterm .tbl tbody tr{border-bottom:1px solid #11151f}.wpterm .tbl tbody tr:last-child{border-bottom:0}
 .wpterm .tbl tbody tr.click{cursor:pointer;transition:background .12s}
-.wpterm .tbl tbody tr.click:hover{background:linear-gradient(90deg,rgba(29,158,117,.08),transparent)}
+.wpterm .tbl tbody tr.click:hover{background:rgba(63,203,145,.06)}
 .wpterm .tbl tbody tr.click:hover td:first-child{box-shadow:inset 3px 0 0 var(--teal)}
 .wpterm .tbl td{padding:10px clamp(8px,0.95vw,14px);font-size:clamp(11.5px,0.78vw,13px);vertical-align:middle}.wpterm .tbl td.c{text-align:center}.wpterm .tbl td.r{text-align:right}
 .wpterm .matchup{display:flex;align-items:center;gap:9px}
@@ -550,7 +554,7 @@ const TCSS = `
 .wpterm .book{font-size:12px;color:#c4cdd9;font-family:var(--mono);text-align:center}.wpterm .book .bk{font-size:10px;color:var(--mut);font-family:'Inter'}
 .wpterm .edge-cell{text-align:right;white-space:nowrap}
 .wpterm .edge-v{font-family:var(--mono);font-size:14px;font-weight:600}.wpterm .edge-v.up{color:var(--up)}.wpterm .edge-v.dn{color:var(--dn)}
-.wpterm .edge-bar{height:3px;border-radius:2px;background:#161c28;margin-top:5px;overflow:hidden}.wpterm .edge-bar i{display:block;height:100%;background:linear-gradient(90deg,var(--teal),var(--up))}
+.wpterm .edge-bar{height:3px;border-radius:2px;background:var(--ink);margin-top:5px;overflow:hidden}.wpterm .edge-bar i{display:block;height:100%;background:var(--teal)}
 .wpterm .conv{font-size:10px;font-weight:800;letter-spacing:.3px;border-radius:5px;padding:3px 7px;white-space:nowrap}
 .wpterm .conv.high{color:var(--amber);background:rgba(243,185,79,.12);border:1px solid rgba(243,185,79,.25)}
 .wpterm .conv.med{color:#8fd9c2;background:rgba(43,212,125,.08);border:1px solid rgba(43,212,125,.2)}
