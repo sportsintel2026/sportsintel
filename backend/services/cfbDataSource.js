@@ -251,11 +251,75 @@ async function fetchSeasonProbe(season = 2025) {
   return out;
 }
 
+/* ---- READ-ONLY PROBE #2: FBS team list + clean PF/PA source (read-only) ------
+ * Probe #1 showed the site standings come back empty and /teams?groups=80 ignores
+ * the FBS filter (returns 400 teams incl. D-II/D-III). So this nails the two pieces
+ * the ratings seed actually needs:
+ *   1. The real FBS membership (~134 teams) via the CORE-API group-80 teams list.
+ *   2. A clean per-team points-for / points-against via the CORE-API record endpoint
+ *      (the same source NFL's seed uses), probed on a real FBS id pulled from #1.
+ * Confirms the seed strategy (loop ~134 FBS record endpoints) before any rating math.
+ * Writes nothing; inspection only. Remove once buildTeamRatings is built. */
+async function fetchPointsProbe(season = 2025) {
+  const out = { season, endpoints: {} };
+  const CORE = `https://sports.core.api.espn.com/v2/sports/football/leagues/college-football/seasons/${season}/types/2`;
+
+  // 1) FBS membership — core group-80 teams. Returns { count, items:[{ $ref }] }.
+  let fbsIds = [];
+  const groupTeamsUrl = `${CORE}/groups/80/teams?limit=200`;
+  try {
+    const data = await espnGet(groupTeamsUrl);
+    const items = data.items || [];
+    fbsIds = items.map((it) => {
+      const m = String(it.$ref || "").match(/teams\/(\d+)/);
+      return m ? m[1] : null;
+    }).filter(Boolean);
+    out.endpoints.fbsTeams = {
+      url: groupTeamsUrl, ok: true,
+      reportedCount: data.count ?? null,
+      idsParsed: fbsIds.length,
+      sampleIds: fbsIds.slice(0, 6),
+    };
+  } catch (e) {
+    out.endpoints.fbsTeams = { url: groupTeamsUrl, ok: false, error: e.message };
+  }
+
+  // 2) Clean PF/PA — core RECORD endpoint for one real FBS team from the list above.
+  //    record returns { items:[{ type, summary, stats:[{name,value,displayValue}] }] }
+  //    where the overall block typically carries pointsFor / pointsAgainst directly.
+  const probeId = fbsIds[0] || "333"; // 333 = Alabama, a safe FBS fallback
+  const recordUrl = `${CORE}/teams/${probeId}/record`;
+  try {
+    const data = await espnGet(recordUrl);
+    const items = data.items || [];
+    const overall = items.find((i) => /overall|total/i.test(`${i.type || ""} ${i.name || ""}`)) || items[0] || {};
+    const stats = overall.stats || [];
+    const statNames = stats.map((s) => s.name).filter(Boolean);
+    const pick = (re) => {
+      const s = stats.find((x) => re.test(x.name || ""));
+      return s ? { name: s.name, value: s.value, display: s.displayValue } : null;
+    };
+    out.endpoints.record = {
+      url: recordUrl, ok: true, teamId: probeId,
+      recordBlocks: items.map((i) => i.type || i.name).filter(Boolean),
+      statNames,
+      pointsFor: pick(/^pointsfor$/i) || pick(/^avgpointsfor$/i) || pick(/pointsfor/i),
+      pointsAgainst: pick(/^pointsagainst$/i) || pick(/^avgpointsagainst$/i) || pick(/pointsagainst/i),
+      gamesPlayed: pick(/^gamesplayed$/i) || pick(/games/i),
+    };
+  } catch (e) {
+    out.endpoints.record = { url: recordUrl, ok: false, error: e.message };
+  }
+
+  return out;
+}
+
 module.exports = {
   fetchScoreboard,
   getUpcomingGames,
   getFinalScore,
   fetchSeasonProbe,
+  fetchPointsProbe,
   statMap,
   parseRecords,
   LEAGUE_AVG_PPG,
