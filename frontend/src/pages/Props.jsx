@@ -175,7 +175,7 @@ function PropRow({ p, onOpen }) {
       <div className="pr">
         {p.lk
           ? <><div className="ped">{p.model!=null?p.model+"%":"\u2014"}</div><div className="plb">MODEL</div></>
-          : <><div className="ped">+{(p.edge??0).toFixed(1)}%</div><div className="plb">EDGE</div></>}
+          : <><div className={"ped "+((p.edge??0)>=0?"":"neg")}>{((p.edge??0)>=0?"+":"")+(p.edge??0).toFixed(1)}%</div><div className="plb">EDGE</div></>}
         <div className={"ptag "+p.mk}>{p.mk}</div>
       </div>
     </div>
@@ -336,7 +336,7 @@ function PlayerSheet({ p, card, loading, onClose }) {
               <div className="dblk"><div className="recline">
                 <Avatar pid={p.pid} initials={p.pl[1]} color={p.pl[2]} cls="av2"/>
                 <div className="rl"><div className="bet">{p.line}</div><div className="sub">{shortTeam(p.teamRaw||p.g)} · best <b>{p.odds}</b></div></div>
-                <div className="edg"><div className="e">{p.edge!=null?`+${p.edge.toFixed(1)}%`:(p.model!=null?p.model+"%":"\u2014")}</div><div className="c">{p.conv?p.conv.toUpperCase()+" CONV":"MODEL"}</div></div>
+                <div className="edg"><div className={"e "+((p.edge!=null&&p.edge<0)?"neg":"")}>{p.edge!=null?`${p.edge>=0?"+":""}${p.edge.toFixed(1)}%`:(p.model!=null?p.model+"%":"\u2014")}</div><div className="c">{p.conv?p.conv.toUpperCase()+" CONV":"MODEL"}</div></div>
               </div><MMbar model={p.model} mkt={p.mkt}/></div>
               <div className="dblk"><div className="bl">PITCHING <span className="bx">season rates</span></div>
                 <div className="stiles">
@@ -502,7 +502,7 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .prow .pmu{font-family:var(--mono);font-size:9px;color:var(--mut2);margin-top:1px}
 .prow .pline{font-family:var(--disp);font-weight:800;font-size:13px;color:#cdd7e1;margin-top:4px}.pline .od{font-family:var(--mono);font-size:11px;color:var(--mut);font-weight:600;margin-left:6px}
 .prow .pr{text-align:right;flex:0 0 auto}
-.prow .ped{font-family:var(--disp);font-weight:800;font-size:22px;color:var(--green);line-height:1}
+.prow .ped{font-family:var(--disp);font-weight:800;font-size:22px;color:var(--green);line-height:1}.prow .ped.neg{color:var(--neg)}
 .prow .plb{font-family:var(--mono);font-size:8px;color:var(--mut);font-weight:700;margin-top:2px;letter-spacing:.3px}
 .prow .ptag{display:inline-block;font-family:var(--mono);font-size:8px;font-weight:700;border-radius:5px;padding:2px 6px;margin-top:5px}
 .ptag.HR{color:var(--gold);background:rgba(201,168,106,.14)}.ptag.HITS{color:var(--blue);background:rgba(93,169,232,.12)}.ptag.K{color:#c08bff;background:rgba(155,123,255,.14)}.ptag.TB{color:#7fdcc0;background:rgba(45,160,120,.16)}
@@ -526,7 +526,7 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .recline .av2{width:50px;height:50px;border-radius:50%;display:flex;align-items:flex-end;justify-content:center;font-family:var(--disp);font-weight:800;font-size:18px;color:#fff;flex:0 0 auto;overflow:hidden}
 .recline .rl .bet{font-family:var(--disp);font-weight:800;font-size:20px;color:#fff}.recline .rl .sub{font-family:var(--mono);font-size:10px;color:var(--mut);margin-top:2px}
 .recline .rl .sub b{color:var(--blue)}
-.recline .edg{margin-left:auto;text-align:right}.recline .edg .e{font-family:var(--disp);font-weight:800;font-size:26px;color:var(--green);line-height:1}.recline .edg .c{font-family:var(--mono);font-size:8px;color:var(--mut);font-weight:700}
+.recline .edg{margin-left:auto;text-align:right}.recline .edg .e{font-family:var(--disp);font-weight:800;font-size:26px;color:var(--green);line-height:1}.recline .edg .e.neg{color:var(--neg)}.recline .edg .c{font-family:var(--mono);font-size:8px;color:var(--mut);font-weight:700}
 .mmlab{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10px;color:var(--mut);margin-bottom:5px}.mmlab b{color:#fff}
 .mmbar{position:relative;height:26px;border-radius:7px;background:#0e1620;border:1px solid var(--line);overflow:hidden}
 .mmbar .fill{position:absolute;left:0;top:0;bottom:0;background:var(--green)}
