@@ -350,16 +350,16 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .subnav b.on{background:#141d24;color:#fff}
 .cap{font-family:var(--mono);font-size:10px;color:var(--mut2);margin:10px 14px 0;line-height:1.4}
 /* odds (line shop) card */
-.oc{margin:9px 14px 0;border:1px solid var(--line);border-radius:14px;background:var(--panel);padding:12px;cursor:pointer;transition:border-color .15s}.oc:active{border-color:var(--steel)}
+.oc{margin:9px 14px 0;border:1px solid var(--line);border-radius:14px;background:var(--panel);padding:13px;cursor:pointer;transition:border-color .15s}.oc:active{border-color:var(--line2)}
 .oc .och{display:flex;align-items:center;gap:9px;margin-bottom:11px}
-.lg{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#0c1018;border:1px solid #000;font-family:var(--disp);font-weight:800;font-size:8px;color:#fff;flex:0 0 auto}.lg img{width:19px;height:19px;object-fit:contain}
+.lg{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#1B2025;border:1px solid var(--line2);font-family:var(--disp);font-weight:800;font-size:8px;color:#fff;flex:0 0 auto}.lg img{width:20px;height:20px;object-fit:contain}
 .lgs{display:flex}.lgs .lg{margin-left:-5px}.lgs .lg:first-child{margin-left:0}
-.oc .mt{font-family:var(--disp);font-weight:800;font-size:16px;color:#fff}.oc .tm2{font-family:var(--mono);font-size:9px;color:var(--mut2);margin-left:auto}
-.bestrow{display:flex;gap:7px}
-.bp{flex:1;border:1px solid var(--line2);border-radius:9px;background:#0e1620;padding:8px;text-align:center}
-.bp .k{font-family:var(--mono);font-size:8px;color:var(--mut2);font-weight:600}
-.bp .v{font-family:var(--disp);font-weight:800;font-size:15px;color:#fff;margin-top:3px}.bp .v .pr{color:var(--green)}
-.bp .bk{font-family:var(--mono);font-size:8px;color:var(--gold);font-weight:700;margin-top:2px}
+.oc .mt{font-family:var(--disp);font-weight:800;font-size:17px;color:#fff;letter-spacing:.2px}.oc .tm2{font-family:var(--mono);font-size:9px;color:var(--mut2);margin-left:auto}
+.bestrow{display:flex;gap:8px}
+.bp{flex:1;border:1px solid var(--line);border-radius:10px;background:var(--panel2);padding:10px 8px;text-align:center}
+.bp .k{font-family:var(--mono);font-size:8.5px;color:var(--mut);font-weight:600;letter-spacing:.3px;text-transform:uppercase}
+.bp .v{font-family:var(--disp);font-weight:800;font-size:20px;color:#fff;margin-top:5px;line-height:1}.bp .v .pr{color:var(--green)}
+.bp .bk{font-family:var(--mono);font-size:8.5px;color:var(--gold);font-weight:700;margin-top:4px}
 /* movers */
 .mvrow{display:flex;align-items:center;gap:11px;margin:8px 14px 0;border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:11px 13px}
 .mvrow .rk{font-family:var(--disp);font-weight:800;font-size:13px;color:var(--mut2);width:18px;flex:0 0 auto}
