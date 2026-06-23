@@ -1,4 +1,5 @@
 // Edges route — the main endpoint powering the analytics dashboard
+// CFB-SCHEDULEPROBE-ROUTE-SOS-2026-06-22
 //
 // GET /api/edges/mlb
 //   Returns today's MLB games with model projections, sportsbook odds, and edges.
@@ -1278,8 +1279,26 @@ router.get("/cfbpointsprobe", async (req, res) => {
   }
 });
 
-// ── CFB POWER RATINGS (read-only) ───────────────────────────────────────────
-// Runs buildTeamRatings over the ~146 FBS teams and returns the seeded ratings,
+// ── TEMP DIAGNOSTIC: CFB per-team SCHEDULE/opponent probe (read-only) ─────────
+// buildTeamRatings seeds from season-aggregate PF/PA (no opponent breakdown), so a
+// cupcake-padded differential is indistinguishable from a battle-tested one — that's
+// the no-SoS phantom-edge source. This probes the site schedule endpoint to confirm
+// it carries opponent id + home/away + final score per game (the data a strength-of-
+// schedule layer needs) BEFORE any SoS math is wired. Samples a few recognizable
+// teams (G5 phantom-edge offenders + a P5 anchor). Writes nothing.
+//   /api/edges/cfbscheduleprobe[?season=2025]
+router.get("/cfbscheduleprobe", async (req, res) => {
+  try {
+    const season = parseInt(req.query.season, 10) || 2025;
+    const { fetchSchedulesProbe } = require("../services/cfbDataSource");
+    const result = await fetchSchedulesProbe(season);
+    res.json({ ok: true, league: "cfb", ...result });
+  } catch (e) {
+    console.error("[cfbscheduleprobe] error:", e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // ranked best→worst, so the loop + PF/PA seed can be sanity-checked (do the real
 // powers land on top?) BEFORE the model consumes them. 2025 seed, FBS only.
 //   /api/edges/cfbratings[?season=2025]
