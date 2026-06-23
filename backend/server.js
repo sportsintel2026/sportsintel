@@ -207,6 +207,23 @@ cron.schedule("5,35 11-23,0-2 * * *", async () => {
   }
 }, { timezone: "America/New_York" });
 
+// NFL model-pick recorder (Phase-2 F5 calibration harness) — once daily, runs the
+// NFL slate and snapshots the model's picks to model_predictions (league:"nfl") so
+// they auto-grade once games finish, building the graded sample we calibrate against.
+// Self-gating: recordNFLPredictions only logs games kicking off within ~7 days, so
+// this is a no-op all offseason and quietly comes alive the week before games. Daily
+// is plenty for a weekly sport; idempotent (dups ignored).
+cron.schedule("20 9 * * *", async () => {
+  try {
+    const { runNFLSlate } = require("./services/nflEdges");
+    const { recordNFLPredictions } = require("./services/predictionTracker");
+    const slate = await runNFLSlate({ weeks: 1 });
+    await recordNFLPredictions(slate);
+  } catch (err) {
+    console.error("[CRON] NFL model-pick record failed:", err.message);
+  }
+}, { timezone: "America/New_York" });
+
 // Grade finished-game predictions — runs hourly, and a final sweep at 3am ET
 cron.schedule("0 * * * *", async () => {
   console.log("[CRON] Grading finished-game predictions...");
