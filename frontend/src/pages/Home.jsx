@@ -559,10 +559,64 @@ function ParkCardM({d}){ return (
     <div className="bs"><div className="b"><div className="kk">HR BOOST</div><div className={"vv "+(d.hr.startsWith("-")?"dn":"")}>{d.hr}</div></div><div className="b"><div className="kk">RUN BOOST</div><div className={"vv "+(d.run.startsWith("-")?"dn":"")}>{d.run}</div></div></div>
     <div className="wx">{d.wx}</div></div>);
 }
+// LIVE-WINPROB-GRAPH-2026-06-23 — crossing win-probability lines for a live game.
+// Read-only: fetches /api/live-winprob/:gamePk (MLB StatsAPI, 0 odds credits).
+function WinProbGraph({gamePk,homeAb,awayAb,homeCol,awayCol}){
+  const [wp,setWp]=useState(null);
+  useEffect(()=>{ if(!gamePk)return; let dead=false,t;
+    const pull=async()=>{ try{
+      const r=await fetch(`${PERF_API_BASE}/api/live-winprob/${gamePk}`);
+      const d=await r.json();
+      if(!dead && d && d.winProb && d.winProb.available) setWp(d.winProb);
+      else if(!dead) setWp(false);
+    }catch(_){ if(!dead) setWp(false); }
+      t=setTimeout(pull,60000); };
+    pull(); return ()=>{ dead=true; clearTimeout(t); };
+  },[gamePk]);
+  if(wp===null) return <div className="wpg wpg-load">loading win probability{"\u2026"}</div>;
+  if(wp===false || !wp.series || wp.series.length<2) return null;
+  const series=wp.series, n=series.length;
+  const W=206, H=64, PT=4, PB=4, PL=0, PR=0;
+  const ix=(i)=> PL + (i/(n-1))*(W-PL-PR);
+  const iy=(v)=> PT + (1-(v/100))*(H-PT-PB); // v is a 0-100 WP
+  // build the AWAY line path (home is the mirror); away on top = away winning
+  const awayPts=series.map((d,i)=>`${i===0?"M":"L"}${ix(i).toFixed(1)} ${iy(d.awayWP).toFixed(1)}`).join(" ");
+  const homePts=series.map((d,i)=>`${i===0?"M":"L"}${ix(i).toFixed(1)} ${iy(d.homeWP).toFixed(1)}`).join(" ");
+  // shaded area under whichever team is currently leading, to the 50% midline
+  const mid=iy(50);
+  const cur=wp.current||series[n-1];
+  const awayLead=(cur.awayWP||0)>=50;
+  const fillPts=series.map((d,i)=>`${ix(i).toFixed(1)} ${iy(d.awayWP).toFixed(1)}`).join(" ");
+  const fillPath=`M0 ${mid.toFixed(1)} L${fillPts} L${W} ${mid.toFixed(1)} Z`;
+  const swings=(wp.topSwings||[]).slice(0,3);
+  return (
+    <div className="wpg">
+      <div className="wpghead">
+        <span className="wl" style={{color:awayCol||"var(--tx)"}}>{awayAb} {cur.awayWP!=null?Math.round(cur.awayWP)+"%":""}</span>
+        <span className="wmid">WIN PROBABILITY</span>
+        <span className="wl wr" style={{color:homeCol||"var(--tx)"}}>{homeAb} {cur.homeWP!=null?Math.round(cur.homeWP)+"%":""}</span>
+      </div>
+      <svg className="wpgsvg" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
+        <line x1="0" y1={mid} x2={W} y2={mid} className="wpmid"/>
+        <path d={fillPath} className={"wpfill "+(awayLead?"wpfa":"wpfh")} style={awayLead?{fill:awayCol}:{fill:homeCol}}/>
+        <path d={homePts} className="wpline wph" style={{stroke:homeCol||"var(--green)"}}/>
+        <path d={awayPts} className="wpline wpa" style={{stroke:awayCol||"var(--gold)"}}/>
+        {swings.map((sw,k)=>{const d=series[sw.i];if(!d)return null;return <circle key={k} cx={ix(sw.i)} cy={iy(d.awayWP)} r="2.4" className="wpsw"/>;})}
+      </svg>
+      <div className="wpgfoot">
+        <span className="wpgf1">first {Math.round(series[0].awayWP)}{"\u2013"}{Math.round(series[0].homeWP)}</span>
+        <span className="wpgsep">{"\u00b7"}</span>
+        <span className="wpgf2">{n} plays</span>
+        {swings[0]&&<><span className="wpgsep">{"\u00b7"}</span><span className="wpgf3">big swing: {swings[0].wpAdded>0?"+":""}{swings[0].wpAdded}%</span></>}
+      </div>
+    </div>
+  );
+}
 function LiveEdgeCard({g,navigate,locked}){ const rows=g.rows||[];
   return (<div className="lec" onClick={()=>g.gameId&&navigate(locked?"/pricing":`/game/mlb/${g.gameId}`)}>
     <div className="lh"><div className="lm"><div className="lgs"><LogoM ab={g.a} col={g.ac}/><LogoM ab={g.h} col={g.hc}/></div>{g.a} @ {g.h}</div><div className="lst"><span className="d"/>{g.state}</div></div>
     {rows.map((r,i)=><div key={i} className="lerow"><span className="ll">{r[0]}</span><span className="lmeta">{r[1]} {"\u00b7"} {r[2]}</span><span className={"le "+(r[3]>=0?"pos":"neg")}>{r[3]>=0?"+":""}{r[3].toFixed(1)}%</span></div>)}
+    {g.gameId&&<WinProbGraph gamePk={g.gameId} homeAb={g.h} awayAb={g.a} homeCol={g.hc} awayCol={g.ac}/>}
   </div>);
 }
 function Swiper({cls,dotcls,children}){ const ref=useRef(null);const [act,setAct]=useState(0);const items=Children.toArray(children);
@@ -793,6 +847,21 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .lerow .ll{font-family:var(--disp);font-weight:800;font-size:14px;color:#dbe4e2;flex:1;min-width:0}
 .lerow .lmeta{font-family:var(--mono);font-size:10px;color:var(--mut)}
 .lerow .le{font-family:var(--disp);font-weight:800;font-size:16px;flex:0 0 auto;font-variant-numeric:tabular-nums}.le.pos{color:var(--green)}.le.neg{color:var(--neg)}
+.wpg{margin-top:9px;padding-top:9px;border-top:1px solid rgba(255,255,255,.06)}
+.wpg-load{font-family:var(--mono);font-size:9px;color:var(--mut2);text-align:center;padding:10px 0}
+.wpghead{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
+.wpghead .wl{font-family:var(--disp);font-weight:800;font-size:11px;font-variant-numeric:tabular-nums}
+.wpghead .wr{text-align:right}
+.wpghead .wmid{font-family:var(--mono);font-size:7.5px;letter-spacing:.6px;color:var(--mut2);font-weight:600}
+.wpgsvg{display:block;width:100%;height:64px}
+.wpmid{stroke:rgba(255,255,255,.12);stroke-width:.6;stroke-dasharray:3 3}
+.wpfill{opacity:.13}
+.wpline{fill:none;stroke-width:1.6;vector-effect:non-scaling-stroke;stroke-linejoin:round}
+.wpa{opacity:1}.wph{opacity:.55}
+.wpsw{fill:#fff;stroke:rgba(0,0,0,.5);stroke-width:.5}
+.wpgfoot{display:flex;align-items:center;gap:5px;margin-top:4px;font-family:var(--mono);font-size:8.5px;color:var(--mut2)}
+.wpgfoot .wpgf3{color:var(--mut)}
+.wpgsep{opacity:.5}
 
 /* swiping carousels */
 .car{display:flex;gap:9px;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding:8px 14px 0}.car::-webkit-scrollbar{display:none}.car>*{scroll-snap-align:start;flex:0 0 auto}
