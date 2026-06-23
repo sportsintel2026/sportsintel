@@ -353,6 +353,9 @@ export default function HomePage(){
         </div>
       )}
 
+        <div className="seclbl">HOW TO USE WIZEPICKS</div>
+        <div className="guide" onClick={()=>navigate("/guide")}><div className="gi"/><div className="gt"><div className="gh">New here? Start with the basics</div><div className="gs">Edges, props, line shopping &amp; the full board {"\u2014"} a quick walkthrough.</div></div><div className="ga">{"\u203a"}</div></div>
+
         {hasFull && <div className="kpis">
           <div className="kpi"><div className="k">ROI</div><div className={"v "+(perfStats&&perfStats.roi!=null?(perfStats.roi>=0?"g":"red"):"")}>{perfStats&&perfStats.roi!=null?(perfStats.roi>=0?"+":"")+perfStats.roi+"%":"\u2014"}</div><div className="ksub">{perfStats?perfStats.roiLbl:"tracked"}</div></div>
           <div className="kpi"><div className="k">WIN RATE</div><div className="v">{perfStats&&perfStats.winRate!=null?perfStats.winRate.toFixed(1)+"%":"\u2014"}</div><div className="ksub">{perfStats&&perfStats.graded!=null?perfStats.graded+" graded":"tracking"}</div></div>
@@ -379,12 +382,7 @@ export default function HomePage(){
               : <div className="herocar"><div className="hslide"><div className="hero" style={{textAlign:"center"}}><div className="eb">BEST EDGE RIGHT NOW</div><div className="heh">Edges post soon</div><div className="hes">Top edges appear ~2 hrs before first pitch.</div></div></div></div>)
           : <Gate title="Today's top edge is locked" navigate={navigate}/>}
 
-      {hasFull && pulseAlerts.length>0 && <MarketPulse alerts={pulseAlerts}/>}
-
-        {hasFull && moverItems.length>0 && <>
-          <div className="seclbl">MARKET MOVERS <span className="ct">all {moverItems.length} moves {"\u00b7"} ranked by {"\u00a2"}</span><span className="lk">swipe {"\u203a"}</span></div>
-          <Swiper cls="car" dotcls="dots">{moverItems.map((d,i)=><MoverCard key={i} d={d}/>)}</Swiper>
-        </>}
+      {hasFull && (pulseAlerts.length>0||moverItems.length>0) && <MarketPulse alerts={pulseAlerts} movers={moverItems}/>}
 
         {liveItems.length>0 && <div id="livesec">
           <div className="seclbl">LIVE EDGES <span className="ct">in-game {"\u00b7"} updates 60s</span><span className="lk">swipe {"\u203a"}</span></div>
@@ -419,8 +417,6 @@ export default function HomePage(){
 
 
 
-        <div className="seclbl">HOW TO USE WIZEPICKS</div>
-        <div className="guide" onClick={()=>navigate("/guide")}><div className="gi"/><div className="gt"><div className="gh">New here? Start with the basics</div><div className="gs">Edges, props, line shopping &amp; the full board {"\u2014"} a quick walkthrough.</div></div><div className="ga">{"\u203a"}</div></div>
 
 
       </div>
@@ -623,13 +619,21 @@ function Swiper({cls,dotcls,children}){ const ref=useRef(null);const [act,setAct
   const onScroll=()=>{const el=ref.current;if(!el)return;const f=el.firstElementChild;const w=f?f.offsetWidth+9:200;setAct(Math.max(0,Math.round(el.scrollLeft/w)));};
   return (<><div className={cls} ref={ref} onScroll={onScroll}>{children}</div>{items.length>1&&<div className={dotcls}>{items.map((_,i)=><i key={i} className={i===act?"on":""}/>)}</div>}</>);
 }
-function MarketPulse({alerts}){ const [idx,setIdx]=useState(0);const [paused,setPaused]=useState(false);
+function MarketPulse({alerts,movers}){ const [idx,setIdx]=useState(0);const [paused,setPaused]=useState(false);
   useEffect(()=>{if(paused||!alerts||alerts.length<2)return;const id=setInterval(()=>setIdx(i=>(i+1)%alerts.length),3600);return ()=>clearInterval(id);},[paused,alerts]);
-  if(!alerts||!alerts.length)return null;const cur=idx%alerts.length;const a=alerts[cur];
-  return (<div className="alerts" onClick={()=>setPaused(p=>!p)}>
-    <div className="ahead">MARKET PULSE {"\u00b7"} WHAT CHANGED &amp; WHY <span className="ago">{paused?"paused \u00b7 tap to resume":"updated 2m ago"}</span></div>
-    <div className="arow"><div className="aline"><span className="adot" style={{background:a.dot,boxShadow:`0 0 6px ${a.dot}`}}/><span className="alab">{a.label}</span><span className="aval">{a.head}</span></div><div className="awhy">{a.sub}</div></div>
-    {alerts.length>1&&<div className="dd">{alerts.map((_,i)=><i key={i} className={i===cur?"on":""} onClick={(ev)=>{ev.stopPropagation();setIdx(i);setPaused(true);}}/>)}</div>}
+  const hasAlerts=alerts&&alerts.length>0; const mv=movers||[];
+  if(!hasAlerts && !mv.length)return null;
+  const cur=hasAlerts?idx%alerts.length:0; const a=hasAlerts?alerts[cur]:null;
+  return (<div className="alerts">
+    <div className="ahead" onClick={()=>setPaused(p=>!p)}>MARKET PULSE {"\u00b7"} WHAT CHANGED &amp; WHY <span className="ago">{hasAlerts?(paused?"paused \u00b7 tap to resume":"updated 2m ago"):(mv.length+" moves")}</span></div>
+    {hasAlerts&&<>
+      <div className="arow" onClick={()=>setPaused(p=>!p)}><div className="aline"><span className="adot" style={{background:a.dot,boxShadow:`0 0 6px ${a.dot}`}}/><span className="alab">{a.label}</span><span className="aval">{a.head}</span></div><div className="awhy">{a.sub}</div></div>
+      {alerts.length>1&&<div className="dd">{alerts.map((_,i)=><i key={i} className={i===cur?"on":""} onClick={(ev)=>{ev.stopPropagation();setIdx(i);setPaused(true);}}/>)}</div>}
+    </>}
+    {mv.length>0&&<>
+      <div className="mvhd">MARKET MOVERS <span className="mvct">all {mv.length} {"\u00b7"} ranked by {"\u00a2"}</span><span className="mvlk">swipe {"\u203a"}</span></div>
+      <div className="mvcar">{mv.map((d,i)=><MoverCard key={i} d={d}/>)}</div>
+    </>}
   </div>);
 }
 function Gate({title,navigate}){
@@ -678,6 +682,13 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .ahead{display:flex;align-items:center;justify-content:space-between;padding:9px 13px 0;font-family:var(--disp);font-weight:800;font-size:11px;letter-spacing:.6px;color:var(--mut)}
 .ahead .ago{font-family:var(--mono);font-size:9px;color:var(--mut2);font-weight:500;letter-spacing:0}
 .arow{padding:9px 13px 11px;cursor:pointer}
+.alerts .mvhd{display:flex;align-items:center;gap:8px;padding:10px 13px 0;border-top:1px solid var(--line);margin-top:2px;font-family:var(--disp);font-weight:800;font-size:11px;letter-spacing:.6px;color:var(--mut)}
+.alerts .mvhd .mvct{font-family:var(--mono);font-size:9px;color:var(--mut2);font-weight:500;letter-spacing:0}
+.alerts .mvhd .mvlk{margin-left:auto;font-family:var(--mono);font-size:9px;color:var(--mut)}
+.mvcar{display:flex;gap:9px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding:9px 13px 12px}
+.mvcar::-webkit-scrollbar{display:none}
+.mvcar>*{flex:0 0 auto}
+.mvcar .mvc{width:172px;border:1px solid var(--line);background:var(--panel2)}
 .arow.fade{animation:afade .42s ease}
 .aline{display:flex;align-items:center;gap:10px}
 .aline .adot{width:9px;height:9px;border-radius:50%;flex:0 0 auto}.adot.g{background:var(--green);box-shadow:0 0 8px rgba(51,233,145,.55)}.adot.r{background:var(--red);box-shadow:0 0 8px rgba(255,93,77,.55)}
