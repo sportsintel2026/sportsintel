@@ -1,5 +1,5 @@
 // Edges route — the main endpoint powering the analytics dashboard
-// CFB-SCHEDULEPROBE-ROUTE-SOS-2026-06-22
+// CFB-ROUTE-SOS-PROBE-DISCLAIMER-2026-06-22
 //
 // GET /api/edges/mlb
 //   Returns today's MLB games with model projections, sportsbook odds, and edges.
@@ -1499,7 +1499,7 @@ router.get("/nfl", async (req, res) => {
 // Same contract as /nfl: ties odds + FBS power ratings + cfbModel into a predicted
 // slate with edges, board-flattened (moneylineEdges/spreadEdges/totalsEdges) so the
 // dashboard renders CFB with no frontend special-casing. GATED FOR HONESTY: 2025
-// seed, no SoS layer, uncalibrated → calibrated:false + provisional flags, behind an
+// seed, SRS SoS applied but uncalibrated → calibrated:false + provisional flags, behind an
 // "IN TRAINING" banner. teamMatch coverage is EXPECTED below 100% (FBS-vs-FCS games
 // keep the FCS side market-only). Read-only.
 //   /api/edges/cfb[?season=2025][&weeks=1]
@@ -1607,7 +1607,7 @@ router.get("/cfb", async (req, res) => {
       moneylineEdges, spreadEdges, totalsEdges,
       runLineEdges: [], hrPropEdges: [], kPropEdges: [], hitsPropEdges: [],
       computedAt: new Date().toISOString(),
-      disclaimer: "PROVISIONAL: 2025-seeded FBS ratings (no strength-of-schedule layer) vs preseason lines. Not calibrated — no graded CFB results yet. For build/validation only; not betting advice until shadow-graded in-season.",
+      disclaimer: "PROVISIONAL: 2025-seeded FBS ratings (SRS strength-of-schedule applied) vs preseason lines. Not calibrated — no graded CFB results yet. For build/validation only; not betting advice until shadow-graded in-season.",
     });
   } catch (e) {
     console.error("[edges/cfb] error:", e.message);
