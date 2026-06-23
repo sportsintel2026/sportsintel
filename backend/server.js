@@ -1,4 +1,5 @@
 require("dotenv").config();
+// CFB-ODDS-TICKS-CRON-WIRED-2026-06-23
 
 const express = require("express");
 const cors = require("cors");
@@ -37,6 +38,7 @@ const umpiresRoutes = require("./routes/umpires");
 const { refreshDailyGames } = require("./services/sportsData");
 const { gradeFinishedGames, captureClosingLines, captureNbaClosingLines, captureOddsTicks, voidUnmatchedProps } = require("./services/predictionTracker");
 const { captureNFLOddsTicks } = require("./services/nflEdges");
+const { captureCFBOddsTicks } = require("./services/cfbEdges");
 const { backfillUmpireGames } = require("./services/umpireStore");
 const { getEasternDate } = require("./services/mlbStatsApi");
 const { gradeExpertPicks } = require("./services/expertPicksGrader");
@@ -204,6 +206,19 @@ cron.schedule("5,35 11-23,0-2 * * *", async () => {
     await captureNFLOddsTicks();
   } catch (err) {
     console.error("[CRON] NFL odds tick capture failed:", err.message);
+  }
+}, { timezone: "America/New_York" });
+
+// CFB odds-tick capture — banks line-movement history for CFB Market Movers. Writes
+// to its own table (cfb_odds_ticks) so it never touches MLB/NFL. Hourly (lighter than
+// NFL's twice-hourly) because CFB lines crawl in the offseason and to stay easy on the
+// Odds API credit budget; staggered to :25 to avoid colliding with the MLB/NFL ticks.
+// Graceful no-op until the cfb_odds_ticks table exists; sparse now, alive as games near.
+cron.schedule("25 11-23,0-2 * * *", async () => {
+  try {
+    await captureCFBOddsTicks();
+  } catch (err) {
+    console.error("[CRON] CFB odds tick capture failed:", err.message);
   }
 }, { timezone: "America/New_York" });
 
