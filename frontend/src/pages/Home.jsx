@@ -388,13 +388,13 @@ export default function HomePage(){
 
       {hasFull && moverItems.length>0 && <MarketMovers movers={moverItems} navigate={navigate}/>}
 
-        <div className="seclbl">{e.rolledToNextDay?"TOMORROW'S BOARD":"TODAY'S BOARD"} <span className="ct">{boardItems.length} edges{e.rolledToNextDay&&e.date?" · "+fmtSlate(e.date):""}</span>{e.rolledToNextDay&&<span className="rollpill">today's games are live below ↓</span>}{hasFull&&<div className="vtog"><button className={boardView==="cards"?"on":""} onClick={()=>setBoardView("cards")}>CARDS</button><button className={boardView==="grid"?"on":""} onClick={()=>setBoardView("grid")}>GRID</button></div>}</div>
+        <div className="seclbl">{e.rolledToNextDay?"TOMORROW'S BOARD":"TODAY'S BOARD"} <span className="ct">{boardItems.length} edges{e.rolledToNextDay&&e.date?" · "+fmtSlate(e.date):""}</span>{hasFull&&<div className="vtog"><button className={boardView==="cards"?"on":""} onClick={()=>setBoardView("cards")}>CARDS</button><button className={boardView==="grid"?"on":""} onClick={()=>setBoardView("grid")}>GRID</button></div>}</div>
         {hasFull
           ? <>
               <div className="chips">{BF.map(([lb,key])=><span key={key} className={"chipf "+(board===key?"on":"")} onClick={()=>setBoard(key)}>{lb}</span>)}</div>
               {boardItems.length>0
                 ? <>
-                    {boardView==="cards"?(<div className="grid">{boardItems.map((d,i)=>{const id=d.gameId+d.cat+i;return <BoardRow key={id} d={d} i={i} open={openId===id} onToggle={()=>setOpenId(openId===id?null:id)} navigate={navigate} sport={sport}/>;})}</div>):(<BoardGrid items={boardItems} sport={sport}/>)}
+                    {boardView==="cards"?(<div className="grid">{boardItems.map((d,i)=>{const id=d.gameId+d.cat+i;return openId===id?<BoardRow key={id} d={d} i={i} open={true} onToggle={()=>setOpenId(null)} navigate={navigate} sport={sport}/>:<BoardCardCompact key={id} d={d} sport={sport} onClick={()=>setOpenId(id)}/>;})}</div>):(<BoardGrid items={boardItems} sport={sport}/>)}
                     <div className="sum"><span className="l">{boardItems.length} game edges</span><span className="sp"/><span>avg <span className="p">+{kpiHas?kAvg:"0.0"}%</span></span></div>
                   </>
                 : <div className="estate"><div className="et">No edges on the board yet</div><div className="es">Edges appear as books post tonight's lines.</div></div>}
@@ -545,9 +545,30 @@ function BoardRow({d,i,open,onToggle,navigate,sport}){ const lg=(SPORTS[sport]||
   );
 }
 /* BOARD-VIEW-TOGGLE-CARDS-GRID-2026-06-24 — spreadsheet view of the same boardItems */
+/* CARDS-COMPACT-GRID-EXPAND-2026-06-24 — compact card; taps open the full BoardRow */
+function BoardCardCompact({d,sport,onClick}){
+  const lg=(SPORTS[sport]||SPORTS.mlb).lg;
+  const conv=String(d.conv||"low");
+  return (
+    <div className={"gr gcompact "+conv} onClick={onClick}>
+      <div className="ghead">
+        <div className="lgs"><LogoM ab={d.a&&d.a[0]} col={d.a&&d.a[1]} lg={lg}/><LogoM ab={d.h&&d.h[0]} col={d.h&&d.h[1]} lg={lg}/></div>
+        <div className="ghm">
+          <div className="ghpick">{d.p}<span className="ghmk">{d.mk}</span></div>
+          <div className="ghmu">{d.g}{d.starts?" \u00b7 "+d.starts:""}</div>
+        </div>
+        <div className="ghr">
+          <div className={"ghedge "+(d.edge<0?"neg":"pos")}>{d.edge>=0?"+":""}{Number(d.edge).toFixed(1)}<i>%</i></div>
+          {conv&&<span className={"ghconv "+conv}>{conv.toUpperCase()}</span>}
+        </div>
+      </div>
+      <div className="gcbody"><div className="gcwhy">Model <b>{d.model}%</b> vs market {d.mkt}% {"\u2014"} the price is better than it should be.</div><div className="gctap">tap for full breakdown {"\u203a"}</div></div>
+    </div>
+  );
+}
 function BoardGrid({items,sport}){
   const CAB={high:"HI",med:"MED",low:"LO"};
-  const cols=["Game","Pick","Odds","Mdl","Mkt%","Edge","Conv","Time","Mv"];
+  const cols=["Game","Pick","Odds","Mdl","Mkt%","Edge","Conv","Mv"]; // CARDS-COMPACT-GRID-EXPAND-2026-06-24
   const isNum={2:1,3:1,4:1,5:1};
   let gi=-1, prev=null;
   return (
@@ -576,7 +597,6 @@ function BoardGrid({items,sport}){
                   <td className="s_num">{mkt}</td>
                   <td className="s_num s_edge">{edge}</td>
                   <td className={"s_conv "+conv}>{CAB[conv]||conv.toUpperCase()}</td>
-                  <td className="s_dim">{d.starts||"\u2014"}</td>
                   <td className="s_num s_mv">{mv}</td>
                 </tr>
               );
@@ -1034,20 +1054,26 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .sheet{margin:8px 14px 0;border:1px solid var(--line2);border-radius:14px;background:var(--panel);overflow:hidden}
 .sheetscroll{max-height:56vh;overflow:auto;-webkit-overflow-scrolling:touch}
 .sheetscroll::-webkit-scrollbar{height:5px;width:5px}.sheetscroll::-webkit-scrollbar-thumb{background:#2a2f37;border-radius:4px}
-.sht{border-collapse:separate;border-spacing:0;font-family:var(--mono);font-size:10px;white-space:nowrap;width:100%}
-.sht td{border-right:1px solid #181B20;padding:5px 7px;height:27px}
-.sht .s_colh{position:sticky;top:0;z-index:20;background:#0F1115;color:var(--mut2);font-size:8px;text-align:center;font-weight:600;padding:3px 7px;height:16px;border-bottom:1px solid #23272E}
-.sht .s_cnr{position:sticky;top:0;left:0;z-index:30;background:#0F1115;width:18px;min-width:18px;border-bottom:1px solid #23272E;border-right:1px solid #23272E}
-.sht .s_rn{position:sticky;left:0;z-index:15;background:#0F1115;color:var(--mut2);font-size:8px;text-align:center;width:18px;min-width:18px;padding:5px 1px;border-right:1px solid #23272E}
+.sht{border-collapse:separate;border-spacing:0;font-family:var(--mono);font-size:12.5px;white-space:nowrap;width:100%}
+.sht td{border-right:1px solid #181B20;padding:9px 12px;height:38px}
+.sht .s_colh{position:sticky;top:0;z-index:20;background:#0F1115;color:var(--mut2);font-size:9px;text-align:center;font-weight:600;padding:3px 7px;height:16px;border-bottom:1px solid #23272E}
+.sht .s_cnr{position:sticky;top:0;left:0;z-index:30;background:#0F1115;width:24px;min-width:24px;border-bottom:1px solid #23272E;border-right:1px solid #23272E}
+.sht .s_rn{position:sticky;left:0;z-index:15;background:#0F1115;color:var(--mut2);font-size:9px;text-align:center;width:24px;min-width:24px;padding:5px 1px;border-right:1px solid #23272E}
 .sht .s_h{position:sticky;top:16px;z-index:18;background:var(--panel2);color:var(--gold);font-weight:700;letter-spacing:.3px;border-bottom:1px solid #23272E;height:24px}
 .sht .s_h.s_num{text-align:right}
-.sht .s_h.s_first{left:18px;z-index:21;border-right:1px solid #2c333c;box-shadow:5px 0 6px -3px rgba(0,0,0,.65)}
-.sht .s_first{position:sticky;left:18px;z-index:16;color:var(--tx);font-weight:700;letter-spacing:.3px;border-right:1px solid #2c333c;box-shadow:5px 0 6px -3px rgba(0,0,0,.65)}
+.sht .s_h.s_first{left:24px;z-index:21;border-right:1px solid #2c333c;box-shadow:5px 0 6px -3px rgba(0,0,0,.65)}
+.sht .s_first{position:sticky;left:24px;z-index:16;color:var(--tx);font-weight:700;letter-spacing:.3px;border-right:1px solid #2c333c;box-shadow:5px 0 6px -3px rgba(0,0,0,.65)}
 .sht tr.gA td{background:#14171B}.sht tr.gB td{background:#0F1216}.sht tr.gtop td{border-top:1px solid #2c333c}
 .sht .s_num{text-align:right}.sht .s_pk{color:var(--tx);font-weight:700}.sht .s_dim{color:var(--mut)}
 .sht .s_odds{color:var(--gold);font-weight:600}.sht .s_edge{color:#46E0A9;font-weight:700;text-align:right}
 .sht .s_mv .up{color:var(--green)}.sht .s_mv .dn{color:var(--neg)}
-.sht .s_conv{font-weight:700;font-size:9px;letter-spacing:.4px;text-align:center}
+.sht .s_conv{font-weight:700;font-size:11px;letter-spacing:.4px;text-align:center}
 .sht .s_conv.high{color:var(--green)}.sht .s_conv.med{color:var(--gold)}.sht .s_conv.low{color:var(--mut)}
 .sheetfoot{display:flex;align-items:center;padding:9px 13px;border-top:1px solid var(--line);font-family:var(--mono);font-size:9.5px;color:var(--mut)}
+
+/* compact board card (taps to full breakdown) */
+.gr.gcompact{cursor:pointer}
+.gcbody{padding:0 15px 13px 17px}
+.gcwhy{font-size:11.5px;color:#aeb8c2;line-height:1.45}.gcwhy b{color:#fff;font-weight:700}
+.gctap{font-family:var(--mono);font-size:9px;color:var(--mut2);margin-top:8px;letter-spacing:.5px}
 `;
