@@ -558,7 +558,7 @@ function MoverRowM({d,rank}){ const c=d.delta||0; const dir=c>=0?"up":"dn";
 }
 function PropCardM({d,rank,navigate}){ const col=d.player[2];
   return (<div className="prc" onClick={()=>navigate("/props")}><div className="rk">{rank}</div>
-    <div className="av2" style={{background:`radial-gradient(circle at 50% 30%, ${col}, #0c1018 80%)`,boxShadow:`0 0 0 2.5px ${col}`}}>{d.id?<img src={`https://midfield.mlbstatic.com/v1/people/${d.id}/spots/120`} alt="" onError={(e)=>{e.currentTarget.style.display="none";e.currentTarget.parentNode.textContent=d.player[1];}}/>:d.player[1]}</div>
+    <div className="av2" style={{background:`radial-gradient(circle at 50% 30%, ${col}, #0A0B0D 80%)`,boxShadow:`0 0 0 2.5px ${col}`}}>{d.id?<img src={`https://midfield.mlbstatic.com/v1/people/${d.id}/spots/120`} alt="" onError={(e)=>{e.currentTarget.style.display="none";e.currentTarget.parentNode.textContent=d.player[1];}}/>:d.player[1]}</div>
     <div className="nm">{d.player[0]}</div><div className="mu">{d.g}</div>
     <div className="ed">+{d.edge.toFixed(1)}%</div><div className="lb">{d.mk} EDGE</div>
     <div className="bet"><span>{d.p}</span><span className="o">{d.odds}</span></div></div>);
@@ -924,16 +924,16 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .mvc .od{font-family:var(--mono);font-size:14px;font-weight:600;margin-top:10px}.mvc .od .a{color:var(--mut2)}.mvc .od.up{color:var(--green)}.mvc .od.dn{color:var(--neg)}
 .mvc .ct2{font-family:var(--mono);font-size:11px;font-weight:600;margin-top:4px}.mvc .ct2.up{color:var(--green)}.mvc .ct2.dn{color:var(--neg)}
 /* prop card */
-.prc{width:132px;border:1px solid rgba(93,169,232,.22);border-radius:14px;background:var(--panel);padding:10px 9px 10px;position:relative;display:flex;flex-direction:column;align-items:center;text-align:center}
-.prc .rk{position:absolute;top:7px;left:7px;width:19px;height:19px;border-radius:6px;background:var(--steel);color:#fff;font-family:var(--disp);font-weight:800;font-size:11px;display:flex;align-items:center;justify-content:center}
+.prc{width:132px;border:1px solid var(--line2);border-radius:14px;background:var(--panel);padding:10px 9px 10px;position:relative;display:flex;flex-direction:column;align-items:center;text-align:center}
+.prc .rk{position:absolute;top:7px;left:7px;width:19px;height:19px;border-radius:6px;background:var(--gold);color:#1a1408;font-family:var(--disp);font-weight:800;font-size:11px;display:flex;align-items:center;justify-content:center}
 .prc .av{width:58px;height:58px;border-radius:50%;display:flex;align-items:flex-end;justify-content:center;font-family:var(--disp);font-weight:800;font-size:18px;color:#fff;margin-top:4px}
 .prc .av2{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;overflow:hidden;font-family:var(--disp);font-weight:800;font-size:14px;color:#fff;margin-top:2px}.prc .av2 img{width:100%;height:100%;object-fit:cover}
 .prc .nm{font-weight:800;font-size:13px;color:#eaf1ee;margin-top:6px;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .prc .mu{font-family:var(--mono);font-size:9px;color:var(--mut);margin-top:2px}
 .prc .ed{font-family:var(--disp);font-weight:800;font-size:21px;color:var(--green);margin-top:5px;line-height:1}
 .prc .lb{font-size:7.5px;letter-spacing:.3px;color:var(--mut);font-weight:800;margin-top:1px}
-.prc .bet{margin-top:7px;width:100%;display:flex;align-items:center;justify-content:space-between;border:1px solid rgba(93,169,232,.3);border-radius:8px;background:rgba(93,169,232,.07);padding:5px 8px}
-.prc .bet span{font-family:var(--mono);font-weight:600;font-size:10px;color:#dbe4e2}.prc .bet .o{color:var(--blue)}
+.prc .bet{margin-top:7px;width:100%;display:flex;align-items:center;justify-content:space-between;border:1px solid var(--line2);border-radius:8px;background:var(--panel2);padding:5px 8px}
+.prc .bet span{font-family:var(--mono);font-weight:600;font-size:10px;color:#dbe4e2}.prc .bet .o{color:var(--green)}
 /* park card */
 .pkc{width:200px;border:1px solid var(--line2);border-radius:13px;background:var(--panel);padding:12px}
 .pkc.h{border-color:rgba(243,185,79,.26)}.pkc.p{border-color:rgba(93,169,232,.2)}
