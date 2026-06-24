@@ -507,8 +507,8 @@ const CSS = `
 .lpwrap .pbar{display:flex;justify-content:space-between;font-family:var(--mono);font-size:11px;color:#5C6770;letter-spacing:.1em;text-transform:uppercase;margin-bottom:15px}
 .lpwrap .prow{display:flex;justify-content:space-between;align-items:center;padding:12px 13px;border-radius:10px;background:#1B2025;margin-bottom:9px}
 .lpwrap .prow .t{font-family:var(--disp);font-weight:600;font-size:14px}
-.lpwrap .prow .m{font-family:var(--mono);font-size:12px;color:#5C6770}
-.lpwrap .pill{font-family:var(--mono);font-weight:700;font-size:13px;color:#04140d;background:var(--green);padding:3px 9px;border-radius:6px}
+.lpwrap .prow .m{font-family:var(--mono);font-size:12px;color:#9AA4AD}
+.lpwrap .pill{font-family:var(--mono);font-weight:700;font-size:13px;color:var(--green);background:rgba(63,203,145,.14);border:1px solid rgba(63,203,145,.32);padding:3px 9px;border-radius:6px}
 /* Player Profile feature panel — solid near-black to match the mock */
 .lpwrap .panel.pppanel{padding:0;overflow:hidden;background:#14171B;border:1px solid var(--line2);min-height:0}
 .lpwrap .ppprow{position:relative;display:flex;align-items:center;gap:11px;padding:13px 14px;background:#1B2025;border-bottom:1px solid var(--line)}
