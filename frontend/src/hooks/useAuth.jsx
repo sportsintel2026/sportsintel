@@ -29,7 +29,13 @@ export function AuthProvider({ children }) {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { full_name: fullName } },
+      // AGE-CHECKBOX-2026-06-24 — record the 21+/terms affirmation on the account itself
+      options: { data: {
+        full_name: fullName,
+        age_confirmed_21: true,
+        age_confirmed_at: new Date().toISOString(),
+        terms_accepted_at: new Date().toISOString(),
+      } },
     });
     if (error) throw error;
     return data;
