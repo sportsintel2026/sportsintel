@@ -41,6 +41,24 @@ function bucketFor(state) {
 
 function num(v) { const n = Number(v); return Number.isFinite(n) ? n : null; }
 
+// LIVESCORES-DEDUP-INNING-ABBR-2026-06-24
+function ordinal(n){ const s=["th","st","nd","rd"], v=n%100; return s[(v-20)%10]||s[v]||s[0]; }
+// ESPN's MLB shortDetail can come back with a doubled half-inning ("Top Top 8",
+// "Top Bottom 1") during inning transitions. Collapse the leading duplicate and
+// re-add the ordinal so it reads "Top 8th" / "Bottom 1st".
+function cleanStatusDetail(s){
+  if(!s) return s;
+  let t=String(s).trim();
+  t=t.replace(/^(Top|Bottom|Mid|Middle|End)\s+(Top|Bottom|Mid|Middle|End)\b/i,"$2");
+  if(/^(Top|Bottom|Mid|Middle|End)\b/i.test(t)) t=t.replace(/\b(\d+)\s*$/,(m,n)=>n+ordinal(+n));
+  return t;
+}
+// Align ESPN team abbreviations to the ones the model/edges feed uses so the same
+// team never shows two ways and dedup keys line up.
+const ABBR_FIX={ CHW:"CWS" };
+function fixAbbr(a){ return (a&&ABBR_FIX[a])||a; }
+
+
 // Normalize one ESPN event into a flat game object for the lists.
 function parseEvent(ev) {
   const comp = (ev.competitions && ev.competitions[0]) || {};
@@ -53,7 +71,7 @@ function parseEvent(ev) {
     const t = c.team || {};
     return {
       id: t.id || null,
-      abbrev: t.abbreviation || "TBD",
+      abbrev: fixAbbr(t.abbreviation) || "TBD",
       name: t.shortDisplayName || t.displayName || t.name || "TBD",
       logo: t.logo || null,
       record: (c.records && c.records[0] && c.records[0].summary) || c.record || null,
@@ -66,7 +84,7 @@ function parseEvent(ev) {
     league: null, // filled by caller
     state,
     bucket: bucketFor(state),
-    statusDetail: status.shortDetail || status.detail || status.description || "",
+    statusDetail: cleanStatusDetail(status.shortDetail || status.detail || status.description || ""),
     completed: !!status.completed,
     startTime: ev.date || comp.date || null,
     venue: (comp.venue && comp.venue.fullName) || null,
@@ -193,12 +211,28 @@ async function getScores(league) {
     // scheduled/upcoming games are not relevant); from today and the model day we
     // keep everything.
     const merged = [];
-    const seen = new Set();
+    const idSeen = new Set();
+    const keyIndex = new Map();          // matchup+start -> index in merged
+    const bucketRank = { live: 3, final: 2, upcoming: 1 };
+    const keyOf = (g) => {
+      const a = g.away && g.away.abbrev, h = g.home && g.home.abbrev;
+      const t = g.startTime ? String(g.startTime).slice(0, 16) : "";
+      return a && h && t ? `${a}|${h}|${t}` : null;   // doubleheaders differ by start time
+    };
     const addGames = (arr, onlyLiveFinal) => {
       for (const g of arr) {
-        if (seen.has(g.id)) continue;
         if (onlyLiveFinal && g.bucket !== "live" && g.bucket !== "final") continue;
-        seen.add(g.id);
+        const k = keyOf(g);
+        if (k && keyIndex.has(k)) {
+          // same game already present (from another day-fetch): keep the most
+          // advanced state (a live rain-delay beats the same game's "scheduled").
+          const i = keyIndex.get(k);
+          if ((bucketRank[g.bucket] || 0) > (bucketRank[merged[i].bucket] || 0)) merged[i] = g;
+          continue;
+        }
+        if (idSeen.has(g.id)) continue;
+        idSeen.add(g.id);
+        if (k) keyIndex.set(k, merged.length);
         merged.push(g);
       }
     };
