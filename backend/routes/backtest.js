@@ -103,7 +103,7 @@ router.get("/:league", async (req, res) => {
     for (let i = 0; i < 20; i++) {
       let q = supabase
         .from("model_predictions")
-        .select("market, side, line, odds, edge, confidence, conviction, result, game_date, clv, beat_close, closing_odds, pinnacle_clv, pinnacle_beat_close")
+        .select("market, selection, line, odds, edge, confidence, conviction, result, game_date, clv, beat_close, closing_odds, pinnacle_clv, pinnacle_beat_close")
         .eq("league", league)
         .in("result", ["win", "loss"])
         .order("game_date", { ascending: true })
