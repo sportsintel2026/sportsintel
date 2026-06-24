@@ -391,6 +391,7 @@ async function recordPredictions(result) {
   const statusById = {};
   const fatigueById = {};
   const shadowById = {};
+  const breakdownById = {};
   for (const g of result.games) {
     statusById[g.id] = g.status;
     const b = g.totals && g.totals.breakdown;
@@ -400,6 +401,21 @@ async function recordPredictions(result) {
       fatigueById[g.id] = `away=${a},home=${h},adj=${b.fatigueAdj}`;
     }
     if (g.totals && g.totals.shadow != null) shadowById[g.id] = g.totals.shadow;
+    // FACTOR-ATTRIBUTION (read-only instrumentation): persist each model
+    // adjustment so we can later measure which factor actually predicts. These
+    // are the same numbers already shown in the totals breakdown, just retained
+    // per-pick for grading instead of thrown away after the console log.
+    if (b) {
+      breakdownById[g.id] = {
+        base: b.base ?? null,
+        pitcher_adj: b.pitcherAdj ?? null,
+        ace_adj: b.aceAdj ?? null,
+        park_adj: b.parkAdj ?? null,
+        weather_adj: b.weatherAdj ?? null,
+        bullpen_adj: b.bullpenAdj ?? null,
+        fatigue_adj: b.fatigueAdj ?? null,
+      };
+    }
   }
 
   // Moneyline — record ONLY the side the model likes (positive edge). The two
@@ -429,6 +445,7 @@ async function recordPredictions(result) {
       confidence: e.confidence, conviction: e.conviction ?? null, conviction_score: e.convictionScore ?? null, line: e.line,
       bullpen_fatigue: fatigueById[e.gameId] || null,
       shadow_total: shadowById[e.gameId] ?? null,
+      ...(breakdownById[e.gameId] || {}),
     });
   }
 
