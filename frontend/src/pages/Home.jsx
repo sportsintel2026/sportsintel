@@ -545,6 +545,15 @@ function MoverCard({d}){ const c=d.delta||0;const dir=c>=0?"up":"dn";
       :<><div className="od">{d.odds}</div><div className="ct2">{d.model!=null?d.model+"% model":""}</div></>}
   </div>);
 }
+function MoverRowM({d,rank}){ const c=d.delta||0; const dir=c>=0?"up":"dn";
+  return (<div className="mvrowm">
+    <div className="rkm">{rank}</div>
+    <div className="mpm"><div className="mpkm">{d.p}</div><div className="mmum">{d.g}</div></div>
+    {d.mv
+      ? <div className="mxm"><div className={"mom "+dir}>{d.mv[0]} <span className="a">{"\u2192"}</span> {d.mv[1]}</div><div className={"mcm "+dir}>{c>=0?"+":"\u2212"}{Math.abs(c)} cents</div></div>
+      : <div className="mxm"><div className="mom">{d.odds}</div><div className="mcm">{d.model!=null?d.model+"% model":""}</div></div>}
+  </div>);
+}
 function PropCardM({d,rank,navigate}){ const col=d.player[2];
   return (<div className="prc" onClick={()=>navigate("/props")}><div className="rk">{rank}</div>
     <div className="av2" style={{background:`radial-gradient(circle at 50% 30%, ${col}, #0c1018 80%)`,boxShadow:`0 0 0 2.5px ${col}`}}>{d.id?<img src={`https://midfield.mlbstatic.com/v1/people/${d.id}/spots/120`} alt="" onError={(e)=>{e.currentTarget.style.display="none";e.currentTarget.parentNode.textContent=d.player[1];}}/>:d.player[1]}</div>
@@ -634,8 +643,8 @@ function MarketPulse({alerts,movers,rolled}){ const [idx,setIdx]=useState(0);con
       {alerts.length>1&&<div className="dd">{alerts.map((_,i)=><i key={i} className={i===cur?"on":""} onClick={(ev)=>{ev.stopPropagation();setIdx(i);setPaused(true);}}/>)}</div>}
     </>}
     {mv.length>0&&<>
-      <div className="mvhd">MARKET MOVERS <span className="mvct">all {mv.length} {"\u00b7"} ranked by {"\u00a2"}</span><span className="mvlk">swipe {"\u203a"}</span></div>
-      <div className="mvcar">{mv.map((d,i)=><MoverCard key={i} d={d}/>)}</div>
+      <div className="mvhd">MARKET MOVERS <span className="mvct">all {mv.length} {"\u00b7"} ranked by {"\u00a2"}</span><span className="mvlk">scroll {"\u2195"}</span></div>
+      <div className="mvlist">{mv.map((d,i)=><MoverRowM key={i} d={d} rank={i+1}/>)}</div>
     </>}
   </div>);
 }
@@ -688,10 +697,16 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .alerts .mvhd{display:flex;align-items:baseline;gap:8px;padding:12px 15px 0;border-top:1px solid var(--line);font-family:var(--disp);font-weight:800;font-size:11.5px;letter-spacing:.7px;color:var(--mut)}
 .alerts .mvhd .mvct{font-family:var(--mono);font-size:9px;color:var(--mut2);font-weight:500;letter-spacing:0}
 .alerts .mvhd .mvlk{margin-left:auto;font-family:var(--mono);font-size:9px;color:var(--mut);white-space:nowrap}
-.mvcar{display:flex;gap:10px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding:11px 15px 14px;scroll-snap-type:x proximity}
-.mvcar::-webkit-scrollbar{display:none}
-.mvcar>*{flex:0 0 auto;scroll-snap-align:start}
-.mvcar .mvc{width:178px;border:1px solid var(--line);border-radius:13px;background:var(--panel2);padding:13px}
+.mvlist{max-height:300px;overflow-y:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding:11px 15px 14px;display:flex;flex-direction:column;gap:8px}
+.mvlist::-webkit-scrollbar{display:none}
+.mvrowm{display:flex;align-items:center;gap:11px;border:1px solid var(--line);border-radius:11px;background:var(--panel2);padding:10px 12px}
+.mvrowm .rkm{font-family:var(--disp);font-weight:800;font-size:13px;color:var(--mut2);width:16px;flex:0 0 auto;text-align:center}
+.mvrowm .mpm{flex:1;min-width:0}
+.mvrowm .mpkm{font-family:var(--disp);font-weight:800;font-size:15px;color:#fff;line-height:1.05}
+.mvrowm .mmum{font-family:var(--mono);font-size:9px;color:var(--mut2);margin-top:2px;letter-spacing:.2px}
+.mvrowm .mxm{flex:0 0 auto;text-align:right}
+.mvrowm .mom{font-family:var(--mono);font-size:13px;font-weight:600;white-space:nowrap}.mom.up{color:var(--green)}.mom.dn{color:var(--neg)}.mom .a{color:var(--mut2)}
+.mvrowm .mcm{font-family:var(--mono);font-size:10px;font-weight:600;margin-top:2px}.mcm.up{color:var(--green)}.mcm.dn{color:var(--neg)}
 .arow.fade{animation:afade .42s ease}
 .aline{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
 .aline .adot{width:8px;height:8px;border-radius:50%;flex:0 0 auto}.adot.g{background:var(--green);box-shadow:0 0 8px rgba(51,233,145,.55)}.adot.r{background:var(--red);box-shadow:0 0 8px rgba(255,93,77,.55)}
