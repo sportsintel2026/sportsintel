@@ -681,23 +681,23 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .sttrack{display:inline-flex;gap:24px;white-space:nowrap;font-family:var(--mono);font-size:11.5px;color:var(--mut);padding:7px 0;animation:tick 24s linear infinite}
 .sttrack .g{color:#cfd7e2;font-weight:600}.sttrack .sc{color:#fff;font-weight:700}.sttrack .st{color:var(--mut2)}
 /* Market Pulse alert strip */
-.alerts{margin:11px 14px 0;border:1px solid var(--line2);border-radius:12px;background:var(--panel);overflow:hidden}
-.ahead{display:flex;align-items:center;justify-content:space-between;padding:9px 13px 0;font-family:var(--disp);font-weight:800;font-size:11px;letter-spacing:.6px;color:var(--mut)}
-.ahead .ago{font-family:var(--mono);font-size:9px;color:var(--mut2);font-weight:500;letter-spacing:0}
-.arow{padding:9px 13px 11px;cursor:pointer}
-.alerts .mvhd{display:flex;align-items:center;gap:8px;padding:10px 13px 0;border-top:1px solid var(--line);margin-top:2px;font-family:var(--disp);font-weight:800;font-size:11px;letter-spacing:.6px;color:var(--mut)}
+.alerts{margin:14px 14px 0;border:1px solid var(--line2);border-radius:16px;background:var(--panel);overflow:hidden}
+.ahead{display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:13px 15px 10px;font-family:var(--disp);font-weight:800;font-size:11.5px;letter-spacing:.7px;color:var(--mut);cursor:pointer}
+.ahead .ago{font-family:var(--mono);font-size:9px;color:var(--mut2);font-weight:500;letter-spacing:0;white-space:nowrap;flex:0 0 auto}
+.arow{padding:0 15px 14px;cursor:pointer}
+.alerts .mvhd{display:flex;align-items:baseline;gap:8px;padding:12px 15px 0;border-top:1px solid var(--line);font-family:var(--disp);font-weight:800;font-size:11.5px;letter-spacing:.7px;color:var(--mut)}
 .alerts .mvhd .mvct{font-family:var(--mono);font-size:9px;color:var(--mut2);font-weight:500;letter-spacing:0}
-.alerts .mvhd .mvlk{margin-left:auto;font-family:var(--mono);font-size:9px;color:var(--mut)}
-.mvcar{display:flex;gap:9px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding:9px 13px 12px}
+.alerts .mvhd .mvlk{margin-left:auto;font-family:var(--mono);font-size:9px;color:var(--mut);white-space:nowrap}
+.mvcar{display:flex;gap:10px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding:11px 15px 14px;scroll-snap-type:x proximity}
 .mvcar::-webkit-scrollbar{display:none}
-.mvcar>*{flex:0 0 auto}
-.mvcar .mvc{width:172px;border:1px solid var(--line);background:var(--panel2)}
+.mvcar>*{flex:0 0 auto;scroll-snap-align:start}
+.mvcar .mvc{width:178px;border:1px solid var(--line);border-radius:13px;background:var(--panel2);padding:13px}
 .arow.fade{animation:afade .42s ease}
-.aline{display:flex;align-items:center;gap:10px}
-.aline .adot{width:9px;height:9px;border-radius:50%;flex:0 0 auto}.adot.g{background:var(--green);box-shadow:0 0 8px rgba(51,233,145,.55)}.adot.r{background:var(--red);box-shadow:0 0 8px rgba(255,93,77,.55)}
-.aline .alab{font-family:var(--disp);font-weight:800;font-size:11px;letter-spacing:.4px;color:var(--gold);flex:0 0 auto}
-.aline .aval{font-family:var(--mono);font-size:13px;color:#fff;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.aline .aval .a{color:var(--mut2)}.aline .aval .up{color:var(--green)}.aline .aval .dn{color:var(--neg)}
-.awhy{font-family:var(--ui);font-size:10.5px;color:var(--mut);margin-top:5px;padding-left:19px;line-height:1.35}
+.aline{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.aline .adot{width:8px;height:8px;border-radius:50%;flex:0 0 auto}.adot.g{background:var(--green);box-shadow:0 0 8px rgba(51,233,145,.55)}.adot.r{background:var(--red);box-shadow:0 0 8px rgba(255,93,77,.55)}
+.aline .alab{font-family:var(--disp);font-weight:800;font-size:10px;letter-spacing:.5px;color:var(--gold);flex:0 0 auto;text-transform:uppercase}
+.aline .aval{font-family:var(--mono);font-size:14px;color:#fff;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.aline .aval .a{color:var(--mut2)}.aline .aval .up{color:var(--green)}.aline .aval .dn{color:var(--neg)}
+.awhy{font-family:var(--ui);font-size:11px;color:var(--mut);margin-top:6px;padding-left:17px;line-height:1.4}
 @keyframes afade{from{opacity:.15;transform:translateY(3px)}to{opacity:1;transform:none}}
 .alerts .dd{display:flex;gap:5px;justify-content:center;padding:0 0 9px}.alerts .dd i{width:5px;height:5px;border-radius:50%;background:#222c33;transition:.2s;cursor:pointer}.alerts .dd i.on{background:var(--gold);width:13px;border-radius:3px}
 
