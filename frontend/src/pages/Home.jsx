@@ -489,7 +489,7 @@ function BoardRow({d,i,open,onToggle,navigate,sport}){ const lg=(SPORTS[sport]||
         ? <>Take the <b>{teamNm}</b> to win {tail}</>
         : <>Take <b>{teamNm}</b> {rest} {tail}</>);
   return (
-    <div className={"gr "+conv+(open?" sel":"")} onClick={onToggle}>
+    <div className={"gr open "+conv}>
       <div className="ghead">
         <div className="lgs"><LogoM ab={d.a[0]} col={d.a[1]} lg={lg}/><LogoM ab={d.h[0]} col={d.h[1]} lg={lg}/></div>
         <div className="ghm">
@@ -499,7 +499,6 @@ function BoardRow({d,i,open,onToggle,navigate,sport}){ const lg=(SPORTS[sport]||
         <div className="ghr">
           <div className={"ghedge "+(d.edge<0?"neg":"pos")}>{d.edge>=0?"+":""}{d.edge.toFixed(1)}<i>%</i></div>
           {conv&&<span className={"ghconv "+conv}>{conv.toUpperCase()}</span>}
-          <span className="ghchev">{open?"\u25b4":"\u25be"}</span>
         </div>
       </div>
       <div className="gbody">
@@ -744,10 +743,10 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .chipf{font-family:var(--mono);font-size:10px;color:var(--mut);border:1px solid var(--line2);border-radius:999px;padding:4px 10px;white-space:nowrap;cursor:pointer}.chipf.on{color:#06202a;background:var(--blue);border-color:var(--blue);font-weight:600}
 
 .grid{margin:6px 14px 0}
-.gr{position:relative;margin-bottom:13px;background:var(--panel);border-radius:16px;overflow:hidden;cursor:pointer}
+.gr{position:relative;margin-bottom:13px;background:var(--panel);border-radius:16px;overflow:hidden}
 .gr::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--mut2);z-index:2}
 .gr.high::before{background:var(--gold)}.gr.med::before{background:var(--green)}.gr.low::before{background:var(--mut2)}
-.ghead{display:flex;align-items:center;gap:11px;padding:12px 14px 12px 17px;cursor:pointer}
+.ghead{display:flex;align-items:center;gap:11px;padding:12px 14px 12px 17px}
 .ghead .lgs{flex:0 0 auto}
 .ghm{flex:1;min-width:0}
 .ghpick{font-family:var(--disp);font-weight:800;font-size:19px;color:#fff;line-height:1;letter-spacing:-.3px;display:flex;align-items:center;gap:7px}
@@ -759,9 +758,9 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .ghconv.high{color:var(--gold);background:rgba(201,168,106,.12);border:1px solid rgba(201,168,106,.3)}
 .ghconv.med{color:var(--green);background:rgba(63,203,145,.12);border:1px solid rgba(63,203,145,.3)}
 .ghconv.low{color:var(--mut);background:rgba(255,255,255,.04);border:1px solid var(--line2)}
-.ghchev{color:var(--mut2);font-size:10px;width:12px;text-align:center;flex:0 0 auto;transition:transform .25s}.gr.sel .ghchev{color:var(--mut)}
-.gbody{max-height:0;overflow:hidden;transition:max-height .34s ease}
-.gr.sel .gbody{max-height:1500px}
+
+.gbody{overflow:visible}
+
 .dxmore{margin:10px 15px 2px;padding:9px 12px;text-align:center;border:1px solid var(--line2);border-radius:10px;background:var(--panel2);font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.4px;color:var(--mut);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:border-color .15s,color .15s}
 .dxmore:active{border-color:var(--line);color:var(--tx)}
 .dxmore .dxc{display:inline-block;transform:rotate(90deg);transition:transform .2s}
