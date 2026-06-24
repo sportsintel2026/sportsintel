@@ -115,6 +115,7 @@ export default function HomePage(){
   const [isDesktop,setIsDesktop]=useState(typeof window!=="undefined"&&window.innerWidth>=1024);
   const [heroIdx,setHeroIdx]=useState(0);
   const [openId,setOpenId]=useState(null);
+  const [boardView,setBoardView]=useState("cards"); // BOARD-VIEW-TOGGLE-CARDS-GRID-2026-06-24
   useEffect(()=>{ const on=()=>setIsDesktop(window.innerWidth>=1024); window.addEventListener("resize",on); return ()=>window.removeEventListener("resize",on); },[]);
   useEffect(()=>{ setBoard("all"); },[]);
 
@@ -387,13 +388,13 @@ export default function HomePage(){
 
       {hasFull && moverItems.length>0 && <MarketMovers movers={moverItems} navigate={navigate}/>}
 
-        <div className="seclbl">{e.rolledToNextDay?"TOMORROW'S BOARD":"TODAY'S BOARD"} <span className="ct">{boardItems.length} edges{e.rolledToNextDay&&e.date?" · "+fmtSlate(e.date):""}</span>{e.rolledToNextDay&&<span className="rollpill">today's games are live below ↓</span>}</div>
+        <div className="seclbl">{e.rolledToNextDay?"TOMORROW'S BOARD":"TODAY'S BOARD"} <span className="ct">{boardItems.length} edges{e.rolledToNextDay&&e.date?" · "+fmtSlate(e.date):""}</span>{e.rolledToNextDay&&<span className="rollpill">today's games are live below ↓</span>}{hasFull&&<div className="vtog"><button className={boardView==="cards"?"on":""} onClick={()=>setBoardView("cards")}>CARDS</button><button className={boardView==="grid"?"on":""} onClick={()=>setBoardView("grid")}>GRID</button></div>}</div>
         {hasFull
           ? <>
               <div className="chips">{BF.map(([lb,key])=><span key={key} className={"chipf "+(board===key?"on":"")} onClick={()=>setBoard(key)}>{lb}</span>)}</div>
               {boardItems.length>0
                 ? <>
-                    <div className="grid">{boardItems.map((d,i)=>{const id=d.gameId+d.cat+i;return <BoardRow key={id} d={d} i={i} open={openId===id} onToggle={()=>setOpenId(openId===id?null:id)} navigate={navigate} sport={sport}/>;})}</div>
+                    {boardView==="cards"?(<div className="grid">{boardItems.map((d,i)=>{const id=d.gameId+d.cat+i;return <BoardRow key={id} d={d} i={i} open={openId===id} onToggle={()=>setOpenId(openId===id?null:id)} navigate={navigate} sport={sport}/>;})}</div>):(<BoardGrid items={boardItems} sport={sport}/>)}
                     <div className="sum"><span className="l">{boardItems.length} game edges</span><span className="sp"/><span>avg <span className="p">+{kpiHas?kAvg:"0.0"}%</span></span></div>
                   </>
                 : <div className="estate"><div className="et">No edges on the board yet</div><div className="es">Edges appear as books post tonight's lines.</div></div>}
@@ -540,6 +541,50 @@ function BoardRow({d,i,open,onToggle,navigate,sport}){ const lg=(SPORTS[sport]||
       </div>
       </div>
       </div>
+    </div>
+  );
+}
+/* BOARD-VIEW-TOGGLE-CARDS-GRID-2026-06-24 — spreadsheet view of the same boardItems */
+function BoardGrid({items,sport}){
+  const CAB={high:"HI",med:"MED",low:"LO"};
+  const cols=["Game","Pick","Odds","Mdl","Mkt%","Edge","Conv","Time","Mv"];
+  const isNum={2:1,3:1,4:1,5:1};
+  let gi=-1, prev=null;
+  return (
+    <div className="sheet">
+      <div className="sheetscroll">
+        <table className="sht">
+          <thead>
+            <tr><td className="s_cnr"/>{cols.map((_,i)=><td key={i} className="s_colh">{String.fromCharCode(65+i)}</td>)}</tr>
+            <tr><td className="s_rn"/>{cols.map((c,i)=><td key={c} className={"s_h "+(isNum[i]?"s_num":"")+(i===0?" s_first":"")}>{c}</td>)}</tr>
+          </thead>
+          <tbody>
+            {items.map((d,ri)=>{
+              const ng=d.g!==prev; if(ng){gi+=1; prev=d.g;}
+              const sh=gi%2===0?"gA":"gB"; const conv=String(d.conv||"low");
+              const mv=Array.isArray(d.mv)?(d.mv[2]==="up"?<span className="up">{"\u25B2"}</span>:d.mv[2]==="dn"?<span className="dn">{"\u25BC"}</span>:"\u2014"):"\u2014";
+              const model=d.model!=null?Math.round(d.model):"\u2014";
+              const mkt=d.mkt!=null?Math.round(d.mkt):"\u2014";
+              const edge=d.edge!=null?(d.edge>=0?"+":"")+Number(d.edge).toFixed(1):"\u2014";
+              return (
+                <tr key={(d.gameId||"")+(d.cat||"")+ri} className={sh+(ng?" gtop":"")}>
+                  <td className="s_rn">{ri+1}</td>
+                  <td className="s_first">{ng?d.g:""}</td>
+                  <td className="s_pk">{d.p}</td>
+                  <td className="s_num s_odds">{d.odds}</td>
+                  <td className="s_num">{model}</td>
+                  <td className="s_num">{mkt}</td>
+                  <td className="s_num s_edge">{edge}</td>
+                  <td className={"s_conv "+conv}>{CAB[conv]||conv.toUpperCase()}</td>
+                  <td className="s_dim">{d.starts||"\u2014"}</td>
+                  <td className="s_num s_mv">{mv}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <div className="sheetfoot"><span>{items.length} edges</span><span className="sp"/><span>grid view</span></div>
     </div>
   );
 }
@@ -981,4 +1026,28 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .nav a{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:8.5px;font-weight:600;color:var(--mut)}.nav a.on{color:var(--gold)}.nav .i{font-size:15px;height:18px;display:flex;align-items:center}
 .dbars rect{animation:eq 1.1s ease-in-out infinite}.db1{fill:var(--green)}.db2{fill:var(--red);animation-delay:.18s}.db3{fill:var(--green);animation-delay:.36s}.db4{fill:var(--red);animation-delay:.54s}
 @keyframes eq{0%,100%{height:5px;y:13px}50%{height:13px;y:5px}}
+
+/* === BOARD GRID (spreadsheet view) + view toggle === */
+.vtog{margin-left:auto;display:flex;border:1px solid var(--line2);border-radius:8px;overflow:hidden;flex:0 0 auto}
+.vtog button{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.5px;padding:5px 11px;background:transparent;color:var(--mut);border:0;cursor:pointer}
+.vtog button.on{background:var(--gold);color:#1a1408}
+.sheet{margin:8px 14px 0;border:1px solid var(--line2);border-radius:14px;background:var(--panel);overflow:hidden}
+.sheetscroll{max-height:56vh;overflow:auto;-webkit-overflow-scrolling:touch}
+.sheetscroll::-webkit-scrollbar{height:5px;width:5px}.sheetscroll::-webkit-scrollbar-thumb{background:#2a2f37;border-radius:4px}
+.sht{border-collapse:separate;border-spacing:0;font-family:var(--mono);font-size:10px;white-space:nowrap;width:100%}
+.sht td{border-right:1px solid #181B20;padding:5px 7px;height:27px}
+.sht .s_colh{position:sticky;top:0;z-index:20;background:#0F1115;color:var(--mut2);font-size:8px;text-align:center;font-weight:600;padding:3px 7px;height:16px;border-bottom:1px solid #23272E}
+.sht .s_cnr{position:sticky;top:0;left:0;z-index:30;background:#0F1115;width:18px;min-width:18px;border-bottom:1px solid #23272E;border-right:1px solid #23272E}
+.sht .s_rn{position:sticky;left:0;z-index:15;background:#0F1115;color:var(--mut2);font-size:8px;text-align:center;width:18px;min-width:18px;padding:5px 1px;border-right:1px solid #23272E}
+.sht .s_h{position:sticky;top:16px;z-index:18;background:var(--panel2);color:var(--gold);font-weight:700;letter-spacing:.3px;border-bottom:1px solid #23272E;height:24px}
+.sht .s_h.s_num{text-align:right}
+.sht .s_h.s_first{left:18px;z-index:21;border-right:1px solid #2c333c;box-shadow:5px 0 6px -3px rgba(0,0,0,.65)}
+.sht .s_first{position:sticky;left:18px;z-index:16;color:var(--tx);font-weight:700;letter-spacing:.3px;border-right:1px solid #2c333c;box-shadow:5px 0 6px -3px rgba(0,0,0,.65)}
+.sht tr.gA td{background:#14171B}.sht tr.gB td{background:#0F1216}.sht tr.gtop td{border-top:1px solid #2c333c}
+.sht .s_num{text-align:right}.sht .s_pk{color:var(--tx);font-weight:700}.sht .s_dim{color:var(--mut)}
+.sht .s_odds{color:var(--gold);font-weight:600}.sht .s_edge{color:#46E0A9;font-weight:700;text-align:right}
+.sht .s_mv .up{color:var(--green)}.sht .s_mv .dn{color:var(--neg)}
+.sht .s_conv{font-weight:700;font-size:9px;letter-spacing:.4px;text-align:center}
+.sht .s_conv.high{color:var(--green)}.sht .s_conv.med{color:var(--gold)}.sht .s_conv.low{color:var(--mut)}
+.sheetfoot{display:flex;align-items:center;padding:9px 13px;border-top:1px solid var(--line);font-family:var(--mono);font-size:9.5px;color:var(--mut)}
 `;
