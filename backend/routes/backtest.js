@@ -19,6 +19,18 @@ const express = require("express");
 const router = express.Router();
 const { supabase } = require("../middleware/auth");
 
+// Core markets per league — MUST match performance.js LEAGUE_CONFIG. Props and
+// *_shadow rows are NEVER part of the bettable board (props live in their own
+// table; shadow rows are model instrumentation, not real bets). The backtester
+// analyzes CORE markets only unless ?market= explicitly asks for one.
+const CORE_MARKETS = {
+  mlb: ["moneyline", "total", "run_line"],
+  nba: ["moneyline", "spread", "total"],
+  nfl: ["moneyline", "spread", "total"],
+  cfb: ["moneyline", "spread", "total"],
+  nhl: ["moneyline", "total", "puck_line"],
+};
+
 // ── ROI math — identical to performance.js so results reconcile ─────────────
 function unitProfit(odds) {
   if (odds == null) return 1;
@@ -128,9 +140,13 @@ router.get("/:league", async (req, res) => {
     }
 
     // Optional pre-filters (so we can backtest "what if we only showed X").
+    const coreSet = new Set(CORE_MARKETS[league] || []);
     let filtered = rows.filter((r) => {
+      // CORE ONLY by default — props + shadow rows never count toward the bettable
+      // board (this mirrors performance.js, which keeps props in their own table).
+      if (fMarket) { if (String(r.market || "").toLowerCase() !== fMarket) return false; }
+      else if (!coreSet.has(r.market)) return false;
       if (fTier && (r.confidence || "NEUTRAL").toUpperCase() !== fTier) return false;
-      if (fMarket && String(r.market || "").toLowerCase() !== fMarket) return false;
       if (fMinEdge != null && (r.edge == null || Math.abs(r.edge) < fMinEdge)) return false;
       return true;
     });
