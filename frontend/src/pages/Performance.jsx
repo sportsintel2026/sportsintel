@@ -63,7 +63,8 @@ export default function PerformancePage() {
   const tiers = TIER_ORDER.map(([k,lbl]) => { const b = D.byConfidence?.[k]; return b ? [lbl, b.roi ?? 0, `${b.wins}-${b.losses}`] : null; }).filter(Boolean);
   const markets = [
     ...Object.entries(D.byMarket || {}).map(([k,b]) => [prettyMkt(k), b.roi ?? 0, `${b.wins}-${b.losses}`]),
-    ...Object.entries(D.props?.byMarket || {}).map(([k,b]) => [prettyMkt(k), b.roi ?? 0, `${b.hits}-${b.misses}`]),
+    // HIDE-NEG-PROPS-2026-06-24 — props aren't the headline; only surface a prop market here if it's net positive
+    ...Object.entries(D.props?.byMarket || {}).filter(([k,b]) => (b.roi ?? 0) >= 0).map(([k,b]) => [prettyMkt(k), b.roi ?? 0, `${b.hits}-${b.misses}`]),
   ];
   const recent = D.recent || [];
   const tmax = Math.max(1, ...tiers.map(t => Math.abs(t[1])));
