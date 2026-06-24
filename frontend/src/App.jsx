@@ -26,6 +26,7 @@ import LiveScoresPage from "./pages/LiveScores";
 import GuidePage from "./pages/Guide";
 import DailyCardPage from "./pages/DailyCard";
 import MarketReadPage from "./pages/MarketRead";
+import { TermsPage, PrivacyPage } from "./pages/Legal"; // LEGAL-PAGES-2026-06-24
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth();
   if (loading) return <LoadingScreen />;
@@ -136,6 +137,8 @@ export default function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />
           <Route path="/pricing" element={<PricingPage />} />
+          <Route path="/terms" element={<TermsPage />} />
+          <Route path="/privacy" element={<PrivacyPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/admin" element={
             <PrivateRoute>
