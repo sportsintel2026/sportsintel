@@ -115,7 +115,6 @@ export default function HomePage(){
   const [isDesktop,setIsDesktop]=useState(typeof window!=="undefined"&&window.innerWidth>=1024);
   const [heroIdx,setHeroIdx]=useState(0);
   const [openId,setOpenId]=useState(null);
-  const [boardView,setBoardView]=useState("cards"); // BOARD-VIEW-TOGGLE-CARDS-GRID-2026-06-24
   useEffect(()=>{ const on=()=>setIsDesktop(window.innerWidth>=1024); window.addEventListener("resize",on); return ()=>window.removeEventListener("resize",on); },[]);
   useEffect(()=>{ setBoard("all"); },[]);
 
@@ -388,13 +387,13 @@ export default function HomePage(){
 
       {hasFull && moverItems.length>0 && <MarketMovers movers={moverItems} navigate={navigate}/>}
 
-        <div className="seclbl">{e.rolledToNextDay?"TOMORROW'S BOARD":"TODAY'S BOARD"} <span className="ct">{boardItems.length} edges{e.rolledToNextDay&&e.date?" · "+fmtSlate(e.date):""}</span>{hasFull&&<div className="vtog"><button className={boardView==="cards"?"on":""} onClick={()=>setBoardView("cards")}>CARDS</button><button className={boardView==="grid"?"on":""} onClick={()=>setBoardView("grid")}>GRID</button></div>}</div>
+        <div className="seclbl">{e.rolledToNextDay?"TOMORROW'S BOARD":"TODAY'S BOARD"} <span className="ct">{boardItems.length} edges{e.rolledToNextDay&&e.date?" · "+fmtSlate(e.date):""}</span></div>
         {hasFull
           ? <>
               <div className="chips">{BF.map(([lb,key])=><span key={key} className={"chipf "+(board===key?"on":"")} onClick={()=>setBoard(key)}>{lb}</span>)}</div>
               {boardItems.length>0
                 ? <>
-                    {boardView==="cards"?(<div className="grid">{boardItems.map((d,i)=>{const id=d.gameId+d.cat+i;return openId===id?<BoardRow key={id} d={d} i={i} open={true} onToggle={()=>setOpenId(null)} navigate={navigate} sport={sport}/>:<BoardCardCompact key={id} d={d} sport={sport} onClick={()=>setOpenId(id)}/>;})}</div>):(<BoardGrid items={boardItems} sport={sport}/>)}
+                    <div className="grid">{boardItems.map((d,i)=>{const id=d.gameId+d.cat+i;return openId===id?<BoardRow key={id} d={d} i={i} open={true} onToggle={()=>setOpenId(null)} navigate={navigate} sport={sport}/>:<BoardCardCompact key={id} d={d} sport={sport} onClick={()=>setOpenId(id)}/>;})}</div>
                     <div className="sum"><span className="l">{boardItems.length} game edges</span><span className="sp"/><span>avg <span className="p">+{kpiHas?kAvg:"0.0"}%</span></span></div>
                   </>
                 : <div className="estate"><div className="et">No edges on the board yet</div><div className="es">Edges appear as books post tonight's lines.</div></div>}
@@ -566,6 +565,7 @@ function BoardCardCompact({d,sport,onClick}){
     </div>
   );
 }
+/* BoardGrid: kept for desktop grid view (not used on mobile as of 2026-06-24) */
 function BoardGrid({items,sport}){
   const CAB={high:"HI",med:"MED",low:"LO"};
   const cols=["Game","Pick","Odds","Mdl","Mkt%","Edge","Conv","Mv"]; // CARDS-COMPACT-GRID-EXPAND-2026-06-24
