@@ -471,8 +471,7 @@ function HeroSlide({h,i,navigate,sport,rolled}){ const lg=(SPORTS[sport]||SPORTS
   </div></div>);
 }
 function BoardRow({d,i,open,onToggle,navigate,sport}){ const lg=(SPORTS[sport]||SPORTS.mlb).lg;
-  const [detailOpen,setDetailOpen]=useState(false);
-  useEffect(()=>{ if(!open) setDetailOpen(false); },[open]);
+  // CARD-ONE-TAP-EXPAND-2026-06-24 — one tap shows the full breakdown; header/Hide collapses to compact
   const av=<div className="av"><LogoM ab={d.h?d.h[0]:d.a[0]} col={d.h?d.h[1]:d.a[1]} lg={lg}/></div>;
   const leg=(name,L)=> L?(<div className="rdrow"><span className="leg">{name}</span><span className={"tier "+String(L[0]).toLowerCase()}>{L[0]}</span><span className="pk">{L[1]} {"\u00b7"} {L[2]}</span><span className={"ag "+(L[3]?"y":"n")}>{L[3]?"\u2713 agrees":"differs"}</span></div>):null;
   const conv=d.conv||"";
@@ -494,7 +493,7 @@ function BoardRow({d,i,open,onToggle,navigate,sport}){ const lg=(SPORTS[sport]||
         : <>Take <b>{teamNm}</b> {rest} {tail}</>);
   return (
     <div className={"gr open "+conv}>
-      <div className="ghead">
+      <div className="ghead" onClick={()=>onToggle&&onToggle()} style={{cursor:"pointer"}}>
         <div className="lgs"><LogoM ab={d.a[0]} col={d.a[1]} lg={lg}/><LogoM ab={d.h[0]} col={d.h[1]} lg={lg}/></div>
         <div className="ghm">
           <div className="ghpick">{d.p}<span className="ghmk">{d.mk}</span></div>
@@ -521,8 +520,8 @@ function BoardRow({d,i,open,onToggle,navigate,sport}){ const lg=(SPORTS[sport]||
             <div className="pmoney">{d.mv&&<SparkM dir={d.mv[2]} seed={i}/>}<span className={"pmt "+money[0]}>{money[1]}</span></div>
           </div>
       </div>
-      <div className="dxmore" onClick={(ev)=>{ev.stopPropagation();setDetailOpen(v=>!v);}}>{detailOpen?"Hide breakdown":"Show full breakdown"} <span className={"dxc"+(detailOpen?" up":"")}>{"\u203a"}</span></div>
-      <div className={"dxwrap"+(detailOpen?" on":"")}>
+      <div className="dxmore" onClick={(ev)=>{ev.stopPropagation();onToggle&&onToggle();}}>Hide breakdown <span className="dxc up">{"\u203a"}</span></div>
+      <div className="dxwrap on">
       <div className="dwrap">
         <div className="dhead">{av}<div><div className="nm">{d.g}</div><div className="mu">{d.p}</div></div>{d.starts&&<div className="st">{d.starts}</div>}</div>
         {d.model!=null&&<div className="mvm"><div className="lbls"><span className="ml">model {d.model}%</span><span className="mk2">market {d.mkt}%</span></div><div className="bar"><i style={{width:d.model+"%"}}/></div></div>}
