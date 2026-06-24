@@ -969,7 +969,7 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .estate .es{font-size:11px;color:var(--mut);margin-top:5px;font-family:var(--mono);line-height:1.45}
 .hero .heh{font-family:var(--disp);font-weight:800;font-size:19px;color:#fff;margin-top:14px}
 .hero .hes{font-size:11.5px;color:var(--mut);margin-top:7px;font-family:var(--mono);line-height:1.55;margin-bottom:4px}
-#content,#freecontent,.offblock{padding-bottom:150px}
+#content,#freecontent,.offblock{padding-bottom:84px}
 .demobar{position:fixed;bottom:56px;left:50%;transform:translateX(-50%);width:100%;max-width:460px;display:flex;align-items:center;gap:6px;padding:6px 11px;background:rgba(8,12,16,.96);backdrop-filter:blur(8px);border-top:1px dashed var(--line2);font-family:var(--mono);font-size:9px;z-index:5}
 .demobar>span{color:var(--gold);font-weight:700;letter-spacing:.6px}
 .demobar b{color:var(--mut);padding:4px 9px;border-radius:6px;border:1px solid var(--line2);cursor:pointer}.demobar b.on{background:#141d24;color:#fff;border-color:var(--steel)}
