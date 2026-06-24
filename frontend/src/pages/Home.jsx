@@ -102,7 +102,6 @@ export default function HomePage(){
   const [planLoaded,setPlanLoaded]=useState(false);
   const [sport,setSport]=useState("mlb");
   const [board,setBoard]=useState("ml");
-  const [boardExpanded,setBoardExpanded]=useState(false);
   const [propTab,setPropTab]=useState("hr");
   const [wpRecord,setWpRecord]=useState(null);
   const [perf,setPerf]=useState(null);
@@ -391,16 +390,7 @@ export default function HomePage(){
               <div className="chips">{BF.map(([lb,key])=><span key={key} className={"chipf "+(board===key?"on":"")} onClick={()=>setBoard(key)}>{lb}</span>)}</div>
               {boardItems.length>0
                 ? <>
-                    {(()=>{ const half=Math.ceil(boardItems.length/2); const top=boardItems.slice(0,half); const rest=boardItems.slice(half);
-                      const render=(d,i)=>{const id=d.gameId+d.cat+i;return <BoardRow key={id} d={d} i={i} open={openId===id} onToggle={()=>setOpenId(openId===id?null:id)} navigate={navigate} sport={sport}/>;};
-                      return <>
-                        <div className="grid">{top.map(render)}</div>
-                        {rest.length>0 && <>
-                          {boardExpanded && <div className="grid">{rest.map((d,i)=>render(d,i+half))}</div>}
-                          <div className="bmore" onClick={()=>setBoardExpanded(v=>!v)}>{boardExpanded?("Show less"):("Show "+rest.length+" more "+(rest.length===1?"edge":"edges"))} <span className={"bmc"+(boardExpanded?" up":"")}>{"\u203a"}</span></div>
-                        </>}
-                      </>;
-                    })()}
+                    <div className="grid">{boardItems.map((d,i)=>{const id=d.gameId+d.cat+i;return <BoardRow key={id} d={d} i={i} open={openId===id} onToggle={()=>setOpenId(openId===id?null:id)} navigate={navigate} sport={sport}/>;})}</div>
                     <div className="sum"><span className="l">{boardItems.length} game edges</span><span className="sp"/><span>avg <span className="p">+{kpiHas?kAvg:"0.0"}%</span></span></div>
                   </>
                 : <div className="estate"><div className="et">No edges on the board yet</div><div className="es">Edges appear as books post tonight's lines.</div></div>}
@@ -477,6 +467,8 @@ function HeroSlide({h,i,navigate,sport}){ const lg=(SPORTS[sport]||SPORTS.mlb).l
   </div></div>);
 }
 function BoardRow({d,i,open,onToggle,navigate,sport}){ const lg=(SPORTS[sport]||SPORTS.mlb).lg;
+  const [detailOpen,setDetailOpen]=useState(false);
+  useEffect(()=>{ if(!open) setDetailOpen(false); },[open]);
   const av=<div className="av"><LogoM ab={d.h?d.h[0]:d.a[0]} col={d.h?d.h[1]:d.a[1]} lg={lg}/></div>;
   const leg=(name,L)=> L?(<div className="rdrow"><span className="leg">{name}</span><span className={"tier "+String(L[0]).toLowerCase()}>{L[0]}</span><span className="pk">{L[1]} {"\u00b7"} {L[2]}</span><span className={"ag "+(L[3]?"y":"n")}>{L[3]?"\u2713 agrees":"differs"}</span></div>):null;
   const conv=d.conv||"";
@@ -525,6 +517,8 @@ function BoardRow({d,i,open,onToggle,navigate,sport}){ const lg=(SPORTS[sport]||
             <div className="pmoney">{d.mv&&<SparkM dir={d.mv[2]} seed={i}/>}<span className={"pmt "+money[0]}>{money[1]}</span></div>
           </div>
       </div>
+      <div className="dxmore" onClick={(ev)=>{ev.stopPropagation();setDetailOpen(v=>!v);}}>{detailOpen?"Hide breakdown":"Show full breakdown"} <span className={"dxc"+(detailOpen?" up":"")}>{"\u203a"}</span></div>
+      <div className={"dxwrap"+(detailOpen?" on":"")}>
       <div className="dwrap">
         <div className="dhead">{av}<div><div className="nm">{d.g}</div><div className="mu">{d.p}</div></div>{d.starts&&<div className="st">{d.starts}</div>}</div>
         {d.model!=null&&<div className="mvm"><div className="lbls"><span className="ml">model {d.model}%</span><span className="mk2">market {d.mkt}%</span></div><div className="bar"><i style={{width:d.model+"%"}}/></div></div>}
@@ -539,6 +533,7 @@ function BoardRow({d,i,open,onToggle,navigate,sport}){ const lg=(SPORTS[sport]||
         {d.read&&<div className="rdbox"><div className="rl">MARKET READ {"\u2014"} BOOKS LEAN</div>{leg("Win",d.read.win)}{leg("Cover",d.read.cover)}{leg("Total",d.read.total)}</div>}
         {d.why&&<div className="why"><b>Why&nbsp;&nbsp;</b>{d.why}</div>}
         <span className="dlink" onClick={(ev)=>{ev.stopPropagation();d.gameId&&navigate(`/game/${sport}/${d.gameId}`);}}>Full matchup breakdown {"\u203a"}</span>
+      </div>
       </div>
       </div>
     </div>
@@ -766,7 +761,13 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .ghconv.low{color:var(--mut);background:rgba(255,255,255,.04);border:1px solid var(--line2)}
 .ghchev{color:var(--mut2);font-size:10px;width:12px;text-align:center;flex:0 0 auto;transition:transform .25s}.gr.sel .ghchev{color:var(--mut)}
 .gbody{max-height:0;overflow:hidden;transition:max-height .34s ease}
-.gr.sel .gbody{max-height:1100px}
+.gr.sel .gbody{max-height:1500px}
+.dxmore{margin:10px 15px 2px;padding:9px 12px;text-align:center;border:1px solid var(--line2);border-radius:10px;background:var(--panel2);font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.4px;color:var(--mut);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:border-color .15s,color .15s}
+.dxmore:active{border-color:var(--line);color:var(--tx)}
+.dxmore .dxc{display:inline-block;transform:rotate(90deg);transition:transform .2s}
+.dxmore .dxc.up{transform:rotate(-90deg)}
+.dxwrap{max-height:0;overflow:hidden;transition:max-height .3s ease}
+.dxwrap.on{max-height:760px}
 .gr .gbody>.psub{padding:2px 15px 12px 18px;margin:0}
 .gr.sel{border-color:#3a4350}
 .pband{padding:13px 15px 14px;background:#000}
@@ -855,10 +856,6 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .rdrow .ag{flex:0 0 auto}.ag.y{color:var(--green)}.ag.n{color:var(--mut)}
 .dlink{font-family:var(--disp);font-weight:800;font-size:13px;color:var(--gold)}
 .sum{display:flex;align-items:center;gap:12px;margin:0 14px;padding:11px 14px;font-family:var(--mono);font-size:11px;color:var(--mut);border-top:1px solid var(--line2)}.sum .l{color:#cfd7e2;font-weight:600}.sum .p{color:var(--green)}.sum .sp{flex:1}
-.bmore{margin:8px 14px 0;padding:11px;text-align:center;border:1px solid var(--line2);border-radius:12px;background:var(--panel);font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.4px;color:var(--mut);cursor:pointer;transition:border-color .15s,color .15s;display:flex;align-items:center;justify-content:center;gap:6px}
-.bmore:active{border-color:var(--line);color:var(--tx)}
-.bmore .bmc{display:inline-block;transform:rotate(90deg);transition:transform .2s}
-.bmore .bmc.up{transform:rotate(-90deg)}
 
 /* live edge cards */
 .lec{width:230px;border:1px solid rgba(255,90,90,.28);border-radius:13px;background:linear-gradient(180deg,#160d0e,#090d12);padding:11px 12px}
