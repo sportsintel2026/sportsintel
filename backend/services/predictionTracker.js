@@ -74,10 +74,24 @@ function closingOddsForPick(pick, ev) {
       : { thisOdds: under, oppOdds: over };
   }
   if (pick.market === "run_line") {
-    // Run line closing price comes from the spreads market (±1.5). Same side mapping
-    // as moneyline; the ±1.5 line is captured at pick time and rarely moves off 1.5.
+    // RLCLV-FLIP-GUARD-2026-06-24
+    // Run line closing price comes from the spreads market (±1.5). The ±1.5 line's
+    // SIGN can flip between pick time and close: a marginal home dog (+1.5) often
+    // gets bet up to a favorite (-1.5) by first pitch. When that happens, our team's
+    // closing price is now on the OPPOSITE side of the spread from the bet we made,
+    // so comparing them is two different bets and yields a garbage CLV (e.g. our
+    // +1.5 dog price -245 vs the closing -1.5 fav price +180 → a phantom -35% CLV).
+    // Guard: only record run-line CLV when the closing line for OUR side has the
+    // SAME sign as the line we bet. If it flipped, return null (honest "no comparable
+    // close") instead of a corrupted number. (Falls through unguarded when the
+    // closing line sign is unavailable, preserving prior behavior.)
     const away = ev.spreads?.away, home = ev.spreads?.home;
     if (away == null || home == null) return null;
+    const ourCloseLine = pick.selection === "away" ? ev.spreads?.awayLine : ev.spreads?.homeLine;
+    if (pick.line != null && ourCloseLine != null
+        && Math.sign(pick.line) !== Math.sign(ourCloseLine)) {
+      return null; // favorite/dog flipped off our side — not a comparable close
+    }
     return pick.selection === "away"
       ? { thisOdds: away, oppOdds: home }
       : { thisOdds: home, oppOdds: away };
