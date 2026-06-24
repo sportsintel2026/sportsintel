@@ -61,7 +61,8 @@ function finalize(b) {
 // Edge ranges (model edge in percentage points). Tuned to common edge sizes.
 function edgeBucket(edge) {
   if (edge == null) return "unknown";
-  const e = Math.abs(edge);
+  // edge is stored as a decimal fraction (0.05 = 5%). Convert to percentage points.
+  const e = Math.abs(edge) * 100;
   if (e < 1) return "0-1%";
   if (e < 2) return "1-2%";
   if (e < 3) return "2-3%";
@@ -115,6 +116,15 @@ router.get("/:league", async (req, res) => {
       rows.push(...data);
       if (data.length < PAGE) break;
       from += PAGE;
+    }
+
+    // Data hygiene: some prop-shadow rows wrote a raw probability (e.g. "0.665")
+    // into the confidence column instead of a tier label. Normalize: anything not
+    // in the known tier set is treated as NEUTRAL so it can't pollute tier analysis.
+    const TIERS = new Set(["HIGH", "MEDIUM", "LOW", "NEUTRAL"]);
+    for (const r of rows) {
+      const c = (r.confidence || "NEUTRAL").toUpperCase();
+      r.confidence = TIERS.has(c) ? c : "NEUTRAL";
     }
 
     // Optional pre-filters (so we can backtest "what if we only showed X").
