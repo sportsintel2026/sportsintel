@@ -379,11 +379,11 @@ export default function HomePage(){
 
         {hasFull
           ? (heroItems.length>0
-              ? <Swiper cls="herocar" dotcls="hdots">{heroItems.map((h,i)=><HeroSlide key={i} h={h} i={i} navigate={navigate} sport={sport}/>)}</Swiper>
-              : <div className="herocar"><div className="hslide"><div className="hero" style={{textAlign:"center"}}><div className="eb">BEST EDGE RIGHT NOW</div><div className="heh">Edges post soon</div><div className="hes">Top edges appear ~2 hrs before first pitch.</div></div></div></div>)
+              ? <Swiper cls="herocar" dotcls="hdots">{heroItems.map((h,i)=><HeroSlide key={i} h={h} i={i} navigate={navigate} sport={sport} rolled={e.rolledToNextDay}/>)}</Swiper>
+              : <div className="herocar"><div className="hslide"><div className="hero" style={{textAlign:"center"}}><div className="eb">BEST EDGE</div><div className="heh">Edges post soon</div><div className="hes">Top edges appear ~2 hrs before first pitch.</div></div></div></div>)
           : <Gate title="Today's top edge is locked" navigate={navigate}/>}
 
-      {hasFull && (pulseAlerts.length>0||moverItems.length>0) && <MarketPulse alerts={pulseAlerts} movers={moverItems}/>}
+      {hasFull && (pulseAlerts.length>0||moverItems.length>0) && <MarketPulse alerts={pulseAlerts} movers={moverItems} rolled={e.rolledToNextDay}/>}
 
         <div className="seclbl">{e.rolledToNextDay?"TOMORROW'S BOARD":"TODAY'S BOARD"} <span className="ct">{boardItems.length} edges{e.rolledToNextDay&&e.date?" · "+fmtSlate(e.date):""}</span>{e.rolledToNextDay&&<span className="rollpill">today's games are live below ↓</span>}</div>
         {hasFull
@@ -452,10 +452,10 @@ function HeroChartM({dir,seed=0}){ const n=9,W=150,H=42;const base=[];
     <path d={ar} fill={`url(#${gid})`}/><path d={ln} fill="none" stroke={col} strokeWidth="2" strokeLinejoin="round" vectorEffect="non-scaling-stroke"/>
     <circle cx={ex} cy={ey} r="2.6" fill={col}><animate attributeName="opacity" values="1;.3;1" dur="1.3s" repeatCount="indefinite"/></circle></svg>;
 }
-function HeroSlide({h,i,navigate,sport}){ const lg=(SPORTS[sport]||SPORTS.mlb).lg;
+function HeroSlide({h,i,navigate,sport,rolled}){ const lg=(SPORTS[sport]||SPORTS.mlb).lg;
   const mv=h.mv?<>{h.mv[0]} <span className="up">{"\u2192"} {h.mv[1]}</span></>:h.odds;
   return (<div className="hslide"><div className="hero" onClick={()=>h.gameId&&navigate(`/game/${sport}/${h.gameId}`)}>
-    <div className="htop"><div className="eb">BEST EDGE RIGHT NOW</div><div className="hbadges"><span className="hedge">+{h.edge.toFixed(1)}% EDGE</span><span className="hot">HOT</span></div></div>
+    <div className="htop"><div className="eb">{rolled?"BEST EDGE \u00b7 TOMORROW":"BEST EDGE RIGHT NOW"}</div><div className="hbadges"><span className="hedge">+{h.edge.toFixed(1)}% EDGE</span><span className="hot">HOT</span></div></div>
     <div className="hpick">{h.p}<span className="mk">{h.mk}</span></div>
     <div className="hpg"><span className="lgs" style={{display:"inline-flex",verticalAlign:"-6px",marginRight:6}}><LogoM ab={h.a[0]} col={h.a[1]} lg={lg}/><LogoM ab={h.h[0]} col={h.h[1]} lg={lg}/></span>{h.g}</div>
     <div className="hmid">
@@ -622,13 +622,13 @@ function Swiper({cls,dotcls,children}){ const ref=useRef(null);const [act,setAct
   const onScroll=()=>{const el=ref.current;if(!el)return;const f=el.firstElementChild;const w=f?f.offsetWidth+9:200;setAct(Math.max(0,Math.round(el.scrollLeft/w)));};
   return (<><div className={cls} ref={ref} onScroll={onScroll}>{children}</div>{items.length>1&&<div className={dotcls}>{items.map((_,i)=><i key={i} className={i===act?"on":""}/>)}</div>}</>);
 }
-function MarketPulse({alerts,movers}){ const [idx,setIdx]=useState(0);const [paused,setPaused]=useState(false);
+function MarketPulse({alerts,movers,rolled}){ const [idx,setIdx]=useState(0);const [paused,setPaused]=useState(false);
   useEffect(()=>{if(paused||!alerts||alerts.length<2)return;const id=setInterval(()=>setIdx(i=>(i+1)%alerts.length),3600);return ()=>clearInterval(id);},[paused,alerts]);
   const hasAlerts=alerts&&alerts.length>0; const mv=movers||[];
   if(!hasAlerts && !mv.length)return null;
   const cur=hasAlerts?idx%alerts.length:0; const a=hasAlerts?alerts[cur]:null;
   return (<div className="alerts">
-    <div className="ahead" onClick={()=>setPaused(p=>!p)}>MARKET PULSE {"\u00b7"} WHAT CHANGED &amp; WHY <span className="ago">{hasAlerts?(paused?"paused \u00b7 tap to resume":"updated 2m ago"):(mv.length+" moves")}</span></div>
+    <div className="ahead" onClick={()=>setPaused(p=>!p)}>MARKET PULSE {"\u00b7"} WHAT CHANGED &amp; WHY <span className="ago">{rolled?"tomorrow\u2019s slate":(hasAlerts?(paused?"paused \u00b7 tap to resume":"updated 2m ago"):(mv.length+" moves"))}</span></div>
     {hasAlerts&&<>
       <div className="arow" onClick={()=>setPaused(p=>!p)}><div className="aline"><span className="adot" style={{background:a.dot,boxShadow:`0 0 6px ${a.dot}`}}/><span className="alab">{a.label}</span><span className="aval">{a.head}</span></div><div className="awhy">{a.sub}</div></div>
       {alerts.length>1&&<div className="dd">{alerts.map((_,i)=><i key={i} className={i===cur?"on":""} onClick={(ev)=>{ev.stopPropagation();setIdx(i);setPaused(true);}}/>)}</div>}
