@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./hooks/useAuth";
 import { supabase } from "./lib/api";
@@ -64,11 +64,73 @@ function RecoveryRedirect() {
   }, [navigate]);
   return null;
 }
+// AGE-GATE-2026-06-24 — self-affirmation 21+ entry gate + responsible-gambling footer.
+// Analytics product (not a sportsbook): a good-faith age affirmation, not ID verification.
+const WPAG_KEY = "wp_age_verified_v1";
+function AgeGate() {
+  const [status, setStatus] = useState("checking"); // checking | ask | blocked | ok
+  useEffect(() => {
+    let ok = false;
+    try { ok = localStorage.getItem(WPAG_KEY) === "yes"; } catch (_) {}
+    setStatus(ok ? "ok" : "ask");
+  }, []);
+  if (status === "ok" || status === "checking") return null;
+  const affirm = () => { try { localStorage.setItem(WPAG_KEY, "yes"); } catch (_) {} setStatus("ok"); };
+  const exit = () => { try { window.location.href = "https://www.google.com"; } catch (_) {} };
+  return (
+    <div className="wpag-root">
+      <style>{WPAG_CSS}</style>
+      <div className="wpag-card">
+        <div className="wpag-brand">Wize<span>Picks</span></div>
+        {status === "ask" ? (
+          <>
+            <div className="wpag-title">Are you 21 or older?</div>
+            <div className="wpag-sub">WizePicks provides sports-betting <b>analytics and information</b> for adults of legal age. You must be 21+ to enter.</div>
+            <div className="wpag-btns">
+              <button className="wpag-yes" onClick={affirm}>Yes, I am 21+</button>
+              <button className="wpag-no" onClick={() => setStatus("blocked")}>No</button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="wpag-title">You must be 21+ to use WizePicks</div>
+            <div className="wpag-sub">Access is limited to adults of legal age.</div>
+            <div className="wpag-btns">
+              <button className="wpag-yes" onClick={exit}>Exit</button>
+            </div>
+            <div className="wpag-back" onClick={() => setStatus("ask")}>Reached this by mistake? Go back</div>
+          </>
+        )}
+        <div className="wpag-foot"><span>21+</span><i/><span>Gamble Responsibly</span><i/><span>1-800-GAMBLER</span></div>
+        <div className="wpag-fine">WizePicks is an analytics and information service, not a sportsbook — we do not accept wagers or hold betting funds. Picks are informational only; past performance does not guarantee future results. If gambling is a problem for you, call <b>1-800-GAMBLER</b> or visit ncpgambling.org.</div>
+      </div>
+    </div>
+  );
+}
+const WPAG_CSS = `
+.wpag-root{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;padding:22px;background:rgba(6,8,11,.975);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+.wpag-card{width:100%;max-width:430px;background:#14171B;border:1px solid #2a2f37;border-radius:18px;padding:26px 24px 20px;box-shadow:0 24px 60px rgba(0,0,0,.6);text-align:center;font-family:Inter,system-ui,-apple-system,sans-serif}
+.wpag-brand{font-family:Georgia,"Times New Roman",serif;font-size:26px;font-weight:700;color:#fff;letter-spacing:-.5px;margin-bottom:18px}
+.wpag-brand span{color:#C9A86A}
+.wpag-title{font-size:21px;font-weight:800;color:#fff;line-height:1.25;margin-bottom:10px}
+.wpag-sub{font-size:13.5px;color:#9aa3ad;line-height:1.5;margin-bottom:20px}
+.wpag-sub b{color:#cfd7e1;font-weight:700}
+.wpag-btns{display:flex;flex-direction:column;gap:10px}
+.wpag-yes{appearance:none;border:0;cursor:pointer;background:#C9A86A;color:#1a1408;font-family:inherit;font-weight:800;font-size:15px;padding:14px;border-radius:11px}
+.wpag-yes:active{opacity:.85}
+.wpag-no{appearance:none;cursor:pointer;background:transparent;color:#9aa3ad;border:1px solid #2a2f37;font-family:inherit;font-weight:700;font-size:14px;padding:12px;border-radius:11px}
+.wpag-back{margin-top:14px;font-size:12px;color:#6b7480;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+.wpag-foot{display:flex;align-items:center;justify-content:center;gap:10px;margin-top:22px;padding-top:16px;border-top:1px solid #22262d;font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:10.5px;font-weight:600;letter-spacing:.4px;color:#C9A86A}
+.wpag-foot i{width:3px;height:3px;border-radius:50%;background:#3a414a;display:inline-block}
+.wpag-fine{margin-top:14px;font-size:10.5px;line-height:1.55;color:#6b7480}
+.wpag-fine b{color:#9aa3ad}
+`;
 export default function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
         <RecoveryRedirect />
+        <AgeGate />
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<LoginPage />} />
