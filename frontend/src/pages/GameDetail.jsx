@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 const PERF_API_BASE = import.meta.env.VITE_API_URL || "https://sportsintel-production.up.railway.app";
 import { useAuth } from "../hooks/useAuth";
-import { edgesApi, subscriptionApi, scoresApi, matchupsApi } from "../lib/api";
+import { edgesApi, subscriptionApi, scoresApi, matchupsApi, liveApi } from "../lib/api";
 
 const TEAMCOL = {
   ARI:"#A71930",ATL:"#CE1141",BAL:"#DF4601",BOS:"#BD3039",CHC:"#0E3386",CWS:"#27251F",CHW:"#27251F",
@@ -30,6 +30,7 @@ export default function GameDetailPage() {
   const [allEdges, setAllEdges] = useState(null);
   const [scoresGame, setScoresGame] = useState(null);
   const [detail, setDetail] = useState(null);     // getGameDetail: series / umpire / line score
+  const [liveGame, setLiveGame] = useState(null);  // direct match from /api/live/mlb (gamePk-keyed)
   const [bvpData, setBvpData] = useState(null);    // matchups: batter-vs-pitcher
   const [lineups, setLineups] = useState(null);    // matchups: projected batting orders
   const [marketRead, setMarketRead] = useState(null);
@@ -42,13 +43,19 @@ export default function GameDetailPage() {
   useEffect(() => {
     let cancelled = false; setLoading(true);
     (async () => {
-      const [edges, scores, mr] = await Promise.all([
+      const [edges, scores, mr, liveFeed] = await Promise.all([
         edgesApi.getMLB().catch(()=>null),
         scoresApi.getScores("mlb").catch(()=>null),
         edgesApi.getMarketRead ? edgesApi.getMarketRead("mlb").catch(()=>null) : Promise.resolve(null),
+        liveApi.getMLB().catch(()=>null),
       ]);
       if (cancelled) return;
       setAllEdges(edges); setMarketRead(mr);
+      // The dashboard Live Edges cards navigate with the live feed's gameId (= StatsAPI
+      // gamePk). Match it directly here so a live game always resolves, even after the
+      // edges board has rolled to tomorrow (when nickname/detailId bridges all miss).
+      const lg = (liveFeed?.games || []).find(g => String(g.gameId)===String(gameId)) || null;
+      setLiveGame(lg);
       const all = scores ? [...(scores.live||[]),...(scores.upcoming||[]),...(scores.final||[])] : [];
       // The URL gameId is the EDGES id (Odds-API-derived); the scores feed carries ESPN ids,
       // so a direct id match never lands. Resolve the edges game first, then bridge to the
@@ -116,6 +123,22 @@ export default function GameDetailPage() {
       venue: scoresGame.venue || null,
       time: scoresGame.startTime || null,
       _fromScores: true,
+    };
+  }
+  // LAST-RESORT: a live game clicked from the dashboard Live Edges card. The live feed
+  // is gamePk-keyed and matched the URL id exactly above, so synthesize from it — this
+  // is the path that fixes "Game not found" for in-game edges after the board rolled.
+  if (!game && liveGame) {
+    game = {
+      id: liveGame.gameId,
+      away: liveGame.away || "",
+      home: liveGame.home || "",
+      awayAbbr: liveGame.awayAbbr || shortTeam(liveGame.away || ""),
+      homeAbbr: liveGame.homeAbbr || shortTeam(liveGame.home || ""),
+      status: "live",
+      inning: liveGame.inning, half: liveGame.half, outs: liveGame.outs,
+      awayScore: liveGame.awayScore, homeScore: liveGame.homeScore,
+      _fromLive: true,
     };
   }
 
