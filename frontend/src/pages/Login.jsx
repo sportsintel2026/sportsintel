@@ -179,7 +179,7 @@ export function SignupPage() {
 
       <div onClick={() => setAge21((v) => !v)} style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer", margin: "6px 0 14px", userSelect: "none" }}>
         <span style={{ flex: "0 0 20px", width: 20, height: 20, marginTop: 1, borderRadius: 6, border: "1px solid " + (age21 ? "#C9A86A" : "#3a414a"), background: age21 ? "#C9A86A" : "transparent", color: "#1a1408", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 800 }}>{age21 ? "✓" : ""}</span>
-        <span style={{ fontSize: 12.5, lineHeight: 1.45, color: "#9aa3ad" }}>I confirm I am <b style={{ color: "#cfd7e1" }}>21 or older</b> and understand WizePicks provides <b style={{ color: "#cfd7e1" }}>informational analytics only</b> — not betting advice or guaranteed outcomes.</span>
+        <span style={{ fontSize: 12.5, lineHeight: 1.45, color: "#9aa3ad" }}>I confirm I am <b style={{ color: "#cfd7e1" }}>21 or older</b>, agree to the <a href="/terms" target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: "#C9A86A", textDecoration: "underline", textUnderlineOffset: 2 }}>Terms</a> and <a href="/privacy" target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: "#C9A86A", textDecoration: "underline", textUnderlineOffset: 2 }}>Privacy Policy</a>, and understand WizePicks provides <b style={{ color: "#cfd7e1" }}>informational analytics only</b> — not betting advice or guaranteed outcomes.</span>
       </div>
       {error && <div className="err">{error}</div>}
       <button className="btn" onClick={handleSubmit} disabled={loading || !age21} style={!age21 ? { opacity: 0.55 } : undefined}>{ctaLabel}</button>
