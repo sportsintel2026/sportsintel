@@ -457,7 +457,7 @@ function HeroChartM({dir,seed=0}){ const n=9,W=150,H=42;const base=[];
 function HeroSlide({h,i,navigate,sport,rolled}){ const lg=(SPORTS[sport]||SPORTS.mlb).lg;
   const mv=h.mv?<>{h.mv[0]} <span className="up">{"\u2192"} {h.mv[1]}</span></>:h.odds;
   return (<div className="hslide"><div className="hero" onClick={()=>h.gameId&&navigate(`/game/${sport}/${h.gameId}`)}>
-    <div className="htop"><div className="eb">{rolled?"BEST EDGE \u00b7 TOMORROW":"BEST EDGE RIGHT NOW"}</div><div className="hbadges"><span className="hedge">+{h.edge.toFixed(1)}% EDGE</span><span className="hot">HOT</span></div></div>
+    <div className="htop"><div className="eb">{rolled?"BEST PLAY \u00b7 TOMORROW":"BEST PLAY RIGHT NOW"}</div><div className="hbadges">{h.model!=null&&<span className="hwin">{h.model}% TO WIN</span>}<span className="hedge">+{h.edge.toFixed(1)}% edge</span></div></div>
     <div className="hpick">{h.p}<span className="mk">{h.mk}</span></div>
     <div className="hpg"><span className="lgs" style={{display:"inline-flex",verticalAlign:"-6px",marginRight:6}}><LogoM ab={h.a[0]} col={h.a[1]} lg={lg}/><LogoM ab={h.h[0]} col={h.h[1]} lg={lg}/></span>{h.g}</div>
     <div className="hmid">
@@ -466,6 +466,7 @@ function HeroSlide({h,i,navigate,sport,rolled}){ const lg=(SPORTS[sport]||SPORTS
       <div className="hchart"><div className="k">LINE MOVE</div><HeroChartM dir={h.mv?h.mv[2]:"up"} seed={i}/></div>
     </div>
     <div className="hmm">model <b>{h.model}%</b> vs market {h.mkt}% {"\u00b7"} {String(h.conv).toUpperCase()} conviction</div>
+    <div className="hexp">Win % is how often we project this hits. Edge is the gap between our price and the market's — that 2-3% difference is our edge, and even a few points is a strong, profitable spot.</div>
     <div className="hf"><span>Tap for the full matchup breakdown</span><span>{"\u203a"}</span></div>
   </div></div>);
 }
@@ -514,6 +515,7 @@ function BoardRow({d,i,open,onToggle,navigate,sport}){ const lg=(SPORTS[sport]||
           </div>
           <div className="pbar"><i className="bf" style={{width:mktW+"%"}}/><i className="of" style={{left:mktW+"%",width:ohW+"%"}}/></div>
           <div className="pble"><span>MARKET {d.mkt!=null?d.mkt+"%":"\u2014"}</span><span className="g">MODEL {d.model!=null?d.model+"%":"\u2014"} {hitWord}</span></div>
+          {d.edge!=null&&<div className="pedgex">That {Math.abs(d.edge).toFixed(1)}% gap between our model and the market is our <b>edge</b> — the price is better than it should be.</div>}
           <div className="pfoot">
             <div className="pconv"><span className="pmeter"><i className={convN>=1?"on":""}/><i className={convN>=2?"on":""}/><i className={convN>=3?"on":""}/></span><span className="pcl">{conv?conv.toUpperCase():""} CONVICTION</span></div>
             <div className="pmoney">{d.mv&&<SparkM dir={d.mv[2]} seed={i}/>}<span className={"pmt "+money[0]}>{money[1]}</span></div>
@@ -743,7 +745,7 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .hero{border:1px solid rgba(201,168,106,.32);border-radius:15px;background:var(--panel);position:relative;overflow:hidden}
 .hero>*{position:relative}
 .htop{display:flex;align-items:center;justify-content:space-between;padding:12px 14px 0}.eb{font-size:11px;font-weight:800;color:var(--gold)}
-.hbadges{display:flex;gap:7px}.hedge{font-family:var(--disp);font-weight:800;font-size:15px;color:var(--green);background:rgba(63,203,145,.12);border:1px solid rgba(63,203,145,.4);border-radius:8px;padding:3px 9px}
+.hbadges{display:flex;gap:7px;align-items:center}.hwin{font-family:var(--disp);font-weight:800;font-size:16px;color:#1a1408;background:var(--gold);border-radius:8px;padding:3px 10px;letter-spacing:-.01em}.hedge{font-family:var(--mono);font-weight:700;font-size:12px;color:var(--green);background:rgba(63,203,145,.12);border:1px solid rgba(63,203,145,.4);border-radius:8px;padding:3px 9px}
 .hot{font-size:9px;font-weight:800;color:var(--red);border:1px solid rgba(255,93,77,.4);background:rgba(255,93,77,.12);border-radius:999px;padding:2px 7px}
 .hpick{font-family:var(--disp);font-weight:800;font-size:34px;color:#fff;line-height:.9;padding:8px 14px 0}.hpick .mk{font-family:var(--mono);font-size:9px;color:var(--gold);border:1px solid rgba(201,168,106,.4);border-radius:4px;padding:1px 5px;margin-left:7px;vertical-align:middle}
 .hpg{font-size:12px;color:var(--mut);font-weight:600;padding:3px 14px 0}
@@ -751,6 +753,7 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .hcell{border:1px solid rgba(255,255,255,.08);border-radius:9px;padding:6px 9px;flex:1}.hcell .k{font-size:8px;color:var(--mut);font-weight:800}.hcell .v{font-family:var(--mono);font-size:12.5px;color:#fff;margin-top:2px}.hcell .v .up{color:var(--green)}
 .hchart{flex:1.1;border:1px solid rgba(255,255,255,.08);border-radius:9px;padding:6px 8px;display:flex;flex-direction:column;justify-content:center}.hchart .k{font-size:8px;color:var(--mut);font-weight:800}
 .hmm{padding:9px 14px 0;font-family:var(--mono);font-size:10.5px;color:#b9c2cc}.hmm b{color:#fff}
+.hexp{padding:6px 14px 0;font-size:10.5px;line-height:1.5;color:#6f7b85}
 .hf{display:flex;align-items:center;justify-content:space-between;border-top:1px solid rgba(243,185,79,.16);margin-top:10px;padding:9px 14px;color:var(--gold);font-size:11px;font-weight:600}
 .hdots{display:flex;gap:6px;justify-content:center;margin-top:9px}.hdots i{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.2)}.hdots i.on{background:var(--gold);width:16px;border-radius:3px}
 
@@ -831,6 +834,7 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .pbar .of{position:absolute;top:0;height:100%;background:var(--green)}
 .gr.med .pbar .of{background:var(--gold)}
 .pble{display:flex;justify-content:space-between;margin-top:5px;font-family:var(--mono);font-size:8.5px;color:var(--mut)}
+.pedgex{font-size:10px;line-height:1.5;color:#6f7b85;margin-top:7px;padding-top:7px;border-top:1px solid rgba(255,255,255,.06)}.pedgex b{color:var(--green)}
 .pble .g{color:var(--green);font-weight:700}.gr.med .pble .g{color:var(--gold)}
 .pfoot{display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--line2);margin:11px -15px 0;padding:11px 15px 0}
 .pconv{display:flex;align-items:center;gap:7px}
