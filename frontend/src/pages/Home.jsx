@@ -383,7 +383,9 @@ export default function HomePage(){
               : <div className="herocar"><div className="hslide"><div className="hero" style={{textAlign:"center"}}><div className="eb">BEST EDGE</div><div className="heh">Edges post soon</div><div className="hes">Top edges appear ~2 hrs before first pitch.</div></div></div></div>)
           : <Gate title="Today's top edge is locked" navigate={navigate}/>}
 
-      {hasFull && (pulseAlerts.length>0||moverItems.length>0) && <MarketPulse alerts={pulseAlerts} movers={moverItems} rolled={e.rolledToNextDay}/>}
+      {hasFull && pulseAlerts.length>0 && <MarketPulse alerts={pulseAlerts} rolled={e.rolledToNextDay}/>}
+
+      {hasFull && moverItems.length>0 && <MarketMovers movers={moverItems} navigate={navigate}/>}
 
         <div className="seclbl">{e.rolledToNextDay?"TOMORROW'S BOARD":"TODAY'S BOARD"} <span className="ct">{boardItems.length} edges{e.rolledToNextDay&&e.date?" · "+fmtSlate(e.date):""}</span>{e.rolledToNextDay&&<span className="rollpill">today's games are live below ↓</span>}</div>
         {hasFull
@@ -633,19 +635,28 @@ function Swiper({cls,dotcls,children}){ const ref=useRef(null);const [act,setAct
 }
 function MarketPulse({alerts,movers,rolled}){ const [idx,setIdx]=useState(0);const [paused,setPaused]=useState(false);
   useEffect(()=>{if(paused||!alerts||alerts.length<2)return;const id=setInterval(()=>setIdx(i=>(i+1)%alerts.length),3600);return ()=>clearInterval(id);},[paused,alerts]);
-  const hasAlerts=alerts&&alerts.length>0; const mv=movers||[];
-  if(!hasAlerts && !mv.length)return null;
-  const cur=hasAlerts?idx%alerts.length:0; const a=hasAlerts?alerts[cur]:null;
+  const hasAlerts=alerts&&alerts.length>0;
+  if(!hasAlerts)return null;
+  const cur=idx%alerts.length; const a=alerts[cur];
   return (<div className="alerts">
-    <div className="ahead" onClick={()=>setPaused(p=>!p)}>MARKET PULSE {"\u00b7"} WHAT CHANGED &amp; WHY <span className="ago">{rolled?"tomorrow\u2019s slate":(hasAlerts?(paused?"paused \u00b7 tap to resume":"updated 2m ago"):(mv.length+" moves"))}</span></div>
-    {hasAlerts&&<>
-      <div className="arow" onClick={()=>setPaused(p=>!p)}><div className="aline"><span className="adot" style={{background:a.dot,boxShadow:`0 0 6px ${a.dot}`}}/><span className="alab">{a.label}</span><span className="aval">{a.head}</span></div><div className="awhy">{a.sub}</div></div>
-      {alerts.length>1&&<div className="dd">{alerts.map((_,i)=><i key={i} className={i===cur?"on":""} onClick={(ev)=>{ev.stopPropagation();setIdx(i);setPaused(true);}}/>)}</div>}
-    </>}
-    {mv.length>0&&<>
-      <div className="mvhd">MARKET MOVERS <span className="mvct">all {mv.length} {"\u00b7"} ranked by {"\u00a2"}</span><span className="mvlk">scroll {"\u2195"}</span></div>
-      <div className="mvlist">{mv.map((d,i)=><MoverRowM key={i} d={d} rank={i+1}/>)}</div>
-    </>}
+    <div className="ahead" onClick={()=>setPaused(p=>!p)}>MARKET PULSE {"\u00b7"} WHAT CHANGED &amp; WHY <span className="ago">{rolled?"tomorrow\u2019s slate":(paused?"paused \u00b7 tap to resume":"updated 2m ago")}</span></div>
+    <div className="arow" onClick={()=>setPaused(p=>!p)}><div className="aline"><span className="adot" style={{background:a.dot,boxShadow:`0 0 6px ${a.dot}`}}/><span className="alab">{a.label}</span><span className="aval">{a.head}</span></div><div className="awhy">{a.sub}</div></div>
+    {alerts.length>1&&<div className="dd">{alerts.map((_,i)=><i key={i} className={i===cur?"on":""} onClick={(ev)=>{ev.stopPropagation();setIdx(i);setPaused(true);}}/>)}</div>}
+  </div>);
+}
+
+// Market Movers — its own collapsible section (dropdown). Collapsed by default.
+function MarketMovers({movers,navigate}){
+  const [open,setOpen]=useState(false);
+  const mv=movers||[];
+  if(!mv.length)return null;
+  return (<div className="mvsec">
+    <div className="mvtop" onClick={()=>setOpen(o=>!o)}>
+      <span className="mvtl">MARKET MOVERS</span>
+      <span className="mvtc">all {mv.length} {"\u00b7"} ranked by {"\u00a2"}</span>
+      <span className={"mvtch"+(open?" up":"")}>{"\u203a"}</span>
+    </div>
+    {open&&<div className="mvlist">{mv.map((d,i)=><MoverRowM key={i} d={d} rank={i+1}/>)}</div>}
   </div>);
 }
 function Gate({title,navigate}){
@@ -694,10 +705,13 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .ahead{display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:13px 15px 10px;font-family:var(--disp);font-weight:800;font-size:11.5px;letter-spacing:.7px;color:var(--mut);cursor:pointer}
 .ahead .ago{font-family:var(--mono);font-size:9px;color:var(--mut2);font-weight:500;letter-spacing:0;white-space:nowrap;flex:0 0 auto}
 .arow{padding:0 15px 14px;cursor:pointer}
-.alerts .mvhd{display:flex;align-items:baseline;gap:8px;padding:12px 15px 0;border-top:1px solid var(--line);font-family:var(--disp);font-weight:800;font-size:11.5px;letter-spacing:.7px;color:var(--mut)}
-.alerts .mvhd .mvct{font-family:var(--mono);font-size:9px;color:var(--mut2);font-weight:500;letter-spacing:0}
-.alerts .mvhd .mvlk{margin-left:auto;font-family:var(--mono);font-size:9px;color:var(--mut);white-space:nowrap}
-.mvlist{max-height:300px;overflow-y:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding:11px 15px 14px;display:flex;flex-direction:column;gap:8px}
+.mvsec{margin:14px 14px 0;border:1px solid var(--line2);border-radius:16px;background:var(--panel);overflow:hidden}
+.mvtop{display:flex;align-items:baseline;gap:9px;padding:14px 15px;cursor:pointer;font-family:var(--disp);font-weight:800;font-size:11.5px;letter-spacing:.7px;color:var(--mut)}
+.mvtop .mvtl{flex:0 0 auto}
+.mvtop .mvtc{font-family:var(--mono);font-size:9px;color:var(--mut2);font-weight:500;letter-spacing:0}
+.mvtop .mvtch{margin-left:auto;font-family:var(--mono);font-size:14px;color:var(--mut);transform:rotate(90deg);transition:transform .2s}
+.mvtop .mvtch.up{transform:rotate(-90deg)}
+.mvlist{max-height:330px;overflow-y:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding:0 15px 14px;display:flex;flex-direction:column;gap:8px}
 .mvlist::-webkit-scrollbar{display:none}
 .mvrowm{display:flex;align-items:center;gap:11px;border:1px solid var(--line);border-radius:11px;background:var(--panel2);padding:10px 12px}
 .mvrowm .rkm{font-family:var(--disp);font-weight:800;font-size:13px;color:var(--mut2);width:16px;flex:0 0 auto;text-align:center}
