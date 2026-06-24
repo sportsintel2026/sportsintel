@@ -102,6 +102,7 @@ export default function HomePage(){
   const [planLoaded,setPlanLoaded]=useState(false);
   const [sport,setSport]=useState("mlb");
   const [board,setBoard]=useState("ml");
+  const [boardExpanded,setBoardExpanded]=useState(false);
   const [propTab,setPropTab]=useState("hr");
   const [wpRecord,setWpRecord]=useState(null);
   const [perf,setPerf]=useState(null);
@@ -384,25 +385,32 @@ export default function HomePage(){
 
       {hasFull && (pulseAlerts.length>0||moverItems.length>0) && <MarketPulse alerts={pulseAlerts} movers={moverItems}/>}
 
-        {liveItems.length>0 && <div id="livesec">
-          <div className="seclbl">LIVE EDGES <span className="ct">in-game {"\u00b7"} updates 60s</span><span className="lk">swipe {"\u203a"}</span></div>
-          <Swiper cls="car" dotcls="dots">{liveItems.map((g,i)=><LiveEdgeCard key={i} g={g} navigate={navigate} locked={!hasFull}/>)}</Swiper>
-        </div>}
-
         <div className="seclbl">FULL BOARD <span className="ct">{boardItems.length} edges</span></div>
         {hasFull
           ? <>
               <div className="chips">{BF.map(([lb,key])=><span key={key} className={"chipf "+(board===key?"on":"")} onClick={()=>setBoard(key)}>{lb}</span>)}</div>
               {boardItems.length>0
                 ? <>
-                    <div className="grid">{boardItems.map((d,i)=>{const id=d.gameId+d.cat+i;return <BoardRow key={id} d={d} i={i} open={openId===id} onToggle={()=>setOpenId(openId===id?null:id)} navigate={navigate} sport={sport}/>;})}</div>
+                    {(()=>{ const half=Math.ceil(boardItems.length/2); const top=boardItems.slice(0,half); const rest=boardItems.slice(half);
+                      const render=(d,i)=>{const id=d.gameId+d.cat+i;return <BoardRow key={id} d={d} i={i} open={openId===id} onToggle={()=>setOpenId(openId===id?null:id)} navigate={navigate} sport={sport}/>;};
+                      return <>
+                        <div className="grid">{top.map(render)}</div>
+                        {rest.length>0 && <>
+                          {boardExpanded && <div className="grid">{rest.map((d,i)=>render(d,i+half))}</div>}
+                          <div className="bmore" onClick={()=>setBoardExpanded(v=>!v)}>{boardExpanded?("Show less"):("Show "+rest.length+" more "+(rest.length===1?"edge":"edges"))} <span className={"bmc"+(boardExpanded?" up":"")}>{"\u203a"}</span></div>
+                        </>}
+                      </>;
+                    })()}
                     <div className="sum"><span className="l">{boardItems.length} game edges</span><span className="sp"/><span>avg <span className="p">+{kpiHas?kAvg:"0.0"}%</span></span></div>
                   </>
                 : <div className="estate"><div className="et">No edges on the board yet</div><div className="es">Edges appear as books post tonight's lines.</div></div>}
             </>
           : <Gate title="Edges are an All-Access feature" navigate={navigate}/>}
 
-
+        {liveItems.length>0 && <div id="livesec">
+          <div className="seclbl">LIVE EDGES <span className="ct">in-game {"\u00b7"} updates 60s</span><span className="lk">swipe {"\u203a"}</span></div>
+          <Swiper cls="car" dotcls="dots">{liveItems.map((g,i)=><LiveEdgeCard key={i} g={g} navigate={navigate} locked={!hasFull}/>)}</Swiper>
+        </div>}
 
         {sp.hasProps && hasFull && propItems.length>0 && <>
           <div className="seclbl">PLAYER PROPS <span className="lk">swipe {"\u203a"}</span></div>
@@ -847,6 +855,10 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .rdrow .ag{flex:0 0 auto}.ag.y{color:var(--green)}.ag.n{color:var(--mut)}
 .dlink{font-family:var(--disp);font-weight:800;font-size:13px;color:var(--gold)}
 .sum{display:flex;align-items:center;gap:12px;margin:0 14px;padding:11px 14px;font-family:var(--mono);font-size:11px;color:var(--mut);border-top:1px solid var(--line2)}.sum .l{color:#cfd7e2;font-weight:600}.sum .p{color:var(--green)}.sum .sp{flex:1}
+.bmore{margin:8px 14px 0;padding:11px;text-align:center;border:1px solid var(--line2);border-radius:12px;background:var(--panel);font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.4px;color:var(--mut);cursor:pointer;transition:border-color .15s,color .15s;display:flex;align-items:center;justify-content:center;gap:6px}
+.bmore:active{border-color:var(--line);color:var(--tx)}
+.bmore .bmc{display:inline-block;transform:rotate(90deg);transition:transform .2s}
+.bmore .bmc.up{transform:rotate(-90deg)}
 
 /* live edge cards */
 .lec{width:230px;border:1px solid rgba(255,90,90,.28);border-radius:13px;background:linear-gradient(180deg,#160d0e,#090d12);padding:11px 12px}
