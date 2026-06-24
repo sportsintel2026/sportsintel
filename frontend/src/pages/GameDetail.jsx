@@ -100,6 +100,24 @@ export default function GameDetailPage() {
     const key = `${nick(scoresGame.away?.name)}|${nick(scoresGame.home?.name)}`;
     game = allEdges.games.find(g => `${nick(g.away)}|${nick(g.home)}` === key);
   }
+  // ROLLOVER FALLBACK: once the model rolls to tomorrow's slate, a still-live game
+  // is gone from allEdges entirely (not by id, not by nickname). But we still have it
+  // from the live SCORES feed — synthesize a minimal game object so the live view
+  // (line score + win-probability) renders instead of "Game not found". Edges-only
+  // sections simply stay empty for these; the live data is what matters here.
+  if (!game && scoresGame) {
+    game = {
+      id: scoresGame.detailId || scoresGame.id,
+      away: scoresGame.away?.name || "",
+      home: scoresGame.home?.name || "",
+      awayAbbr: shortTeam(scoresGame.away?.name || ""),
+      homeAbbr: shortTeam(scoresGame.home?.name || ""),
+      status: scoresGame.status || (scoresGame.bucket==="live"?"live":scoresGame.bucket==="final"?"final":"pre"),
+      venue: scoresGame.venue || null,
+      time: scoresGame.startTime || null,
+      _fromScores: true,
+    };
+  }
 
   const aAb = game?.awayAbbr || shortTeam(scoresGame?.away?.name || game?.away || "");
   const hAb = game?.homeAbbr || shortTeam(scoresGame?.home?.name || game?.home || "");
