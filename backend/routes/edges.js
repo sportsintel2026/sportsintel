@@ -124,16 +124,23 @@ async function resolveSlateDate() {
   const playable = todayGames.filter(g => g.status !== "postponed" && g.status !== "cancelled");
 
   // This board shows PRE-GAME edges/props, which only exist for not-yet-started
-  // ("scheduled") games. So stay on today only while today still has a game that
-  // hasn't started. The moment today's last game first-pitches, there are no
-  // pre-game plays left today — roll forward to tomorrow's slate so the board,
-  // the top edge, and the prop board keep showing upcoming opportunities instead
-  // of sitting empty until the last out. Today's live/finished games are handled
-  // separately by the in-game Live Edges section, so rolling here doesn't hide them.
+  // ("scheduled") games. Stay on the current ET day while it still has a game that
+  // hasn't started; once they've all started/finished, serve tomorrow's slate.
   const anyPreGameToday = playable.some(g => g.status === "scheduled");
+  const anyLiveToday    = playable.some(g => g.status === "live");
+  const anyDoneToday    = playable.some(g => g.status === "final");
 
   if (anyPreGameToday) {
-    return { date: today, rolled: false };
+    // Today still has pre-game games. But across the midnight-ET seam, the games
+    // currently scheduled for "today" (the new ET date) may have NOT been preceded
+    // by any live/final games yet — meaning from a still-awake user's perspective
+    // (evening on the US west coast = just-past-midnight ET) these are really
+    // TOMORROW'S games and tonight's slate just finished. Detect that: if the
+    // current ET day has produced no live or final games at all, it's the fresh
+    // overnight slate that hasn't arrived yet → label it as rolled (TOMORROW'S)
+    // until the day actually gets underway.
+    const dayUnderway = anyLiveToday || anyDoneToday;
+    return { date: today, rolled: !dayUnderway };
   }
   // No more pre-game games today (all started or finished) → roll to tomorrow.
   const tomorrow = getEasternDate(1);
