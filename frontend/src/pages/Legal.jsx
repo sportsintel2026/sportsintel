@@ -1,6 +1,7 @@
 // LEGAL-PAGES-2026-06-24 — Terms of Service + Privacy Policy.
 // TEMPLATE ONLY — not legal advice. Have a licensed attorney review before relying on these.
 // Bracketed [PLACEHOLDERS] must be filled in by WizePicks.
+// LEGAL-FILL-EMAIL-REFUND-2026-06-24
 import { useNavigate } from "react-router-dom";
 
 const UPDATED = "June 24, 2026";
@@ -67,7 +68,7 @@ export function TermsPage() {
 
       <Sec n={6} h="Subscriptions, Billing &amp; Cancellation">
         <P>Certain features require a paid subscription. Subscription prices and billing intervals are shown at the point of purchase (currently [PRICE TIERS, e.g. $7/week, $25/month, $199/year]). Payments are processed by our third-party processor, Stripe; we do not store full payment-card details.</P>
-        <P>Unless otherwise stated, subscriptions <b>renew automatically</b> at the end of each billing period until cancelled. You may cancel at any time through your account settings or by contacting us; cancellation takes effect at the end of the current billing period. [REFUND POLICY — state your refund terms here. Absent a stated policy, fees may be non-refundable except where required by law.]</P>
+        <P>Unless otherwise stated, subscriptions <b>renew automatically</b> at the end of each billing period until cancelled. You may cancel at any time through your account settings or by contacting us; cancellation takes effect at the end of the current billing period. <b>All sales are final.</b> Cancelling stops future billing, but amounts already charged are non-refundable except where a refund is required by applicable law.</P>
       </Sec>
 
       <Sec n={7} h="Acceptable Use">
@@ -115,7 +116,7 @@ export function TermsPage() {
       </Sec>
 
       <Sec n={16} h="Contact">
-        <P>Questions about these Terms: [CONTACT EMAIL] · [MAILING ADDRESS, if applicable].</P>
+        <P>Questions about these Terms: wizepickshelp@gmail.com.</P>
       </Sec>
     </LegalShell>
   );
@@ -165,7 +166,7 @@ export function PrivacyPage() {
       </Sec>
 
       <Sec n={7} h="Your Rights">
-        <P>Depending on where you live, you may have rights to access, correct, delete, or restrict use of your personal information, and to opt out of certain processing. To exercise these rights, contact us at [CONTACT EMAIL]. [Add CCPA / GDPR-specific disclosures here if you have users in California or the EU/UK.]</P>
+        <P>Depending on where you live, you may have rights to access, correct, delete, or restrict use of your personal information, and to opt out of certain processing. To exercise these rights, contact us at wizepickshelp@gmail.com. [Add CCPA / GDPR-specific disclosures here if you have users in California or the EU/UK.]</P>
       </Sec>
 
       <Sec n={8} h="Children &amp; Minors">
@@ -181,7 +182,7 @@ export function PrivacyPage() {
       </Sec>
 
       <Sec n={11} h="Contact">
-        <P>Questions about privacy or your data: [CONTACT EMAIL] · [MAILING ADDRESS, if applicable].</P>
+        <P>Questions about privacy or your data: wizepickshelp@gmail.com.</P>
       </Sec>
     </LegalShell>
   );
