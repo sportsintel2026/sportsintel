@@ -27,6 +27,7 @@ import GuidePage from "./pages/Guide";
 import DailyCardPage from "./pages/DailyCard";
 import MarketReadPage from "./pages/MarketRead";
 import { TermsPage, PrivacyPage } from "./pages/Legal"; // LEGAL-PAGES-2026-06-24
+import MobileShell from "./pages/MobileShell"; // MOBILESHELL-ROUTE-2026-06-24
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth();
   if (loading) return <LoadingScreen />;
@@ -282,6 +283,11 @@ export default function App() {
           <Route path="/market-read" element={
             <PrivateRoute>
               <MarketReadPage />
+            </PrivateRoute>
+          } />
+          <Route path="/m" element={
+            <PrivateRoute>
+              <MobileShell />
             </PrivateRoute>
           } />
           <Route path="*" element={<Navigate to="/" replace />} />
