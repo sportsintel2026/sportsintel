@@ -1,7 +1,7 @@
 // LEGAL-PAGES-2026-06-24 — Terms of Service + Privacy Policy.
 // TEMPLATE ONLY — not legal advice. Have a licensed attorney review before relying on these.
 // Bracketed [PLACEHOLDERS] must be filled in by WizePicks.
-// LEGAL-FILL-EMAIL-REFUND-PRICE-STATE-2026-06-24
+// LEGAL-FILL-COMPLETE-2026-06-24
 import { useNavigate } from "react-router-dom";
 
 const UPDATED = "June 24, 2026";
@@ -42,7 +42,7 @@ export function TermsPage() {
   return (
     <LegalShell
       title="Terms of Service"
-      intro={<>These Terms of Service (&ldquo;Terms&rdquo;) govern your access to and use of WizePicks, operated by [LEGAL ENTITY NAME] (&ldquo;WizePicks,&rdquo; &ldquo;we,&rdquo; &ldquo;us,&rdquo; or &ldquo;our&rdquo;), including the website at wizepicks.com and any related services (the &ldquo;Service&rdquo;). By creating an account or using the Service, you agree to these Terms. If you do not agree, do not use the Service.</>}
+      intro={<>These Terms of Service (&ldquo;Terms&rdquo;) govern your access to and use of WizePicks (&ldquo;WizePicks,&rdquo; &ldquo;we,&rdquo; &ldquo;us,&rdquo; or &ldquo;our&rdquo;), including the website at wizepicks.com and any related services (the &ldquo;Service&rdquo;). By creating an account or using the Service, you agree to these Terms. If you do not agree, do not use the Service.</>}
     >
       <Sec n={1} h="Eligibility">
         <P>You must be at least <b>21 years of age</b> (or the minimum legal age in your jurisdiction, whichever is higher) and located in a jurisdiction where use of the Service is lawful. By using the Service, you represent and warrant that you meet these requirements. We may restrict or terminate access where use is prohibited.</P>
@@ -96,7 +96,7 @@ export function TermsPage() {
       </Sec>
 
       <Sec n={11} h="Limitation of Liability">
-        <P>TO THE MAXIMUM EXTENT PERMITTED BY LAW, WIZEPICKS AND ITS OPERATORS WILL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES, OR FOR ANY GAMBLING OR BETTING LOSSES, ARISING FROM OR RELATED TO YOUR USE OF THE SERVICE. OUR TOTAL LIABILITY FOR ANY CLAIM WILL NOT EXCEED THE AMOUNT YOU PAID US IN THE [TWELVE (12)] MONTHS PRECEDING THE CLAIM.</P>
+        <P>TO THE MAXIMUM EXTENT PERMITTED BY LAW, WIZEPICKS AND ITS OPERATORS WILL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES, OR FOR ANY GAMBLING OR BETTING LOSSES, ARISING FROM OR RELATED TO YOUR USE OF THE SERVICE. OUR TOTAL LIABILITY FOR ANY CLAIM WILL NOT EXCEED THE AMOUNT YOU PAID US IN THE TWELVE (12) MONTHS PRECEDING THE CLAIM.</P>
       </Sec>
 
       <Sec n={12} h="Indemnification">
@@ -112,7 +112,7 @@ export function TermsPage() {
       </Sec>
 
       <Sec n={15} h="Governing Law">
-        <P>These Terms are governed by the laws of the State of Nevada, without regard to conflict-of-laws rules. [Optional: dispute-resolution / arbitration / venue clause to be added by counsel.]</P>
+        <P>These Terms are governed by the laws of the State of Nevada, without regard to conflict-of-laws rules.</P>
       </Sec>
 
       <Sec n={16} h="Contact">
@@ -126,7 +126,7 @@ export function PrivacyPage() {
   return (
     <LegalShell
       title="Privacy Policy"
-      intro={<>This Privacy Policy explains how WizePicks, operated by [LEGAL ENTITY NAME], collects, uses, and shares information when you use wizepicks.com and related services (the &ldquo;Service&rdquo;).</>}
+      intro={<>This Privacy Policy explains how WizePicks collects, uses, and shares information when you use wizepicks.com and related services (the &ldquo;Service&rdquo;).</>}
     >
       <Sec n={1} h="Information We Collect">
         <P>We collect:</P>
@@ -166,7 +166,7 @@ export function PrivacyPage() {
       </Sec>
 
       <Sec n={7} h="Your Rights">
-        <P>Depending on where you live, you may have rights to access, correct, delete, or restrict use of your personal information, and to opt out of certain processing. To exercise these rights, contact us at wizepickshelp@gmail.com. [Add CCPA / GDPR-specific disclosures here if you have users in California or the EU/UK.]</P>
+        <P>Depending on where you live, you may have rights to access, correct, delete, or restrict use of your personal information, and to opt out of certain processing. To exercise these rights, contact us at wizepickshelp@gmail.com.</P>
       </Sec>
 
       <Sec n={8} h="Children &amp; Minors">
