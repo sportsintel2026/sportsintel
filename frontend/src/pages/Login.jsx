@@ -1,3 +1,4 @@
+// FIX-MIDDOT-SIGNUP-2026-06-24
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
@@ -183,7 +184,7 @@ export function SignupPage() {
       </div>
       {error && <div className="err">{error}</div>}
       <button className="btn" onClick={handleSubmit} disabled={loading || !age21} style={!age21 ? { opacity: 0.55 } : undefined}>{ctaLabel}</button>
-      {plan !== "free" && <div className="ptrust">Cancel anytime \u00b7 Secure checkout by Stripe \u00b7 No hidden fees</div>}
+      {plan !== "free" && <div className="ptrust">Cancel anytime · Secure checkout by Stripe · No hidden fees</div>}
       <div className="foot t1">Already have an account? <Link to="/login" className="lk">Sign in</Link></div>
     </AuthLayout>
   );
