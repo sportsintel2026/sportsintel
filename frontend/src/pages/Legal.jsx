@@ -1,7 +1,7 @@
 // LEGAL-PAGES-2026-06-24 — Terms of Service + Privacy Policy.
 // TEMPLATE ONLY — not legal advice. Have a licensed attorney review before relying on these.
 // Bracketed [PLACEHOLDERS] must be filled in by WizePicks.
-// LEGAL-FILL-EMAIL-REFUND-2026-06-24
+// LEGAL-FILL-EMAIL-REFUND-PRICE-STATE-2026-06-24
 import { useNavigate } from "react-router-dom";
 
 const UPDATED = "June 24, 2026";
@@ -67,7 +67,7 @@ export function TermsPage() {
       </Sec>
 
       <Sec n={6} h="Subscriptions, Billing &amp; Cancellation">
-        <P>Certain features require a paid subscription. Subscription prices and billing intervals are shown at the point of purchase (currently [PRICE TIERS, e.g. $7/week, $25/month, $199/year]). Payments are processed by our third-party processor, Stripe; we do not store full payment-card details.</P>
+        <P>Certain features require a paid subscription. Subscription prices and billing intervals are shown at the point of purchase (currently $7/week, $25/month, or $199/year). Payments are processed by our third-party processor, Stripe; we do not store full payment-card details.</P>
         <P>Unless otherwise stated, subscriptions <b>renew automatically</b> at the end of each billing period until cancelled. You may cancel at any time through your account settings or by contacting us; cancellation takes effect at the end of the current billing period. <b>All sales are final.</b> Cancelling stops future billing, but amounts already charged are non-refundable except where a refund is required by applicable law.</P>
       </Sec>
 
@@ -112,7 +112,7 @@ export function TermsPage() {
       </Sec>
 
       <Sec n={15} h="Governing Law">
-        <P>These Terms are governed by the laws of the State of [GOVERNING STATE — e.g., Nevada], without regard to conflict-of-laws rules. [Optional: dispute-resolution / arbitration / venue clause to be added by counsel.]</P>
+        <P>These Terms are governed by the laws of the State of Nevada, without regard to conflict-of-laws rules. [Optional: dispute-resolution / arbitration / venue clause to be added by counsel.]</P>
       </Sec>
 
       <Sec n={16} h="Contact">
