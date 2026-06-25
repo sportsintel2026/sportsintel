@@ -1,7 +1,8 @@
-// SportShell.jsx — NEW sport-first mobile shell. SPORTSHELL-NEW-2026-06-24
+// SportShell.jsx — sport-first mobile shell. SPORTSHELL-PERF-2026-06-25
 //
-// NOT WIRED YET. Nothing imports this file, so deploying it changes nothing in
-// the live app — it just sits in the repo ready to be wired in MLB-first later.
+// Wired into the live mobile app via MobileShell (test route /m, and the real
+// /home + /dashboard once App.jsx points to MobileShell). Deploying this file
+// alone only affects MobileShell's tab list.
 //
 // MOBILE ONLY. Renders the shell at <1024px; at >=1024px it returns children
 // with NO shell, leaving the existing desktop layout byte-for-byte untouched
@@ -11,7 +12,7 @@
 // live ticker. The page content the parent passes as `children` is rendered
 // untouched in the middle — same cards, same board, same skin, just relocated.
 //
-// Usage (wiring comes later):
+// Usage:
 //   <SportShell sport="mlb" section="Edges" onSport={fn} onSection={fn}
 //               navigate={navigate} plan={plan} scores={liveScores}>
 //     {pageContent}
@@ -27,7 +28,7 @@ const SPORTS = [
   { id: "nhl", lb: "NHL", status: "soon" },
 ];
 
-const SECTIONS = ["Edges", "Props", "Games", "News", "Market", "Movers"];
+const SECTIONS = ["Edges", "Props", "Games", "Performance", "Market", "Movers"];
 
 export default function SportShell({
   sport = "mlb",
