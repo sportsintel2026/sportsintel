@@ -3,6 +3,7 @@
 // fetched (passed as props) — no extra API calls. All figures are real: edges,
 // modelProb, conviction from /api/edges; weather/pitchers ride along on games.
 // HOMEDESKTOP-PREMIUM-DARK-RESKIN-2026-06-23
+// FIX-CLV-DESKTOP-OBJECT-2026-06-24
 import { useState, useEffect, useRef } from "react";
 
 // ---- self-contained helpers (kept local so this file stands alone) ----
@@ -56,7 +57,11 @@ export default function HomeDesktop(props) {
     let w = 0, l = 0; if (d.byConfidence) { for (const k in d.byConfidence) { const b = d.byConfidence[k]; if (b) { w += b.wins || 0; l += b.losses || 0; } } }
     const winRate = (w + l) > 0 ? (w / (w + l) * 100) : null;
     const graded = d.n != null ? d.n : ((w + l) || null);
-    return { roi, roiLbl, winRate, graded, clv: (d.clv != null ? d.clv : null) };
+    // CLV can arrive as an object (e.g. { value, n } or per-range); pull the real
+    // number the same way the mobile board does, else show "—". Never render raw.
+    const rng = (d.ranges && (d.ranges.Season || d.ranges[Object.keys(d.ranges)[0]])) || null;
+    const clvNum = (rng && typeof rng.clv === "number") ? rng.clv : (typeof d.clv === "number" ? d.clv : null);
+    return { roi, roiLbl, winRate, graded, clv: clvNum };
   })();
   const [market, setMarket] = useState("ml");
   const [propTab, setPropTab] = useState("hits");
