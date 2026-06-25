@@ -28,6 +28,7 @@ import DailyCardPage from "./pages/DailyCard";
 import MarketReadPage from "./pages/MarketRead";
 import { TermsPage, PrivacyPage } from "./pages/Legal"; // LEGAL-PAGES-2026-06-24
 import MobileShell from "./pages/MobileShell"; // MOBILESHELL-ROUTE-2026-06-24
+import SportBar, { SportTabsHeader } from "./pages/SportNav"; // WIZEPICKS-SPORTNAV-2026-06-25
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth();
   if (loading) return <LoadingScreen />;
@@ -161,12 +162,26 @@ const WPF_CSS = `
 .wpf-copy{font-size:10.5px;color:#4b535c}
 @media (max-width:1023px){.wpf-root{padding-bottom:96px}}
 `;
+// NEWS-PLACEHOLDER-2026-06-25 — News tab destination; the feed wires in here later.
+function NewsComingSoon() {
+  return (
+    <div className="app" style={{ maxWidth: 460, margin: "0 auto", minHeight: "100vh" }}>
+      <div style={{ padding: "78px 22px", textAlign: "center" }}>
+        <div style={{ fontFamily: "'Barlow Condensed',sans-serif", fontWeight: 800, fontSize: 26, color: "#dfe7ea", letterSpacing: ".3px" }}>News</div>
+        <div style={{ fontFamily: "'IBM Plex Mono',ui-monospace,monospace", fontSize: 12, color: "#8B98A3", marginTop: 10, lineHeight: 1.6 }}>
+          Feed wiring in soon — injuries, lineups, and line-move alerts will land here.
+        </div>
+      </div>
+    </div>
+  );
+}
 export default function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
         <RecoveryRedirect />
         <AgeGate />
+        <SportTabsHeader />
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<LoginPage />} />
@@ -285,6 +300,11 @@ export default function App() {
               <MarketReadPage />
             </PrivateRoute>
           } />
+          <Route path="/news" element={
+            <PrivateRoute>
+              <NewsComingSoon />
+            </PrivateRoute>
+          } />
           <Route path="/m" element={
             <PrivateRoute>
               <MobileShell />
@@ -292,6 +312,7 @@ export default function App() {
           } />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        <SportBar />
         <LegalFooter />
       </BrowserRouter>
     </AuthProvider>
