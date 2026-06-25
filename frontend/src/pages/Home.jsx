@@ -14,6 +14,7 @@
 import { useState, useEffect, useRef, useCallback, Children } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
+import { useSport } from "../hooks/useSport"; // WIZEPICKS-SPORTNAV-2026-06-25
 import { edgesApi, subscriptionApi, liveApi, supabase } from "../lib/api";
 import Sidebar from "./Sidebar";
 import HomeDesktop from "./HomeDesktop";
@@ -101,7 +102,7 @@ export default function HomePage(){
   const [loading,setLoading]=useState(true);
   const [plan,setPlan]=useState({tier:"free",isAdmin:false});
   const [planLoaded,setPlanLoaded]=useState(false);
-  const [sport,setSport]=useState("mlb");
+  const [sport,setSport]=useSport(); // WIZEPICKS-SPORTNAV-2026-06-25 (was useState("mlb"))
   const [board,setBoard]=useState("ml");
   const [propTab,setPropTab]=useState("hr");
   const [wpRecord,setWpRecord]=useState(null);
