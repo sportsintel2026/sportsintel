@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, Link, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "./hooks/useAuth";
 import { supabase } from "./lib/api";
 import LandingPage from "./pages/Landing";
@@ -125,6 +125,40 @@ const WPAG_CSS = `
 .wpag-foot i{width:3px;height:3px;border-radius:50%;background:#3a414a;display:inline-block}
 .wpag-fine{margin-top:14px;font-size:10.5px;line-height:1.55;color:#6b7480}
 .wpag-fine b{color:#9aa3ad}
+`;
+// LEGAL-FOOTER-2026-06-24 — site-wide compliance footer: Terms/Privacy links +
+// responsible-gambling line, on every page except the landing (which has its own).
+// Mobile gets extra bottom padding so links clear the fixed bottom tab bar.
+function LegalFooter() {
+  const { pathname } = useLocation();
+  if (pathname === "/") return null; // landing has its own footer
+  return (
+    <footer className="wpf-root">
+      <style>{WPF_CSS}</style>
+      <div className="wpf-inner">
+        <div className="wpf-links">
+          <Link to="/terms">Terms</Link><i/>
+          <Link to="/privacy">Privacy</Link>
+        </div>
+        <div className="wpf-rg"><span>21+</span><i/><span>Gamble Responsibly</span><i/><span>1-800-GAMBLER</span><i/><span>ncpgambling.org</span></div>
+        <div className="wpf-fine">WizePicks provides informational sports analytics only — not betting advice, and not a sportsbook. Past performance does not guarantee future results.</div>
+        <div className="wpf-copy">© {new Date().getFullYear()} WizePicks</div>
+      </div>
+    </footer>
+  );
+}
+const WPF_CSS = `
+.wpf-root{background:#0A0B0D;border-top:1px solid #1B2025;padding:26px 20px 30px;font-family:Inter,system-ui,-apple-system,sans-serif}
+.wpf-inner{max-width:980px;margin:0 auto;text-align:center}
+.wpf-links{display:flex;align-items:center;justify-content:center;gap:14px;margin-bottom:14px}
+.wpf-links a{color:#C9A86A;font-size:13px;font-weight:600;text-decoration:none}
+.wpf-links a:hover{text-decoration:underline;text-underline-offset:2px}
+.wpf-links i{width:3px;height:3px;border-radius:50%;background:#3a414a;display:inline-block}
+.wpf-rg{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:9px;font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:10.5px;font-weight:600;letter-spacing:.4px;color:#C9A86A;margin-bottom:12px}
+.wpf-rg i{width:3px;height:3px;border-radius:50%;background:#3a414a;display:inline-block}
+.wpf-fine{font-size:10.5px;line-height:1.55;color:#6b7480;max-width:620px;margin:0 auto 10px}
+.wpf-copy{font-size:10.5px;color:#4b535c}
+@media (max-width:1023px){.wpf-root{padding-bottom:96px}}
 `;
 export default function App() {
   return (
@@ -252,6 +286,7 @@ export default function App() {
           } />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        <LegalFooter />
       </BrowserRouter>
     </AuthProvider>
   );
