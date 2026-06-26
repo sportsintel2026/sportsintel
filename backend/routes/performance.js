@@ -215,6 +215,38 @@ router.get("/:league", async (req, res) => {
     const ranges = {};
     for (const [name, cut] of WINDOWS) ranges[name] = rangeStats(cut);
 
+    // ── Home stat-card sparklines — compact cumulative curves ─────────────────
+    // ROI% and win% accrue over the qualified set; CLV% over the captured-close
+    // set, all within the season window. A short warmup is skipped so the first
+    // 1–2 picks (±100% noise) don't dominate the axis. Real cumulative paths,
+    // downsampled to ≤24 points; short/absent curves return [] (card shows none).
+    const downsample = (arr, k = 24) => {
+      if (!arr || arr.length <= k) return arr || [];
+      const out = [], step = (arr.length - 1) / (k - 1);
+      for (let i = 0; i < k; i++) out.push(arr[Math.round(i * step)]);
+      return out;
+    };
+    const roiCurve = [], winCurve = [], clvCurve = [];
+    {
+      const set = qualifiedRows
+        .filter(r => inWindow(r.game_date, SEASON_START))
+        .sort((a, b) => String(a.game_date || "").localeCompare(String(b.game_date || "")));
+      let sc = 0, sw = 0, sl = 0; const WARM = 10;
+      for (const r of set) {
+        const won = r.result === "win"; sc += won ? unitProfit(r.odds) : -1; if (won) sw++; else sl++;
+        const tot = sw + sl;
+        if (tot >= WARM) { roiCurve.push(Math.round((sc / tot) * 1000) / 10); winCurve.push(Math.round((sw / tot) * 1000) / 10); }
+      }
+    }
+    {
+      const set = clvRows
+        .filter(r => inWindow(r.game_date, SEASON_START))
+        .sort((a, b) => String(a.game_date || "").localeCompare(String(b.game_date || "")));
+      let cc = 0; const WARM = 5;
+      set.forEach((r, i) => { cc += Number(r.clv) || 0; if (i + 1 >= WARM) clvCurve.push(Math.round((cc / (i + 1)) * 10000) / 100); });
+    }
+    const spark = { roi: downsample(roiCurve), win: downsample(winCurve), clv: downsample(clvCurve) };
+
     // ── Recent graded picks (core + props), newest first, with a readable label ─
     let recent = [];
     try {
@@ -263,6 +295,8 @@ router.get("/:league", async (req, res) => {
       totalGraded: qualifiedRows.length,
       // Range-aware headline KPIs + cumulative units curve + CLV grid.
       ranges,
+      // Compact cumulative curves (roi/win/clv) for the Home stat-card sparklines.
+      spark,
       // Newest graded picks (core + props) for the Recent Results list.
       recent,
       // Full sample kept visible so nothing is hidden.
