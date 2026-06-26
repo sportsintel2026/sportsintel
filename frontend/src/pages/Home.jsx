@@ -373,6 +373,12 @@ export default function HomePage(){
             : <div className="rec"><div className="r" style={{fontSize:13,color:"#f3b94f"}}>View {"\u203a"}</div></div>}
         </div>
 
+        {/* WIZESPIN-MOVED-UNDER-WIZEPLAYS-2026-06-26 */}
+        <div className="spincard" onClick={()=>navigate("/daily-card")}>
+          <div className="h">WIZE SPIN <span className="new">NEW</span></div><div className="wheel"/>
+          <div className="d">Need a play fast? Spin for a model-qualified pick.</div><div className="cta">Spin the wheel {"\u203a"}</div>
+        </div>
+
       {hasFull && moverItems.length>0 && <MarketMovers movers={moverItems} navigate={navigate}/>}
 
       {hasFull && pulseAlerts.length>0 && <MarketPulse alerts={pulseAlerts} rolled={e.rolledToNextDay}/>}
@@ -411,11 +417,6 @@ export default function HomePage(){
           <div className="seclbl">PARK FACTORS <span className="ct">run &amp; HR environment</span><span className="lk">swipe {"\u203a"}</span></div>
           <Swiper cls="car" dotcls="dots">{parkItems.map((d,i)=><ParkCardM key={i} d={d}/>)}</Swiper>
         </>}
-
-        <div className="spincard" onClick={()=>navigate("/daily-card")}>
-          <div className="h">WIZE SPIN <span className="new">NEW</span></div><div className="wheel"/>
-          <div className="d">Need a play fast? Spin for a model-qualified pick.</div><div className="cta">Spin the wheel {"\u203a"}</div>
-        </div>
 
 
 
