@@ -1,4 +1,4 @@
-// ODDSPAGE-PREMIUM-DARK-RESKIN-2026-06-23  ·  MARKET-URL-SPORT-2026-06-26
+// ODDSPAGE-PREMIUM-DARK-RESKIN-2026-06-23  ·  MARKET-URL-SPORT-2026-06-26  ·  SUBNAV-MOBILE-FIX-2026-06-26
 import { useState, useEffect } from "react";
 // CFB-ODDSPAGE-MARKET-WIRED-2026-06-23
 import { useNavigate } from "react-router-dom";
@@ -180,8 +180,9 @@ export default function MarketPage() {
             <b key={key} className={key===sport?"on":""} onClick={()=>{ if(key==="mlb"||key==="nfl"||key==="cfb"){ if(key!==sport){setSport(key);setLoading(true);setView(key==="cfb"?"odds":"movers");} } else if(key==="nba")navigate("/nba"); else navigate(`/${key}-games`); }}><span className="dot"/>{lb}</b>
           ))}
         </div>
-        <div className="subnav">{VIEWS.map(v=><b key={v[0]} className={v[0]===view?"on":""} onClick={()=>setView(v[0])}>{v[1]}</b>)}</div>
       </div>
+
+      <div className="subnav">{VIEWS.map(v=><b key={v[0]} className={v[0]===view?"on":""} onClick={()=>setView(v[0])}>{v[1]}</b>)}</div>
 
       <div id="wrap">
         {loading ? <div className="estate"><div className="et">Loading market…</div><div className="es">Pulling every book’s lines.</div></div> : <>
