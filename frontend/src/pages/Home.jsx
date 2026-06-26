@@ -1,4 +1,4 @@
-// WizePicks Home — live dashboard hub. Reads the existing /api/edges/mlb feed (no extra Odds cost).  ·  FULL-EDGE-BOARD-RANKED-2026-06-26
+// WizePicks Home — live dashboard hub. Reads the existing /api/edges/mlb feed (no extra Odds cost).  ·  FULL-EDGE-BOARD-RANKED-2026-06-26  ·  BESTPLAY-REAL-LINEMOVE-2026-06-26
 // CFB-BOARD-WIRED-MOBILE-INTRAINING-2026-06-22
 // HOME-PREMIUM-DARK-RESKIN-2026-06-23
 // HOME-FLAT-STATS-DEPLOY2-2026-06-23
@@ -284,7 +284,7 @@ export default function HomePage(){
       if(mr.total&&(mr.total.lean||mr.total.side||mr.total.favTeam))read.total=[mr.total.tier,String(mr.total.lean||mr.total.side||mr.total.favTeam).toUpperCase()+(mr.total.line!=null?" "+mr.total.line:""),formatOdds(mr.total.odds),!!mr.total.agrees];}
     const park=[];if(gm&&gm.parkRunFactor!=null)park.push((gm.parkRunFactor>1?"+":"")+Math.round((gm.parkRunFactor-1)*100)+"%");
     const wx=gm&&gm.weather&&gm.weather.tempF!=null?(Math.round(gm.weather.tempF)+"\u00b0F"+(gm.weather.windMph?" \u00b7 "+gm.weather.windMph+" mph":"")):null;
-    return {p:edgeLabel(x),mk:mkOf(x),cat:catOf(x),conv:convOf(x),edge:edgeNum(x),odds:formatOdds(x.odds),mv:mvOf(x),delta:x._delta,clv:null,a,h,g:x.matchup,starts:gm&&gm.time?fmtTime(gm.time):null,model,mkt,flags:flags.length?flags:null,read,why:x.reason,park:park.length?park:null,wx,gameId:x.gameId,seed:i};
+    return {p:edgeLabel(x),mk:mkOf(x),cat:catOf(x),conv:convOf(x),edge:edgeNum(x),odds:formatOdds(x.odds),mv:mvOf(x),delta:x._delta,clv:null,a,h,g:x.matchup,starts:gm&&gm.time?fmtTime(gm.time):null,model,mkt,flags:flags.length?flags:null,read,why:x.reason,park:park.length?park:null,wx,series:lineSeries[x.gameId+x.side]||null,gameId:x.gameId,seed:i};
   };
   const allAdj=[...mlAdj,...totAdj,...spAdj];
   const sortBoard=(a,b)=>((tierRank(b._convAdj)-tierRank(a._convAdj))||((b.convictionScore||0)-(a.convictionScore||0))||((b.edge||0)-(a.edge||0)));
@@ -445,11 +445,15 @@ function SparkM({dir,seed=0}){ const n=7,w=40,h=15,z=[1.4,-1,.8,-1.6,.6,0,-1.2];
   const col=dir==="up"?"#33e991":dir==="dn"?"#ff6a5a":"#46505c";const path=pts.map((p,i)=>(i?"L":"M")+p[0].toFixed(1)+" "+p[1].toFixed(1)).join(" ");
   return <svg className="spk" width={w} height={h} viewBox={`0 0 ${w} ${h}`}><path d={path} fill="none" stroke={col} strokeWidth="1.4" strokeLinejoin="round"/></svg>;
 }
-function HeroChartM({dir,seed=0}){ const n=9,W=150,H=42;const base=[];
-  for(let i=0;i<n;i++){const trend=dir==="dn"?(n-1-i):i;base.push(trend+((seed*7+i*11)%5)*0.45);}
-  const mn=Math.min(...base),mx=Math.max(...base),rng=(mx-mn)||1;const X=i=>i/(n-1)*W,Y=v=>H-4-((v-mn)/rng)*(H-9);
-  const ln=base.map((v,i)=>`${i?"L":"M"}${X(i).toFixed(1)} ${Y(v).toFixed(1)}`).join(" ");const ar=ln+`L${W} ${H} L0 ${H} Z`;
-  const col=dir==="dn"?"#ff6a5a":"#33e991";const ex=X(n-1),ey=Y(base[n-1]);const gid="hg"+seed;
+function HeroChartM({series,seed=0}){ const W=150,H=42;
+  const raw=Array.isArray(series)?series.map(amCents).filter(v=>v!=null):[];
+  if(raw.length<2){ // no real line-movement history yet — honest flat baseline, never a fabricated trend
+    return <svg viewBox={`0 0 ${W} ${H}`} width="100%" height="40" preserveAspectRatio="none" style={{overflow:"visible",marginTop:3}}>
+      <line x1="0" y1={H/2} x2={W} y2={H/2} stroke="#3a4450" strokeWidth="2" strokeDasharray="3 4" vectorEffect="non-scaling-stroke"/></svg>;
+  }
+  const mn=Math.min(...raw),mx=Math.max(...raw),rng=(mx-mn)||1;const X=i=>i/(raw.length-1)*W,Y=v=>H-4-((v-mn)/rng)*(H-9);
+  const ln=raw.map((v,i)=>`${i?"L":"M"}${X(i).toFixed(1)} ${Y(v).toFixed(1)}`).join(" ");const ar=ln+`L${W} ${H} L0 ${H} Z`;
+  const col=raw[raw.length-1]>=raw[0]?"#33e991":"#ff6a5a";const ex=X(raw.length-1),ey=Y(raw[raw.length-1]);const gid="hg"+seed;
   return <svg viewBox={`0 0 ${W} ${H}`} width="100%" height="40" preserveAspectRatio="none" style={{overflow:"visible",marginTop:3}}>
     <defs><linearGradient id={gid} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={col} stopOpacity="0.3"/><stop offset="100%" stopColor={col} stopOpacity="0"/></linearGradient></defs>
     <path d={ar} fill={`url(#${gid})`}/><path d={ln} fill="none" stroke={col} strokeWidth="2" strokeLinejoin="round" vectorEffect="non-scaling-stroke"/>
@@ -464,7 +468,7 @@ function HeroSlide({h,i,navigate,sport,rolled}){ const lg=(SPORTS[sport]||SPORTS
     <div className="hmid">
       <div className="hcell"><div className="k">ODDS / MOVE</div><div className="v">{mv}</div></div>
       <div className="hcell"><div className="k">STARTS</div><div className="v">{h.starts||"\u2014"}</div></div>
-      <div className="hchart"><div className="k">LINE MOVE</div><HeroChartM dir={h.mv?h.mv[2]:"up"} seed={i}/></div>
+      <div className="hchart"><div className="k">LINE MOVE</div><HeroChartM series={h.series} seed={i}/></div>
     </div>
     <div className="hmm">model <b>{h.model}%</b> vs market {h.mkt}% {"\u00b7"} {String(h.conv).toUpperCase()} conviction</div>
     <div className="hexp">Win % is how often we project this hits. Edge is the gap between our price and the market's — that 2-3% difference is our edge, and even a few points is a strong, profitable spot.</div>
