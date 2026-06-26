@@ -158,7 +158,25 @@ export default function HomePage(){
     return ()=>{ c=true; };
   },[sport]);
 
-  if(loading&&!edges) return <div style={S.shell}><style>{CSS}</style><div style={{padding:40,textAlign:"center",color:"#8a99a2"}}>Loading the board…</div></div>;
+  if(loading&&!edges) return (<div className="app"><style>{CSS}</style>
+    <div className="skwrap">
+      <div className="skkpis">{[0,1,2].map(i=>(
+        <div key={i} className="skkpi">
+          <div className="sk" style={{width:"42%",height:8}}/>
+          <div className="sk" style={{width:"68%",height:20,marginTop:9}}/>
+          <div className="sk" style={{width:"52%",height:7,marginTop:8}}/>
+        </div>))}</div>
+      <div className="skboard">{[0,1,2,3,4].map(i=>(
+        <div key={i} className="skrow">
+          <div className="sk skc"/>
+          <div className="skb">
+            <div className="sk" style={{width:(52-i*4)+"%",height:13}}/>
+            <div className="sk" style={{width:(36-i*2)+"%",height:8,marginTop:6}}/>
+          </div>
+          <div className="sk" style={{width:34,height:13}}/>
+        </div>))}</div>
+    </div>
+  </div>);
   const e=edges||{}; const games=e.games||[];
   // When the board has rolled forward (today's slate all started), label it
   // "Tomorrow's" so it's clear these are next-day plays; flips back automatically.
@@ -775,6 +793,17 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 /* KPI-TIGHTEN-2026-06-26 :: stat cards tightened; movers note unchanged (cents shown) */
 /* LAYOUT-POLISH-8PT-DEBOX-2026-06-26 :: 12px page inset, 8pt vertical rhythm, de-boxed edge board, borders reduced to premium-only */
 .app{max-width:460px;margin:0 auto;min-height:100vh;padding-bottom:64px}
+/* LOADING-SKELETON-2026-06-26 :: shimmer placeholder for the board load */
+.skwrap{padding:14px 12px 0}
+.sk{background:#141a20;background-image:linear-gradient(90deg,rgba(255,255,255,0) 0,rgba(255,255,255,.06) 50%,rgba(255,255,255,0) 100%);background-size:200% 100%;animation:sksh 1.3s ease-in-out infinite;border-radius:6px}
+@keyframes sksh{0%{background-position:200% 0}100%{background-position:-200% 0}}
+.skkpis{display:flex;gap:8px;margin-bottom:14px}
+.skkpi{flex:1;background:var(--panel);border-radius:11px;padding:11px 12px}
+.skboard{background:var(--panel);border-radius:14px;overflow:hidden}
+.skrow{display:flex;align-items:center;gap:11px;padding:14px}
+.skrow+.skrow{border-top:1px solid var(--line)}
+.skc{width:25px;height:25px;border-radius:50%;flex:0 0 auto}
+.skb{flex:1;min-width:0}
 .hd{position:sticky;top:0;z-index:20;background:#0b0d11;padding:11px 12px 0}
 .hrow{display:flex;align-items:center;gap:8px}
 .brand{font-family:var(--serif);font-weight:600;font-size:22px;letter-spacing:-.2px}.brand b{color:var(--tx);font-weight:500}.brand i{color:var(--gold);font-style:normal;font-weight:600}
