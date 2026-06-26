@@ -192,9 +192,11 @@ export default function SportBar() {
 }
 
 const CSS = `
+/* HIDE-LEGACY-WPBN-2026-06-26 :: hide old BottomNav (.wpbn) on mobile; sport bar is the nav */
 @media (max-width:1023px){
   .hd{display:none!important}
   .nav{display:none!important}
+  .wpbn{display:none!important}
   .demobar{display:none!important}
   .app{min-height:calc(100vh - 84px)!important;min-height:calc(100dvh - 84px)!important;padding-bottom:calc(74px + env(safe-area-inset-bottom))!important}
 }
