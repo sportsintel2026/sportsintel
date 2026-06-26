@@ -1,4 +1,4 @@
-// SportNav.jsx — sport-first mobile navigation. WIZEPICKS-SPORTNAV-2026-06-25
+// SportNav.jsx — sport-first mobile navigation. WIZEPICKS-SPORTNAV-2026-06-26-WIRE
 //
 // One global nav, mounted once in App.jsx, mobile-only:
 //   <SportTabsHeader/>  — rendered ABOVE the routes: a faithful clone of each
@@ -24,7 +24,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 const SECTIONS = [
   { key: "edges", lb: "Edges",       to: "/home",        match: ["/home", "/dashboard"] },
   { key: "props", lb: "Props",       to: "/props",       match: ["/props"] },
-  { key: "games", lb: "Games",       to: "/games",       match: ["/games"] },
+  { key: "games", lb: "Games",       to: "/games",       match: ["/games", "/nfl-games", "/cfb-games", "/nba-games", "/nhl-games"] },
   { key: "mkt",   lb: "Market",      to: "/odds",        match: ["/odds", "/consensus", "/market-read"] },
   { key: "perf",  lb: "Performance", to: "/performance", match: ["/performance", "/clv"] },
   { key: "news",  lb: "News",        to: "/news",        match: ["/news"] },
@@ -34,9 +34,19 @@ const SPORTS = [
   { key: "mlb", lb: "MLB", status: "LIVE" },
   { key: "nfl", lb: "NFL", status: "TRAIN" },
   { key: "cfb", lb: "CFB", status: "TRAIN" },
-  { key: "nba", lb: "NBA", status: "LIVE" },
+  { key: "nba", lb: "NBA", status: "SOON" },
   { key: "nhl", lb: "NHL", status: "SOON" },
 ];
+
+// Games is the one section whose page differs per sport: each sport has its own
+// live-scores route. Every other section is one shared page that reads ?sport=.
+const GAMES_ROUTE = { mlb: "/games", nfl: "/nfl-games", cfb: "/cfb-games", nba: "/nba-games", nhl: "/nhl-games" };
+
+// resolve the destination path for a section under a given sport
+function routeFor(section, sport) {
+  if (section.key === "games") return GAMES_ROUTE[sport] || "/games";
+  return section.to;
+}
 
 const HIDE_ON = ["/", "/login", "/signup", "/pricing", "/terms", "/privacy", "/reset-password"];
 
@@ -66,8 +76,9 @@ export function SportTabsHeader() {
   const params = new URLSearchParams(search);
   const goSection = (s) => {
     if (sectionOn(s, pathname)) return;
-    const sp = params.get("sport");
-    navigate(s.to + (sp ? `?sport=${sp}` : ""));
+    const sport = (params.get("sport") || "mlb").toLowerCase();
+    const to = routeFor(s, sport);
+    navigate(to + (sport !== "mlb" ? `?sport=${sport}` : ""));
   };
 
   return (
@@ -118,9 +129,9 @@ export default function SportBar() {
 
   const pickSport = (key) => {
     if (key === curSport) return;
-    const onSection = SECTIONS.some((s) => sectionOn(s, pathname));
-    const base = onSection ? pathname : "/home";
-    navigate(`${base}?sport=${key}`);
+    const cur = SECTIONS.find((s) => sectionOn(s, pathname));
+    const to = cur ? routeFor(cur, key) : "/home";
+    navigate(to + (key !== "mlb" ? `?sport=${key}` : ""));
   };
 
   return (
