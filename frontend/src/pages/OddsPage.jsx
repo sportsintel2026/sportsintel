@@ -185,7 +185,15 @@ export default function MarketPage() {
       <div className="subnav">{VIEWS.map(v=><b key={v[0]} className={v[0]===view?"on":""} onClick={()=>setView(v[0])}>{v[1]}</b>)}</div>
 
       <div id="wrap">
-        {loading ? <div className="estate"><div className="et">Loading market…</div><div className="es">Pulling every book’s lines.</div></div> : <>
+        {loading ? <div className="mvlist">{[0,1,2,3,4].map(i=>(
+          <div key={i} className="skrow">
+            <div className="sk skc"/>
+            <div className="skb">
+              <div className="sk" style={{width:(50-i*4)+"%",height:13}}/>
+              <div className="sk" style={{width:(32-i*2)+"%",height:8,marginTop:6}}/>
+            </div>
+            <div className="sk" style={{width:46,height:14}}/>
+          </div>))}</div> : <>
           {sport==="nfl" && (
             <div style={{margin:"0 0 10px",padding:"9px 12px",border:"1px solid #6b4a16",background:"linear-gradient(180deg,#1a1305,#0d0a02)",borderRadius:10,fontFamily:"var(--mono)",fontSize:11,lineHeight:1.45,color:"#f3b94f"}}>
               ⚠ NFL preview — market data is live, but the model behind it is uncalibrated (2025 seed). Movement history fills in as books adjust toward the season.
@@ -338,6 +346,14 @@ const CSS = `@import url('https://fonts.googleapis.com/css2?family=Barlow+Conden
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoothing:antialiased}
 .app{max-width:460px;margin:0 auto;min-height:100vh;position:relative;padding-bottom:96px}
+/* LOADING-SKELETON-2026-06-26 :: shimmer placeholder */
+.sk{background:#141a20;background-image:linear-gradient(90deg,rgba(255,255,255,0) 0,rgba(255,255,255,.06) 50%,rgba(255,255,255,0) 100%);background-size:200% 100%;animation:sksh 1.3s ease-in-out infinite;border-radius:6px}
+@keyframes sksh{0%{background-position:200% 0}100%{background-position:-200% 0}}
+.skrow{display:flex;align-items:center;gap:11px}
+.skrow+.skrow{border-top:1px solid var(--line)}
+.skb{flex:1;min-width:0}
+.skrow{padding:13px}
+.skc{width:24px;height:24px;border-radius:50%;flex:0 0 auto}
 .hd{position:sticky;top:0;z-index:10;background:rgba(6,9,11,.94);backdrop-filter:blur(12px);border-bottom:1px solid var(--line);padding:0 14px}
 .hrow{display:flex;align-items:center;gap:9px;padding:12px 0 9px}
 .logo{font-family:var(--serif);font-weight:600;font-size:22px;letter-spacing:-.2px;color:var(--tx)}.logo .w{color:var(--gold)}
