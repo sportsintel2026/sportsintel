@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { BrowserRouter, Routes, Route, Navigate, useNavigate, Link, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, Link, useLocation, useSearchParams } from "react-router-dom";
 import { AuthProvider, useAuth } from "./hooks/useAuth";
 import { supabase } from "./lib/api";
 import LandingPage from "./pages/Landing";
@@ -162,18 +162,25 @@ const WPF_CSS = `
 .wpf-copy{font-size:10.5px;color:#4b535c}
 @media (max-width:1023px){.wpf-root{padding-bottom:96px}}
 `;
-// NEWS-PLACEHOLDER-2026-06-25 — News tab destination; the feed wires in here later.
-function NewsComingSoon() {
+// COMING-SOON-2026-06-25 — shared placeholder for sections/sports not wired yet.
+function ComingSoon({ title, note }) {
   return (
     <div className="app" style={{ maxWidth: 460, margin: "0 auto", minHeight: "100vh" }}>
       <div style={{ padding: "78px 22px", textAlign: "center" }}>
-        <div style={{ fontFamily: "'Barlow Condensed',sans-serif", fontWeight: 800, fontSize: 26, color: "#dfe7ea", letterSpacing: ".3px" }}>News</div>
-        <div style={{ fontFamily: "'IBM Plex Mono',ui-monospace,monospace", fontSize: 12, color: "#8B98A3", marginTop: 10, lineHeight: 1.6 }}>
-          Feed wiring in soon — injuries, lineups, and line-move alerts will land here.
-        </div>
+        <div style={{ fontFamily: "'Barlow Condensed',sans-serif", fontWeight: 800, fontSize: 26, color: "#dfe7ea", letterSpacing: ".3px" }}>{title}</div>
+        <div style={{ fontFamily: "'IBM Plex Mono',ui-monospace,monospace", fontSize: 12, color: "#8B98A3", marginTop: 10, lineHeight: 1.6 }}>{note}</div>
       </div>
     </div>
   );
+}
+// SPORTGATE-2026-06-25 — renders the real page for sports it supports; otherwise a
+// "coming soon" for that sport+section. Keeps every sport's tabs identical to MLB.
+function SportGate({ section, allow, children }) {
+  const [params] = useSearchParams();
+  const sport = (params.get("sport") || "mlb").toLowerCase();
+  if (allow.includes(sport)) return children;
+  const SP = sport.toUpperCase();
+  return <ComingSoon title={`${SP} · ${section}`} note={`${section} for ${SP} is coming soon — we'll wire it in as the data lands.`} />;
 }
 export default function App() {
   return (
@@ -197,17 +204,17 @@ export default function App() {
           } />
           <Route path="/dashboard" element={
             <PrivateRoute>
-              <HomePage />
+              <SportGate section="Edges" allow={["mlb","nba","nfl","cfb"]}><HomePage /></SportGate>
             </PrivateRoute>
           } />
           <Route path="/home" element={
             <PrivateRoute>
-              <HomePage />
+              <SportGate section="Edges" allow={["mlb","nba","nfl","cfb"]}><HomePage /></SportGate>
             </PrivateRoute>
           } />
           <Route path="/games" element={
             <PrivateRoute>
-              <GamesPage />
+              <SportGate section="Games" allow={["mlb"]}><GamesPage /></SportGate>
             </PrivateRoute>
           } />
           <Route path="/nba-games" element={
@@ -242,12 +249,12 @@ export default function App() {
           } />
           <Route path="/performance" element={
             <PrivateRoute>
-              <PerformancePage />
+              <SportGate section="Performance" allow={["mlb"]}><PerformancePage /></SportGate>
             </PrivateRoute>
           } />
           <Route path="/props" element={
             <PrivateRoute>
-              <PropsPage />
+              <SportGate section="Props" allow={["mlb"]}><PropsPage /></SportGate>
             </PrivateRoute>
           } />
           <Route path="/game/mlb/:gameId" element={
@@ -277,7 +284,7 @@ export default function App() {
           } />
           <Route path="/odds" element={
             <PrivateRoute>
-              <OddsPage />
+              <SportGate section="Market" allow={["mlb"]}><OddsPage /></SportGate>
             </PrivateRoute>
           } />
           <Route path="/clv" element={
@@ -302,7 +309,7 @@ export default function App() {
           } />
           <Route path="/news" element={
             <PrivateRoute>
-              <NewsComingSoon />
+              <ComingSoon title="News" note="Feed wiring in soon — injuries, lineups, and line-move alerts will land here." />
             </PrivateRoute>
           } />
           <Route path="/m" element={
