@@ -217,14 +217,14 @@ const CSS = `
   cursor:pointer;background:#14171B;color:#99A2AA}
 .wpnav-tabs{display:flex;gap:2px;padding:7px 0 0;overflow-x:auto;scrollbar-width:none}
 .wpnav-tabs::-webkit-scrollbar{display:none}
-/* TAB-FIT-RESPONSIVE-2026-06-26 :: side padding scales with screen (clamp 4-8px) so big phones (Pro Max) stay roomy while small phones tighten just enough to fit all six tabs; letter-spacing restored to .5 */
+/* TAB-FULLWORD-SWIPE-2026-06-26 :: keep full "Performance" label + roomy 12px padding; row scrolls (overflow-x:auto) so off-screen tabs are reachable by a sideways swipe — chosen over shortening any label */
 .wpnav-tab{flex:0 0 auto;appearance:none;background:none;border:0;cursor:pointer;position:relative;
   font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:13.5px;font-weight:600;letter-spacing:.5px;color:#99A2AA;
-  padding:9px clamp(4px, 7.5vw - 24px, 8px) 13px;white-space:nowrap;text-transform:uppercase;
+  padding:9px 12px 13px;white-space:nowrap;text-transform:uppercase;
   transform-origin:center bottom;opacity:.5;transform:scale(.78);
   transition:opacity .3s cubic-bezier(.4,0,.2,1),transform .3s cubic-bezier(.4,0,.2,1),color .3s ease}
 .wpnav-tab.on{color:#C9A86A;opacity:1;transform:scale(1.16)}
-.wpnav-tab.on::after{content:"";position:absolute;left:6px;right:6px;bottom:0;height:2px;background:#C9A86A;border-radius:2px 2px 0 0;transform-origin:left center;animation:wpnavbar .32s cubic-bezier(.4,0,.2,1)}
+.wpnav-tab.on::after{content:"";position:absolute;left:9px;right:9px;bottom:0;height:2px;background:#C9A86A;border-radius:2px 2px 0 0;transform-origin:left center;animation:wpnavbar .32s cubic-bezier(.4,0,.2,1)}
 @keyframes wpnavbar{from{transform:scaleX(0)}to{transform:scaleX(1)}}
 /* ===== bottom sport bar (icon chips) ===== */
 /* SPORTBAR-WEIGHT-BUMP-2026-06-26 :: icons 23->26, label 12->13.5, padding/gap up */
