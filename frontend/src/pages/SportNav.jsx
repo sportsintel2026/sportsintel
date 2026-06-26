@@ -91,7 +91,9 @@ function useShell() {
   useEffect(() => {
     const on = () => setIsMobile(window.innerWidth < 1024);
     window.addEventListener("resize", on);
-    return () => window.removeEventListener("resize", on);
+    const tap = () => {};
+    document.addEventListener("touchstart", tap, { passive: true }); // iOS: enable :active press feedback
+    return () => { window.removeEventListener("resize", on); document.removeEventListener("touchstart", tap); };
   }, []);
   const visible = isMobile && !HIDE_ON.includes(pathname);
   return { visible, pathname, search };
@@ -202,7 +204,7 @@ const CSS = `
   .app{min-height:calc(100vh - 84px)!important;min-height:calc(100dvh - 84px)!important;padding-bottom:calc(74px + env(safe-area-inset-bottom))!important}
 }
 /* ===== top header (clone of .hd) + section tabs ===== */
-.wpnav-hd{position:sticky;top:0;z-index:40;max-width:460px;margin:0 auto;background:#0b0d11;padding:11px 14px 0;
+.wpnav-hd{position:sticky;top:0;z-index:40;max-width:460px;margin:0 auto;background:#0b0d11;padding:11px 4px 0; /* EDGE-4PX-2026-06-26 */
   font-family:'Inter',system-ui,sans-serif}
 .wpnav-hr{display:flex;align-items:center;gap:8px}
 .wpnav-bd{font-family:Georgia,'Times New Roman',serif;font-weight:600;font-size:22px;letter-spacing:-.2px;color:#ECEFF2}
