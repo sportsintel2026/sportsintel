@@ -145,7 +145,15 @@ export default function PropsPage() {
           <span className="sort"><b className={sortBy==="edge"?"on":""} onClick={()=>setSortBy("edge")}>Edge</b><b className={sortBy==="conv"?"on":""} onClick={()=>setSortBy("conv")}>Conviction</b></span>
         </div>
         <div id="wrap">
-          {loading ? <div className="estate"><div className="et">Loading props…</div><div className="es">Pulling model edges.</div></div>
+          {loading ? <div className="plist">{[0,1,2,3,4,5].map(i=>(
+              <div key={i} className="skrow">
+                <div className="sk skav"/>
+                <div className="skb">
+                  <div className="sk" style={{width:(56-i*4)+"%",height:13}}/>
+                  <div className="sk" style={{width:(34-i*2)+"%",height:8,marginTop:6}}/>
+                </div>
+                <div className="sk" style={{width:40,height:20}}/>
+              </div>))}</div>
             : list.length ? <div className="plist">{list.map((p,i)=><PropRow key={i} p={p} onOpen={openP}/>)}</div>
             : <div className="estate"><div className="et">No {mfilter} props</div><div className="es">Try another market.</div></div>}
         </div>
@@ -512,6 +520,14 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .seclbl{font-family:var(--disp);font-weight:800;font-size:13px;letter-spacing:1px;color:var(--mut);margin:24px 12px 2px}
 /* PROPS-POLISH-2026-06-26 :: 12px inset, 8pt rhythm, de-boxed prop list */
 #wrap{padding-bottom:96px}
+/* LOADING-SKELETON-2026-06-26 :: shimmer placeholder */
+.sk{background:#141a20;background-image:linear-gradient(90deg,rgba(255,255,255,0) 0,rgba(255,255,255,.06) 50%,rgba(255,255,255,0) 100%);background-size:200% 100%;animation:sksh 1.3s ease-in-out infinite;border-radius:6px}
+@keyframes sksh{0%{background-position:200% 0}100%{background-position:-200% 0}}
+.skrow{display:flex;align-items:center;gap:11px}
+.skrow+.skrow{border-top:1px solid var(--line)}
+.skb{flex:1;min-width:0}
+.skrow{padding:11px 13px 11px 16px}
+.skav{width:42px;height:42px;border-radius:50%;flex:0 0 auto}
 .nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:460px;display:flex;justify-content:space-around;padding:7px 4px;background:rgba(0,0,0,.96);backdrop-filter:blur(12px);border-top:1px solid var(--line);z-index:20}
 .nav a{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;font-family:var(--disp);font-weight:700;font-size:10px;letter-spacing:.3px;color:var(--mut2);text-decoration:none}
 .nav a.on{color:var(--gold)}.nav a .i{font-size:15px;line-height:1}.nav a .dbars rect{fill:var(--mut2)}
