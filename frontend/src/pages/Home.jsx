@@ -748,9 +748,9 @@ function MarketMovers({movers,navigate}){
         <span className={"mvd "+(up?"up":"dn")}>{up?"\u2191":"\u2193"} {up?"+":"\u2212"}{Math.abs(d.delta)}{"\u00a2"}</span>
       </div>);})}</div>
     <div className="mvnote">
-      <div className="mvnr"><span className="up">{"\u2191"} +40{"\u00a2"} (green)</span> {"\u2014"} the price has <b>lengthened</b> by 40 cents since it opened. Bigger payout on that side now than at open {"\u2014"} a team that opened +120 is now +160, or a -140 drifted to -100. The market is drifting <b>away</b> from that side: fewer takers, so the book is sweetening the price.</div>
-      <div className="mvnr"><span className="dn">{"\u2193"} {"\u2212"}40{"\u00a2"} (red)</span> {"\u2014"} the price has <b>shortened</b> by 40 cents. Worse payout now than at open {"\u2014"} +160 bet down to +120, or -100 steamed to -140. Money is coming in on that side: the market is moving <b>toward</b> it.</div>
-      <div className="mvnf">So green isn't automatically good and red isn't bad {"\u2014"} green = a better entry price but the market fading you; red = the market agreeing, but you've missed the best number. A 40{"\u00a2"} move either way is sizable, worth noticing.</div>
+      <div className="mvnr"><span className="up">{"\u2191"} green</span> {"\u2014"} the price has <b>lengthened</b> since it opened. Bigger payout on that side now than at open {"\u2014"} a team that opened +120 is now +160, or a -140 drifted to -100. The market is drifting <b>away</b> from that side: fewer takers, so the book is sweetening the price.</div>
+      <div className="mvnr"><span className="dn">{"\u2193"} red</span> {"\u2014"} the price has <b>shortened</b>. Worse payout now than at open {"\u2014"} +160 bet down to +120, or -100 steamed to -140. Money is coming in on that side: the market is moving <b>toward</b> it.</div>
+      <div className="mvnf">So green isn't automatically good and red isn't bad {"\u2014"} green = a better entry price but the market fading you; red = the market agreeing, but you've missed the best number. A move either way is sizable, worth noticing.</div>
     </div>
   </div>);
 }
@@ -771,6 +771,7 @@ const CSS=`@import url('https://fonts.googleapis.com/css2?family=Barlow+Condense
 --disp:'Barlow Condensed',sans-serif;--mono:'IBM Plex Mono',ui-monospace,monospace;--ui:'Inter',system-ui,sans-serif;--serif:Georgia,'Times New Roman',serif;}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}html,body{margin:0}
 body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-webkit-font-smoothing:antialiased}
+/* KPI-TIGHTEN-2026-06-26 :: stat cards tightened; movers note 40c figures stripped */
 /* LAYOUT-POLISH-8PT-DEBOX-2026-06-26 :: 12px page inset, 8pt vertical rhythm, de-boxed edge board, borders reduced to premium-only */
 .app{max-width:460px;margin:0 auto;min-height:100vh;padding-bottom:64px}
 .hd{position:sticky;top:0;z-index:20;background:#0b0d11;padding:11px 12px 0}
@@ -875,9 +876,9 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .wheel{width:52px;height:52px;border-radius:50%;position:absolute;top:24px;right:16px;background:radial-gradient(circle,#3a2c0a,#14110a 72%);border:2px solid var(--gold);animation:spin 7s linear infinite}.wheel::before{content:"";position:absolute;inset:6px;border-radius:50%;border:1px dashed rgba(243,185,79,.6)}
 @keyframes spin{to{transform:rotate(360deg)}}
 
-.kpis{display:flex;gap:8px;margin:24px 12px 0}.kpi{flex:1;border:none;border-radius:11px;background:var(--panel);padding:11px 12px;text-align:left}
-.kpi .k{font-family:var(--mono);font-size:8.5px;color:var(--mut2);letter-spacing:.5px}.kpi .v{font-family:var(--mono);font-weight:600;font-size:19px;color:var(--tx);margin-top:5px;line-height:1}.kpi .v.g{color:var(--green)}.kpi .v.gold{color:var(--gold)}.kpi .v.red{color:var(--red)}.kpi .ksub{font-family:var(--mono);font-size:8.5px;color:var(--mut2);margin-top:3px}
-.kpi .kspark{display:block;width:100%;height:24px;margin-top:8px;overflow:visible}
+.kpis{display:flex;gap:8px;margin:24px 12px 0}.kpi{flex:1;border:none;border-radius:11px;background:var(--panel);padding:9px 11px;text-align:left}
+.kpi .k{font-family:var(--mono);font-size:8.5px;color:var(--mut2);letter-spacing:.5px}.kpi .v{font-family:var(--mono);font-weight:600;font-size:19px;color:var(--tx);margin-top:3px;line-height:1}.kpi .v.g{color:var(--green)}.kpi .v.gold{color:var(--gold)}.kpi .v.red{color:var(--red)}.kpi .ksub{font-family:var(--mono);font-size:8.5px;color:var(--mut2);margin-top:2px}
+.kpi .kspark{display:block;width:100%;height:22px;margin-top:5px;overflow:visible}
 
 .chips{display:flex;align-items:center;gap:7px;padding:8px 12px 0;overflow-x:auto;scrollbar-width:none}.chips::-webkit-scrollbar{display:none}
 .chipf{font-family:var(--mono);font-size:10px;color:var(--mut);border:1px solid var(--line2);border-radius:999px;padding:4px 10px;white-space:nowrap;cursor:pointer}.chipf.on{color:#06202a;background:var(--blue);border-color:var(--blue);font-weight:600}
