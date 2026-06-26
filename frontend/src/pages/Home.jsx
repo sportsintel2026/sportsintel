@@ -1,4 +1,4 @@
-// WizePicks Home — live dashboard hub. Reads the existing /api/edges/mlb feed (no extra Odds cost).  ·  FULL-EDGE-BOARD-RANKED-2026-06-26  ·  BESTPLAY-REAL-LINEMOVE-2026-06-26
+// WizePicks Home — live dashboard hub. Reads the existing /api/edges/mlb feed (no extra Odds cost).  ·  FULL-EDGE-BOARD-RANKED-2026-06-26  ·  BESTPLAY-REAL-LINEMOVE-2026-06-26  ·  KPI-SPARKLINES-2026-06-26
 // CFB-BOARD-WIRED-MOBILE-INTRAINING-2026-06-22
 // HOME-PREMIUM-DARK-RESKIN-2026-06-23
 // HOME-FLAT-STATS-DEPLOY2-2026-06-23
@@ -359,9 +359,9 @@ export default function HomePage(){
         <div className="guide" onClick={()=>navigate("/guide")}><div className="gi"/><div className="gt"><div className="gh">New here? Start with the basics</div><div className="gs">Edges, props, line shopping &amp; the full board {"\u2014"} a quick walkthrough.</div></div><div className="ga">{"\u203a"}</div></div>
 
         {hasFull && <div className="kpis">
-          <div className="kpi"><div className="k">ROI</div><div className={"v "+(perfStats&&perfStats.roi!=null?(perfStats.roi>=0?"g":"red"):"")}>{perfStats&&perfStats.roi!=null?(perfStats.roi>=0?"+":"")+perfStats.roi+"%":"\u2014"}</div><div className="ksub">{perfStats?perfStats.roiLbl:"tracked"}</div></div>
-          <div className="kpi"><div className="k">WIN RATE</div><div className="v">{perfStats&&perfStats.winRate!=null?perfStats.winRate.toFixed(1)+"%":"\u2014"}</div><div className="ksub">{perfStats&&perfStats.graded!=null?perfStats.graded+" graded":"tracking"}</div></div>
-          <div className="kpi"><div className="k">CLV</div><div className={"v "+(perfStats&&perfStats.clv!=null?(perfStats.clv>=0?"g":"red"):"")}>{perfStats&&perfStats.clv!=null?(perfStats.clv>=0?"+":"")+perfStats.clv+"%":"\u2014"}</div><div className="ksub">beat close</div></div>
+          <div className="kpi"><div className="k">ROI</div><div className={"v "+(perfStats&&perfStats.roi!=null?(perfStats.roi>=0?"g":"red"):"")}>{perfStats&&perfStats.roi!=null?(perfStats.roi>=0?"+":"")+perfStats.roi+"%":"\u2014"}</div><div className="ksub">{perfStats?perfStats.roiLbl:"tracked"}</div><Spark data={perf&&perf.spark&&perf.spark.roi} color="#3FCB91"/></div>
+          <div className="kpi"><div className="k">WIN RATE</div><div className="v">{perfStats&&perfStats.winRate!=null?perfStats.winRate.toFixed(1)+"%":"\u2014"}</div><div className="ksub">{perfStats&&perfStats.graded!=null?perfStats.graded+" graded":"tracking"}</div><Spark data={perf&&perf.spark&&perf.spark.win} color="#ECEFF2"/></div>
+          <div className="kpi"><div className="k">CLV</div><div className={"v "+(perfStats&&perfStats.clv!=null?(perfStats.clv>=0?"g":"red"):"")}>{perfStats&&perfStats.clv!=null?(perfStats.clv>=0?"+":"")+perfStats.clv+"%":"\u2014"}</div><div className="ksub">beat close</div><Spark data={perf&&perf.spark&&perf.spark.clv} color="#3FCB91"/></div>
         </div>}
 
       <div id="content">
@@ -444,6 +444,13 @@ function SparkM({dir,seed=0}){ const n=7,w=40,h=15,z=[1.4,-1,.8,-1.6,.6,0,-1.2];
   for(let i=0;i<n;i++){const t=dir==="up"?-(i/(n-1))*8:dir==="dn"?(i/(n-1))*8:0;const y=Math.max(2,Math.min(h-2,h/2+t*.55+z[(i+seed)%7]));pts.push([(i/(n-1))*w,y]);}
   const col=dir==="up"?"#33e991":dir==="dn"?"#ff6a5a":"#46505c";const path=pts.map((p,i)=>(i?"L":"M")+p[0].toFixed(1)+" "+p[1].toFixed(1)).join(" ");
   return <svg className="spk" width={w} height={h} viewBox={`0 0 ${w} ${h}`}><path d={path} fill="none" stroke={col} strokeWidth="1.4" strokeLinejoin="round"/></svg>;
+}
+function Spark({data,color}){
+  if(!Array.isArray(data)||data.length<2) return null;
+  const W=100,H=26,mn=Math.min(...data),mx=Math.max(...data),rng=(mx-mn)||1;
+  const X=i=>i/(data.length-1)*W,Y=v=>H-2-((v-mn)/rng)*(H-4);
+  const pts=data.map((v,i)=>`${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(" ");
+  return <svg className="kspark" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none"><polyline points={pts} fill="none" stroke={color||"#3FCB91"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke"/></svg>;
 }
 function HeroChartM({series,seed=0}){ const W=150,H=42;
   const raw=Array.isArray(series)?series.map(amCents).filter(v=>v!=null):[];
@@ -841,6 +848,7 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 
 .kpis{display:flex;gap:9px;margin:13px 14px 0}.kpi{flex:1;border:1px solid var(--line);border-radius:11px;background:var(--panel);padding:10px 12px;text-align:left}
 .kpi .k{font-family:var(--mono);font-size:8.5px;color:var(--mut2);letter-spacing:.5px}.kpi .v{font-family:var(--mono);font-weight:600;font-size:19px;color:var(--tx);margin-top:5px;line-height:1}.kpi .v.g{color:var(--green)}.kpi .v.gold{color:var(--gold)}.kpi .v.red{color:var(--red)}.kpi .ksub{font-family:var(--mono);font-size:8.5px;color:var(--mut2);margin-top:3px}
+.kpi .kspark{display:block;width:100%;height:24px;margin-top:8px;overflow:visible}
 
 .chips{display:flex;align-items:center;gap:7px;padding:8px 14px 0;overflow-x:auto;scrollbar-width:none}.chips::-webkit-scrollbar{display:none}
 .chipf{font-family:var(--mono);font-size:10px;color:var(--mut);border:1px solid var(--line2);border-radius:999px;padding:4px 10px;white-space:nowrap;cursor:pointer}.chipf.on{color:#06202a;background:var(--blue);border-color:var(--blue);font-weight:600}
