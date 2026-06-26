@@ -1,4 +1,4 @@
-// WizePicks Home — live dashboard hub. Reads the existing /api/edges/mlb feed (no extra Odds cost).
+// WizePicks Home — live dashboard hub. Reads the existing /api/edges/mlb feed (no extra Odds cost).  ·  FULL-EDGE-BOARD-RANKED-2026-06-26
 // CFB-BOARD-WIRED-MOBILE-INTRAINING-2026-06-22
 // HOME-PREMIUM-DARK-RESKIN-2026-06-23
 // HOME-FLAT-STATS-DEPLOY2-2026-06-23
@@ -394,7 +394,7 @@ export default function HomePage(){
               <div className="chips">{BF.map(([lb,key])=><span key={key} className={"chipf "+(board===key?"on":"")} onClick={()=>setBoard(key)}>{lb}</span>)}</div>
               {boardItems.length>0
                 ? <>
-                    <div className="grid">{boardItems.map((d,i)=>{const id=d.gameId+d.cat+i;return openId===id?<BoardRow key={id} d={d} i={i} open={true} onToggle={()=>setOpenId(null)} navigate={navigate} sport={sport}/>:<BoardCardCompact key={id} d={d} sport={sport} onClick={()=>setOpenId(id)}/>;})}</div>
+                    <div className="grid">{boardItems.map((d,i)=>{const id=d.gameId+d.cat+i;return openId===id?<BoardRow key={id} d={d} i={i} open={true} onToggle={()=>setOpenId(null)} navigate={navigate} sport={sport}/>:<BoardCardCompact key={id} d={d} i={i} sport={sport} onClick={()=>setOpenId(id)}/>;})}</div>
                     <div className="sum"><span className="l">{boardItems.length} game edges</span><span className="sp"/><span>avg <span className="p">+{kpiHas?kAvg:"0.0"}%</span></span></div>
                   </>
                 : <div className="estate"><div className="et">No edges on the board yet</div><div className="es">Edges appear as books post tonight's lines.</div></div>}
@@ -545,23 +545,23 @@ function BoardRow({d,i,open,onToggle,navigate,sport}){ const lg=(SPORTS[sport]||
 }
 /* BOARD-VIEW-TOGGLE-CARDS-GRID-2026-06-24 — spreadsheet view of the same boardItems */
 /* CARDS-COMPACT-GRID-EXPAND-2026-06-24 — compact card; taps open the full BoardRow */
-function BoardCardCompact({d,sport,onClick}){
-  const lg=(SPORTS[sport]||SPORTS.mlb).lg;
+function BoardCardCompact({d,i,sport,onClick}){
   const conv=String(d.conv||"low");
+  const wp=Number(d.model);
+  const wpv=isFinite(wp)?Math.max(0,Math.min(100,wp)):null;
+  const C=113.1; // 2·π·18
+  const dash=wpv!=null?(wpv/100*C):0;
   return (
-    <div className={"gr gcompact "+conv} onClick={onClick}>
-      <div className="ghead">
-        <div className="lgs"><LogoM ab={d.a&&d.a[0]} col={d.a&&d.a[1]} lg={lg}/><LogoM ab={d.h&&d.h[0]} col={d.h&&d.h[1]} lg={lg}/></div>
-        <div className="ghm">
-          <div className="ghpick">{d.p}<span className="ghmk">{d.mk}</span></div>
-          <div className="ghmu">{d.g}{d.starts?" \u00b7 "+d.starts:""}</div>
-        </div>
-        <div className="ghr">
-          <div className={"ghedge "+(d.edge<0?"neg":"pos")}>{d.edge>=0?"+":""}{Number(d.edge).toFixed(1)}<i>%</i></div>
-          {conv&&<span className={"ghconv "+conv}>{conv.toUpperCase()}</span>}
-        </div>
+    <div className={"gr gcompact erow "+conv} onClick={onClick}>
+      <div className="erk">{i+1}</div>
+      <div className="ein">
+        <div className="epick">{d.p}{d.mk&&<span className="emk">{d.mk}</span>}</div>
+        <div className="emu">{d.g}</div>
       </div>
-      <div className="gcbody"><div className="gcwhy">Model <b>{d.model}%</b> vs market {d.mkt}% {"\u2014"} the price is better than it should be.</div><div className="gctap">tap for full breakdown {"\u203a"}</div></div>
+      <div className="ecol"><div className={"ecv "+(d.edge<0?"neg":"pos")}>{d.edge>=0?"+":""}{Number(d.edge).toFixed(1)}%</div><div className="ecl">EDGE</div></div>
+      <div className="ecol odds"><div className="ecv">{d.odds}</div><div className="ecl">BEST ODDS</div></div>
+      {wpv!=null&&<div className="ering"><svg viewBox="0 0 46 46"><circle cx="23" cy="23" r="18" fill="none" stroke="rgba(255,255,255,.08)" strokeWidth="4"/><circle cx="23" cy="23" r="18" fill="none" stroke="#3FCB91" strokeWidth="4" strokeLinecap="round" strokeDasharray={dash.toFixed(1)+" "+C} transform="rotate(-90 23 23)"/></svg><div className="epct">{Math.round(wpv)}%</div></div>}
+      <div className="echev">{"\u203a"}</div>
     </div>
   );
 }
@@ -1076,4 +1076,20 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .gcbody{padding:0 15px 13px 17px}
 .gcwhy{font-size:11.5px;color:#aeb8c2;line-height:1.45}.gcwhy b{color:#fff;font-weight:700}
 .gctap{font-family:var(--mono);font-size:9px;color:var(--mut2);margin-top:8px;letter-spacing:.5px}
+/* ranked edge-board row — FULL-EDGE-BOARD-RANKED-2026-06-26. keeps conviction ::before accent; tap still swaps to BoardRow breakdown */
+.gr.erow{display:flex;align-items:center;gap:10px;padding:13px 12px 13px 16px}
+.erow .erk{width:25px;height:25px;flex:0 0 auto;border-radius:50%;border:1px solid rgba(63,203,145,.45);color:var(--green);font-family:var(--disp);font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center}
+.erow .ein{flex:1;min-width:0}
+.erow .epick{font-family:var(--disp);font-weight:800;font-size:18px;color:#fff;line-height:1;letter-spacing:-.2px;display:flex;align-items:center;gap:7px}
+.erow .emk{font-family:var(--mono);font-size:8.5px;font-weight:600;color:var(--gold);border:1px solid rgba(201,168,106,.4);border-radius:4px;padding:1px 5px}
+.erow .emu{font-family:var(--mono);font-size:10.5px;color:var(--mut);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.erow .ecol{flex:0 0 auto;text-align:center}
+.erow .ecv{font-family:var(--disp);font-weight:700;font-size:15px;color:#fff;line-height:1;font-variant-numeric:tabular-nums}
+.erow .ecv.pos{color:var(--green)}.erow .ecv.neg{color:var(--neg)}
+.erow .ecl{font-family:var(--mono);font-size:8px;letter-spacing:.4px;color:var(--mut2);margin-top:3px;white-space:nowrap}
+.erow .ering{width:44px;height:44px;flex:0 0 auto;position:relative}
+.erow .ering svg{width:44px;height:44px;display:block}
+.erow .epct{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:var(--disp);font-weight:700;font-size:12px;color:var(--green)}
+.erow .echev{flex:0 0 auto;color:var(--mut2);font-family:var(--disp);font-size:21px;line-height:1}
+@media (max-width:380px){.erow .ecol.odds{display:none}}
 `;
