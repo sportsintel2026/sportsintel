@@ -205,6 +205,16 @@ function calculateMoneylineProjection(game, awayPitcher, homePitcher, awayTeamHi
 const ACE_ERA_THRESHOLD = LEAGUE_AVG.era - 0.6; // only starters clearly better than league get extra credit
 const ACE_SUPPRESS_PER = 0.35;   // extra runs suppressed per run of ERA below the threshold
 const ACE_SUPPRESS_MAX = 0.6;    // hard cap on extra suppression per starter (runs)
+// ===== WZ-TOTALS-MEANADJ-2026-06-26 =====
+// Conservative mean correction for a CONFIRMED Under bias in the LIVE total projection.
+// Evidence (graded MLB totals): model's Under picks ran -9.0% ROI (47.5% win, avg line 9.14)
+// while Over picks ran +6.0% (54.6% win, avg line 8.28) — the live projection sits low, so it
+// manufactures losing Unders on high-total games. This nudges every live projection up a touch
+// to trim those Unders without disturbing the profitable Over book. DELIBERATELY conservative:
+// the live projection (calculateTotalProjection) is not yet stored, so exact bias is unmeasured.
+// Refine from the by-side ROI split after ~2 weeks. Applied to the LIVE projection ONLY — the
+// shadow projection (calculateTotalProjectionShadow) is grading-only and is intentionally untouched.
+const TOTAL_MEAN_ADJ = 0.20;     // runs added to the live total projection (tunable / reversible)
 // Expected starter innings, anchored on the pitcher's REAL avg innings/start when
 // the sample is real (else ERA-derived). EXCEPTION (Roland's rule): a bad starter
 // — high ERA AND high WHIP — facing a strong-hitting lineup gets pulled EARLIER
@@ -276,7 +286,7 @@ function calculateTotalProjection(game, awayPitcher, homePitcher, awayTeamHit, h
   // 3-IP baseline — a worn pen behind an ace barely pitches, so it inflates little.
   const fatigueAdj = fatigueRunAdj(awayFatigue, homeFatigue, awayPenIP / 3.0, homePenIP / 3.0);
 
-  const projected = baseTotal + pitcherAdj + parkAdj + weatherAdj + bullpenAdj + fatigueAdj;
+  const projected = baseTotal + pitcherAdj + parkAdj + weatherAdj + bullpenAdj + fatigueAdj + TOTAL_MEAN_ADJ;
   return {
     projectedTotal: round2(projected),
     breakdown: {
