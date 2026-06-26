@@ -1,8 +1,9 @@
-// ODDSPAGE-PREMIUM-DARK-RESKIN-2026-06-23
+// ODDSPAGE-PREMIUM-DARK-RESKIN-2026-06-23  ·  MARKET-URL-SPORT-2026-06-26
 import { useState, useEffect } from "react";
 // CFB-ODDSPAGE-MARKET-WIRED-2026-06-23
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
+import { useSport } from "../hooks/useSport";
 import { oddsApi, edgesApi, subscriptionApi } from "../lib/api";
 
 const TEAMCOL = {
@@ -59,7 +60,7 @@ export default function MarketPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [plan, setPlan] = useState({ tier:"free", isAdmin:false });
-  const [sport, setSport] = useState("mlb");
+  const [sport, setSport] = useSport();
   const [odds, setOdds] = useState(null);
   const [edges, setEdges] = useState(null);
   const [oddsHist, setOddsHist] = useState(null);
