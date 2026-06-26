@@ -363,12 +363,12 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .sports b{flex:0 0 auto;font-family:var(--disp);font-weight:700;font-size:13px;letter-spacing:.4px;color:var(--mut);border:1px solid var(--line2);border-radius:999px;padding:6px 13px;display:inline-flex;align-items:center;gap:6px;cursor:pointer}
 .sports b.on{color:var(--tx);border-color:rgba(63,203,145,.4);background:rgba(63,203,145,.12)}
 .sports b .dot{width:6px;height:6px;border-radius:50%;background:#2a3640}.sports b.on .dot{background:var(--green)}
-.subnav{display:flex;gap:0;border:1px solid var(--line2);border-radius:10px;overflow:hidden;margin:11px 12px 0}
+.subnav{display:flex;gap:0;border:1px solid var(--line2);border-radius:10px;overflow:hidden;margin:11px 4px 0}
 .subnav b{flex:1;text-align:center;font-family:var(--disp);font-weight:800;font-size:13px;letter-spacing:.4px;color:var(--mut);padding:9px;cursor:pointer}
 .subnav b.on{background:#141d24;color:#fff}
-.cap{font-family:var(--mono);font-size:10px;color:var(--mut2);margin:10px 12px 0;line-height:1.4}
+.cap{font-family:var(--mono);font-size:10px;color:var(--mut2);margin:10px 4px 0;line-height:1.4}
 /* odds (line shop) card */
-.oc{margin:9px 12px 0;border:1px solid var(--line);border-radius:14px;background:var(--panel);padding:13px;cursor:pointer;transition:border-color .15s}.oc:active{border-color:var(--line2)}
+.oc{margin:9px 4px 0;border:1px solid var(--line);border-radius:14px;background:var(--panel);padding:13px;cursor:pointer;transition:border-color .15s}.oc:active{border-color:var(--line2)}
 .oc .och{display:flex;align-items:center;gap:9px;margin-bottom:11px}
 .lg{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#1B2025;border:1px solid var(--line2);font-family:var(--disp);font-weight:800;font-size:8px;color:#fff;flex:0 0 auto}.lg img{width:20px;height:20px;object-fit:contain}
 .lgs{display:flex}.lgs .lg{margin-left:-5px}.lgs .lg:first-child{margin-left:0}
@@ -379,13 +379,13 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .bp .v{font-family:var(--disp);font-weight:800;font-size:20px;color:#fff;margin-top:5px;line-height:1}.bp .v .pr{color:var(--green)}
 .bp .bk{font-family:var(--mono);font-size:8.5px;color:var(--gold);font-weight:700;margin-top:4px}
 /* movers */
-.mvrow{display:flex;align-items:center;gap:11px;margin:0;border:none;border-radius:0;background:transparent;padding:11px 13px}.mvrow+.mvrow{border-top:1px solid var(--line)}.mvlist{margin:8px 12px 0;background:var(--panel);border-radius:12px;overflow:hidden}
+.mvrow{display:flex;align-items:center;gap:11px;margin:0;border:none;border-radius:0;background:transparent;padding:11px 13px}.mvrow+.mvrow{border-top:1px solid var(--line)}.mvlist{margin:8px 4px 0;background:var(--panel);border-radius:12px;overflow:hidden}
 .mvrow .rk{font-family:var(--disp);font-weight:800;font-size:13px;color:var(--mut2);width:18px;flex:0 0 auto}
 .mvrow .mp{flex:1;min-width:0}.mvrow .mpk{font-family:var(--disp);font-weight:800;font-size:15px;color:#fff}.mvrow .mmu{font-family:var(--mono);font-size:9px;color:var(--mut2);margin-top:1px}
 .mvrow .mo{font-family:var(--mono);font-size:13px;font-weight:600;text-align:right;flex:0 0 auto}.mo.up{color:var(--green)}.mo.dn{color:var(--neg)}.mo .a{color:var(--mut2)}
 .mvrow .mc{font-family:var(--mono);font-size:10px;font-weight:600;margin-top:2px}.mc.up{color:var(--green)}.mc.dn{color:var(--neg)}
 /* consensus */
-.cc{margin:9px 12px 0;border:1px solid var(--line);border-radius:14px;background:var(--panel);padding:12px}
+.cc{margin:9px 4px 0;border:1px solid var(--line);border-radius:14px;background:var(--panel);padding:12px}
 .cc .och{display:flex;align-items:center;gap:9px;margin-bottom:9px}
 .crow{display:flex;align-items:center;gap:9px;padding:8px 0;border-top:1px solid rgba(255,255,255,.05)}.crow:first-of-type{border-top:none}
 .crow .cd{width:8px;height:8px;border-radius:50%;flex:0 0 auto}.cd.strong{background:var(--green)}.cd.soft{background:var(--gold)}.cd.split{background:var(--mut)}
@@ -393,7 +393,7 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .crow .cv{font-family:var(--mono);font-size:11px;color:#cdd7e1;flex:1}.crow .cv b{color:#fff}
 .crow .ca{font-family:var(--mono);font-size:10px;font-weight:600;flex:0 0 auto}.ca.ag{color:var(--green)}.ca.df{color:var(--gold)}
 .seclbl{font-family:var(--disp);font-weight:800;font-size:13px;letter-spacing:1px;color:var(--mut);margin:24px 12px 2px}
-.estate{margin:40px 12px;border:1px dashed var(--line2);border-radius:14px;padding:36px 18px;text-align:center}.estate .et{font-family:var(--disp);font-weight:800;font-size:18px;color:#cfd7e2}.estate .es{font-size:12px;color:var(--mut);margin-top:6px;font-family:var(--mono)}
+.estate{margin:40px 4px; /* EDGE-4PX-2026-06-26 */border:1px dashed var(--line2);border-radius:14px;padding:36px 18px;text-align:center}.estate .et{font-family:var(--disp);font-weight:800;font-size:18px;color:#cfd7e2}.estate .es{font-size:12px;color:var(--mut);margin-top:6px;font-family:var(--mono)}
 .nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:460px;display:flex;justify-content:space-around;padding:7px 4px;background:rgba(0,0,0,.96);backdrop-filter:blur(12px);border-top:1px solid var(--line);z-index:20}
 .nav a{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;font-family:var(--disp);font-weight:700;font-size:10px;letter-spacing:.3px;color:var(--mut2);text-decoration:none}
 .nav a.on{color:var(--gold)}.nav a .i{font-size:15px;line-height:1}.nav a .dbars rect{fill:var(--mut2)}
@@ -403,7 +403,7 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .shead{position:sticky;top:0;background:#080c11;border-bottom:1px solid var(--line);padding:12px 14px;display:flex;align-items:center;gap:11px;z-index:2}
 .shead .x{width:32px;height:32px;border-radius:9px;border:1px solid var(--line2);display:flex;align-items:center;justify-content:center;color:#cdd7e1;font-size:19px;cursor:pointer;flex:0 0 auto}
 .shead .t{font-family:var(--disp);font-weight:800;font-size:19px;color:#fff;line-height:1}.shead .ts{font-family:var(--mono);font-size:10px;color:var(--mut);margin-top:2px}
-.sbody{padding:13px 12px 80px}
+.sbody{padding:13px 4px 80px}
 /* MARKET-POLISH-2026-06-26 :: 12px inset, 8pt rhythm, de-boxed mover list */
 .gridblk{border:1px solid var(--line);border-radius:13px;background:var(--panel);padding:11px;margin-top:11px;overflow-x:auto}
 .gridblk .bl{font-family:var(--disp);font-weight:800;font-size:12px;letter-spacing:.6px;color:var(--mut);margin-bottom:9px}
