@@ -1,4 +1,4 @@
-// WizePicks Home — live dashboard hub. Reads the existing /api/edges/mlb feed (no extra Odds cost).  ·  KPI-SPARKLINES-2026-06-26  ·  MOVERS-CHIPS+LINEMOVE-GUARD-2026-06-26  ·  MOVER-MATCHUP-2026-06-26  ·  SECTION-REORDER-2026-06-26d
+// WizePicks Home — live dashboard hub. Reads the existing /api/edges/mlb feed (no extra Odds cost).  ·  KPI-SPARKLINES-2026-06-26  ·  MOVERS-CHIPS+LINEMOVE-GUARD-2026-06-26  ·  MOVER-MATCHUP-2026-06-26  ·  MOVERS-EXPLAINER-2026-06-26c
 // CFB-BOARD-WIRED-MOBILE-INTRAINING-2026-06-22
 // HOME-PREMIUM-DARK-RESKIN-2026-06-23
 // HOME-FLAT-STATS-DEPLOY2-2026-06-23
@@ -747,6 +747,11 @@ function MarketMovers({movers,navigate}){
         <span className="mvtxt"><span className="mvp">{d.p}</span>{d.g&&<span className="mvg">{d.g}</span>}</span>
         <span className={"mvd "+(up?"up":"dn")}>{up?"\u2191":"\u2193"} {up?"+":"\u2212"}{Math.abs(d.delta)}{"\u00a2"}</span>
       </div>);})}</div>
+    <div className="mvnote">
+      <div className="mvnr"><span className="up">{"\u2191"} +40{"\u00a2"} (green)</span> {"\u2014"} the price has <b>lengthened</b> by 40 cents since it opened. Bigger payout on that side now than at open {"\u2014"} a team that opened +120 is now +160, or a -140 drifted to -100. The market is drifting <b>away</b> from that side: fewer takers, so the book is sweetening the price.</div>
+      <div className="mvnr"><span className="dn">{"\u2193"} {"\u2212"}40{"\u00a2"} (red)</span> {"\u2014"} the price has <b>shortened</b> by 40 cents. Worse payout now than at open {"\u2014"} +160 bet down to +120, or -100 steamed to -140. Money is coming in on that side: the market is moving <b>toward</b> it.</div>
+      <div className="mvnf">So green isn't automatically good and red isn't bad {"\u2014"} green = a better entry price but the market fading you; red = the market agreeing, but you've missed the best number. A 40{"\u00a2"} move either way is sizable, worth noticing.</div>
+    </div>
   </div>);
 }
 function Gate({title,navigate}){
@@ -808,6 +813,12 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .mvchip .mvg{font-family:var(--mono);font-size:9px;color:var(--mut);white-space:nowrap;line-height:1;letter-spacing:.3px}
 .mvchip .mvd{font-family:var(--mono);font-size:12px;font-weight:700;white-space:nowrap}
 .mvchip .mvd.up{color:var(--green)}.mvchip .mvd.dn{color:var(--red)}
+.mvnote{margin-top:11px;padding:12px 13px;border:1px solid var(--line);border-radius:11px;background:rgba(255,255,255,.015)}
+.mvnr{font-family:var(--mono);font-size:9.5px;line-height:1.55;color:var(--mut2)}
+.mvnr+.mvnr{margin-top:7px}
+.mvnr b{color:var(--tx);font-weight:700}
+.mvnf{font-family:var(--mono);font-size:9.5px;line-height:1.55;color:var(--mut);margin-top:9px;padding-top:9px;border-top:1px solid var(--line)}
+.mvnote .up{color:var(--green);font-weight:700}.mvnote .dn{color:var(--red);font-weight:700}
 .mvrowm{display:flex;align-items:center;gap:11px;border:1px solid var(--line);border-radius:11px;background:var(--panel2);padding:10px 12px}
 .mvrowm .rkm{font-family:var(--disp);font-weight:800;font-size:13px;color:var(--mut2);width:16px;flex:0 0 auto;text-align:center}
 .mvrowm .mpm{flex:1;min-width:0}
