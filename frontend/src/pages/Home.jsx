@@ -1,4 +1,4 @@
-// WizePicks Home — live dashboard hub. Reads the existing /api/edges/mlb feed (no extra Odds cost).  ·  KPI-SPARKLINES-2026-06-26  ·  MOVERS-CHIPS+LINEMOVE-GUARD-2026-06-26  ·  MOVER-MATCHUP-2026-06-26  ·  SECTION-REORDER-2026-06-26c
+// WizePicks Home — live dashboard hub. Reads the existing /api/edges/mlb feed (no extra Odds cost).  ·  KPI-SPARKLINES-2026-06-26  ·  MOVERS-CHIPS+LINEMOVE-GUARD-2026-06-26  ·  MOVER-MATCHUP-2026-06-26  ·  SECTION-REORDER-2026-06-26d
 // CFB-BOARD-WIRED-MOBILE-INTRAINING-2026-06-22
 // HOME-PREMIUM-DARK-RESKIN-2026-06-23
 // HOME-FLAT-STATS-DEPLOY2-2026-06-23
@@ -373,9 +373,9 @@ export default function HomePage(){
             : <div className="rec"><div className="r" style={{fontSize:13,color:"#f3b94f"}}>View {"\u203a"}</div></div>}
         </div>
 
-      {hasFull && pulseAlerts.length>0 && <MarketPulse alerts={pulseAlerts} rolled={e.rolledToNextDay}/>}
-
       {hasFull && moverItems.length>0 && <MarketMovers movers={moverItems} navigate={navigate}/>}
+
+      {hasFull && pulseAlerts.length>0 && <MarketPulse alerts={pulseAlerts} rolled={e.rolledToNextDay}/>}
 
         {hasFull
           ? (heroItems.length>0
