@@ -114,6 +114,15 @@ export function SportTabsHeader() {
     navigate(to + (sport !== "mlb" ? `?sport=${sport}` : ""));
   };
 
+  let curSport = (params.get("sport") || "mlb").toLowerCase();
+  if (pathname.startsWith("/nhl-games")) curSport = "nhl";
+  else if (pathname.startsWith("/nba")) curSport = "nba";
+  else if (pathname.startsWith("/nfl-games")) curSport = "nfl";
+  else if (pathname.startsWith("/cfb-games")) curSport = "cfb";
+  const sportMeta = SPORTS.find((s) => s.key === curSport) || SPORTS[0];
+  const dotCls = sportMeta.status === "LIVE" ? "live" : sportMeta.status === "TRAIN" ? "train" : "soon";
+  const activeSec = SECTIONS.find((s) => sectionOn(s, pathname));
+
   return (
     <>
       <style>{CSS}</style>
@@ -142,6 +151,15 @@ export function SportTabsHeader() {
             );
           })}
         </nav>
+        <div className="wpnav-scope">
+          <span className="wpnav-scsport">
+            <span className="wpnav-scico">{SPORT_ICON[sportMeta.key]}</span>
+            {sportMeta.lb}
+            <i className={"wpnav-scdot " + dotCls} />
+          </span>
+          {activeSec && <><span className="wpnav-scsep">{"\u203a"}</span><span className="wpnav-scsec">{activeSec.lb}</span></>}
+          <span className="wpnav-schint">sport below {"\u00b7"} section above</span>
+        </div>
       </header>
     </>
   );
@@ -181,7 +199,7 @@ export default function SportBar() {
           >
             <span className="wpnav-ic">
               {SPORT_ICON[sp.key]}
-              {sp.status === "LIVE" && <i className="wpnav-dot" />}
+              <i className={"wpnav-dot " + (sp.status === "LIVE" ? "live" : sp.status === "TRAIN" ? "train" : "soon")} />
             </span>
             <span className="wpnav-spl">{sp.lb}</span>
           </button>
@@ -192,6 +210,7 @@ export default function SportBar() {
 }
 
 const CSS = `
+/* UNIFIED-NAV-FOCUS-TABS-2026-06-26 :: focus tabs (scale/fade), scope line, sport status dots */
 /* HIDE-LEGACY-WPBN-2026-06-26 :: hide old BottomNav (.wpbn) on mobile; sport bar is the nav */
 @media (max-width:1023px){
   .hd{display:none!important}
@@ -216,9 +235,21 @@ const CSS = `
 .wpnav-tabs::-webkit-scrollbar{display:none}
 .wpnav-tab{flex:0 0 auto;appearance:none;background:none;border:0;cursor:pointer;position:relative;
   font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:11.5px;font-weight:600;letter-spacing:.5px;color:#99A2AA;
-  padding:8px 11px 12px;white-space:nowrap;text-transform:uppercase}
-.wpnav-tab.on{color:#C9A86A}
-.wpnav-tab.on::after{content:"";position:absolute;left:9px;right:9px;bottom:0;height:2px;background:#C9A86A;border-radius:2px 2px 0 0}
+  padding:8px 11px 12px;white-space:nowrap;text-transform:uppercase;
+  transform-origin:center bottom;opacity:.5;transform:scale(.78);
+  transition:opacity .3s cubic-bezier(.4,0,.2,1),transform .3s cubic-bezier(.4,0,.2,1),color .3s ease}
+.wpnav-tab.on{color:#C9A86A;opacity:1;transform:scale(1.16)}
+.wpnav-tab.on::after{content:"";position:absolute;left:9px;right:9px;bottom:0;height:2px;background:#C9A86A;border-radius:2px 2px 0 0;transform-origin:left center;animation:wpnavbar .32s cubic-bezier(.4,0,.2,1)}
+@keyframes wpnavbar{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+/* unified scope line — bridges section tabs + sport bar */
+.wpnav-scope{display:flex;align-items:center;gap:8px;margin:6px -14px 0;padding:7px 13px;background:#08090c;border-top:1px solid rgba(255,255,255,.06);border-bottom:1px solid rgba(255,255,255,.06)}
+.wpnav-scsport{display:inline-flex;align-items:center;gap:6px;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:13px;letter-spacing:.5px;color:#C9A86A}
+.wpnav-scico{display:inline-flex}.wpnav-scico svg{width:14px;height:14px;display:block}
+.wpnav-scdot{width:6px;height:6px;border-radius:50%}
+.wpnav-scdot.live{background:#3FCB91}.wpnav-scdot.train{background:#D9A441}.wpnav-scdot.soon{background:transparent;box-shadow:inset 0 0 0 1.5px #3a4148}
+.wpnav-scsep{color:#5B646C;font-size:13px}
+.wpnav-scsec{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12.5px;letter-spacing:.6px;color:#ECEFF2;text-transform:uppercase}
+.wpnav-schint{margin-left:auto;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:8.5px;color:#5B646C;letter-spacing:.2px;white-space:nowrap}
 /* ===== bottom sport bar (icon chips) ===== */
 /* SPORTBAR-WEIGHT-BUMP-2026-06-26 :: icons 23->26, label 12->13.5, padding/gap up */
 .wpnav-sport{position:fixed;left:50%;bottom:0;transform:translateX(-50%);width:100%;max-width:460px;display:flex;gap:4px;z-index:50;
@@ -231,5 +262,8 @@ const CSS = `
 .wpnav-ic{position:relative;width:26px;height:26px}
 .wpnav-ic svg{width:26px;height:26px;display:block}
 .wpnav-sp .wpnav-spl{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13.5px;letter-spacing:.6px;line-height:1;color:inherit}
-.wpnav-dot{position:absolute;top:-2px;right:-3px;width:7px;height:7px;border-radius:50%;background:#3FCB91;border:1.5px solid #0b0d11}
+.wpnav-dot{position:absolute;top:-2px;right:-3px;width:7px;height:7px;border-radius:50%;border:1.5px solid #0b0d11}
+.wpnav-dot.live{background:#3FCB91}
+.wpnav-dot.train{background:#D9A441}
+.wpnav-dot.soon{background:transparent;border-color:#3a4148}
 `;
