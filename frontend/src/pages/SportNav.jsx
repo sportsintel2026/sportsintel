@@ -27,7 +27,7 @@ const SECTIONS = [
   { key: "games", lb: "Games",       to: "/games",       match: ["/games"] },
   { key: "mkt",   lb: "Market",      to: "/odds",        match: ["/odds", "/consensus", "/market-read"] },
   { key: "perf",  lb: "Performance", to: "/performance", match: ["/performance", "/clv"] },
-  { key: "news",  lb: "News",        to: "/news",        match: ["/news"], soon: true },
+  { key: "news",  lb: "News",        to: "/news",        match: ["/news"] },
 ];
 
 const SPORTS = [
@@ -94,7 +94,6 @@ export function SportTabsHeader() {
                 aria-current={on ? "page" : undefined}
               >
                 {s.lb}
-                {s.soon && <span className="wpnav-soon">SOON</span>}
               </button>
             );
           })}
@@ -150,7 +149,7 @@ const CSS = `
   .hd{display:none!important}
   .nav{display:none!important}
   .demobar{display:none!important}
-  .app{padding-bottom:84px!important}
+  .app{min-height:calc(100vh - 150px)!important;min-height:calc(100dvh - 150px)!important;padding-bottom:24px!important}
 }
 /* ===== top header (clone of .hd) + section tabs ===== */
 .wpnav-hd{position:sticky;top:0;z-index:40;max-width:460px;margin:0 auto;background:#0b0d11;padding:11px 14px 0;
@@ -171,7 +170,6 @@ const CSS = `
   padding:8px 11px 12px;white-space:nowrap;text-transform:uppercase}
 .wpnav-tab.on{color:#C9A86A}
 .wpnav-tab.on::after{content:"";position:absolute;left:9px;right:9px;bottom:0;height:2px;background:#C9A86A;border-radius:2px 2px 0 0}
-.wpnav-soon{font-family:'Inter',system-ui,sans-serif;font-size:7px;font-weight:800;background:#C9A86A;color:#1a1408;border-radius:4px;padding:1px 4px;margin-left:5px;vertical-align:middle;letter-spacing:.3px}
 /* ===== bottom sport bar ===== */
 .wpnav-sport{position:fixed;left:50%;bottom:0;transform:translateX(-50%);width:100%;max-width:460px;height:64px;display:flex;z-index:50;
   background:linear-gradient(180deg,#0c0f13,#070809);border-top:1px solid rgba(255,255,255,.06)}
