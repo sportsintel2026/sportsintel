@@ -146,7 +146,7 @@ export default function PropsPage() {
         </div>
         <div id="wrap">
           {loading ? <div className="estate"><div className="et">Loading props…</div><div className="es">Pulling model edges.</div></div>
-            : list.length ? list.map((p,i)=><PropRow key={i} p={p} onOpen={openP}/>)
+            : list.length ? <div className="plist">{list.map((p,i)=><PropRow key={i} p={p} onOpen={openP}/>)}</div>
             : <div className="estate"><div className="et">No {mfilter} props</div><div className="es">Try another market.</div></div>}
         </div>
       </>}
@@ -490,14 +490,14 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .sports b{flex:0 0 auto;font-family:var(--disp);font-weight:700;font-size:13px;letter-spacing:.4px;color:var(--mut);border:1px solid var(--line2);border-radius:999px;padding:6px 13px;display:inline-flex;align-items:center;gap:6px;cursor:pointer}
 .sports b.on{color:var(--tx);border-color:rgba(63,203,145,.4);background:rgba(63,203,145,.12)}
 .sports b .dot{width:6px;height:6px;border-radius:50%;background:#2a3640}.sports b.on .dot{background:var(--green)}
-.chips{display:flex;gap:7px;padding:11px 14px 4px;overflow-x:auto;scrollbar-width:none}.chips::-webkit-scrollbar{display:none}
+.chips{display:flex;gap:7px;padding:11px 12px 4px;overflow-x:auto;scrollbar-width:none}.chips::-webkit-scrollbar{display:none}
 .chips b{flex:0 0 auto;font-family:var(--mono);font-size:11px;font-weight:600;color:var(--mut);border:1px solid var(--line2);border-radius:8px;padding:6px 12px;cursor:pointer}
 .chips b.on{color:#06090b;background:var(--gold);border-color:var(--gold);font-weight:700}
-.bar{display:flex;align-items:center;justify-content:space-between;padding:9px 14px 0;font-family:var(--mono);font-size:10px;color:var(--mut)}
+.bar{display:flex;align-items:center;justify-content:space-between;padding:9px 12px 0;font-family:var(--mono);font-size:10px;color:var(--mut)}
 .bar .sort{display:flex;gap:0;border:1px solid var(--line2);border-radius:8px;overflow:hidden}
 .bar .sort b{padding:5px 10px;color:var(--mut);cursor:pointer;font-weight:600}.bar .sort b.on{background:#141d24;color:#fff}
-.prow{position:relative;display:flex;align-items:center;gap:11px;margin:8px 14px 0;border:1px solid var(--line);border-radius:13px;background:var(--panel);padding:11px 13px 11px 16px;overflow:hidden;cursor:pointer;transition:border-color .15s}
-.prow:active{border-color:var(--steel)}
+.prow{position:relative;display:flex;align-items:center;gap:11px;margin:0;border:none;border-radius:0;background:transparent;padding:11px 13px 11px 16px;overflow:hidden;cursor:pointer;transition:background .15s}.prow+.prow{border-top:1px solid var(--line)}.plist{margin:8px 12px 0;background:var(--panel);border-radius:13px;overflow:hidden}
+.prow:active{background:rgba(255,255,255,.03)}
 .prow .rail{position:absolute;left:0;top:0;bottom:0;width:4px}.rail.high{background:var(--green)}.rail.med{background:var(--gold)}.rail.low{background:#39454f}.rail.lk{background:#2a6f97}
 .prow .av{width:42px;height:42px;border-radius:50%;display:flex;align-items:flex-end;justify-content:center;font-family:var(--disp);font-weight:800;font-size:15px;color:#fff;flex:0 0 auto;overflow:hidden}
 .prow .pinfo{flex:1;min-width:0}
@@ -509,7 +509,8 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .prow .plb{font-family:var(--mono);font-size:8px;color:var(--mut);font-weight:700;margin-top:2px;letter-spacing:.3px}
 .prow .ptag{display:inline-block;font-family:var(--mono);font-size:8px;font-weight:700;border-radius:5px;padding:2px 6px;margin-top:5px}
 .ptag.HR{color:var(--gold);background:rgba(201,168,106,.14)}.ptag.HITS{color:var(--blue);background:rgba(93,169,232,.12)}.ptag.K{color:#c08bff;background:rgba(155,123,255,.14)}.ptag.TB{color:#7fdcc0;background:rgba(45,160,120,.16)}
-.seclbl{font-family:var(--disp);font-weight:800;font-size:13px;letter-spacing:1px;color:var(--mut);margin:18px 14px 2px}
+.seclbl{font-family:var(--disp);font-weight:800;font-size:13px;letter-spacing:1px;color:var(--mut);margin:24px 12px 2px}
+/* PROPS-POLISH-2026-06-26 :: 12px inset, 8pt rhythm, de-boxed prop list */
 #wrap{padding-bottom:96px}
 .nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:460px;display:flex;justify-content:space-around;padding:7px 4px;background:rgba(0,0,0,.96);backdrop-filter:blur(12px);border-top:1px solid var(--line);z-index:20}
 .nav a{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;font-family:var(--disp);font-weight:700;font-size:10px;letter-spacing:.3px;color:var(--mut2);text-decoration:none}
@@ -520,7 +521,7 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .shead{position:sticky;top:0;background:#000;backdrop-filter:blur(12px);border-bottom:1px solid var(--line);padding:12px 14px;display:flex;align-items:center;gap:11px;z-index:2}
 .shead .x{width:32px;height:32px;border-radius:9px;border:1px solid var(--line2);display:flex;align-items:center;justify-content:center;color:#cdd7e1;font-size:19px;cursor:pointer;flex:0 0 auto}
 .shead .t{font-family:var(--disp);font-weight:800;font-size:19px;color:#fff;line-height:1}.shead .ts{font-family:var(--mono);font-size:10px;color:var(--mut);margin-top:2px}
-.sbody{padding:13px 14px 80px}
+.sbody{padding:13px 12px 80px}
 .dblk{border:1px solid var(--line);border-radius:13px;background:var(--panel);padding:13px;margin-top:11px}
 .dblk .bl{font-family:var(--disp);font-weight:800;font-size:12px;letter-spacing:.7px;color:var(--mut);margin-bottom:11px;display:flex;align-items:center;justify-content:space-between}
 .dblk .bl .bx{font-family:var(--mono);font-size:9px;color:var(--mut2);letter-spacing:0;font-weight:500}
@@ -564,7 +565,7 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .hpWind{font-family:var(--mono);font-size:9.5px;letter-spacing:.2px;color:#aeb9c8;margin-top:2px;text-align:center}.hpWind .ar{font-weight:800;font-size:11px}.hpWind.wout{color:#46E0A9}.hpWind.win{color:#ff8f80}
 .histrow{display:flex;align-items:center;gap:10px}.histrow .hv{font-family:var(--disp);font-weight:800;font-size:22px;color:var(--green)}.histrow .ht{font-family:var(--mono);font-size:11px;color:#cdd7e1}.histrow .ht b{color:#fff}
 .why{font-size:12.5px;color:#c4cfd9;line-height:1.55}.why .wl{font-family:var(--disp);font-weight:800;font-size:11px;letter-spacing:.5px;color:var(--gold);display:block;margin-bottom:4px}
-.estate{margin:40px 14px;border:1px dashed var(--line2);border-radius:14px;padding:36px 18px;text-align:center}.estate .et{font-family:var(--disp);font-weight:800;font-size:18px;color:#cfd7e2}.estate .es{font-size:12px;color:var(--mut);margin-top:6px;font-family:var(--mono)}
+.estate{margin:40px 12px;border:1px dashed var(--line2);border-radius:14px;padding:36px 18px;text-align:center}.estate .et{font-family:var(--disp);font-weight:800;font-size:18px;color:#cfd7e2}.estate .es{font-size:12px;color:var(--mut);margin-top:6px;font-family:var(--mono)}
 /* ── rich HR card ──────────────────────────────────────────── */
 .hpHead{display:flex;align-items:center;gap:13px}
 .hpAv{width:58px;height:58px;border-radius:50%;flex:0 0 auto;overflow:hidden;display:flex;align-items:flex-end;justify-content:center;font-family:var(--disp);font-weight:800;font-size:20px;color:#fff}
