@@ -218,15 +218,16 @@ const CSS = `
 .wpnav-tab.on{color:#C9A86A}
 .wpnav-tab.on::after{content:"";position:absolute;left:9px;right:9px;bottom:0;height:2px;background:#C9A86A;border-radius:2px 2px 0 0}
 /* ===== bottom sport bar (icon chips) ===== */
+/* SPORTBAR-WEIGHT-BUMP-2026-06-26 :: icons 23->26, label 12->13.5, padding/gap up */
 .wpnav-sport{position:fixed;left:50%;bottom:0;transform:translateX(-50%);width:100%;max-width:460px;display:flex;gap:4px;z-index:50;
   padding:7px 8px calc(7px + env(safe-area-inset-bottom));
   background:linear-gradient(180deg,#0c0f13,#070809);border-top:1px solid rgba(255,255,255,.07)}
 .wpnav-sp{flex:1;min-width:0;appearance:none;background:none;cursor:pointer;position:relative;
-  display:flex;flex-direction:column;align-items:center;gap:4px;
-  padding:7px 2px;border:1px solid transparent;border-radius:15px;color:#8A929A}
+  display:flex;flex-direction:column;align-items:center;gap:5px;
+  padding:8px 2px;border:1px solid transparent;border-radius:15px;color:#8A929A}
 .wpnav-sp.on{border-color:rgba(201,168,106,.45);background:rgba(201,168,106,.08);color:#C9A86A}
-.wpnav-ic{position:relative;width:23px;height:23px}
-.wpnav-ic svg{width:23px;height:23px;display:block}
-.wpnav-sp .wpnav-spl{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12px;letter-spacing:.6px;line-height:1;color:inherit}
+.wpnav-ic{position:relative;width:26px;height:26px}
+.wpnav-ic svg{width:26px;height:26px;display:block}
+.wpnav-sp .wpnav-spl{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13.5px;letter-spacing:.6px;line-height:1;color:inherit}
 .wpnav-dot{position:absolute;top:-2px;right:-3px;width:7px;height:7px;border-radius:50%;background:#3FCB91;border:1.5px solid #0b0d11}
 `;
