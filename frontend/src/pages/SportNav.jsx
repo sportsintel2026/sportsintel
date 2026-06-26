@@ -67,7 +67,7 @@ export function SportTabsHeader() {
   const goSection = (s) => {
     if (sectionOn(s, pathname)) return;
     const sp = params.get("sport");
-    navigate(s.to + (sp && s.to === "/home" ? `?sport=${sp}` : ""));
+    navigate(s.to + (sp ? `?sport=${sp}` : ""));
   };
 
   return (
@@ -117,9 +117,10 @@ export default function SportBar() {
   else if (pathname.startsWith("/cfb-games")) curSport = "cfb";
 
   const pickSport = (key) => {
-    if (key === curSport && (pathname === "/home" || pathname === "/dashboard")) return;
-    if (key === "nhl") navigate("/nhl-games");
-    else navigate(`/home?sport=${key}`);
+    if (key === curSport) return;
+    const onSection = SECTIONS.some((s) => sectionOn(s, pathname));
+    const base = onSection ? pathname : "/home";
+    navigate(`${base}?sport=${key}`);
   };
 
   return (
