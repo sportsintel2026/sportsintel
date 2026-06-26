@@ -1,4 +1,4 @@
-// SportNav.jsx — sport-first mobile navigation. WIZEPICKS-SPORTNAV-2026-06-26-WIRE
+// SportNav.jsx — sport-first mobile navigation. WIZEPICKS-SPORTNAV-2026-06-26-ICONCHIPS
 //
 // One global nav, mounted once in App.jsx, mobile-only:
 //   <SportTabsHeader/>  — rendered ABOVE the routes: a faithful clone of each
@@ -37,6 +37,39 @@ const SPORTS = [
   { key: "nba", lb: "NBA", status: "SOON" },
   { key: "nhl", lb: "NHL", status: "SOON" },
 ];
+
+const FB = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <ellipse cx="12" cy="12" rx="9" ry="5.4" transform="rotate(-32 12 12)" />
+    <path d="M9.2 14.8 14.8 9.2" />
+    <path d="M10.7 13.3l1.1 1.1M12.3 11.7l1.1 1.1" />
+  </svg>
+);
+const SPORT_ICON = {
+  mlb: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M6.7 5.4c2.5 2.3 2.5 10.9 0 13.2" />
+      <path d="M17.3 5.4c-2.5 2.3-2.5 10.9 0 13.2" />
+    </svg>
+  ),
+  nfl: FB,
+  cfb: FB,
+  nba: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 3.5v17M3.5 12h17" />
+      <path d="M6 6c2.6 2.4 2.6 9.6 0 12M18 6c-2.6 2.4-2.6 9.6 0 12" />
+    </svg>
+  ),
+  nhl: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <ellipse cx="12" cy="8.6" rx="7" ry="2.8" />
+      <path d="M5 8.6v6.2M19 8.6v6.2" />
+      <path d="M5 14.8c0 1.55 3.13 2.8 7 2.8s7-1.25 7-2.8" />
+    </svg>
+  ),
+};
 
 // Games is the one section whose page differs per sport: each sport has its own
 // live-scores route. Every other section is one shared page that reads ?sport=.
@@ -146,9 +179,11 @@ export default function SportBar() {
             onClick={() => pickSport(sp.key)}
             aria-current={on ? "true" : undefined}
           >
-            {sp.status === "LIVE" && <span className="wpnav-ld" />}
+            <span className="wpnav-ic">
+              {SPORT_ICON[sp.key]}
+              {sp.status === "LIVE" && <i className="wpnav-dot" />}
+            </span>
             <span className="wpnav-spl">{sp.lb}</span>
-            <span className="wpnav-spt">{sp.status}</span>
           </button>
         );
       })}
@@ -161,7 +196,7 @@ const CSS = `
   .hd{display:none!important}
   .nav{display:none!important}
   .demobar{display:none!important}
-  .app{min-height:calc(100vh - 150px)!important;min-height:calc(100dvh - 150px)!important;padding-bottom:24px!important}
+  .app{min-height:calc(100vh - 84px)!important;min-height:calc(100dvh - 84px)!important;padding-bottom:calc(74px + env(safe-area-inset-bottom))!important}
 }
 /* ===== top header (clone of .hd) + section tabs ===== */
 .wpnav-hd{position:sticky;top:0;z-index:40;max-width:460px;margin:0 auto;background:#0b0d11;padding:11px 14px 0;
@@ -182,16 +217,16 @@ const CSS = `
   padding:8px 11px 12px;white-space:nowrap;text-transform:uppercase}
 .wpnav-tab.on{color:#C9A86A}
 .wpnav-tab.on::after{content:"";position:absolute;left:9px;right:9px;bottom:0;height:2px;background:#C9A86A;border-radius:2px 2px 0 0}
-/* ===== bottom sport bar ===== */
-.wpnav-sport{position:fixed;left:50%;bottom:0;transform:translateX(-50%);width:100%;max-width:460px;height:64px;display:flex;z-index:50;
-  background:linear-gradient(180deg,#0c0f13,#070809);border-top:1px solid rgba(255,255,255,.06)}
-.wpnav-sport::before{content:"";position:absolute;left:0;right:0;top:-1px;height:2px;background:linear-gradient(90deg,transparent,#C9A86A,transparent);opacity:.55}
-.wpnav-sp{flex:1;min-width:0;appearance:none;background:none;border:0;cursor:pointer;position:relative;
-  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px}
-.wpnav-sp .wpnav-spl{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:15.5px;letter-spacing:.5px;color:#5B646C}
-.wpnav-sp .wpnav-spt{font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:7px;letter-spacing:.5px;color:#5B646C}
-.wpnav-sp.on{background:color-mix(in srgb,#C9A86A 12%,transparent)}
-.wpnav-sp.on .wpnav-spl,.wpnav-sp.on .wpnav-spt{color:#C9A86A}
-.wpnav-sp.on::before{content:"";position:absolute;top:-1px;left:20%;right:20%;height:3px;background:#C9A86A;border-radius:0 0 3px 3px}
-.wpnav-sp .wpnav-ld{width:5px;height:5px;border-radius:50%;background:#3FCB91;position:absolute;top:11px;right:50%;margin-right:-15px}
+/* ===== bottom sport bar (icon chips) ===== */
+.wpnav-sport{position:fixed;left:50%;bottom:0;transform:translateX(-50%);width:100%;max-width:460px;display:flex;gap:4px;z-index:50;
+  padding:7px 8px calc(7px + env(safe-area-inset-bottom));
+  background:linear-gradient(180deg,#0c0f13,#070809);border-top:1px solid rgba(255,255,255,.07)}
+.wpnav-sp{flex:1;min-width:0;appearance:none;background:none;cursor:pointer;position:relative;
+  display:flex;flex-direction:column;align-items:center;gap:4px;
+  padding:7px 2px;border:1px solid transparent;border-radius:15px;color:#8A929A}
+.wpnav-sp.on{border-color:rgba(201,168,106,.45);background:rgba(201,168,106,.08);color:#C9A86A}
+.wpnav-ic{position:relative;width:23px;height:23px}
+.wpnav-ic svg{width:23px;height:23px;display:block}
+.wpnav-sp .wpnav-spl{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12px;letter-spacing:.6px;line-height:1;color:inherit}
+.wpnav-dot{position:absolute;top:-2px;right:-3px;width:7px;height:7px;border-radius:50%;background:#3FCB91;border:1.5px solid #0b0d11}
 `;
