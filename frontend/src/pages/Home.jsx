@@ -1,4 +1,4 @@
-// WizePicks Home — live dashboard hub. Reads the existing /api/edges/mlb feed (no extra Odds cost).  ·  FULL-EDGE-BOARD-RANKED-2026-06-26  ·  BESTPLAY-REAL-LINEMOVE-2026-06-26  ·  KPI-SPARKLINES-2026-06-26  ·  MOVERS-CHIPS+LINEMOVE-GUARD-2026-06-26
+// WizePicks Home — live dashboard hub. Reads the existing /api/edges/mlb feed (no extra Odds cost).  ·  FULL-EDGE-BOARD-RANKED-2026-06-26  ·  BESTPLAY-REAL-LINEMOVE-2026-06-26  ·  KPI-SPARKLINES-2026-06-26  ·  MOVERS-CHIPS+LINEMOVE-GUARD-2026-06-26  ·  MOVER-MATCHUP-2026-06-26
 // CFB-BOARD-WIRED-MOBILE-INTRAINING-2026-06-22
 // HOME-PREMIUM-DARK-RESKIN-2026-06-23
 // HOME-FLAT-STATS-DEPLOY2-2026-06-23
@@ -291,7 +291,7 @@ export default function HomePage(){
   const boardSrc = board==="all" ? oneSidePerGame(allAdj).filter(x=>sport==="mlb"?(x.edge??0)>0:(x.edge??0)>=1).sort(sortBoard) : boardEdges;
   const boardItems = boardSrc.map(toBoard);
   const heroItems = oneSidePerGame(allAdj).filter(x=>(x.edge??0)>0).sort((a,b)=>(b.edge||0)-(a.edge||0)).slice(0,3).map(toBoard);
-  const moverItems = movers.map((m)=>{return {p:edgeLabel(m),g:m.matchup,mv:(m._open!=null&&m._now!=null&&m._delta!=null)?[formatOdds(m._open),formatOdds(m._now),(m._delta>0?"up":m._delta<0?"dn":"")]:null,odds:formatOdds(m.odds),model:m.modelProb!=null?Math.round(m.modelProb*100):null,delta:m._delta};});
+  const moverItems = movers.map((m)=>{return {p:edgeLabel(m),g:(abbrById[m.gameId]?abbrById[m.gameId].a+" @ "+abbrById[m.gameId].h:m.matchup),mv:(m._open!=null&&m._now!=null&&m._delta!=null)?[formatOdds(m._open),formatOdds(m._now),(m._delta>0?"up":m._delta<0?"dn":"")]:null,odds:formatOdds(m.odds),model:m.modelProb!=null?Math.round(m.modelProb*100):null,delta:m._delta};});
   const propItems = topProps.map(p=>{const col=teamCol(shortTeam(p.team||p.game||""));const initials=((p.name||"").split(" ").map(s=>s[0]).join("").slice(0,2))||(p.name||"").slice(0,2);return {player:[p.name,initials,col],g:p.game||p.team||"",edge:(p.edge||0)*100,mk:p.market,p:p.betSide,odds:formatOdds(p.odds),id:p.id};});
   const parkItems = parks.map(g=>{const f=g.parkRunFactor,hf=g.parkHRFactor,w=g.weather||{};const hot=(hf??f)>1.05,cold=(hf??f)<0.95;const tag=hot?["HITTER FRIENDLY","h"]:cold?["PITCHER FRIENDLY","p"]:["NEUTRAL","n"];const ab=mlbAbbr(g.home||"");const t=w.tempF!=null?Math.round(w.tempF):null;const wind=w.windMph?(w.windMph+" mph"+(w.windEffect?" "+w.windEffect:"")):null;const wx=w.indoor?"Dome \u00b7 roof closed":([t!=null?t+"\u00b0F":null,wind].filter(Boolean).join(" \u00b7 ")||"Forecast pending");return {venue:g.venue||g.park||((g.home||"")+" Park"),g:g.home||"",a:[ab,teamCol(ab)],tag,hr:(hf!=null?((hf>1?"+":"")+Math.round((hf-1)*100)+"%"):"0%"),run:((f>1?"+":"")+Math.round((f-1)*100)+"%"),wx};});
   const liveItems = liveGames.map(g=>{const a=g.awayAbbr||(abbrById[g.gameId]?abbrById[g.gameId].a:shortTeam(g.away||""));const h=g.homeAbbr||(abbrById[g.gameId]?abbrById[g.gameId].h:shortTeam(g.home||""));const rows=[];const ml=(g.awayEdge??-9)>=(g.homeEdge??-9)?[a+" ML",g.awayWinProb,g.awayEdge,g.awayOdds]:[h+" ML",g.homeWinProb,g.homeEdge,g.homeOdds];if(ml[2]!=null)rows.push([ml[0],(ml[1]!=null?Math.round(ml[1]*100)+"%":"\u2014"),formatOdds(ml[3]),ml[2]*100]);if(g.totalLine!=null){const tt=(g.overEdge??-9)>=(g.underEdge??-9)?["Over "+g.totalLine,g.overProb,g.overEdge,g.overOdds]:["Under "+g.totalLine,g.underProb,g.underEdge,g.underOdds];if(tt[2]!=null)rows.push([tt[0],(tt[1]!=null?Math.round(tt[1]*100)+"%":"\u2014"),formatOdds(tt[3]),tt[2]*100]);}return {a,h,ac:colFor(a,sport),hc:colFor(h,sport),state:(g.half==="bottom"?"Bot":"Top")+" "+(g.inning||"")+(g.outs!=null?" \u00b7 "+g.outs+" out":""),rows,gameId:g.gameId};});
@@ -744,7 +744,7 @@ function MarketMovers({movers,navigate}){
     </div>
     <div className="mvscroll">{mv.slice(0,10).map((d,i)=>{const up=d.delta>0;return (
       <div className="mvchip" key={i}>
-        <span className="mvp">{d.p}</span>
+        <span className="mvtxt"><span className="mvp">{d.p}</span>{d.g&&<span className="mvg">{d.g}</span>}</span>
         <span className={"mvd "+(up?"up":"dn")}>{up?"\u2191":"\u2193"} {up?"+":"\u2212"}{Math.abs(d.delta)}{"\u00a2"}</span>
       </div>);})}</div>
   </div>);
@@ -802,8 +802,10 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .mvall{margin-left:auto;color:var(--green);font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap}
 .mvscroll{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
 .mvscroll::-webkit-scrollbar{display:none}
-.mvchip{flex:0 0 auto;display:flex;align-items:center;gap:9px;border:1px solid var(--line2);border-radius:11px;background:var(--panel);padding:10px 13px}
-.mvchip .mvp{font-family:var(--disp);font-weight:700;font-size:14px;color:var(--tx);white-space:nowrap}
+.mvchip{flex:0 0 auto;display:flex;align-items:center;gap:10px;border:1px solid var(--line2);border-radius:11px;background:var(--panel);padding:9px 13px}
+.mvchip .mvtxt{display:flex;flex-direction:column;gap:3px;min-width:0}
+.mvchip .mvp{font-family:var(--disp);font-weight:700;font-size:14px;color:var(--tx);white-space:nowrap;line-height:1}
+.mvchip .mvg{font-family:var(--mono);font-size:9px;color:var(--mut);white-space:nowrap;line-height:1;letter-spacing:.3px}
 .mvchip .mvd{font-family:var(--mono);font-size:12px;font-weight:700;white-space:nowrap}
 .mvchip .mvd.up{color:var(--green)}.mvchip .mvd.dn{color:var(--red)}
 .mvrowm{display:flex;align-items:center;gap:11px;border:1px solid var(--line);border-radius:11px;background:var(--panel2);padding:10px 12px}
