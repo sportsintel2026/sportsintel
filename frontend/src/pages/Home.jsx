@@ -1,4 +1,4 @@
-// WizePicks Home — live dashboard hub. Reads the existing /api/edges/mlb feed (no extra Odds cost).  ·  FULL-EDGE-BOARD-RANKED-2026-06-26  ·  BESTPLAY-REAL-LINEMOVE-2026-06-26  ·  KPI-SPARKLINES-2026-06-26
+// WizePicks Home — live dashboard hub. Reads the existing /api/edges/mlb feed (no extra Odds cost).  ·  FULL-EDGE-BOARD-RANKED-2026-06-26  ·  BESTPLAY-REAL-LINEMOVE-2026-06-26  ·  KPI-SPARKLINES-2026-06-26  ·  MOVERS-CHIPS+LINEMOVE-GUARD-2026-06-26
 // CFB-BOARD-WIRED-MOBILE-INTRAINING-2026-06-22
 // HOME-PREMIUM-DARK-RESKIN-2026-06-23
 // HOME-FLAT-STATS-DEPLOY2-2026-06-23
@@ -378,6 +378,8 @@ export default function HomePage(){
           <div className="d">Need a play fast? Spin for a model-qualified pick.</div><div className="cta">Spin the wheel {"\u203a"}</div>
         </div>
 
+      {hasFull && moverItems.length>0 && <MarketMovers movers={moverItems} navigate={navigate}/>}
+
         {hasFull
           ? (heroItems.length>0
               ? <Swiper cls="herocar" dotcls="hdots">{heroItems.map((h,i)=><HeroSlide key={i} h={h} i={i} navigate={navigate} sport={sport} rolled={e.rolledToNextDay}/>)}</Swiper>
@@ -385,8 +387,6 @@ export default function HomePage(){
           : <Gate title="Today's top edge is locked" navigate={navigate}/>}
 
       {hasFull && pulseAlerts.length>0 && <MarketPulse alerts={pulseAlerts} rolled={e.rolledToNextDay}/>}
-
-      {hasFull && moverItems.length>0 && <MarketMovers movers={moverItems} navigate={navigate}/>}
 
         <div className="seclbl">{e.rolledToNextDay?"TOMORROW'S BOARD":"TODAY'S BOARD"} <span className="ct">{boardItems.length} edges{e.rolledToNextDay&&e.date?" · "+fmtSlate(e.date):""}</span></div>
         {hasFull
@@ -453,7 +453,16 @@ function Spark({data,color}){
   return <svg className="kspark" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none"><polyline points={pts} fill="none" stroke={color||"#3FCB91"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke"/></svg>;
 }
 function HeroChartM({series,seed=0}){ const W=150,H=42;
-  const raw=Array.isArray(series)?series.map(amCents).filter(v=>v!=null):[];
+  let raw=Array.isArray(series)?series.map(amCents).filter(v=>v!=null):[];
+  // Drop a lone anomalous tick (a single bad reading) so one glitch can't dominate
+  // the axis. MAD-based: a gradual real move keeps a wide spread and survives; only
+  // points far from the cluster relative to its own spread are trimmed.
+  if(raw.length>=4){
+    const s=[...raw].sort((a,b)=>a-b); const med=s[(s.length-1)>>1];
+    const dev=raw.map(v=>Math.abs(v-med)).sort((a,b)=>a-b); const mad=dev[(dev.length-1)>>1]||0;
+    const tol=Math.max(mad*5,20); const kept=raw.filter(v=>Math.abs(v-med)<=tol);
+    if(kept.length>=2) raw=kept;
+  }
   if(raw.length<2){ // no real line-movement history yet — honest flat baseline, never a fabricated trend
     return <svg viewBox={`0 0 ${W} ${H}`} width="100%" height="40" preserveAspectRatio="none" style={{overflow:"visible",marginTop:3}}>
       <line x1="0" y1={H/2} x2={W} y2={H/2} stroke="#3a4450" strokeWidth="2" strokeDasharray="3 4" vectorEffect="non-scaling-stroke"/></svg>;
@@ -725,16 +734,19 @@ function MarketPulse({alerts,movers,rolled}){ const [idx,setIdx]=useState(0);con
 
 // Market Movers — its own collapsible section (dropdown). Collapsed by default.
 function MarketMovers({movers,navigate}){
-  const [open,setOpen]=useState(false);
-  const mv=movers||[];
+  const mv=(movers||[]).filter(d=>d.delta!=null&&d.delta!==0);
   if(!mv.length)return null;
   return (<div className="mvsec">
-    <div className="mvtop" onClick={()=>setOpen(o=>!o)}>
+    <div className="mvhd">
+      <span className="mvpulse"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12h4l2 6 4-14 2 8h6"/></svg></span>
       <span className="mvtl">MARKET MOVERS</span>
-      <span className="mvtc">all {mv.length} {"\u00b7"} ranked by {"\u00a2"}</span>
-      <span className={"mvtch"+(open?" up":"")}>{"\u203a"}</span>
+      <span className="mvall" onClick={()=>navigate("/odds")}>View all {"\u203a"}</span>
     </div>
-    {open&&<div className="mvlist">{mv.map((d,i)=><MoverRowM key={i} d={d} rank={i+1}/>)}</div>}
+    <div className="mvscroll">{mv.slice(0,10).map((d,i)=>{const up=d.delta>0;return (
+      <div className="mvchip" key={i}>
+        <span className="mvp">{d.p}</span>
+        <span className={"mvd "+(up?"up":"dn")}>{up?"\u2191":"\u2193"} {up?"+":"\u2212"}{Math.abs(d.delta)}{"\u00a2"}</span>
+      </div>);})}</div>
   </div>);
 }
 function Gate({title,navigate}){
@@ -783,14 +795,17 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .ahead{display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:13px 15px 10px;font-family:var(--disp);font-weight:800;font-size:11.5px;letter-spacing:.7px;color:var(--mut);cursor:pointer}
 .ahead .ago{font-family:var(--mono);font-size:9px;color:var(--mut2);font-weight:500;letter-spacing:0;white-space:nowrap;flex:0 0 auto}
 .arow{padding:0 15px 14px;cursor:pointer}
-.mvsec{margin:14px 14px 0;border:1px solid var(--line2);border-radius:16px;background:var(--panel);overflow:hidden}
-.mvtop{display:flex;align-items:baseline;gap:9px;padding:14px 15px;cursor:pointer;font-family:var(--disp);font-weight:800;font-size:11.5px;letter-spacing:.7px;color:var(--mut)}
-.mvtop .mvtl{flex:0 0 auto}
-.mvtop .mvtc{font-family:var(--mono);font-size:9px;color:var(--mut2);font-weight:500;letter-spacing:0}
-.mvtop .mvtch{margin-left:auto;font-family:var(--mono);font-size:14px;color:var(--mut);transform:rotate(90deg);transition:transform .2s}
-.mvtop .mvtch.up{transform:rotate(-90deg)}
-.mvlist{max-height:330px;overflow-y:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding:0 15px 14px;display:flex;flex-direction:column;gap:8px}
-.mvlist::-webkit-scrollbar{display:none}
+.mvsec{margin:16px 14px 0}
+.mvhd{display:flex;align-items:center;gap:7px;margin-bottom:9px}
+.mvpulse{color:var(--green);display:inline-flex}
+.mvhd .mvtl{font-family:var(--disp);font-weight:700;font-size:14px;letter-spacing:.8px;color:var(--tx)}
+.mvall{margin-left:auto;color:var(--green);font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap}
+.mvscroll{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
+.mvscroll::-webkit-scrollbar{display:none}
+.mvchip{flex:0 0 auto;display:flex;align-items:center;gap:9px;border:1px solid var(--line2);border-radius:11px;background:var(--panel);padding:10px 13px}
+.mvchip .mvp{font-family:var(--disp);font-weight:700;font-size:14px;color:var(--tx);white-space:nowrap}
+.mvchip .mvd{font-family:var(--mono);font-size:12px;font-weight:700;white-space:nowrap}
+.mvchip .mvd.up{color:var(--green)}.mvchip .mvd.dn{color:var(--red)}
 .mvrowm{display:flex;align-items:center;gap:11px;border:1px solid var(--line);border-radius:11px;background:var(--panel2);padding:10px 12px}
 .mvrowm .rkm{font-family:var(--disp);font-weight:800;font-size:13px;color:var(--mut2);width:16px;flex:0 0 auto;text-align:center}
 .mvrowm .mpm{flex:1;min-width:0}
