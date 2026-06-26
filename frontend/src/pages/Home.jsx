@@ -1145,6 +1145,12 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 
 /* compact board card (taps to full breakdown) */
 .gr.gcompact{cursor:pointer}
+/* TAP-FEEDBACK-2026-06-26 :: consistent press micro-interaction */
+.hero{cursor:pointer}
+.wpbar,.spincard,.hero{transition:transform .13s cubic-bezier(.4,0,.2,1)}
+.wpbar:active,.spincard:active,.hero:active{transform:scale(.985)}
+.gr.gcompact{transition:background .13s ease}
+.gr.gcompact:active{background:rgba(255,255,255,.04)}
 .gcbody{padding:0 15px 13px 17px}
 .gcwhy{font-size:11.5px;color:#aeb8c2;line-height:1.45}.gcwhy b{color:#fff;font-weight:700}
 .gctap{font-family:var(--mono);font-size:9px;color:var(--mut2);margin-top:8px;letter-spacing:.5px}
