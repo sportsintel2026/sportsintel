@@ -219,7 +219,7 @@ export default function HomePage(){
   const mkProp=(p,kind)=>{
     const b={k:kind+(p.playerId||p.player),id:p.playerId,name:p.player,team:p.team,game:p.game,edge:p.edge??0,odds:p.odds};
     if(kind==="hr") return {...b,market:"HR",betSide:"Anytime HR"};
-    if(kind==="hits") return {...b,market:"HITS",betSide:(p.line===0.5?"1+ Hits":`${p.side==="under"?"U":"O"} ${p.line} Hits`)};
+    if(kind==="hits") return {...b,market:"HITS",betSide:(p.line===0.5?(p.side==="under"?"No Hits":"1+ Hits"):`${p.side==="under"?"U":"O"} ${p.line} Hits`)}; // WZ-PROP-UNDER-NOX-2026-06-26 :: under-0.5 hits was mislabeled "1+ Hits"
     return {...b,market:"K",betSide:`K ${p.side==="under"?"U":"O"}${p.line}`};
   };
   const topProps=[...hitsP.map(x=>mkProp(x,"hits")),...ksP.map(x=>mkProp(x,"ks")),...hrP.map(x=>mkProp(x,"hr"))].sort((a,b)=>(b.edge-a.edge)).slice(0,7);
