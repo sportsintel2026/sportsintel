@@ -361,7 +361,7 @@ const CSS = `
 
 .wznews .ncard{display:flex;gap:11px;width:100%;text-align:left;background:transparent;border:none;
   border-bottom:1px solid var(--line);padding:13px 0;cursor:pointer}
-.wznews .nthumb{flex:0 0 104px;height:68px;border-radius:8px;background:var(--panel2) center/cover no-repeat;
+.wznews .nthumb{flex:0 0 104px;height:68px;border-radius:8px;background:var(--panel2) center/contain no-repeat;
   border:1px solid var(--line);position:relative}
 .wznews .nplay{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:26px;height:26px;border-radius:50%;
   background:rgba(10,11,13,.7);border:1px solid rgba(255,255,255,.6)}
