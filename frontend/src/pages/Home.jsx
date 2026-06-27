@@ -438,7 +438,15 @@ export default function HomePage(){
         </div>}
 
         {sp.hasProps && hasFull && propItems.length>0 && <>
-          <div className="seclbl">PLAYER PROPS <span className="lk">swipe {"\u203a"}</span></div>
+          {/* WZ-PROPS-HEADER-2026-06-26 :: Player Props header matched to board (gold title + arrows + divider) */}
+          <div className="boardhd">
+            <div className="bhtitle">
+              <svg className="bharw" width="34" height="10" viewBox="0 0 34 10" aria-hidden="true"><line x1="0" y1="5" x2="28" y2="5"/><path d="M22 1 L30 5 L22 9" fill="none"/></svg>
+              <span className="bht">PLAYER PROPS</span>
+              <svg className="bharw" width="34" height="10" viewBox="0 0 34 10" aria-hidden="true"><line x1="6" y1="5" x2="34" y2="5"/><path d="M12 1 L4 5 L12 9" fill="none"/></svg>
+            </div>
+            <div className="bhsub">HR <span className="bhd">{"\u00b7"}</span> Hits <span className="bhd">{"\u00b7"}</span> Strikeouts</div>
+          </div>
           <Swiper cls="car" dotcls="dots">{propItems.map((d,i)=><PropCardM key={i} d={d} rank={i+1} navigate={navigate}/>)}</Swiper>
           <div className="seeall" onClick={()=>navigate("/props")}>See all props {"\u203a"}</div>
         </>}
