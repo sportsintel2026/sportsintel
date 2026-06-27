@@ -452,7 +452,15 @@ export default function HomePage(){
         </>}
 
         {parkItems.length>0 && <>
-          <div className="seclbl">PARK FACTORS <span className="ct">run &amp; HR environment</span><span className="lk">swipe {"\u203a"}</span></div>
+          {/* WZ-PARKFACTORS-HEADER-2026-06-27 :: own identity — green title + wind/flight wave flourishes */}
+          <div className="boardhd pfhd">
+            <div className="bhtitle">
+              <svg className="pfarw" width="34" height="10" viewBox="0 0 34 10" aria-hidden="true"><path d="M1 5 Q7 1.5 13 5 T25 5" fill="none"/></svg>
+              <span className="bht">PARK FACTORS</span>
+              <svg className="pfarw" width="34" height="10" viewBox="0 0 34 10" aria-hidden="true"><path d="M9 5 Q15 1.5 21 5 T33 5" fill="none"/></svg>
+            </div>
+            <div className="bhsub">Run &amp; HR environment <span className="bhd">{"\u00b7"}</span> <span className="gd">hitter</span> vs <span className="gd">pitcher</span> friendly</div>
+          </div>
           <Swiper cls="car" dotcls="dots">{parkItems.map((d,i)=><ParkCardM key={i} d={d}/>)}</Swiper>
         </>}
 
@@ -898,6 +906,10 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .bht{font-family:var(--disp);font-weight:700;font-size:27px;letter-spacing:.5px;color:var(--gold);line-height:1}
 .bharw{flex:0 0 auto}.bharw line,.bharw path{stroke:var(--gold);stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round}
 .bhsub{font-family:var(--mono);font-size:11px;color:var(--mut);margin-top:10px;letter-spacing:.2px}.bhsub .bhd{color:var(--mut2)}
+/* WZ-PARKFACTORS-HEADER-2026-06-27 :: Park Factors identity — green title + wind/flight wave */
+.pfhd .bht{color:var(--green)}
+.pfarw{flex:0 0 auto}.pfarw path{stroke:var(--green);stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round}
+.bhsub .gd{color:var(--green)}
 .seclbl .lk{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--mut)}
 .seclbl::before{content:"";width:3px;height:13px;border-radius:2px;background:var(--red)}
 
