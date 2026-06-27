@@ -267,12 +267,78 @@ async function buildMlbInjuries() {
         teamAbbr: team.abbr,
         position: p.position?.abbreviation || "",
         status: ilBadge(desc, code),
-        statusRaw: desc, statusCode: code, // included for verification; harmless
         note: note ? note.summary : null,
         noteHeadline: note ? note.headline : null,
         published: note ? note.published : null,
         headshot: pid ? headshotUrl(pid) : null,
         link: note ? note.link : null,
+      });
+    }
+  }
+  out.sort((a, b) => a.team.localeCompare(b.team) || a.playerName.localeCompare(b.playerName));
+  return out;
+}
+
+// ── league-wide injury report (NFL) — ESPN site roster, injuries resolved inline ──
+let nflTeams = null, nflTeamsAt = 0;
+async function getNflTeams() {
+  if (nflTeams && (Date.now() - nflTeamsAt) < 24 * 60 * 60 * 1000) return nflTeams;
+  try {
+    const { data } = await axios.get(
+      "https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams?limit=1000",
+      { timeout: 9000, headers: { "User-Agent": "Mozilla/5.0" } });
+    const teams = data?.sports?.[0]?.leagues?.[0]?.teams || [];
+    nflTeams = teams.map((t) => t.team || {}).filter((t) => t.id)
+      .map((t) => ({ id: t.id, name: t.displayName || t.name, abbr: t.abbreviation || "" }));
+    nflTeamsAt = Date.now();
+  } catch (e) { console.error("[News] NFL teams failed:", e.message); if (!nflTeams) nflTeams = []; }
+  return nflTeams;
+}
+// NFL uses named statuses (not IL-day counts) -> severity class + short label
+function nflSev(status = "") {
+  const s = status.toLowerCase();
+  if (/reserve|\bir\b/.test(s)) return { sev: "ir", label: "IR" };
+  if (/pup|physically unable/.test(s)) return { sev: "ir", label: "PUP" };
+  if (/\bout\b/.test(s)) return { sev: "out", label: "Out" };
+  if (/doubtful/.test(s)) return { sev: "doubtful", label: "Doubtful" };
+  if (/questionable/.test(s)) return { sev: "questionable", label: "Questionable" };
+  if (/day.?to.?day/.test(s)) return { sev: "dtd", label: "Day-To-Day" };
+  return { sev: "questionable", label: status || "Injured" };
+}
+async function buildNflInjuries() {
+  const teams = await getNflTeams();
+  const rosters = await Promise.allSettled(teams.map((t) =>
+    axios.get(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/${t.id}?enable=roster`,
+      { timeout: 9000, headers: { "User-Agent": "Mozilla/5.0" } })
+      .then((r) => ({ team: t, athletes: r.data?.team?.athletes || [] }))));
+  const out = [];
+  for (const res of rosters) {
+    if (res.status !== "fulfilled") continue;
+    const { team, athletes } = res.value;
+    for (const a of athletes) {
+      const inj = Array.isArray(a.injuries) ? a.injuries[0] : null;
+      if (!inj) continue;
+      const raw = inj.status || inj.type?.description || "";
+      if (!raw || /^active$/i.test(raw) || /suspension/i.test(raw)) continue;
+      const { sev, label } = nflSev(raw);
+      const d = inj.details || {};
+      const bodyPart = [d.type, d.detail].filter(Boolean).join(" · ") || null;
+      out.push({
+        id: `nflinj-${a.id}`,
+        source: "nfl",
+        type: "injury",
+        playerName: a.fullName || a.displayName || "",
+        team: team.name,
+        teamAbbr: team.abbr,
+        position: a.position?.abbreviation || "",
+        status: label,
+        sev,
+        bodyPart,
+        returnDate: d.returnDate || null,
+        note: inj.shortComment || inj.longComment || null,
+        headshot: a.headshot?.href || null,
+        link: (a.links || []).find((l) => (l.rel || []).includes("news"))?.href
+          || (a.links || []).find((l) => (l.rel || []).includes("playercard"))?.href || null,
       });
     }
   }
@@ -319,13 +385,14 @@ async function buildFeed(league) {
 
 router.get("/:league/injuries", async (req, res) => {
   const league = String(req.params.league || "").toLowerCase();
-  if (league !== "mlb") return res.json({ league, items: [], note: "injury report is MLB-only for now" });
+  const builder = league === "mlb" ? buildMlbInjuries : league === "nfl" ? buildNflInjuries : null;
+  if (!builder) return res.json({ league, items: [], note: "no injury report for this league yet" });
   const c = injCache[league];
   if (c && (Date.now() - c.at) < INJ_TTL) {
     return res.json({ league, count: c.items.length, items: c.items, updatedAt: new Date(c.at).toISOString(), cached: true });
   }
   try {
-    const items = await buildMlbInjuries();
+    const items = await builder();
     injCache[league] = { items, at: Date.now() };
     res.json({ league, count: items.length, items, updatedAt: new Date().toISOString(), cached: false });
   } catch (err) {
