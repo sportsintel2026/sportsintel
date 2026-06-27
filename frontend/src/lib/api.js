@@ -21,10 +21,9 @@ export const gamesApi = {
   getToday: (league) => apiFetch(`/api/games/${league}/today`),
   getBoxScore: (league, gameId) => apiFetch(`/api/games/${league}/${gameId}/boxscore`),
 };
-// Existing news API (still wired if you use it later)
+// WZ-NEWS-FEED-2026-06-26 :: blended ESPN + RotoWire feed, per league (mlb/nfl/cfb)
 export const newsApi = {
-  getHeadlines: (sport) => apiFetch(`/api/news/headlines/${sport}`),
-  getInjuries: (league) => apiFetch(`/api/news/${league}/injuries`),
+  getFeed: (league) => apiFetch(`/api/news/${league}`),
 };
 // NEW — edges API for MLB analytics dashboard
 export const edgesApi = {
