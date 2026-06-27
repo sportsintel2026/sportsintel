@@ -150,9 +150,15 @@ async function fetchRoto(league) {
     const link = cleanUrl(pick("link"));
     const pub = pick("pubDate");
     const blob = `${title} ${desc}`.toLowerCase();
+    // WZ-LIVETICKER-SCRATCH-2026-06-27 :: late scratch = a player pulled from tonight's
+    // lineup. Surfaced as an "out" (status injury so existing consumers treat it as one),
+    // plus a distinct `scratch` flag the live ticker uses to label it SCR. Checked
+    // separately because "out of the lineup" also trips the generic lineup pattern.
+    const isScratch = /scratch|scratched|(out of|not in|removed from|pulled from|held out of|left out of) the (starting )?lineup/.test(blob);
     let status = "note";
     if (/injur|\bil\b|day-to-day|strain|sprain|contusion|fractur|surgery|concussion|placed on|out (for|indefinitely)|sidelined|rehab|hamstring|oblique|elbow|shoulder|knee|torn|tear|ruptur|\bacl\b|\bmcl\b|\bucl\b|achilles|meniscus|ligament|dislocat|calf|groin|quad/.test(blob)) status = "injury";
     else if (/lineup|returns?|activated|reinstated|recalled|back (in|from)/.test(blob)) status = "lineup";
+    if (isScratch) status = "injury"; // an out-of-lineup scratch is an "out", not a positive lineup move
     const slug = (link.split("/").filter(Boolean).pop() || title).slice(0, 64);
     items.push({
       id: `roto-${slug}`,
@@ -167,6 +173,7 @@ async function fetchRoto(league) {
       playerName: extractPlayer(title),
       headshot: null,
       status,
+      scratch: isScratch,
     });
   }
   return items;
