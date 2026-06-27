@@ -1,25 +1,25 @@
 // WZ-NEWS-FEED-2026-06-26 :: blended news feed (ESPN JSON + RotoWire RSS), per-league.
 // Read-only. No DB. ESPN gives headlines/recaps/video + images + game tagging;
 // RotoWire gives the player/injury wire. MLB wire items get a best-effort headshot
-// via the free MLB Stats API name map (fail-safe: any miss -> null -> UI fallback).
+// via the free MLB Stats API name map. Team abbreviations for game chips come from
+// ESPN's own teams endpoint (cached) so they're always correct (no last-word guessing).
+// All external calls fail-safe: any miss degrades gracefully, never 500s the whole feed.
 // Endpoint: GET /api/news/:league   league in {mlb,nfl,cfb}
 const express = require("express");
 const router = express.Router();
 const axios = require("axios");
 
-// ── league config ──────────────────────────────────────────────────────────
 const LEAGUES = {
-  mlb: { espn: "baseball/mlb",            roto: "MLB", headshots: true  },
-  nfl: { espn: "football/nfl",            roto: "NFL", headshots: false },
+  mlb: { espn: "baseball/mlb",              roto: "MLB", headshots: true  },
+  nfl: { espn: "football/nfl",              roto: "NFL", headshots: false },
   cfb: { espn: "football/college-football", roto: "CFB", headshots: false },
 };
 
-// ── in-memory cache (per league) + coalescing, matching edges.js house style ──
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5 min — news moves fast but protect the feeds
-const cache = {};        // league -> { items, at }
-const inflight = {};     // league -> Promise (request coalescing)
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 min — fast-moving, but protect the feeds
+const cache = {};
+const inflight = {};
 
-// ── small helpers ────────────────────────────────────────────────────────────
+// ── helpers ────────────────────────────────────────────────────────────────
 function decodeEntities(s = "") {
   return s
     .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
@@ -30,6 +30,7 @@ function decodeEntities(s = "") {
     .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(+n))
     .trim();
 }
+function cleanUrl(u = "") { return u.replace(/([^:])\/{2,}/g, "$1/").trim(); }
 function timeAgo(d) {
   const t = new Date(d).getTime();
   if (!t) return "";
@@ -45,10 +46,50 @@ function norm(name = "") {
     .replace(/[^a-z\s]/g, "").replace(/\s+/g, " ").trim();
 }
 
-// ── ESPN: headlines / recaps / video, with images + game tagging ───────────────
+// ── team abbreviations from ESPN teams endpoint (cached 24h, per league) ───────
+const abbrMaps = {};     // league -> { map:Map, at:number }
+const ABBR_TTL = 24 * 60 * 60 * 1000;
+async function getAbbrMap(league) {
+  const cur = abbrMaps[league];
+  if (cur && (Date.now() - cur.at) < ABBR_TTL) return cur.map;
+  const map = new Map();
+  try {
+    const url = `https://site.api.espn.com/apis/site/v2/sports/${LEAGUES[league].espn}/teams?limit=1000`;
+    const { data } = await axios.get(url, { timeout: 9000, headers: { "User-Agent": "Mozilla/5.0" } });
+    const teams = data?.sports?.[0]?.leagues?.[0]?.teams || [];
+    for (const t of teams) {
+      const tm = t.team || {};
+      const ab = tm.abbreviation || tm.shortDisplayName || "";
+      if (!ab) continue;
+      for (const key of [tm.displayName, tm.name, tm.shortDisplayName, tm.location]) {
+        if (key) map.set(norm(key), ab);
+      }
+    }
+    abbrMaps[league] = { map, at: Date.now() };
+  } catch (e) {
+    console.error(`[News] abbr map ${league} failed:`, e.message);
+    if (!abbrMaps[league]) abbrMaps[league] = { map, at: Date.now() };
+  }
+  return map;
+}
+function shortFallback(team = "") {
+  const t = team.trim();
+  if (!t) return "";
+  const w = t.split(/\s+/);
+  return (w.length > 1 ? w.map((x) => x[0]).join("") : t.slice(0, 4)).toUpperCase().slice(0, 4);
+}
+function gameChip(eventDesc, abbrMap) {
+  if (!eventDesc) return null;
+  const m = eventDesc.match(/^(.+?)\s+@\s+(.+)$/);
+  if (!m) return null;
+  const a = abbrMap.get(norm(m[1])) || shortFallback(m[1]);
+  const h = abbrMap.get(norm(m[2])) || shortFallback(m[2]);
+  return `${a} @ ${h}`;
+}
+
+// ── ESPN: headlines / recaps / video, with images + (raw) game desc ────────────
 async function fetchEspn(league) {
-  const cfg = LEAGUES[league];
-  const url = `https://site.api.espn.com/apis/site/v2/sports/${cfg.espn}/news?limit=30`;
+  const url = `https://site.api.espn.com/apis/site/v2/sports/${LEAGUES[league].espn}/news?limit=30`;
   const { data } = await axios.get(url, { timeout: 9000, headers: { "User-Agent": "Mozilla/5.0" } });
   const arts = Array.isArray(data?.articles) ? data.articles : [];
   return arts.map((a) => {
@@ -56,20 +97,10 @@ async function fetchEspn(league) {
     let type = "headline";
     if (tRaw === "media") type = "video";
     else if (tRaw === "recap") type = "recap";
-    else if (tRaw === "preview") type = "headline";
-    // pick a usable image: prefer a real photo over auto "stitcher" graphics
-    let image = null;
     const imgs = Array.isArray(a.images) ? a.images : [];
     const real = imgs.find((i) => i.url && i.type !== "stitcher" && (i.width || 0) >= 300);
-    image = (real || imgs.find((i) => i.url) || {}).url || null;
-    // game chip from a tagged event category ("Away @ Home")
-    let game = null;
+    const image = (real || imgs.find((i) => i.url) || {}).url || null;
     const ev = (a.categories || []).find((c) => c.type === "event" && c.description);
-    if (ev) {
-      const m = ev.description.match(/^(.+?)\s+@\s+(.+)$/);
-      game = m ? `${abbr(m[1])} @ ${abbr(m[2])}` : null;
-    }
-    const link = a?.links?.web?.href || a?.links?.mobile?.href || "";
     return {
       id: `espn-${a.id}`,
       source: "espn",
@@ -77,32 +108,21 @@ async function fetchEspn(league) {
       headline: decodeEntities(a.headline || ""),
       summary: decodeEntities(a.description || ""),
       image,
-      link,
+      link: cleanUrl(a?.links?.web?.href || a?.links?.mobile?.href || ""),
       published: a.published || a.lastModified || null,
-      game,
+      _gameDesc: ev ? ev.description : null,
+      game: null,
       playerName: null, headshot: null, status: null,
     };
   }).filter((x) => x.headline && x.link);
 }
 
-// crude team-name -> abbev for the game chip (full names from ESPN event desc)
-function abbr(team = "") {
-  const t = team.trim();
-  const last = t.split(" ").pop();
-  const map = {
-    Dodgers:"LAD",Rockies:"COL",Astros:"HOU",Rangers:"TEX",Marlins:"MIA","Jays":"TOR","Blue":"TOR",
-    Yankees:"NYY",Mets:"NYM",Cubs:"CHC","Sox":"BOS",Braves:"ATL",Padres:"SD",Giants:"SF",Phillies:"PHI",
-    Guardians:"CLE",Tigers:"DET",Twins:"MIN",Royals:"KC",Brewers:"MIL",Cardinals:"STL",Pirates:"PIT",
-    Reds:"CIN",Nationals:"WSH",Orioles:"BAL",Rays:"TB",Angels:"LAA",Athletics:"ATH",Mariners:"SEA",
-    Diamondbacks:"AZ",
-  };
-  return map[last] || last.slice(0, 3).toUpperCase();
+// ── RotoWire: player / injury wire (RSS 2.0) ───────────────────────────────────
+function stripRotoBoiler(s = "") {
+  return s.replace(/\s*Visit RotoWire\.com.*$/is, "").replace(/\s+/g, " ").trim();
 }
-
-// ── RotoWire: the player / injury wire (RSS 2.0) ───────────────────────────────
 async function fetchRoto(league) {
-  const cfg = LEAGUES[league];
-  const url = `https://www.rotowire.com/rss/news.php?sport=${cfg.roto}`;
+  const url = `https://www.rotowire.com/rss/news.php?sport=${LEAGUES[league].roto}`;
   const { data } = await axios.get(url, { timeout: 9000, responseType: "text",
     headers: { "User-Agent": "Mozilla/5.0", Accept: "application/rss+xml,application/xml,text/xml" } });
   const xml = typeof data === "string" ? data : String(data);
@@ -116,17 +136,17 @@ async function fetchRoto(league) {
       return r ? decodeEntities(r[1]) : "";
     };
     const title = pick("title");
-    const desc = pick("description");
-    const link = pick("link");
-    const pub = pick("pubDate");
     if (!title) continue;
+    const desc = stripRotoBoiler(pick("description"));
+    const link = cleanUrl(pick("link"));
+    const pub = pick("pubDate");
     const blob = `${title} ${desc}`.toLowerCase();
     let status = "note";
-    if (/injur|il\b|day-to-day|strain|sprain|contusion|fracture|surgery|concussion|placed on|out (for|indefinitely)|sidelined|hamstring|oblique|elbow|shoulder|knee/.test(blob)) status = "injury";
-    else if (/lineup|returns?|activated|reinstated|starting|recalled|back (in|from)/.test(blob)) status = "lineup";
-    const playerName = extractPlayer(title);
+    if (/injur|\bil\b|day-to-day|strain|sprain|contusion|fractur|surgery|concussion|placed on|out (for|indefinitely)|sidelined|rehab|hamstring|oblique|elbow|shoulder|knee/.test(blob)) status = "injury";
+    else if (/lineup|returns?|activated|reinstated|recalled|back (in|from)/.test(blob)) status = "lineup";
+    const slug = (link.split("/").filter(Boolean).pop() || title).slice(0, 64);
     items.push({
-      id: `roto-${(link || title).slice(-60)}`,
+      id: `roto-${slug}`,
       source: "rotowire",
       type: "wire",
       headline: title,
@@ -135,19 +155,16 @@ async function fetchRoto(league) {
       link,
       published: pub ? new Date(pub).toISOString() : null,
       game: null,
-      playerName,
-      headshot: null, // filled by resolveHeadshots() for MLB
+      playerName: extractPlayer(title),
+      headshot: null,
       status,
     });
   }
   return items;
 }
-
-// RotoWire titles usually lead with the player's name. Grab the name-ish prefix.
 function extractPlayer(title = "") {
-  let t = title.split(/[:\u2013\u2014\-]/)[0].trim(); // before colon/dash
+  const t = title.split(/[:\u2013\u2014\-]/)[0].trim();
   const words = t.split(/\s+/).slice(0, 3);
-  // keep leading capitalized tokens (a name), stop at a lowercase verb
   const keep = [];
   for (const w of words) {
     if (/^[A-Z][A-Za-z.'\u00C0-\u017F]+$/.test(w)) keep.push(w);
@@ -156,19 +173,17 @@ function extractPlayer(title = "") {
   return keep.length >= 2 ? keep.join(" ") : (keep[0] || "");
 }
 
-// ── MLB headshots: best-effort name -> MLBAM id via free Stats API (cached 24h) ─
+// ── MLB headshots: name -> MLBAM id via free Stats API (cached 24h) ─────────────
 let mlbMap = null, mlbMapAt = 0;
 const MLB_MAP_TTL = 24 * 60 * 60 * 1000;
 async function getMlbNameMap() {
   if (mlbMap && (Date.now() - mlbMapAt) < MLB_MAP_TTL) return mlbMap;
   try {
     const yr = new Date().getFullYear();
-    const { data } = await axios.get(
-      `https://statsapi.mlb.com/api/v1/sports/1/players`, { params: { season: yr }, timeout: 9000 });
+    const { data } = await axios.get(`https://statsapi.mlb.com/api/v1/sports/1/players`,
+      { params: { season: yr }, timeout: 9000 });
     const map = new Map();
-    for (const p of data?.people || []) {
-      if (p.fullName && p.id) map.set(norm(p.fullName), p.id);
-    }
+    for (const p of data?.people || []) if (p.fullName && p.id) map.set(norm(p.fullName), p.id);
     mlbMap = map; mlbMapAt = Date.now();
   } catch (e) {
     console.error("[News] MLB name map failed:", e.message);
@@ -181,25 +196,44 @@ async function resolveHeadshots(items) {
   for (const it of items) {
     if (it.source !== "rotowire" || !it.playerName) continue;
     const id = map.get(norm(it.playerName));
-    if (id) it.headshot =
-      `https://midfield.mlbstatic.com/v1/people/${id}/spots/120`;
+    if (id) it.headshot = `https://midfield.mlbstatic.com/v1/people/${id}/spots/120`;
   }
 }
 
 // ── build + cache ──────────────────────────────────────────────────────────────
+function dedupe(items) {
+  const seen = new Set();
+  const out = [];
+  for (const it of items) {
+    // collapse same-story ESPN duplicates by a normalized headline prefix; wire items always kept
+    if (it.source === "espn") {
+      const key = norm(it.headline).split(" ").slice(0, 7).join(" ");
+      if (key && seen.has(key)) continue;
+      if (key) seen.add(key);
+    }
+    out.push(it);
+  }
+  return out;
+}
 async function buildFeed(league) {
-  const [espn, roto] = await Promise.allSettled([fetchEspn(league), fetchRoto(league)]);
+  const [espnR, rotoR, abbrMap] = await Promise.all([
+    Promise.allSettled([fetchEspn(league)]).then((r) => r[0]),
+    Promise.allSettled([fetchRoto(league)]).then((r) => r[0]),
+    getAbbrMap(league),
+  ]);
   let items = [];
-  if (espn.status === "fulfilled") items = items.concat(espn.value);
-  else console.error(`[News] ESPN ${league} failed:`, espn.reason?.message);
-  if (roto.status === "fulfilled") items = items.concat(roto.value);
-  else console.error(`[News] RotoWire ${league} failed:`, roto.reason?.message);
+  if (espnR.status === "fulfilled") {
+    for (const it of espnR.value) { it.game = gameChip(it._gameDesc, abbrMap); delete it._gameDesc; }
+    items = items.concat(espnR.value);
+  } else console.error(`[News] ESPN ${league} failed:`, espnR.reason?.message);
+  if (rotoR.status === "fulfilled") items = items.concat(rotoR.value);
+  else console.error(`[News] RotoWire ${league} failed:`, rotoR.reason?.message);
 
   if (LEAGUES[league].headshots) {
     try { await resolveHeadshots(items); } catch (e) { console.error("[News] headshots:", e.message); }
   }
   items.sort((a, b) => new Date(b.published || 0) - new Date(a.published || 0));
-  items = items.slice(0, 40).map((x) => ({ ...x, timeAgo: timeAgo(x.published) }));
+  items = dedupe(items).slice(0, 40).map((x) => ({ ...x, timeAgo: timeAgo(x.published) }));
   return items;
 }
 
