@@ -37,6 +37,7 @@ const playerCardRoutes = require("./routes/playerCard");
 const umpiresRoutes = require("./routes/umpires");
 const liveProbeRoutes = require("./routes/liveProbe");
 const liveWinProbRoutes = require("./routes/liveWinProb");
+const newsRoutes = require("./routes/news"); // WZ-NEWS-MOUNT-2026-06-26
 
 const { refreshDailyGames } = require("./services/sportsData");
 const { gradeFinishedGames, captureClosingLines, captureNbaClosingLines, captureOddsTicks, voidUnmatchedProps } = require("./services/predictionTracker");
@@ -142,6 +143,7 @@ app.use("/api/player-card", playerCardRoutes);
 app.use("/api/umpires", umpiresRoutes);
 app.use("/api/live-probe", liveProbeRoutes);
 app.use("/api/live-winprob", liveWinProbRoutes);
+app.use("/api/news", newsRoutes); // WZ-NEWS-MOUNT-2026-06-26 :: blended ESPN+RotoWire feed
 
 // Health check
 app.get("/api/health", (req, res) => {
