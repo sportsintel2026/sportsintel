@@ -61,7 +61,8 @@ function fmtEdgeFor(e,sport){ const v=e.edge??0; const s=v>=0?"+":""; if(sport!=
 function teams(m){ if(!m)return ["",""]; const p=String(m).split(/@|vs|·/i).map(s=>s.trim()).filter(Boolean); return [p[0]||"",p[1]||""]; }
 function shortTeam(t){ const m=String(t).match(/[A-Z]{2,3}/); return m?m[0]:String(t).slice(0,3).toUpperCase(); }
 // WZ-LIVEWIRE-2026-06-27 :: concise injury text for the ticker (action after the colon, trimmed)
-function wireBlurb(n){ const h=n.headline||""; const after=h.includes(":")?h.split(":").slice(1).join(":").trim():h; const s=(after||n.summary||"").trim(); return s.length>72?s.slice(0,70).trimEnd()+"\u2026":s; }
+function capWire(s, max){ s=(s||"").trim(); return s.length>max?s.slice(0,max-1).trimEnd()+"\u2026":s; } // WZ-LIVEWIRE-FIX-2026-06-27
+function wireBlurb(n){ const h=n.headline||""; const after=h.includes(":")?h.split(":").slice(1).join(":").trim():h; return capWire(after||n.summary||"", 52); }
 // Resolve a full/partial MLB team name to its ESPN logo abbr. shortTeam() slices the
 // first 3 letters, which breaks on multi-word cities ("New York Mets" -> "NEW", no logo).
 const MLB_ABBR={diamondbacks:"ARI",braves:"ATL",orioles:"BAL","red sox":"BOS",cubs:"CHC","white sox":"CHW",reds:"CIN",guardians:"CLE",rockies:"COL",tigers:"DET",astros:"HOU",royals:"KC",angels:"LAA",dodgers:"LAD",marlins:"MIA",brewers:"MIL",twins:"MIN",mets:"NYM",yankees:"NYY",athletics:"OAK","a's":"OAK",phillies:"PHI",pirates:"PIT",padres:"SD",mariners:"SEA",giants:"SF",cardinals:"STL",rays:"TB",rangers:"TEX","blue jays":"TOR",nationals:"WSH"};
@@ -326,11 +327,14 @@ export default function HomePage(){
     const inj=(newsFeed||[]).filter(n=>n.source==="rotowire"&&n.status==="injury").slice(0,6)
       .map(n=>({kind:"inj",name:n.playerName||"",text:wireBlurb(n)}));
     const news=(newsFeed||[]).filter(n=>n.source==="espn"&&n.headline).slice(0,6)
-      .map(n=>({kind:"news",name:"",text:n.headline}));
+      .map(n=>({kind:"news",name:"",text:capWire(n.headline,46)}));
     const out=[]; const max=Math.max(mv.length,inj.length,news.length);
     for(let i=0;i<max;i++){ if(mv[i])out.push(mv[i]); if(inj[i])out.push(inj[i]); if(news[i])out.push(news[i]); }
     return out;
   })() : [];
+  // WZ-LIVEWIRE-FIX-2026-06-27 :: repeat the wire so the marquee always fills the viewport
+  // even when items are few/short (e.g. before news loads) — prevents the empty-gap scroll.
+  const wireLoop = wireItems.length ? (()=>{ let s=[...wireItems]; while(s.length<12) s=s.concat(wireItems); return s; })() : [];
   const propItems = topProps.map(p=>{const col=teamCol(shortTeam(p.team||p.game||""));const initials=((p.name||"").split(" ").map(s=>s[0]).join("").slice(0,2))||(p.name||"").slice(0,2);return {player:[p.name,initials,col],g:p.game||p.team||"",edge:(p.edge||0)*100,mk:p.market,p:p.betSide,odds:formatOdds(p.odds),id:p.id};});
   const parkItems = parks.map(g=>{const f=g.parkRunFactor,hf=g.parkHRFactor,w=g.weather||{};const hot=(hf??f)>1.05,cold=(hf??f)<0.95;const tag=hot?["HITTER FRIENDLY","h"]:cold?["PITCHER FRIENDLY","p"]:["NEUTRAL","n"];const ab=mlbAbbr(g.home||"");const t=w.tempF!=null?Math.round(w.tempF):null;const wind=w.windMph?(w.windMph+" mph"+(w.windEffect?" "+w.windEffect:"")):null;const wx=w.indoor?"Dome \u00b7 roof closed":([t!=null?t+"\u00b0F":null,wind].filter(Boolean).join(" \u00b7 ")||"Forecast pending");return {venue:g.venue||g.park||((g.home||"")+" Park"),g:g.home||"",a:[ab,teamCol(ab)],tag,hr:(hf!=null?((hf>1?"+":"")+Math.round((hf-1)*100)+"%"):"0%"),run:((f>1?"+":"")+Math.round((f-1)*100)+"%"),wx};});
   const liveItems = liveGames.map(g=>{const a=g.awayAbbr||(abbrById[g.gameId]?abbrById[g.gameId].a:shortTeam(g.away||""));const h=g.homeAbbr||(abbrById[g.gameId]?abbrById[g.gameId].h:shortTeam(g.home||""));const rows=[];const ml=(g.awayEdge??-9)>=(g.homeEdge??-9)?[a+" ML",g.awayWinProb,g.awayEdge,g.awayOdds]:[h+" ML",g.homeWinProb,g.homeEdge,g.homeOdds];if(ml[2]!=null)rows.push([ml[0],(ml[1]!=null?Math.round(ml[1]*100)+"%":"\u2014"),formatOdds(ml[3]),ml[2]*100]);if(g.totalLine!=null){const tt=(g.overEdge??-9)>=(g.underEdge??-9)?["Over "+g.totalLine,g.overProb,g.overEdge,g.overOdds]:["Under "+g.totalLine,g.underProb,g.underEdge,g.underOdds];if(tt[2]!=null)rows.push([tt[0],(tt[1]!=null?Math.round(tt[1]*100)+"%":"\u2014"),formatOdds(tt[3]),tt[2]*100]);}return {a,h,ac:colFor(a,sport),hc:colFor(h,sport),state:(g.half==="bottom"?"Bot":"Top")+" "+(g.inning||"")+(g.outs!=null?" \u00b7 "+g.outs+" out":""),rows,gameId:g.gameId};});
@@ -389,7 +393,7 @@ export default function HomePage(){
       {/* WZ-LIVEWIRE-2026-06-27 :: MLB shows the live wire (movers + injuries + headlines); other sports keep their score tape */}
       {sport==="mlb" && wireItems.length>0 ? (
         <div className="scoretape wiretape"><span className="lvpill"><span className="d"/>WIRE</span>
-          <div className="stwrap"><div className="sttrack">{[...wireItems,...wireItems].map((w,i)=>(
+          <div className="stwrap"><div className="sttrack">{[...wireLoop,...wireLoop].map((w,i)=>(
             <span key={i} className="it">
               <span className={"tg "+w.kind}>{w.kind==="move"?"MOVE":w.kind==="inj"?"INJ":"NEWS"}</span>
               {w.kind==="move"?<span className={"ar "+w.dir}/>:null}
