@@ -1,8 +1,10 @@
-// News.jsx — WZ-NEWS-PAGE-2026-06-26 :: blended ESPN + RotoWire news, sport-aware (?sport=).
+// News.jsx — WZ-NEWS-PAGE-2026-06-27 :: blended ESPN + RotoWire news, sport-aware (?sport=).
 // ESPN = headline/recap/video cards (images + game chips); RotoWire = player/injury wire
 // rows (MLB headshots + status ring). Tap any item -> in-app detail sheet that reads the
 // summary on-site and links out to the source only on demand. Auto-refreshes every 5 min.
-import { useState, useEffect, useCallback } from "react";
+// Injuries pill loads the full league IL report (/api/news/:league/injuries), grouped by
+// team with severity badges; tap a player -> injury detail sheet w/ RotoWire note if present.
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { newsApi } from "../lib/api";
 
@@ -24,6 +26,14 @@ function fmtDate() {
   } catch (e) { return ""; }
 }
 
+// IL length -> severity class for the badge
+function ilClass(status = "") {
+  if (/60/.test(status)) return "il60";
+  if (/15/.test(status)) return "il15";
+  if (/\b7\b|7-/.test(status)) return "il7";
+  return "il10";
+}
+
 export default function News() {
   const [params] = useSearchParams();
   const sport = (params.get("sport") || "mlb").toLowerCase();
@@ -32,6 +42,11 @@ export default function News() {
   const [err, setErr] = useState(false);
   const [filter, setFilter] = useState("all");
   const [active, setActive] = useState(null);
+  // injuries (lazy-loaded the first time the Injuries pill is opened)
+  const [injuries, setInjuries] = useState([]);
+  const [injLoading, setInjLoading] = useState(false);
+  const [injErr, setInjErr] = useState(false);
+  const [injLoaded, setInjLoaded] = useState(false);
 
   const load = useCallback(async (quiet) => {
     if (!quiet) { setLoading(true); setErr(false); }
@@ -45,7 +60,30 @@ export default function News() {
     }
   }, [sport]);
 
-  useEffect(() => { setFilter("all"); load(); }, [load]);
+  const loadInjuries = useCallback(async () => {
+    setInjLoading(true); setInjErr(false);
+    try {
+      const data = await newsApi.getInjuries(sport);
+      setInjuries(Array.isArray(data && data.items) ? data.items : []);
+      setInjLoaded(true);
+    } catch (e) {
+      setInjErr(true);
+    } finally {
+      setInjLoading(false);
+    }
+  }, [sport]);
+
+  // sport change: reset to All feed and clear any loaded injury report
+  useEffect(() => {
+    setFilter("all");
+    setInjuries([]); setInjLoaded(false); setInjErr(false);
+    load();
+  }, [load]);
+
+  // lazy-load the injury report the first time Injuries is opened (MLB only for now)
+  useEffect(() => {
+    if (filter === "injuries" && sport === "mlb" && !injLoaded && !injLoading) loadInjuries();
+  }, [filter, sport, injLoaded, injLoading, loadInjuries]);
 
   // quiet background refresh every 5 min while the tab is open
   useEffect(() => {
@@ -62,10 +100,20 @@ export default function News() {
 
   const shown = items.filter((it) => {
     if (filter === "headlines") return it.source === "espn";
-    if (filter === "injuries") return it.status === "injury";
     return true;
   });
 
+  // group injuries by team (backend already sorts team -> player)
+  const injGroups = useMemo(() => {
+    const m = new Map();
+    for (const it of injuries) {
+      if (!m.has(it.team)) m.set(it.team, { team: it.team, abbr: it.teamAbbr, items: [] });
+      m.get(it.team).items.push(it);
+    }
+    return [...m.values()];
+  }, [injuries]);
+
+  const isInj = filter === "injuries";
   const SP = LABEL[sport] || sport.toUpperCase();
 
   return (
@@ -78,7 +126,11 @@ export default function News() {
           <span className="bht">{SP} NEWS</span>
           <svg className="bharw" width="34" height="10" viewBox="0 0 34 10" aria-hidden="true"><line x1="6" y1="5" x2="34" y2="5"/><path d="M12 1 L4 5 L12 9" fill="none"/></svg>
         </div>
-        <div className="bhsub">Headlines <span className="bhd">·</span> Injuries <span className="bhd">·</span> Player Wire <span className="bhd">·</span> {fmtDate()}</div>
+        <div className="bhsub">
+          {isInj
+            ? <>{injLoaded ? `${injuries.length} players on the IL` : "Injury report"} <span className="bhd">·</span> {fmtDate()}</>
+            : <>Headlines <span className="bhd">·</span> Injuries <span className="bhd">·</span> Player Wire <span className="bhd">·</span> {fmtDate()}</>}
+        </div>
       </div>
 
       <div className="nfilters">
@@ -87,12 +139,35 @@ export default function News() {
         ))}
       </div>
 
-      {loading ? (
+      {isInj ? (
+        sport !== "mlb" ? (
+          <div className="nmsg">No injury report for {SP} yet — MLB only for now.</div>
+        ) : injLoading ? (
+          <div className="nmsg">Loading {SP} injury report…</div>
+        ) : injErr ? (
+          <div className="nmsg">Couldn’t load the injury report. <button className="nretry" onClick={() => loadInjuries()}>Retry</button></div>
+        ) : injuries.length === 0 ? (
+          <div className="nmsg">No injuries reported for {SP} right now.</div>
+        ) : (
+          <div className="ninj">
+            {injGroups.map((g) => (
+              <div className="nigrp" key={g.team}>
+                <div className="nihead">
+                  <span className="niabbr">{g.abbr}</span>
+                  <span className="niname">{g.team}</span>
+                  <span className="nicount">{g.items.length} out</span>
+                </div>
+                {g.items.map((it) => <InjuryRow key={it.id} it={it} onOpen={() => setActive(it)} />)}
+              </div>
+            ))}
+          </div>
+        )
+      ) : loading ? (
         <div className="nmsg">Loading {SP} news…</div>
       ) : err ? (
         <div className="nmsg">Couldn’t load news right now. <button className="nretry" onClick={() => load()}>Retry</button></div>
       ) : shown.length === 0 ? (
-        <div className="nmsg">No {filter === "injuries" ? "injury updates" : "news"} for {SP} right now.</div>
+        <div className="nmsg">No news for {SP} right now.</div>
       ) : (
         <div className="nfeed">
           {shown.map((it) => it.source === "rotowire"
@@ -101,9 +176,11 @@ export default function News() {
         </div>
       )}
 
-      <div className="nfoot">Sources: ESPN · RotoWire — headlines link out to the original.</div>
+      <div className="nfoot">Sources: ESPN · RotoWire · MLB — headlines link out to the original.</div>
 
-      {active && <Sheet it={active} onClose={() => setActive(null)} />}
+      {active && (active.type === "injury"
+        ? <InjurySheet it={active} onClose={() => setActive(null)} />
+        : <Sheet it={active} onClose={() => setActive(null)} />)}
     </div>
   );
 }
@@ -141,6 +218,19 @@ function WireRow({ it, onOpen }) {
         <span className="nwlead">{it.playerName ? <b>{it.playerName}</b> : null}{it.playerName ? " \u2014 " : ""}{action}</span>
         <span className="nwmeta">ROTOWIRE · {it.timeAgo}</span>
       </span>
+    </button>
+  );
+}
+
+function InjuryRow({ it, onOpen }) {
+  return (
+    <button className="nirow" onClick={onOpen}>
+      <Avatar src={it.headshot} ring="plain" />
+      <span className="nibody">
+        <span className="niplayer">{it.playerName}</span>
+        <span className="nipos">{it.position}{it.note ? " · note" : ""}</span>
+      </span>
+      <span className={"nibadge " + ilClass(it.status)}>{it.status}</span>
     </button>
   );
 }
@@ -198,6 +288,33 @@ function Sheet({ it, onClose }) {
               <a className="ncta" href={it.link} target="_blank" rel="noopener noreferrer">{cta}</a>
               <div className="nctasub">Opens in a new tab · WizePicks stays open</div>
             </>)}
+        <button className="nclose" onClick={onClose}>Close</button>
+      </div>
+    </div>
+  );
+}
+
+function InjurySheet({ it, onClose }) {
+  return (
+    <div className="nsheet-wrap" onClick={onClose}>
+      <div className="nsheet" onClick={(e) => e.stopPropagation()}>
+        <div className="ngrab" />
+        <div className="nihero">
+          <Avatar src={it.headshot} ring="plain" big />
+          <div className="nihinfo">
+            <div className="nihname">{it.playerName}</div>
+            <div className="nihteam">{(it.team || "").toUpperCase()}{it.position ? ` · ${it.position}` : ""}</div>
+          </div>
+        </div>
+        <div className="nichips">
+          <span className={"nichip " + ilClass(it.status)}>{it.status}</span>
+          {it.position && <span className="nichip plain">{it.position}</span>}
+        </div>
+        <div className="nilbl">Latest update</div>
+        {it.note
+          ? <div className="nsbody">{it.note}</div>
+          : <div className="ninonote">No recent wire note. Player is on the {it.status}.</div>}
+        {it.link && <a className="ncta-sec" href={it.link} target="_blank" rel="noopener noreferrer">Open on RotoWire ↗</a>}
         <button className="nclose" onClick={onClose}>Close</button>
       </div>
     </div>
@@ -311,4 +428,39 @@ const CSS = `
 .wznews .nav.big .nsil{width:56px;height:56px}
 .nsheet .ncta-sec{display:block;text-align:center;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:11.5px;
   letter-spacing:.4px;color:#99A2AA;text-decoration:none;padding:11px;border:1px solid rgba(255,255,255,.12);border-radius:10px}
+
+/* ── injuries view ── */
+.wznews .nav.plain{border-color:var(--line2)}
+.wznews .ninj{padding:8px 0 0}
+.wznews .nigrp{margin-bottom:8px}
+.wznews .nihead{display:flex;align-items:center;gap:9px;padding:11px 2px 9px;border-bottom:1px solid var(--line2)}
+.wznews .niabbr{font-family:var(--mono);font-weight:600;font-size:11px;letter-spacing:.5px;color:#0A0B0D;
+  background:var(--gold);padding:3px 7px;border-radius:5px}
+.wznews .niname{font-family:var(--disp);font-weight:600;font-size:17px;letter-spacing:.5px;text-transform:uppercase}
+.wznews .nicount{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--mut2);letter-spacing:.3px}
+.wznews .nirow{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:transparent;border:none;
+  border-bottom:1px solid var(--line);padding:11px 2px;cursor:pointer}
+.wznews .nirow:active{background:var(--panel)}
+.wznews .nibody{flex:1;min-width:0;display:flex;flex-direction:column}
+.wznews .niplayer{font-size:14.5px;font-weight:600;letter-spacing:.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wznews .nipos{font-family:var(--mono);font-size:11px;color:var(--mut);margin-top:2px}
+.wznews .nibadge{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.4px;padding:4px 9px;
+  border-radius:999px;flex:none;border:1px solid}
+.wznews .nibadge.il60,.nsheet .nichip.il60{color:var(--neg);border-color:rgba(226,101,92,.4);background:rgba(226,101,92,.10)}
+.wznews .nibadge.il15,.nsheet .nichip.il15{color:var(--gold);border-color:rgba(201,168,106,.4);background:rgba(201,168,106,.10)}
+.wznews .nibadge.il10,.nsheet .nichip.il10{color:var(--blue);border-color:rgba(93,169,232,.4);background:rgba(93,169,232,.10)}
+.wznews .nibadge.il7,.nsheet .nichip.il7{color:var(--green);border-color:rgba(63,203,145,.4);background:rgba(63,203,145,.10)}
+
+/* ── injury detail sheet ── */
+.nsheet .nihero{display:flex;align-items:center;gap:14px;margin:8px 0 4px}
+.nsheet .nihinfo{min-width:0}
+.nsheet .nihname{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:24px;letter-spacing:.5px;line-height:1.1}
+.nsheet .nihteam{font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:11px;color:#99A2AA;margin-top:4px;letter-spacing:.3px}
+.nsheet .nichips{display:flex;gap:8px;margin:16px 0 8px;flex-wrap:wrap}
+.nsheet .nichip{font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:10px;font-weight:600;letter-spacing:.4px;
+  padding:5px 10px;border-radius:999px;border:1px solid rgba(255,255,255,.12);color:#99A2AA}
+.nsheet .nichip.plain{color:#99A2AA;border-color:rgba(255,255,255,.12);background:transparent}
+.nsheet .nilbl{font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:10px;letter-spacing:1px;color:#5B646C;
+  text-transform:uppercase;margin:10px 0 8px}
+.nsheet .ninonote{font-size:13px;color:#5B646C;font-style:italic;margin-bottom:16px;line-height:1.5}
 `;
