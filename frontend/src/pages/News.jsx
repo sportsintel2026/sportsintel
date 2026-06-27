@@ -145,10 +145,10 @@ function WireRow({ it, onOpen }) {
   );
 }
 
-function Avatar({ src, ring }) {
+function Avatar({ src, ring, big }) {
   const [bad, setBad] = useState(false);
   return (
-    <span className={"nav " + ring}>
+    <span className={"nav " + ring + (big ? " big" : "")}>
       {src && !bad
         ? <img className="navimg" src={src} alt="" onError={() => setBad(true)} />
         : <Sil />}
@@ -167,10 +167,10 @@ function Sil() {
 
 function Sheet({ it, onClose }) {
   const isVideo = it.type === "video";
+  const isWire = it.source === "rotowire";
   const cta = isVideo
     ? "\u25B6 Watch on ESPN \u2197"
-    : it.source === "rotowire" ? "Open on RotoWire \u2197" : "Read full story on ESPN \u2197";
-  const hero = it.image || it.headshot;
+    : isWire ? "Open on RotoWire \u2197" : "Read full story on ESPN \u2197";
   const chip = it.source === "espn"
     ? (TYPE_CHIP[it.type] || TYPE_CHIP.headline)
     : (WIRE[it.status] || WIRE.note);
@@ -178,8 +178,10 @@ function Sheet({ it, onClose }) {
     <div className="nsheet-wrap" onClick={onClose}>
       <div className="nsheet" onClick={(e) => e.stopPropagation()}>
         <div className="ngrab" />
-        {hero ? (
-          <div className="nhero" style={{ backgroundImage: `url("${hero}")` }}>
+        {isWire ? (
+          <div className="nheroav"><Avatar src={it.headshot} ring={chip.cls} big /></div>
+        ) : it.image ? (
+          <div className="nhero" style={{ backgroundImage: `url("${it.image}")` }}>
             {isVideo && <span className="nbplay" aria-hidden="true" />}
           </div>
         ) : null}
@@ -190,8 +192,12 @@ function Sheet({ it, onClose }) {
         <div className="nshl">{it.headline}</div>
         <div className="nsmeta"><span className="src">{it.source === "espn" ? "ESPN" : "RotoWire"}</span> · {it.timeAgo}</div>
         {it.summary && <div className="nsbody">{it.summary}</div>}
-        {it.link && <a className="ncta" href={it.link} target="_blank" rel="noopener noreferrer">{cta}</a>}
-        <div className="nctasub">Opens in a new tab · WizePicks stays open</div>
+        {it.link && (isWire
+          ? <a className="ncta-sec" href={it.link} target="_blank" rel="noopener noreferrer">{cta}</a>
+          : <>
+              <a className="ncta" href={it.link} target="_blank" rel="noopener noreferrer">{cta}</a>
+              <div className="nctasub">Opens in a new tab · WizePicks stays open</div>
+            </>)}
         <button className="nclose" onClick={onClose}>Close</button>
       </div>
     </div>
@@ -300,4 +306,9 @@ const CSS = `
 .nsheet .nctasub{text-align:center;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:9.5px;color:#5B646C;margin-top:9px}
 .nsheet .nclose{display:block;width:100%;margin-top:14px;background:transparent;border:1px solid rgba(255,255,255,.12);
   color:#99A2AA;border-radius:10px;padding:11px;font-size:12px;letter-spacing:.4px;cursor:pointer}
+.nsheet .nheroav{display:flex;justify-content:center;margin:8px 0 2px}
+.wznews .nav.big{flex:0 0 88px;width:88px;height:88px;border-width:3px}
+.wznews .nav.big .nsil{width:56px;height:56px}
+.nsheet .ncta-sec{display:block;text-align:center;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:11.5px;
+  letter-spacing:.4px;color:#99A2AA;text-decoration:none;padding:11px;border:1px solid rgba(255,255,255,.12);border-radius:10px}
 `;
