@@ -237,16 +237,22 @@ export default function MarketPage() {
 }
 
 function OddsCard({ g, onOpen }) {
-  const aAb = g.awayAbbr || abbrOf(g.away), hAb = g.homeAbbr || abbrOf(g.home);
+  // ODDSCARD-C2-LEDGER-2026-06-27 :: box-free ledger, centered gold-tucked names,
+  // 4-segment best-price strip (away ML | home ML | OVER | UNDER). Logos removed;
+  // full team names (g.away/g.home) read off the centered title order.
   const best = g.best || {}; const cl = g.consensusTotalLine;
   const nBooks = (g.books||[]).length;
+  const ot = cl!=null ? "O "+cl : "Over";
+  const ut = cl!=null ? "U "+cl : "Under";
   return (
     <div className="oc" onClick={onOpen}>
-      <div className="och"><div className="lgs"><Logo ab={aAb} col={g.awayCol}/><Logo ab={hAb} col={g.homeCol}/></div><div className="mt">{aAb} @ {hAb}</div><div className="tm2">{nBooks} books</div></div>
-      <div className="bestrow">
-        <div className="bp"><div className="k">BEST {aAb} ML</div><div className="v"><span className="pr">{fmtOdds(best.awayML?.price)}</span></div><div className="bk">{best.awayML?.book || "—"}</div></div>
-        <div className="bp"><div className="k">BEST {hAb} ML</div><div className="v"><span className="pr">{fmtOdds(best.homeML?.price)}</span></div><div className="bk">{best.homeML?.book || "—"}</div></div>
-        <div className="bp"><div className="k">BEST O {cl ?? ""}</div><div className="v"><span className="pr">{fmtOdds(best.over?.price)}</span></div><div className="bk">{best.over?.book || "—"}</div></div>
+      <div className="mtt">{g.away} <span className="at">@</span> {g.home}</div>
+      <div className="gbk">{nBooks} books</div>
+      <div className="strip">
+        <div className="seg"><div className="slab"/><div className="sval">{fmtOdds(best.awayML?.price)}</div><div className="sbook">{best.awayML?.book || "\u2014"}</div></div>
+        <div className="seg"><div className="slab"/><div className="sval">{fmtOdds(best.homeML?.price)}</div><div className="sbook">{best.homeML?.book || "\u2014"}</div></div>
+        <div className="seg gsep"><div className="slab">{ot}</div><div className="sval">{fmtOdds(best.over?.price)}</div><div className="sbook">{best.over?.book || "\u2014"}</div></div>
+        <div className="seg"><div className="slab">{ut}</div><div className="sval">{fmtOdds(best.under?.price)}</div><div className="sbook">{best.under?.book || "\u2014"}</div></div>
       </div>
     </div>
   );
@@ -365,19 +371,23 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .sports b .dot{width:6px;height:6px;border-radius:50%;background:#2a3640}.sports b.on .dot{background:var(--green)}
 .subnav{display:flex;gap:0;border:1px solid var(--line2);border-radius:10px;overflow:hidden;margin:11px 4px 0}
 .subnav b{flex:1;text-align:center;font-family:var(--disp);font-weight:800;font-size:13px;letter-spacing:.4px;color:var(--mut);padding:9px;cursor:pointer}
-.subnav b.on{background:#141d24;color:#fff}
+.subnav b.on{background:var(--gold);color:#0A0B0D}/* SUBNAV-GOLD-ACTIVE-2026-06-27 */
 .cap{font-family:var(--mono);font-size:10px;color:var(--mut2);margin:10px 4px 0;line-height:1.4}
-/* odds (line shop) card */
-.oc{margin:9px 4px 0;border:1px solid var(--line);border-radius:14px;background:var(--panel);padding:13px;cursor:pointer;transition:border-color .15s}.oc:active{border-color:var(--line2)}
-.oc .och{display:flex;align-items:center;gap:9px;margin-bottom:11px}
+/* odds (line shop) card — ODDSCARD-C2-LEDGER-2026-06-27 :: box-free hairline ledger */
+.oc{margin:0 6px;padding:13px 0 12px;border-top:1px solid var(--line);cursor:pointer}
+.oc:first-of-type{border-top:none}
 .lg{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#1B2025;border:1px solid var(--line2);font-family:var(--disp);font-weight:800;font-size:8px;color:#fff;flex:0 0 auto}.lg img{width:20px;height:20px;object-fit:contain}
 .lgs{display:flex}.lgs .lg{margin-left:-5px}.lgs .lg:first-child{margin-left:0}
-.oc .mt{font-family:var(--disp);font-weight:800;font-size:17px;color:#fff;letter-spacing:.2px}.oc .tm2{font-family:var(--mono);font-size:9px;color:var(--mut2);margin-left:auto}
-.bestrow{display:flex;gap:8px}
-.bp{flex:1;border:1px solid var(--line);border-radius:10px;background:var(--panel2);padding:10px 8px;text-align:center}
-.bp .k{font-family:var(--mono);font-size:8.5px;color:var(--mut);font-weight:600;letter-spacing:.3px;text-transform:uppercase}
-.bp .v{font-family:var(--disp);font-weight:800;font-size:20px;color:#fff;margin-top:5px;line-height:1}.bp .v .pr{color:var(--green)}
-.bp .bk{font-family:var(--mono);font-size:8.5px;color:var(--gold);font-weight:700;margin-top:4px}
+.oc .mtt{text-align:center;line-height:1.12;letter-spacing:.2px;font-family:var(--disp);font-weight:600;font-size:14.5px;color:var(--gold);opacity:.82}
+.oc .mtt .at{color:var(--mut2);opacity:.9;margin:0 3px}
+.oc .gbk{font-family:var(--mono);font-size:9px;color:var(--mut2);text-align:center;margin-top:3px}
+.oc .strip{display:flex;align-items:flex-end;margin-top:10px}
+.oc .seg{flex:1;min-width:0;text-align:center;padding:0 2px}
+.oc .seg + .seg{border-left:1px solid var(--line)}
+.oc .seg.gsep{border-left:1px solid var(--line2)}
+.oc .slab{font-family:var(--mono);font-size:8px;font-weight:600;color:var(--mut2);height:11px}
+.oc .sval{font-family:var(--disp);font-weight:800;font-size:19px;line-height:1;color:var(--green);margin-top:2px}
+.oc .sbook{font-family:var(--mono);font-size:8.5px;font-weight:700;color:var(--gold);margin-top:4px}
 /* movers */
 .mvrow{display:flex;align-items:center;gap:11px;margin:0;border:none;border-radius:0;background:transparent;padding:11px 13px}.mvrow+.mvrow{border-top:1px solid var(--line)}.mvlist{margin:8px 4px 0;background:var(--panel);border-radius:12px;overflow:hidden}
 .mvrow .rk{font-family:var(--disp);font-weight:800;font-size:13px;color:var(--mut2);width:18px;flex:0 0 auto}
