@@ -78,11 +78,14 @@ function shortFallback(team = "") {
   const w = t.split(/\s+/);
   return (w.length > 1 ? w.map((x) => x[0]).join("") : t.slice(0, 4)).toUpperCase().slice(0, 4);
 }
-// edge cases ESPN abbreviates oddly (e.g. the relocated Athletics)
+// edge cases ESPN abbreviates oddly (e.g. the relocated Athletics, whose event
+// strings have appeared as bare "Athletics"). Substring catch = bulletproof.
 const ABBR_OVERRIDE = { "athletics": "ATH", "oakland athletics": "ATH" };
 function resolveAbbr(name, abbrMap) {
   const k = norm(name);
-  return ABBR_OVERRIDE[k] || abbrMap.get(k) || shortFallback(name);
+  if (ABBR_OVERRIDE[k]) return ABBR_OVERRIDE[k];
+  if (k.includes("athletics")) return "ATH";
+  return abbrMap.get(k) || shortFallback(name);
 }
 function gameChip(eventDesc, abbrMap) {
   if (!eventDesc) return null;
@@ -200,7 +203,7 @@ async function resolveHeadshots(items) {
   for (const it of items) {
     if (it.source !== "rotowire" || !it.playerName) continue;
     const id = map.get(norm(it.playerName));
-    if (id) it.headshot = `https://midfield.mlbstatic.com/v1/people/${id}/spots/120`;
+    if (id) it.headshot = `https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_240,q_auto:best/v1/people/${id}/headshot/67/current`;
   }
 }
 
