@@ -1341,6 +1341,148 @@ router.get("/wincal", async (req, res) => {
   }
 });
 
+// ── DIAGNOSTIC: run-line MARGIN_SD calibration backtest (read-only) ──────────
+// WZ-RLSD-BACKTEST-2026-06-26
+// /wincal showed the only real residual overconfidence lives in the RUN LINE
+// (claimed ~63%/~69% vs actual ~58%/~64% at the high end), AFTER the market blend.
+// The run line is still profitable, so this is a TRUST/calibration issue, not a
+// profit leak — and the right lever is the cover-prob spread width MARGIN_SD (live
+// = 3.0), NOT a win-prob shrink. This tool tests candidate MARGIN_SD values against
+// graded run-line history. Read-only: it re-scores existing picks, writes nothing,
+// prices nothing.
+//
+// THE MATH (why this is valid offline):
+//   The model computes a side's cover prob as  c = normalCDF(z + L/SD)  where
+//   z = invNorm(blendedWin) is the win-prob view (INDEPENDENT of SD) and L is the
+//   picked side's signed run line (+1.5 dog / -1.5 fav). So from each stored row we
+//   recover  z = invNorm(c) - L/SD_live  and re-score at any candidate SD as
+//   normalCDF(z + L/SD_new). normalCDF (Zelen-Severo) and invNorm (Acklam) are copied
+//   VERBATIM from edgesModel.js so there is zero drift from the production transform.
+//
+// SCOPE / HONEST LIMITS:
+//   - Recovery base SD_live = 3.0 is correct for the whole recorded history (MARGIN_SD
+//     has never changed). If MARGIN_SD is ever changed live, rows recorded afterward
+//     must be recovered at the new base — revisit this constant then.
+//   - This measures CALIBRATION of the picks we ALREADY made. A different SD would
+//     also change edges → which side qualifies → SELECTION; that needs a live re-run,
+//     not this DB-only tool. winRate/ROI here are selection-invariant (same picks).
+//   - Only positive-edge sides are recorded, so model_prob = picked side's cover prob
+//     and result = whether THAT side covered.
+const _RL_SD_LIVE = 3.0; // must match MARGIN_SD in edgesModel.js (run-line transform)
+// Standard normal CDF — Zelen & Severo, copied verbatim from edgesModel.js.
+function _normalCDF(x) {
+  const t = 1 / (1 + 0.2316419 * Math.abs(x));
+  const d = 0.3989422804014327 * Math.exp(-x * x / 2);
+  const p = d * t * (0.319381530 + t * (-0.356563782 + t * (1.781477937 + t * (-1.821255978 + t * 1.330274429))));
+  return x >= 0 ? 1 - p : p;
+}
+// Inverse normal CDF — Acklam, copied verbatim from edgesModel.js.
+function _invNorm(p) {
+  p = Math.min(Math.max(p, 1e-6), 1 - 1e-6);
+  const a = [-39.6968302866538, 220.946098424521, -275.928510446969, 138.357751867269, -30.6647980661472, 2.50662827745924];
+  const b = [-54.4760987982241, 161.585836858041, -155.698979859887, 66.8013118877197, -13.2806815528857];
+  const c = [-0.00778489400243029, -0.322396458041136, -2.40075827716184, -2.54973253934373, 4.37466414146497, 2.93816398269878];
+  const d = [0.00778469570904146, 0.32246712907004, 2.445134137143, 3.75440866190742];
+  const plow = 0.02425, phigh = 1 - 0.02425;
+  let q, r;
+  if (p < plow) {
+    q = Math.sqrt(-2 * Math.log(p));
+    return (((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) / ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1);
+  } else if (p <= phigh) {
+    q = p - 0.5; r = q * q;
+    return (((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) * q / (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1);
+  } else {
+    q = Math.sqrt(-2 * Math.log(1 - p));
+    return -(((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) / ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1);
+  }
+}
+// Re-score one stored cover prob c (picked side, signed line L) at a candidate SD.
+function _rlCoverAtSD(c, L, sdNew) {
+  const z = _invNorm(c) - L / _RL_SD_LIVE; // recover SD-independent win-prob view
+  return _clampProb(_normalCDF(z + L / sdNew));
+}
+// Score graded run-line rows under a candidate SD. y = 1 if the picked side covered.
+function _scoreRunLineSD(rows, sdNew) {
+  let n = 0, claimedSum = 0, wins = 0, ll = 0, brier = 0;
+  for (const r of rows) {
+    if (r.result !== "win" && r.result !== "loss") continue;
+    if (r.model_prob == null || r.line == null) continue;
+    const y = r.result === "win" ? 1 : 0;
+    const p = _rlCoverAtSD(Number(r.model_prob), Number(r.line), sdNew);
+    n++; claimedSum += p; wins += y;
+    ll += -(y * Math.log(p) + (1 - y) * Math.log(1 - p));
+    brier += (p - y) * (p - y);
+  }
+  const winRate = n ? wins / n : null;
+  const meanClaimed = n ? claimedSum / n : null;
+  return {
+    sd: sdNew, n,
+    meanClaimed: meanClaimed != null ? _round4(meanClaimed) : null,
+    winRate: winRate != null ? _round4(winRate) : null,
+    calibrationGap: (meanClaimed != null && winRate != null) ? _round4(meanClaimed - winRate) : null,
+    logLoss: n ? _round4(ll / n) : null,
+    brier: n ? _round4(brier / n) : null,
+  };
+}
+// Bucket by ORIGINAL claimed cover prob; show claimed vs re-scored vs actual per region.
+function _rlByBucket(rows, sdNew) {
+  return _CAL_BUCKETS.map(([label, lo, hi]) => {
+    let n = 0, wins = 0, claimedSum = 0, rescoredSum = 0;
+    for (const r of rows) {
+      if (r.result !== "win" && r.result !== "loss") continue;
+      if (r.model_prob == null || r.line == null) continue;
+      const mp = Number(r.model_prob);
+      if (!(mp >= lo && mp < hi)) continue;
+      n++; wins += r.result === "win" ? 1 : 0;
+      claimedSum += mp; rescoredSum += _rlCoverAtSD(mp, Number(r.line), sdNew);
+    }
+    const actual = n ? wins / n : null;
+    return {
+      bucket: label, n,
+      claimedPct: n ? _round4(claimedSum / n) : null,
+      rescoredPct: n ? _round4(rescoredSum / n) : null,
+      actualPct: actual != null ? _round4(actual) : null,
+      claimedGapPp: (n && actual != null) ? _round4(claimedSum / n - actual) : null,
+      rescoredGapPp: (n && actual != null) ? _round4(rescoredSum / n - actual) : null,
+    };
+  });
+}
+
+// GET /api/edges/rlsd[?since=YYYY-MM-DD]
+router.get("/rlsd", async (req, res) => {
+  try {
+    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) {
+      return res.status(500).json({ error: "Supabase env not set" });
+    }
+    const { createClient } = require("@supabase/supabase-js");
+    const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+    const since = req.query.since || null;
+    const rows = await _fetchGraded(sb, "run_line", since);
+
+    const SDS = [3.0, 3.25, 3.5, 3.75, 4.0, 4.5, 5.0];
+    const sweep = SDS.map(sd => _scoreRunLineSD(rows, sd));
+    const scored = sweep.filter(x => x.logLoss != null && x.calibrationGap != null);
+    const bestByLogLoss = scored.slice().sort((a, b) => a.logLoss - b.logLoss)[0] || null;
+    const bestByGap = scored.slice().sort((a, b) => Math.abs(a.calibrationGap) - Math.abs(b.calibrationGap))[0] || null;
+
+    res.json({
+      ok: true, since: since || "all",
+      market: "run_line", liveSD: _RL_SD_LIVE,
+      dateRange: rows.length ? { first: rows[0].game_date, last: rows[rows.length - 1].game_date } : null,
+      overall: _summarizeGraded(rows),
+      asIsByBucket: _rlByBucket(rows, _RL_SD_LIVE),
+      sdSweep: sweep,
+      recommendedByBucket: bestByLogLoss ? _rlByBucket(rows, bestByLogLoss.sd) : null,
+      bestByLogLoss: bestByLogLoss ? bestByLogLoss.sd : null,
+      bestByAbsGap: bestByGap ? bestByGap.sd : null,
+      note: "Read-only. Re-scores EXISTING run-line picks under candidate MARGIN_SD (live=3.0). c=normalCDF(z+L/SD); z=invNorm(c)-L/3.0 recovered per row, then re-applied at SD_new. logLoss/Brier lower = better calibrated; calibrationGap = meanClaimed - winRate (positive = overconfident). Wider SD pulls extreme cover probs toward 0.50 — watch the 60-65 & 65+ rescoredGapPp shrink vs claimedGapPp. winRate/ROI are selection-invariant (same picks); changing SD live would also shift SELECTION, which this DB-only tool does not model. If bestByLogLoss = 3.0, the existing SD is already best and we leave it.",
+    });
+  } catch (e) {
+    console.error("[rlsd] error:", e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // ── TEMP DIAGNOSTIC: odds coverage probe (read-only) ─────────────────────────
 // Answers ONE question before any football build starts: does The Odds API
 // actually return lines for a given sport through THIS key/plan right now?
