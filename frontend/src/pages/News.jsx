@@ -1,4 +1,4 @@
-// News.jsx — WZ-NEWS-PAGE-2026-06-27 :: blended ESPN + RotoWire news, sport-aware (?sport=).
+// News.jsx — WZ-NEWS-PAGE-2026-06-27B :: blended ESPN + RotoWire news, sport-aware (?sport=).
 // ESPN = headline/recap/video cards (images + game chips); RotoWire = player/injury wire
 // rows (MLB headshots + status ring). Tap any item -> in-app detail sheet that reads the
 // summary on-site and links out to the source only on demand. Auto-refreshes every 5 min.
@@ -442,14 +442,14 @@ const CSS = `
   border-bottom:1px solid var(--line);padding:11px 2px;cursor:pointer}
 .wznews .nirow:active{background:var(--panel)}
 .wznews .nibody{flex:1;min-width:0;display:flex;flex-direction:column}
-.wznews .niplayer{font-size:14.5px;font-weight:600;letter-spacing:.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wznews .niplayer{font-size:14.5px;font-weight:600;letter-spacing:.2px;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .wznews .nipos{font-family:var(--mono);font-size:11px;color:var(--mut);margin-top:2px}
 .wznews .nibadge{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.4px;padding:4px 9px;
   border-radius:999px;flex:none;border:1px solid}
-.wznews .nibadge.il60,.nsheet .nichip.il60{color:var(--neg);border-color:rgba(226,101,92,.4);background:rgba(226,101,92,.10)}
-.wznews .nibadge.il15,.nsheet .nichip.il15{color:var(--gold);border-color:rgba(201,168,106,.4);background:rgba(201,168,106,.10)}
-.wznews .nibadge.il10,.nsheet .nichip.il10{color:var(--blue);border-color:rgba(93,169,232,.4);background:rgba(93,169,232,.10)}
-.wznews .nibadge.il7,.nsheet .nichip.il7{color:var(--green);border-color:rgba(63,203,145,.4);background:rgba(63,203,145,.10)}
+.wznews .nibadge.il60,.nsheet .nichip.il60{color:#C58178;border-color:rgba(197,129,120,.32);background:transparent}
+.wznews .nibadge.il15,.nsheet .nichip.il15{color:#BBA06E;border-color:rgba(187,160,110,.32);background:transparent}
+.wznews .nibadge.il10,.nsheet .nichip.il10{color:#8AA3BE;border-color:rgba(138,163,190,.32);background:transparent}
+.wznews .nibadge.il7,.nsheet .nichip.il7{color:#7DB29A;border-color:rgba(125,178,154,.32);background:transparent}
 
 /* ── injury detail sheet ── */
 .nsheet .nihero{display:flex;align-items:center;gap:14px;margin:8px 0 4px}
