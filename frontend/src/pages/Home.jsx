@@ -893,11 +893,11 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .seclbl{display:flex;align-items:center;gap:10px;margin:24px 4px 0;color:var(--mut);font-family:var(--disp);font-weight:800;font-size:13px;letter-spacing:.6px}
 .seclbl .ct{font-family:var(--mono);font-size:10px;color:var(--mut2);font-weight:500}
 .seclbl .rollpill{margin-left:auto;font-family:var(--mono);font-size:9px;font-weight:600;letter-spacing:.3px;color:var(--gold);background:rgba(201,168,106,.12);border:1px solid rgba(201,168,106,.3);border-radius:20px;padding:3px 9px;white-space:nowrap}
-.boardhd{text-align:center;margin:22px 4px 2px;padding-top:22px;border-top:1px solid var(--line)}
+.boardhd{text-align:center;margin:28px 4px 2px;padding-top:28px;border-top:1px solid var(--line)} /* WZ-BOARD-BREATHE-2026-06-26 :: more breathing room */
 .bhtitle{display:flex;align-items:center;justify-content:center;gap:12px}
 .bht{font-family:var(--disp);font-weight:700;font-size:27px;letter-spacing:.5px;color:var(--gold);line-height:1}
 .bharw{flex:0 0 auto}.bharw line,.bharw path{stroke:var(--gold);stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round}
-.bhsub{font-family:var(--mono);font-size:11px;color:var(--mut);margin-top:7px;letter-spacing:.2px}.bhsub .bhd{color:var(--mut2)}
+.bhsub{font-family:var(--mono);font-size:11px;color:var(--mut);margin-top:10px;letter-spacing:.2px}.bhsub .bhd{color:var(--mut2)}
 .seclbl .lk{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--mut)}
 .seclbl::before{content:"";width:3px;height:13px;border-radius:2px;background:var(--red)}
 
@@ -936,10 +936,10 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .kpi .k{font-family:var(--mono);font-size:8.5px;color:var(--mut2);letter-spacing:.5px}.kpi .v{font-family:var(--mono);font-weight:600;font-size:19px;color:var(--tx);margin-top:3px;line-height:1}.kpi .v.g{color:var(--green)}.kpi .v.gold{color:var(--gold)}.kpi .v.red{color:var(--red)}.kpi .ksub{font-family:var(--mono);font-size:8.5px;color:var(--mut2);margin-top:2px}
 .kpi .kspark{display:block;width:100%;height:22px;margin-top:5px;overflow:visible}
 
-.chips{display:flex;align-items:center;gap:7px;padding:8px 4px 0;overflow-x:auto;scrollbar-width:none}.chips::-webkit-scrollbar{display:none}
+.chips{display:flex;align-items:center;gap:7px;padding:14px 4px 0;overflow-x:auto;scrollbar-width:none}.chips::-webkit-scrollbar{display:none}
 .chipf{font-family:var(--mono);font-size:10px;color:var(--mut);border:1px solid var(--line2);border-radius:999px;padding:4px 10px;white-space:nowrap;cursor:pointer}.chipf.on{color:var(--gold);background:transparent;border-color:rgba(201,168,106,.55);font-weight:600}
 
-.grid{margin:8px 4px 0;background:var(--panel);border-radius:14px;overflow:hidden}
+.grid{margin:12px 4px 0;background:var(--panel);border-radius:14px;overflow:hidden}
 .gr{position:relative;margin-bottom:0;background:transparent;border-radius:0;overflow:hidden}.gr+.gr{border-top:1px solid var(--line)}
 .gr::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--mut2);z-index:2}
 .gr.high::before{background:var(--gold)}.gr.med::before{background:var(--green)}.gr.low::before{background:var(--mut2)}
