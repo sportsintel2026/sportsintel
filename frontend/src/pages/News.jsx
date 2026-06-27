@@ -1,4 +1,4 @@
-// News.jsx — WZ-NEWS-PAGE-2026-06-27B :: blended ESPN + RotoWire news, sport-aware (?sport=).
+// News.jsx — WZ-NEWS-PAGE-2026-06-27C :: blended ESPN + RotoWire news, sport-aware (?sport=).
 // ESPN = headline/recap/video cards (images + game chips); RotoWire = player/injury wire
 // rows (MLB headshots + status ring). Tap any item -> in-app detail sheet that reads the
 // summary on-site and links out to the source only on demand. Auto-refreshes every 5 min.
@@ -26,12 +26,23 @@ function fmtDate() {
   } catch (e) { return ""; }
 }
 
-// IL length -> severity class for the badge
-function ilClass(status = "") {
-  if (/60/.test(status)) return "il60";
-  if (/15/.test(status)) return "il15";
-  if (/\b7\b|7-/.test(status)) return "il7";
+// severity class for the badge — NFL carries an explicit sev; MLB derives from IL length
+function badgeClass(it = {}) {
+  if (it.sev) return "nf-" + it.sev;          // out / ir / doubtful / questionable / dtd
+  const s = it.status || "";
+  if (/60/.test(s)) return "il60";
+  if (/15/.test(s)) return "il15";
+  if (/\b7\b|7-/.test(s)) return "il7";
   return "il10";
+}
+
+// "2026-06-01" -> "Jun 1"
+function shortDate(d) {
+  if (!d) return "";
+  try {
+    const dt = new Date(d + (d.length === 10 ? "T12:00:00" : ""));
+    return dt.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  } catch (e) { return ""; }
 }
 
 export default function News() {
@@ -82,7 +93,7 @@ export default function News() {
 
   // lazy-load the injury report the first time Injuries is opened (MLB only for now)
   useEffect(() => {
-    if (filter === "injuries" && sport === "mlb" && !injLoaded && !injLoading) loadInjuries();
+    if (filter === "injuries" && (sport === "mlb" || sport === "nfl") && !injLoaded && !injLoading) loadInjuries();
   }, [filter, sport, injLoaded, injLoading, loadInjuries]);
 
   // quiet background refresh every 5 min while the tab is open
@@ -128,7 +139,7 @@ export default function News() {
         </div>
         <div className="bhsub">
           {isInj
-            ? <>{injLoaded ? `${injuries.length} players on the IL` : "Injury report"} <span className="bhd">·</span> {fmtDate()}</>
+            ? <>{injLoaded ? `${injuries.length} players ${sport === "nfl" ? "on the report" : "on the IL"}` : "Injury report"} <span className="bhd">·</span> {fmtDate()}</>
             : <>Headlines <span className="bhd">·</span> Injuries <span className="bhd">·</span> Player Wire <span className="bhd">·</span> {fmtDate()}</>}
         </div>
       </div>
@@ -140,8 +151,8 @@ export default function News() {
       </div>
 
       {isInj ? (
-        sport !== "mlb" ? (
-          <div className="nmsg">No injury report for {SP} yet — MLB only for now.</div>
+        (sport !== "mlb" && sport !== "nfl") ? (
+          <div className="nmsg">No injury report for {SP} yet.</div>
         ) : injLoading ? (
           <div className="nmsg">Loading {SP} injury report…</div>
         ) : injErr ? (
@@ -230,7 +241,7 @@ function InjuryRow({ it, onOpen }) {
         <span className="niplayer">{it.playerName}</span>
         <span className="nipos">{it.position}{it.note ? " · note" : ""}</span>
       </span>
-      <span className={"nibadge " + ilClass(it.status)}>{it.status}</span>
+      <span className={"nibadge " + badgeClass(it)}>{it.status}</span>
     </button>
   );
 }
@@ -307,14 +318,15 @@ function InjurySheet({ it, onClose }) {
           </div>
         </div>
         <div className="nichips">
-          <span className={"nichip " + ilClass(it.status)}>{it.status}</span>
-          {it.position && <span className="nichip plain">{it.position}</span>}
+          <span className={"nichip " + badgeClass(it)}>{it.status}</span>
+          {it.bodyPart && <span className="nichip plain">{it.bodyPart}</span>}
+          {it.returnDate && <span className="nichip plain">Est. return {shortDate(it.returnDate)}</span>}
         </div>
         <div className="nilbl">Latest update</div>
         {it.note
           ? <div className="nsbody">{it.note}</div>
-          : <div className="ninonote">No recent wire note. Player is on the {it.status}.</div>}
-        {it.link && <a className="ncta-sec" href={it.link} target="_blank" rel="noopener noreferrer">Open on RotoWire ↗</a>}
+          : <div className="ninonote">No recent update. Status: {it.status}.</div>}
+        {it.link && <a className="ncta-sec" href={it.link} target="_blank" rel="noopener noreferrer">{it.source === "nfl" ? "More on ESPN ↗" : "Open on RotoWire ↗"}</a>}
         <button className="nclose" onClick={onClose}>Close</button>
       </div>
     </div>
@@ -450,6 +462,10 @@ const CSS = `
 .wznews .nibadge.il15,.nsheet .nichip.il15{color:#BBA06E;border-color:rgba(187,160,110,.32);background:transparent}
 .wznews .nibadge.il10,.nsheet .nichip.il10{color:#8AA3BE;border-color:rgba(138,163,190,.32);background:transparent}
 .wznews .nibadge.il7,.nsheet .nichip.il7{color:#7DB29A;border-color:rgba(125,178,154,.32);background:transparent}
+.wznews .nibadge.nf-out,.nsheet .nichip.nf-out,.wznews .nibadge.nf-ir,.nsheet .nichip.nf-ir{color:#C58178;border-color:rgba(197,129,120,.32);background:transparent}
+.wznews .nibadge.nf-doubtful,.nsheet .nichip.nf-doubtful{color:#CC9A6E;border-color:rgba(204,154,110,.32);background:transparent}
+.wznews .nibadge.nf-questionable,.nsheet .nichip.nf-questionable{color:#BBA06E;border-color:rgba(187,160,110,.32);background:transparent}
+.wznews .nibadge.nf-dtd,.nsheet .nichip.nf-dtd{color:#8AA3BE;border-color:rgba(138,163,190,.32);background:transparent}
 
 /* ── injury detail sheet ── */
 .nsheet .nihero{display:flex;align-items:center;gap:14px;margin:8px 0 4px}
