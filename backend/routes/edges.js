@@ -1187,6 +1187,160 @@ router.get("/tbgrade", async (req, res) => {
   }
 });
 
+// ── DIAGNOSTIC: win-prob calibration backtest (read-only) ────────────────────
+// WZ-WINCAL-BACKTEST-2026-06-26
+// The 2026-06-26 diagnostic found the moneyline win prob is overconfident at the
+// high-confidence end. This tool QUANTIFIES that and tests whether a confidence-
+// dependent shrink of the raw win prob toward 0.50 would fix it — WITHOUT touching
+// live pricing. Read-only: it queries graded history, scores candidate tempers,
+// writes nothing, prices nothing. Hit it, read it, then we decide.
+//
+// SCOPE (what is and isn't valid here):
+//   - MONEYLINE rows store the RAW strength-ratio win prob (calculateMoneylineProjection),
+//     so we CAN apply a candidate temper to model_prob directly and re-score. Valid.
+//   - RUN_LINE rows store the market-BLENDED cover prob (derived through the margin
+//     transform), so the underlying win prob can't be recovered offline. We show its
+//     AS-IS calibration only, for the downstream picture — NOT a temper sweep.
+//   - Only positive-edge sides are recorded, so model_prob is the prob of the side we
+//     actually picked and result is whether THAT side won — the betting-relevant set.
+//   - This measures CALIBRATION (claimed prob vs reality). It does NOT evaluate the
+//     W_MODEL / selection lever — that changes which picks get recorded and needs a
+//     live re-run harness, not this DB-only tool.
+//
+// Temper form tested = shrink toward 0.50:  T_s(p) = 0.5 + (p - 0.5) * (1 - s).
+// s = 0 is the live model as-is (baseline). We report log-loss + Brier (proper
+// scoring; LOWER = better calibrated) and calibrationGap per s, so the best shrink
+// (if any) is the one that minimizes log-loss / drives the gap toward 0. If NO temper
+// beats s = 0, the fix belongs at the SOURCE (the strength-ratio form), not a post-hoc
+// shrink — the same lesson the K-model rebuild already recorded ("no more hacking
+// probabilities toward 0.5 after the fact").
+const _EPS = 1e-6;
+function _clampProb(p) { return Math.max(_EPS, Math.min(1 - _EPS, p)); }
+// Shrink a probability toward 0.50 by fraction s (0 = unchanged, 1 = flat 0.50).
+function _temperToward50(p, s) { return _clampProb(0.5 + (p - 0.5) * (1 - s)); }
+
+// Score graded rows under a temper s. y = 1 if the picked side won. logLoss/Brier
+// are computed against the picked side's outcome at the tempered probability.
+function _scoreCalibration(rows, s) {
+  let n = 0, claimedSum = 0, wins = 0, ll = 0, brier = 0;
+  for (const r of rows) {
+    if (r.result !== "win" && r.result !== "loss") continue; // decisions only
+    if (r.model_prob == null) continue;
+    const y = r.result === "win" ? 1 : 0;
+    const p = _temperToward50(Number(r.model_prob), s);
+    n++; claimedSum += p; wins += y;
+    ll += -(y * Math.log(p) + (1 - y) * Math.log(1 - p));
+    brier += (p - y) * (p - y);
+  }
+  const winRate = n ? wins / n : null;
+  const meanClaimed = n ? claimedSum / n : null;
+  return {
+    s, n,
+    meanClaimed: meanClaimed != null ? _round4(meanClaimed) : null,
+    winRate: winRate != null ? _round4(winRate) : null,
+    calibrationGap: (meanClaimed != null && winRate != null) ? _round4(meanClaimed - winRate) : null,
+    logLoss: n ? _round4(ll / n) : null,
+    brier: n ? _round4(brier / n) : null,
+  };
+}
+
+// Bucket by the ORIGINAL claimed prob (matches the diagnostic SQL buckets) so each
+// row stays in one bucket across tempers; show claimed vs tempered vs actual.
+const _CAL_BUCKETS = [
+  ["1_under50", -Infinity, 0.50],
+  ["2_50to55", 0.50, 0.55],
+  ["3_55to60", 0.55, 0.60],
+  ["4_60to65", 0.60, 0.65],
+  ["5_65plus", 0.65, Infinity],
+];
+function _calByBucket(rows, s) {
+  return _CAL_BUCKETS.map(([label, lo, hi]) => {
+    let n = 0, wins = 0, claimedSum = 0, temperedSum = 0;
+    for (const r of rows) {
+      if (r.result !== "win" && r.result !== "loss") continue;
+      if (r.model_prob == null) continue;
+      const mp = Number(r.model_prob);
+      if (!(mp >= lo && mp < hi)) continue;
+      n++; wins += r.result === "win" ? 1 : 0;
+      claimedSum += mp; temperedSum += _temperToward50(mp, s);
+    }
+    const actual = n ? wins / n : null;
+    return {
+      bucket: label, n,
+      claimedPct: n ? _round4(claimedSum / n) : null,
+      temperedPct: n ? _round4(temperedSum / n) : null,
+      actualPct: actual != null ? _round4(actual) : null,
+      gapPp: (n && actual != null) ? _round4(claimedSum / n - actual) : null,
+    };
+  });
+}
+
+// GET /api/edges/wincal[?since=YYYY-MM-DD]
+router.get("/wincal", async (req, res) => {
+  try {
+    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) {
+      return res.status(500).json({ error: "Supabase env not set" });
+    }
+    const { createClient } = require("@supabase/supabase-js");
+    const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+    const since = req.query.since || null;
+
+    const mlRows = await _fetchGraded(sb, "moneyline", since);
+    const rlRows = await _fetchGraded(sb, "run_line", since);
+
+    const SHRINKS = [0, 0.05, 0.10, 0.15, 0.20, 0.25, 0.30];
+    const mlSweep = SHRINKS.map(s => _scoreCalibration(mlRows, s));
+
+    // Constant-predictor reference log-losses on the moneyline decided set, so we
+    // can tell whether the model (even tempered) actually beats a dumb baseline.
+    const decided = mlRows.filter(r => r.result === "win" || r.result === "loss");
+    const baseRate = decided.length
+      ? decided.filter(r => r.result === "win").length / decided.length : null;
+    let llFlat = 0, llBase = 0, nb = 0;
+    for (const r of decided) {
+      const y = r.result === "win" ? 1 : 0;
+      const pf = _clampProb(0.5);
+      const pb = _clampProb(baseRate != null ? baseRate : 0.5);
+      llFlat += -(y * Math.log(pf) + (1 - y) * Math.log(1 - pf));
+      llBase += -(y * Math.log(pb) + (1 - y) * Math.log(1 - pb));
+      nb++;
+    }
+    const referenceLogLoss = {
+      coinFlip_0_50: nb ? _round4(llFlat / nb) : null,
+      constantBaseRate: nb ? _round4(llBase / nb) : null,
+      baseRate: baseRate != null ? _round4(baseRate) : null,
+    };
+
+    // Best temper by log-loss and by |calibrationGap|.
+    const scored = mlSweep.filter(x => x.logLoss != null && x.calibrationGap != null);
+    const bestByLogLoss = scored.slice().sort((a, b) => a.logLoss - b.logLoss)[0] || null;
+    const bestByGap = scored.slice().sort((a, b) => Math.abs(a.calibrationGap) - Math.abs(b.calibrationGap))[0] || null;
+
+    res.json({
+      ok: true, since: since || "all",
+      moneyline: {
+        market: "moneyline (raw win prob — temperable)",
+        dateRange: mlRows.length ? { first: mlRows[0].game_date, last: mlRows[mlRows.length - 1].game_date } : null,
+        asIsByBucket: _calByBucket(mlRows, 0),
+        temperSweep: mlSweep,
+        bestByLogLoss: bestByLogLoss ? bestByLogLoss.s : null,
+        bestByAbsGap: bestByGap ? bestByGap.s : null,
+        referenceLogLoss,
+      },
+      runLine: {
+        market: "run_line (blended cover prob — AS-IS only, not temperable offline)",
+        dateRange: rlRows.length ? { first: rlRows[0].game_date, last: rlRows[rlRows.length - 1].game_date } : null,
+        asIsByBucket: _calByBucket(rlRows, 0),
+        overall: _summarizeGraded(rlRows),
+      },
+      note: "Read-only. Temper form = shrink toward 0.50: T(p)=0.5+(p-0.5)*(1-s); s=0 is the live model. logLoss/Brier lower = better calibrated; calibrationGap = meanClaimed - winRate (positive = overconfident). If bestByLogLoss is s=0, a post-hoc shrink does NOT help and the fix belongs at the source (strength-ratio form). Run line shows AS-IS calibration only (stored prob is already market-blended; re-tempering its win prob needs a live re-run, not this tool). Does NOT evaluate W_MODEL/selection.",
+    });
+  } catch (e) {
+    console.error("[wincal] error:", e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // ── TEMP DIAGNOSTIC: odds coverage probe (read-only) ─────────────────────────
 // Answers ONE question before any football build starts: does The Odds API
 // actually return lines for a given sport through THIS key/plan right now?
