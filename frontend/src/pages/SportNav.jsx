@@ -182,11 +182,7 @@ export default function SportBar() {
             onClick={() => pickSport(sp.key)}
             aria-current={on ? "true" : undefined}
           >
-            <span className="wpnav-ic">
-              {SPORT_ICON[sp.key]}
-              <i className={"wpnav-dot " + (sp.status === "LIVE" ? "live" : sp.status === "TRAIN" ? "train" : "soon")} />
-            </span>
-            <span className="wpnav-spl">{sp.lb}</span>
+            <span className="wpnav-spl">{sp.lb}<i className={"wpnav-dot " + (sp.status === "LIVE" ? "live" : sp.status === "TRAIN" ? "train" : "soon")} /></span>
           </button>
         );
       })}
@@ -195,6 +191,7 @@ export default function SportBar() {
 }
 
 const CSS = `
+@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@700&display=swap'); /* WZ-SPORTBAR-OSWALD-2026-06-26 :: heavier text-only sport labels */
 /* UNIFIED-NAV-FOCUS-TABS-2026-06-26b :: focus tabs (scale/fade) + bigger tabs, sport status dots; scope line removed */
 /* HIDE-LEGACY-WPBN-2026-06-26 :: hide old BottomNav (.wpbn) on mobile; sport bar is the nav */
 @media (max-width:1023px){
@@ -233,13 +230,11 @@ const CSS = `
   padding:5px 8px calc(5px + env(safe-area-inset-bottom)); /* WZ-SPORTBAR-COMPACT-2026-06-26 :: tighter bottom sport bar */
   background:linear-gradient(180deg,#0c0f13,#070809);border-top:1px solid rgba(255,255,255,.07)}
 .wpnav-sp{flex:1;min-width:0;appearance:none;background:none;cursor:pointer;position:relative;
-  display:flex;flex-direction:column;align-items:center;gap:3px;
-  padding:5px 2px;border:1px solid transparent;border-radius:12px;color:#8A929A}
+  display:flex;align-items:center;justify-content:center;
+  padding:9px 2px;border:1px solid transparent;border-radius:12px;color:#8A929A}
 .wpnav-sp.on{border-color:rgba(201,168,106,.45);background:rgba(201,168,106,.08);color:#C9A86A}
-.wpnav-ic{position:relative;width:22px;height:22px}
-.wpnav-ic svg{width:22px;height:22px;display:block}
-.wpnav-sp .wpnav-spl{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12px;letter-spacing:.6px;line-height:1;color:inherit}
-.wpnav-dot{position:absolute;top:-2px;right:-3px;width:7px;height:7px;border-radius:50%;border:1.5px solid #0b0d11}
+.wpnav-sp .wpnav-spl{position:relative;font-family:'Oswald',sans-serif;font-weight:700;font-size:19px;letter-spacing:.4px;line-height:1;color:inherit}
+.wpnav-dot{position:absolute;top:-3px;right:-9px;width:7px;height:7px;border-radius:50%;border:1.5px solid #0b0d11}
 .wpnav-dot.live{background:#3FCB91}
 .wpnav-dot.train{background:#D9A441}
 .wpnav-dot.soon{background:transparent;border-color:#3a4148}
