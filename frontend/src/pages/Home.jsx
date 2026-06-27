@@ -15,7 +15,7 @@ import { useState, useEffect, useRef, useCallback, Children } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { useSport } from "../hooks/useSport"; // WIZEPICKS-SPORTNAV-2026-06-25
-import { edgesApi, subscriptionApi, liveApi, supabase } from "../lib/api";
+import { edgesApi, subscriptionApi, liveApi, newsApi, supabase } from "../lib/api";
 import Sidebar from "./Sidebar";
 import HomeDesktop from "./HomeDesktop";
 
@@ -60,6 +60,8 @@ const SPORTS={
 function fmtEdgeFor(e,sport){ const v=e.edge??0; const s=v>=0?"+":""; if(sport!=="nba") return pct1(v); if(isTotal(e)||e.line!=null) return `${s}${v.toFixed(1)}`; return `${s}${v.toFixed(1)}%`; }
 function teams(m){ if(!m)return ["",""]; const p=String(m).split(/@|vs|·/i).map(s=>s.trim()).filter(Boolean); return [p[0]||"",p[1]||""]; }
 function shortTeam(t){ const m=String(t).match(/[A-Z]{2,3}/); return m?m[0]:String(t).slice(0,3).toUpperCase(); }
+// WZ-LIVEWIRE-2026-06-27 :: concise injury text for the ticker (action after the colon, trimmed)
+function wireBlurb(n){ const h=n.headline||""; const after=h.includes(":")?h.split(":").slice(1).join(":").trim():h; const s=(after||n.summary||"").trim(); return s.length>72?s.slice(0,70).trimEnd()+"\u2026":s; }
 // Resolve a full/partial MLB team name to its ESPN logo abbr. shortTeam() slices the
 // first 3 letters, which breaks on multi-word cities ("New York Mets" -> "NEW", no logo).
 const MLB_ABBR={diamondbacks:"ARI",braves:"ATL",orioles:"BAL","red sox":"BOS",cubs:"CHC","white sox":"CHW",reds:"CIN",guardians:"CLE",rockies:"COL",tigers:"DET",astros:"HOU",royals:"KC",angels:"LAA",dodgers:"LAD",marlins:"MIA",brewers:"MIL",twins:"MIN",mets:"NYM",yankees:"NYY",athletics:"OAK","a's":"OAK",phillies:"PHI",pirates:"PIT",padres:"SD",mariners:"SEA",giants:"SF",cardinals:"STL",rays:"TB",rangers:"TEX","blue jays":"TOR",nationals:"WSH"};
@@ -113,6 +115,7 @@ export default function HomePage(){
   const [live,setLive]=useState(null);
   const [oddsHist,setOddsHist]=useState(null);
   const [marketRead,setMarketRead]=useState(null);
+  const [newsFeed,setNewsFeed]=useState([]); // WZ-LIVEWIRE-2026-06-27 :: MLB live wire (news + injuries)
   const prev=useRef({}); const [flash,setFlash]=useState({});
   const hasFull=plan.isAdmin===true||plan.tier==="pro"||plan.tier==="elite"||user?.email==="r7002g@gmail.com";
   const sp=SPORTS[sport]||SPORTS.mlb;
@@ -151,6 +154,8 @@ export default function HomePage(){
   useEffect(()=>{ if(!SPORTS[sport].hasLive){ setLive([]); return; } let t; const pull=async()=>{ try{ const d=await liveApi.getMLB(); setLive(d?.games||[]); }catch(_){ setLive([]); } t=setTimeout(pull,60000); }; pull(); return ()=>clearTimeout(t); },[sport]);
   useEffect(()=>{ if(!SPORTS[sport].hasHist){ setOddsHist([]); return; } let t; const pull=async()=>{ try{ const d=await edgesApi.getOddsHistory(); setOddsHist(d?.games||[]); }catch(_){ setOddsHist([]); } t=setTimeout(pull,300000); }; pull(); return ()=>clearTimeout(t); },[sport]);
   useEffect(()=>{ if(sport!=="mlb"){ setMarketRead([]); return; } let t; const pull=async()=>{ try{ const d=await edgesApi.getMarketRead(); setMarketRead(d?.games||[]); }catch(_){ setMarketRead([]); } t=setTimeout(pull,120000); }; pull(); return ()=>clearTimeout(t); },[sport]);
+  // WZ-LIVEWIRE-2026-06-27 :: MLB live wire — pull news feed (headlines + injury wire) for the ticker, MLB only.
+  useEffect(()=>{ if(sport!=="mlb"){ setNewsFeed([]); return; } let t,dead=false; const pull=async()=>{ try{ const d=await newsApi.getFeed("mlb"); if(!dead) setNewsFeed(Array.isArray(d?.items)?d.items:[]); }catch(_){ if(!dead) setNewsFeed([]); } t=setTimeout(pull,300000); }; pull(); return ()=>{dead=true;clearTimeout(t);}; },[sport]);
   // Tracked record (ROI / win rate / CLV) for the stats row, per current sport.
   // Honest: only real graded numbers; falls back to em-dashes if a league has none yet.
   useEffect(()=>{ let c=false; setPerf(null);
@@ -314,6 +319,18 @@ export default function HomePage(){
   const boardDate = fmtSlateFull(e.date || todayISO());
   const heroItems = oneSidePerGame(allAdj).filter(x=>(x.edge??0)>0).sort((a,b)=>(b.edge||0)-(a.edge||0)).slice(0,3).map(toBoard);
   const moverItems = movers.map((m)=>{return {p:edgeLabel(m),g:(abbrById[m.gameId]?abbrById[m.gameId].a+" @ "+abbrById[m.gameId].h:m.matchup),mv:(m._open!=null&&m._now!=null&&m._delta!=null)?[formatOdds(m._open),formatOdds(m._now),(m._delta>0?"up":m._delta<0?"dn":"")]:null,odds:formatOdds(m.odds),model:m.modelProb!=null?Math.round(m.modelProb*100):null,delta:m._delta};});
+  // WZ-LIVEWIRE-2026-06-27 :: MLB-only live wire — market movers + live injury notes + headlines, round-robin
+  const wireItems = sport==="mlb" ? (()=>{
+    const mv=(moverItems||[]).filter(m=>m.mv&&m.delta!=null&&m.delta!==0).slice(0,6)
+      .map(m=>({kind:"move",dir:m.delta>0?"up":"dn",name:m.p,text:`${m.mv[0]}\u2192${m.mv[1]}`}));
+    const inj=(newsFeed||[]).filter(n=>n.source==="rotowire"&&n.status==="injury").slice(0,6)
+      .map(n=>({kind:"inj",name:n.playerName||"",text:wireBlurb(n)}));
+    const news=(newsFeed||[]).filter(n=>n.source==="espn"&&n.headline).slice(0,6)
+      .map(n=>({kind:"news",name:"",text:n.headline}));
+    const out=[]; const max=Math.max(mv.length,inj.length,news.length);
+    for(let i=0;i<max;i++){ if(mv[i])out.push(mv[i]); if(inj[i])out.push(inj[i]); if(news[i])out.push(news[i]); }
+    return out;
+  })() : [];
   const propItems = topProps.map(p=>{const col=teamCol(shortTeam(p.team||p.game||""));const initials=((p.name||"").split(" ").map(s=>s[0]).join("").slice(0,2))||(p.name||"").slice(0,2);return {player:[p.name,initials,col],g:p.game||p.team||"",edge:(p.edge||0)*100,mk:p.market,p:p.betSide,odds:formatOdds(p.odds),id:p.id};});
   const parkItems = parks.map(g=>{const f=g.parkRunFactor,hf=g.parkHRFactor,w=g.weather||{};const hot=(hf??f)>1.05,cold=(hf??f)<0.95;const tag=hot?["HITTER FRIENDLY","h"]:cold?["PITCHER FRIENDLY","p"]:["NEUTRAL","n"];const ab=mlbAbbr(g.home||"");const t=w.tempF!=null?Math.round(w.tempF):null;const wind=w.windMph?(w.windMph+" mph"+(w.windEffect?" "+w.windEffect:"")):null;const wx=w.indoor?"Dome \u00b7 roof closed":([t!=null?t+"\u00b0F":null,wind].filter(Boolean).join(" \u00b7 ")||"Forecast pending");return {venue:g.venue||g.park||((g.home||"")+" Park"),g:g.home||"",a:[ab,teamCol(ab)],tag,hr:(hf!=null?((hf>1?"+":"")+Math.round((hf-1)*100)+"%"):"0%"),run:((f>1?"+":"")+Math.round((f-1)*100)+"%"),wx};});
   const liveItems = liveGames.map(g=>{const a=g.awayAbbr||(abbrById[g.gameId]?abbrById[g.gameId].a:shortTeam(g.away||""));const h=g.homeAbbr||(abbrById[g.gameId]?abbrById[g.gameId].h:shortTeam(g.home||""));const rows=[];const ml=(g.awayEdge??-9)>=(g.homeEdge??-9)?[a+" ML",g.awayWinProb,g.awayEdge,g.awayOdds]:[h+" ML",g.homeWinProb,g.homeEdge,g.homeOdds];if(ml[2]!=null)rows.push([ml[0],(ml[1]!=null?Math.round(ml[1]*100)+"%":"\u2014"),formatOdds(ml[3]),ml[2]*100]);if(g.totalLine!=null){const tt=(g.overEdge??-9)>=(g.underEdge??-9)?["Over "+g.totalLine,g.overProb,g.overEdge,g.overOdds]:["Under "+g.totalLine,g.underProb,g.underEdge,g.underOdds];if(tt[2]!=null)rows.push([tt[0],(tt[1]!=null?Math.round(tt[1]*100)+"%":"\u2014"),formatOdds(tt[3]),tt[2]*100]);}return {a,h,ac:colFor(a,sport),hc:colFor(h,sport),state:(g.half==="bottom"?"Bot":"Top")+" "+(g.inning||"")+(g.outs!=null?" \u00b7 "+g.outs+" out":""),rows,gameId:g.gameId};});
@@ -369,13 +386,24 @@ export default function HomePage(){
         </div>
       )}
 
-      {scoreTape.length>0 && (
+      {/* WZ-LIVEWIRE-2026-06-27 :: MLB shows the live wire (movers + injuries + headlines); other sports keep their score tape */}
+      {sport==="mlb" && wireItems.length>0 ? (
+        <div className="scoretape wiretape"><span className="lvpill"><span className="d"/>WIRE</span>
+          <div className="stwrap"><div className="sttrack">{[...wireItems,...wireItems].map((w,i)=>(
+            <span key={i} className="it">
+              <span className={"tg "+w.kind}>{w.kind==="move"?"MOVE":w.kind==="inj"?"INJ":"NEWS"}</span>
+              {w.kind==="move"?<span className={"ar "+w.dir}/>:null}
+              <span className="tx">{w.name?<b>{w.name}</b>:null}{w.name?" ":""}{w.text}</span>
+            </span>
+          ))}</div></div>
+        </div>
+      ) : scoreTape.length>0 ? (
         <div className="scoretape"><span className="lvpill"><span className="d"/>{scoreTape.some(t=>t.live)?"LIVE":scoreTape.some(t=>t.as!=null)?"SCORES":"TODAY"}</span>
           <div className="stwrap"><div className="sttrack">{[...scoreTape,...scoreTape].map((s,i)=>(
             <span key={i}><span className="g">{s.a}</span> {s.as!=null?<span className="sc">{s.as}</span>:null} <span className="g">{s.h}</span> {s.hs!=null?<span className="sc">{s.hs}</span>:null} <span className="st">{s.state}</span></span>
           ))}</div></div>
         </div>
-      )}
+      ) : null}
 
         <div className="seclbl">HOW TO USE WIZEPICKS</div>
         <div className="guide" onClick={()=>navigate("/guide")}><div className="gi"/><div className="gt"><div className="gh">New here? Start with the basics</div><div className="gs">Edges, props, line shopping &amp; the full board {"\u2014"} a quick walkthrough.</div></div><div className="ga">{"\u203a"}</div></div>
@@ -856,6 +884,15 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .stwrap{flex:1;overflow:hidden;display:flex;align-items:center}
 .sttrack{display:inline-flex;gap:24px;white-space:nowrap;font-family:var(--mono);font-size:11.5px;color:var(--mut);padding:7px 0;animation:tick 24s linear infinite}
 .sttrack .g{color:#cfd7e2;font-weight:600}.sttrack .sc{color:#fff;font-weight:700}.sttrack .st{color:var(--mut2)}
+/* WZ-LIVEWIRE-2026-06-27 :: MLB live wire — tagged items (movers / injuries / headlines) */
+.sttrack .it{display:inline-flex;align-items:center;gap:7px}
+.sttrack .tg{font-family:var(--mono);font-weight:700;font-size:8.5px;letter-spacing:.6px;padding:2px 5px;border-radius:4px;border:1px solid}
+.sttrack .tg.move{color:var(--gold);border-color:rgba(201,168,106,.4);background:rgba(201,168,106,.08)}
+.sttrack .tg.inj{color:var(--neg);border-color:rgba(226,101,92,.4);background:rgba(226,101,92,.08)}
+.sttrack .tg.news{color:var(--blue);border-color:rgba(93,169,232,.35);background:rgba(93,169,232,.07)}
+.sttrack .it .tx{color:#cfd7e2}.sttrack .it .tx b{color:#fff;font-weight:700}
+.sttrack .ar{font-weight:700;font-size:8px}.sttrack .ar.up{color:var(--green)}.sttrack .ar.dn{color:var(--neg)}
+.sttrack .ar.up::before{content:"\u25B2"}.sttrack .ar.dn::before{content:"\u25BC"}
 /* Market Pulse alert strip */
 .alerts{margin:24px 4px 0;border:1px solid var(--line);border-radius:16px;background:var(--panel);overflow:hidden}
 .ahead{display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:13px 15px 10px;font-family:var(--disp);font-weight:800;font-size:11.5px;letter-spacing:.7px;color:var(--mut);cursor:pointer}
