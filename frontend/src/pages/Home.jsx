@@ -885,7 +885,7 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .seclbl{display:flex;align-items:center;gap:10px;margin:24px 4px 0;color:var(--mut);font-family:var(--disp);font-weight:800;font-size:13px;letter-spacing:.6px}
 .seclbl .ct{font-family:var(--mono);font-size:10px;color:var(--mut2);font-weight:500}
 .seclbl .rollpill{margin-left:auto;font-family:var(--mono);font-size:9px;font-weight:600;letter-spacing:.3px;color:var(--gold);background:rgba(201,168,106,.12);border:1px solid rgba(201,168,106,.3);border-radius:20px;padding:3px 9px;white-space:nowrap}
-.boardhd{text-align:center;margin:26px 4px 2px}
+.boardhd{text-align:center;margin:22px 4px 2px;padding-top:22px;border-top:1px solid var(--line)}
 .bhtitle{display:flex;align-items:center;justify-content:center;gap:12px}
 .bht{font-family:var(--disp);font-weight:700;font-size:27px;letter-spacing:.5px;color:var(--gold);line-height:1}
 .bharw{flex:0 0 auto}.bharw line,.bharw path{stroke:var(--gold);stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round}
