@@ -151,7 +151,7 @@ async function fetchRoto(league) {
     const pub = pick("pubDate");
     const blob = `${title} ${desc}`.toLowerCase();
     let status = "note";
-    if (/injur|\bil\b|day-to-day|strain|sprain|contusion|fractur|surgery|concussion|placed on|out (for|indefinitely)|sidelined|rehab|hamstring|oblique|elbow|shoulder|knee/.test(blob)) status = "injury";
+    if (/injur|\bil\b|day-to-day|strain|sprain|contusion|fractur|surgery|concussion|placed on|out (for|indefinitely)|sidelined|rehab|hamstring|oblique|elbow|shoulder|knee|torn|tear|ruptur|\bacl\b|\bmcl\b|\bucl\b|achilles|meniscus|ligament|dislocat|calf|groin|quad/.test(blob)) status = "injury";
     else if (/lineup|returns?|activated|reinstated|recalled|back (in|from)/.test(blob)) status = "lineup";
     const slug = (link.split("/").filter(Boolean).pop() || title).slice(0, 64);
     items.push({
