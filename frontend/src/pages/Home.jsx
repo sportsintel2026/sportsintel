@@ -34,6 +34,9 @@ const NICK={ARI:"Diamondbacks",AZ:"Diamondbacks",ATL:"Braves",BAL:"Orioles",BOS:
 function amCents(o){ if(o==null||isNaN(o))return null; const n=Number(o); return n>=100?n-100:n<=-100?n+100:0; }
 function fmtTime(t,withDay){ if(!t)return "—"; const d=new Date(t); if(isNaN(d.getTime()))return t; const o={hour:"numeric",minute:"2-digit",timeZone:"America/New_York"}; if(withDay)o.weekday="short"; return d.toLocaleString("en-US",o)+" ET"; }
 function fmtSlate(ds){ if(!ds)return ""; const d=new Date(ds+"T12:00:00"); if(isNaN(d.getTime()))return ""; return d.toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"}); }
+// WZ-BOARD-HEADER-2026-06-26 :: full weekday/month subtitle for the redesigned board header
+function fmtSlateFull(ds){ if(!ds)return ""; const d=new Date(ds+"T12:00:00"); if(isNaN(d.getTime()))return ""; return d.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"}); }
+function todayISO(){ const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; }
 function impliedFromAmerican(a){ if(a==null||isNaN(a))return null; const n=Number(a); return n>0?100/(n+100):-n/(-n+100); }
 const ESPN_ALIAS={az:"ari"};
 const ESPN=(ab,lg="mlb")=>{const a=String(ab||"").toLowerCase();const slug=(lg==="mlb"?(ESPN_ALIAS[a]||a):a);return `https://a.espncdn.com/i/teamlogos/${lg}/500/${slug}.png`;};
@@ -308,6 +311,7 @@ export default function HomePage(){
   const sortBoard=(a,b)=>((tierRank(b._convAdj)-tierRank(a._convAdj))||((b.convictionScore||0)-(a.convictionScore||0))||((b.edge||0)-(a.edge||0)));
   const boardSrc = board==="all" ? oneSidePerGame(allAdj).filter(x=>sport==="mlb"?(x.edge??0)>0:(x.edge??0)>=1).sort(sortBoard) : boardEdges;
   const boardItems = boardSrc.map(toBoard);
+  const boardDate = fmtSlateFull(e.date || todayISO());
   const heroItems = oneSidePerGame(allAdj).filter(x=>(x.edge??0)>0).sort((a,b)=>(b.edge||0)-(a.edge||0)).slice(0,3).map(toBoard);
   const moverItems = movers.map((m)=>{return {p:edgeLabel(m),g:(abbrById[m.gameId]?abbrById[m.gameId].a+" @ "+abbrById[m.gameId].h:m.matchup),mv:(m._open!=null&&m._now!=null&&m._delta!=null)?[formatOdds(m._open),formatOdds(m._now),(m._delta>0?"up":m._delta<0?"dn":"")]:null,odds:formatOdds(m.odds),model:m.modelProb!=null?Math.round(m.modelProb*100):null,delta:m._delta};});
   const propItems = topProps.map(p=>{const col=teamCol(shortTeam(p.team||p.game||""));const initials=((p.name||"").split(" ").map(s=>s[0]).join("").slice(0,2))||(p.name||"").slice(0,2);return {player:[p.name,initials,col],g:p.game||p.team||"",edge:(p.edge||0)*100,mk:p.market,p:p.betSide,odds:formatOdds(p.odds),id:p.id};});
@@ -408,7 +412,14 @@ export default function HomePage(){
 
       {hasFull && moverItems.length>0 && <MarketMovers movers={moverItems} navigate={navigate}/>}
 
-        <div className="seclbl">{e.rolledToNextDay?"TOMORROW'S BOARD":"TODAY'S BOARD"} <span className="ct">{boardItems.length} edges{e.rolledToNextDay&&e.date?" · "+fmtSlate(e.date):""}</span></div>
+        <div className="boardhd">
+          <div className="bhtitle">
+            <svg className="bharw" width="34" height="10" viewBox="0 0 34 10" aria-hidden="true"><line x1="0" y1="5" x2="28" y2="5"/><path d="M22 1 L30 5 L22 9" fill="none"/></svg>
+            <span className="bht">{e.rolledToNextDay?"TOMORROW'S BOARD":"TODAY'S BOARD"}</span>
+            <svg className="bharw" width="34" height="10" viewBox="0 0 34 10" aria-hidden="true"><line x1="6" y1="5" x2="34" y2="5"/><path d="M12 1 L4 5 L12 9" fill="none"/></svg>
+          </div>
+          <div className="bhsub">{boardItems.length} Model Qualified Edges{boardDate&&<> <span className="bhd">{"\u00b7"}</span> {boardDate}</>}</div>
+        </div>
         {hasFull
           ? <>
               <div className="chips">{BF.map(([lb,key])=><span key={key} className={"chipf "+(board===key?"on":"")} onClick={()=>setBoard(key)}>{lb}</span>)}</div>
@@ -874,6 +885,11 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .seclbl{display:flex;align-items:center;gap:10px;margin:24px 4px 0;color:var(--mut);font-family:var(--disp);font-weight:800;font-size:13px;letter-spacing:.6px}
 .seclbl .ct{font-family:var(--mono);font-size:10px;color:var(--mut2);font-weight:500}
 .seclbl .rollpill{margin-left:auto;font-family:var(--mono);font-size:9px;font-weight:600;letter-spacing:.3px;color:var(--gold);background:rgba(201,168,106,.12);border:1px solid rgba(201,168,106,.3);border-radius:20px;padding:3px 9px;white-space:nowrap}
+.boardhd{text-align:center;margin:26px 4px 2px}
+.bhtitle{display:flex;align-items:center;justify-content:center;gap:12px}
+.bht{font-family:var(--disp);font-weight:700;font-size:27px;letter-spacing:.5px;color:var(--gold);line-height:1}
+.bharw{flex:0 0 auto}.bharw line,.bharw path{stroke:var(--gold);stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round}
+.bhsub{font-family:var(--mono);font-size:11px;color:var(--mut);margin-top:7px;letter-spacing:.2px}.bhsub .bhd{color:var(--mut2)}
 .seclbl .lk{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--mut)}
 .seclbl::before{content:"";width:3px;height:13px;border-radius:2px;background:var(--red)}
 
@@ -913,7 +929,7 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .kpi .kspark{display:block;width:100%;height:22px;margin-top:5px;overflow:visible}
 
 .chips{display:flex;align-items:center;gap:7px;padding:8px 4px 0;overflow-x:auto;scrollbar-width:none}.chips::-webkit-scrollbar{display:none}
-.chipf{font-family:var(--mono);font-size:10px;color:var(--mut);border:1px solid var(--line2);border-radius:999px;padding:4px 10px;white-space:nowrap;cursor:pointer}.chipf.on{color:#06202a;background:var(--blue);border-color:var(--blue);font-weight:600}
+.chipf{font-family:var(--mono);font-size:10px;color:var(--mut);border:1px solid var(--line2);border-radius:999px;padding:4px 10px;white-space:nowrap;cursor:pointer}.chipf.on{color:var(--gold);background:transparent;border-color:rgba(201,168,106,.55);font-weight:600}
 
 .grid{margin:8px 4px 0;background:var(--panel);border-radius:14px;overflow:hidden}
 .gr{position:relative;margin-bottom:0;background:transparent;border-radius:0;overflow:hidden}.gr+.gr{border-top:1px solid var(--line)}
