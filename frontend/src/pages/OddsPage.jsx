@@ -207,7 +207,7 @@ export default function MarketPage() {
 
           {view==="odds" && (oddsList.length ? <>
             <div className="cap">Best available price across all books for each game. Tap any game for the full book-by-book grid{isFb?" — moneyline, spread and total":""}.</div>
-            {oddsList.map((g,i)=><OddsCard key={i} g={g} onOpen={()=>setSel(g)}/>)}
+            <div className="oddsgrp">{/* ODDSGRP-LEDGER-SURFACE-2026-06-27 */}{oddsList.map((g,i)=><OddsCard key={i} g={g} onOpen={()=>setSel(g)}/>)}</div>
           </> : <div className="estate"><div className="et">{sport==="cfb"?"No CFB lines posted yet":sport==="nfl"?"No NFL lines posted yet":"No games posted"}</div><div className="es">Lines appear as books open.</div></div>)}
 
           {view==="movers" && (movers.length ? <>
@@ -374,8 +374,9 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .subnav b.on{background:var(--gold);color:#0A0B0D}/* SUBNAV-GOLD-ACTIVE-2026-06-27 */
 .cap{font-family:var(--mono);font-size:10px;color:var(--mut2);margin:10px 4px 0;line-height:1.4}
 /* odds (line shop) card — ODDSCARD-C2-LEDGER-2026-06-27 :: box-free hairline ledger */
-.oc{margin:0 6px;padding:13px 0 12px;border-top:1px solid var(--line);cursor:pointer}
-.oc:first-of-type{border-top:none}
+.oddsgrp{background:var(--panel);border:1px solid var(--line);border-radius:14px;margin:9px 4px 0;overflow:hidden}
+.oc{padding:13px 11px;border-top:1px solid var(--line);cursor:pointer}
+.oc:first-child{border-top:none}
 .lg{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#1B2025;border:1px solid var(--line2);font-family:var(--disp);font-weight:800;font-size:8px;color:#fff;flex:0 0 auto}.lg img{width:20px;height:20px;object-fit:contain}
 .lgs{display:flex}.lgs .lg{margin-left:-5px}.lgs .lg:first-child{margin-left:0}
 .oc .mtt{text-align:center;line-height:1.12;letter-spacing:.2px;font-family:var(--disp);font-weight:600;font-size:14.5px;color:var(--gold);opacity:.82}
@@ -387,7 +388,7 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .oc .seg.gsep{border-left:1px solid var(--line2)}
 .oc .slab{font-family:var(--mono);font-size:8px;font-weight:600;color:var(--mut2);height:11px}
 .oc .sval{font-family:var(--disp);font-weight:800;font-size:19px;line-height:1;color:var(--green);margin-top:2px}
-.oc .sbook{font-family:var(--mono);font-size:8.5px;font-weight:700;color:var(--gold);margin-top:4px}
+.oc .sbook{font-family:var(--mono);font-size:8.5px;font-weight:600;color:var(--mut);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 /* movers */
 .mvrow{display:flex;align-items:center;gap:11px;margin:0;border:none;border-radius:0;background:transparent;padding:11px 13px}.mvrow+.mvrow{border-top:1px solid var(--line)}.mvlist{margin:8px 4px 0;background:var(--panel);border-radius:12px;overflow:hidden}
 .mvrow .rk{font-family:var(--disp);font-weight:800;font-size:13px;color:var(--mut2);width:18px;flex:0 0 auto}
