@@ -207,6 +207,79 @@ async function resolveHeadshots(items) {
   }
 }
 
+function headshotUrl(id) {
+  return `https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_240,q_auto:best/v1/people/${id}/headshot/67/current`;
+}
+
+// ── league-wide injury report (MLB) — 40-man roster status, enriched w/ RotoWire ──
+let mlbTeams = null, mlbTeamsAt = 0;
+async function getMlbTeams() {
+  if (mlbTeams && (Date.now() - mlbTeamsAt) < 24 * 60 * 60 * 1000) return mlbTeams;
+  try {
+    const yr = new Date().getFullYear();
+    const { data } = await axios.get("https://statsapi.mlb.com/api/v1/teams",
+      { params: { sportId: 1, season: yr }, timeout: 9000 });
+    mlbTeams = (data?.teams || []).filter((t) => t.active !== false)
+      .map((t) => ({ id: t.id, name: t.name, abbr: t.abbreviation }));
+    mlbTeamsAt = Date.now();
+  } catch (e) { console.error("[News] MLB teams failed:", e.message); if (!mlbTeams) mlbTeams = []; }
+  return mlbTeams;
+}
+function ilBadge(desc = "", code = "") {
+  const m = (desc || "").match(/(\d+)\s*-?\s*day/i);
+  if (m) return `${m[1]}-Day IL`;
+  if (/60/.test(code)) return "60-Day IL";
+  if (/restricted/i.test(desc)) return "Restricted";
+  return "IL";
+}
+const injCache = {};
+const INJ_TTL = 20 * 60 * 1000;
+async function buildMlbInjuries() {
+  const teams = await getMlbTeams();
+  const rosters = await Promise.allSettled(teams.map((t) =>
+    axios.get(`https://statsapi.mlb.com/api/v1/teams/${t.id}/roster`,
+      { params: { rosterType: "40Man" }, timeout: 9000 })
+      .then((r) => ({ team: t, roster: r.data?.roster || [] }))));
+  // RotoWire notes for the "what happened / when's he back" detail
+  const notes = new Map();
+  try {
+    const r = await fetchRoto("mlb");
+    for (const it of r) if (it.playerName) notes.set(norm(it.playerName), it);
+  } catch (_) {}
+  const out = [];
+  for (const res of rosters) {
+    if (res.status !== "fulfilled") continue;
+    const { team, roster } = res.value;
+    for (const p of roster) {
+      const code = p.status?.code || "";
+      const desc = p.status?.description || "";
+      const isIL = /^d/i.test(code) || /injured|\bil\b|disabled list/i.test(desc);
+      if (!isIL) continue;
+      const name = p.person?.fullName || "";
+      const pid = p.person?.id;
+      const note = notes.get(norm(name));
+      out.push({
+        id: `inj-${pid || name}`,
+        source: "mlb",
+        type: "injury",
+        playerName: name,
+        team: team.name,
+        teamAbbr: team.abbr,
+        position: p.position?.abbreviation || "",
+        status: ilBadge(desc, code),
+        statusRaw: desc, statusCode: code, // included for verification; harmless
+        note: note ? note.summary : null,
+        noteHeadline: note ? note.headline : null,
+        published: note ? note.published : null,
+        headshot: pid ? headshotUrl(pid) : null,
+        link: note ? note.link : null,
+      });
+    }
+  }
+  out.sort((a, b) => a.team.localeCompare(b.team) || a.playerName.localeCompare(b.playerName));
+  return out;
+}
+
 // ── build + cache ──────────────────────────────────────────────────────────────
 function dedupe(items) {
   const seen = new Set();
@@ -243,6 +316,24 @@ async function buildFeed(league) {
   items = dedupe(items).slice(0, 40).map((x) => ({ ...x, timeAgo: timeAgo(x.published) }));
   return items;
 }
+
+router.get("/:league/injuries", async (req, res) => {
+  const league = String(req.params.league || "").toLowerCase();
+  if (league !== "mlb") return res.json({ league, items: [], note: "injury report is MLB-only for now" });
+  const c = injCache[league];
+  if (c && (Date.now() - c.at) < INJ_TTL) {
+    return res.json({ league, count: c.items.length, items: c.items, updatedAt: new Date(c.at).toISOString(), cached: true });
+  }
+  try {
+    const items = await buildMlbInjuries();
+    injCache[league] = { items, at: Date.now() };
+    res.json({ league, count: items.length, items, updatedAt: new Date().toISOString(), cached: false });
+  } catch (err) {
+    console.error("[News] injuries error:", err.message);
+    if (injCache[league]) return res.json({ league, items: injCache[league].items, stale: true });
+    res.status(500).json({ error: "failed to build injuries" });
+  }
+});
 
 router.get("/:league", async (req, res) => {
   const league = String(req.params.league || "").toLowerCase();
