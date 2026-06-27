@@ -241,6 +241,7 @@ function OddsCard({ g, onOpen }) {
   // 4-segment best-price strip (away ML | home ML | OVER | UNDER). Logos removed;
   // full team names (g.away/g.home) read off the centered title order.
   const best = g.best || {}; const cl = g.consensusTotalLine;
+  const aAb = g.awayAbbr || abbrOf(g.away), hAb = g.homeAbbr || abbrOf(g.home);
   const nBooks = (g.books||[]).length;
   const ot = cl!=null ? "O "+cl : "Over";
   const ut = cl!=null ? "U "+cl : "Under";
@@ -249,8 +250,8 @@ function OddsCard({ g, onOpen }) {
       <div className="mtt">{g.away} <span className="at">@</span> {g.home}</div>
       <div className="gbk">{nBooks} books</div>
       <div className="strip">
-        <div className="seg"><div className="slab"/><div className="sval">{fmtOdds(best.awayML?.price)}</div><div className="sbook">{best.awayML?.book || "\u2014"}</div></div>
-        <div className="seg"><div className="slab"/><div className="sval">{fmtOdds(best.homeML?.price)}</div><div className="sbook">{best.homeML?.book || "\u2014"}</div></div>
+        <div className="seg"><div className="slab">{aAb}</div><div className="sval">{fmtOdds(best.awayML?.price)}</div><div className="sbook">{best.awayML?.book || "\u2014"}</div></div>
+        <div className="seg"><div className="slab">{hAb}</div><div className="sval">{fmtOdds(best.homeML?.price)}</div><div className="sbook">{best.homeML?.book || "\u2014"}</div></div>
         <div className="seg gsep"><div className="slab">{ot}</div><div className="sval">{fmtOdds(best.over?.price)}</div><div className="sbook">{best.over?.book || "\u2014"}</div></div>
         <div className="seg"><div className="slab">{ut}</div><div className="sval">{fmtOdds(best.under?.price)}</div><div className="sbook">{best.under?.book || "\u2014"}</div></div>
       </div>
@@ -371,7 +372,7 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .sports b .dot{width:6px;height:6px;border-radius:50%;background:#2a3640}.sports b.on .dot{background:var(--green)}
 .subnav{display:flex;gap:0;border:1px solid var(--line2);border-radius:10px;overflow:hidden;margin:11px 4px 0}
 .subnav b{flex:1;text-align:center;font-family:var(--disp);font-weight:800;font-size:13px;letter-spacing:.4px;color:var(--mut);padding:9px;cursor:pointer}
-.subnav b.on{background:var(--gold);color:#0A0B0D}/* SUBNAV-GOLD-ACTIVE-2026-06-27 */
+.subnav b.on{background:#141d24;color:var(--gold)}/* SUBNAV-DARK-GOLDTEXT-2026-06-27 */
 .cap{font-family:var(--mono);font-size:10px;color:var(--mut2);margin:10px 4px 0;line-height:1.4}
 /* odds (line shop) card — ODDSCARD-C2-LEDGER-2026-06-27 :: box-free hairline ledger */
 .oddsgrp{background:var(--panel);border:1px solid var(--line);border-radius:14px;margin:9px 4px 0;overflow:hidden}
@@ -386,7 +387,7 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .oc .seg{flex:1;min-width:0;text-align:center;padding:0 2px}
 .oc .seg + .seg{border-left:1px solid var(--line)}
 .oc .seg.gsep{border-left:1px solid var(--line2)}
-.oc .slab{font-family:var(--mono);font-size:8px;font-weight:600;color:var(--mut2);height:11px}
+.oc .slab{font-family:var(--mono);font-size:9px;font-weight:600;color:#ECEFF2;height:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}/* MLLABELS-WHITE-2026-06-27 */
 .oc .sval{font-family:var(--disp);font-weight:800;font-size:19px;line-height:1;color:var(--green);margin-top:2px}
 .oc .sbook{font-family:var(--mono);font-size:8.5px;font-weight:600;color:var(--mut);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 /* movers */
