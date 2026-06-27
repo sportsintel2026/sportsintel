@@ -1,4 +1,4 @@
-// News.jsx — WZ-NEWS-PAGE-2026-06-27C :: blended ESPN + RotoWire news, sport-aware (?sport=).
+// News.jsx — WZ-NEWS-PAGE-2026-06-27D :: blended ESPN + RotoWire news, sport-aware (?sport=).
 // ESPN = headline/recap/video cards (images + game chips); RotoWire = player/injury wire
 // rows (MLB headshots + status ring). Tap any item -> in-app detail sheet that reads the
 // summary on-site and links out to the source only on demand. Auto-refreshes every 5 min.
@@ -8,7 +8,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { newsApi } from "../lib/api";
 
-const LABEL = { mlb: "MLB", nfl: "NFL", cfb: "CFB" };
+const LABEL = { mlb: "MLB", nfl: "NFL", cfb: "CFB", nba: "NBA", nhl: "NHL" };
 const TYPE_CHIP = {
   video:    { cls: "video", txt: "\u25B6 Video" },
   recap:    { cls: "recap", txt: "Recap" },
