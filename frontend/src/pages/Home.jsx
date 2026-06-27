@@ -320,21 +320,31 @@ export default function HomePage(){
   const boardDate = fmtSlateFull(e.date || todayISO());
   const heroItems = oneSidePerGame(allAdj).filter(x=>(x.edge??0)>0).sort((a,b)=>(b.edge||0)-(a.edge||0)).slice(0,3).map(toBoard);
   const moverItems = movers.map((m)=>{return {p:edgeLabel(m),g:(abbrById[m.gameId]?abbrById[m.gameId].a+" @ "+abbrById[m.gameId].h:m.matchup),mv:(m._open!=null&&m._now!=null&&m._delta!=null)?[formatOdds(m._open),formatOdds(m._now),(m._delta>0?"up":m._delta<0?"dn":"")]:null,odds:formatOdds(m.odds),model:m.modelProb!=null?Math.round(m.modelProb*100):null,delta:m._delta};});
-  // WZ-LIVEWIRE-2026-06-27 :: MLB-only live wire — market movers + live injury notes + headlines, round-robin
-  const wireItems = sport==="mlb" ? (()=>{
-    const mv=(moverItems||[]).filter(m=>m.mv&&m.delta!=null&&m.delta!==0).slice(0,6)
-      .map(m=>({kind:"move",dir:m.delta>0?"up":"dn",name:m.p,text:`${m.mv[0]}\u2192${m.mv[1]}`}));
-    const inj=(newsFeed||[]).filter(n=>n.source==="rotowire"&&n.status==="injury").slice(0,6)
+  // WZ-LIVETICKER-2026-06-27 :: ticker = live scores (the backbone) with injury + late-scratch
+  // alerts woven in. MLB pulls injuries/scratches from the RotoWire wire; other sports show
+  // plain scores. A late scratch (player pulled from tonight's lineup) is the more urgent
+  // signal, so scratches lead the alert list.
+  const tickerAlerts = sport==="mlb" ? (()=>{
+    const scr=(newsFeed||[]).filter(n=>n.source==="rotowire"&&n.scratch).slice(0,6)
+      .map(n=>({kind:"scr",name:n.playerName||"",text:wireBlurb(n)}));
+    const inj=(newsFeed||[]).filter(n=>n.source==="rotowire"&&n.status==="injury"&&!n.scratch).slice(0,6)
       .map(n=>({kind:"inj",name:n.playerName||"",text:wireBlurb(n)}));
-    const news=(newsFeed||[]).filter(n=>n.source==="espn"&&n.headline).slice(0,6)
-      .map(n=>({kind:"news",name:"",text:capWire(n.headline,46)}));
-    const out=[]; const max=Math.max(mv.length,inj.length,news.length);
-    for(let i=0;i<max;i++){ if(mv[i])out.push(mv[i]); if(inj[i])out.push(inj[i]); if(news[i])out.push(news[i]); }
-    return out;
+    return [...scr,...inj];
   })() : [];
-  // WZ-LIVEWIRE-FIX-2026-06-27 :: repeat the wire so the marquee always fills the viewport
-  // even when items are few/short (e.g. before news loads) — prevents the empty-gap scroll.
-  const wireLoop = wireItems.length ? (()=>{ let s=[...wireItems]; while(s.length<12) s=s.concat(wireItems); return s; })() : [];
+  // Scores are the backbone; weave one alert in after roughly every two scores so both stay visible.
+  const tickerItems = (()=>{
+    const scores=scoreTape.map(s=>({kind:"score",...s}));
+    if(!tickerAlerts.length) return scores;
+    const out=[]; let si=0, ai=0;
+    while(si<scores.length||ai<tickerAlerts.length){
+      if(si<scores.length) out.push(scores[si++]);
+      if(si<scores.length) out.push(scores[si++]);
+      if(ai<tickerAlerts.length) out.push(tickerAlerts[ai++]);
+    }
+    return out;
+  })();
+  // Repeat so the marquee always fills the viewport even when items are few.
+  const tickerLoop = tickerItems.length ? (()=>{ let s=[...tickerItems]; while(s.length<10) s=s.concat(tickerItems); return s; })() : [];
   const propItems = topProps.map(p=>{const col=teamCol(shortTeam(p.team||p.game||""));const initials=((p.name||"").split(" ").map(s=>s[0]).join("").slice(0,2))||(p.name||"").slice(0,2);return {player:[p.name,initials,col],g:p.game||p.team||"",edge:(p.edge||0)*100,mk:p.market,p:p.betSide,odds:formatOdds(p.odds),id:p.id};});
   const parkItems = parks.map(g=>{const f=g.parkRunFactor,hf=g.parkHRFactor,w=g.weather||{};const hot=(hf??f)>1.05,cold=(hf??f)<0.95;const tag=hot?["HITTER FRIENDLY","h"]:cold?["PITCHER FRIENDLY","p"]:["NEUTRAL","n"];const ab=mlbAbbr(g.home||"");const t=w.tempF!=null?Math.round(w.tempF):null;const wind=w.windMph?(w.windMph+" mph"+(w.windEffect?" "+w.windEffect:"")):null;const wx=w.indoor?"Dome \u00b7 roof closed":([t!=null?t+"\u00b0F":null,wind].filter(Boolean).join(" \u00b7 ")||"Forecast pending");return {venue:g.venue||g.park||((g.home||"")+" Park"),g:g.home||"",a:[ab,teamCol(ab)],tag,hr:(hf!=null?((hf>1?"+":"")+Math.round((hf-1)*100)+"%"):"0%"),run:((f>1?"+":"")+Math.round((f-1)*100)+"%"),wx};});
   const liveItems = liveGames.map(g=>{const a=g.awayAbbr||(abbrById[g.gameId]?abbrById[g.gameId].a:shortTeam(g.away||""));const h=g.homeAbbr||(abbrById[g.gameId]?abbrById[g.gameId].h:shortTeam(g.home||""));const rows=[];const ml=(g.awayEdge??-9)>=(g.homeEdge??-9)?[a+" ML",g.awayWinProb,g.awayEdge,g.awayOdds]:[h+" ML",g.homeWinProb,g.homeEdge,g.homeOdds];if(ml[2]!=null)rows.push([ml[0],(ml[1]!=null?Math.round(ml[1]*100)+"%":"\u2014"),formatOdds(ml[3]),ml[2]*100]);if(g.totalLine!=null){const tt=(g.overEdge??-9)>=(g.underEdge??-9)?["Over "+g.totalLine,g.overProb,g.overEdge,g.overOdds]:["Under "+g.totalLine,g.underProb,g.underEdge,g.underOdds];if(tt[2]!=null)rows.push([tt[0],(tt[1]!=null?Math.round(tt[1]*100)+"%":"\u2014"),formatOdds(tt[3]),tt[2]*100]);}return {a,h,ac:colFor(a,sport),hc:colFor(h,sport),state:(g.half==="bottom"?"Bot":"Top")+" "+(g.inning||"")+(g.outs!=null?" \u00b7 "+g.outs+" out":""),rows,gameId:g.gameId};});
@@ -390,21 +400,13 @@ export default function HomePage(){
         </div>
       )}
 
-      {/* WZ-LIVEWIRE-2026-06-27 :: MLB shows the live wire (movers + injuries + headlines); other sports keep their score tape */}
-      {sport==="mlb" && wireItems.length>0 ? (
-        <div className="scoretape wiretape"><span className="lvpill"><span className="d"/>WIRE</span>
-          <div className="stwrap"><div className="sttrack">{[...wireLoop,...wireLoop].map((w,i)=>(
-            <span key={i} className="it">
-              <span className={"tg "+w.kind}>{w.kind==="move"?"MOVE":w.kind==="inj"?"INJ":"NEWS"}</span>
-              {w.kind==="move"?<span className={"ar "+w.dir}/>:null}
-              <span className="tx">{w.name?<b>{w.name}</b>:null}{w.name?" ":""}{w.text}</span>
-            </span>
-          ))}</div></div>
-        </div>
-      ) : scoreTape.length>0 ? (
+      {/* WZ-LIVETICKER-2026-06-27 :: live-scores ticker (all sports) with MLB injury + late-scratch alerts woven in */}
+      {tickerItems.length>0 ? (
         <div className="scoretape"><span className="lvpill"><span className="d"/>{scoreTape.some(t=>t.live)?"LIVE":scoreTape.some(t=>t.as!=null)?"SCORES":"TODAY"}</span>
-          <div className="stwrap"><div className="sttrack">{[...scoreTape,...scoreTape].map((s,i)=>(
-            <span key={i}><span className="g">{s.a}</span> {s.as!=null?<span className="sc">{s.as}</span>:null} <span className="g">{s.h}</span> {s.hs!=null?<span className="sc">{s.hs}</span>:null} <span className="st">{s.state}</span></span>
+          <div className="stwrap"><div className="sttrack">{[...tickerLoop,...tickerLoop].map((s,i)=>(
+            s.kind==="score"
+              ? <span key={i}><span className="g">{s.a}</span> {s.as!=null?<span className="sc">{s.as}</span>:null} <span className="g">{s.h}</span> {s.hs!=null?<span className="sc">{s.hs}</span>:null} <span className="st">{s.state}</span></span>
+              : <span key={i} className="it"><span className={"tg "+s.kind}>{s.kind==="scr"?"SCR":"INJ"}</span><span className="tx">{s.name?<b>{s.name}</b>:null}{s.name?" ":""}{s.text}</span></span>
           ))}</div></div>
         </div>
       ) : null}
@@ -894,6 +896,7 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .sttrack .tg.move{color:var(--gold);border-color:rgba(201,168,106,.4);background:rgba(201,168,106,.08)}
 .sttrack .tg.inj{color:var(--neg);border-color:rgba(226,101,92,.4);background:rgba(226,101,92,.08)}
 .sttrack .tg.news{color:var(--blue);border-color:rgba(93,169,232,.35);background:rgba(93,169,232,.07)}
+.sttrack .tg.scr{color:#E89B4F;border-color:rgba(232,155,79,.45);background:rgba(232,155,79,.10)}/* WZ-LIVETICKER-SCRATCH-2026-06-27 */
 .sttrack .it .tx{color:#cfd7e2}.sttrack .it .tx b{color:#fff;font-weight:700}
 .sttrack .ar{font-weight:700;font-size:8px}.sttrack .ar.up{color:var(--green)}.sttrack .ar.dn{color:var(--neg)}
 .sttrack .ar.up::before{content:"\u25B2"}.sttrack .ar.dn::before{content:"\u25BC"}
