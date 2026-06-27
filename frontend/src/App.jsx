@@ -26,7 +26,7 @@ import LiveScoresPage from "./pages/LiveScores";
 import GuidePage from "./pages/Guide";
 import DailyCardPage from "./pages/DailyCard";
 import MarketReadPage from "./pages/MarketRead";
-import NewsPage from "./pages/News"; // WZ-NEWS-ROUTE-2026-06-26
+import NewsPage from "./pages/News"; // WZ-NEWS-ROUTE-2026-06-27 (nba/nhl)
 import { TermsPage, PrivacyPage } from "./pages/Legal"; // LEGAL-PAGES-2026-06-24
 import MobileShell from "./pages/MobileShell"; // MOBILESHELL-ROUTE-2026-06-24
 import SportBar, { SportTabsHeader } from "./pages/SportNav"; // WIZEPICKS-SPORTNAV-2026-06-25
@@ -311,7 +311,7 @@ export default function App() {
           <Route path="/news" element={
             <PrivateRoute>
               {/* WZ-NEWS-ROUTE-2026-06-26 :: blended ESPN + RotoWire feed (mlb/nfl/cfb) */}
-              <SportGate section="News" allow={["mlb", "nfl", "cfb"]}>
+              <SportGate section="News" allow={["mlb", "nfl", "cfb", "nba", "nhl"]}>
                 <NewsPage />
               </SportGate>
             </PrivateRoute>
