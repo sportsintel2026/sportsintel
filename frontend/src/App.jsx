@@ -26,6 +26,7 @@ import LiveScoresPage from "./pages/LiveScores";
 import GuidePage from "./pages/Guide";
 import DailyCardPage from "./pages/DailyCard";
 import MarketReadPage from "./pages/MarketRead";
+import NewsPage from "./pages/News"; // WZ-NEWS-ROUTE-2026-06-26
 import { TermsPage, PrivacyPage } from "./pages/Legal"; // LEGAL-PAGES-2026-06-24
 import MobileShell from "./pages/MobileShell"; // MOBILESHELL-ROUTE-2026-06-24
 import SportBar, { SportTabsHeader } from "./pages/SportNav"; // WIZEPICKS-SPORTNAV-2026-06-25
@@ -309,7 +310,10 @@ export default function App() {
           } />
           <Route path="/news" element={
             <PrivateRoute>
-              <ComingSoon title="News" note="Feed wiring in soon — injuries, lineups, and line-move alerts will land here." />
+              {/* WZ-NEWS-ROUTE-2026-06-26 :: blended ESPN + RotoWire feed (mlb/nfl/cfb) */}
+              <SportGate section="News" allow={["mlb", "nfl", "cfb"]}>
+                <NewsPage />
+              </SportGate>
             </PrivateRoute>
           } />
           <Route path="/m" element={
