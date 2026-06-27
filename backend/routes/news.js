@@ -13,6 +13,8 @@ const LEAGUES = {
   mlb: { espn: "baseball/mlb",              roto: "MLB", headshots: true  },
   nfl: { espn: "football/nfl",              roto: "NFL", headshots: false },
   cfb: { espn: "football/college-football", roto: "CFB", headshots: false },
+  nba: { espn: "basketball/nba",            roto: "NBA", headshots: false },
+  nhl: { espn: "hockey/nhl",                roto: "NHL", headshots: false },
 };
 
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 min — fast-moving, but protect the feeds
