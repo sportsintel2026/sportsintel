@@ -78,13 +78,17 @@ function shortFallback(team = "") {
   const w = t.split(/\s+/);
   return (w.length > 1 ? w.map((x) => x[0]).join("") : t.slice(0, 4)).toUpperCase().slice(0, 4);
 }
+// edge cases ESPN abbreviates oddly (e.g. the relocated Athletics)
+const ABBR_OVERRIDE = { "athletics": "ATH", "oakland athletics": "ATH" };
+function resolveAbbr(name, abbrMap) {
+  const k = norm(name);
+  return ABBR_OVERRIDE[k] || abbrMap.get(k) || shortFallback(name);
+}
 function gameChip(eventDesc, abbrMap) {
   if (!eventDesc) return null;
   const m = eventDesc.match(/^(.+?)\s+@\s+(.+)$/);
   if (!m) return null;
-  const a = abbrMap.get(norm(m[1])) || shortFallback(m[1]);
-  const h = abbrMap.get(norm(m[2])) || shortFallback(m[2]);
-  return `${a} @ ${h}`;
+  return `${resolveAbbr(m[1], abbrMap)} @ ${resolveAbbr(m[2], abbrMap)}`;
 }
 
 // ── ESPN: headlines / recaps / video, with images + (raw) game desc ────────────
@@ -207,7 +211,7 @@ function dedupe(items) {
   for (const it of items) {
     // collapse same-story ESPN duplicates by a normalized headline prefix; wire items always kept
     if (it.source === "espn") {
-      const key = norm(it.headline).split(" ").slice(0, 7).join(" ");
+      const key = norm(it.headline).split(" ").slice(0, 5).join(" ");
       if (key && seen.has(key)) continue;
       if (key) seen.add(key);
     }
