@@ -88,15 +88,23 @@ export default function AdminPage() {
   const numOr = (v) => (v==null||v===""||isNaN(Number(v))) ? null : Number(v);
   const autoOdds = (g, mkt, sel) => {
     if (!g) return { odds: null, line: null };
-    if (mkt==="moneyline") { const ml=g.moneyline||{}; return { odds: sel==="home"?ml.home:ml.away, line: null }; }
+    if (mkt==="moneyline") { const ml=g.moneyline||{}; return { odds: sel==="home"?ml.homeOdds:ml.awayOdds, line: null }; } // WP-PICKER-FIELDFIX-2026-06-27
     if (mkt==="total")     { const t=g.totals||{};     return { odds: sel==="under"?t.underOdds:t.overOdds, line: t.line ?? null }; }
     if (mkt==="run_line")  {
+      // WP-PICKER-RUNLINE-FIX-2026-06-27 — the model emits the correctly SIGNED run line
+      // per side (homeLine/awayLine: favorite -1.5, dog +1.5), so read it directly. The
+      // old code derived the sign from ml.home/ml.away — fields that don't exist on the
+      // edges payload (it's homeOdds/awayOdds) — so favorite detection silently failed and
+      // home always defaulted to -1.5 (e.g. SD, a home dog, wrongly showed -1.5).
       const rl=g.runLine||{}, ml=g.moneyline||{};
-      const hm=numOr(ml.home), aw=numOr(ml.away);
-      const homeFav = (hm!=null && aw!=null) ? hm < aw : null;          // more-negative ML = favorite
-      const sideFav = sel==="home" ? homeFav : (homeFav===null ? null : !homeFav);
-      const mag = (rl.line!=null && !isNaN(Number(rl.line))) ? Math.abs(Number(rl.line)) : 1.5;
-      const ln = sideFav===null ? (sel==="home"?-mag:mag) : (sideFav ? -mag : mag);
+      let ln = sel==="home" ? rl.homeLine : rl.awayLine;
+      if (ln==null) { // fallback: derive sign from the moneyline, using the REAL field names
+        const hm=numOr(ml.homeOdds), aw=numOr(ml.awayOdds);
+        const homeFav = (hm!=null && aw!=null) ? hm < aw : null;        // more-negative ML = favorite
+        const sideFav = sel==="home" ? homeFav : (homeFav===null ? null : !homeFav);
+        const mag = 1.5;
+        ln = sideFav===null ? (sel==="home"?-mag:mag) : (sideFav ? -mag : mag);
+      }
       return { odds: sel==="home"?rl.homeOdds:rl.awayOdds, line: ln };
     }
     if (mkt==="spread")    {
