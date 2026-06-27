@@ -70,7 +70,8 @@ export default function PropsPage() {
     // so the old default of "O" mislabeled every model under (e.g. a K under as "6+ Ks").
     const sideStr = String(p.side || p.betSide || "").toLowerCase();
     const isUnder = sideStr.startsWith("u");
-    if (isUnder) return `Under ${p.line ?? "0.5"} ${unit}`;
+    // WZ-PROP-UNDER-NOX-2026-06-26 :: "Under 0.5 X" isn't a real betting line — show "No X" (zero of the stat). Higher under lines keep their number.
+    if (isUnder) { const ln = Number(p.line ?? 0.5); return ln === 0.5 ? `No ${unit}` : `Under ${p.line} ${unit}`; }
     // Over X.5 → (X+1)+   e.g. Over 0.5 Hits → "1+ Hits", Over 5.5 Ks → "6+ Ks"
     const n = p.line == null ? 1 : Math.ceil(Number(p.line));
     if (unit === "HR" && n === 1) return "Anytime HR";
