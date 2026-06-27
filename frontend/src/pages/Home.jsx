@@ -766,9 +766,10 @@ function MarketMovers({movers,navigate}){
         <span className="mvtxt"><span className="mvp">{d.p}</span>{d.g&&<span className="mvg">{d.g}</span>}</span>
         <span className={"mvd "+(up?"up":"dn")}>{up?"\u2191":"\u2193"} {up?"+":"\u2212"}{Math.abs(d.delta)}{"\u00a2"}</span>
       </div>);})}</div>
+    {/* WZ-MVNOTE-TRIM-2026-06-26 :: green/red mover legend shortened (removed lengthened/shortened sentences + price examples) */}
     <div className="mvnote">
-      <div className="mvnr"><span className="up">{"\u2191"} +40{"\u00a2"} (green)</span> {"\u2014"} the price has <b>lengthened</b> by 40 cents since it opened. Bigger payout on that side now than at open {"\u2014"} a team that opened +120 is now +160, or a -140 drifted to -100. The market is drifting <b>away</b> from that side: fewer takers, so the book is sweetening the price.</div>
-      <div className="mvnr"><span className="dn">{"\u2193"} {"\u2212"}40{"\u00a2"} (red)</span> {"\u2014"} the price has <b>shortened</b> by 40 cents. Worse payout now than at open {"\u2014"} +160 bet down to +120, or -100 steamed to -140. Money is coming in on that side: the market is moving <b>toward</b> it.</div>
+      <div className="mvnr"><span className="up">{"\u2191"} +40{"\u00a2"} (green)</span> {"\u2014"} Bigger payout on that side now than at open. The market is drifting <b>away</b> from that side: fewer takers, so the book is sweetening the price.</div>
+      <div className="mvnr"><span className="dn">{"\u2193"} {"\u2212"}40{"\u00a2"} (red)</span> {"\u2014"} Money is coming in on that side: the market is moving <b>toward</b> it.</div>
       <div className="mvnf">So green isn't automatically good and red isn't bad {"\u2014"} green = a better entry price but the market fading you; red = the market agreeing, but you've missed the best number. A 40{"\u00a2"} move either way is sizable, worth noticing.</div>
     </div>
   </div>);
