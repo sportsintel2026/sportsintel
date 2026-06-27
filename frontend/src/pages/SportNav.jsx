@@ -21,13 +21,14 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 
+// WZ-NAV-NEWS-PERF-SWAP-2026-06-26 :: News now sits before Performance (tab positions swapped)
 const SECTIONS = [
   { key: "edges", lb: "Edges",       to: "/home",        match: ["/home", "/dashboard"] },
   { key: "props", lb: "Props",       to: "/props",       match: ["/props"] },
   { key: "games", lb: "Games",       to: "/games",       match: ["/games", "/nfl-games", "/cfb-games", "/nba-games", "/nhl-games"] },
   { key: "mkt",   lb: "Market",      to: "/odds",        match: ["/odds", "/consensus", "/market-read"] },
-  { key: "perf",  lb: "Performance", to: "/performance", match: ["/performance", "/clv"] },
   { key: "news",  lb: "News",        to: "/news",        match: ["/news"] },
+  { key: "perf",  lb: "Performance", to: "/performance", match: ["/performance", "/clv"] },
 ];
 
 const SPORTS = [
