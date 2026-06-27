@@ -202,7 +202,7 @@ const CSS = `
   .nav{display:none!important}
   .wpbn{display:none!important}
   .demobar{display:none!important}
-  .app{min-height:calc(100vh - 84px)!important;min-height:calc(100dvh - 84px)!important;padding-bottom:calc(74px + env(safe-area-inset-bottom))!important}
+  .app{min-height:calc(100vh - 70px)!important;min-height:calc(100dvh - 70px)!important;padding-bottom:calc(60px + env(safe-area-inset-bottom))!important}
 }
 /* ===== top header (clone of .hd) + section tabs ===== */
 .wpnav-hd{position:sticky;top:0;z-index:40;max-width:460px;margin:0 auto;background:#0b0d11;padding:11px 4px 0; /* EDGE-4PX-2026-06-26 */
@@ -230,15 +230,15 @@ const CSS = `
 /* ===== bottom sport bar (icon chips) ===== */
 /* SPORTBAR-WEIGHT-BUMP-2026-06-26 :: icons 23->26, label 12->13.5, padding/gap up */
 .wpnav-sport{position:fixed;left:50%;bottom:0;transform:translateX(-50%);width:100%;max-width:460px;display:flex;gap:4px;z-index:50;
-  padding:7px 8px calc(7px + env(safe-area-inset-bottom));
+  padding:5px 8px calc(5px + env(safe-area-inset-bottom)); /* WZ-SPORTBAR-COMPACT-2026-06-26 :: tighter bottom sport bar */
   background:linear-gradient(180deg,#0c0f13,#070809);border-top:1px solid rgba(255,255,255,.07)}
 .wpnav-sp{flex:1;min-width:0;appearance:none;background:none;cursor:pointer;position:relative;
-  display:flex;flex-direction:column;align-items:center;gap:5px;
-  padding:8px 2px;border:1px solid transparent;border-radius:15px;color:#8A929A}
+  display:flex;flex-direction:column;align-items:center;gap:3px;
+  padding:5px 2px;border:1px solid transparent;border-radius:12px;color:#8A929A}
 .wpnav-sp.on{border-color:rgba(201,168,106,.45);background:rgba(201,168,106,.08);color:#C9A86A}
-.wpnav-ic{position:relative;width:26px;height:26px}
-.wpnav-ic svg{width:26px;height:26px;display:block}
-.wpnav-sp .wpnav-spl{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13.5px;letter-spacing:.6px;line-height:1;color:inherit}
+.wpnav-ic{position:relative;width:22px;height:22px}
+.wpnav-ic svg{width:22px;height:22px;display:block}
+.wpnav-sp .wpnav-spl{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12px;letter-spacing:.6px;line-height:1;color:inherit}
 .wpnav-dot{position:absolute;top:-2px;right:-3px;width:7px;height:7px;border-radius:50%;border:1.5px solid #0b0d11}
 .wpnav-dot.live{background:#3FCB91}
 .wpnav-dot.train{background:#D9A441}
