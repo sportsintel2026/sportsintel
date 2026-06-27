@@ -323,6 +323,12 @@ async function buildNflInjuries() {
       const { sev, label } = nflSev(raw);
       const d = inj.details || {};
       const bodyPart = [d.type, d.detail].filter(Boolean).join(" · ") || null;
+      // ESPN sometimes returns the bare status word as the comment — useless, drop it
+      let note = inj.shortComment || inj.longComment || null;
+      if (note && /^(questionable|out|doubtful|injured reserve|ir|day.?to.?day|active|probable)$/i.test(note.trim())) note = null;
+      // ESPN uses ~Feb 15 of the following year as an "out for the season" placeholder
+      let returnDate = d.returnDate || null;
+      if (returnDate && returnDate >= `${new Date().getFullYear() + 1}-01-01`) returnDate = null;
       out.push({
         id: `nflinj-${a.id}`,
         source: "nfl",
@@ -334,8 +340,8 @@ async function buildNflInjuries() {
         status: label,
         sev,
         bodyPart,
-        returnDate: d.returnDate || null,
-        note: inj.shortComment || inj.longComment || null,
+        returnDate,
+        note,
         headshot: a.headshot?.href || null,
         link: (a.links || []).find((l) => (l.rel || []).includes("news"))?.href
           || (a.links || []).find((l) => (l.rel || []).includes("playercard"))?.href || null,
