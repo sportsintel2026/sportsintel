@@ -3,6 +3,10 @@
 // Docs: https://the-odds-api.com/liveapi/guides/v4/
 
 const axios = require("axios");
+// DEDUPE-DUP-EVENTS-2026-06-27 — schedule used to disambiguate duplicate same-matchup
+// events at the source (see dedupeDuplicateEvents). mlbStatsApi only requires axios, so
+// this is a one-directional import — no circular dependency.
+const { getScheduleForDate, getEasternDate } = require("./mlbStatsApi");
 
 const ODDS_BASE = "https://api.the-odds-api.com/v4";
 const ODDS_API_KEY = process.env.ODDS_API_KEY;
@@ -65,6 +69,76 @@ async function oddsGet(path, params = {}) {
 
 // ── MLB Moneyline + Totals ────────────────────────────────────────────────────
 
+// DEDUPE-DUP-EVENTS-2026-06-27 ───────────────────────────────────────────────
+// The US MLB odds feed intermittently returns TWO events for ONE game — a phantom
+// duplicate with a different eventId/commenceTime alongside the real one (observed
+// LAD@SD: real LAD -200 / SD +175 at the 8:40 start, plus a phantom -140 / +120 at a
+// different time). Deduped HERE, at the single source every consumer reads, so ticks,
+// CLV closing-line capture, the WizePlay picker, and any future reader all get one
+// clean event per game automatically — no per-consumer guards to forget.
+//
+// Discriminator is identical to the edge model's own matcher (routes/edges.js
+// matchOddsToGame → closestByStart): match each SCHEDULED game to the event whose
+// start time is closest. So the pick/edge path sees exactly what it always did —
+// this only removes the phantom it was already ignoring. Conservative + fail-safe:
+//   • matchups with a single event pass through untouched (zero behavior change),
+//   • real doubleheaders (two scheduled games, same matchup) keep BOTH events,
+//   • if the schedule can't be read, keep the most-booked event,
+//   • ANY error → return the raw feed, so odds are never blocked.
+function _normTeamOdds(name) {
+  return String(name || "").toLowerCase()
+    .replace(/^(los angeles|new york|san francisco|san diego|st\.? louis|tampa bay|chicago|kansas city|washington|cleveland|cincinnati|colorado|arizona|atlanta|baltimore|boston|detroit|houston|miami|milwaukee|minnesota|oakland|philadelphia|pittsburgh|seattle|texas|toronto)\s+/i, "")
+    .trim();
+}
+async function dedupeDuplicateEvents(events) {
+  try {
+    if (!Array.isArray(events) || events.length < 2) return events;
+    const byMatch = new Map();
+    for (const ev of events) {
+      const k = _normTeamOdds(ev.awayTeam) + "@" + _normTeamOdds(ev.homeTeam);
+      if (!byMatch.has(k)) byMatch.set(k, []);
+      byMatch.get(k).push(ev);
+    }
+    // Nothing duplicated → return the feed exactly as-is (no behavior change at all).
+    if (![...byMatch.values()].some(a => a.length > 1)) return events;
+
+    const schedByMatch = new Map();
+    try {
+      const sched = await getScheduleForDate(getEasternDate());
+      for (const g of (sched || [])) {
+        const k = _normTeamOdds(g.away) + "@" + _normTeamOdds(g.home);
+        if (!schedByMatch.has(k)) schedByMatch.set(k, []);
+        schedByMatch.get(k).push(g);
+      }
+    } catch (e) { console.error("[OddsAPI] dedupe schedule fetch failed:", e.message); }
+
+    const mostBooked = (arr) => arr.slice().sort((a, b) => ((b.h2hQuotes?.length || 0) - (a.h2hQuotes?.length || 0)))[0];
+    const out = [];
+    for (const [k, evs] of byMatch) {
+      if (evs.length === 1) { out.push(evs[0]); continue; }
+      const games = schedByMatch.get(k) || [];
+      if (!games.length) { out.push(mostBooked(evs)); continue; } // no schedule → safe fallback
+      for (const game of games) {                                 // one event per real game (handles DHs)
+        const t = game.startTimeUTC ? new Date(game.startTimeUTC).getTime() : null;
+        let best = evs[0], bd = Infinity;
+        for (const ev of evs) {
+          if (t != null && ev.commenceTime) {
+            const d = Math.abs(new Date(ev.commenceTime).getTime() - t);
+            if (d < bd) { bd = d; best = ev; }
+          }
+        }
+        if (!out.includes(best)) out.push(best);
+      }
+    }
+    const dropped = events.length - out.length;
+    if (dropped > 0) console.log(`[OddsAPI] deduped ${dropped} phantom MLB event(s)`);
+    return out;
+  } catch (e) {
+    console.error("[OddsAPI] dedupe error, using raw events:", e.message);
+    return events; // fail-safe: never block odds
+  }
+}
+
 async function getMLBMainOdds({ forceFresh = false } = {}) {
   const cacheKey = "mlb_main";
   const cached = cache.get(cacheKey);
@@ -84,7 +158,8 @@ async function getMLBMainOdds({ forceFresh = false } = {}) {
         oddsFormat: "american",
         dateFormat: "iso",
       });
-      const games = (data || []).map(parseMainOddsEvent);
+      const parsed = (data || []).map(parseMainOddsEvent);
+      const games = await dedupeDuplicateEvents(parsed); // DEDUPE-DUP-EVENTS-2026-06-27
       cache.set(cacheKey, { data: games, fetchedAt: Date.now() });
       return games;
     } catch (e) {
