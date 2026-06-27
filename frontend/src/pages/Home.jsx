@@ -902,8 +902,8 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .ahead{display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:13px 15px 10px;font-family:var(--disp);font-weight:800;font-size:11.5px;letter-spacing:.7px;color:var(--mut);cursor:pointer}
 .ahead .ago{font-family:var(--mono);font-size:9px;color:var(--mut2);font-weight:500;letter-spacing:0;white-space:nowrap;flex:0 0 auto}
 .arow{padding:0 15px 14px;cursor:pointer}
-.mvsec{margin:16px 4px 0}/* WZ-MOVERS-BOARD-TIGHTEN-2026-06-27 */
-.mvhd{display:flex;align-items:center;gap:7px;margin-bottom:8px}
+.mvsec{margin:24px 4px 0}
+.mvhd{display:flex;align-items:center;gap:7px;margin-bottom:9px}
 .mvpulse{color:var(--green);display:inline-flex}
 .mvhd .mvtl{font-family:var(--disp);font-weight:700;font-size:14px;letter-spacing:.8px;color:var(--tx)}
 .mvall{margin-left:auto;color:var(--green);font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap}
@@ -915,11 +915,11 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .mvchip .mvg{font-family:var(--mono);font-size:9px;color:var(--mut);white-space:nowrap;line-height:1;letter-spacing:.3px}
 .mvchip .mvd{font-family:var(--mono);font-size:12px;font-weight:700;white-space:nowrap}
 .mvchip .mvd.up{color:var(--green)}.mvchip .mvd.dn{color:var(--red)}
-.mvnote{margin-top:11px;padding:0 2px;border:none;border-radius:0;background:none}
-.mvnr{font-family:var(--mono);font-size:9.5px;line-height:1.4;color:var(--mut2)}
-.mvnr+.mvnr{margin-top:5px}
+.mvnote{margin-top:16px;padding:0 2px;border:none;border-radius:0;background:none}
+.mvnr{font-family:var(--mono);font-size:9.5px;line-height:1.55;color:var(--mut2)}
+.mvnr+.mvnr{margin-top:7px}
 .mvnr b{color:var(--tx);font-weight:700}
-.mvnf{font-family:var(--mono);font-size:9.5px;line-height:1.4;color:var(--mut);margin-top:7px;padding-top:7px;border-top:1px solid var(--line)}
+.mvnf{font-family:var(--mono);font-size:9.5px;line-height:1.55;color:var(--mut);margin-top:9px;padding-top:9px;border-top:1px solid var(--line)}
 .mvnote .up{color:var(--green);font-weight:700}.mvnote .dn{color:var(--red);font-weight:700}
 .mvrowm{display:flex;align-items:center;gap:11px;border:1px solid var(--line);border-radius:11px;background:var(--panel2);padding:10px 12px}
 .mvrowm .rkm{font-family:var(--disp);font-weight:800;font-size:13px;color:var(--mut2);width:16px;flex:0 0 auto;text-align:center}
@@ -942,11 +942,11 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .seclbl{display:flex;align-items:center;gap:10px;margin:24px 4px 0;color:var(--mut);font-family:var(--disp);font-weight:800;font-size:13px;letter-spacing:.6px}
 .seclbl .ct{font-family:var(--mono);font-size:10px;color:var(--mut2);font-weight:500}
 .seclbl .rollpill{margin-left:auto;font-family:var(--mono);font-size:9px;font-weight:600;letter-spacing:.3px;color:var(--gold);background:rgba(201,168,106,.12);border:1px solid rgba(201,168,106,.3);border-radius:20px;padding:3px 9px;white-space:nowrap}
-.boardhd{text-align:center;margin:15px 4px 2px;padding-top:14px;border-top:1px solid var(--line)} /* WZ-MOVERS-BOARD-TIGHTEN-2026-06-27 :: was 28/28 breathe — pulled in */
+.boardhd{text-align:center;margin:28px 4px 2px;padding-top:28px;border-top:1px solid var(--line)} /* WZ-BOARD-BREATHE-2026-06-26 :: more breathing room */
 .bhtitle{display:flex;align-items:center;justify-content:center;gap:12px}
 .bht{font-family:var(--disp);font-weight:700;font-size:27px;letter-spacing:.5px;color:var(--gold);line-height:1}
 .bharw{flex:0 0 auto}.bharw line,.bharw path{stroke:var(--gold);stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round}
-.bhsub{font-family:var(--mono);font-size:11px;color:var(--mut);margin-top:7px;letter-spacing:.2px}.bhsub .bhd{color:var(--mut2)}
+.bhsub{font-family:var(--mono);font-size:11px;color:var(--mut);margin-top:10px;letter-spacing:.2px}.bhsub .bhd{color:var(--mut2)}
 /* WZ-PARKFACTORS-HEADER-2026-06-27 :: Park Factors identity — green title + wind/flight wave */
 .pfhd .bht{color:var(--green)}
 .pfarw{flex:0 0 auto}.pfarw path{stroke:var(--green);stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round}
@@ -989,7 +989,7 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .kpi .k{font-family:var(--mono);font-size:8.5px;color:var(--mut2);letter-spacing:.5px}.kpi .v{font-family:var(--mono);font-weight:600;font-size:19px;color:var(--tx);margin-top:3px;line-height:1}.kpi .v.g{color:var(--green)}.kpi .v.gold{color:var(--gold)}.kpi .v.red{color:var(--red)}.kpi .ksub{font-family:var(--mono);font-size:8.5px;color:var(--mut2);margin-top:2px}
 .kpi .kspark{display:block;width:100%;height:22px;margin-top:5px;overflow:visible}
 
-.chips{display:flex;align-items:center;gap:7px;padding:11px 4px 0;overflow-x:auto;scrollbar-width:none}.chips::-webkit-scrollbar{display:none}
+.chips{display:flex;align-items:center;gap:7px;padding:14px 4px 0;overflow-x:auto;scrollbar-width:none}.chips::-webkit-scrollbar{display:none}
 .chipf{font-family:var(--mono);font-size:10px;color:var(--mut);border:1px solid var(--line2);border-radius:999px;padding:4px 10px;white-space:nowrap;cursor:pointer}.chipf.on{color:var(--gold);background:transparent;border-color:rgba(201,168,106,.55);font-weight:600}
 
 .grid{margin:12px 4px 0;background:var(--panel);border-radius:14px;overflow:hidden}
