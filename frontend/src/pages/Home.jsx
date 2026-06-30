@@ -148,7 +148,7 @@ export default function HomePage(){
   }catch(_){ setWpRecord(null); } })();},[]);
   const load=useCallback(async()=>{ try{ const d=await (sport==="nfl"?SPORTS.nfl.feed(nflPhase):SPORTS[sport].feed());
     if(sport==="nfl"&&d&&d.phase){ setPhaseAvail(d.phase.available||[]); if(nflPhase==null&&d.phase.selected) setNflPhase(d.phase.selected); }
-    const f={}; [...(d.moneylineEdges||[]),...(d.totalsEdges||[]),...(d.spreadEdges||[])].forEach(e=>{ const k=e.gameId+e.side; if(prev.current[k]!=null&&prev.current[k]!==e.odds)f[k]=e.odds>prev.current[k]?"up":"dn"; prev.current[k]=e.odds; });
+    const f={}; [...(d.moneylineEdges||[]),...(d.totalsEdges||[]),...(d.runLineEdges||[])].forEach(e=>{ const k=e.gameId+e.side; if(prev.current[k]!=null&&prev.current[k]!==e.odds)f[k]=e.odds>prev.current[k]?"up":"dn"; prev.current[k]=e.odds; });
     setFlash(f); setEdges(d);
   }catch(e){} setLoading(false); },[sport,nflPhase]);
   useEffect(()=>{ setEdges(null); setLoading(true); prev.current={}; load(); const id=setInterval(load,45000); return ()=>clearInterval(id); },[load]);
@@ -201,7 +201,7 @@ export default function HomePage(){
   const moveAdjust=(x)=>{ const ser=seriesFor(x); let delta=null; if(ser&&ser.length>1){ const d=amCents(ser[ser.length-1].o)-amCents(ser[0].o); if(d!=null&&!isNaN(d))delta=d; } let dir=0,flag=null; if(delta!=null){ if(delta>=MOVE_GUARD_CENTS){dir=-1;flag="against";} else if(delta<=-MOVE_GUARD_CENTS){dir=1;flag="toward";} } return {...x,_delta:delta,_moveDir:dir,_moveFlag:flag,_convAdj:dir!==0?tierBump(x.conviction,dir):x.conviction}; };
   const mlAdj=(e.moneylineEdges||[]).map(moveAdjust);
   const totAdj=(e.totalsEdges||[]).map(moveAdjust);
-  const spAdj=(e.spreadEdges||[]).map(moveAdjust);
+  const spAdj=(e.runLineEdges||[]).map(moveAdjust);/* WZ-RUNLINE-FIELDFIX-2026-06-30 :: API sends runLineEdges, not spreadEdges — was always empty */
   // Movement keyed by pick for the desktop board (single source of truth — the math
   // stays here where amCents/seriesFor live; HomeDesktop just looks up dir/flag).
   const moveByPick={}; [...mlAdj,...totAdj,...spAdj].forEach(x=>{ if(x._moveDir) moveByPick[x.gameId+x.side]={dir:x._moveDir,flag:x._moveFlag}; });
@@ -215,7 +215,7 @@ export default function HomePage(){
   const topHeroes=pool.slice(0,5);
   const boardArr=board==="ml"?mlAdj:board==="spread"?spAdj:totAdj;
   const boardEdges=oneSidePerGame(boardArr||[]).filter(x=>sport==="mlb"?(x.edge??0)>0:(x.edge??0)>=1).sort((a,b)=>((tierRank(b._convAdj)-tierRank(a._convAdj))||((b.convictionScore||0)-(a.convictionScore||0))||((b.edge||0)-(a.edge||0))));
-  const moverPool=[...(e.moneylineEdges||[]),...(e.totalsEdges||[]),...(e.spreadEdges||[])].map(x=>{ const ser=seriesFor(x); const open=(ser&&ser.length)?ser[0].o:null; const now=(ser&&ser.length)?ser[ser.length-1].o:x.odds; const delta=(open!=null&&ser&&ser.length>1)?(amCents(now)-amCents(open)):null; return {...x,_open:open,_now:now,_delta:delta}; });
+  const moverPool=[...(e.moneylineEdges||[]),...(e.totalsEdges||[]),...(e.runLineEdges||[])].map(x=>{ const ser=seriesFor(x); const open=(ser&&ser.length)?ser[0].o:null; const now=(ser&&ser.length)?ser[ser.length-1].o:x.odds; const delta=(open!=null&&ser&&ser.length>1)?(amCents(now)-amCents(open)):null; return {...x,_open:open,_now:now,_delta:delta}; });
   const movers=moverPool.filter(m=>m._delta!=null).sort((a,b)=>{ const ad=Math.abs(a._delta); const bd=Math.abs(b._delta); return (bd-ad)||((b.edge??0)-(a.edge??0)); }).slice(0,12);
   const hasMoves=movers.some(m=>m._delta!=null);
   const hrP=(e.hrPropEdges||[]).slice(0,6);
@@ -242,7 +242,7 @@ export default function HomePage(){
   const liveGames=(live||[]).filter(g=>[g.awayEdge,g.homeEdge,g.overEdge,g.underEdge].some(x=>x!=null));
 
   const lineSeries={};
-  [...(e.moneylineEdges||[]),...(e.totalsEdges||[]),...(e.spreadEdges||[])].forEach(x=>{ const s=seriesFor(x); if(s&&s.length>1) lineSeries[x.gameId+x.side]=s.map(p=>p.o).filter(o=>o!=null); });
+  [...(e.moneylineEdges||[]),...(e.totalsEdges||[]),...(e.runLineEdges||[])].forEach(x=>{ const s=seriesFor(x); if(s&&s.length>1) lineSeries[x.gameId+x.side]=s.map(p=>p.o).filter(o=>o!=null); });
 
   // ---- Redesign derived data (presentation only; reads existing engine vars) ----
   const mrByGame={}; (marketRead||[]).forEach(g=>{ if(g&&g.gameId!=null) mrByGame[g.gameId]=g; });
