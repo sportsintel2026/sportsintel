@@ -315,7 +315,10 @@ export default function HomePage(){
   };
   const allAdj=[...mlAdj,...totAdj,...spAdj];
   const sortBoard=(a,b)=>((tierRank(b._convAdj)-tierRank(a._convAdj))||((b.convictionScore||0)-(a.convictionScore||0))||((b.edge||0)-(a.edge||0)));
-  const boardSrc = board==="all" ? oneSidePerGame(allAdj).filter(x=>sport==="mlb"?(x.edge??0)>0:(x.edge??0)>=1).sort(sortBoard) : boardEdges;
+  // WZ-FULLBOARD-2026-06-30 :: "All" shows every qualifying edge (ML + total + run line per
+  // game), not just the single highest per game. Only one side of a market can be +edge, so a
+  // game surfaces at most one pick per market — fuller board, run line included, conviction-sorted.
+  const boardSrc = board==="all" ? allAdj.filter(x=>sport==="mlb"?(x.edge??0)>0:(x.edge??0)>=1).sort(sortBoard) : boardEdges;
   const boardItems = boardSrc.map(toBoard);
   const boardDate = fmtSlateFull(e.date || todayISO());
   const heroItems = oneSidePerGame(allAdj).filter(x=>(x.edge??0)>0).sort((a,b)=>(b.edge||0)-(a.edge||0)).slice(0,3).map(toBoard);
