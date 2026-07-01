@@ -1857,12 +1857,16 @@ async function calculateHitsPropEdges(games, hitsOddsByEvent) {
       const underProb = round3(1 - overProb);
       const edgeOver = sanitizeEdge(fairOver != null ? round3(overProb - fairOver) : calculateEdge(overProb, propOdds.overOdds));
       const edgeUnder = sanitizeEdge(fairOver != null ? round3(underProb - (1 - fairOver)) : calculateEdge(underProb, propOdds.underOdds));
-      const overBetter = (edgeOver ?? -1) >= (edgeUnder ?? -1);
-      const side = overBetter ? "over" : "under";
-      const edge = overBetter ? edgeOver : edgeUnder;
-      const modelProb = overBetter ? overProb : underProb;
-      const odds = overBetter ? propOdds.overOdds : propOdds.underOdds;
-      const oppOdds = overBetter ? propOdds.underOdds : propOdds.overOdds;
+      // WZ-HITS-OVERONLY-2026-06-30 :: Hits is a milestone market — the book only posts the
+      // OVER side (1+ hits, 2+ hits). The under / "No Hits" side isn't bettable anywhere, so we
+      // never surface it: always take the over and let HITS_MIN_EDGE below drop it when the over
+      // itself isn't a real edge. (Previously took whichever side had the bigger edge, which
+      // produced unbettable "No Hits +178"-type picks.)
+      const side = "over";
+      const edge = edgeOver;
+      const modelProb = overProb;
+      const odds = propOdds.overOdds;
+      const oppOdds = propOdds.underOdds;
       out.push({
         gameId: game.id,
         playerId: batter.id,
