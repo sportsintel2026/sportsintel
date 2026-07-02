@@ -644,6 +644,48 @@ async function recordTotalBasesShadow(tbShadow, gameIso) {
 // components — expected_ks (operative lambda), proj_ip, k_rate, pitcher_k9 — alongside the
 // usual fields. Graded later by the player_strikeouts_shadow branch vs actual Ks AND IP.
 // Market string is distinct (player_strikeouts_shadow) so it never touches live K picks.
+// Batter hits projection SHADOW recorder (log-only, mirrors recordStrikeoutShadow).
+// WZ-HITSSHADOW-REC-2026-07-02 :: snapshots EVERY evaluated batter's hits projection
+// (from calculateHitsPropEdges' shadowSink) — pre-filter, RAW un-haircut prob — so the
+// confirmed hits overconfidence (claims ~0.62 cashing 0.43, last-14d gap -0.098) can be
+// decomposed at the source vs graded actuals. Column reuse (K-shadow pattern, zero
+// migration): model_prob = RAW anchored over prob (measures the un-calibrated model);
+// expected_ks = expected HITS (perAB x expAB); proj_ip = expected AT-BATS; k_rate =
+// per-AB hit rate. Grader fills actual_value (hits) and actual_ip (actual ABs), so the
+// bias splits into innings... er, at-bats vs rate, exactly like Ks-vs-IP did.
+// Market string is distinct (player_hits_shadow) so it never touches live hits picks.
+async function recordHitsShadow(hitsShadow, gameIso) {
+  if (!Array.isArray(hitsShadow) || hitsShadow.length === 0) return;
+  const supabase = db();
+  const gameDate = gameIso || getEasternDate(0);
+  const rows = [];
+  for (const p of hitsShadow) {
+    if (!p.playerId || p.line == null || p.overProbRaw == null) continue;
+    const expHits = (p.perAB != null && p.expAB != null) ? Math.round(p.perAB * p.expAB * 100) / 100 : null;
+    rows.push({
+      game_id: String(p.gameId), game_date: gameDate, league: "mlb",
+      matchup: p.game, market: "player_hits_shadow",
+      selection: `${p.player}:OVER`,
+      description: `${p.player} hits shadow (perAB ${p.perAB}, expAB ${p.expAB}, order ${p.battingOrder ?? "?"}, avg ${p.seasonAvg ?? "?"}, xBA ${p.xBA ?? "?"})`,
+      model_prob: p.overProbRaw, odds: -110,
+      edge: null, confidence: p.overProbRaw, line: p.line,
+      expected_ks: expHits,
+      proj_ip: p.expAB ?? null,
+      k_rate: p.perAB ?? null,
+    });
+  }
+  if (rows.length === 0) return;
+  try {
+    const { error } = await supabase
+      .from("model_predictions")
+      .upsert(rows, { onConflict: "game_id,market,selection,game_date", ignoreDuplicates: true });
+    if (error) console.error("[Tracker] hits-shadow record error:", error.message);
+    else console.log(`[Tracker] Snapshotted ${rows.length} hits-shadow projections for ${gameDate} (dups ignored)`);
+  } catch (e) {
+    console.error("[Tracker] hits-shadow record exception:", e.message);
+  }
+}
+
 async function recordStrikeoutShadow(kShadow, gameIso) {
   if (!Array.isArray(kShadow) || kShadow.length === 0) return;
   const supabase = db();
@@ -1084,7 +1126,10 @@ async function gradeMlb(supabase, pending) {
           const win = side === "OVER" ? over : !over;
           outcome = { result: win ? "win" : "loss", actual: k, actualIp };
         }
-      } else if (p.market === "player_hits") {
+      } else if (p.market === "player_hits" || p.market === "player_hits_shadow") {
+        // WZ-HITSSHADOW-REC-2026-07-02 :: shadow grades identically to live hits picks
+        // (same boxscore read, same matcher). actual_ip carries the batter's actual
+        // AT-BATS (the K shadow's IP pattern) so the shadow decomposes AB vs rate.
         if (!hitsCache.has(p.game_id)) {
           hitsCache.set(p.game_id, await getGameBatterHits(p.game_id));
         }
@@ -1095,11 +1140,13 @@ async function gradeMlb(supabase, pending) {
         const side = (ci >= 0 ? p.selection.slice(ci + 1) : "OVER").toUpperCase();
         const { found, value } = resolvePlayerStat(box.hits, pname);
         if (!found) continue;                          // batter not located → never false-loss
-        if (p.line != null && value === p.line) outcome = { result: "push", actual: value };
+        const abRes = box.abs ? resolvePlayerStat(box.abs, pname) : { found: false, value: null };
+        const actualIp = abRes && abRes.found && abRes.value != null ? abRes.value : null;
+        if (p.line != null && value === p.line) outcome = { result: "push", actual: value, actualIp };
         else {
           const over = value > (p.line ?? 0);
           const win = side === "OVER" ? over : !over;
-          outcome = { result: win ? "win" : "loss", actual: value };
+          outcome = { result: win ? "win" : "loss", actual: value, actualIp };
         }
       } else if (p.market === "player_total_bases_shadow") {
         if (!tbCache.has(p.game_id)) {
@@ -1411,7 +1458,7 @@ async function captureOddsTicks() {
 // and the player is provably absent. Unreadable boxes are left pending to retry; any
 // player who is present grades normally and is never touched. Covers every recorded
 // prop market — extend PROP here (one place) when a new prop market starts recording.
-const VOID_PROP_MARKETS = new Set(["hr_prop", "player_strikeouts", "player_strikeouts_shadow", "player_hits", "player_total_bases_shadow"]);
+const VOID_PROP_MARKETS = new Set(["hr_prop", "player_strikeouts", "player_strikeouts_shadow", "player_hits", "player_hits_shadow", "player_total_bases_shadow"]); // WZ-HITSSHADOW-REC-2026-07-02
 
 async function voidUnmatchedProps() {
   const supabase = db();
@@ -1450,7 +1497,7 @@ async function voidUnmatchedProps() {
       else {
         try {
           if (p.market === "player_strikeouts") box = await getGamePitcherStrikeouts(p.game_id);
-          else if (p.market === "player_hits") box = await getGameBatterHits(p.game_id);
+          else if (p.market === "player_hits" || p.market === "player_hits_shadow") box = await getGameBatterHits(p.game_id);
           else if (p.market === "player_total_bases_shadow") box = await getGameBatterTotalBases(p.game_id);
           else box = await getGameHRHitters(p.game_id);
         } catch { box = { ok: false }; }
@@ -1474,4 +1521,4 @@ async function voidUnmatchedProps() {
   return { finalPropsChecked: finalChecked, voided, details };
 }
 
-module.exports = { recordPredictions, recordTotalBasesShadow, recordStrikeoutShadow, recordNbaPropPredictions, recordNbaTeamPredictions, recordNFLPredictions, gradeFinishedGames, gradeNbaProp, captureClosingLines, captureNbaClosingLines, captureOddsTicks, voidUnmatchedProps };
+module.exports = { recordPredictions, recordTotalBasesShadow, recordStrikeoutShadow, recordHitsShadow, recordNbaPropPredictions, recordNbaTeamPredictions, recordNFLPredictions, gradeFinishedGames, gradeNbaProp, captureClosingLines, captureNbaClosingLines, captureOddsTicks, voidUnmatchedProps };
