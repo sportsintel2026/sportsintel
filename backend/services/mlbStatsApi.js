@@ -967,12 +967,17 @@ async function getGameBatterTotalBases(gamePk) {
 
 // Per-batter hits from a finished game's box score — grades hits props.
 // Mirrors getGameHRHitters but reads batting.hits.
+// WZ-HITSSHADOW-ABS-2026-07-02 :: also returns a parallel `abs` map (name -> atBats)
+// from the same boxscore read, so the hits shadow can decompose its bias into the
+// at-bats assumption vs the per-AB hit rate (mirrors the K shadow's Ks-vs-IP split).
+// Existing consumers read `.hits` only — fully backward compatible, no extra fetch.
 async function getGameBatterHits(gamePk) {
   try {
     const data = await mlbGet(`/game/${gamePk}/boxscore`);
     const teams = data && data.teams;
-    if (!teams || !teams.home || !teams.away) return { ok: false, hits: null };
+    if (!teams || !teams.home || !teams.away) return { ok: false, hits: null, abs: null };
     const hits = new Map();
+    const abs = new Map();
     let battingObjectsSeen = 0;
     for (const side of ["home", "away"]) {
       const players = teams[side] && teams[side].players;
@@ -985,13 +990,14 @@ async function getGameBatterHits(gamePk) {
         if (batting && typeof batting === "object" && batting.hits != null) {
           battingObjectsSeen++;
           hits.set(normPlayerName(name), parseIntSafe(batting.hits) || 0);
+          abs.set(normPlayerName(name), parseIntSafe(batting.atBats) || 0);
         }
       }
     }
-    if (battingObjectsSeen === 0) return { ok: false, hits: null };
-    return { ok: true, hits };
+    if (battingObjectsSeen === 0) return { ok: false, hits: null, abs: null };
+    return { ok: true, hits, abs };
   } catch (e) {
-    return { ok: false, hits: null };
+    return { ok: false, hits: null, abs: null };
   }
 }
 
