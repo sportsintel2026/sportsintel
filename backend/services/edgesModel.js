@@ -18,7 +18,9 @@ const {
   getTeamBullpenStats,
   getTeamBullpenUsage,
   getPitcherHand,
+  getGameHPUmpire,
 } = require("./mlbStatsApi");
+const { getUmpireByName } = require("./umpireStore");
 const { americanToImpliedProb } = require("./oddsApi");
 const { getBatterExpectedStats, getBatterBarrels, getPitcherWhiffStats } = require("./savantApi");
 const { getWeatherForVenue } = require("./weatherApi");
@@ -693,10 +695,43 @@ const LEAGUE_BATTER_K_PCT = 0.225; // league avg batter strikeout rate (per PA)
 const K_WHIFF_WEIGHT = 0.20; // weight on the whiff%-implied K rate vs raw k% (mild)
 const K_WHIFF_TO_KPCT = 1.85; // empirical scaler: whiff% (swstr) × this ≈ k% (e.g. 0.12 whiff → ~0.22 k%)
 
+// WZ-UMPK-RATE-2026-07-02 :: umpire strikeout-environment factor (Option A).
+// The plate ump is knowable same-day only (~a few hours pre-first-pitch, from boxscore
+// officials — no day-ahead feed exists anywhere), and the board recomputes every ~12-15
+// min, so this is a late-arriving overlay: when tonight's HP ump is posted AND his sample
+// isn't thin (>=10 games), his kIndex (ump K/game vs league, from umpire_games) is
+// dampened to half-weight, clamped to +/-6%, and multiplied into the K lambda via the
+// RATE side only — expIP is NEVER touched (the IP-fix shadow measurement must stay
+// clean). Applied to the LIVE K pricing path only; calculateStrikeoutShadow deliberately
+// does NOT receive it — the shadow is mid-measurement of the IP fix (one change at a
+// time), and its first-write-wins daily snapshot usually lands before umps post anyway.
+// Skips cleanly (factor null -> 1.0) when the ump isn't posted, isn't in the store, or
+// is thin. Never throws.
+const UMP_K_WEIGHT = 0.5;        // dampen: use half of the ump's distance from league avg
+const UMP_K_FACTOR_MIN = 0.94;   // clamp the applied factor to +/-6%
+const UMP_K_FACTOR_MAX = 1.06;
+async function getUmpKFactorForGame(gamePk) {
+  try {
+    const name = await getGameHPUmpire(gamePk);
+    if (!name) return null;
+    const res = await getUmpireByName(name);
+    const u = res && res.umpire;
+    if (!u || u.thin || !Number.isFinite(u.kIndex) || u.kIndex <= 0) return null;
+    let f = 1 + UMP_K_WEIGHT * (u.kIndex - 1);
+    f = Math.max(UMP_K_FACTOR_MIN, Math.min(UMP_K_FACTOR_MAX, f));
+    return { factor: round3(f), name: u.name, kIndex: u.kIndex, games: u.games };
+  } catch (_) {
+    return null;
+  }
+}
+
 // Recent-aware K projection. expIP from recent starts + season; strikeout RATE from
 // Savant k% (preferred) blended with recent form; opponent-adjusted. savantK is the
-// pitcher's Savant row {kPct, whiffPct, pa} or null. Returns {lambda, expIP, kRate, ...}.
-function kProjection(pitcherStats, recentStarts, oppTeamStats, savantK) {
+// pitcher's Savant row {kPct, whiffPct, pa} or null. umpKFactor (optional) is the
+// dampened plate-ump strikeout-environment multiplier from getUmpKFactorForGame —
+// applied to the rate side of lambda only, never expIP; null/omitted = 1.0.
+// Returns {lambda, expIP, kRate, ...}.
+function kProjection(pitcherStats, recentStarts, oppTeamStats, savantK, umpKFactor) {
   const ps = pitcherStats || {};
   const seasonK9 = ps.strikeoutsPer9 ?? LEAGUE_K9;
   let seasonIP_GS = DEFAULT_START_IP;
@@ -754,20 +789,25 @@ function kProjection(pitcherStats, recentStarts, oppTeamStats, savantK) {
     oppFactor = (oppTeamStats.strikeouts / oppTeamStats.games) / LEAGUE_TEAM_K_PER_GAME;
     oppFactor = Math.max(0.82, Math.min(1.18, oppFactor)); // one stat shouldn't swing it wildly
   }
-  const lambda = kRate * expBF * oppFactor;
-  return { lambda: lambda > 0 ? lambda : null, expIP: round2(expIP), kRate: round3(kRate), expBF: round2(expBF), oppFactor: round3(oppFactor), usedSavant: haveSavant };
+  // Plate-ump strikeout environment (rate side only — expIP above is untouched).
+  // kRate in the return stays the pitcher's INTRINSIC rate so the residual rate-bias
+  // investigation reads clean; the ump lives in its own factor: lambda = kRate x expBF
+  // x oppFactor x umpFactor.
+  const umpF = (Number.isFinite(umpKFactor) && umpKFactor > 0) ? umpKFactor : 1.0;
+  const lambda = kRate * expBF * oppFactor * umpF;
+  return { lambda: lambda > 0 ? lambda : null, expIP: round2(expIP), kRate: round3(kRate), expBF: round2(expBF), oppFactor: round3(oppFactor), umpFactor: round3(umpF), usedSavant: haveSavant };
 }
 
-function expectedKsFor(pitcherStats, recentStarts, savantK) {
-  const { lambda } = kProjection(pitcherStats, recentStarts, null, savantK);
+function expectedKsFor(pitcherStats, recentStarts, savantK, umpKFactor) {
+  const { lambda } = kProjection(pitcherStats, recentStarts, null, savantK, umpKFactor);
   return lambda != null ? round2(lambda) : null;
 }
 
 // P(strikeouts OVER the line) — negative-binomial, recent-aware, Savant-k%-driven.
 // No blunt shrink: the overdispersion (φ) does the tempering the old 0.75 shrink hacked in.
-function strikeoutOverProb(pitcherStats, oppTeamStats, line, recentStarts, savantK) {
+function strikeoutOverProb(pitcherStats, oppTeamStats, line, recentStarts, savantK, umpKFactor) {
   if (!pitcherStats || line == null) return null;
-  const { lambda } = kProjection(pitcherStats, recentStarts, oppTeamStats, savantK);
+  const { lambda } = kProjection(pitcherStats, recentStarts, oppTeamStats, savantK, umpKFactor);
   if (!(lambda > 0)) return null;
   // .5 lines: over wins on K ≥ floor(line)+1, so P(over) = 1 - CDF(floor(line))
   return round3(1 - kNegBinomCdf(Math.floor(line), lambda, K_DISPERSION_PHI));
@@ -1697,6 +1737,10 @@ async function calculateStrikeoutPropEdges(games, kOddsByEvent) {
       getTeamSeasonStats(game.awayId),
       getTeamSeasonStats(game.homeId),
     ]);
+    // WZ-UMPK-RATE-2026-07-02 :: same-day plate-ump factor (LIVE pricing only — the
+    // shadow below deliberately never receives this; see getUmpKFactorForGame).
+    const ump = await getUmpKFactorForGame(game.id);
+    const umpF = ump ? ump.factor : null;
     for (const propOdds of kOdds) {
       const pitcher = findProbableStarter(propOdds.player, game);
       if (!pitcher) continue;
@@ -1706,7 +1750,7 @@ async function calculateStrikeoutPropEdges(games, kOddsByEvent) {
       const savantK = whiffMap ? (whiffMap.get(Number(pitcher.id)) || null) : null;
       const onAwayTeam = pitcher.teamId === game.awayId;
       const oppTeamStats = onAwayTeam ? homeTeam : awayTeam; // the lineup he faces
-      const overProb = strikeoutOverProb(pitcherStats, oppTeamStats, propOdds.line, recentStarts, savantK);
+      const overProb = strikeoutOverProb(pitcherStats, oppTeamStats, propOdds.line, recentStarts, savantK, umpF);
       if (overProb == null) continue;
       const fairOver = devigTwoWay(propOdds.overOdds, propOdds.underOdds);
       const underProb = round3(1 - overProb);
@@ -1739,8 +1783,11 @@ async function calculateStrikeoutPropEdges(games, kOddsByEvent) {
         book: propOdds.book,
         edge,
         confidence: rateConfidence(edge),
-        expectedKs: expectedKsFor(pitcherStats, recentStarts, savantK),
+        expectedKs: expectedKsFor(pitcherStats, recentStarts, savantK, umpF),
         pitcherK9: pitcherStats.strikeoutsPer9 ?? null,
+        // audit trail: which plate ump (if any) shaped this price
+        umpire: ump ? ump.name : null,
+        umpFactor: umpF,
       });
     }
   }
