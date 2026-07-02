@@ -21,6 +21,7 @@ const {
   getGameHPUmpire,
 } = require("./mlbStatsApi");
 const { getUmpireByName } = require("./umpireStore");
+const { winProbHaircut, calibrateWinProb, calibrateCoverProb } = require("./winProbCalibration"); // WZ-CAL-LIVE-2026-07-02
 const { americanToImpliedProb } = require("./oddsApi");
 const { getBatterExpectedStats, getBatterBarrels, getPitcherWhiffStats } = require("./savantApi");
 const { getWeatherForVenue } = require("./weatherApi");
@@ -1391,6 +1392,16 @@ async function calculateGameEdges(game, oddsForGame) {
   // through sanitizeEdge() so an implausible number can never surface.
   const awayEdge = sanitizeEdge(blendedEdge(ml.awayWinProb, awayML, homeML));
   const homeEdge = sanitizeEdge(blendedEdge(ml.homeWinProb, homeML, awayML));
+  // WZ-CAL-LIVE-2026-07-02 :: ML win-prob calibration, promoted from shadow to LIVE on
+  // out-of-sample evidence (n=61 forward picks: the 23 picks this would have pruned won
+  // 14-25%). Exactly the shadow's validated semantics: displayed/recorded prob is the
+  // calibrated claim, edge takes the full haircut. Pick-level only — ml.awayWinProb /
+  // ml.homeWinProb stay RAW below where they feed the run-line margin blend, which has
+  // its own independently fitted cover curve (never stack the two corrections).
+  const awayWinProbCal = ml.awayWinProb != null ? round3(calibrateWinProb(ml.awayWinProb)) : null;
+  const homeWinProbCal = ml.homeWinProb != null ? round3(calibrateWinProb(ml.homeWinProb)) : null;
+  const awayEdgeCal = awayEdge != null ? round3(awayEdge - winProbHaircut(ml.awayWinProb)) : null;
+  const homeEdgeCal = homeEdge != null ? round3(homeEdge - winProbHaircut(ml.homeWinProb)) : null;
   // Neutral "market overreaction" context (the side the market is high on).
   const awayInflation = overreactionNote(ml.awayWinProb, awayML, homeML);
   const homeInflation = overreactionNote(ml.homeWinProb, homeML, awayML);
@@ -1436,7 +1447,15 @@ async function calculateGameEdges(game, oddsForGame) {
       ? (W_MODEL * ml.homeWinProb + (1 - W_MODEL) * fairHomeWin)
       : ml.homeWinProb;
     const muHome = MARGIN_SD * invNorm(blendedHomeWin); // expected home run margin
-    const hCover = normalCDF((muHome + homeRLLine) / MARGIN_SD);
+    // WZ-CAL-LIVE-2026-07-02 :: run-line cover calibration. Measured on n=461 graded
+    // picks: actual cover flatlines ~0.62 above ~0.65 claimed (70%+ bucket claimed
+    // 0.714, cashed 0.620). Apply the fitted monotone curve to the LIKELIER side and
+    // set the other side to its complement so the pair stays coherent (sums to 1).
+    // Identity below 0.57, so near-coin-flip lines are untouched.
+    const hCoverRaw = normalCDF((muHome + homeRLLine) / MARGIN_SD);
+    const hCover = hCoverRaw >= 0.5
+      ? calibrateCoverProb(hCoverRaw)
+      : 1 - calibrateCoverProb(1 - hCoverRaw);
     const aCover = 1 - hCover;
     homeCoverProb = round3(hCover);
     awayCoverProb = round3(aCover);
@@ -1469,8 +1488,8 @@ async function calculateGameEdges(game, oddsForGame) {
     awayAbbr: game.awayAbbr, homeAbbr: game.homeAbbr,
     parkRunFactor: game.parkRunFactor, weather,
   };
-  const awayReason = describeMoneyline("away", { winProb: ml.awayWinProb, marketProb: mlMarket(ml.awayWinProb, awayEdge), teamAbbr: game.awayAbbr, oppAbbr: game.homeAbbr, era: awayPitcherForm?.era, oppEra: homePitcherForm?.era, ops: awayHit?.ops, oppOps: homeHit?.ops });
-  const homeReason = describeMoneyline("home", { winProb: ml.homeWinProb, marketProb: mlMarket(ml.homeWinProb, homeEdge), teamAbbr: game.homeAbbr, oppAbbr: game.awayAbbr, era: homePitcherForm?.era, oppEra: awayPitcherForm?.era, ops: homeHit?.ops, oppOps: awayHit?.ops });
+  const awayReason = describeMoneyline("away", { winProb: awayWinProbCal, marketProb: mlMarket(awayWinProbCal, awayEdgeCal), teamAbbr: game.awayAbbr, oppAbbr: game.homeAbbr, era: awayPitcherForm?.era, oppEra: homePitcherForm?.era, ops: awayHit?.ops, oppOps: homeHit?.ops });
+  const homeReason = describeMoneyline("home", { winProb: homeWinProbCal, marketProb: mlMarket(homeWinProbCal, homeEdgeCal), teamAbbr: game.homeAbbr, oppAbbr: game.awayAbbr, era: homePitcherForm?.era, oppEra: awayPitcherForm?.era, ops: homeHit?.ops, oppOps: awayHit?.ops });
   const overReason = describeTotals("over", totReasonCtx);
   const underReason = describeTotals("under", totReasonCtx);
   const awayTrust = trustLine(cvAwayML.tier, convBase.stability, convBase.completeness, agAwayML);
@@ -1521,16 +1540,17 @@ async function calculateGameEdges(game, oddsForGame) {
     },
     convictionInputs: { stability: convBase.stability, completeness: convBase.completeness },
     moneyline: {
-      awayWinProb: ml.awayWinProb,
-      homeWinProb: ml.homeWinProb,
+      // WZ-CAL-LIVE-2026-07-02 :: calibrated claims are the live values from here on.
+      awayWinProb: awayWinProbCal,
+      homeWinProb: homeWinProbCal,
       awayOdds: awayML,
       homeOdds: homeML,
       awayBook: odds.h2h?.awayBook ?? null,
       homeBook: odds.h2h?.homeBook ?? null,
-      awayEdge,
-      homeEdge,
-      awayConfidence: rateConfidence(awayEdge),
-      homeConfidence: rateConfidence(homeEdge),
+      awayEdge: awayEdgeCal,
+      homeEdge: homeEdgeCal,
+      awayConfidence: rateConfidence(awayEdgeCal),
+      homeConfidence: rateConfidence(homeEdgeCal),
       awayConviction: cvAwayML.tier,
       homeConviction: cvHomeML.tier,
       awayConvictionScore: cvAwayML.score,
