@@ -63,4 +63,37 @@ function calibrateCoverProb(c) {
   return c - coverProbHaircut(c);
 }
 
-module.exports = { winProbHaircut, calibrateWinProb, coverProbHaircut, calibrateCoverProb };
+// ── Hits over-probability curve ───────────────────────────────────────────────
+// WZ-CAL-HITS-2026-07-02 :: the hits prop model OVERSTATES P(1+ hit) across every
+// bucket, and the bias is WORSENING on the current model (all-time gap -0.061 on
+// n=1027; last-14d gap -0.098 on n=456). Recent-window buckets (claimed -> actual):
+//   0.525 -> 0.469 (n=81)   0.577 -> 0.538 (n=197)   0.615 -> 0.432 (n=176)
+// Above ~0.58 claimed, reality flatlines ~0.49 — and 0.432 actual on the model's
+// most confident bucket is roughly what a batter with only ~2 AB produces, strongly
+// implicating the expected-at-bats assumption (the hits shadow decomposes this).
+// Weighted isotonic fit (violating upper buckets pooled to 0.488):
+//
+//   calHits(h) = h                        for h <= 0.46
+//   calHits(h) = 0.46 + 0.20*(h - 0.46)   for h  > 0.46   (haircut capped at 0.15)
+//
+// Deliberately heavy: the model keeps only 20 cents per point of claimed confidence
+// above the knee, because that is what 456 recent graded picks say it has earned.
+// Expect the hits board to run thin-to-empty until the feature-level fix lands —
+// a thin honest board beats a full losing one (-9% ROI at time of fit). Applied at
+// the hits pricing source in edgesModel; the shadow logs the RAW prob so the
+// underlying model keeps being measured while the haircut protects the board.
+const HITS_CAL_KNEE = 0.46;
+const HITS_CAL_SLOPE = 0.20;
+const HITS_CAL_MAX_HAIRCUT = 0.15;
+
+function hitsProbHaircut(h) {
+  if (h == null || typeof h !== "number" || !isFinite(h)) return 0;
+  return Math.min(HITS_CAL_MAX_HAIRCUT, Math.max(0, (1 - HITS_CAL_SLOPE) * (h - HITS_CAL_KNEE)));
+}
+
+function calibrateHitsProb(h) {
+  if (h == null || typeof h !== "number" || !isFinite(h)) return h;
+  return h - hitsProbHaircut(h);
+}
+
+module.exports = { winProbHaircut, calibrateWinProb, coverProbHaircut, calibrateCoverProb, hitsProbHaircut, calibrateHitsProb };
