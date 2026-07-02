@@ -10,7 +10,8 @@ const { fetchGamelog } = require("./nbaGamelog");
 const { fetchScoreboard } = require("./nbaDataSource");
 const { fetchScoreboard: fetchNflScoreboard } = require("./nflDataSource");
 const { getMLBMainOdds, getMLBPinnacleClose } = require("./oddsApi");
-const { winProbHaircut, calibrateWinProb } = require("./winProbCalibration"); // WZ-WINPROB-CAL-2026-06-27 :: shadow win-prob recalibration (logging only)
+// WZ-CAL-MIRROR-2026-07-02 :: winProbCalibration import removed — calibration now applies
+// LIVE in edgesModel; this file just records the already-calibrated values it receives.
 
 function db() {
   return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
@@ -444,11 +445,12 @@ async function recordPredictions(result) {
       matchup: e.matchup, market: "moneyline", selection: e.side,
       description: `${e.teamAbbr} ML`,
       model_prob: e.modelProb, odds: e.odds, edge: e.edge,
-      // WZ-WINPROB-CAL-2026-06-27 :: SHADOW ONLY — calibrated win-prob + edge logged alongside
-      // the live values. The live model_prob/edge/confidence/conviction above are untouched, and
-      // nothing reads these two fields yet. cal_edge = edge - haircut (fair price is unchanged).
-      model_prob_cal: e.modelProb != null ? Math.round(calibrateWinProb(e.modelProb) * 1000) / 1000 : null,
-      cal_edge: (e.edge != null && e.modelProb != null) ? Math.round((e.edge - winProbHaircut(e.modelProb)) * 1000) / 1000 : null,
+      // WZ-CAL-MIRROR-2026-07-02 :: the calibration went LIVE this deploy — model_prob and
+      // edge above ARE the calibrated values (applied in edgesModel). These columns now
+      // mirror them for query continuity; re-applying the haircut here would double-cut.
+      // Raw pre-cal values are recoverable via the curve's inverse in winProbCalibration.
+      model_prob_cal: e.modelProb ?? null,
+      cal_edge: e.edge ?? null,
       confidence: e.confidence, conviction: e.conviction ?? null, conviction_score: e.convictionScore ?? null, line: null,
     });
   }
