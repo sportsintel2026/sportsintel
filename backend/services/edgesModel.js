@@ -713,7 +713,16 @@ function kProjection(pitcherStats, recentStarts, oppTeamStats, savantK) {
   // expected innings (the v2 root-cause fix): lean on recent starts, clamp sane.
   const wRecent = Math.min(0.6, n * 0.2);
   let expIP = recentIP != null ? wRecent * recentIP + (1 - wRecent) * seasonIP_GS : seasonIP_GS;
-  expIP = Math.max(3.5, Math.min(7.0, expIP));
+  // WZ-KIP-SHRINK-2026-07-02 :: shadow brackets showed the IP *tail* is broken, not the mean
+  // (overall proj 5.42 vs actual 5.45). Actual IP is nearly flat ~5.5 across every bracket, but
+  // the raw guess swung 4.5→6.9: deep-projected aces run to ~6.9 while real starts top out ~5.5
+  // (bullpen hook / 3rd-time-through), inflating their Ks by ~3; short starters were mirror-
+  // under-projected. Fix: regress expIP toward the empirical per-start mean (~5.5) and cap the
+  // ceiling at a realistic modern number. Pulls both tails toward reality; the accurate 5-6 IP
+  // middle barely moves. Re-measure via the K shadow before tuning the residual rate bias.
+  const IP_ANCHOR = 5.5, IP_SHRINK = 0.45;
+  expIP = expIP + IP_SHRINK * (IP_ANCHOR - expIP);
+  expIP = Math.max(4.0, Math.min(6.3, expIP));
   const expBF = expIP * BF_PER_IP;
 
   // strikeout RATE per batter faced. Prefer Savant k%; else derive from K/9 (the
