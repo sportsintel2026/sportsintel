@@ -36,7 +36,7 @@ const {
   calculateTriplesBoard,
   debugHitsProps,
 } = require("../services/edgesModel");
-const { recordPredictions, recordTotalBasesShadow, recordStrikeoutShadow } = require("../services/predictionTracker");
+const { recordPredictions, recordTotalBasesShadow, recordStrikeoutShadow, recordHitsShadow } = require("../services/predictionTracker"); // WZ-HITSSHADOW-WIRE-2026-07-02
 // In-memory cache
 let edgesCache = null;
 let edgesCacheAt = 0;
@@ -552,7 +552,12 @@ router.get("/mlb", async (req, res) => {
           const dbg = await debugHitsProps(topGamesForHR, hitsOddsByEvent);
           return res.json({ ok: true, slateDate, gamesUsed: topGamesForHR.map(g => `${g.awayAbbr}@${g.homeAbbr}`), count: dbg.length, hits_debug: dbg });
         }
-        hitsPropEdges = await calculateHitsPropEdges(topGamesForHR, hitsOddsByEvent);
+        // WZ-HITSSHADOW-WIRE-2026-07-02 :: single pass — the same compute that prices the
+        // (now calibrated) hits board also fills the shadow sink with every evaluated
+        // batter's RAW projection components; persisted fire-and-forget, never blocks.
+        const hitsShadowSink = [];
+        hitsPropEdges = await calculateHitsPropEdges(topGamesForHR, hitsOddsByEvent, hitsShadowSink);
+        recordHitsShadow(hitsShadowSink, slateDate).catch(e => console.error("[Edges] hits-shadow record failed:", e.message));
         // ── EXPERIMENTAL rare-hit boards: TB / Doubles / Triples ─────────────
         // Same pre-game feed as TB shadow. Ranked by likelihood (uncalibrated —
         // shown like the HR board, no edge claims). Fully wrapped; never blocks
