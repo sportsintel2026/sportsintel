@@ -252,22 +252,23 @@ async function getLinescore(gamePk) {
   try { return await mlbGet(`/game/${gamePk}/linescore`); } catch (e) { return null; }
 }
 
-// Read-only: home-plate umpire + game-level K / BB / R / NRFI for a FINISHED game.
-// Everything here comes from feeds we already fetch (boxscore + linescore) — no new
-// endpoint families, no added cost. Officials live on the boxscore; if that copy is
-// empty (StatsAPI sometimes only fills the live feed), fall back to /feed/live.
-async function getGameUmpireAndTotals(gamePk) {
+// WZ-UMPK-HPFETCH-2026-07-02 :: shared HP-official finder + same-day pre-game ump probe.
+// The HP umpire posts to boxscore officials only ~a few hours before first pitch (there is
+// NO day-ahead assignment feed anywhere — every public source derives from these same
+// boxscores). Since the edges board recomputes every ~12-15 min and K props are bet
+// same-day, a cached probe here gives the model the plate ump for tonight's slate as soon
+// as MLB posts it, at ~one boxscore fetch per game per refresh until it lands.
+const _findHPOfficial = (arr) => (arr || []).find((o) =>
+  /home\s*plate/i.test((o && o.officialType) || (o && o.official && o.official.officialType) || "")
+);
+
+// Fetch officials for a game (boxscore first, /feed/live fallback — StatsAPI sometimes
+// only fills the live copy). Returns { hp, officials, source }. Never throws.
+async function _fetchHPOfficial(gamePk) {
   let box = null;
   try { box = await mlbGet(`/game/${gamePk}/boxscore`); } catch (_) { box = null; }
-  if (!box) return null;
-
-  const num = (x) => (Number.isFinite(+x) ? +x : 0);
-  const findHP = (arr) => (arr || []).find((o) =>
-    /home\s*plate/i.test((o && o.officialType) || (o && o.official && o.official.officialType) || "")
-  );
-
-  let officials = Array.isArray(box.officials) ? box.officials : [];
-  let hp = findHP(officials);
+  let officials = box && Array.isArray(box.officials) ? box.officials : [];
+  let hp = _findHPOfficial(officials);
   let source = "boxscore";
   if (!hp) {
     try {
@@ -275,10 +276,40 @@ async function getGameUmpireAndTotals(gamePk) {
       if (res.ok) {
         const feed = await res.json();
         const liveOff = feed && feed.liveData && feed.liveData.boxscore && feed.liveData.boxscore.officials;
-        if (Array.isArray(liveOff) && liveOff.length) { officials = liveOff; hp = findHP(liveOff); source = "feed/live"; }
+        if (Array.isArray(liveOff) && liveOff.length) { officials = liveOff; hp = _findHPOfficial(liveOff); source = "feed/live"; }
       }
     } catch (_) {}
   }
+  return { box, hp, officials, source };
+}
+
+// Same-day HP umpire NAME for a game, cached. Deliberately does NOT use _boxscoreCache
+// (that cache is process-lifetime and built for immutable FINAL games — a pre-game
+// boxscore with no officials yet must not get frozen in). Hits cache for the process
+// once found (assignments don't change); misses re-probe after 10 min, which lines up
+// with the ~12-15 min board refresh. Returns the name string or null. Never throws.
+const _hpUmpCache = new Map(); // gamePk -> { name, at }
+const HP_UMP_MISS_TTL_MS = 10 * 60 * 1000;
+async function getGameHPUmpire(gamePk) {
+  if (!gamePk) return null;
+  const key = String(gamePk);
+  const hit = _hpUmpCache.get(key);
+  if (hit && (hit.name || Date.now() - hit.at < HP_UMP_MISS_TTL_MS)) return hit.name;
+  const { hp } = await _fetchHPOfficial(key);
+  const name = hp && hp.official ? (hp.official.fullName || null) : null;
+  _hpUmpCache.set(key, { name, at: Date.now() });
+  return name;
+}
+
+// Read-only: home-plate umpire + game-level K / BB / R / NRFI for a FINISHED game.
+// Everything here comes from feeds we already fetch (boxscore + linescore) — no new
+// endpoint families, no added cost. Officials live on the boxscore; if that copy is
+// empty (StatsAPI sometimes only fills the live feed), fall back to /feed/live.
+async function getGameUmpireAndTotals(gamePk) {
+  const { box, hp, officials, source } = await _fetchHPOfficial(gamePk);
+  if (!box) return null;
+
+  const num = (x) => (Number.isFinite(+x) ? +x : 0);
   const umpire = hp && hp.official ? (hp.official.fullName || null) : null;
 
   const bat = (side) =>
@@ -1020,6 +1051,7 @@ module.exports = {
   getLiveGameState,
   getGameStatusAndScore,
   getGameUmpireAndTotals,
+  getGameHPUmpire,
   getTeamHandednessSplits, getTeamBullpenStats, getTeamBullpenUsage, getPitcherHand,
   getBatterHandednessSplits, getBatterHand,
   getGameBatterTotalBases,
