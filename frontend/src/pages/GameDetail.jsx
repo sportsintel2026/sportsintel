@@ -1,5 +1,6 @@
 // GAMEDETAIL-PREMIUM-DARK-RESKIN-2026-06-23
 // GAMEDETAIL-CARDS-POLISH-2026-06-23
+// WZ-GD-PREMIUM2-2026-07-02 :: premium pre-game redesign (hero, duel, informal voice)
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 const PERF_API_BASE = import.meta.env.VITE_API_URL || "https://sportsintel-production.up.railway.app";
@@ -152,6 +153,7 @@ export default function GameDetailPage() {
   const pickByMarket = (kinds) => gEdges.find(e => kinds.some(k => String(e.market||"").toLowerCase().includes(k)));
   const mlPick = pickByMarket(["moneyline","ml"]);
   const totPick = pickByMarket(["total"]);
+  const rlPick = pickByMarket(["run","spread"]); // WZ-GD-PREMIUM2-2026-07-02 :: per-market edge pill
   const bestEdge = [...gEdges].sort((a,b)=>(b.edge||0)-(a.edge||0))[0] || null;
 
   const mr = (Array.isArray(marketRead) ? marketRead : marketRead?.games || [])
@@ -172,7 +174,7 @@ export default function GameDetailPage() {
       <div className="sbody">
         {loading && <div className="estate"><div className="et">Loading matchup…</div></div>}
         {!loading && !game && <div className="estate"><div className="et">Game not found</div><div className="es">It may have rolled off today's slate.</div></div>}
-        {!loading && game && st==="pre"   && <SheetPre   game={game} aAb={aAb} hAb={hAb} gEdges={gEdges} mlPick={mlPick} totPick={totPick} bestEdge={bestEdge} mr={mr} detail={detail} bvpData={bvpData} lineups={lineups} hasFull={hasFull} navigate={navigate}/>}
+        {!loading && game && st==="pre"   && <SheetPre   game={game} aAb={aAb} hAb={hAb} gEdges={gEdges} mlPick={mlPick} totPick={totPick} rlPick={rlPick} bestEdge={bestEdge} mr={mr} detail={detail} bvpData={bvpData} lineups={lineups} hasFull={hasFull} navigate={navigate}/>}
         {!loading && game && st==="live"  && <SheetLive  game={game} gameId={gameId} scoresGame={scoresGame} aAb={aAb} hAb={hAb} gEdges={gEdges} detail={detail}/>}
         {!loading && game && st==="final" && <SheetFinal game={game} scoresGame={scoresGame} aAb={aAb} hAb={hAb} bestEdge={bestEdge} detail={detail} venue={venue}/>}
       </div>
@@ -213,29 +215,118 @@ const Collapse = ({ label, bx, sub, open: defOpen = false, children }) => {
 };
 // Home-plate umpire tendencies (from detail.umpire). Shown on every game state, not
 // just pre-game. Renders nothing until the crew is posted (a few hours pre-first-pitch).
+// WZ-GD-PREMIUM2-2026-07-02 :: friendlier voice — always shows a lean pill.
 const UmpBlock = ({ detail }) => {
   const ump = detail?.umpire || null;
   if (!ump) return null;
   return (
-    <Block label="HOME PLATE UMPIRE" bx="season tendencies">
-      <div className="umphd">{ump.name||"TBD"} {ump.favor && <span className="umpf">leans {ump.favor}</span>}</div>
+    <Block label="BEHIND THE PLATE" bx="the ump's season tendencies">
+      <div className="umphd">{ump.name||"TBD"} <span className="umpf">{ump.favor ? `leans ${ump.favor}` : "plays it neutral"}</span></div>
       <div className="umpgrid">
         <div className="ug"><div className="k">RUNS vs AVG</div><div className={"v "+(String(ump.runs||"").startsWith("-")?"dn":"up")}>{ump.runs ?? "—"}</div></div>
-        <div className="ug"><div className="k">K RATE</div><div className="v">{ump.k ?? "—"}</div></div>
-        <div className="ug"><div className="k">BB RATE</div><div className="v">{ump.bb ?? "—"}</div></div>
+        <div className="ug"><div className="k">K / GAME</div><div className="v">{ump.k ?? "—"}</div></div>
+        <div className="ug"><div className="k">BB / GAME</div><div className="v">{ump.bb ?? "—"}</div></div>
       </div>
     </Block>
   );
 };
-function TeamHead({ aAb, hAb, aCol, hCol, aRec, hRec }) {
-  return <div className="dblk"><div className="mst">
-    <div className="tm"><LogoB ab={aAb} col={aCol}/><div className="ab">{aAb}</div><div className="rc">{aRec||""}</div></div>
-    <div className="at">@</div>
-    <div className="tm"><LogoB ab={hAb} col={hCol}/><div className="ab">{hAb}</div><div className="rc">{hRec||""}</div></div>
-  </div></div>;
+// WZ-GD-PREMIUM2-2026-07-02 :: premium pre-game sheet — one-glance hero (matchup +
+// win prob + plain-English readout), friendlier section voices, face-to-face pitching
+// duel with headline stats + collapsible full sheets, lineups & BvP open by default.
+// Data logic untouched; live/final sheets share the refreshed base styles.
+
+// plain-English one-liner under the win bar — the "informal" layer.
+function wpReadout(aAb, hAb, wlA, wlH) {
+  if (wlA == null || wlH == null) return null;
+  const lead = wlA >= wlH ? aAb : hAb;
+  const diff = Math.abs(wlA - wlH);
+  if (diff <= 4)  return <>Basically a coin flip {"\u2014"} the model leans <b>{lead} by a hair</b></>;
+  if (diff <= 12) return <>The model leans <b>{lead}</b></>;
+  if (diff <= 24) return <>The model likes <b>{lead}</b> tonight</>;
+  return <>The model strongly favors <b>{lead}</b></>;
 }
 
-function SheetPre({ game, aAb, hAb, gEdges, mlPick, totPick, bestEdge, mr, detail, bvpData, lineups, hasFull, navigate }) {
+function HeroCard({ game, aAb, hAb, aCol, hCol, wlA, wlH, venue, timeStr }) {
+  return <div className="hero">
+    <div className="hteams">
+      <div className="htm"><LogoB ab={aAb} col={aCol}/><div className="ab">{aAb}</div><div className="rc">{game.awayRecord||""}</div></div>
+      <div className="hat">@</div>
+      <div className="htm"><LogoB ab={hAb} col={hCol}/><div className="ab">{hAb}</div><div className="rc">{game.homeRecord||""}</div></div>
+    </div>
+    <div className="hchips">
+      {venue && <span className="hch">{venue}</span>}
+      {timeStr && <span className="hch">First pitch <b>{timeStr}</b></span>}
+    </div>
+    {(wlA!=null && wlH!=null) && <div className="hwp">
+      <div className="hwpwrap">
+        <div className="hwpbar">
+          <div className="a" style={{width:wlA+"%"}}>{aAb} {wlA}%</div>
+          <div className="h" style={{width:wlH+"%"}}>{wlH}% {hAb}</div>
+        </div>
+        <div className="hwptick"/>
+      </div>
+      <div className="hwpread">{wpReadout(aAb, hAb, wlA, wlH)}</div>
+    </div>}
+  </div>;
+}
+
+// good/bad coloring for the duel headline stats — mild thresholds, neutral otherwise.
+const statTone = {
+  era:  (v)=> v==null?"" : v<3.60?"good" : v>4.80?"bad" : "",
+  whip: (v)=> v==null?"" : v<1.20?"good" : v>1.42?"bad" : "",
+  k9:   (v)=> v==null?"" : v>9.5?"good"  : v<7.2?"bad"  : "",
+  baa:  (v)=> v==null?"" : v<0.230?"good": v>0.275?"bad": "",
+};
+const f3p = (v)=> v==null ? "\u2014" : Number(v).toFixed(3).replace(/^0(?=\.)/,"");
+
+function DuelPitcher({ ab, col, p }) {
+  const [imgErr,setImgErr]=useState(false);
+  const pid=p?.id||null; const s=p?.stats||{};
+  const head = (pid && !imgErr)
+    ? <span className="dface" style={{background:`radial-gradient(circle at 50% 28%, ${col}, #0c1018 82%)`}}><img src={`https://midfield.mlbstatic.com/v1/people/${pid}/spots/120`} alt="" onError={()=>setImgErr(true)}/></span>
+    : <span className="dface" style={{background:`radial-gradient(circle at 50% 32%, ${col}99,#0c1018 82%)`}}>{String(ab||"?").slice(0,2)}</span>;
+  const wl = (s.wins!=null||s.losses!=null) ? `${s.wins??0}-${s.losses??0}` : null;
+  const num=(x,d)=> x!=null ? (d!=null?Number(x).toFixed(d):x) : "\u2014";
+  return <div className="dpit">
+    {head}
+    <div className="dnm">{p?.name || "TBD"}</div>
+    <div className="dmeta">{p?.hand?`${p.hand}HP \u00b7 `:""}{ab}{wl?` \u00b7 ${wl}`:""}{s.inningsPitched!=null?` \u00b7 ${Number(s.inningsPitched).toFixed(1)} IP`:""}</div>
+    {p?.name && <div className="dbig">
+      <div className="db"><div className="k">ERA</div><div className={"v "+statTone.era(s.era!=null?+s.era:null)}>{num(s.era,2)}</div></div>
+      <div className="db"><div className="k">WHIP</div><div className={"v "+statTone.whip(s.whip!=null?+s.whip:null)}>{num(s.whip,2)}</div></div>
+      <div className="db"><div className="k">K/9</div><div className={"v "+statTone.k9(s.strikeoutsPer9!=null?+s.strikeoutsPer9:null)}>{num(s.strikeoutsPer9,1)}</div></div>
+      <div className="db"><div className="k">BAA</div><div className={"v "+statTone.baa(s.battingAvgAgainst!=null?+s.battingAvgAgainst:null)}>{f3p(s.battingAvgAgainst)}</div></div>
+    </div>}
+  </div>;
+}
+
+function FullStatGrid({ ab, p }) {
+  const s=p?.stats||{};
+  if (!p?.name) return null;
+  const num=(x,d)=> x!=null ? (d!=null?Number(x).toFixed(d):x) : "\u2014";
+  const tiles=[["BB/9",num(s.walksPer9,1)],["HR/9",num(s.homeRunsPer9,1)],["K/BB",num(s.strikeoutWalkRatio,2)],["SLG-A",f3p(s.sluggingAgainst)],["GS",num(s.gamesStarted)],["K",num(s.strikeouts)],["BB",num(s.walks)],["HR",num(s.homeRuns)]];
+  return <div className="fsg">
+    <div className="fsgab">{ab} {"\u00b7"} {p.name}</div>
+    <div className="pgrid" style={{marginTop:6}}>{tiles.map(([k,v],i)=><div key={i} className="pg"><div className="k">{k}</div><div className="v">{v}</div></div>)}</div>
+  </div>;
+}
+
+function PitchingDuel({ aAb, hAb, aCol, hCol, pa, ph }) {
+  const [open,setOpen]=useState(false);
+  return <Block label="ON THE MOUND" bx="probable starters">
+    <div className="duel">
+      <DuelPitcher ab={aAb} col={aCol} p={pa}/>
+      <div className="dvs">VS</div>
+      <DuelPitcher ab={hAb} col={hCol} p={ph}/>
+    </div>
+    {(pa?.name||ph?.name) && <>
+      <div className="morestats"><span className={"morebtn"+(open?" open":"")} onClick={()=>setOpen(o=>!o)}>Full stat sheets <span className="cv">{"\u25b8"}</span></span></div>
+      {open && <div className="fsgwrap"><FullStatGrid ab={aAb} p={pa}/><FullStatGrid ab={hAb} p={ph}/></div>}
+    </>}
+  </Block>;
+}
+
+function SheetPre({ game, aAb, hAb, gEdges, mlPick, totPick, rlPick, bestEdge, mr, detail, bvpData, lineups, hasFull, navigate }) {
   const aCol=colFor(aAb), hCol=colFor(hAb);
   const ml = game.moneyline || {};
   const wlA = pct(ml.awayWinProb), wlH = pct(ml.homeWinProb);
@@ -243,9 +334,8 @@ function SheetPre({ game, aAb, hAb, gEdges, mlPick, totPick, bestEdge, mr, detai
   const projA = t.awayProjected ?? t.projectedAway ?? game.awayProjected ?? null;
   const projH = t.homeProjected ?? t.projectedHome ?? game.homeProjected ?? null;
   const projTot = (projA!=null && projH!=null) ? (parseFloat(projA)+parseFloat(projH)).toFixed(1) : (t.projected ?? null);
-  const ou = t.line ?? t.projected ?? "—";
+  const ou = t.line ?? "\u2014";
   const rl = game.runLine || {};
-  const edgeStr = bestEdge ? ((bestEdge.edge>=0?"+":"")+(bestEdge.edge*100).toFixed(1)+"%") : "—";
   const pa = game.pitchers?.away || {}, ph = game.pitchers?.home || {};
   const _lu = (lineups && ((lineups.away && lineups.away.length) || (lineups.home && lineups.home.length))) ? lineups : (game.lineups || {});
   const luA = _lu.away || [], luH = _lu.home || [];
@@ -255,107 +345,96 @@ function SheetPre({ game, aAb, hAb, gEdges, mlPick, totPick, bestEdge, mr, detai
   const series = detail?.series || {};
   const formA = series.away || series.awayForm || null;
   const formH = series.home || series.homeForm || null;
-  const ump = detail?.umpire || null;
   const bvpA = bvpData?.awayBattersVsHomePitcher || [];
   const bvpH = bvpData?.homeBattersVsAwayPitcher || [];
   const bvpTotal = bvpA.length + bvpH.length;
   const w = game.weather || {};
-  const parkTxt = game.parkRunFactor!=null ? ((game.parkRunFactor>1?"+":"")+Math.round((game.parkRunFactor-1)*100)+"% runs") : "—";
+  const parkTxt = game.parkRunFactor!=null ? ((game.parkRunFactor>1?"+":"")+Math.round((game.parkRunFactor-1)*100)+"% runs") : "\u2014";
   const parkHrTxt = game.parkHRFactor!=null ? ((game.parkHRFactor>1?"+":"")+Math.round((game.parkHRFactor-1)*100)+"% HR") : null;
   const windCls = w.windEffect==="out" ? "wout" : w.windEffect==="in" ? "win" : "";
+  const timeStr = fmtTime(game.time);
+
+  // per-market edge pills
+  const edgePill = (pick) => pick && pick.edge!=null
+    ? <span className={"epill "+(pick.edge>0?"pos":"neu")}>{(pick.edge>=0?"+":"")+(pick.edge*100).toFixed(1)+"%"}</span>
+    : <span className="epill neu">{"\u2014"}</span>;
 
   const reads = [];
-  if (mr?.win) { const w=mr.win; reads.push({ k:"WIN", lean:w.favTeam, odds:fmtOdds(w.consensus ?? w.bestPrice), prob:(w.favProb ?? w.model?.prob ?? null), mv:(w.move?{toward:w.move.towardFav,cents:w.move.cents,team:w.favTeam}:null), agrees:w.model?.agrees }); }
+  if (mr?.win) { const w2=mr.win; reads.push({ k:"WIN", lean:w2.favTeam, odds:fmtOdds(w2.consensus ?? w2.bestPrice), prob:(w2.favProb ?? w2.model?.prob ?? null), mv:(w2.move?{toward:w2.move.towardFav,cents:w2.move.cents,team:w2.favTeam}:null), agrees:w2.model?.agrees }); }
   if (mr?.cover?.favTeam) { const c=mr.cover; reads.push({ k:"COVER", lean:c.favTeam, odds:fmtOdds(c.bestPrice ?? c.odds), prob:(c.favProb ?? c.model?.prob ?? null), mv:null, agrees:(c.model?.agrees ?? c.agrees) }); }
   if (mr?.total && (mr.total.lean||mr.total.side)) { const tt=mr.total; reads.push({ k:"TOTAL", lean:String(tt.lean||tt.side).toUpperCase()+(tt.line!=null?" "+tt.line:""), odds:fmtOdds(tt.bestOver ?? tt.odds), prob:(tt.favProb ?? tt.model?.prob ?? null), mv:null, agrees:(tt.model?.agrees ?? tt.agrees) }); }
 
   return (<>
-    <TeamHead aAb={aAb} hAb={hAb} aCol={aCol} hCol={hCol} aRec={game.awayRecord} hRec={game.homeRecord}/>
+    <HeroCard game={game} aAb={aAb} hAb={hAb} aCol={aCol} hCol={hCol} wlA={wlA} wlH={wlH} venue={game.venue||""} timeStr={timeStr}/>
 
-    <Block label="MODEL PROJECTION" bx="win prob">
-      {(wlA!=null && wlH!=null) ? <div className="wpwrap"><div className="wprow"><div className="s aw" style={{width:wlA+"%"}}>{aAb} {wlA}%</div><div className="s hm" style={{width:wlH+"%"}}>{hAb} {wlH}%</div></div></div>
-        : <div className="estate" style={{padding:14}}><div className="es">Win probability posts with the model line.</div></div>}
-      <div className="proj">
-        <div className="p"><div className="k">PROJ {aAb}</div><div className="v">{projA ?? "—"}</div></div>
-        <div className="p"><div className="k">PROJ {hAb}</div><div className="v">{projH ?? "—"}</div></div>
-        <div className="p"><div className="k">PROJ TOTAL</div><div className="v g">{projTot ?? "—"}</div></div>
-        <div className="p"><div className="k">O/U</div><div className="v">{ou}</div></div>
+    <Block label="THE MODEL'S NUMBERS" bx="tonight's projection">
+      <div className="projg">
+        <div className="pcell"><div className="k">{aAb} RUNS</div><div className="v">{projA ?? "\u2014"}</div></div>
+        <div className="pcell"><div className="k">{hAb} RUNS</div><div className="v">{projH ?? "\u2014"}</div></div>
+        <div className="pcell"><div className="k">TOTAL</div><div className="v g">{projTot ?? "\u2014"}</div></div>
+        <div className="pcell"><div className="k">THE LINE</div><div className="v">{ou}</div></div>
       </div>
     </Block>
 
-    <Block label="ODDS & EDGES" bx="best line">
-      <div className="orow"><div className="ol">Moneyline</div><div className="os">{aAb} <b>{fmtOdds(ml.away)}</b> · {hAb} <b>{fmtOdds(ml.home)}</b></div><div className="oe pos">{edgeStr}</div></div>
-      {(rl.awayOdds!=null||rl.homeOdds!=null) && <div className="orow"><div className="ol">Run Line</div><div className="os">{aAb} <b>{fmtOdds(rl.awayOdds)}</b> · {hAb} <b>{fmtOdds(rl.homeOdds)}</b></div><div className="oe pos">{rl.line!=null?(rl.line>0?"+":"")+rl.line:""}</div></div>}
-      {(t.overOdds!=null||t.underOdds!=null||t.line!=null) && <div className="orow"><div className="ol">Total</div><div className="os">O <b>{fmtOdds(t.overOdds)}</b> · U <b>{fmtOdds(t.underOdds)}</b></div><div className="oe pos">{totPick?((totPick.edge>=0?"+":"")+(totPick.edge*100).toFixed(1)+"%"):""}</div></div>}
+    <Block label="THE PRICES" bx="best line across books">
+      <div className="pricer">
+        <div className="mk">Moneyline</div>
+        <div className="ocs"><span className="oc"><span className="who">{aAb}</span><b>{fmtOdds(ml.away)}</b></span><span className="oc"><span className="who">{hAb}</span><b>{fmtOdds(ml.home)}</b></span></div>
+        {edgePill(mlPick)}
+      </div>
+      {(rl.awayOdds!=null||rl.homeOdds!=null) && <div className="pricer">
+        <div className="mk">Run Line</div>
+        <div className="ocs"><span className="oc"><span className="who">{aAb} {rl.awayLine!=null?(rl.awayLine>0?"+":"")+rl.awayLine:""}</span><b>{fmtOdds(rl.awayOdds)}</b></span><span className="oc"><span className="who">{hAb} {rl.homeLine!=null?(rl.homeLine>0?"+":"")+rl.homeLine:""}</span><b>{fmtOdds(rl.homeOdds)}</b></span></div>
+        {edgePill(rlPick)}
+      </div>}
+      {(t.overOdds!=null||t.underOdds!=null||t.line!=null) && <div className="pricer">
+        <div className="mk">Total {t.line!=null?t.line:""}</div>
+        <div className="ocs"><span className="oc"><span className="who">Over</span><b>{fmtOdds(t.overOdds)}</b></span><span className="oc"><span className="who">Under</span><b>{fmtOdds(t.underOdds)}</b></span></div>
+        {edgePill(totPick)}
+      </div>}
     </Block>
 
-    <Block label="PROBABLE STARTERS">
-      <PitcherCard ab={aAb} col={aCol} p={pa}/>
-      <PitcherCard ab={hAb} col={hCol} p={ph}/>
-    </Block>
+    <PitchingDuel aAb={aAb} hAb={hAb} aCol={aCol} hCol={hCol} pa={pa} ph={ph}/>
 
-    <Collapse label="LINEUPS" bx="batting order" sub={(luA.length||luH.length) ? `${aAb} vs ${hAb}` : "not posted"}>
+    <Collapse label="WHO'S BATTING" bx="lineups" open={true} sub={(luA.length||luH.length) ? `${aAb} vs ${hAb}` : "not posted"}>
       {(luA.length>0 || luH.length>0) ? <>
         <div className="lusub">{aAb}{luA.length>0 && (_lu.awayConfirmed ? <span className="luok">{"\u2713 confirmed"}</span> : <span className="luproj">projected</span>)}</div>{luA.map((x,i)=><div key={"a"+i} className="lurowf"><span className="o">{luOrd(x)}</span><span className="nm">{luName(x)}</span><span className="po">{luPos(x)}</span></div>)}
         <div className="lusub">{hAb}{luH.length>0 && (_lu.homeConfirmed ? <span className="luok">{"\u2713 confirmed"}</span> : <span className="luproj">projected</span>)}</div>{luH.map((x,i)=><div key={"h"+i} className="lurowf"><span className="o">{luOrd(x)}</span><span className="nm">{luName(x)}</span><span className="po">{luPos(x)}</span></div>)}
-      </> : <div className="estate" style={{padding:"4px 2px"}}><div className="es">Lineups confirm ~90 min before first pitch.</div></div>}
+      </> : <div className="estate" style={{padding:"4px 2px",margin:0,border:"none"}}><div className="es">Lineups confirm ~90 min before first pitch.</div></div>}
     </Collapse>
 
-    {bvpTotal>0 && <Collapse label="BATTER vs PITCHER" bx="career" sub={`${bvpTotal} w/ history`}>
+    {bvpTotal>0 && <Collapse label="HISTORY AT THE PLATE" bx="batter vs pitcher, career" open={true} sub={`${bvpTotal} w/ history`}>
       {bvpA.length>0 && <><div className="bvpgrp">{aAb} batters vs {ph?.name || "opp SP"}</div><BvpTable rows={bvpA}/></>}
       {bvpH.length>0 && <><div className="bvpgrp">{hAb} batters vs {pa?.name || "opp SP"}</div><BvpTable rows={bvpH}/></>}
     </Collapse>}
 
-    {(formA||formH) && <Block label="TEAM FORM" bx="last 5 · runs/game"><div className="formgrid">
+    {(formA||formH) && <Block label="RECENT FORM" bx="last 5 · runs/game"><div className="formgrid">
       <FormCol ab={aAb} f={formA}/><FormCol ab={hAb} f={formH}/>
     </div></Block>}
 
-    {ump && <Block label="HOME PLATE UMPIRE" bx="season tendencies">
-      <div className="umphd">{ump.name||"TBD"} {ump.favor && <span className="umpf">leans {ump.favor}</span>}</div>
-      <div className="umpgrid">
-        <div className="ug"><div className="k">RUNS vs AVG</div><div className={"v "+(String(ump.runs||"").startsWith("-")?"dn":"up")}>{ump.runs ?? "—"}</div></div>
-        <div className="ug"><div className="k">K RATE</div><div className="v">{ump.k ?? "—"}</div></div>
-        <div className="ug"><div className="k">BB RATE</div><div className="v">{ump.bb ?? "—"}</div></div>
-      </div>
+    <UmpBlock detail={detail}/>
+
+    {reads.length>0 && <Block label="WHAT THE BOOKS THINK" bx="collective lean">
+      {reads.map((r,i)=><div key={i} className="mr"><span className={"md "+(r.agrees?"strong":"split")}/><span className="mk">{r.k}</span><div className="mv"><div className="mvtop"><b>{r.lean}</b>{r.odds&&r.odds!=="\u2014"?` \u00b7 ${r.odds}`:""}{r.prob!=null?` \u00b7 ${r.prob}%`:""}</div>{r.mv&&<div className={"mvmoney "+(r.mv.toward?"toward":"off")}>{r.mv.toward?`money coming in on ${r.mv.team}`:`money drifting off ${r.mv.team}`} · {r.mv.cents}{"\u00a2"} since open</div>}</div><Agree ok={r.agrees}/></div>)}
     </Block>}
 
-    {reads.length>0 && <Block label="MARKET READ" bx="books' collective lean">
-      {reads.map((r,i)=><div key={i} className="mr"><span className={"md "+(r.agrees?"strong":"split")}/><span className="mk">{r.k}</span><div className="mv"><div className="mvtop"><b>{r.lean}</b>{r.odds&&r.odds!=="—"?` · ${r.odds}`:""}{r.prob!=null?` · ${r.prob}%`:""}</div>{r.mv&&<div className={"mvmoney "+(r.mv.toward?"toward":"off")}>{r.mv.toward?`money coming in on ${r.mv.team}`:`money drifting off ${r.mv.team}`} · {r.mv.cents}{"\u00a2"} since open</div>}</div><Agree ok={r.agrees}/></div>)}
-    </Block>}
-
-    <Block label="PARK &amp; WEATHER" bx={!w.indoor && w.forecastAtGameTime ? "at first pitch" : "conditions"}><div className="ctx">
+    <Block label="TONIGHT'S CONDITIONS" bx={!w.indoor && w.forecastAtGameTime ? "at first pitch" : "conditions"}><div className="ctx">
       {venueChip(game.venue||scoresGame_venue(game))}
-      <span className="ch">Runs: <b>{parkTxt}</b></span>
-      {parkHrTxt && <span className="ch">HR: <b>{parkHrTxt}</b></span>}
-      {w.indoor ? <span className="ch">Dome · roof closed</span> : <>
-        {w.tempF!=null && <span className="ch">{w.tempF}°F{w.tempEffect&&w.tempEffect!=="neutral"?` · ${w.tempEffect}`:""}</span>}
+      <span className="ch">Runs <b>{parkTxt}</b></span>
+      {parkHrTxt && <span className="ch">HR <b>{parkHrTxt}</b></span>}
+      {w.indoor ? <span className="ch">Dome {"\u00b7"} roof closed</span> : <>
+        {w.tempF!=null && <span className="ch">{w.tempF}{"\u00b0"}F{w.tempEffect&&w.tempEffect!=="neutral"?` \u00b7 ${w.tempEffect==="hot"?"warm air carries":w.tempEffect}`:""}</span>}
         {w.windLabel && <span className={"ch "+windCls}>{w.windLabel}</span>}
-        {(w.conditions||w.isRaining) && <span className="ch">{w.conditions||""}{w.isRaining?" · rain":""}</span>}
+        {(w.conditions||w.isRaining) && <span className="ch">{w.conditions||""}{w.isRaining?" \u00b7 rain":""}</span>}
       </>}
     </div></Block>
 
-    {bestEdge?.reason && <div className="dblk"><div className="why"><span className="wl">WHY THE EDGE</span>{bestEdge.reason}</div></div>}
+    {bestEdge?.reason && <div className="whycard"><div className="l">WHY THE EDGE</div><div className="t">{bestEdge.reason}</div></div>}
   </>);
 }
 const scoresGame_venue = (g) => g?.venue || "";
 const venueChip = (v) => v ? <span className="ch">{v}</span> : null;
 
-function PitcherCard({ ab, col, p }) {
-  const [imgErr,setImgErr]=useState(false);
-  const pid=p?.id||null;
-  const s=p?.stats||{};
-  const head = (pid && !imgErr)
-    ? <span className="pl" style={{background:`radial-gradient(circle at 50% 28%, ${col}, #0c1018 82%)`}}><img src={`https://midfield.mlbstatic.com/v1/people/${pid}/spots/120`} alt="" onError={()=>setImgErr(true)} style={{width:"100%",height:"100%",objectFit:"cover",borderRadius:"50%"}}/></span>
-    : <LogoP ab={ab} col={col}/>;
-  const wl = (s.wins!=null||s.losses!=null) ? `${s.wins??0}-${s.losses??0}` : null;
-  const num=(x,d)=> x!=null ? (d!=null?Number(x).toFixed(d):x) : "—";
-  const f3p=(v)=> v==null ? "—" : Number(v).toFixed(3).replace(/^0(?=\.)/,"");
-  const tiles=[["ERA",num(s.era,2)],["WHIP",num(s.whip,2)],["K/9",num(s.strikeoutsPer9,1)],["BB/9",num(s.walksPer9,1)],["HR/9",num(s.homeRunsPer9,1)],["K/BB",num(s.strikeoutWalkRatio,2)],["BAA",f3p(s.battingAvgAgainst)],["SLG-A",f3p(s.sluggingAgainst)],["GS",num(s.gamesStarted)],["K",num(s.strikeouts)],["BB",num(s.walks)],["HR",num(s.homeRuns)]];
-  return <div className="pcard">
-    <div className="prow">{head}<div className="pmeta"><div className="pn">{p?.name || "TBD"}</div><div className="ph">{p?.hand?`${p.hand}HP · `:""}{ab}{wl?` · ${wl}`:""}{s.inningsPitched!=null?` · ${Number(s.inningsPitched).toFixed(1)} IP`:""}</div></div></div>
-    {(p?.name)&&<div className="pgrid">{tiles.map(([k,v],i)=><div key={i} className="pg"><div className="k">{k}</div><div className="v">{v}</div></div>)}</div>}
-  </div>;
-}
 function FormCol({ ab, f }) {
   const l5 = (f?.l5 || f?.last5 || "").toString();
   return <div className="fcol"><div className="fab">{ab}</div>
@@ -670,4 +749,66 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .lsc{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11px}
 .lsc th{color:var(--mut2);font-weight:500;font-size:9px;padding:3px 5px;text-align:center}.lsc td{padding:4px 5px;text-align:center;color:#cdd7e1;border-top:1px solid var(--line)}
 .lsc td.tm{text-align:left;font-family:var(--disp);font-weight:800;font-size:13px;color:#fff}.lsc td.rh{color:#fff;font-weight:700}
+
+/* WZ-GD-PREMIUM2-2026-07-02 :: premium pre-game sheet */
+.hero{background:linear-gradient(180deg,#171B20 0%,#14171B 100%);border:1px solid var(--line2);border-radius:18px;padding:20px 16px 16px;margin-top:11px;position:relative;overflow:hidden}
+.hero::before{content:"";position:absolute;left:-40px;top:-50px;width:180px;height:180px;border-radius:50%;background:radial-gradient(circle,rgba(120,130,140,.10),transparent 70%);pointer-events:none}
+.hero::after{content:"";position:absolute;right:-40px;top:-50px;width:180px;height:180px;border-radius:50%;background:radial-gradient(circle,rgba(201,168,106,.08),transparent 70%);pointer-events:none}
+.hteams{display:flex;align-items:center;justify-content:space-between;position:relative;z-index:1}
+.htm{display:flex;flex-direction:column;align-items:center;gap:6px;flex:1}
+.htm .lgb{width:58px;height:58px;border-radius:50%;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#1B2025;border:1px solid var(--line2)}
+.htm .lgb img{width:46px;height:46px;object-fit:contain}
+.htm .ab{font-family:var(--disp);font-weight:800;font-size:20px;color:#fff;margin-top:2px}
+.htm .rc{font-family:var(--mono);font-size:9px;color:var(--mut2)}
+.hat{font-family:var(--disp);font-weight:700;font-size:14px;color:var(--mut2)}
+.hchips{display:flex;gap:7px;justify-content:center;margin-top:14px;flex-wrap:wrap;position:relative;z-index:1}
+.hch{font-family:var(--mono);font-size:10px;color:var(--mut);background:#1B2025;border:1px solid var(--line2);border-radius:999px;padding:5px 12px}
+.hch b{color:#fff;font-weight:600}
+.hwp{margin-top:16px;position:relative;z-index:1}
+.hwpwrap{position:relative}
+.hwpbar{display:flex;height:36px;border-radius:11px;overflow:hidden;border:1px solid var(--line2)}
+.hwpbar .a{background:linear-gradient(90deg,#23303B,#2B3B49);display:flex;align-items:center;padding-left:11px;font-family:var(--disp);font-weight:800;font-size:13px;color:#cfe2f5;white-space:nowrap;overflow:hidden}
+.hwpbar .h{background:linear-gradient(90deg,#1C3A30,#215043);display:flex;align-items:center;justify-content:flex-end;padding-right:11px;font-family:var(--disp);font-weight:800;font-size:13px;color:#46E0A9;white-space:nowrap;overflow:hidden}
+.hwptick{position:absolute;left:50%;top:0;height:36px;width:1px;background:rgba(255,255,255,.18)}
+.hwpread{margin-top:9px;font-family:var(--mono);font-size:11px;color:var(--mut);text-align:center}
+.hwpread b{color:#fff;font-weight:600}
+.projg{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.pcell{background:#1B2025;border:1px solid var(--line2);border-radius:11px;padding:10px 4px;text-align:center}
+.pcell .k{font-family:var(--mono);font-size:8px;color:var(--mut2);letter-spacing:.06em}
+.pcell .v{font-family:var(--disp);font-weight:800;font-size:18px;color:#fff;margin-top:4px}
+.pcell .v.g{color:var(--green)}
+.pricer{display:flex;align-items:center;gap:9px;padding:10px 0;border-top:1px solid rgba(255,255,255,.05)}
+.pricer:first-of-type{border-top:none;padding-top:2px}
+.pricer:last-of-type{padding-bottom:2px}
+.pricer .mk{font-family:var(--mono);font-size:11px;color:var(--mut);width:78px;flex:0 0 auto}
+.pricer .ocs{display:flex;gap:6px;flex:1;flex-wrap:wrap}
+.pricer .oc{font-family:var(--mono);font-size:11px;background:#1B2025;border:1px solid var(--line2);border-radius:9px;padding:5px 9px;white-space:nowrap}
+.pricer .oc .who{color:var(--mut);margin-right:5px}
+.pricer .oc b{color:#fff;font-weight:700}
+.epill{font-family:var(--disp);font-weight:800;font-size:12px;border-radius:999px;padding:4px 10px;flex:0 0 auto}
+.epill.pos{color:var(--green);background:rgba(63,203,145,.1);border:1px solid rgba(63,203,145,.25)}
+.epill.neu{color:var(--mut2);background:#1B2025;border:1px solid var(--line2)}
+.duel{display:grid;grid-template-columns:1fr 30px 1fr;gap:4px;align-items:start}
+.dpit{text-align:center}
+.dface{width:52px;height:52px;border-radius:50%;border:1px solid var(--line2);margin:0 auto 8px;display:flex;align-items:center;justify-content:center;overflow:hidden;font-family:var(--disp);font-weight:800;font-size:14px;color:#fff}
+.dface img{width:100%;height:100%;object-fit:cover;border-radius:50%}
+.dnm{font-family:var(--ui);font-weight:700;font-size:13.5px;color:#eaf1ee;line-height:1.25}
+.dmeta{font-family:var(--mono);font-size:9px;color:var(--mut2);margin-top:3px}
+.dvs{font-family:var(--disp);font-weight:800;font-size:11px;color:var(--mut2);align-self:center;text-align:center;padding-top:22px}
+.dbig{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:10px}
+.db{background:#1B2025;border:1px solid var(--line2);border-radius:9px;padding:7px 3px}
+.db .k{font-family:var(--mono);font-size:7.5px;color:var(--mut2);letter-spacing:.06em}
+.db .v{font-family:var(--disp);font-weight:800;font-size:16px;color:#cfe2f5;margin-top:2px}
+.db .v.good{color:var(--green)}
+.db .v.bad{color:var(--neg)}
+.morestats{margin-top:12px;text-align:center}
+.morebtn{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10.5px;font-weight:600;color:var(--mut);background:#1B2025;border:1px solid var(--line2);border-radius:999px;padding:7px 15px;cursor:pointer;user-select:none;-webkit-tap-highlight-color:transparent}
+.morebtn .cv{color:var(--gold);display:inline-block;transition:transform .2s}
+.morebtn.open .cv{transform:rotate(90deg)}
+.fsgwrap{margin-top:11px;padding-top:11px;border-top:1px solid var(--line)}
+.fsg+.fsg{margin-top:11px}
+.fsgab{font-family:var(--disp);font-weight:800;font-size:12px;letter-spacing:.4px;color:var(--gold)}
+.whycard{margin-top:11px;background:linear-gradient(180deg,rgba(201,168,106,.08),rgba(201,168,106,.03));border:1px solid rgba(201,168,106,.3);border-radius:14px;padding:14px}
+.whycard .l{font-family:var(--disp);font-weight:800;font-size:11px;letter-spacing:.7px;color:var(--gold);margin-bottom:6px}
+.whycard .t{font-size:12.5px;color:#e2e8ec;line-height:1.55;font-family:var(--ui)}
 `;
