@@ -819,6 +819,7 @@ function MarketPulse({alerts,movers,rolled}){ const [idx,setIdx]=useState(0);con
 // Market Movers — its own collapsible section (dropdown). Collapsed by default.
 function MarketMovers({movers,navigate}){
   const mv=(movers||[]).filter(d=>d.delta!=null&&d.delta!==0);
+  const [showKey,setShowKey]=useState(false);/* WZ-MVNOTE-COLLAPSE-2026-07-01 */
   if(!mv.length)return null;
   return (<div className="mvsec">
     <div className="mvhd">
@@ -831,11 +832,16 @@ function MarketMovers({movers,navigate}){
         <span className="mvtxt"><span className="mvp">{d.p}</span>{d.g&&<span className="mvg">{d.g}</span>}</span>
         <span className={"mvd "+(up?"up":"dn")}>{up?"\u2191":"\u2193"} {up?"+":"\u2212"}{Math.abs(d.delta)}{"\u00a2"}</span>
       </div>);})}</div>
-    {/* WZ-MVNOTE-TRIM-2026-06-26 :: green/red mover legend shortened (removed lengthened/shortened sentences + price examples) */}
+    {/* WZ-MVNOTE-COLLAPSE-2026-07-01 :: green/red legend collapsed behind a tap-to-expand toggle (default closed) */}
     <div className="mvnote">
-      <div className="mvnr"><span className="up">{"\u2191"} +40{"\u00a2"} (green)</span> {"\u2014"} Bigger payout on that side now than at open. The market is drifting <b>away</b> from that side: fewer takers, so the book is sweetening the price.</div>
-      <div className="mvnr"><span className="dn">{"\u2193"} {"\u2212"}40{"\u00a2"} (red)</span> {"\u2014"} Money is coming in on that side: the market is moving <b>toward</b> it.</div>
-      <div className="mvnf">So green isn't automatically good and red isn't bad {"\u2014"} green = a better entry price but the market fading you; red = the market agreeing, but you've missed the best number. A 40{"\u00a2"} move either way is sizable, worth noticing.</div>
+      <button className="mvkeytoggle" onClick={()=>setShowKey(s=>!s)} aria-expanded={showKey}>
+        <span className="mvkarr">{showKey?"\u25be":"\u25b8"}</span> What do <span className="up">green</span> / <span className="dn">red</span> moves mean?
+      </button>
+      {showKey && (<div className="mvkeybody">
+        <div className="mvnr"><span className="up">{"\u2191"} +40{"\u00a2"} (green)</span> {"\u2014"} Bigger payout on that side now than at open. The market is drifting <b>away</b> from that side: fewer takers, so the book is sweetening the price.</div>
+        <div className="mvnr"><span className="dn">{"\u2193"} {"\u2212"}40{"\u00a2"} (red)</span> {"\u2014"} Money is coming in on that side: the market is moving <b>toward</b> it.</div>
+        <div className="mvnf">So green isn't automatically good and red isn't bad {"\u2014"} green = a better entry price but the market fading you; red = the market agreeing, but you've missed the best number. A 40{"\u00a2"} move either way is sizable, worth noticing.</div>
+      </div>)}
     </div>
   </div>);
 }
@@ -922,6 +928,9 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .mvchip .mvd{font-family:var(--mono);font-size:12px;font-weight:700;white-space:nowrap}
 .mvchip .mvd.up{color:var(--green)}.mvchip .mvd.dn{color:var(--red)}
 .mvnote{margin-top:16px;padding:0 2px;border:none;border-radius:0;background:none}
+.mvkeytoggle{display:flex;align-items:center;gap:7px;width:100%;background:none;border:none;padding:6px 0;cursor:pointer;font-family:var(--mono);font-size:10px;letter-spacing:.3px;color:var(--mut);text-align:left}/* WZ-MVNOTE-COLLAPSE-2026-07-01 */
+.mvkarr{color:var(--mut2);font-size:9px;width:10px;display:inline-block}
+.mvkeybody{margin-top:8px}
 .mvnr{font-family:var(--mono);font-size:9.5px;line-height:1.55;color:var(--mut2)}
 .mvnr+.mvnr{margin-top:7px}
 .mvnr b{color:var(--tx);font-weight:700}
