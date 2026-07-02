@@ -835,7 +835,9 @@ function MarketMovers({movers,navigate}){
     {/* WZ-MVNOTE-COLLAPSE-2026-07-01 :: green/red legend collapsed behind a tap-to-expand toggle (default closed) */}
     <div className="mvnote">
       <button className="mvkeytoggle" onClick={()=>setShowKey(s=>!s)} aria-expanded={showKey}>
-        <span className="mvkarr">{showKey?"\u25be":"\u25b8"}</span> What do <span className="up">green</span> / <span className="dn">red</span> moves mean?
+        <span className="mvkq">?</span>
+        <span className="lbl">What do <span className="up">green</span> / <span className="dn">red</span> moves mean?</span>
+        <span className={"mvkarr"+(showKey?" open":"")}>{"\u203a"}</span>
       </button>
       {showKey && (<div className="mvkeybody">
         <div className="mvnr"><span className="up">{"\u2191"} +40{"\u00a2"} (green)</span> {"\u2014"} Bigger payout on that side now than at open. The market is drifting <b>away</b> from that side: fewer takers, so the book is sweetening the price.</div>
@@ -928,9 +930,12 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .mvchip .mvd{font-family:var(--mono);font-size:12px;font-weight:700;white-space:nowrap}
 .mvchip .mvd.up{color:var(--green)}.mvchip .mvd.dn{color:var(--red)}
 .mvnote{margin-top:16px;padding:0 2px;border:none;border-radius:0;background:none}
-.mvkeytoggle{display:flex;align-items:center;gap:7px;width:100%;background:none;border:none;padding:6px 0;cursor:pointer;font-family:var(--mono);font-size:10px;letter-spacing:.3px;color:var(--mut);text-align:left}/* WZ-MVNOTE-COLLAPSE-2026-07-01 */
-.mvkarr{color:var(--mut2);font-size:9px;width:10px;display:inline-block}
-.mvkeybody{margin-top:8px}
+.mvkeytoggle{display:flex;align-items:center;gap:9px;width:100%;background:var(--panel2);border:1px solid var(--line2);border-radius:9px;padding:10px 13px;cursor:pointer;font-family:var(--mono);font-size:10.5px;letter-spacing:.3px;color:var(--mut)}/* WZ-MVNOTE-COLLAPSE-2026-07-01 */
+.mvkeytoggle .lbl{flex:1;text-align:left}
+.mvkq{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;border:1px solid var(--gold);color:var(--gold);font-size:9px;font-weight:700;flex:0 0 auto}
+.mvkarr{color:var(--gold);font-size:12px;font-weight:700;flex:0 0 auto;transition:transform .15s}
+.mvkarr.open{transform:rotate(90deg)}
+.mvkeybody{margin-top:10px;padding:0 2px}
 .mvnr{font-family:var(--mono);font-size:9.5px;line-height:1.55;color:var(--mut2)}
 .mvnr+.mvnr{margin-top:7px}
 .mvnr b{color:var(--tx);font-weight:700}
