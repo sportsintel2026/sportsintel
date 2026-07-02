@@ -21,7 +21,7 @@ const {
   getGameHPUmpire,
 } = require("./mlbStatsApi");
 const { getUmpireByName } = require("./umpireStore");
-const { winProbHaircut, calibrateWinProb, calibrateCoverProb } = require("./winProbCalibration"); // WZ-CAL-LIVE-2026-07-02
+const { winProbHaircut, calibrateWinProb, calibrateCoverProb, calibrateHitsProb } = require("./winProbCalibration"); // WZ-CAL-LIVE-2026-07-02 + WZ-HITS-CAL-2026-07-02
 const { americanToImpliedProb } = require("./oddsApi");
 const { getBatterExpectedStats, getBatterBarrels, getPitcherWhiffStats } = require("./savantApi");
 const { getWeatherForVenue } = require("./weatherApi");
@@ -937,6 +937,16 @@ function hitsOverProb(batterStats, oppPitcherStats, line, opts = {}) {
   const m = opts.marketFairOver;
   let finalP = pOver;
   if (m != null && m > 0 && m < 1) finalP = HITS_MARKET_WEIGHT * m + (1 - HITS_MARKET_WEIGHT) * pOver;
+  // WZ-HITS-CAL-2026-07-02 :: optional trace side-channel — when the caller passes
+  // opts._trace = {}, the operative components are written into it (no behavior
+  // change). The hits shadow logs these EXACT numbers so the bias decomposes into
+  // the at-bats assumption vs the per-AB rate at the source, never a re-derivation.
+  if (opts._trace && typeof opts._trace === "object") {
+    opts._trace.perAB = round3(perAB);
+    opts._trace.expAB = round2(expAB);
+    opts._trace.pOverRaw = round3(pOver);
+    opts._trace.finalP = round3(Math.max(0.02, Math.min(0.98, finalP)));
+  }
   return round3(Math.max(0.02, Math.min(0.98, finalP)));
 }
 
@@ -1875,9 +1885,20 @@ const MAX_HITS_GAMES = 20; // process all games we have odds for. Coverage/cost 
 
 // Batter hits prop edges. Two-sided market — de-vig and take the better side.
 // Mirrors calculateHRPropEdges (per batter) with the strikeout build's de-vig.
-async function calculateHitsPropEdges(games, hitsOddsByEvent) {
+async function calculateHitsPropEdges(games, hitsOddsByEvent, shadowSink) {
+  // WZ-HITS-CAL-2026-07-02 :: two changes, one pass.
+  // (1) CALIBRATION: the raw (market-anchored) over prob gets the fitted haircut
+  //     from winProbCalibration before pricing — recent buckets showed claims of
+  //     ~0.62 cashing 0.43 (-9% ROI board-wide), so the board now prices the
+  //     calibrated claim and HITS_MIN_EDGE prunes what no longer clears. Expect a
+  //     thin board until the feature fix lands.
+  // (2) SHADOW: when the caller passes a shadowSink array, EVERY evaluated batter
+  //     (pre-filter) is pushed with the operative projection components (RAW prob,
+  //     perAB, expAB, batting order) so the bias decomposes vs graded actuals —
+  //     same single-pass, zero extra fetches.
   const targetGames = games.slice(0, MAX_HITS_GAMES);
   const out = [];
+  const shadowSeen = new Set();
   // Savant xBA map once (cached); null-safe — model falls back to season AVG if absent.
   let savantMap = null;
   try { savantMap = await getBatterExpectedStats(); } catch (e) { savantMap = null; }
@@ -1923,13 +1944,29 @@ async function calculateHitsPropEdges(games, hitsOddsByEvent) {
       const pitcherBbPct = (whiffMap && oppId) ? (whiffMap.get(Number(oppId))?.bbPct ?? null) : null;
       const batterKPct = (batterStats && batterStats.strikeouts != null && batterStats.plateAppearances > 0)
         ? batterStats.strikeouts / batterStats.plateAppearances : null;
-      const overProb = hitsOverProb(batterStats, oppPitcherStats, propOdds.line, {
+      const trace = {};
+      const overProbRaw = hitsOverProb(batterStats, oppPitcherStats, propOdds.line, {
         xBA: savantXBA, expAB, marketFairOver: fairOver, sampleAB: batterStats?.atBats ?? null,
         recentAvg: recent15?.avg ?? null, recentAB: recent15?.atBats ?? null,
         batterSplits, pitcherHand, pitcherBbPct, batterKPct,
         parkFactor: game.parkHRFactor ?? null, weather: hitsWeather,
+        _trace: trace,
       });
-      if (overProb == null) continue;
+      if (overProbRaw == null) continue;
+      // shadow row: RAW prob + operative components, every batter, pre-filter
+      if (Array.isArray(shadowSink) && !shadowSeen.has(batter.id) && propOdds.line != null) {
+        shadowSeen.add(batter.id);
+        shadowSink.push({
+          gameId: game.id, playerId: batter.id, player: propOdds.player,
+          game: `${game.awayAbbr} @ ${game.homeAbbr}`, line: propOdds.line,
+          overProbRaw, perAB: trace.perAB ?? null, expAB: trace.expAB ?? null,
+          pOverUnanchored: trace.pOverRaw ?? null,
+          battingOrder: spotIdx >= 0 ? spotIdx + 1 : null,
+          seasonAvg: batterStats?.avg ?? null, xBA: savantXBA ?? null,
+        });
+      }
+      // calibrated price is the live claim from here on
+      const overProb = round3(calibrateHitsProb(overProbRaw));
       const underProb = round3(1 - overProb);
       const edgeOver = sanitizeEdge(fairOver != null ? round3(overProb - fairOver) : calculateEdge(overProb, propOdds.overOdds));
       const edgeUnder = sanitizeEdge(fairOver != null ? round3(underProb - (1 - fairOver)) : calculateEdge(underProb, propOdds.underOdds));
