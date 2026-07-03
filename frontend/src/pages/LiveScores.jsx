@@ -454,19 +454,45 @@ function ScoresTerminal({ activeLeague, meta, goSport, navigate, filter, setFilt
               </div>
               {fbBoard===null && <div className="empty">Running the model…</div>}
               {fbBoard!==null && rows.length===0 && <div className="empty">No {ebMkt==="ml"?"moneyline":ebMkt} edges on this slate — the model agrees with the market here.</div>}
-              {rows.length>0 && <>
-                <div className="xhead"><span className="xm">MATCHUP</span><span className="xpick">MODEL PICK</span><span className="xnum">MODEL %</span><span className="xnum">BEST BOOK</span><span className="xedge">EDGE</span><span className="xst">STATUS</span></div>
-                {rows.slice(0,14).map((e,i)=>(
+              {rows.length>0 && (()=>{ /* WZ-EB-PARITY-2026-07-02 :: dashboard column parity */
+                // team abbr + logo lookup from the scoreboard feed (no hardcoded maps)
+                const pool=[...live,...upcoming,...fin].flatMap(g=>[g.away,g.home]).filter(Boolean);
+                const nrm=(x)=>String(x||"").toLowerCase().replace(/[^a-z0-9 ]/g,"").trim();
+                const metaFor=(full)=>{ const f=nrm(full); if(!f) return null;
+                  return pool.find(t=>{ const n=nrm(t.name), a=nrm(t.abbrev); return (n&&(f.includes(n)||n.includes(f)))||(a&&f.split(" ").includes(a)); })||null; };
+                const abbrOf=(full,m)=> m?.abbrev || String(full||"").split(" ").pop().slice(0,12);
+                const mkKey=ebMkt==="totals"?"total":ebMkt;
+                const bpKey=ebMkt==="ml"?"ml":ebMkt==="spread"?"spread":"total";
+                const bookFor=(e)=>{ const bp=(fbBoard.marketByGame||{})[e.gameId]?.bestPrices?.[bpKey]; if(!bp) return null;
+                  return e.side==="over"?bp.overBook : e.side==="under"?bp.underBook : e.side==="home"?bp.homeBook : bp.awayBook; };
+                const moveFor=(e)=>{ const mv=(fbBoard.marketMovers||[]).find(m=>m.matchup===e.matchup&&m.market===mkKey&&m.side===e.side); return mv||null; };
+                const pickLabel=(e)=>{ const t=teamsFor(e); const ab=e.side==="over"||e.side==="under"?String(e.side).toUpperCase():abbrOf(e.side==="home"?t.home:t.away, e.side==="home"?t.hm:t.am);
+                  if(ebMkt==="ml") return ab+" ML";
+                  if(ebMkt==="spread") return ab+(e.line!=null?` ${e.line>0?"+"+e.line:e.line}`:"");
+                  return ab+(e.line!=null?` ${e.line}`:""); };
+                const teamsFor=(e)=>{ const p=String(e.matchup||"").split(" @ "); const away=p[0]||"", home=p[1]||"";
+                  return { away, home, am:metaFor(away), hm:metaFor(home) }; };
+                const Spark=({mv})=>{ if(!mv) return <span className="xdash">—</span>;
+                  const up=mv.dir==="up";
+                  return <svg className="xspark" viewBox="0 0 64 18" preserveAspectRatio="none"><polyline points={up?"2,14 30,14 34,4 62,4":"2,4 30,4 34,14 62,14"} fill="none" stroke={up?"var(--up)":"var(--dn)"} strokeWidth="1.6"/></svg>; };
+                return (<>
+                <div className="xhead"><span>MATCHUP</span><span>MODEL PICK</span><span>MODEL %</span><span>BEST BOOK</span><span>LINE MOVE</span><span>EDGE</span><span className="xr">CONVICTION</span></div>
+                {rows.slice(0,14).map((e,i)=>{ const t=teamsFor(e); const bk=bookFor(e); const mv=moveFor(e);
+                  return (
                   <div key={i} className="xrow">
-                    <span className="xm">{e.matchup}</span>
-                    <span className="xpick"><i className="pk">PICK</i>{e.teamAbbr||String(e.side||"").toUpperCase()}{e.line!=null?` ${e.line>0?"+"+e.line:e.line}`:""}</span>
-                    <span className="xnum">{e.modelProb!=null?Math.round(e.modelProb*100)+"%":"—"}</span>
-                    <span className="xnum">{fmtAm(e.odds)}</span>
+                    <span className="xm">
+                      <span className="xlg">{t.am?.logo?<img src={t.am.logo} alt=""/>:<i>{abbrOf(t.away,t.am).slice(0,3)}</i>}{t.hm?.logo?<img src={t.hm.logo} alt=""/>:<i>{abbrOf(t.home,t.hm).slice(0,3)}</i>}</span>
+                      <b>{abbrOf(t.away,t.am)}</b><em>@</em><b>{abbrOf(t.home,t.hm)}</b>
+                    </span>
+                    <span className="xpick"><i className="pk">PICK</i>{pickLabel(e)}</span>
+                    <span className="xnum teal">{e.modelProb!=null?Math.round(e.modelProb*100)+"%":"—"}</span>
+                    <span className="xbook"><b>{fmtAm(e.odds)}</b>{bk&&<span>{bk}</span>}</span>
+                    <span className="xmove"><Spark mv={mv}/></span>
                     <span className="xedge"><b className={(e.edge??0)>=0?"up":"dn"}>{(e.edge>=0?"+":"")+(e.edge??0).toFixed(1)}%</b><span className="bar"><span style={{width:Math.min(100,Math.abs(e.edge??0)/maxE*100)+"%"}}/></span></span>
-                    <span className="xst"><i className="prov">PROVISIONAL</i></span>
+                    <span className="xst xr"><i className="prov">PROVISIONAL</i></span>
                   </div>
-                ))}
-              </>}
+                );})}
+                </>); })()}
             </div>
             </>); })()}
 
@@ -702,7 +728,7 @@ const TCSS2 = `
 .wpterm .idx .v.lockv{font-size:19px;letter-spacing:.02em}
 .wpterm .idx .chg{font-family:var(--mono);font-size:11px;font-weight:600;margin-top:3px;color:var(--mut)}
 .wpterm .idx.teal .v{color:var(--up)}.wpterm .idx.green .v{color:var(--tx)}.wpterm .idx.amber .v{color:var(--amber)}.wpterm .idx.purple .v{color:var(--tx)}
-.wpterm .xhead,.wpterm .xrow{display:grid;grid-template-columns:minmax(200px,1.5fr) 170px 90px 100px minmax(140px,1fr) 110px;gap:12px;align-items:center;padding:10px 15px}
+.wpterm .xhead,.wpterm .xrow{display:grid;grid-template-columns:minmax(170px,1.25fr) minmax(120px,.9fr) 76px 100px 92px minmax(130px,1fr) 108px;gap:14px;align-items:center;padding:13px 16px}
 .wpterm .xhead{font-family:var(--mono);font-size:9px;letter-spacing:.1em;color:var(--mut2);border-bottom:1px solid var(--line);padding-bottom:8px}
 .wpterm .xrow{border-top:1px solid rgba(255,255,255,.05)}
 .wpterm .xrow:hover{background:rgba(255,255,255,.02)}
@@ -724,6 +750,20 @@ const TCSS2 = `
 .wpterm .mvb b{display:block;font-family:var(--mono);font-size:11px;color:#e6ecef}
 .wpterm .mvm{display:block;font-family:var(--mono);font-size:9px;color:var(--mut2);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .wpterm .mvo{font-family:var(--mono);font-size:10.5px;color:var(--mut);white-space:nowrap}
+.wpterm .xhead .xr,.wpterm .xrow .xr{text-align:right;justify-self:end}
+.wpterm .xm{display:flex;align-items:center;gap:8px;font-family:var(--disp);font-weight:800;font-size:15px;color:#eef3f5;white-space:nowrap;overflow:hidden}
+.wpterm .xm em{font-style:normal;color:var(--mut2);font-size:12px;font-weight:600}
+.wpterm .xlg{display:flex;align-items:center;flex:0 0 auto}
+.wpterm .xlg img,.wpterm .xlg i{width:21px;height:21px;border-radius:50%;object-fit:contain;background:#1B2025;border:1px solid var(--line2)}
+.wpterm .xlg i{font-style:normal;display:inline-flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:6.5px;color:var(--mut)}
+.wpterm .xlg img+img,.wpterm .xlg img+i,.wpterm .xlg i+img,.wpterm .xlg i+i{margin-left:-6px}
+.wpterm .xnum.teal{color:var(--up)}
+.wpterm .xbook{display:flex;flex-direction:column;gap:2px;font-family:var(--mono)}
+.wpterm .xbook b{font-size:12.5px;color:#e6ecef;font-weight:600}
+.wpterm .xbook span{font-size:8.5px;color:var(--mut2)}
+.wpterm .xmove{display:flex;align-items:center}
+.wpterm .xspark{width:64px;height:18px}
+.wpterm .xdash{color:var(--mut2);font-family:var(--mono);font-size:11px}
 `;
 
 function Section({ title, color, count, defaultOpen, liveDot, children }) {
