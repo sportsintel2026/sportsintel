@@ -184,7 +184,7 @@ async function getMLBPinnacleClose({ forceFresh = false } = {}) {
   if (!forceFresh && isCacheValid(cached)) return cached.data;
   try {
     const data = await oddsGet("/sports/baseball_mlb/odds", {
-      regions: "eu", markets: "h2h,totals", oddsFormat: "american", dateFormat: "iso",
+      regions: "eu", markets: "h2h,totals,spreads", oddsFormat: "american", dateFormat: "iso", // WZ-PINN-SPREADS-2026-07-03 :: run-line Pinnacle CLV was structurally unfillable without spreads
     });
     const events = [];
     for (const g of (data || [])) {
@@ -212,7 +212,20 @@ async function getMLBPinnacleClose({ forceFresh = false } = {}) {
           if (un && plausibleTotalOdds(un.price)) totals.under = un.price;
         }
       }
-      events.push({ awayTeam: away, homeTeam: home, commenceTime: g.commence_time, h2h, totals });
+      // WZ-PINN-SPREADS-2026-07-03 :: parse the ±1.5 run line so pinnacle_clv can fill
+      // for run_line picks (closingOddsForPick reads ev.spreads.{away,home,awayLine,homeLine}).
+      // Pinnacle posts alternate lines; only the standard ±1.5 pair is the run line.
+      const sprM = (pin.markets || []).find(m => m.key === "spreads");
+      const spreads = { away: null, home: null, awayLine: null, homeLine: null };
+      if (sprM) {
+        const ao = (sprM.outcomes || []).find(o => o.name === away && Math.abs(o.point ?? 0) === 1.5);
+        const ho = (sprM.outcomes || []).find(o => o.name === home && Math.abs(o.point ?? 0) === 1.5);
+        if (ao && ho && plausibleMlOdds(ao.price) && plausibleMlOdds(ho.price)) {
+          spreads.away = ao.price; spreads.awayLine = ao.point;
+          spreads.home = ho.price; spreads.homeLine = ho.point;
+        }
+      }
+      events.push({ awayTeam: away, homeTeam: home, commenceTime: g.commence_time, h2h, totals, spreads });
     }
     cache.set(cacheKey, { data: events, fetchedAt: Date.now() });
     return events;
