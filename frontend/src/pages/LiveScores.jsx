@@ -56,16 +56,7 @@ export default function LiveScoresPage({ league = "mlb" }) {
   const [fbBoard,setFbBoard]=useState(null);
   useEffect(()=>{ let dead=false; setFbBoard(null);
     if(!isDesktop || (activeLeague!=="nfl" && activeLeague!=="cfb")) return;
-    (activeLeague==="cfb"?edgesApi.getCFB():edgesApi.getNFL()).then(d=>{ if(!dead) setFbBoard(d?.edges||[]); }).catch(()=>{ if(!dead) setFbBoard([]); });
-    return ()=>{ dead=true; };
-  },[activeLeague,isDesktop]);
-
-  // WZ-SPORT-TERMINAL-2026-07-02 :: MLB board payload for the EDGES/ODDS sections
-  // (same cached endpoint the dashboard reads; desktop + MLB only).
-  const [mlbBoard,setMlbBoard]=useState(null);
-  useEffect(()=>{ let dead=false; setMlbBoard(null);
-    if(!isDesktop || activeLeague!=="mlb") return;
-    edgesApi.getMLB().then(d=>{ if(!dead) setMlbBoard(d||{}); }).catch(()=>{ if(!dead) setMlbBoard({}); });
+    (activeLeague==="cfb"?edgesApi.getCFB():edgesApi.getNFL()).then(d=>{ if(!dead) setFbBoard(d||{}); }).catch(()=>{ if(!dead) setFbBoard({}); });
     return ()=>{ dead=true; };
   },[activeLeague,isDesktop]);
 
@@ -128,7 +119,7 @@ export default function LiveScoresPage({ league = "mlb" }) {
       live={live} upcoming={upcoming} final={final} total={total} off={off}
       showLive={showLive} showPre={showPre} showFin={showFin} nothing={nothing}
       loading={loading} error={error} retry={()=>load(true)} refreshedAt={refreshedAt}
-      plan={plan} news={news} fbOdds={fbOdds} fbBoard={fbBoard} mlbBoard={mlbBoard}/>
+      plan={plan} news={news} fbOdds={fbOdds} fbBoard={fbBoard}/>
   );
 
   return (
@@ -343,11 +334,13 @@ const NEWS_CHIP = (it) => it.scratch ? ["SCR","c-red"] : it.status==="injury" ? 
 
 function ScoresTerminal({ activeLeague, meta, goSport, navigate, filter, setFilter, FILTS,
   live, upcoming, final: fin, total, off, showLive, showPre, showFin, nothing,
-  loading, error, retry, refreshedAt, plan, news, fbOdds, fbBoard, mlbBoard }) {
+  loading, error, retry, refreshedAt, plan, news, fbOdds, fbBoard }) {
 
   // WZ-SPORT-TERMINAL-2026-07-02 :: sport-first sections, mirroring the mobile nav.
-  const [tab,setTab]=useState("games");
-  useEffect(()=>{ setTab("games"); },[activeLeague]);
+  const [tab,setTab]=useState("edges");
+  useEffect(()=>{ setTab("edges"); },[activeLeague]); // WZ-DASH-PARITY-2026-07-02
+  const [ebMkt,setEbMkt]=useState("ml");
+  useEffect(()=>{ setEbMkt("ml"); },[activeLeague]);
   // WZ-ODDS-BOARD-2026-07-02 :: football odds are grouped into betting weeks
   // (Thu–Mon window; a 36h shift maps every game to its week's Monday anchor).
   const [weekIdx,setWeekIdx]=useState(0);
@@ -425,7 +418,7 @@ function ScoresTerminal({ activeLeague, meta, goSport, navigate, filter, setFilt
             <div><h1>{meta.title}</h1><div className="sub">{total} games · {activeLeague.toUpperCase()} · live scores {refreshedAt?`\u00b7 updated ${refreshedAt.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"})}`:""}</div></div>
             <div className="sportbar">
               {[["MLB","mlb"],["NBA","nba"],["NFL","nfl"],["NHL","nhl"],["CFB","cfb"]].map(([lb,k])=>(
-                <div key={k} className={"sp"+(activeLeague===k?" on":"")} onClick={()=>goSport(k)}><span className="d"/>{lb}</div>
+                <div key={k} className={"sp"+(activeLeague===k?" on":"")} onClick={()=>(k==="mlb"||k==="nba")?navigate(`/home?sport=${k}`):goSport(k)}><span className="d"/>{lb}</div>
               ))}
             </div>
           </div>
@@ -436,69 +429,46 @@ function ScoresTerminal({ activeLeague, meta, goSport, navigate, filter, setFilt
             ))}
           </div>
 
-          {tab==="edges" && (activeLeague==="nfl"||activeLeague==="cfb") && (
-            <div className="panel">{/* WZ-SCORES-EDGEBOARD-2026-07-02 */}
-              <div className="phead"><div className="t">Edge Board</div>
-                <span className="trainpill">MODEL IN TRAINING</span>
-                <div className="right">{activeLeague==="nfl"?"2025-seeded ratings · calibrates in preseason":"SoS-weighted seeds · calibrates when games start"}</div>
-              </div>
-              {fbBoard===null && <div className="empty">Running the model…</div>}
-              {Array.isArray(fbBoard) && fbBoard.length===0 && <div className="empty">No model edges on this slate yet — lines are still settling.</div>}
-              {Array.isArray(fbBoard) && fbBoard.length>0 && <div className="eblist">
-                {fbBoard.slice(0,12).map((e,i)=>(
-                  <div key={i} className="ebrow">
-                    <span className="ebm">{e.matchup}</span>
-                    <span className="ebmk">{String(e.market||"").toUpperCase()}</span>
-                    <span className="ebp">{e.pick||"—"}</span>
-                    <span className={"ebe "+((e.edge??0)>=0?"up":"dn")}>{(e.edge>=0?"+":"")+((e.edge??0)*100).toFixed(1)}%</span>
-                    {e.dataQuality && <span className="ebq">{String(e.dataQuality).toUpperCase()}</span>}
-                  </div>
-                ))}
-              </div>}
+          {tab==="edges" && (()=>{ /* WZ-DASH-PARITY-2026-07-02 :: dashboard-style board */
+            const isFb=(activeLeague==="nfl"||activeLeague==="cfb");
+            if(!isFb) return (
+              <div className="panel"><div className="phead"><div className="t">Edge Board</div></div>
+                <div className="empty">The NHL model arrives with the season — edges will post here from day one.</div></div>
+            );
+            const B=fbBoard||{};
+            const rows=(ebMkt==="ml"?B.moneylineEdges:ebMkt==="spread"?B.spreadEdges:B.totalsEdges)||[];
+            const priced=(()=>{ const o=Array.isArray(fbOdds)?fbOdds:[]; return {
+              ml:o.filter(e=>e.h2h?.away!=null).length, spr:o.filter(e=>e.spreads?.awayLine!=null).length, tot:o.filter(e=>e.totals?.line!=null).length, n:o.length }; })();
+            const maxE=Math.max(1,...rows.map(r=>Math.abs(r.edge??0)));
+            return (<>
+            <div className="indices">
+              <div className="idx teal"><div className="k">Games Priced</div><div className="v num">{priced.n||"—"}</div><div className="chg">{activeLeague.toUpperCase()} lookahead slate</div></div>
+              <div className="idx green"><div className="k">Markets Live</div><div className="v num">{priced.ml+priced.spr+priced.tot}</div><div className="chg">ML {priced.ml} · SPR {priced.spr} · O/U {priced.tot}</div></div>
+              <div className="idx purple"><div className="k">Model Edges</div><div className="v num">{Array.isArray(B.edges)?B.edges.length:"—"}</div><div className="chg">across all markets</div></div>
+              <div className="idx amber"><div className="k">Status</div><div className="v lockv">IN TRAINING</div><div className="chg">{activeLeague==="nfl"?"calibrates in preseason":"calibrates when games start"}</div></div>
             </div>
-          )}
-
-          {tab==="games" && <div className="panel">
-            <div className="phead"><div className="t">Games</div>
-              <div className="seg">{FILTS.map(f=><b key={f} className={f===filter?"on":""} onClick={()=>setFilter(f)}>{f}</b>)}</div>
-              <div className="right"><span className="ldot"/>auto-refreshes every 30s</div>
-            </div>
-            {loading && <div className="empty">Loading today's games…</div>}
-            {!loading && error && <div className="empty" style={{cursor:"pointer"}} onClick={retry}>Couldn't load scores — click to retry</div>}
-            {!loading && !error && total===0 && <div className="empty">{off || `No ${activeLeague.toUpperCase()} games on the slate today.`}</div>}
-            {!loading && !error && total>0 && <>
-              {showLive && <Sec title="LIVE NOW" color="var(--dn)" dot items={live}/>}
-              {showPre && <Sec title="UPCOMING" color="var(--mut)" items={upcoming}/>}
-              {showFin && <Sec title="FINAL" color="var(--up)" items={fin}/>}
-              {nothing && <div className="empty">No {filter.toLowerCase()} games right now.</div>}
-            </>}
-          </div>}
-
-          {tab==="edges" && activeLeague==="mlb" && (
             <div className="panel">
               <div className="phead"><div className="t">Edge Board</div>
-                <div className="right">top model edges · full board on the Dashboard</div>
-                <span className="dashlink" onClick={()=>navigate("/home")}>Open Dashboard ›</span>
+                <div className="seg">{[["ml","Moneyline"],["spread","Spread"],["totals","Totals"]].map(([m,lb])=>(<b key={m} className={ebMkt===m?"on":""} onClick={()=>setEbMkt(m)}>{lb}</b>))}</div>
+                <div className="right">provisional — 2025-seeded ratings, ungraded</div>
               </div>
-              {mlbBoard===null && <div className="empty">Loading the board…</div>}
-              {mlbBoard && Array.isArray(mlbBoard.moneylineEdges) && (()=>{ 
-                const rows=[...(mlbBoard.moneylineEdges||[]).map(e=>({...e,_mk:"ML"})),...(mlbBoard.totalsEdges||[]).map(e=>({...e,_mk:"TOTAL"})),...(mlbBoard.runLineEdges||[]).map(e=>({...e,_mk:"RUN LINE"}))].filter(e=>(e.edge??0)>0).sort((a,b)=>(b.edge??0)-(a.edge??0)).slice(0,14);
-                return rows.length===0 ? <div className="empty">No positive edges on the board right now.</div> : <div className="eblist">
-                  {rows.map((e,i)=>(<div key={i} className="ebrow">
-                    <span className="ebm">{e.matchup}</span>
-                    <span className="ebmk">{e._mk}</span>
-                    <span className="ebp">{e.team||e.teamAbbr||e.side||"—"} {e.line!=null?(e.line>0?"+"+e.line:e.line):""}</span>
-                    <span className="ebp" style={{maxWidth:70}}>{fmtAm(e.odds)}</span>
-                    <span className={"ebe "+((e.edge??0)>=0?"up":"dn")}>{(e.edge>=0?"+":"")+((e.edge??0)*100).toFixed(1)}%</span>
-                    {e.conviction && <span className="ebq">{e.conviction}</span>}
-                  </div>))}
-                </div>; })()}
+              {fbBoard===null && <div className="empty">Running the model…</div>}
+              {fbBoard!==null && rows.length===0 && <div className="empty">No {ebMkt==="ml"?"moneyline":ebMkt} edges on this slate — the model agrees with the market here.</div>}
+              {rows.length>0 && <>
+                <div className="xhead"><span className="xm">MATCHUP</span><span className="xpick">MODEL PICK</span><span className="xnum">MODEL %</span><span className="xnum">BEST BOOK</span><span className="xedge">EDGE</span><span className="xst">STATUS</span></div>
+                {rows.slice(0,14).map((e,i)=>(
+                  <div key={i} className="xrow">
+                    <span className="xm">{e.matchup}</span>
+                    <span className="xpick"><i className="pk">PICK</i>{e.teamAbbr||String(e.side||"").toUpperCase()}{e.line!=null?` ${e.line>0?"+"+e.line:e.line}`:""}</span>
+                    <span className="xnum">{e.modelProb!=null?Math.round(e.modelProb*100)+"%":"—"}</span>
+                    <span className="xnum">{fmtAm(e.odds)}</span>
+                    <span className="xedge"><b className={(e.edge??0)>=0?"up":"dn"}>{(e.edge>=0?"+":"")+(e.edge??0).toFixed(1)}%</b><span className="bar"><span style={{width:Math.min(100,Math.abs(e.edge??0)/maxE*100)+"%"}}/></span></span>
+                    <span className="xst"><i className="prov">PROVISIONAL</i></span>
+                  </div>
+                ))}
+              </>}
             </div>
-          )}
-          {tab==="edges" && activeLeague==="nhl" && (
-            <div className="panel"><div className="phead"><div className="t">Edge Board</div></div>
-              <div className="empty">The NHL model arrives with the season — edges will post here.</div></div>
-          )}
+            </>); })()}
 
           {tab==="odds" && (()=>{ /* WZ-ODDS-BOARD-2026-07-02 :: real odds board */
             const fmtDay=(iso)=>{ const d=new Date(iso); return d.toLocaleDateString("en-US",{weekday:"short",month:"numeric",day:"numeric",timeZone:"America/New_York"}); };
@@ -541,23 +511,6 @@ function ScoresTerminal({ activeLeague, meta, goSport, navigate, filter, setFilt
                   <div className="oblist">{cur.map(Row)}</div>
                 </>}
               </>}
-              {activeLeague==="mlb" && <>
-                {mlbBoard===null && <div className="empty">Loading odds…</div>}
-                {mlbBoard && Array.isArray(mlbBoard.games) && (mlbBoard.games.length===0
-                  ? <div className="empty">No MLB games on the board right now.</div>
-                  : <>
-                  <div className="obhead"><span className="obm">MATCHUP</span><span className="obk">FIRST PITCH</span><span className="obcell">MONEYLINE</span><span className="obcell">RUN LINE</span><span className="obcell">TOTAL</span></div>
-                  <div className="oblist">{mlbBoard.games.map((g,i)=>(
-                    <div key={i} className="obrow">
-                      <span className="obm"><b>{g.away||g.awayAbbr}</b><b className="h">@ {g.home||g.homeAbbr}</b></span>
-                      <span className="obk">{g.time||"—"}</span>
-                      <Cell top={<>{fmtAm(g.moneyline?.awayOdds)} {bk(g.moneyline?.awayBook)}</>} bot={<>{fmtAm(g.moneyline?.homeOdds)} {bk(g.moneyline?.homeBook)}</>}/>
-                      <Cell top={<>{fmtLine(g.runLine?.awayLine)} <em>{fmtAm(g.runLine?.awayOdds)}</em></>} bot={<>{fmtLine(g.runLine?.homeLine)} <em>{fmtAm(g.runLine?.homeOdds)}</em></>}/>
-                      <Cell top={<>O {g.totals?.line??"—"} <em>{fmtAm(g.totals?.overOdds)}</em></>} bot={<>U {g.totals?.line??"—"} <em>{fmtAm(g.totals?.underOdds)}</em></>}/>
-                    </div>
-                  ))}</div>
-                  </>)}
-              </>}
               {activeLeague==="nhl" && <div className="empty">NHL odds arrive with the NHL model.</div>}
               {activeLeague==="nba" && <div className="empty">NBA odds live on the NBA board.</div>}
             </div>
@@ -590,6 +543,46 @@ function ScoresTerminal({ activeLeague, meta, goSport, navigate, filter, setFilt
             </div>
           )}
         </div>
+
+        <div className="rail">{/* WZ-DASH-PARITY-2026-07-02 :: dashboard-style rail */}
+          <div className="panel">
+            <div className="phead"><div className="t">Live</div><div className="right">{live.length>0?<><span className="ldot"/>{live.length} now</>:"today"}</div></div>
+            {live.length===0 && upcoming.length===0 && <div className="empty">No {activeLeague.toUpperCase()} games today.</div>}
+            {[...live.slice(0,4),...upcoming.slice(0,Math.max(0,6-live.length))].map((g,i)=>(
+              <div key={i} className="lvrow">
+                <span className="lvtm">{g.away?.abbrev} @ {g.home?.abbrev}</span>
+                {g.bucket==="live"
+                  ? <span className="lvsc dn">{g.away?.score}–{g.home?.score} · {g.statusDetail||"LIVE"}</span>
+                  : <span className="lvsc">{g.statusDetail||""}</span>}
+              </div>
+            ))}
+          </div>
+          {(activeLeague==="nfl"||activeLeague==="cfb") && <>
+          <div className="panel" style={{marginTop:12}}>
+            <div className="phead"><div className="t">Market Movers</div><div className="right">open → now</div></div>
+            {(!fbBoard||!Array.isArray(fbBoard.marketMovers)||fbBoard.marketMovers.length===0)
+              ? <div className="empty">Lines barely move this far out — movers fill in as the season nears.</div>
+              : fbBoard.marketMovers.slice(0,8).map((m,i)=>(
+                <div key={i} className="mvrow">
+                  <span className={"mvd "+(m.dir==="up"?"up":"dn")}>{m.dir==="up"?"▲":"▼"}</span>
+                  <span className="mvb"><b>{String(m.side||"").toUpperCase()} {String(m.market||"").toUpperCase()}{m.line!=null?` ${m.line>0?"+"+m.line:m.line}`:""}</b><span className="mvm">{m.matchup}</span></span>
+                  <span className="mvo">{fmtAm(m.open)} → {fmtAm(m.now)}</span>
+                </div>
+              ))}
+          </div>
+          <div className="panel" style={{marginTop:12}}>
+            <div className="phead"><div className="t">Market Price</div><div className="right">best ML</div></div>
+            {!Array.isArray(fbOdds)||fbOdds.length===0
+              ? <div className="empty">Prices post closer to the season.</div>
+              : fbOdds.filter(e=>e.h2h?.away!=null).slice(0,6).map((ev,i)=>(
+                <div key={i} className="lvrow">
+                  <span className="lvtm">{ev.awayTeam.split(" ").pop()} @ {ev.homeTeam.split(" ").pop()}</span>
+                  <span className="lvsc">{fmtAm(ev.h2h.away)} / {fmtAm(ev.h2h.home)}</span>
+                </div>
+              ))}
+          </div>
+          </>}
+        </div>
       </div>
     </div>
     </div>
@@ -620,7 +613,7 @@ const TCSS2 = `
 @keyframes wppulse{0%{box-shadow:0 0 0 0 rgba(43,212,125,.5)}70%{box-shadow:0 0 0 7px rgba(43,212,125,0)}100%{box-shadow:0 0 0 0 rgba(43,212,125,0)}}
 .wpterm .clock{font-family:var(--mono);font-size:12px;color:var(--mut)}
 .wpterm .avatar{width:30px;height:30px;border-radius:8px;background:#1B2025;border:1px solid var(--line2);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;color:var(--mut);cursor:pointer}
-.wpterm .body{flex:1 0 auto;display:grid;grid-template-columns:clamp(176px,11vw,210px) minmax(0,1fr);align-items:start}
+.wpterm .body{flex:1 0 auto;display:grid;grid-template-columns:clamp(176px,11vw,210px) minmax(0,1fr) clamp(270px,20vw,340px);align-items:start}
 .wpterm .nav{position:sticky;top:52px;align-self:start;height:calc(100vh - 52px);border-right:1px solid var(--line);background:#080a11;display:flex;flex-direction:column;padding:12px 10px;gap:3px;overflow:auto}
 .wpterm .nav .grp{font-size:9.5px;font-weight:800;letter-spacing:1.4px;color:var(--mut2);padding:12px 10px 5px}
 .wpterm .nav a{display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:9px;color:#aeb9c8;font-size:13px;font-weight:600;cursor:pointer;border:1px solid transparent;position:relative}
@@ -701,6 +694,36 @@ const TCSS2 = `
 .wpterm .obcell em{font-style:normal;color:var(--mut)}
 .wpterm .obbk{font-style:normal;font-size:8.5px;color:var(--mut2);margin-left:5px}
 .wpterm .phead .seg b{white-space:nowrap}
+.wpterm .rail{position:sticky;top:52px;align-self:start;max-height:calc(100vh - 52px);overflow:auto;padding:clamp(11px,0.95vw,15px) clamp(12px,1.2vw,18px) 40px clamp(2px,0.4vw,6px)}
+.wpterm .indices{display:grid;grid-template-columns:repeat(4,1fr);gap:11px}
+.wpterm .idx{border:1px solid var(--line);border-radius:13px;background:var(--panel);padding:12px 14px}
+.wpterm .idx .k{font-size:10px;font-weight:800;letter-spacing:.8px;color:var(--mut);text-transform:uppercase}
+.wpterm .idx .v{font-family:var(--mono);font-weight:600;font-size:clamp(20px,1.8vw,27px);line-height:1.05;margin-top:5px}
+.wpterm .idx .v.lockv{font-size:19px;letter-spacing:.02em}
+.wpterm .idx .chg{font-family:var(--mono);font-size:11px;font-weight:600;margin-top:3px;color:var(--mut)}
+.wpterm .idx.teal .v{color:var(--up)}.wpterm .idx.green .v{color:var(--tx)}.wpterm .idx.amber .v{color:var(--amber)}.wpterm .idx.purple .v{color:var(--tx)}
+.wpterm .xhead,.wpterm .xrow{display:grid;grid-template-columns:minmax(200px,1.5fr) 170px 90px 100px minmax(140px,1fr) 110px;gap:12px;align-items:center;padding:10px 15px}
+.wpterm .xhead{font-family:var(--mono);font-size:9px;letter-spacing:.1em;color:var(--mut2);border-bottom:1px solid var(--line);padding-bottom:8px}
+.wpterm .xrow{border-top:1px solid rgba(255,255,255,.05)}
+.wpterm .xrow:hover{background:rgba(255,255,255,.02)}
+.wpterm .xm{font-family:var(--disp);font-weight:800;font-size:14px;color:#eef3f5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wpterm .xpick{font-family:var(--mono);font-size:11.5px;color:#e6ecef;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wpterm .xpick .pk{font-style:normal;font-size:8px;font-weight:700;color:#0a1310;background:var(--up);border-radius:4px;padding:2px 5px;margin-right:8px;letter-spacing:.05em}
+.wpterm .xnum{font-family:var(--mono);font-size:12px;color:#e6ecef;font-variant-numeric:tabular-nums}
+.wpterm .xedge b{font-family:var(--disp);font-weight:800;font-size:14px}
+.wpterm .xedge .bar{display:block;height:3px;border-radius:2px;background:#10151b;margin-top:5px;overflow:hidden}
+.wpterm .xedge .bar span{display:block;height:100%;background:var(--up);border-radius:2px}
+.wpterm .xst .prov{font-style:normal;font-family:var(--mono);font-size:8.5px;font-weight:700;color:var(--amber);background:rgba(201,168,106,.1);border:1px solid rgba(201,168,106,.3);border-radius:999px;padding:3px 8px;letter-spacing:.05em}
+.wpterm .lvrow{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 14px;border-top:1px solid rgba(255,255,255,.05)}
+.wpterm .lvrow:first-of-type{border-top:none}
+.wpterm .lvtm{font-family:var(--disp);font-weight:800;font-size:13px;color:#dbe4e2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wpterm .lvsc{font-family:var(--mono);font-size:10.5px;color:var(--mut);white-space:nowrap}
+.wpterm .mvrow{display:flex;align-items:flex-start;gap:9px;padding:9px 14px;border-top:1px solid rgba(255,255,255,.05)}
+.wpterm .mvd{font-size:10px;margin-top:2px}
+.wpterm .mvb{flex:1;min-width:0}
+.wpterm .mvb b{display:block;font-family:var(--mono);font-size:11px;color:#e6ecef}
+.wpterm .mvm{display:block;font-family:var(--mono);font-size:9px;color:var(--mut2);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wpterm .mvo{font-family:var(--mono);font-size:10.5px;color:var(--mut);white-space:nowrap}
 `;
 
 function Section({ title, color, count, defaultOpen, liveDot, children }) {
