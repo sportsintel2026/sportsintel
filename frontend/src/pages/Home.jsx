@@ -318,6 +318,52 @@ export default function HomePage(){
   // WZ-FULLBOARD-2026-06-30 :: "All" shows every qualifying edge (ML + total + run line per
   // game), not just the single highest per game. Only one side of a market can be +edge, so a
   // game surfaces at most one pick per market — fuller board, run line included, conviction-sorted.
+  // WZ-WINNERS-M-2026-07-03 :: Winners face — the casual-bettor lens over the same
+  // calibrated math. "winners" = every game called + Best Bets (winner AND underpaid).
+  // "edges" = today's board, untouched. Toggle only swaps the board section.
+  const [face,setFace]=useState("winners");
+  const winnersRows=(()=>{
+    const out=[];
+    const fmtOddsW=(o)=>o==null?"\u2014":(o>0?"+"+o:""+o);
+    if(sport==="mlb"){
+      for(const g of (e.games||[])){
+        const ml=g.moneyline||{}; if(ml.awayWinProb==null||ml.homeWinProb==null) continue;
+        const homeW=ml.homeWinProb>=ml.awayWinProb;
+        const prob=homeW?ml.homeWinProb:ml.awayWinProb;
+        const edgePct=((homeW?ml.homeEdge:ml.awayEdge)??null); const eP=edgePct!=null?edgePct*100:null;
+        out.push({ ab:homeW?g.homeAbbr:g.awayAbbr, opp:homeW?g.awayAbbr:g.homeAbbr,
+          matchup:`${g.awayAbbr} @ ${g.homeAbbr}`, time:g.time||"", prob,
+          odds:homeW?ml.homeOdds:ml.awayOdds, book:homeW?ml.homeBook:ml.awayBook,
+          edge:eP, best:eP!=null&&eP>0, over:eP!=null&&eP<=-1.0, prov:false, gameId:g.id, fmt:fmtOddsW });
+      }
+    } else if(sport==="nfl"||sport==="cfb"){
+      for(const g of (e.games||[])){
+        const m=g.moneyline||{}; if(m.homeWinProb==null||m.awayWinProb==null) continue;
+        const parts=String(g.matchup||"").split(" @ "); const awayN=parts[0]||"", homeN=parts[1]||"";
+        const homeW=m.homeWinProb>=m.awayWinProb;
+        const prob=(homeW?m.homeWinProb:m.awayWinProb)/100;
+        const eP=(m.fair&&m.fair.home!=null)?((homeW?m.homeWinProb:m.awayWinProb)-(homeW?m.fair.home:m.fair.away)):null;
+        out.push({ ab:(homeW?homeN:awayN).split(" ").pop(), opp:(homeW?awayN:homeN).split(" ").pop(),
+          matchup:g.matchup, time:g.commenceTime?new Date(g.commenceTime).toLocaleDateString("en-US",{weekday:"short",month:"numeric",day:"numeric",timeZone:"America/New_York"})+" \u00b7 "+new Date(g.commenceTime).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit",timeZone:"America/New_York"})+" ET":"",
+          prob, odds:m.book?(homeW?m.book.home:m.book.away):null, book:null,
+          edge:eP, best:eP!=null&&eP>=1.0, over:eP!=null&&eP<=-1.5, prov:true, gameId:g.matchup, fmt:fmtOddsW });
+      }
+    } else if(sport==="nba"){
+      for(const r of (e.moneylineEdges||[])){
+        const parts=String(r.matchup||"").split(" @ "); const oppAb=(parts[0]===r.teamAbbr)?parts[1]:parts[0];
+        const pickIsWinner=(r.modelProb??0)>=0.5;
+        out.push({ ab:pickIsWinner?r.teamAbbr:oppAb, opp:pickIsWinner?oppAb:r.teamAbbr,
+          matchup:r.matchup, time:"", prob:pickIsWinner?r.modelProb:1-(r.modelProb??0.5),
+          odds:pickIsWinner?r.odds:null, book:null,
+          edge:pickIsWinner?(r.edge??null):null, best:pickIsWinner&&(r.edge??0)>=1.0, over:false,
+          dogValue:!pickIsWinner, prov:true, gameId:r.gameId||r.matchup, fmt:fmtOddsW });
+      }
+    }
+    out.sort((a,b)=>(b.prob||0)-(a.prob||0));
+    return out;
+  })();
+  const bestBets=winnersRows.filter(r=>r.best).sort((a,b)=>(b.edge||0)-(a.edge||0)).slice(0,5);
+
   const boardSrc = board==="all" ? allAdj.filter(x=>sport==="mlb"?(x.edge??0)>0:(x.edge??0)>=1).sort(sortBoard) : boardEdges;
   const boardItems = boardSrc.map(toBoard);
   const boardDate = fmtSlateFull(e.date || todayISO());
@@ -449,6 +495,48 @@ export default function HomePage(){
 
       {hasFull && moverItems.length>0 && <MarketMovers movers={moverItems} navigate={navigate}/>}
 
+        {/* WZ-WINNERS-M-2026-07-03 :: face toggle + Winners view */}
+        <div className="wntog"><b className={face==="winners"?"on":""} onClick={()=>setFace("winners")}>WINNERS</b><b className={face==="edges"?"on":""} onClick={()=>setFace("edges")}>EDGE BOARD</b></div>
+
+        {face==="winners" && (hasFull ? <>
+          {bestBets.length>0 && <>
+            <div className="seclbl" style={{marginTop:4}}>BEST BETS <span className="ct">our winner + the books underpay it</span></div>
+            {bestBets.map((r,i)=>(
+              <div key={i} className="wnbb">
+                <span className="wncrown">{r.prov?"WINNER + VALUE \u00b7 PROVISIONAL":"WINNER + VALUE"}</span>
+                <div className="wnbbtop">
+                  <div><div className="wnteam">{r.ab}</div><div className="wnmk">to win · {r.matchup}{r.time?` \u00b7 ${r.time}`:""}</div></div>
+                  <div className="wnbbr"><div className="wnodds">{r.fmt(r.odds)}</div>{r.book&&<div className="wnbook">{r.book} \u00b7 best price</div>}</div>
+                </div>
+                <div className="wnchips">
+                  <div className="wnchip"><div className="k">WIN CHANCE</div><div className="v t">{Math.round((r.prob||0)*100)}%</div></div>
+                  <div className="wnchip"><div className="k">BOOKS SAY</div><div className="v">{r.edge!=null?(Math.round(((r.prob||0)*100-r.edge)*10)/10)+"%":"\u2014"}</div></div>
+                  <div className="wnchip"><div className="k">YOUR EDGE</div><div className="v g">+{(r.edge||0).toFixed(1)}%</div></div>
+                </div>
+              </div>
+            ))}
+          </>}
+          <div className="seclbl">EVERY GAME, CALLED <span className="ct">who the model says wins</span></div>
+          {winnersRows.length===0 && <div className="estate"><div className="et">No games to call yet</div><div className="es">Winner calls post when the board fills.</div></div>}
+          {winnersRows.map((r,i)=>(
+            <div key={i} className="wnrow">
+              <div className="wnl">
+                <div className="wnpick">{r.ab} <span className="vs">over {r.opp}</span></div>
+                {r.time&&<div className="wnsub">{r.time}</div>}
+                <div className="wnbar"><span style={{width:Math.round((r.prob||0)*100)+"%"}}/></div>
+              </div>
+              <div className="wnconf">{Math.round((r.prob||0)*100)}%<span className="k">TO WIN</span></div>
+              {r.dogValue
+                ? <span className="wntag fair">DOG HAS VALUE {"\u2192"} EDGES</span>
+                : r.best ? <span className="wntag val">{"\u2713"} BEST BET</span>
+                : r.over ? <span className="wntag skip">OVERPRICED</span>
+                : <span className="wntag fair">PRICED FAIR</span>}
+            </div>
+          ))}
+          <div className="wnfoot"><b>How to read this:</b> Every game gets our winner call. <b>{"\u2713"} BEST BET</b> means the books are also underpaying that winner. <b>PRICED FAIR</b> means right team, fair payout. <b>OVERPRICED</b> means the price eats the value {"\u2014"} skip it. Only Best Bets belong in your record.</div>
+        </> : <Gate title="Winners are an All-Access feature" navigate={navigate}/>)}
+
+        {face==="edges" && <>
         <div className="boardhd">
           <div className="bhtitle">
             <svg className="bharw" width="34" height="10" viewBox="0 0 34 10" aria-hidden="true"><line x1="0" y1="5" x2="28" y2="5"/><path d="M22 1 L30 5 L22 9" fill="none"/></svg>
@@ -468,6 +556,7 @@ export default function HomePage(){
                 : <div className="estate"><div className="et">No edges on the board yet</div><div className="es">Edges appear as books post tonight's lines.</div></div>}
             </>
           : <Gate title="Edges are an All-Access feature" navigate={navigate}/>}
+        </>}
 
         {liveItems.length>0 && <div id="livesec">
           <div className="seclbl">LIVE EDGES <span className="ct">in-game {"\u00b7"} updates 60s</span><span className="lk">swipe {"\u203a"}</span></div>
@@ -1263,4 +1352,36 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .erow .epct{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:var(--disp);font-weight:700;font-size:12px;color:var(--green)}
 .erow .echev{flex:0 0 auto;color:var(--mut2);font-family:var(--disp);font-size:21px;line-height:1}
 @media (max-width:380px){.erow .ecol.odds{display:none}}
+/* WZ-WINNERS-M-2026-07-03 :: Winners face */
+.wntog{display:flex;gap:4px;background:#0e1116;border:1px solid var(--line);border-radius:11px;padding:4px;margin:2px 4px 12px}
+.wntog b{flex:1;text-align:center;font-family:var(--mono);font-size:11.5px;font-weight:700;letter-spacing:.06em;color:var(--mut);padding:9px 0;border-radius:8px;cursor:pointer}
+.wntog b.on{background:var(--gold);color:#06090b}
+.wnbb{background:linear-gradient(180deg,rgba(201,168,106,.10),rgba(201,168,106,.03));border:1px solid rgba(201,168,106,.4);border-radius:16px;padding:14px;margin:12px 4px 10px;position:relative}
+.wncrown{position:absolute;top:-9px;left:14px;font-family:var(--mono);font-size:8px;font-weight:700;letter-spacing:.08em;color:#06090b;background:var(--gold);border-radius:5px;padding:3px 8px}
+.wnbbtop{display:flex;align-items:center;gap:12px}
+.wnteam{font-family:var(--disp);font-weight:800;font-size:24px;color:#fff}
+.wnmk{font-family:var(--mono);font-size:9.5px;color:var(--mut);margin-top:2px}
+.wnbbr{margin-left:auto;text-align:right}
+.wnodds{font-family:var(--disp);font-weight:800;font-size:22px;color:#fff}
+.wnbook{font-family:var(--mono);font-size:8.5px;color:var(--mut2)}
+.wnchips{display:flex;gap:8px;margin-top:12px}
+.wnchip{flex:1;background:rgba(0,0,0,.25);border:1px solid var(--line);border-radius:10px;padding:8px 6px;text-align:center}
+.wnchip .k{font-family:var(--mono);font-size:7.5px;color:var(--mut2);letter-spacing:.08em}
+.wnchip .v{font-family:var(--disp);font-weight:800;font-size:17px;margin-top:3px;color:#e8eef0}
+.wnchip .v.t{color:var(--up,#46E0A9)}.wnchip .v.g{color:var(--gold)}
+.wnrow{display:flex;align-items:center;gap:11px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 13px;margin:0 4px 8px}
+.wnl{flex:1;min-width:0}
+.wnpick{font-family:var(--disp);font-weight:800;font-size:17.5px;color:#fff}
+.wnpick .vs{font-family:var(--mono);font-size:10.5px;color:var(--mut2);font-weight:600}
+.wnsub{font-family:var(--mono);font-size:9px;color:var(--mut2);margin-top:2px}
+.wnbar{height:4px;border-radius:2px;background:#10151b;margin-top:7px;overflow:hidden;max-width:170px}
+.wnbar span{display:block;height:100%;background:var(--teal,#3FCB91);border-radius:2px}
+.wnconf{font-family:var(--disp);font-weight:800;font-size:18px;color:var(--up,#46E0A9);width:50px;text-align:right;flex:0 0 auto}
+.wnconf .k{display:block;font-family:var(--mono);font-size:7px;color:var(--mut2);letter-spacing:.08em;font-weight:400}
+.wntag{flex:0 0 auto;font-family:var(--mono);font-size:8px;font-weight:700;letter-spacing:.05em;border-radius:999px;padding:4px 8px;border:1px solid;white-space:nowrap}
+.wntag.val{color:var(--up,#46E0A9);border-color:rgba(63,203,145,.35);background:rgba(63,203,145,.08)}
+.wntag.fair{color:var(--mut);border-color:var(--line);background:#171b21}
+.wntag.skip{color:#ff9d92;border-color:rgba(226,101,92,.3);background:rgba(226,101,92,.06)}
+.wnfoot{margin:14px 8px 4px;padding:12px;border:1px dashed var(--line);border-radius:12px;font-family:var(--mono);font-size:9.5px;color:var(--mut2);line-height:1.6}
+.wnfoot b{color:var(--mut)}
 `;
