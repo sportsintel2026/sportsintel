@@ -6,7 +6,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-import { subscriptionApi } from "../lib/api";
+import { subscriptionApi, scoresApi, newsApi } from "../lib/api"; // WZ-MTICKER-2026-07-03
 import Sidebar from "./Sidebar";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
@@ -36,6 +36,16 @@ export default function NBAPage() {
   }, []);
   useEffect(() => { load(); }, [load]);
 
+  // WZ-MTICKER-2026-07-03 :: NBA live ticker tape (scores backbone + news alerts)
+  const [tkScores,setTkScores]=useState([]);
+  const [tkNews,setTkNews]=useState([]);
+  useEffect(()=>{ let dead=false;
+    scoresApi.getScores("nba").then(d=>{ if(!dead) setTkScores(Array.isArray(d?.games)?d.games:[]); }).catch(()=>{});
+    newsApi.getFeed("nba").then(d=>{ if(!dead) setTkNews(d?.items||[]); }).catch(()=>{});
+    const t=setInterval(()=>{ scoresApi.getScores("nba").then(d=>{ if(!dead) setTkScores(Array.isArray(d?.games)?d.games:[]); }).catch(()=>{}); },45000);
+    return ()=>{ dead=true; clearInterval(t); };
+  },[]);
+
   // hide games whose matchup isn't set yet (placeholder opponent like "Spurs/Thunder"
   // or no usable team data) — they shouldn't render until the matchup is decided
   const games = (data?.predictions || []).filter((g) => {
@@ -57,11 +67,22 @@ export default function NBAPage() {
         .game-row{transition:background .15s}
         .game-row:hover{background:#131820}
         .mobile-only{display:none}
+        .wztkbar{display:none;margin:8px 14px 0;border:1px solid #1a1f28;border-radius:10px;background:#0e1218;padding:0 10px;overflow:hidden}
+        .wztkwrap{overflow:hidden;display:flex;align-items:center}
+        .wztktrack{display:inline-flex;gap:24px;white-space:nowrap;font-family:ui-monospace,monospace;font-size:11.5px;color:#8b93a1;padding:8px 0;animation:wztick 26s linear infinite}
+        .wztktrack .g{color:#cfd7e2;font-weight:600}.wztktrack .sc{color:#fff;font-weight:700}.wztktrack .st{color:#5b646c}
+        .wztktrack .it{display:inline-flex;align-items:center;gap:7px}
+        .wztktrack .tg{font-weight:700;font-size:8.5px;letter-spacing:.6px;padding:2px 5px;border-radius:4px;border:1px solid}
+        .wztktrack .tg.scr,.wztktrack .tg.inj{color:#ff9d92;border-color:rgba(226,101,92,.4);background:rgba(226,101,92,.08)}
+        .wztktrack .tg.news{color:#7db8e8;border-color:rgba(93,169,232,.35);background:rgba(93,169,232,.07)}
+        .wztktrack .tx b{color:#e8eef0;font-weight:700}
+        @keyframes wztick{from{transform:translateX(0)}to{transform:translateX(-50%)}}
         .desktop-sidebar{display:block}
         @media (max-width: 768px) {
           .desktop-sidebar{display:none!important}
           .main-content{margin-left:0!important}
           .mobile-only{display:flex!important}
+          .wztkbar{display:block!important}
           .games-table-wrap{margin:0 -14px!important}
           .games-table{font-size:11px!important}
           .games-table th,.games-table td{padding:6px 4px!important}
@@ -91,6 +112,24 @@ export default function NBAPage() {
         </div>
         <div style={{ width: 30 }} />
       </div>
+
+      {/* WZ-MTICKER-2026-07-03 :: mobile ticker tape */}
+      {(()=>{
+        const live=tkScores.filter(g=>g.bucket==="live"), fin=tkScores.filter(g=>g.bucket==="final"), up=tkScores.filter(g=>g.bucket==="upcoming");
+        const sc=(g,st)=>({kind:"score",a:g.away?.abbrev||"",h:g.home?.abbrev||"",as:g.away?.score??null,hs:g.home?.score??null,state:st??(g.statusDetail||"")});
+        const backbone=(live.length||fin.length)?[...live.map(g=>sc(g)),...fin.slice(0,6).map(g=>sc(g,"Final"))]:up.slice(0,10).map(g=>({kind:"score",a:g.away?.abbrev||"",h:g.home?.abbrev||"",as:null,hs:null,state:g.statusDetail||""}));
+        const alerts=tkNews.filter(n=>n.scratch||n.status==="injury"||n.type==="headline").slice(0,8)
+          .map(n=>({kind:n.scratch?"scr":n.status==="injury"?"inj":"news",name:n.playerName||"",text:String(n.headline||"").slice(0,80)}));
+        const items=(()=>{ const out=[]; let si=0,ai=0;
+          while(si<backbone.length||ai<alerts.length){ if(si<backbone.length)out.push(backbone[si++]); if(si<backbone.length)out.push(backbone[si++]); if(ai<alerts.length)out.push(alerts[ai++]); }
+          return out; })();
+        if(!items.length) return null;
+        let loop=[...items]; while(loop.length<10) loop=loop.concat(items);
+        return <div className="wztkbar"><div className="wztkwrap"><div className="wztktrack">{[...loop,...loop].map((x,k)=>(
+          x.kind==="score"
+            ? <span key={k}><span className="g">{x.a}</span> {x.as!=null?<span className="sc">{x.as}</span>:null} <span className="g">{x.h}</span> {x.hs!=null?<span className="sc">{x.hs}</span>:null} <span className="st">{x.state}</span></span>
+            : <span key={k} className="it"><span className={"tg "+x.kind}>{x.kind==="scr"?"SCR":x.kind==="inj"?"INJ":"NEWS"}</span><span className="tx">{x.name?<b>{x.name}</b>:null}{x.name?" ":""}{x.text}</span></span>
+        ))}</div></div></div>; })()}
 
       <div className="main-content" style={{ marginLeft: 200 }}>
         <div className="games-content" style={{ maxWidth: 1200, margin: "0 auto", padding: "32px 24px 80px", animation: "fadeIn .3s ease" }}>
