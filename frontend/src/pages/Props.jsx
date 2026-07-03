@@ -156,7 +156,18 @@ export default function PropsPage() {
                 <div className="sk" style={{width:40,height:20}}/>
               </div>))}</div>
             : list.length ? <div className="plist">{list.map((p,i)=><PropRow key={i} p={p} onOpen={openP}/>)}</div>
-            : <div className="estate"><div className="et">No {mfilter} props</div><div className="es">Try another market.</div></div>}
+            : (()=>{ /* WZ-PROPS-EMPTY-2026-07-02 :: honest, market-aware empty states.
+                 A thin board is calibration doing its job (hits haircut live 07-02;
+                 K unders-only + honest projections) — say so instead of looking broken. */
+              const COPY={
+                Hits:["No hits edges clear the bar today","Every batter gets priced, but only picks that beat the book after calibration make the board. An empty board means the model found no real value tonight \u2014 that\u2019s the discipline working, not a glitch."],
+                K:["No strikeout edges today","K picks only post when the projection genuinely beats the price. Quiet board = the market has these priced right."],
+                HR:["No HR edges right now","Home-run prices are juiced hard \u2014 the model only surfaces bats with real value against them."],
+                TB:["No total-bases plays yet","TB rows post from the model\u2019s probability board as games firm up."],
+                All:["No props clear the bar today","We only show picks the model has actually earned an edge on. Check back closer to first pitch \u2014 lines and lineups move."],
+              };
+              const [t,d]=COPY[mfilter]||COPY.All;
+              return <div className="estate"><div className="et">{t}</div><div className="es">{d}</div></div>; })()}
         </div>
       </>}
 
