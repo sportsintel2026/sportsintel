@@ -32,6 +32,7 @@ export const edgesApi = {
   getNBA: () => apiFetch("/api/edges/nba"),
   getNFL: (phase) => apiFetch(`/api/edges/nfl${phase?`?phase=${phase}`:""}`),
   getCFB: () => apiFetch("/api/edges/cfb"),
+  getFbOdds: (league) => apiFetch(`/api/edges/fbodds?league=${league}`), // WZ-FBODDS-CLIENT-2026-07-02
   getNBAProps: () => apiFetch("/api/edges/nba/props"),
   getOddsHistory: () => apiFetch("/api/edges/odds-history/mlb"),
   getMarketRead: () => apiFetch("/api/edges/market-read/mlb"),
