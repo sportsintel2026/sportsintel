@@ -685,4 +685,11 @@ const CSS = `
 .lpwrap .ctaband p{color:#9AA4AD}
 
 @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(63,203,145,.5)}70%{box-shadow:0 0 0 9px rgba(63,203,145,0)}100%{box-shadow:0 0 0 0 rgba(63,203,145,0)}}
+/* WZ-DESK-VIDFRAME-2026-07-02 :: desktop — the commercial was full-bleed 100vw (huge on
+   monitors). >=1024px it becomes a centered, framed 1080px player; the 111.2% width keeps
+   the same horizontal overscan that crops YT chrome. Mobile keeps the full-bleed look. */
+@media(min-width:1024px){
+.lpwrap .vidframe{width:min(1080px,92vw);max-width:1080px;left:auto;right:auto;margin-left:auto;margin-right:auto;border-radius:18px;border:1px solid rgba(255,255,255,.09);box-shadow:0 24px 70px rgba(0,0,0,.45)}
+.lpwrap .vidframe video,.lpwrap .vidframe iframe{width:111.2%;height:100%}
+}
 `;
