@@ -139,6 +139,25 @@ export default function LiveScoresPage({ league = "mlb" }) {
       </div>
 
 
+      {/* WZ-MTICKER-2026-07-03 :: mobile live ticker tape (this league's scores backbone,
+          news/injury alerts woven in). Explicitly requested for nfl/cfb/nhl (+nba on its
+          own page); mirrors the MLB Home ticker's classes and rhythm. */}
+      {(()=>{
+        const sc=(g)=>({kind:"score",a:g.away?.abbrev||"",h:g.home?.abbrev||"",as:g.away?.score??null,hs:g.home?.score??null,state:g.statusDetail||""});
+        const backbone=(live.length||final.length)?[...live.map(sc),...final.slice(0,6).map(g=>({...sc(g),state:"Final"}))]:upcoming.slice(0,10).map(g=>({kind:"score",a:g.away?.abbrev||"",h:g.home?.abbrev||"",as:null,hs:null,state:g.statusDetail||""}));
+        const alerts=(news||[]).filter(n=>n.scratch||n.status==="injury"||n.type==="headline").slice(0,6)
+          .map(n=>({kind:n.scratch?"scr":n.status==="injury"?"inj":"news",name:n.playerName||"",text:String(n.headline||"").slice(0,80)}));
+        const items=(()=>{ const out=[]; let si=0,ai=0;
+          while(si<backbone.length||ai<alerts.length){ if(si<backbone.length)out.push(backbone[si++]); if(si<backbone.length)out.push(backbone[si++]); if(ai<alerts.length)out.push(alerts[ai++]); }
+          return out; })();
+        if(!items.length) return null;
+        let loop=[...items]; while(loop.length<10) loop=loop.concat(items);
+        return <div className="stbar"><div className="stwrap"><div className="sttrack">{[...loop,...loop].map((s,i)=>(
+          s.kind==="score"
+            ? <span key={i}><span className="g">{s.a}</span> {s.as!=null?<span className="sc">{s.as}</span>:null} <span className="g">{s.h}</span> {s.hs!=null?<span className="sc">{s.hs}</span>:null} <span className="st">{s.state}</span></span>
+            : <span key={i} className="it"><span className={"tg "+s.kind}>{s.kind==="scr"?"SCR":s.kind==="inj"?"INJ":"NEWS"}</span><span className="tx">{s.name?<b>{s.name}</b>:null}{s.name?" ":""}{s.text}</span></span>
+        ))}</div></div></div>; })()}
+
       <div className="chips">{FILTS.map(f => <b key={f} className={f === filter ? "on" : ""} onClick={() => setFilter(f)}>{f}</b>)}</div>
 
       <div id="wrap">
@@ -323,6 +342,17 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .subln .hot{color:var(--red);font-weight:600}
 .secbody{display:flex;flex-direction:column;gap:8px;padding:0 14px}
 }
+.stbar{margin:2px 14px 4px;border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:0 10px;overflow:hidden}/* WZ-MTICKER-2026-07-03 */
+.stwrap{overflow:hidden;display:flex;align-items:center}
+.sttrack{display:inline-flex;gap:24px;white-space:nowrap;font-family:var(--mono);font-size:11.5px;color:var(--mut);padding:8px 0;animation:wztick 26s linear infinite}
+.sttrack .g{color:#cfd7e2;font-weight:600}.sttrack .sc{color:#fff;font-weight:700}.sttrack .st{color:var(--mut2)}
+.sttrack .it{display:inline-flex;align-items:center;gap:7px}
+.sttrack .tg{font-family:var(--mono);font-weight:700;font-size:8.5px;letter-spacing:.6px;padding:2px 5px;border-radius:4px;border:1px solid}
+.sttrack .tg.scr{color:#ff9d92;border-color:rgba(226,101,92,.5);background:rgba(226,101,92,.1)}
+.sttrack .tg.inj{color:#ff9d92;border-color:rgba(226,101,92,.4);background:rgba(226,101,92,.08)}
+.sttrack .tg.news{color:#7db8e8;border-color:rgba(93,169,232,.35);background:rgba(93,169,232,.07)}
+.sttrack .tx b{color:#e8eef0;font-weight:700}
+@keyframes wztick{from{transform:translateX(0)}to{transform:translateX(-50%)}}
 `;
 
 // ── WZ-SCORES-TERMINAL-2026-07-02 :: desktop terminal for the scores pages ──────
