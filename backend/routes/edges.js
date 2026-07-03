@@ -1224,6 +1224,26 @@ router.get("/oddsprobe", async (req, res) => {
 //   /api/edges/fballodds            → NFL, first 5 parsed games
 //   /api/edges/fballodds?league=cfb → CFB
 //   &n=10                           → show more games
+// WZ-FBODDS-ROUTE-2026-07-02 :: production odds feed for the desktop scores terminal.
+// Returns EVERY parsed pre-game odds event for the league (the /fballodds diagnostic
+// above caps its sample at 30, which truncates a full CFB opening slate). Read-only,
+// rides the same 30-min odds cache as the board — no extra API credits.
+router.get("/fbodds", async (req, res) => {
+  try {
+    const league = (req.query.league || "nfl").toLowerCase();
+    if (league !== "nfl" && league !== "cfb") return res.status(400).json({ ok: false, error: "league must be nfl or cfb" });
+    const events = league === "cfb" ? await getCFBMainOdds() : await getNFLMainOdds();
+    const games = (events || []).map(ev => ({
+      awayTeam: ev.awayTeam, homeTeam: ev.homeTeam, commenceTime: ev.commenceTime ?? null,
+      h2h: ev.h2h || {}, totals: ev.totals || {}, spreads: ev.spreads || {},
+    }));
+    res.json({ ok: true, league, count: games.length, games });
+  } catch (e) {
+    console.error("[fbodds] error:", e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 router.get("/fballodds", async (req, res) => {
   try {
     const league = (req.query.league || "nfl").toLowerCase();
