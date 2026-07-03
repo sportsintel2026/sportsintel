@@ -1,4 +1,7 @@
 // LIVESCORES-PREMIUM-DARK-RESKIN-2026-06-23
+// WZ-SCORES-TERMINAL-2026-07-02 :: >=1024px renders the full desktop TERMINAL (topbar +
+// tape + sidebar + games grid + league news wire), matching HomeDesktop exactly. The
+// mobile experience below 1024px is untouched.
 // LIVESCORES-CARDS-POLISH-2026-06-23
 // LiveScores.jsx — shared live scores view for MLB / NBA / NFL / CFB / NHL.
 // Splits games into Live / Upcoming / Final with a blinking LIVE dot, refreshes
@@ -14,7 +17,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-import { subscriptionApi, scoresApi } from "../lib/api";
+import { subscriptionApi, scoresApi, newsApi, edgesApi } from "../lib/api";
 
 const LEAGUE_META = {
   mlb: { icon: "", title: "MLB Games", periodLabel: "Inn" },
@@ -38,6 +41,25 @@ export default function LiveScoresPage({ league = "mlb" }) {
   const timer = useRef(null);
 
   useEffect(() => { subscriptionApi.getMyPlan().then(setPlan).catch(() => {}); }, []);
+
+  // WZ-SCORES-TERMINAL-2026-07-02 :: desktop detection (same pattern as Home.jsx)
+  const [isDesktop,setIsDesktop]=useState(typeof window!=="undefined"&&window.innerWidth>=1024);
+  useEffect(()=>{ const on=()=>setIsDesktop(window.innerWidth>=1024); window.addEventListener("resize",on); return ()=>window.removeEventListener("resize",on); },[]);
+  // league news wire (server-cached; feeds the terminal tape + right-rail panel)
+  const [news,setNews]=useState(null);
+  useEffect(()=>{ let dead=false; setNews(null);
+    newsApi.getFeed(activeLeague).then(d=>{ if(!dead) setNews(d?.items||[]); }).catch(()=>{ if(!dead) setNews([]); });
+    return ()=>{ dead=true; };
+  },[activeLeague]);
+  // WZ-SCORES-ODDS-2026-07-02 :: live odds for the terminal cards (NFL/CFB only —
+  // MLB/NBA have their own boards; desktop-only fetch, mobile never requests this)
+  const [fbOdds,setFbOdds]=useState(null);
+  useEffect(()=>{ let dead=false; setFbOdds(null);
+    if(!isDesktop || (activeLeague!=="nfl" && activeLeague!=="cfb")) return;
+    edgesApi.getFbOdds(activeLeague).then(d=>{ if(!dead) setFbOdds(d?.games||[]); }).catch(()=>{ if(!dead) setFbOdds([]); });
+    const t=setInterval(()=>{ edgesApi.getFbOdds(activeLeague).then(d=>{ if(!dead) setFbOdds(d?.games||[]); }).catch(()=>{}); },5*60000);
+    return ()=>{ dead=true; clearInterval(t); };
+  },[activeLeague,isDesktop]);
 
   const load = useCallback(async (showSpinner) => {
     if (showSpinner) setLoading(true);
@@ -81,6 +103,15 @@ export default function LiveScoresPage({ league = "mlb" }) {
     else if (key === "nba") navigate("/nba");
     else navigate(`/${key}-games`);
   };
+
+  if (isDesktop) return (
+    <ScoresTerminal activeLeague={activeLeague} meta={meta} goSport={goSport} navigate={navigate}
+      filter={filter} setFilter={setFilter} FILTS={FILTS}
+      live={live} upcoming={upcoming} final={final} total={total} off={off}
+      showLive={showLive} showPre={showPre} showFin={showFin} nothing={nothing}
+      loading={loading} error={error} retry={()=>load(true)} refreshedAt={refreshedAt}
+      plan={plan} news={news} fbOdds={fbOdds}/>
+  );
 
   return (
     <div className="app"><style>{CSS}</style>
@@ -282,21 +313,218 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .subln{font-size:12px;color:var(--mut);margin:2px 14px 4px;font-family:var(--ui)}
 .subln .hot{color:var(--red);font-weight:600}
 .secbody{display:flex;flex-direction:column;gap:8px;padding:0 14px}
-/* WZ-DESK-SCORES-2026-07-02 :: desktop layout — full-width game grid, terminal-consistent.
-   Mobile (<1024px) keeps the exact old look; everything below applies on desktop only. */
-@media(min-width:1024px){
-.app{max-width:1180px}
-.nav{max-width:1180px}
-#wrap{padding:0 6px}
-.hd{padding:0 20px}
-.chips{padding:11px 20px 4px}
-.seclbl{margin:18px 20px 2px}
-.subln{margin:2px 20px 0}
-.secbody{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:12px;align-items:start;padding:0 20px}
-.secbody .gc{margin:0}
-.estate{margin:40px 20px}
-.sheet{max-width:760px}
 }
+`;
+
+// ── WZ-SCORES-TERMINAL-2026-07-02 :: desktop terminal for the scores pages ──────
+function timeAgo(iso){ if(!iso) return ""; const m=Math.max(1,Math.round((Date.now()-new Date(iso).getTime())/60000));
+  if(m<60) return `${m}m ago`; const h=Math.round(m/60); if(h<24) return `${h}h ago`; return `${Math.round(h/24)}d ago`; }
+const NEWS_CHIP = (it) => it.scratch ? ["SCR","c-red"] : it.status==="injury" ? ["INJ","c-amber"]
+  : it.status==="lineup" ? ["LINEUP","c-teal"] : it.type==="video" ? ["VIDEO","c-mut"]
+  : it.type==="recap" ? ["RECAP","c-mut"] : it.type==="wire" ? ["WIRE","c-mut"] : ["NEWS","c-mut"];
+
+function ScoresTerminal({ activeLeague, meta, goSport, navigate, filter, setFilter, FILTS,
+  live, upcoming, final: fin, total, off, showLive, showPre, showFin, nothing,
+  loading, error, retry, refreshedAt, plan, news, fbOdds }) {
+
+  const [clock,setClock]=useState("");
+  useEffect(()=>{ const f=()=>setClock(new Date().toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit",timeZone:"America/New_York"})+" ET"); f(); const t=setInterval(f,30000); return ()=>clearInterval(t); },[]);
+  const marketsLive = live.length>0;
+  const hasFull = plan?.isAdmin===true || plan?.tier==="pro" || plan?.tier==="elite";
+
+  // tape: live scores first, then upcoming, then headlines — terminal ticker feel
+  const esc=(x)=>String(x??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  const bits=[];
+  live.slice(0,6).forEach(g=>bits.push(`<span class="tk"><span class="s">${esc(g.away?.abbrev||"")} ${esc(g.away?.score??"")} \u00b7 ${esc(g.home?.abbrev||"")} ${esc(g.home?.score??"")}</span><span class="v dn">${esc(g.statusDetail||"LIVE")}</span></span><span class="tdot"></span>`));
+  upcoming.slice(0,6).forEach(g=>bits.push(`<span class="tk"><span class="s">${esc(g.away?.abbrev||"")} @ ${esc(g.home?.abbrev||"")}</span><span class="v up">${esc(g.statusDetail||"")}</span></span><span class="tdot"></span>`));
+  (news||[]).slice(0,8).forEach(n=>{ const [lb]=NEWS_CHIP(n); bits.push(`<span class="tk"><span class="v ${n.scratch?"dn":"up"}">${lb}</span><span class="s">${esc(n.headline).slice(0,80)}</span></span><span class="tdot"></span>`); });
+  const tapeHtml=bits.join("");
+
+  const NAV = [
+    ["BOARD", null],
+    ["", "Dashboard", "/home"],
+    ["", "Market Price", "/odds"],
+    ["", "Market Read", "/market-read"],
+    ["", "Props", "/props"],
+    ["TRACK", null],
+    ["", "Performance", "/performance"],
+    ["", "WizePlays", "/expert-picks"],
+    ["", "Wize Spin", "/daily-card"],
+    ["SCORES", null],
+    ["", "Games & Scores", "/games", true],
+  ];
+
+  // WZ-SCORES-ODDS-2026-07-02 :: match parsed odds events to scoreboard games by the
+  // TEAM PAIR (both names must resolve to the same event — nickname collisions like
+  // Tigers/Bulldogs can't false-match when away AND home must agree).
+  const norm=(x)=>String(x||"").toLowerCase().replace(/[^a-z0-9 ]/g,"").replace(/\s+/g," ").trim();
+  const nameHit=(a,b)=>{ a=norm(a); b=norm(b); if(!a||!b) return false; return a===b||a.includes(b)||b.includes(a); };
+  const oddsFor=(g)=>{ if(!Array.isArray(fbOdds)||!fbOdds.length) return null;
+    const an=g.away?.name||g.away?.abbrev, hn=g.home?.name||g.home?.abbrev;
+    return fbOdds.find(ev=>nameHit(ev.awayTeam,an)&&nameHit(ev.homeTeam,hn))||null; };
+
+  const Sec = ({title, color, dot, items}) => items.length>0 && (
+    <div className="tsec">
+      <div className="sechd" style={{color}}>{dot && <span className="rd"/>}{title} <span className="c">· {items.length}</span></div>
+      <div className="tgrid">{items.map(g=><GameCard key={g.id} g={g} league={activeLeague} meta={meta} odds={oddsFor(g)}/>)}</div>
+    </div>
+  );
+
+  return (
+    <div className="wpterm2"><style>{CSS}</style><style>{TCSS2}</style>
+    <div className="wpterm">
+      <div className="status">
+        <div className="brand"><div className="logo">Wize<span className="b">Picks</span></div><div className="tag">TERMINAL</div></div>
+        <div className="tape"><div className="tape-track" dangerouslySetInnerHTML={{ __html: tapeHtml + tapeHtml }}/></div>
+        <div className="sright">
+          <span className={"mkt"+(marketsLive?"":" off")}><span className="ldot"/> {marketsLive?"GAMES LIVE":"NO GAMES LIVE"}</span>
+          <span className="clock">{clock||"\u2014"}</span>
+          <div className="avatar" onClick={()=>navigate("/settings")}>{String(plan?.email||"W").slice(0,1).toUpperCase()}</div>
+        </div>
+      </div>
+      <div className="body">
+        <nav className="nav">
+          {NAV.map((it,i)=> it[1]===null
+            ? <div key={i} className="grp">{it[0]}</div>
+            : <a key={i} className={it[3]?"on":""} onClick={()=>navigate(it[2])}><span className="i">{it[0]}</span>{it[1]}</a>)}
+          <div className="spacer"/>
+          <div className="upsell">
+            <div className="h">{hasFull?"All-Access":"Go All-Access"}</div>
+            <div className="d">{hasFull?"Your plan is active \u2014 every edge unlocked.":"Every edge, prop & live play \u2014 from $7/wk."}</div>
+            <button onClick={()=>navigate(hasFull?"/settings":"/pricing")}>{hasFull?"Manage plan":"Unlock \u2014 from $7/wk"}</button>
+          </div>
+        </nav>
+
+        <div className="content">
+          <div className="maintop">
+            <div><h1>{meta.title}</h1><div className="sub">{total} games · {activeLeague.toUpperCase()} · live scores {refreshedAt?`\u00b7 updated ${refreshedAt.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"})}`:""}</div></div>
+            <div className="sportbar">
+              {[["MLB","mlb"],["NBA","nba"],["NFL","nfl"],["NHL","nhl"],["CFB","cfb"]].map(([lb,k])=>(
+                <div key={k} className={"sp"+(activeLeague===k?" on":"")} onClick={()=>goSport(k)}><span className="d"/>{lb}</div>
+              ))}
+            </div>
+          </div>
+
+          <div className="panel">
+            <div className="phead"><div className="t">Games</div>
+              <div className="seg">{FILTS.map(f=><b key={f} className={f===filter?"on":""} onClick={()=>setFilter(f)}>{f}</b>)}</div>
+              <div className="right"><span className="ldot"/>auto-refreshes every 30s</div>
+            </div>
+            {loading && <div className="empty">Loading today's games…</div>}
+            {!loading && error && <div className="empty" style={{cursor:"pointer"}} onClick={retry}>Couldn't load scores — click to retry</div>}
+            {!loading && !error && total===0 && <div className="empty">{off || `No ${activeLeague.toUpperCase()} games on the slate today.`}</div>}
+            {!loading && !error && total>0 && <>
+              {showLive && <Sec title="LIVE NOW" color="var(--dn)" dot items={live}/>}
+              {showPre && <Sec title="UPCOMING" color="var(--mut)" items={upcoming}/>}
+              {showFin && <Sec title="FINAL" color="var(--up)" items={fin}/>}
+              {nothing && <div className="empty">No {filter.toLowerCase()} games right now.</div>}
+            </>}
+          </div>
+        </div>
+
+        <div className="rail">
+          <div className="panel">
+            <div className="phead"><div className="t">{activeLeague.toUpperCase()} Wire</div>
+              <div className="right">injuries · lineups · headlines</div>
+            </div>
+            {news===null && <div className="empty">Loading the wire…</div>}
+            {Array.isArray(news) && news.length===0 && <div className="empty">Quiet wire right now.</div>}
+            {Array.isArray(news) && news.length>0 && <div className="nlist">
+              {news.slice(0,18).map((it,i)=>{ const [lb,cls]=NEWS_CHIP(it); return (
+                <a key={it.id||i} className="nit" href={it.link} target="_blank" rel="noopener noreferrer">
+                  <span className={"nchip "+cls}>{lb}</span>
+                  <span className="nbody"><span className="nhl">{it.headline}</span>
+                    <span className="nmeta">{(it.source||"").toUpperCase()} {it.published?`\u00b7 ${timeAgo(it.published)}`:""}</span></span>
+                </a>
+              );})}
+            </div>}
+          </div>
+        </div>
+      </div>
+    </div>
+    </div>
+  );
+}
+
+const TCSS2 = `
+/* WZ-SCORES-TERMINAL-2026-07-02 :: terminal chrome (mirrors HomeDesktop) + scores grid + news wire */
+.wpterm{--panel:#14171B;--line:rgba(255,255,255,.06);--line2:rgba(255,255,255,.12);--teal:#3FCB91;--up:#46E0A9;--dn:#E2655C;--amber:#C9A86A;--tx:#ECEFF2;--mut:#99A2AA;--mut2:#5B646C;--mono:'IBM Plex Mono',ui-monospace,monospace;--disp:'Barlow Condensed',sans-serif;--serif:Georgia,'Times New Roman',serif;background:#0A0B0D;min-height:100vh;color:#e8eef0;font-family:'Inter',sans-serif;display:flex;flex-direction:column}
+.wpterm .status{position:sticky;top:0;z-index:30;flex:0 0 52px;display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:18px;height:52px;padding:0 18px;border-bottom:1px solid var(--line);background:#0E1013}
+.wpterm .brand{display:flex;align-items:center;gap:9px}
+.wpterm .logo{font-family:var(--serif);font-weight:600;font-size:23px;letter-spacing:-.3px}.wpterm .logo .b{color:var(--amber)}
+.wpterm .tag{font-size:9px;font-weight:700;letter-spacing:1.5px;color:var(--mut);border:1px solid var(--line2);border-radius:4px;padding:2px 6px}
+.wpterm .tape{overflow:hidden;position:relative;height:100%;display:flex;align-items:center;border-left:1px solid var(--line);border-right:1px solid var(--line)}
+.wpterm .tape::before,.wpterm .tape::after{content:"";position:absolute;top:0;bottom:0;width:46px;z-index:2;pointer-events:none}
+.wpterm .tape::before{left:0;background:linear-gradient(90deg,#090b12,transparent)}.wpterm .tape::after{right:0;background:linear-gradient(270deg,#090b12,transparent)}
+.wpterm .tape-track{display:flex;gap:28px;white-space:nowrap;animation:wptape 40s linear infinite;padding-left:28px}
+.wpterm .tape:hover .tape-track{animation-play-state:paused}
+@keyframes wptape{to{transform:translateX(-50%)}}
+.wpterm .tk{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600}
+.wpterm .tk .s{font-family:var(--disp);font-weight:700;font-size:14px;color:#cfd7e2}.wpterm .tk .v{font-family:var(--mono);font-size:12px}
+.wpterm .tk .up,.wpterm .up{color:var(--up)}.wpterm .tk .dn,.wpterm .dn{color:var(--dn)}.wpterm .tdot{width:4px;height:4px;border-radius:50%;background:var(--mut2)}
+.wpterm .sright{display:flex;align-items:center;gap:13px}
+.wpterm .mkt{display:inline-flex;align-items:center;gap:7px;font-size:11px;font-weight:700;letter-spacing:.4px;color:#bfe7d6;border:1px solid rgba(43,212,125,.3);background:rgba(43,212,125,.07);border-radius:999px;padding:5px 11px}
+.wpterm .mkt.off{color:var(--mut);border-color:var(--line2);background:transparent}
+.wpterm .ldot{width:7px;height:7px;border-radius:50%;background:var(--up);animation:wppulse 1.8s infinite}
+.wpterm .mkt.off .ldot{background:var(--mut2);animation:none}
+@keyframes wppulse{0%{box-shadow:0 0 0 0 rgba(43,212,125,.5)}70%{box-shadow:0 0 0 7px rgba(43,212,125,0)}100%{box-shadow:0 0 0 0 rgba(43,212,125,0)}}
+.wpterm .clock{font-family:var(--mono);font-size:12px;color:var(--mut)}
+.wpterm .avatar{width:30px;height:30px;border-radius:8px;background:#1B2025;border:1px solid var(--line2);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;color:var(--mut);cursor:pointer}
+.wpterm .body{flex:1 0 auto;display:grid;grid-template-columns:clamp(176px,11vw,210px) minmax(0,1fr) clamp(286px,22vw,360px);align-items:start}
+.wpterm .nav{position:sticky;top:52px;align-self:start;height:calc(100vh - 52px);border-right:1px solid var(--line);background:#080a11;display:flex;flex-direction:column;padding:12px 10px;gap:3px;overflow:auto}
+.wpterm .nav .grp{font-size:9.5px;font-weight:800;letter-spacing:1.4px;color:var(--mut2);padding:12px 10px 5px}
+.wpterm .nav a{display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:9px;color:#aeb9c8;font-size:13px;font-weight:600;cursor:pointer;border:1px solid transparent;position:relative}
+.wpterm .nav a .i{width:17px;text-align:center;font-size:14px}
+.wpterm .nav a:hover{background:#0e1320;color:#fff}
+.wpterm .nav a.on{background:rgba(201,168,106,.1);color:var(--tx);border-color:rgba(201,168,106,.32)}
+.wpterm .nav a.on::before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:3px;border-radius:0 3px 3px 0;background:var(--teal)}
+.wpterm .nav .spacer{flex:1}
+.wpterm .nav .upsell{margin:8px 4px 4px;border:1px solid rgba(201,168,106,.28);border-radius:11px;background:rgba(201,168,106,.05);padding:12px}
+.wpterm .nav .upsell .h{font-family:var(--disp);font-weight:800;font-size:16px;color:#cdbcff}
+.wpterm .nav .upsell .d{font-size:10.5px;color:var(--mut);margin:4px 0 9px;line-height:1.4}
+.wpterm .nav .upsell button{width:100%;border:0;border-radius:8px;background:var(--teal);color:#04130d;font-weight:800;font-size:12px;padding:8px;cursor:pointer;font-family:inherit}
+.wpterm .content{padding:clamp(11px,0.95vw,15px) clamp(12px,1.2vw,18px) 40px;display:flex;flex-direction:column;gap:clamp(10px,0.9vw,13px);min-width:0}
+.wpterm .maintop{display:flex;align-items:flex-end;justify-content:space-between}
+.wpterm .maintop h1{font-family:var(--disp);font-weight:800;font-size:clamp(20px,1.7vw,26px);margin:0}
+.wpterm .maintop .sub{font-size:12px;color:var(--mut);margin-top:1px;font-family:var(--mono)}
+.wpterm .sportbar{display:flex;gap:5px}
+.wpterm .sportbar .sp{display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;color:var(--mut);padding:7px 12px;border:1px solid var(--line);border-radius:9px;background:var(--panel);cursor:pointer}
+.wpterm .sportbar .sp.on{color:#fff;border-color:var(--line2);background:#111726}.wpterm .sportbar .sp.on .d{background:var(--up)}
+.wpterm .sportbar .sp .d{width:6px;height:6px;border-radius:50%;background:var(--mut2)}
+.wpterm .panel{border:1px solid var(--line);border-radius:14px;background:var(--panel);overflow:hidden}
+.wpterm .phead{display:flex;align-items:center;gap:12px;padding:11px 15px;border-bottom:1px solid var(--line)}
+.wpterm .phead .t{font-family:var(--disp);font-weight:800;font-size:clamp(13px,1vw,15.5px);letter-spacing:.4px;display:flex;align-items:center;gap:8px}
+.wpterm .phead .seg{display:flex;gap:2px;background:#080b12;border:1px solid var(--line);border-radius:9px;padding:3px;margin-left:6px}
+.wpterm .phead .seg b{font-size:11.5px;font-weight:700;color:var(--mut);padding:5px 12px;border-radius:6px;cursor:pointer}
+.wpterm .phead .seg b.on{background:#16203a;color:#fff;box-shadow:inset 0 0 0 1px rgba(38,116,176,.35)}
+.wpterm .phead .right{margin-left:auto;display:flex;align-items:center;gap:7px;font-size:11px;color:var(--mut)}
+.wpterm .phead .right .ldot{width:6px;height:6px}
+.wpterm .empty{padding:22px 16px;color:var(--mut);font-size:12.5px}
+.wpterm .rd{width:6px;height:6px;border-radius:50%;background:var(--dn);animation:wppulse 1.4s infinite}
+.wpterm .tsec{padding:4px 0 8px}
+.wpterm .sechd{display:flex;align-items:center;gap:8px;font-size:11.5px;font-weight:800;letter-spacing:1.1px;padding:11px 15px 2px;font-family:var(--disp)}
+.wpterm .sechd .c{font-family:var(--mono);font-size:10px;color:var(--mut2);font-weight:600;letter-spacing:0}
+.wpterm .tgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:11px;padding:10px 15px 8px}
+.wpterm .tgrid .gc{margin:0;background:#171c22}
+.wpterm .rail{position:sticky;top:52px;align-self:start;max-height:calc(100vh - 52px);overflow:auto;padding:clamp(11px,0.95vw,15px) clamp(12px,1.2vw,18px) 40px clamp(2px,0.4vw,6px)}
+.wpterm .nlist{display:flex;flex-direction:column}
+.wpterm .nit{display:flex;gap:10px;align-items:flex-start;padding:10px 14px;border-top:1px solid rgba(255,255,255,.05);text-decoration:none;color:inherit}
+.wpterm .nit:first-child{border-top:none}
+.wpterm .nit:hover{background:rgba(255,255,255,.025)}
+.wpterm .nchip{flex:0 0 auto;font-family:var(--mono);font-size:8.5px;font-weight:700;letter-spacing:.06em;border-radius:5px;padding:3px 7px;margin-top:1px}
+.wpterm .nchip.c-red{color:#ff9d92;background:rgba(226,101,92,.13);border:1px solid rgba(226,101,92,.3)}
+.wpterm .nchip.c-amber{color:var(--amber);background:rgba(201,168,106,.1);border:1px solid rgba(201,168,106,.3)}
+.wpterm .nchip.c-teal{color:var(--up);background:rgba(63,203,145,.1);border:1px solid rgba(63,203,145,.28)}
+.wpterm .nchip.c-mut{color:var(--mut);background:#1B2025;border:1px solid var(--line2)}
+.wpterm .nbody{min-width:0}
+.wpterm .nhl{display:block;font-size:12px;font-weight:600;color:#dbe4e2;line-height:1.4}
+.wpterm .nmeta{display:block;font-family:var(--mono);font-size:9px;color:var(--mut2);margin-top:3px}
+.wpterm .nav{position:sticky;left:auto;right:auto;bottom:auto;transform:none;width:auto;max-width:none;border-top:none;justify-content:flex-start;z-index:1}
+.wpterm .nav a{flex-direction:row;font-family:'Inter',sans-serif;font-size:13px;letter-spacing:0}
+.wpterm .sportbar .sp{flex:0 0 auto}
+.wpterm .godds{display:flex;flex-wrap:wrap;gap:6px;padding:8px 13px;border-top:1px solid rgba(255,255,255,.05)}
+.wpterm .gob{font-family:var(--mono);font-size:10.5px;color:#cdd7e1;background:#10141a;border:1px solid var(--line2);border-radius:7px;padding:4px 8px;white-space:nowrap}
+.wpterm .gob i{font-style:normal;color:var(--mut2);margin-right:6px;font-size:9px;letter-spacing:.05em}
 `;
 
 function Section({ title, color, count, defaultOpen, liveDot, children }) {
@@ -317,7 +545,9 @@ function Section({ title, color, count, defaultOpen, liveDot, children }) {
 // Tapping a card opens the full matchup page. We navigate by the backend model
 // id (detailId) when we have it, otherwise fall back to ESPN's own game id so
 // the card is always clickable — the detail page knows how to resolve either.
-function GameCard({ g, league, meta }) {
+const fmtAm=(o)=>o==null||isNaN(+o)?"\u2014":(+o>0?"+"+(+o):""+(+o));
+const fmtLine=(l)=>l==null?"":(l>0?"+"+l:""+l);
+function GameCard({ g, league, meta, odds }) {
   const navigate = useNavigate();
   const isLive = g.bucket === "live";
   const isFinal = g.bucket === "final";
@@ -342,6 +572,13 @@ function GameCard({ g, league, meta }) {
       <div className="gtop">{leftLabel}<span className="ou">{rightNote}</span></div>
       <TeamRow t={g.away} showScore={isLive || isFinal} />
       <TeamRow t={g.home} showScore={isLive || isFinal} />
+      {odds && (odds.h2h?.away!=null || odds.spreads?.awayLine!=null || odds.totals?.line!=null) && (
+        <div className="godds">{/* WZ-SCORES-ODDS-2026-07-02 :: desktop-only best-line strip */}
+          {odds.h2h?.away!=null && odds.h2h?.home!=null && <span className="gob"><i>ML</i>{fmtAm(odds.h2h.away)} / {fmtAm(odds.h2h.home)}</span>}
+          {odds.spreads?.awayLine!=null && <span className="gob"><i>SPR</i>{fmtLine(odds.spreads.awayLine)} {fmtAm(odds.spreads.away)}</span>}
+          {odds.totals?.line!=null && <span className="gob"><i>O/U</i>{odds.totals.line} · {fmtAm(odds.totals.over)}/{fmtAm(odds.totals.under)}</span>}
+        </div>
+      )}
       {target && <div className="gfoot"><span className="lean"><span className="lb">{meta.title.replace(" Games","").toUpperCase()}</span></span><span className="go">View game {"\u203a"}</span></div>}
     </div>
   );
