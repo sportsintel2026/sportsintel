@@ -281,6 +281,22 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .sp{flex:1}
 .subln{font-size:12px;color:var(--mut);margin:2px 14px 4px;font-family:var(--ui)}
 .subln .hot{color:var(--red);font-weight:600}
+.secbody{display:flex;flex-direction:column;gap:8px;padding:0 14px}
+/* WZ-DESK-SCORES-2026-07-02 :: desktop layout — full-width game grid, terminal-consistent.
+   Mobile (<1024px) keeps the exact old look; everything below applies on desktop only. */
+@media(min-width:1024px){
+.app{max-width:1180px}
+.nav{max-width:1180px}
+#wrap{padding:0 6px}
+.hd{padding:0 20px}
+.chips{padding:11px 20px 4px}
+.seclbl{margin:18px 20px 2px}
+.subln{margin:2px 20px 0}
+.secbody{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:12px;align-items:start;padding:0 20px}
+.secbody .gc{margin:0}
+.estate{margin:40px 20px}
+.sheet{max-width:760px}
+}
 `;
 
 function Section({ title, color, count, defaultOpen, liveDot, children }) {
@@ -293,7 +309,7 @@ function Section({ title, color, count, defaultOpen, liveDot, children }) {
         <span style={{ fontSize: 11, color: "#6b7280" }}>· {count}</span>
         <span style={{ marginLeft: "auto", fontSize: 12, color: "#6b7280" }}>{open ? "▲" : "▼"}</span>
       </div>
-      {open && <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "0 14px" }}>{children}</div>}
+      {open && <div className="secbody">{children}</div>}
     </div>
   );
 }
