@@ -51,6 +51,24 @@ export default function LiveScoresPage({ league = "mlb" }) {
     newsApi.getFeed(activeLeague).then(d=>{ if(!dead) setNews(d?.items||[]); }).catch(()=>{ if(!dead) setNews([]); });
     return ()=>{ dead=true; };
   },[activeLeague]);
+  // WZ-SCORES-EDGEBOARD-2026-07-02 :: NFL/CFB model board for the terminal (training
+  // mode). Same endpoints the Market page reads; desktop-only fetch.
+  const [fbBoard,setFbBoard]=useState(null);
+  useEffect(()=>{ let dead=false; setFbBoard(null);
+    if(!isDesktop || (activeLeague!=="nfl" && activeLeague!=="cfb")) return;
+    (activeLeague==="cfb"?edgesApi.getCFB():edgesApi.getNFL()).then(d=>{ if(!dead) setFbBoard(d?.edges||[]); }).catch(()=>{ if(!dead) setFbBoard([]); });
+    return ()=>{ dead=true; };
+  },[activeLeague,isDesktop]);
+
+  // WZ-SPORT-TERMINAL-2026-07-02 :: MLB board payload for the EDGES/ODDS sections
+  // (same cached endpoint the dashboard reads; desktop + MLB only).
+  const [mlbBoard,setMlbBoard]=useState(null);
+  useEffect(()=>{ let dead=false; setMlbBoard(null);
+    if(!isDesktop || activeLeague!=="mlb") return;
+    edgesApi.getMLB().then(d=>{ if(!dead) setMlbBoard(d||{}); }).catch(()=>{ if(!dead) setMlbBoard({}); });
+    return ()=>{ dead=true; };
+  },[activeLeague,isDesktop]);
+
   // WZ-SCORES-ODDS-2026-07-02 :: live odds for the terminal cards (NFL/CFB only —
   // MLB/NBA have their own boards; desktop-only fetch, mobile never requests this)
   const [fbOdds,setFbOdds]=useState(null);
@@ -110,7 +128,7 @@ export default function LiveScoresPage({ league = "mlb" }) {
       live={live} upcoming={upcoming} final={final} total={total} off={off}
       showLive={showLive} showPre={showPre} showFin={showFin} nothing={nothing}
       loading={loading} error={error} retry={()=>load(true)} refreshedAt={refreshedAt}
-      plan={plan} news={news} fbOdds={fbOdds}/>
+      plan={plan} news={news} fbOdds={fbOdds} fbBoard={fbBoard} mlbBoard={mlbBoard}/>
   );
 
   return (
@@ -325,8 +343,11 @@ const NEWS_CHIP = (it) => it.scratch ? ["SCR","c-red"] : it.status==="injury" ? 
 
 function ScoresTerminal({ activeLeague, meta, goSport, navigate, filter, setFilter, FILTS,
   live, upcoming, final: fin, total, off, showLive, showPre, showFin, nothing,
-  loading, error, retry, refreshedAt, plan, news, fbOdds }) {
+  loading, error, retry, refreshedAt, plan, news, fbOdds, fbBoard, mlbBoard }) {
 
+  // WZ-SPORT-TERMINAL-2026-07-02 :: sport-first sections, mirroring the mobile nav.
+  const [tab,setTab]=useState("games");
+  useEffect(()=>{ setTab("games"); },[activeLeague]);
   const [clock,setClock]=useState("");
   useEffect(()=>{ const f=()=>setClock(new Date().toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit",timeZone:"America/New_York"})+" ET"); f(); const t=setInterval(f,30000); return ()=>clearInterval(t); },[]);
   const marketsLive = live.length>0;
@@ -405,7 +426,35 @@ function ScoresTerminal({ activeLeague, meta, goSport, navigate, filter, setFilt
             </div>
           </div>
 
-          <div className="panel">
+          <div className="sectabs">{/* WZ-SPORT-TERMINAL-2026-07-02 */}
+            {[["edges","EDGES"],["games","GAMES"],["odds","ODDS"],["news","NEWS"],["performance","PERFORMANCE"]].map(([k,lb])=>(
+              <b key={k} className={tab===k?"on":""} onClick={()=>setTab(k)}>{lb}</b>
+            ))}
+          </div>
+
+          {tab==="edges" && (activeLeague==="nfl"||activeLeague==="cfb") && (
+            <div className="panel">{/* WZ-SCORES-EDGEBOARD-2026-07-02 */}
+              <div className="phead"><div className="t">Edge Board</div>
+                <span className="trainpill">MODEL IN TRAINING</span>
+                <div className="right">{activeLeague==="nfl"?"2025-seeded ratings · calibrates in preseason":"SoS-weighted seeds · calibrates when games start"}</div>
+              </div>
+              {fbBoard===null && <div className="empty">Running the model…</div>}
+              {Array.isArray(fbBoard) && fbBoard.length===0 && <div className="empty">No model edges on this slate yet — lines are still settling.</div>}
+              {Array.isArray(fbBoard) && fbBoard.length>0 && <div className="eblist">
+                {fbBoard.slice(0,12).map((e,i)=>(
+                  <div key={i} className="ebrow">
+                    <span className="ebm">{e.matchup}</span>
+                    <span className="ebmk">{String(e.market||"").toUpperCase()}</span>
+                    <span className="ebp">{e.pick||"—"}</span>
+                    <span className={"ebe "+((e.edge??0)>=0?"up":"dn")}>{(e.edge>=0?"+":"")+((e.edge??0)*100).toFixed(1)}%</span>
+                    {e.dataQuality && <span className="ebq">{String(e.dataQuality).toUpperCase()}</span>}
+                  </div>
+                ))}
+              </div>}
+            </div>
+          )}
+
+          {tab==="games" && <div className="panel">
             <div className="phead"><div className="t">Games</div>
               <div className="seg">{FILTS.map(f=><b key={f} className={f===filter?"on":""} onClick={()=>setFilter(f)}>{f}</b>)}</div>
               <div className="right"><span className="ldot"/>auto-refreshes every 30s</div>
@@ -419,10 +468,96 @@ function ScoresTerminal({ activeLeague, meta, goSport, navigate, filter, setFilt
               {showFin && <Sec title="FINAL" color="var(--up)" items={fin}/>}
               {nothing && <div className="empty">No {filter.toLowerCase()} games right now.</div>}
             </>}
-          </div>
+          </div>}
+
+          {tab==="edges" && activeLeague==="mlb" && (
+            <div className="panel">
+              <div className="phead"><div className="t">Edge Board</div>
+                <div className="right">top model edges · full board on the Dashboard</div>
+                <span className="dashlink" onClick={()=>navigate("/home")}>Open Dashboard ›</span>
+              </div>
+              {mlbBoard===null && <div className="empty">Loading the board…</div>}
+              {mlbBoard && Array.isArray(mlbBoard.moneylineEdges) && (()=>{ 
+                const rows=[...(mlbBoard.moneylineEdges||[]).map(e=>({...e,_mk:"ML"})),...(mlbBoard.totalsEdges||[]).map(e=>({...e,_mk:"TOTAL"})),...(mlbBoard.runLineEdges||[]).map(e=>({...e,_mk:"RUN LINE"}))].filter(e=>(e.edge??0)>0).sort((a,b)=>(b.edge??0)-(a.edge??0)).slice(0,14);
+                return rows.length===0 ? <div className="empty">No positive edges on the board right now.</div> : <div className="eblist">
+                  {rows.map((e,i)=>(<div key={i} className="ebrow">
+                    <span className="ebm">{e.matchup}</span>
+                    <span className="ebmk">{e._mk}</span>
+                    <span className="ebp">{e.team||e.teamAbbr||e.side||"—"} {e.line!=null?(e.line>0?"+"+e.line:e.line):""}</span>
+                    <span className="ebp" style={{maxWidth:70}}>{fmtAm(e.odds)}</span>
+                    <span className={"ebe "+((e.edge??0)>=0?"up":"dn")}>{(e.edge>=0?"+":"")+((e.edge??0)*100).toFixed(1)}%</span>
+                    {e.conviction && <span className="ebq">{e.conviction}</span>}
+                  </div>))}
+                </div>; })()}
+            </div>
+          )}
+          {tab==="edges" && activeLeague==="nhl" && (
+            <div className="panel"><div className="phead"><div className="t">Edge Board</div></div>
+              <div className="empty">The NHL model arrives with the season — edges will post here.</div></div>
+          )}
+
+          {tab==="odds" && (
+            <div className="panel">
+              <div className="phead"><div className="t">Odds Board</div><div className="right">best line across books</div></div>
+              {(activeLeague==="nfl"||activeLeague==="cfb") && <>
+                {fbOdds===null && <div className="empty">Loading odds…</div>}
+                {Array.isArray(fbOdds) && fbOdds.length===0 && <div className="empty">No priced games yet — books post lines closer to the season.</div>}
+                {Array.isArray(fbOdds) && fbOdds.length>0 && <div className="eblist">
+                  {fbOdds.map((ev,i)=>(<div key={i} className="ebrow">
+                    <span className="ebm">{ev.awayTeam} @ {ev.homeTeam}</span>
+                    <span className="gob"><i>ML</i>{fmtAm(ev.h2h?.away)} / {fmtAm(ev.h2h?.home)}</span>
+                    <span className="gob"><i>SPR</i>{fmtLine(ev.spreads?.awayLine)} {fmtAm(ev.spreads?.away)}</span>
+                    <span className="gob"><i>O/U</i>{ev.totals?.line??"—"} · {fmtAm(ev.totals?.over)}/{fmtAm(ev.totals?.under)}</span>
+                  </div>))}
+                </div>}
+              </>}
+              {activeLeague==="mlb" && <>
+                {mlbBoard===null && <div className="empty">Loading odds…</div>}
+                {mlbBoard && Array.isArray(mlbBoard.games) && (mlbBoard.games.length===0
+                  ? <div className="empty">No MLB games on the board right now.</div>
+                  : <div className="eblist">
+                    {mlbBoard.games.map((g,i)=>(<div key={i} className="ebrow">
+                      <span className="ebm">{g.awayAbbr} @ {g.homeAbbr}</span>
+                      <span className="gob"><i>ML</i>{fmtAm(g.moneyline?.awayOdds)} / {fmtAm(g.moneyline?.homeOdds)}</span>
+                      <span className="gob"><i>RL</i>{fmtLine(g.runLine?.awayLine)} {fmtAm(g.runLine?.awayOdds)}</span>
+                      <span className="gob"><i>O/U</i>{g.totals?.line??"—"} · {fmtAm(g.totals?.overOdds)}/{fmtAm(g.totals?.underOdds)}</span>
+                    </div>))}
+                  </div>)}
+              </>}
+              {activeLeague==="nhl" && <div className="empty">NHL odds arrive with the NHL model.</div>}
+              {activeLeague==="nba" && <div className="empty">NBA odds live on the NBA board.</div>}
+            </div>
+          )}
+
+          {tab==="news" && (
+            <div className="panel">
+              <div className="phead"><div className="t">{activeLeague.toUpperCase()} News</div><div className="right">injuries · lineups · headlines</div></div>
+              {news===null && <div className="empty">Loading the wire…</div>}
+              {Array.isArray(news) && news.length===0 && <div className="empty">Quiet wire right now.</div>}
+              {Array.isArray(news) && news.length>0 && <div className="nlist">
+                {news.map((it,i)=>{ const [lb,cls]=NEWS_CHIP(it); return (
+                  <a key={it.id||i} className="nit big" href={it.link} target="_blank" rel="noopener noreferrer">
+                    <span className={"nchip "+cls}>{lb}</span>
+                    <span className="nbody"><span className="nhl">{it.headline}</span>
+                      {it.summary && <span className="nsum">{it.summary}</span>}
+                      <span className="nmeta">{(it.source||"").toUpperCase()} {it.published?`· ${timeAgo(it.published)}`:""}</span></span>
+                  </a>
+                );})}
+              </div>}
+            </div>
+          )}
+
+          {tab==="performance" && (
+            <div className="panel">
+              <div className="phead"><div className="t">Performance</div><div className="right">graded picks · honest record</div></div>
+              {activeLeague==="mlb"
+                ? <div className="empty">The full MLB performance dashboard — ROI, win rate, CLV, market splits — lives on its own page. <span className="dashlink" onClick={()=>navigate("/performance")}>Open Performance ›</span></div>
+                : <div className="empty">{activeLeague.toUpperCase()} grading begins when real games are played {activeLeague==="nfl"?"(preseason, early August)":activeLeague==="cfb"?"(late August)":"(with the season)"} — every pick will be tracked and graded here from day one.</div>}
+            </div>
+          )}
         </div>
 
-        <div className="rail">
+        {tab!=="news" && <div className="rail">
           <div className="panel">
             <div className="phead"><div className="t">{activeLeague.toUpperCase()} Wire</div>
               <div className="right">injuries · lineups · headlines</div>
@@ -439,7 +574,7 @@ function ScoresTerminal({ activeLeague, meta, goSport, navigate, filter, setFilt
               );})}
             </div>}
           </div>
-        </div>
+        </div>}
       </div>
     </div>
     </div>
@@ -525,6 +660,21 @@ const TCSS2 = `
 .wpterm .godds{display:flex;flex-wrap:wrap;gap:6px;padding:8px 13px;border-top:1px solid rgba(255,255,255,.05)}
 .wpterm .gob{font-family:var(--mono);font-size:10.5px;color:#cdd7e1;background:#10141a;border:1px solid var(--line2);border-radius:7px;padding:4px 8px;white-space:nowrap}
 .wpterm .gob i{font-style:normal;color:var(--mut2);margin-right:6px;font-size:9px;letter-spacing:.05em}
+.wpterm .trainpill{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.08em;color:var(--amber);background:rgba(201,168,106,.1);border:1px solid rgba(201,168,106,.32);border-radius:999px;padding:4px 10px}
+.wpterm .eblist{display:flex;flex-direction:column}
+.wpterm .ebrow{display:flex;align-items:center;gap:12px;padding:9px 15px;border-top:1px solid rgba(255,255,255,.05)}
+.wpterm .ebrow:first-child{border-top:none}
+.wpterm .ebm{font-family:var(--disp);font-weight:800;font-size:14px;color:#dbe4e2;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wpterm .ebmk{font-family:var(--mono);font-size:9.5px;color:var(--mut2);width:74px;flex:0 0 auto}
+.wpterm .ebp{font-family:var(--mono);font-size:11.5px;color:#cdd7e1;flex:0 0 auto;max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wpterm .ebe{font-family:var(--disp);font-weight:800;font-size:14px;flex:0 0 auto;width:58px;text-align:right}
+.wpterm .ebq{font-family:var(--mono);font-size:8.5px;color:var(--mut2);border:1px solid var(--line2);border-radius:5px;padding:2px 6px;flex:0 0 auto}
+.wpterm .sectabs{display:flex;gap:6px}
+.wpterm .sectabs b{font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--mut);border:1px solid var(--line2);border-radius:8px;padding:7px 14px;cursor:pointer;background:var(--panel)}
+.wpterm .sectabs b.on{color:#06090b;background:var(--amber);border-color:var(--amber)}
+.wpterm .dashlink{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--up);cursor:pointer;white-space:nowrap;margin-left:10px}
+.wpterm .nit.big .nhl{font-size:13px}
+.wpterm .nsum{display:block;font-size:11px;color:var(--mut);margin-top:3px;line-height:1.45}
 `;
 
 function Section({ title, color, count, defaultOpen, liveDot, children }) {
