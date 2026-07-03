@@ -1,4 +1,5 @@
 // GAMES-PREMIUM-DARK-RESKIN-2026-06-23
+import LiveScoresPage from "./LiveScores"; // WZ-GAMES-DESKGATE-2026-07-02
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
@@ -40,6 +41,8 @@ const edgeLabel = (e) => {
 };
 
 export default function GamesPage() {
+  const [winW,setWinW]=useState(typeof window!=="undefined"?window.innerWidth:0); // WZ-GAMES-DESKGATE-2026-07-02
+  useEffect(()=>{ const on=()=>setWinW(window.innerWidth); window.addEventListener("resize",on); return ()=>window.removeEventListener("resize",on); },[]);
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const [edges, setEdges] = useState(null);
@@ -133,6 +136,11 @@ export default function GamesPage() {
   const showPre  = (filter==="All"||filter==="Upcoming") && pre.length;
   const showFin  = (filter==="All"||filter==="Final") && fin.length;
   const nothing = !loading && !(showLive||showPre||showFin);
+
+  // WZ-GAMES-DESKGATE-2026-07-02 :: >=1024px the MLB scores page renders the same
+  // desktop TERMINAL the other sports use (LiveScores' desktop branch handles it,
+  // including the MLB news wire). Mobile below is untouched. Detection mirrors Home.jsx.
+  if (typeof window !== "undefined" && winW >= 1024) return <LiveScoresPage league="mlb"/>;
 
   return (
     <div className="app"><style>{CSS}</style>
