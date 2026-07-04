@@ -244,6 +244,11 @@ cron.schedule("20 9 * * *", async () => {
     const { recordNFLPredictions } = require("./services/predictionTracker");
     const slate = await runNFLSlate({ weeks: 1 });
     await recordNFLPredictions(slate);
+    // WZ-NFLPROPSSHADOW-CRON-2026-07-05 :: props shadow logger, same imminence gate;
+    // no-op all offseason (bails before the roster crawl when no lines are posted).
+    const { recordNflPropShadow } = require("./services/nflPropsShadow");
+    const propShadow = await recordNflPropShadow({});
+    if (propShadow && propShadow.logged) console.log(`[CRON] NFL prop-shadow logged ${propShadow.logged} rows`);
   } catch (err) {
     console.error("[CRON] NFL model-pick record failed:", err.message);
   }
