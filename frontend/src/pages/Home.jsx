@@ -1276,36 +1276,5 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .erow .epct{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:var(--disp);font-weight:700;font-size:12px;color:var(--green)}
 .erow .echev{flex:0 0 auto;color:var(--mut2);font-family:var(--disp);font-size:21px;line-height:1}
 @media (max-width:380px){.erow .ecol.odds{display:none}}
-/* WZ-WINNERS-M-2026-07-03 :: Winners face */
-.wntog{display:flex;gap:4px;background:#0e1116;border:1px solid var(--line);border-radius:11px;padding:4px;margin:2px 4px 12px}
-.wntog b{flex:1;text-align:center;font-family:var(--mono);font-size:11.5px;font-weight:700;letter-spacing:.06em;color:var(--mut);padding:9px 0;border-radius:8px;cursor:pointer}
-.wntog b.on{background:var(--gold);color:#06090b}
-.wnbb{background:linear-gradient(180deg,rgba(201,168,106,.10),rgba(201,168,106,.03));border:1px solid rgba(201,168,106,.4);border-radius:16px;padding:14px;margin:12px 4px 10px;position:relative}
-.wncrown{position:absolute;top:-9px;left:14px;font-family:var(--mono);font-size:8px;font-weight:700;letter-spacing:.08em;color:#06090b;background:var(--gold);border-radius:5px;padding:3px 8px}
-.wnbbtop{display:flex;align-items:center;gap:12px}
-.wnteam{font-family:var(--disp);font-weight:800;font-size:24px;color:#fff}
-.wnmk{font-family:var(--mono);font-size:9.5px;color:var(--mut);margin-top:2px}
-.wnbbr{margin-left:auto;text-align:right}
-.wnodds{font-family:var(--disp);font-weight:800;font-size:22px;color:#fff}
-.wnbook{font-family:var(--mono);font-size:8.5px;color:var(--mut2)}
-.wnchips{display:flex;gap:8px;margin-top:12px}
-.wnchip{flex:1;background:rgba(0,0,0,.25);border:1px solid var(--line);border-radius:10px;padding:8px 6px;text-align:center}
-.wnchip .k{font-family:var(--mono);font-size:7.5px;color:var(--mut2);letter-spacing:.08em}
-.wnchip .v{font-family:var(--disp);font-weight:800;font-size:17px;margin-top:3px;color:#e8eef0}
-.wnchip .v.t{color:var(--up,#46E0A9)}.wnchip .v.g{color:var(--gold)}
-.wnrow{display:flex;align-items:center;gap:11px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 13px;margin:0 4px 8px}
-.wnl{flex:1;min-width:0}
-.wnpick{font-family:var(--disp);font-weight:800;font-size:17.5px;color:#fff}
-.wnpick .vs{font-family:var(--mono);font-size:10.5px;color:var(--mut2);font-weight:600}
-.wnsub{font-family:var(--mono);font-size:9px;color:var(--mut2);margin-top:2px}
-.wnbar{height:4px;border-radius:2px;background:#10151b;margin-top:7px;overflow:hidden;max-width:170px}
-.wnbar span{display:block;height:100%;background:var(--teal,#3FCB91);border-radius:2px}
-.wnconf{font-family:var(--disp);font-weight:800;font-size:18px;color:var(--up,#46E0A9);width:50px;text-align:right;flex:0 0 auto}
-.wnconf .k{display:block;font-family:var(--mono);font-size:7px;color:var(--mut2);letter-spacing:.08em;font-weight:400}
-.wntag{flex:0 0 auto;font-family:var(--mono);font-size:8px;font-weight:700;letter-spacing:.05em;border-radius:999px;padding:4px 8px;border:1px solid;white-space:nowrap}
-.wntag.val{color:var(--up,#46E0A9);border-color:rgba(63,203,145,.35);background:rgba(63,203,145,.08)}
-.wntag.fair{color:var(--mut);border-color:var(--line);background:#171b21}
-.wntag.skip{color:#ff9d92;border-color:rgba(226,101,92,.3);background:rgba(226,101,92,.06)}
-.wnfoot{margin:14px 8px 4px;padding:12px;border:1px dashed var(--line);border-radius:12px;font-family:var(--mono);font-size:9.5px;color:var(--mut2);line-height:1.6}
-.wnfoot b{color:var(--mut)}
+/* WZ-WINNERS-REMOVED-2026-07-05 :: dead Winners CSS swept — every .wn* class had 0 usage in JSX and appeared in no other file. */
 `;
