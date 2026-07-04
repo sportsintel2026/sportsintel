@@ -1,22 +1,33 @@
-// WZ-NFLPROPSDATA-2026-07-05
-// nflPropsData.js  —  WizePicks NFL Player Props projection engine (Phase 3).
+// WZ-NFLPROPSDATA-V2-2026-07-05
+// nflPropsData.js  —  WizePicks NFL Player Props projection engine (Phase 3, v1.1).
 //
 // Turns ESPN's 2025 core-API athlete statistics into per-game projections for the
 // core prop markets (pass yds / rush yds / receptions / receiving yds), plus a
 // helper to convert a projected mean + a book line into an Over probability.
 //
-// HONESTY (read before "why are the edges tiny"): this seeds off 2025 SEASON
-// AVERAGES. Props are dominated by snap share, target share, injuries, game script
-// and the specific defense — none of which a season average captures — so a raw
-// projection is a COARSE prior, not a sharp number. Nothing here publishes: it feeds
-// a shadow logger that grades silently in-season, and the parametric dispersion below
-// gets replaced by a dispersion fit from real graded actuals. No fabricated edges.
+// v1.1 fixes (from eyeballing the first live run):
+//   - MARKET-PARTICIPANT GATES: only project a market when the player has real
+//     volume in it (a passer needs pass attempts, a receiver targets, a runner
+//     carries). Books only post props for real participants; so do we. This kills
+//     the "backup QB who threw 2 passes projects 143 yds" nonsense at the source.
+//   - HONEST NULLS: a missing underlying stat yields a NULL projection, never a
+//     league-average prior. No fabricated numbers under a real player's name.
+//   - THIN-SAMPLE-ONLY REGRESSION: full-season workhorses reflect their real per-game
+//     production; only genuinely small samples get pulled toward the positional prior.
+//   - FETCH BACKOFF: capped concurrency + one retry, so we stop dropping ~60 players
+//     to ESPN throttling.
 //
-// The pure functions (extractSeasonStats / projectPlayer / overProb) are unit-tested
-// offline against a real athlete payload; buildPlayerProjections does the live
-// roster->stats orchestration and is validated by running the diagnostic route.
+// HONESTY: still a 2025 SEASON-AVERAGE seed. Props are dominated by snap/target share,
+// injuries, game script and the defense faced — none of which a season average knows —
+// so this is a COARSE baseline that publishes NOTHING. It feeds a shadow logger that
+// grades silently in-season; the parametric dispersion below is replaced by a fit from
+// real graded actuals. No fabricated edges.
 //
-// CommonJS. Requires Node 18+ (global fetch not used here; axios like the probe).
+// The pure functions (extractSeasonStats / projectPlayer / overProb / marketEligible)
+// are unit-tested offline against a real athlete payload; buildPlayerProjections does
+// the live roster->stats orchestration and is validated by running the diagnostic route.
+//
+// CommonJS. Requires Node 18+.
 
 const axios = require("axios");
 
@@ -25,31 +36,55 @@ const ESPN_CORE = "https://sports.core.api.espn.com/v2/sports/football/leagues/n
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36";
 const TIMEOUT_MS = 9000;
 
-// Small-sample regression: blend a player's own per-game rate with a positional
-// prior, weighting the prior as K "pseudo-games". A full 2025 season (17 GP) is
-// dominated by the player; a 2-game rookie leans on the prior. Recalibrate later.
-const REGRESSION_PSEUDO_GAMES = 4;
+// Thin-sample regression: blend a player's own per-game rate with a positional prior,
+// weighting the prior as K "pseudo-games". K is SMALL for established samples so a
+// 17-game workhorse barely moves; larger for thin samples so a 3-game fluke is tamed.
+const REGRESSION_K_THIN = 4;   // < THIN_GP games: protect against small-sample noise
+const REGRESSION_K_FULL = 1.5; // >= THIN_GP games: reflect real production
+const THIN_GP = 8;
 const MIN_GAMES = 1;
 
-// Coarse per-game positional priors (league-typical 2025-ish). These are ANCHORS
-// for thin samples only, NOT published values — flagged as rough on purpose.
+// Per-game positional priors (league-typical). ANCHORS for thin samples only, never a
+// standalone published value — a market with no real volume is skipped, not priored.
 const POSITION_PRIORS = {
-  QB: { passYds: 215, passAtt: 32, completions: 21, passTds: 1.3, rushYds: 12, rushAtt: 3, receptions: 0, recYds: 0 },
-  RB: { passYds: 0, passAtt: 0, completions: 0, passTds: 0, rushYds: 48, rushAtt: 11, receptions: 2.4, recYds: 18 },
-  WR: { passYds: 0, passAtt: 0, completions: 0, passTds: 0, rushYds: 2, rushAtt: 0.4, receptions: 3.8, recYds: 46 },
-  TE: { passYds: 0, passAtt: 0, completions: 0, passTds: 0, rushYds: 0, rushAtt: 0, receptions: 3.2, recYds: 32 },
+  QB: { passYds: 215, rushYds: 12, receptions: 0, recYds: 0 },
+  RB: { passYds: 0, rushYds: 48, receptions: 2.4, recYds: 18 },
+  WR: { passYds: 0, rushYds: 2, receptions: 3.8, recYds: 46 },
+  TE: { passYds: 0, rushYds: 0, receptions: 3.2, recYds: 32 },
 };
 const DEFAULT_PRIOR = POSITION_PRIORS.WR;
 
-// v1 parametric dispersion: coefficient of variation per market (SD = CV * mean),
-// with a floor so a tiny mean does not collapse SD to ~0. These are placeholders
-// tuned to typical game-to-game spread; the shadow harness replaces them with a fit.
+// Which markets a position is eligible for (never project a QB's receptions).
+const POSITION_MARKETS = {
+  QB: ["pass_yds"],
+  RB: ["rush_yds", "receptions", "rec_yds"],
+  WR: ["receptions", "rec_yds"],
+  TE: ["receptions", "rec_yds"],
+};
+const PROJECTED_POSITIONS = new Set(["QB", "RB", "WR", "TE"]);
+
+// MARKET-PARTICIPANT gates: minimum SEASON volume (on a ~17-game basis) for the
+// player to count as a real participant in that market. Below this, props are not
+// realistically posted and the sample is too thin to seed — skip the market entirely.
+const MARKET_MIN_VOLUME = {
+  pass_yds:   { field: "passAtt", min: 100 },  // a real passer, not a clipboard QB
+  rush_yds:   { field: "rushAtt", min: 40 },   // a real ball-carrier
+  receptions: { field: "targets", min: 25 },   // a real pass-catcher
+  rec_yds:    { field: "targets", min: 25 },
+};
+
+// v1 parametric dispersion (SD = CV * mean, with a floor). Placeholder pending a fit
+// from shadow-graded actuals; used only when a book line arrives to make an Over prob.
 const MARKET_DISPERSION = {
   pass_yds: { cv: 0.28, minSd: 35 },
   rush_yds: { cv: 0.55, minSd: 18 },
   receptions: { cv: 0.45, minSd: 1.4 },
   rec_yds: { cv: 0.60, minSd: 15 },
 };
+
+// which raw season field feeds each market
+const MARKET_SRC = { pass_yds: "passYds", rush_yds: "rushYds", receptions: "receptions", rec_yds: "recYds" };
+const MARKET_PRIOR = { pass_yds: "passYds", rush_yds: "rushYds", receptions: "receptions", rec_yds: "recYds" };
 
 // ── math helpers ──────────────────────────────────────────────────────────────
 function erf(x) {
@@ -98,7 +133,6 @@ function extractSeasonStats(statsJson) {
   const pick = (...vals) => { for (const v of vals) if (v != null) return v; return null; };
   return {
     gamesPlayed: pick(G.gamesPlayed),
-    // gross passing yards for prop settlement; fall back to net if gross absent.
     passYds: pick(P.passingYards, P.netPassingYards),
     passAtt: pick(P.passingAttempts),
     completions: pick(P.completions),
@@ -114,33 +148,43 @@ function extractSeasonStats(statsJson) {
   };
 }
 
-// ── PURE: per-game projection with small-sample regression toward a position prior ─
-function regressRate(total, gp, prior) {
-  if (gp == null || gp < MIN_GAMES || total == null) return prior != null ? prior : null;
-  const rate = total / gp;
-  if (prior == null) return rate;
-  return (gp * rate + REGRESSION_PSEUDO_GAMES * prior) / (gp + REGRESSION_PSEUDO_GAMES);
+// ── PURE: is a player a real participant in this market? (volume gate) ───────────
+function marketEligible(season, market) {
+  const g = MARKET_MIN_VOLUME[market];
+  if (!g || !season) return false;
+  const v = season[g.field];
+  return v != null && v >= g.min;
 }
 
+// ── PURE: project one stat's per-game mean, regressed only for thin samples ──────
+// Returns null if the underlying total is missing (NO prior fabrication) or the
+// sample is empty. A real total (even small/negative) is trusted, shrunk by sample.
+function projectStat(total, gp, prior) {
+  if (total == null || gp == null || gp < MIN_GAMES) return null;
+  const rate = total / gp;
+  if (prior == null) return rate;
+  const K = gp >= THIN_GP ? REGRESSION_K_FULL : REGRESSION_K_THIN;
+  return (gp * rate + K * prior) / (gp + K);
+}
+
+// ── PURE: full per-market projection for one player (gated) ──────────────────────
 function projectPlayer(season, position) {
   const prior = POSITION_PRIORS[position] || DEFAULT_PRIOR;
   const gp = season.gamesPlayed;
-  return {
-    gamesPlayed: gp,
-    passYds: round(regressRate(season.passYds, gp, prior.passYds)),
-    passAtt: round(regressRate(season.passAtt, gp, prior.passAtt)),
-    completions: round(regressRate(season.completions, gp, prior.completions)),
-    passTds: round(regressRate(season.passTds, gp, prior.passTds), 2),
-    rushYds: round(regressRate(season.rushYds, gp, prior.rushYds)),
-    rushAtt: round(regressRate(season.rushAtt, gp, prior.rushAtt)),
-    receptions: round(regressRate(season.receptions, gp, prior.receptions), 2),
-    recYds: round(regressRate(season.recYds, gp, prior.recYds)),
-  };
+  const posMarkets = POSITION_MARKETS[position] || [];
+  const projected = { pass_yds: null, rush_yds: null, receptions: null, rec_yds: null };
+  const eligibleMarkets = [];
+  for (const mkt of posMarkets) {
+    if (!marketEligible(season, mkt)) continue;
+    const val = projectStat(season[MARKET_SRC[mkt]], gp, prior[MARKET_PRIOR[mkt]]);
+    if (val == null) continue;
+    projected[mkt] = round(val, mkt === "receptions" ? 2 : 1);
+    eligibleMarkets.push(mkt);
+  }
+  return { gamesPlayed: gp, eligibleMarkets, projected };
 }
 
 // ── PURE: projected mean + book line -> Over probability (v1 parametric) ─────────
-// P(stat > line) using a normal approx with market-specific dispersion. Returns null
-// if inputs are missing. Dispersion is a placeholder pending the shadow-fit.
 function overProb(mean, line, market) {
   const m = num(mean), l = num(line);
   const disp = MARKET_DISPERSION[market];
@@ -152,26 +196,24 @@ function overProb(mean, line, market) {
 }
 
 // ── LIVE: fetch + assemble player projections across teams (validated via route) ─
-async function espnGet(url) {
-  const res = await axios.get(url, { timeout: TIMEOUT_MS, headers: { "User-Agent": UA, Accept: "application/json" } });
-  return res.data;
+function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
+
+async function espnGet(url, retries = 1) {
+  try {
+    const res = await axios.get(url, { timeout: TIMEOUT_MS, headers: { "User-Agent": UA, Accept: "application/json" } });
+    return res.data;
+  } catch (e) {
+    if (retries > 0) { await sleep(300); return espnGet(url, retries - 1); }
+    throw e;
+  }
 }
 
 const _cache = new Map();
 function cacheGet(k) { const h = _cache.get(k); if (h && h.exp > Date.now()) return h.v; _cache.delete(k); return null; }
 function cacheSet(k, v, ttl) { _cache.set(k, { v, exp: Date.now() + ttl }); }
 
-// Which markets a position is eligible for (so we never project a QB's receptions).
-const POSITION_MARKETS = {
-  QB: ["pass_yds"],
-  RB: ["rush_yds", "receptions", "rec_yds"],
-  WR: ["receptions", "rec_yds"],
-  TE: ["receptions", "rec_yds"],
-};
-const PROJECTED_MARKETS = new Set(["QB", "RB", "WR", "TE"]);
+const FETCH_CONCURRENCY = 4;
 
-// buildPlayerProjections: enumerate teams -> rosters -> per-athlete 2025 stats ->
-// projections. `teamLimit` caps teams (keep the diagnostic cheap); 0 = all 32.
 async function buildPlayerProjections({ season = 2025, teamLimit = 3 } = {}) {
   const key = `nflProj:${season}:${teamLimit}`;
   const cached = cacheGet(key);
@@ -189,6 +231,8 @@ async function buildPlayerProjections({ season = 2025, teamLimit = 3 } = {}) {
 
   const players = [];
   let statErrors = 0;
+  let skippedNoMarket = 0;
+
   for (const tm of teams) {
     let roster = [];
     try {
@@ -197,32 +241,30 @@ async function buildPlayerProjections({ season = 2025, teamLimit = 3 } = {}) {
         const items = Array.isArray(g.items) ? g.items : (g.id ? [g] : []);
         for (const a of items) {
           const pos = a.position && a.position.abbreviation;
-          if (a.id && PROJECTED_MARKETS.has(pos)) roster.push({ id: a.id, name: a.fullName || a.displayName, pos, team: tm.abbreviation });
+          if (a.id && PROJECTED_POSITIONS.has(pos)) roster.push({ id: a.id, name: a.fullName || a.displayName, pos, team: tm.abbreviation });
         }
       }
     } catch (_) { continue; }
 
-    // fetch each skill player's season stats (concurrency-capped)
-    for (let i = 0; i < roster.length; i += 6) {
-      const batch = roster.slice(i, i + 6);
+    for (let i = 0; i < roster.length; i += FETCH_CONCURRENCY) {
+      const batch = roster.slice(i, i + FETCH_CONCURRENCY);
       await Promise.all(batch.map(async (pl) => {
         try {
           const stats = await espnGet(`${ESPN_CORE}/seasons/${season}/types/2/athletes/${pl.id}/statistics`);
           const season2025 = extractSeasonStats(stats);
-          if (season2025.gamesPlayed == null || season2025.gamesPlayed < MIN_GAMES) return; // no 2025 sample
+          if (season2025.gamesPlayed == null || season2025.gamesPlayed < MIN_GAMES) return;
           const proj = projectPlayer(season2025, pl.pos);
+          if (proj.eligibleMarkets.length === 0) { skippedNoMarket++; return; } // not a real market participant
           players.push({
             id: pl.id, name: pl.name, team: pl.team, pos: pl.pos,
             gamesPlayed: season2025.gamesPlayed,
-            markets: POSITION_MARKETS[pl.pos] || [],
-            projected: {
-              pass_yds: proj.passYds, rush_yds: proj.rushYds,
-              receptions: proj.receptions, rec_yds: proj.recYds,
-            },
+            markets: proj.eligibleMarkets,
+            projected: proj.projected,
             season2025,
           });
         } catch (_) { statErrors++; }
       }));
+      await sleep(120); // gentle pacing to avoid ESPN throttling
     }
   }
 
@@ -231,8 +273,11 @@ async function buildPlayerProjections({ season = 2025, teamLimit = 3 } = {}) {
     teamsProbed: teams.length,
     playersProjected: players.length,
     statErrors,
-    note: "2025 season-average seed, regressed for thin samples. COARSE prior, shadow-only — not published. Dispersion for Over/Under is parametric pending a shadow-graded fit.",
-    players: players.sort((a, b) => (b.projected.pass_yds || b.projected.rec_yds || 0) - (a.projected.pass_yds || a.projected.rec_yds || 0)),
+    skippedNoMarket,
+    note: "v1.1: market-participant gated, honest nulls, thin-sample-only regression. 2025 season-average seed, shadow-only — publishes nothing. Over/Under dispersion is parametric pending a shadow-graded fit.",
+    players: players.sort((a, b) =>
+      (b.projected.pass_yds || b.projected.rush_yds || b.projected.rec_yds || 0) -
+      (a.projected.pass_yds || a.projected.rush_yds || a.projected.rec_yds || 0)),
   };
   cacheSet(key, result, 30 * 60 * 1000);
   return result;
@@ -240,11 +285,14 @@ async function buildPlayerProjections({ season = 2025, teamLimit = 3 } = {}) {
 
 module.exports = {
   extractSeasonStats,
+  marketEligible,
+  projectStat,
   projectPlayer,
   overProb,
   buildPlayerProjections,
   POSITION_PRIORS,
   POSITION_MARKETS,
+  MARKET_MIN_VOLUME,
   MARKET_DISPERSION,
-  _internal: { normalCDF, regressRate, num },
+  _internal: { normalCDF, num },
 };
