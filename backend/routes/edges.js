@@ -46,6 +46,9 @@ const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
 // (a free-tier-era throttle). On the 100K plan at ~4%/period usage there's ample
 // headroom, so cover the full slate. Named constant = one-line dial if usage climbs.
 const MLB_PROP_GAME_CAP = 18;
+// WZ-MLBPROPS-DISPLAYCAP-2026-07-05 :: per-type prop display cap. TB fills fast (ranked
+// by model prob, not juice-filtered) and was clipping at 25; raised to 40. Named for easy dial.
+const MLB_PROP_DISPLAY_CAP = 40;
 // Coalescing: true while a full board recompute is in progress, so concurrent cold
 // requests wait for that single build instead of each launching their own (stampede +
 // duplicate Odds API calls). Released in the handler's finally, so it can never get
@@ -628,12 +631,12 @@ router.get("/mlb", async (req, res) => {
       moneylineEdges: moneylineEdges.slice(0, 10),
       totalsEdges: totalsEdges.slice(0, 10),
       runLineEdges: runLineEdges.slice(0, 10),
-      hrPropEdges: hrPropEdges.slice(0, 25),
-      kPropEdges: kPropEdges.slice(0, 25),
-      hitsPropEdges: hitsPropEdges.slice(0, 25),
-      tbPropEdges: tbPropEdges.slice(0, 25),
-      doublesPropEdges: doublesPropEdges.slice(0, 25),
-      triplesPropEdges: triplesPropEdges.slice(0, 25),
+      hrPropEdges: hrPropEdges.slice(0, MLB_PROP_DISPLAY_CAP),
+      kPropEdges: kPropEdges.slice(0, MLB_PROP_DISPLAY_CAP),
+      hitsPropEdges: hitsPropEdges.slice(0, MLB_PROP_DISPLAY_CAP),
+      tbPropEdges: tbPropEdges.slice(0, MLB_PROP_DISPLAY_CAP),
+      doublesPropEdges: doublesPropEdges.slice(0, MLB_PROP_DISPLAY_CAP),
+      triplesPropEdges: triplesPropEdges.slice(0, MLB_PROP_DISPLAY_CAP),
       computedAt: new Date().toISOString(),
       cached: false,
     };
