@@ -42,6 +42,10 @@ let edgesCache = null;
 let edgesCacheAt = 0;
 let edgesCacheDate = null; // which ET date the cached payload is for
 const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
+// WZ-MLBPROPS-FULLSLATE-2026-07-05 :: prop coverage was capped at the first 5 games
+// (a free-tier-era throttle). On the 100K plan at ~4%/period usage there's ample
+// headroom, so cover the full slate. Named constant = one-line dial if usage climbs.
+const MLB_PROP_GAME_CAP = 18;
 // Coalescing: true while a full board recompute is in progress, so concurrent cold
 // requests wait for that single build instead of each launching their own (stampede +
 // duplicate Odds API calls). Released in the handler's finally, so it can never get
@@ -529,7 +533,7 @@ router.get("/mlb", async (req, res) => {
       const eligibleGamesForHR = gamesWithOdds
         .filter(g => g._oddsEventId)
         .filter(g => isPreGame(g.status));
-      const topGamesForHR = eligibleGamesForHR.slice(0, 5);
+      const topGamesForHR = eligibleGamesForHR.slice(0, MLB_PROP_GAME_CAP);
       const eventIds = topGamesForHR.map(g => g._oddsEventId);
       tbAutoEventIds = eventIds;
       tbAutoGames = topGamesForHR;
