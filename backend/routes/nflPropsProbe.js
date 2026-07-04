@@ -1,4 +1,4 @@
-// WZ-NFLPROPS-PROBE-V6-2026-07-05
+// WZ-NFLPROPS-PROBE-V7-2026-07-05
 // nflPropsProbe.js  —  WizePicks NFL Player Props, Phase 3 recon (READ-ONLY).
 //
 // Isolated router (its own express.Router, own fetches, writes NOTHING) so a bug
@@ -35,6 +35,11 @@
 //   GET /api/nfl-props-probe/actuals[?date=YYYYMMDD]
 //       Read-only probe of the box-score actuals extractor (nflPropsActuals), against a
 //       REAL completed 2025 game, so the grader's stat source is confirmed before use.
+//
+//   GET /api/nfl-props-probe/grade-dry-run
+//       Read-only DRY RUN of the grader (nflPropsGrader): grades pending shadow rows
+//       from box scores and returns previews WITHOUT writing. Empty until rows exist;
+//       the hourly cron does the real write-back.
 //
 // Delete this file (and its server.js mount) once the projection seed + prop fetcher
 // are built on the confirmed shapes.
@@ -391,6 +396,17 @@ router.get("/actuals", async (req, res) => {
     res.json(result);
   } catch (e) {
     console.error("[nfl-props-probe/actuals] error:", e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+router.get("/grade-dry-run", async (req, res) => {
+  try {
+    const { gradeNflPropShadows } = require("../services/nflPropsGrader");
+    const result = await gradeNflPropShadows({ dryRun: true });
+    res.json(result);
+  } catch (e) {
+    console.error("[nfl-props-probe/grade-dry-run] error:", e.message);
     res.status(500).json({ ok: false, error: e.message });
   }
 });
