@@ -119,7 +119,7 @@ export default function HomePage(){
   const [newsFeed,setNewsFeed]=useState([]); // WZ-LIVEWIRE-2026-06-27 :: MLB live wire (news + injuries)
   const prev=useRef({}); const [flash,setFlash]=useState({});
   const hasFull=plan.isAdmin===true||plan.tier==="pro"||plan.tier==="elite"||user?.email==="r7002g@gmail.com";
-  const [face,setFace]=useState("edges"); // WZ-WINNERS-V2-2026-07-04 :: Edge Board leads; Winners one tap away
+  const [face]=useState("edges"); // WZ-WINNERS-REMOVED-2026-07-05 :: Winners dropped; Edge Board is the only board face
   const sp=SPORTS[sport]||SPORTS.mlb;
   const [isDesktop,setIsDesktop]=useState(typeof window!=="undefined"&&window.innerWidth>=1024);
   const [heroIdx,setHeroIdx]=useState(0);
@@ -319,49 +319,9 @@ export default function HomePage(){
   // WZ-FULLBOARD-2026-06-30 :: "All" shows every qualifying edge (ML + total + run line per
   // game), not just the single highest per game. Only one side of a market can be +edge, so a
   // game surfaces at most one pick per market — fuller board, run line included, conviction-sorted.
-  // WZ-WINNERS-M-2026-07-03 :: Winners face — the casual-bettor lens over the same
-  // calibrated math. (The face useState lives with the other hooks at the top of the
-  // component — it MUST run before the loading early-return, per Rules of Hooks.)
-  const winnersRows=(()=>{
-    const out=[];
-    const fmtOddsW=(o)=>o==null?"\u2014":(o>0?"+"+o:""+o);
-    if(sport==="mlb"){
-      for(const g of (e.games||[])){
-        const ml=g.moneyline||{}; if(ml.awayWinProb==null||ml.homeWinProb==null) continue;
-        const homeW=ml.homeWinProb>=ml.awayWinProb;
-        const prob=homeW?ml.homeWinProb:ml.awayWinProb;
-        const edgePct=((homeW?ml.homeEdge:ml.awayEdge)??null); const eP=edgePct!=null?edgePct*100:null;
-        out.push({ ab:homeW?g.homeAbbr:g.awayAbbr, opp:homeW?g.awayAbbr:g.homeAbbr,
-          matchup:`${g.awayAbbr} @ ${g.homeAbbr}`, time:g.time||"", prob,
-          odds:homeW?ml.homeOdds:ml.awayOdds, book:homeW?ml.homeBook:ml.awayBook,
-          edge:eP, best:eP!=null&&eP>0, over:eP!=null&&eP<=-1.0, prov:false, gameId:g.id, fmt:fmtOddsW });
-      }
-    } else if(sport==="nfl"||sport==="cfb"){
-      for(const g of (e.games||[])){
-        const m=g.moneyline||{}; if(m.homeWinProb==null||m.awayWinProb==null) continue;
-        const parts=String(g.matchup||"").split(" @ "); const awayN=parts[0]||"", homeN=parts[1]||"";
-        const homeW=m.homeWinProb>=m.awayWinProb;
-        const prob=(homeW?m.homeWinProb:m.awayWinProb)/100;
-        const eP=(m.fair&&m.fair.home!=null)?((homeW?m.homeWinProb:m.awayWinProb)-(homeW?m.fair.home:m.fair.away)):null;
-        out.push({ ab:(homeW?homeN:awayN).split(" ").pop(), opp:(homeW?awayN:homeN).split(" ").pop(),
-          matchup:g.matchup, time:g.commenceTime?new Date(g.commenceTime).toLocaleDateString("en-US",{weekday:"short",month:"numeric",day:"numeric",timeZone:"America/New_York"})+" \u00b7 "+new Date(g.commenceTime).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit",timeZone:"America/New_York"})+" ET":"",
-          prob, odds:m.book?(homeW?m.book.home:m.book.away):null, book:null,
-          edge:eP, best:eP!=null&&eP>=1.0, over:eP!=null&&eP<=-1.5, prov:true, gameId:g.matchup, fmt:fmtOddsW });
-      }
-    } else if(sport==="nba"){
-      for(const r of (e.moneylineEdges||[])){
-        const parts=String(r.matchup||"").split(" @ "); const oppAb=(parts[0]===r.teamAbbr)?parts[1]:parts[0];
-        const pickIsWinner=(r.modelProb??0)>=0.5;
-        out.push({ ab:pickIsWinner?r.teamAbbr:oppAb, opp:pickIsWinner?oppAb:r.teamAbbr,
-          matchup:r.matchup, time:"", prob:pickIsWinner?r.modelProb:1-(r.modelProb??0.5),
-          odds:pickIsWinner?r.odds:null, book:null,
-          edge:pickIsWinner?(r.edge??null):null, best:pickIsWinner&&(r.edge??0)>=1.0, over:false,
-          dogValue:!pickIsWinner, prov:true, gameId:r.gameId||r.matchup, fmt:fmtOddsW });
-      }
-    }
-    out.sort((a,b)=>(b.prob||0)-(a.prob||0));
-    return out;
-  })();
+  // WZ-WINNERS-REMOVED-2026-07-05 :: Winners face removed — the Edge Board is the sole
+  // board surface. (Dropped: it was moneyline betting already covered by the Edge Board,
+  // and it headlined uncalibrated raw win% — off the storefront until the model earns it.)
 
   const boardSrc = board==="all" ? allAdj.filter(x=>sport==="mlb"?(x.edge??0)>0:(x.edge??0)>=1).sort(sortBoard) : boardEdges;
   const boardItems = boardSrc.map(toBoard);
@@ -499,30 +459,7 @@ export default function HomePage(){
 
       {hasFull && moverItems.length>0 && <MarketMovers movers={moverItems} navigate={navigate}/>}
 
-        {/* WZ-WINNERS-M-2026-07-03 :: face toggle + Winners view */}
-        <div className="wntog"><b className={face==="edges"?"on":""} onClick={()=>setFace("edges")}>EDGE BOARD</b><b className={face==="winners"?"on":""} onClick={()=>setFace("winners")}>WINNERS</b></div>
-
-        {face==="winners" && (hasFull ? <>
-          <div className="seclbl">EVERY GAME, CALLED <span className="ct">who the model says wins</span></div>
-          {winnersRows.length===0 && <div className="estate"><div className="et">No games to call yet</div><div className="es">Winner calls post when the board fills.</div></div>}
-          {winnersRows.map((r,i)=>(
-            <div key={i} className="wnrow">
-              <div className="wnl">
-                <div className="wnpick">{r.ab} <span className="vs">over {r.opp}</span></div>
-                {r.time&&<div className="wnsub">{r.time}</div>}
-                <div className="wnbar"><span style={{width:Math.round((r.prob||0)*100)+"%"}}/></div>
-              </div>
-              <div className="wnconf">{Math.round((r.prob||0)*100)}%<span className="k">TO WIN</span></div>
-              {r.dogValue
-                ? <span className="wntag fair">DOG HAS VALUE {"\u2192"} EDGES</span>
-                : r.best ? <span className="wntag val">{"\u2713"} BEST BET</span>
-                : r.over ? <span className="wntag skip">OVERPRICED</span>
-                : <span className="wntag fair">PRICED FAIR</span>}
-            </div>
-          ))}
-          <div className="wnfoot"><b>How to read this:</b> Every game gets our winner call. <b>{"\u2713"} BEST BET</b> means the books are also underpaying that winner. <b>PRICED FAIR</b> means right team, fair payout. <b>OVERPRICED</b> means the price eats the value {"\u2014"} skip it. Only Best Bets belong in your record.</div>
-        </> : <Gate title="Winners are an All-Access feature" navigate={navigate}/>)}
-
+        {/* WZ-WINNERS-REMOVED-2026-07-05 :: toggle + Winners view removed; Edge Board only */}
         {face==="edges" && <>
         <div className="boardhd">
           <div className="bhtitle">
