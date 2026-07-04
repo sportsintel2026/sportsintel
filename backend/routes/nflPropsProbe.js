@@ -1,30 +1,26 @@
-// WZ-NFLPROPS-PROBE-2026-07-05
+// WZ-NFLPROPS-PROBE-V2-2026-07-05
 // nflPropsProbe.js  —  WizePicks NFL Player Props, Phase 3 recon (READ-ONLY).
 //
 // Isolated router (its own express.Router, own fetches, writes NOTHING) so a bug
-// here can never destabilize the live edges feed — the same containment pattern as
-// playerCard.js / Market Read. Its only job is to confirm two data sources BEFORE a
-// single line of projection math is written, so the model is built on verified
-// shapes, not guesses:
+// here can never destabilize the live edges feed — same containment as playerCard.js.
+// Confirms two data sources BEFORE any projection math is written.
 //
 //   GET /api/nfl-props-probe/stats[?season=2025]
-//       ESPN 2025 player-stat shapes. Chains leaders -> one athlete's season
-//       statistics -> that athlete's gamelog, and reports the raw category / stat
-//       field names + one sample value each. This tells us exactly what keys a
-//       projection (pass yds / rush yds / receptions, plus a per-game variance
-//       source) can read. No field names are assumed.
+//       ESPN 2025 player-stat shapes. v2 probes FOUR sources INDEPENDENTLY (no
+//       single-endpoint chain — v1's site "leaders" URL 404'd and blinded the rest):
+//         1. core-API season leaders   (category names + an athlete $ref)
+//         2. teams list -> roster      (athlete enumeration + a fallback athlete id)
+//         3. athlete season statistics (THE field names a projection reads)
+//         4. athlete gamelog           (per-game shape for a variance fit)
+//       Reports raw category / stat field names + one sample value each. Nothing assumed.
 //
 //   GET /api/nfl-props-probe/odds
-//       Odds API NFL player-prop availability. Lists upcoming NFL events (free
-//       call), then asks the nearest event for the core player-prop markets and
-//       reports HTTP status, which markets returned, a sample outcome, and the
-//       credit-usage headers. A 422 (markets not on this plan) or an empty result
-//       (props not posted this far from kickoff) is itself a valid, informative
-//       answer — it tells us whether the $59 plan upgrade is required and confirms
-//       the "shadow-first from the first preseason snap" timing.
+//       Odds API NFL player-prop availability + credit cost. Lists events (free call),
+//       asks the nearest event for the core prop markets, reports HTTP status (200 vs
+//       422 = plan gate), which markets returned, a sample outcome, and credit headers.
 //
-// Delete this file (and its mount) once the projection seed + prop fetcher are built
-// on the confirmed shapes.
+// Delete this file (and its server.js mount) once the projection seed + prop fetcher
+// are built on the confirmed shapes.
 
 const express = require("express");
 const router = express.Router();
@@ -37,9 +33,6 @@ const ODDS_API_KEY = process.env.ODDS_API_KEY;
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36";
 const TIMEOUT_MS = 9000;
 
-// The core player-prop markets a Phase 3 projection would price. Kept short on
-// purpose: each market on an event-odds call costs credits, and a probe should be
-// cheap. QB pass yds, rushing yds, receptions, receiving yds (+ pass TDs as a bonus).
 const CORE_PROP_MARKETS = [
   "player_pass_yds",
   "player_rush_yds",
@@ -56,132 +49,143 @@ async function espnGet(url) {
   return res.data;
 }
 
-// Pull an athlete id out of a core-API $ref like ".../athletes/3139477?lang=en".
 function athleteIdFromRef(ref) {
   const m = String(ref || "").match(/athletes\/(\d+)/);
   return m ? m[1] : null;
 }
 
-// ── Probe A: ESPN 2025 player-stat shapes ─────────────────────────────────────
-async function probePlayerStats(season) {
-  const out = { season, endpoints: {} };
-  let sampleAthleteId = null;
-  let sampleAthleteName = null;
+function statusOf(e) {
+  return (e && e.response && e.response.status) || null;
+}
 
-  // 1) League leaders — one call. Gives category keys (passingYards / rushingYards /
-  //    receptions ...) plus each leader's athlete $ref, from which we grab an id to
-  //    chain the next two probes. Cheapest confirmation of category names.
-  const leadersUrl = `${ESPN_SITE}/leaders?season=${season}&seasontype=2`;
+// ── Probe A: ESPN 2025 player-stat shapes (four independent sources) ──────────
+async function probePlayerStats(season) {
+  const out = { season, sources: {} };
+  let athId = null;
+  let athName = null;
+  let athFrom = null;
+
+  // 1) Core-API season leaders — structured category list + athlete refs. Preferred
+  //    athlete resolver AND confirmation of which stat categories exist for 2025.
+  const coreLeadersUrl = `${ESPN_CORE}/seasons/${season}/types/2/leaders`;
   try {
-    const data = await espnGet(leadersUrl);
-    const cats =
-      (data && data.leaders && data.leaders.categories) ||
-      (data && data.categories) ||
-      [];
-    out.endpoints.leaders = {
-      url: leadersUrl,
+    const data = await espnGet(coreLeadersUrl);
+    const cats = data.categories || data.items || [];
+    for (const c of cats) {
+      const ld = (c.leaders || [])[0];
+      const ref = ld && (ld.athlete ? ld.athlete.$ref || ld.athlete : null);
+      const id = athleteIdFromRef(ref);
+      if (id) { athId = id; athFrom = `coreLeaders:${c.name || c.abbreviation}`; break; }
+    }
+    out.sources.coreLeaders = {
+      url: coreLeadersUrl,
       ok: true,
       categoryNames: cats.map((c) => c.name || c.abbreviation).filter(Boolean),
-      sample: cats.slice(0, 4).map((c) => {
-        const top = (c.leaders && c.leaders[0]) || null;
-        if (top && !sampleAthleteId) {
-          sampleAthleteId = athleteIdFromRef(top.athlete && top.athlete.$ref);
-          sampleAthleteName =
-            (top.athlete && (top.athlete.displayName || top.athlete.fullName)) || null;
-        }
-        return {
-          name: c.name,
-          displayName: c.displayName,
-          topLeader: top
-            ? { value: top.value, displayValue: top.displayValue }
-            : null,
-        };
-      }),
+      resolvedAthleteId: athId,
     };
   } catch (e) {
-    out.endpoints.leaders = {
-      url: leadersUrl,
-      ok: false,
-      status: (e.response && e.response.status) || null,
-      error: e.message,
-    };
+    out.sources.coreLeaders = { url: coreLeadersUrl, ok: false, status: statusOf(e), error: e.message };
   }
 
-  // 2) One athlete's SEASON statistics (core API) — the per-player aggregate source
-  //    a projection reads (attempts, yards, receptions, games). Report the category
-  //    + stat field names and a couple of sample values so the seed math targets
-  //    real keys. Uses the athlete resolved from the leaders call above.
-  if (sampleAthleteId) {
-    const statUrl = `${ESPN_CORE}/seasons/${season}/types/2/athletes/${sampleAthleteId}/statistics`;
+  // 2) Teams list -> first team id -> roster. Confirms athlete enumeration and gives a
+  //    fallback athlete id (prefer a QB — the pass-yds seed) if leaders didn't resolve one.
+  let teamId = null;
+  const teamsUrl = `${ESPN_SITE}/teams`;
+  try {
+    const data = await espnGet(teamsUrl);
+    const teams = (data.sports && data.sports[0] && data.sports[0].leagues && data.sports[0].leagues[0] && data.sports[0].leagues[0].teams) || [];
+    teamId = (teams[0] && teams[0].team && teams[0].team.id) || null;
+    out.sources.teams = { url: teamsUrl, ok: true, teamCount: teams.length, sampleTeamId: teamId };
+  } catch (e) {
+    out.sources.teams = { url: teamsUrl, ok: false, status: statusOf(e), error: e.message };
+  }
+
+  if (teamId) {
+    const rosterUrl = `${ESPN_SITE}/teams/${teamId}/roster`;
+    try {
+      const data = await espnGet(rosterUrl);
+      const groups = data.athletes || [];
+      const flat = [];
+      for (const g of groups) {
+        if (Array.isArray(g.items)) {
+          for (const a of g.items) flat.push({ id: a.id, name: a.fullName || a.displayName, pos: a.position && a.position.abbreviation });
+        } else if (g.id) {
+          flat.push({ id: g.id, name: g.fullName || g.displayName, pos: g.position && g.position.abbreviation });
+        }
+      }
+      const qb = flat.find((a) => a.pos === "QB") || flat[0] || null;
+      if (!athId && qb && qb.id) { athId = String(qb.id); athName = qb.name; athFrom = "roster"; }
+      else if (qb) athName = athName || qb.name;
+      out.sources.roster = {
+        url: rosterUrl,
+        ok: true,
+        groupCount: groups.length,
+        athleteCount: flat.length,
+        positionsSeen: [...new Set(flat.map((a) => a.pos))].filter(Boolean),
+        sampleAthlete: qb,
+      };
+    } catch (e) {
+      out.sources.roster = { url: rosterUrl, ok: false, status: statusOf(e), error: e.message };
+    }
+  }
+
+  // 3) THE key source — athlete SEASON statistics (core API). Confirms the exact stat
+  //    field names a projection reads (passingYards / rushingYards / receptions / attempts
+  //    / gamesPlayed ...). Uses whichever athlete id sources 1 or 2 resolved.
+  if (athId) {
+    const statUrl = `${ESPN_CORE}/seasons/${season}/types/2/athletes/${athId}/statistics`;
     try {
       const data = await espnGet(statUrl);
-      const cats = (data && data.splits && data.splits.categories) || [];
-      out.endpoints.athleteSeasonStats = {
+      const cats = (data.splits && data.splits.categories) || [];
+      out.sources.athleteSeasonStats = {
         url: statUrl,
         ok: true,
-        athleteId: sampleAthleteId,
-        athleteName: sampleAthleteName,
+        athleteId: athId,
+        athleteName: athName,
+        resolvedFrom: athFrom,
         categories: cats.map((c) => ({
           name: c.name,
           displayName: c.displayName,
-          statSample: (c.stats || []).slice(0, 10).map((s) => ({
-            name: s.name,
-            abbr: s.abbreviation,
-            value: s.value,
-            display: s.displayValue,
+          stats: (c.stats || []).slice(0, 14).map((s) => ({
+            name: s.name, abbr: s.abbreviation, value: s.value, display: s.displayValue,
           })),
         })),
       };
     } catch (e) {
-      out.endpoints.athleteSeasonStats = {
-        url: statUrl,
-        ok: false,
-        athleteId: sampleAthleteId,
-        status: (e.response && e.response.status) || null,
-        error: e.message,
-      };
+      out.sources.athleteSeasonStats = { url: statUrl, ok: false, athleteId: athId, status: statusOf(e), error: e.message };
     }
 
-    // 3) That athlete's GAMELOG — the per-game variance source (a projection needs a
-    //    spread, not just a mean). Confirm per-game rows carry stat values + opponent.
-    const gamelogUrl = `${ESPN_SITE}/athletes/${sampleAthleteId}/gamelog?season=${season}`;
+    // 4) Athlete GAMELOG — per-game rows (the variance/dispersion source).
+    const gamelogUrl = `${ESPN_SITE}/athletes/${athId}/gamelog?season=${season}`;
     try {
       const data = await espnGet(gamelogUrl);
-      const names = (data && data.names) || (data && data.labels) || null;
-      const seasonTypes = (data && data.seasonTypes) || [];
+      const st = data.seasonTypes || [];
       let firstRow = null;
-      const st0 = seasonTypes[0];
-      const cat0 = st0 && st0.categories && st0.categories[0];
+      const cat0 = st[0] && st[0].categories && st[0].categories[0];
       const ev0 = cat0 && cat0.events && cat0.events[0];
       if (ev0) firstRow = { eventId: ev0.eventId, stats: ev0.stats };
-      out.endpoints.athleteGamelog = {
+      out.sources.athleteGamelog = {
         url: gamelogUrl,
         ok: true,
-        athleteId: sampleAthleteId,
-        statLabels: names,
-        seasonTypeCount: seasonTypes.length,
+        athleteId: athId,
+        statLabels: data.names || data.labels || null,
+        seasonTypeCount: st.length,
         sampleGameRow: firstRow,
       };
     } catch (e) {
-      out.endpoints.athleteGamelog = {
-        url: gamelogUrl,
-        ok: false,
-        athleteId: sampleAthleteId,
-        status: (e.response && e.response.status) || null,
-        error: e.message,
-      };
+      out.sources.athleteGamelog = { url: gamelogUrl, ok: false, athleteId: athId, status: statusOf(e), error: e.message };
     }
   } else {
-    out.endpoints.athleteSeasonStats = { ok: false, error: "no athlete id resolved from leaders" };
-    out.endpoints.athleteGamelog = { ok: false, error: "no athlete id resolved from leaders" };
+    out.sources.athleteSeasonStats = { ok: false, error: "no athlete id resolved from coreLeaders or roster" };
+    out.sources.athleteGamelog = { ok: false, error: "no athlete id resolved from coreLeaders or roster" };
   }
 
   out.note =
-    "Read-only. leaders.categoryNames = the stat categories that exist for 2025. " +
-    "athleteSeasonStats.categories[].statSample = the exact field names a projection " +
-    "seed reads (target pass yds / rush yds / receptions + attempts + games). " +
-    "athleteGamelog.sampleGameRow = the per-game shape for a variance/dispersion fit. " +
-    "If season stats look empty, try ?season=2024 to confirm the shape on a closed season.";
+    "Read-only v2. Sources probed independently. coreLeaders.categoryNames = stat " +
+    "categories that exist for the season. athleteSeasonStats.categories[].stats = the " +
+    "exact field names the projection seed reads (pass yds / rush yds / receptions + " +
+    "attempts + gamesPlayed). athleteGamelog.sampleGameRow = per-game shape for a variance " +
+    "fit. If season stats are empty, retry ?season=2024 to confirm on a fully-closed season.";
   return out;
 }
 
@@ -190,8 +194,6 @@ async function probePropOdds() {
   if (!ODDS_API_KEY) return { ok: false, error: "ODDS_API_KEY not configured" };
   const out = { ok: true, markets: CORE_PROP_MARKETS };
 
-  // 1) List upcoming NFL events — this endpoint is FREE (0 credits) and confirms
-  //    what NFL games the feed currently carries and how far out they are.
   const eventsUrl = `${ODDS_BASE}/sports/americanfootball_nfl/events`;
   let nearest = null;
   try {
@@ -223,18 +225,9 @@ async function probePropOdds() {
       requestsRemaining: res.headers["x-requests-remaining"] || null,
     };
   } catch (e) {
-    out.events = {
-      url: eventsUrl,
-      ok: false,
-      status: (e.response && e.response.status) || null,
-      error: e.message,
-    };
+    out.events = { url: eventsUrl, ok: false, status: statusOf(e), error: e.message };
   }
 
-  // 2) Ask the NEAREST event for the core player-prop markets. This is the real
-  //    question: does the plan return them (200) or reject them (422 = not on plan),
-  //    and if 200, are any actually posted this far out? Report the raw shape of the
-  //    first market found + credit headers so the cost of a live poll is visible.
   if (nearest && nearest.id) {
     const oddsUrl = `${ODDS_BASE}/sports/americanfootball_nfl/events/${nearest.id}/odds`;
     try {
@@ -277,7 +270,7 @@ async function probePropOdds() {
         requestsUsed: res.headers["x-requests-used"] || null,
       };
     } catch (e) {
-      const status = (e.response && e.response.status) || null;
+      const status = statusOf(e);
       out.propOdds = {
         url: oddsUrl,
         eventSampled: `${nearest.away} @ ${nearest.home}`,
@@ -298,11 +291,11 @@ async function probePropOdds() {
   }
 
   out.note =
-    "Read-only. marketsReturned lists which player-prop markets the plan actually " +
-    "serves for the sampled event. Empty markets with httpStatus 200 = plan allows " +
-    "them but books have not posted props this far out (expected until ~preseason). " +
-    "httpStatus 422 = plan does not include player props (upgrade needed). The /events " +
-    "list call is free; the event-odds call is where credits are spent.";
+    "Read-only. marketsReturned lists which player-prop markets the plan actually serves " +
+    "for the sampled event. Empty markets with httpStatus 200 = plan allows them but books " +
+    "have not posted props this far out (expected until ~preseason). httpStatus 422 = plan " +
+    "does not include player props (upgrade needed). The /events list call is free; the " +
+    "event-odds call is where credits are spent.";
   return out;
 }
 
