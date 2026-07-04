@@ -88,16 +88,77 @@ function nflPhaseFor(commenceISO) {
   return d.getTime() < regStart.getTime() ? "preseason" : "regular";
 }
 
+// ── Rolling season blend (2025->2026 rollover) ───────────────────────────────
+// WZ-NFLROLLOVER-2026-07-05
+// Rate on the PRIOR completed season early, and let the CURRENT season take over as
+// its games accumulate: weight on current = g / (g + SEASON_BLEND_K). Before the
+// current season's regular opener there are provably ZERO current-season regular
+// games, so this is PURE PRIOR — byte-identical to the old fixed-2025 behavior — and
+// it transitions on its own once real games are played. The season year is derived,
+// so no manual bump is needed from one year to the next.
+const SEASON_BLEND_K = 6; // current-season pseudo-games; higher = trust the prior longer
+
+// The season whose regular season is current/most-recent. A season's year is its
+// calendar year, except Jan/Feb (playoffs) which belong to the prior year's season.
+function currentNflSeasonYear(now = new Date()) {
+  const m = now.getUTCMonth(); // 0=Jan
+  return m <= 1 ? now.getUTCFullYear() - 1 : now.getUTCFullYear();
+}
+
+// PURE: blend two buildTeamRatings() results by per-team current-season games. Starts
+// from the prior object and overrides only each team's rating, so every other field
+// (ids, names the resolver needs, rated count) is preserved exactly.
+function blendRatings(prior, current, k = SEASON_BLEND_K) {
+  const curTeams = (current && current.teams) || {};
+  const teams = {};
+  let blendedTeams = 0;
+  for (const id of Object.keys((prior && prior.teams) || {})) {
+    const pt = prior.teams[id];
+    const ct = curTeams[id];
+    const gCur = ct ? (ct.gp || 0) : 0;
+    if (gCur > 0 && ct.rating != null && pt.rating != null) {
+      const w = gCur / (gCur + k);
+      teams[id] = {
+        ...pt,
+        rating: Math.round((w * ct.rating + (1 - w) * pt.rating) * 100) / 100,
+        priorRating: pt.rating, currentRating: ct.rating, currentGp: gCur,
+        blendWeight: Math.round(w * 100) / 100,
+      };
+      blendedTeams++;
+    } else {
+      teams[id] = { ...pt, currentGp: gCur };
+    }
+  }
+  return { ...prior, teams, blend: { mode: blendedTeams ? "blended" : "prior-only", k, blendedTeams } };
+}
+
+// Build the rolling-blend ratings for the live model. Fetches the prior season always;
+// fetches the current season and blends only once its regular season has opened.
+async function buildBlendedTeamRatings({ now = new Date() } = {}) {
+  const currentSeason = currentNflSeasonYear(now);
+  const priorSeason = currentSeason - 1;
+  const prior = await buildTeamRatings(priorSeason);
+
+  const regStart = nflRegularSeasonStart(currentSeason);
+  if (now.getTime() < regStart.getTime()) {
+    return { ...prior, blend: { mode: "prior-only", priorSeason, currentSeason, k: SEASON_BLEND_K, blendedTeams: 0 } };
+  }
+  const current = await buildTeamRatings(currentSeason);
+  const out = blendRatings(prior, current, SEASON_BLEND_K);
+  out.blend = { ...out.blend, priorSeason, currentSeason };
+  return out;
+}
+
 // Run the full NFL slate: returns { ratingsMeta, games:[prediction...], match:{...} }.
 // `weeks` limits output to the next N NFL weeks (default 1) so the board shows one
 // slate at a time — each team appears once — instead of every lookahead game at
 // once. The window is anchored to the EARLIEST upcoming game in the feed (rolls
 // forward like the MLB board): week = [earliest, earliest + 7d*weeks). Pass
 // weeks=0 to disable the filter and return the full multi-week slate.
-async function runNFLSlate({ season = 2025, weeks = 1, phase = null } = {}) {
+async function runNFLSlate({ season = null, weeks = 1, phase = null } = {}) {
   const [eventsRaw, ratings] = await Promise.all([
     getNFLMainOdds(),
-    buildTeamRatings(season),
+    season == null ? buildBlendedTeamRatings() : buildTeamRatings(season),
   ]);
 
   let events = Array.isArray(eventsRaw) ? eventsRaw.slice() : [];
@@ -176,13 +237,14 @@ async function runNFLSlate({ season = 2025, weeks = 1, phase = null } = {}) {
   });
 
   return {
-    season,
+    season: ratings.season != null ? ratings.season : season,
     weekWindow,
     phase: { selected: selectedPhase, available: availablePhases },
     ratingsMeta: {
       loaded: ratingsLoaded,
       rated: ratings.rated || 0,
       note: ratings.note || null,
+      blend: ratings.blend || null,
     },
     match: {
       matched, unmatched,
@@ -193,7 +255,7 @@ async function runNFLSlate({ season = 2025, weeks = 1, phase = null } = {}) {
   };
 }
 
-module.exports = { runNFLSlate, captureNFLOddsTicks, getNFLMarketMovers, _internal: { normName, resolveTeam, buildResolver, nflPhaseFor, nflRegularSeasonStart } };
+module.exports = { runNFLSlate, captureNFLOddsTicks, getNFLMarketMovers, _internal: { normName, resolveTeam, buildResolver, nflPhaseFor, nflRegularSeasonStart, currentNflSeasonYear, blendRatings, buildBlendedTeamRatings, SEASON_BLEND_K } };
 
 // ── NFL odds-tick snapshots (line-movement history) ──────────────────────────
 // Mirrors MLB captureOddsTicks but writes to its OWN table (nfl_odds_ticks) so the
