@@ -479,32 +479,11 @@ function ScoresTerminal({ activeLeague, meta, goSport, navigate, filter, setFilt
             </div>
             <div className="panel">
               <div className="phead"><div className="t">Edge Board</div>
-                <div className="seg">{[["ml","Moneyline"],["spread","Spread"],["totals","Totals"],["winners","Winners"]].map(([m,lb])=>(<b key={m} className={ebMkt===m?"on":""} onClick={()=>setEbMkt(m)}>{lb}</b>))}</div>
+                <div className="seg">{[["ml","Moneyline"],["spread","Spread"],["totals","Totals"]].map(([m,lb])=>(<b key={m} className={ebMkt===m?"on":""} onClick={()=>setEbMkt(m)}>{lb}</b>))}</div>
                 <div className="right">provisional — 2025-seeded ratings, ungraded</div>
               </div>
               {fbBoard===null && <div className="empty">Running the model…</div>}
-              {ebMkt==="winners" && fbBoard!==null && (()=>{ /* WZ-WINNERS-D-2026-07-03 */
-                const W=[];
-                for(const g of (fbBoard.games||[])){
-                  const m=g.moneyline||{}; if(m.homeWinProb==null||m.awayWinProb==null) continue;
-                  const parts=String(g.matchup||"").split(" @ "); const awayN=parts[0]||"", homeN=parts[1]||"";
-                  const homeW=m.homeWinProb>=m.awayWinProb;
-                  const eP=(m.fair&&m.fair.home!=null)?((homeW?m.homeWinProb:m.awayWinProb)-(homeW?m.fair.home:m.fair.away)):null;
-                  W.push({ ab:homeW?homeN:awayN, opp:homeW?awayN:homeN, prob:(homeW?m.homeWinProb:m.awayWinProb)/100,
-                    odds:m.book?(homeW?m.book.home:m.book.away):null, edge:eP, best:eP!=null&&eP>=1.0, over:eP!=null&&eP<=-1.5 });
-                }
-                W.sort((a,b)=>(b.best?1:0)-(a.best?1:0)||((b.edge??-99)-(a.edge??-99))||(b.prob-a.prob));
-                return W.length===0 ? <div className="empty">No games priced yet — winner calls post with the lines.</div> : <>
-                <div className="xhead" style={{gridTemplateColumns:"minmax(220px,1.6fr) 120px 110px minmax(150px,1fr)"}}><span>WINNER CALL</span><span>WIN %</span><span>BEST PRICE</span><span className="xr">VERDICT</span></div>
-                {W.slice(0,16).map((r,i)=>(
-                  <div key={i} className="xrow" style={{gridTemplateColumns:"minmax(220px,1.6fr) 120px 110px minmax(150px,1fr)"}}>
-                    <span className="xm" style={{whiteSpace:"normal"}}>{r.ab} <em style={{fontStyle:"normal",color:"var(--mut2)",fontSize:12}}>over</em> {r.opp}</span>
-                    <span className="xnum teal">{Math.round(r.prob*100)}%<span className="bar" style={{display:"block",height:3,borderRadius:2,background:"#10151b",marginTop:5,overflow:"hidden"}}><span style={{display:"block",height:"100%",width:Math.round(r.prob*100)+"%",background:"var(--up)",borderRadius:2}}/></span></span>
-                    <span className="xnum">{fmtAm(r.odds)}</span>
-                    <span className="xst xr">{r.best?<i className="prov" style={{color:"var(--up)",borderColor:"rgba(63,203,145,.35)",background:"rgba(63,203,145,.08)"}}>{"✓"} BEST BET · PROV</i>:r.over?<i className="prov" style={{color:"#ff9d92",borderColor:"rgba(226,101,92,.3)",background:"rgba(226,101,92,.06)"}}>OVERPRICED</i>:<i className="prov" style={{color:"var(--mut)",borderColor:"var(--line2)",background:"#171b21"}}>PRICED FAIR</i>}</span>
-                  </div>
-                ))}
-                </>; })()}
+              {/* WZ-WINNERS-REMOVED-2026-07-05 :: Winners tab + render removed; Edge Board only */}
               {ebMkt!=="winners" && <>
               {fbBoard!==null && rows.length===0 && <div className="empty">No {ebMkt==="ml"?"moneyline":ebMkt} edges on this slate — the model agrees with the market here.</div>}
               {rows.length>0 && (()=>{ /* WZ-EB-PARITY-2026-07-02 :: dashboard column parity */
