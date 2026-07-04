@@ -1,4 +1,4 @@
-// WZ-NFLPROPS-PROBE-V2-2026-07-05
+// WZ-NFLPROPS-PROBE-V3-2026-07-05
 // nflPropsProbe.js  —  WizePicks NFL Player Props, Phase 3 recon (READ-ONLY).
 //
 // Isolated router (its own express.Router, own fetches, writes NOTHING) so a bug
@@ -18,6 +18,10 @@
 //       Odds API NFL player-prop availability + credit cost. Lists events (free call),
 //       asks the nearest event for the core prop markets, reports HTTP status (200 vs
 //       422 = plan gate), which markets returned, a sample outcome, and credit headers.
+//
+//   GET /api/nfl-props-probe/projections[?season=2025][&teams=3]
+//       Read-only view of the projection engine (nflPropsData) run on real rosters,
+//       so projected per-game means can be eyeballed before anything is ever logged.
 //
 // Delete this file (and its server.js mount) once the projection seed + prop fetcher
 // are built on the confirmed shapes.
@@ -317,6 +321,20 @@ router.get("/odds", async (req, res) => {
     res.json(result);
   } catch (e) {
     console.error("[nfl-props-probe/odds] error:", e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+router.get("/projections", async (req, res) => {
+  try {
+    const season = parseInt(req.query.season, 10) || 2025;
+    const teamsParam = req.query.teams != null ? parseInt(req.query.teams, 10) : 3;
+    const teamLimit = Number.isFinite(teamsParam) && teamsParam >= 0 ? teamsParam : 3;
+    const { buildPlayerProjections } = require("../services/nflPropsData");
+    const result = await buildPlayerProjections({ season, teamLimit });
+    res.json(result);
+  } catch (e) {
+    console.error("[nfl-props-probe/projections] error:", e.message);
     res.status(500).json({ ok: false, error: e.message });
   }
 });
