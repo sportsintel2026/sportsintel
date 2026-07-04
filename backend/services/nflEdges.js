@@ -155,6 +155,26 @@ async function buildBlendedTeamRatings({ now = new Date() } = {}) {
 // once. The window is anchored to the EARLIEST upcoming game in the feed (rolls
 // forward like the MLB board): week = [earliest, earliest + 7d*weeks). Pass
 // weeks=0 to disable the filter and return the full multi-week slate.
+// ── Totals scoring model (2025-seeded; mirrors CFB) ──────────────────────────
+// WZ-NFLTOTALS-2026-07-05
+// Projected points = a team's per-game offense vs the opponent's per-game defense,
+// re-centered on the league average. Home + away projPts sum to the projected total,
+// which nflModel already compares to the book line (NFL_TOTAL_SIGMA=10) to price
+// over/under and gate an edge. Needs full pf/pa/gp on BOTH sides; returns null
+// otherwise so the game stays market-only (no fabricated total). 2025 seed ->
+// PROVISIONAL, shadow-graded off final scores before it earns trust.
+function leaguePpgFrom(teams) {
+  const vals = Object.values(teams || {})
+    .map((t) => (t && t.gp > 0 && t.pf != null) ? t.pf / t.gp : null)
+    .filter((v) => v != null);
+  return vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : null;
+}
+function projPointsFor(team, opp, leaguePPG) {
+  if (!team || !opp || leaguePPG == null) return null;
+  if (!(team.gp > 0) || !(opp.gp > 0) || team.pf == null || opp.pa == null) return null;
+  return Math.round((team.pf / team.gp + opp.pa / opp.gp - leaguePPG) * 10) / 10;
+}
+
 async function runNFLSlate({ season = null, weeks = 1, phase = null } = {}) {
   const [eventsRaw, ratings] = await Promise.all([
     getNFLMainOdds(),
@@ -207,6 +227,7 @@ async function runNFLSlate({ season = null, weeks = 1, phase = null } = {}) {
 
   const resolver = buildResolver(ratings.teams);
   const ratingsLoaded = (ratings.rated || 0) > 0;
+  const leaguePPG = leaguePpgFrom(ratings.teams); // baseline for the totals scoring model
 
   let matched = 0, unmatched = 0;
   const unmatchedNames = new Set();
@@ -224,7 +245,8 @@ async function runNFLSlate({ season = null, weeks = 1, phase = null } = {}) {
     }
     // ctx carries ratings when both teams resolved; absent → model is market-only.
     const ctx = (ratingsLoaded && homeT && awayT)
-      ? { home: { rating: homeT.rating }, away: { rating: awayT.rating } }
+      ? { home: { rating: homeT.rating, projPoints: projPointsFor(homeT, awayT, leaguePPG) },
+          away: { rating: awayT.rating, projPoints: projPointsFor(awayT, homeT, leaguePPG) } }
       : {};
     const pred = predictGame(ev, ctx);
     // Carry the books' Market Read (consensus lean) through onto the prediction so
@@ -255,7 +277,7 @@ async function runNFLSlate({ season = null, weeks = 1, phase = null } = {}) {
   };
 }
 
-module.exports = { runNFLSlate, captureNFLOddsTicks, getNFLMarketMovers, _internal: { normName, resolveTeam, buildResolver, nflPhaseFor, nflRegularSeasonStart, currentNflSeasonYear, blendRatings, buildBlendedTeamRatings, SEASON_BLEND_K } };
+module.exports = { runNFLSlate, captureNFLOddsTicks, getNFLMarketMovers, _internal: { normName, resolveTeam, buildResolver, nflPhaseFor, nflRegularSeasonStart, currentNflSeasonYear, blendRatings, buildBlendedTeamRatings, SEASON_BLEND_K, leaguePpgFrom, projPointsFor } };
 
 // ── NFL odds-tick snapshots (line-movement history) ──────────────────────────
 // Mirrors MLB captureOddsTicks but writes to its OWN table (nfl_odds_ticks) so the
