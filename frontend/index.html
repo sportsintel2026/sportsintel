@@ -2,13 +2,13 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#000000" />
     <meta name="description" content="WizePicks — Live scores, H2H records, player stats, and weather analysis for MLB, NBA, and NFL." />
     <title>WizePicks — Your Edge on Every Game</title>
 
-    <!-- WZ-PWA-RESTORE-2026-07-05 :: site look reverted to original. Only PWA hooks + the
-         installed-app status bar remain below; these do NOT affect the website's appearance. -->
+    <!-- WZ-PWA-SAFEBOTTOM-2026-07-05 :: re-enable viewport-fit=cover so the sport bar's
+         existing env(safe-area-inset-bottom) padding works in the installed app. -->
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -29,7 +29,7 @@
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
     <script>
-      /* WZ-PWA-RESTORE-2026-07-05 :: register the service worker (offline shell; live /api is never cached) */
+      /* WZ-PWA-SAFEBOTTOM-2026-07-05 :: register the service worker (offline shell; live /api is never cached) */
       if ("serviceWorker" in navigator) {
         window.addEventListener("load", function () {
           navigator.serviceWorker.register("/sw.js").catch(function () {});
