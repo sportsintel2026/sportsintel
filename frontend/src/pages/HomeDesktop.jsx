@@ -46,30 +46,7 @@ function Lock({ title, sub, navigate }) {
 }
 
 export default function HomeDesktop(props) {
-  // WZ-WINNERS-D-2026-07-03 :: Winners lens over the same calibrated payload.
-  const winnersRows=(()=>{
-    const e=props.edges||{}; const out=[];
-    if(props.sport==="mlb"){
-      for(const g of (e.games||[])){
-        const ml=g.moneyline||{}; if(ml.awayWinProb==null||ml.homeWinProb==null) continue;
-        const homeW=ml.homeWinProb>=ml.awayWinProb;
-        const eP=((homeW?ml.homeEdge:ml.awayEdge)??null); const edge=eP!=null?eP*100:null;
-        out.push({ ab:homeW?g.homeAbbr:g.awayAbbr, opp:homeW?g.awayAbbr:g.homeAbbr, gameId:g.id,
-          prob:homeW?ml.homeWinProb:ml.awayWinProb, odds:homeW?ml.homeOdds:ml.awayOdds,
-          book:homeW?ml.homeBook:ml.awayBook, edge, best:edge!=null&&edge>0, over:edge!=null&&edge<=-1.0 });
-      }
-    } else {
-      for(const r of (e.moneylineEdges||[])){
-        const parts=String(r.matchup||"").split(" @ "); const oppAb=(parts[0]===r.teamAbbr)?parts[1]:parts[0];
-        const pickW=(r.modelProb??0)>=0.5;
-        out.push({ ab:pickW?r.teamAbbr:oppAb, opp:pickW?oppAb:r.teamAbbr, gameId:r.gameId,
-          prob:pickW?r.modelProb:1-(r.modelProb??0.5), odds:pickW?r.odds:null, book:pickW?r.book:null,
-          edge:pickW?(r.edge??null):null, best:pickW&&(r.edge??0)>=1.0, over:false, dogValue:!pickW });
-      }
-    }
-    out.sort((a,b)=>(b.best?1:0)-(a.best?1:0)||((b.edge??-99)-(a.edge??-99))||((b.prob||0)-(a.prob||0)));
-    return out;
-  })();
+  // WZ-WINNERS-REMOVED-2026-07-05 :: Winners lens removed — Edge Board is the sole board.
 
   const { edges, games = [], movers = [], live = [], abbrById = {}, topProps = [], propList = [], propsByType = {}, hero, hasFull, planLoaded = true, lineSeries = {}, moveByPick = {},
     wpRecord, navigate, plan = {}, sport = "mlb", setSport, marketsLive, anyLive, marketRead = [], perf = null } = props;
@@ -217,7 +194,7 @@ export default function HomeDesktop(props) {
           {/* EDGE BOARD */}
           <div className="panel">
             <div className="phead"><div className="t">Edge Board</div>
-              <div className="seg">{[["ml", "Moneyline"], ["totals", "Totals"], ...(sport === "nba" ? [["spread", "Spread"]] : []), ["winners", "Winners"]].map(([m, lb]) => (
+              <div className="seg">{[["ml", "Moneyline"], ["totals", "Totals"], ...(sport === "nba" ? [["spread", "Spread"]] : [])].map(([m, lb]) => (
                 <b key={m} className={market === m ? "on" : ""} onClick={() => setMarket(m)}>{lb}</b>))}</div>
               <div className="right"><span className="ldot" />click a column to sort</div>
             </div>
@@ -225,20 +202,7 @@ export default function HomeDesktop(props) {
               ? <div className="empty">Loading the board…</div>
               : !hasFull
               ? <Lock title="Edges are an All-Access feature" sub={<>Every edge across the slate, ranked by conviction. <b>From $7/wk</b></>} navigate={navigate} />
-              : market==="winners" ? (
-                  <table className="tbl">
-                    <thead><tr><th>Winner Call</th><th className="r">Win %</th><th className="c">Best Price</th><th className="c">Verdict</th></tr></thead>
-                    <tbody>{winnersRows.map((r,i)=>{ const ab=abbrById[r.gameId]||{};
-                      return (<tr key={i} className="click" onClick={()=>r.gameId&&navigate(`/game/${lg}/${r.gameId}`)}>
-                        <td><div className="matchup"><span className="logos"><TLogo ab={r.ab} lg={lg}/></span><span className="mu"><span className="mua">{r.ab}<span className="at"> over </span>{r.opp}</span></span></div></td>
-                        <td className="model-p">{r.prob!=null?Math.round(r.prob*100)+"%":"\u2014"}<div className="edge-bar" style={{marginTop:4}}><i style={{width:Math.round((r.prob||0)*100)+"%"}}/></div></td>
-                        <td className="book">{formatOdds(r.odds)}{r.book?<><br/><span className="bk">{r.book}</span></>:""}</td>
-                        <td className="c">{r.dogValue?<span className="conv NEUTRAL">DOG VALUE {"\u2192"} ML</span>:r.best?<span className="conv HIGH">{"\u2713"} BEST BET</span>:r.over?<span className="conv LOW">OVERPRICED</span>:<span className="conv NEUTRAL">PRICED FAIR</span>}</td>
-                      </tr>);})}
-                      {winnersRows.length===0&&<tr><td colSpan={4} className="c" style={{padding:"22px 0",color:"var(--mut)"}}>No games to call yet.</td></tr>}
-                    </tbody>
-                  </table>
-                ) : rows.length === 0
+              : rows.length === 0
                 ? <div className="empty">No {market === "ml" ? "moneyline" : market === "spread" ? "spread" : "totals"} edges on the board yet — fills in closer to first pitch.</div>
                 : (
                   <table className="tbl">
