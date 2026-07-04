@@ -88,7 +88,7 @@ export default function HomeDesktop(props) {
     const clvNum = (rng && typeof rng.clv === "number") ? rng.clv : (typeof d.clv === "number" ? d.clv : null);
     return { roi, roiLbl, winRate, graded, clv: clvNum };
   })();
-  const [market, setMarket] = useState("winners"); // WZ-WINNERS-D-2026-07-03 :: winners-first
+  const [market, setMarket] = useState("ml"); // WZ-WINNERS-V2-2026-07-04 :: Edge Board leads
   const [propTab, setPropTab] = useState("hits");
   const [propSort, setPropSort] = useState({ key: "edge", dir: -1 });
   const [sortKey, setSortKey] = useState("edge");
@@ -217,7 +217,7 @@ export default function HomeDesktop(props) {
           {/* EDGE BOARD */}
           <div className="panel">
             <div className="phead"><div className="t">Edge Board</div>
-              <div className="seg">{[["winners", "Winners"], ["ml", "Moneyline"], ["totals", "Totals"], ...(sport === "nba" ? [["spread", "Spread"]] : [])].map(([m, lb]) => (
+              <div className="seg">{[["ml", "Moneyline"], ["totals", "Totals"], ...(sport === "nba" ? [["spread", "Spread"]] : []), ["winners", "Winners"]].map(([m, lb]) => (
                 <b key={m} className={market === m ? "on" : ""} onClick={() => setMarket(m)}>{lb}</b>))}</div>
               <div className="right"><span className="ldot" />click a column to sort</div>
             </div>
