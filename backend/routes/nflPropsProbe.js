@@ -1,4 +1,4 @@
-// WZ-NFLPROPS-PROBE-V5-2026-07-05
+// WZ-NFLPROPS-PROBE-V6-2026-07-05
 // nflPropsProbe.js  —  WizePicks NFL Player Props, Phase 3 recon (READ-ONLY).
 //
 // Isolated router (its own express.Router, own fetches, writes NOTHING) so a bug
@@ -31,6 +31,10 @@
 //       Read-only DRY RUN of the shadow logger (nflPropsShadow): shows what WOULD be
 //       written to model_predictions (matched/unmatched + sample rows) WITHOUT writing.
 //       Empty until props post; the daily cron does the real (idempotent) write.
+//
+//   GET /api/nfl-props-probe/actuals[?date=YYYYMMDD]
+//       Read-only probe of the box-score actuals extractor (nflPropsActuals), against a
+//       REAL completed 2025 game, so the grader's stat source is confirmed before use.
 //
 // Delete this file (and its server.js mount) once the projection seed + prop fetcher
 // are built on the confirmed shapes.
@@ -375,6 +379,18 @@ router.get("/shadow-dry-run", async (req, res) => {
     res.json(result);
   } catch (e) {
     console.error("[nfl-props-probe/shadow-dry-run] error:", e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+router.get("/actuals", async (req, res) => {
+  try {
+    const date = (req.query.date && /^\d{8}$/.test(req.query.date)) ? req.query.date : "20251207";
+    const { probeActuals } = require("../services/nflPropsActuals");
+    const result = await probeActuals({ date });
+    res.json(result);
+  } catch (e) {
+    console.error("[nfl-props-probe/actuals] error:", e.message);
     res.status(500).json({ ok: false, error: e.message });
   }
 });
