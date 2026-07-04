@@ -1,27 +1,26 @@
-// InstallNudge.jsx — WZ-GETAPP-2026-07-05
+// InstallNudge.jsx — WZ-GETAPP-ANDROID-2026-07-05
 //
-// A self-contained "Get the app" banner for iOS Safari visitors who haven't
-// installed the PWA yet. Mounted once in App.jsx; it renders nothing unless ALL of
-// these are true, so it never gets in anyone's way:
+// A self-contained "Get the app" banner. Two flavors, chosen by platform:
+//   - Android / Chrome: captures the browser's `beforeinstallprompt` event and shows a
+//     one-tap INSTALL button that fires Chrome's native install dialog.
+//   - iOS Safari: no programmatic install exists, so it shows the manual
+//     "tap Share -> Add to Home Screen" instruction.
+//
+// It renders nothing unless it should, so it never gets in anyone's way:
 //   - on a phone (width < 1024)
-//   - on iOS (iPhone / iPad, including iPadOS-reports-as-Mac)
 //   - NOT already running as the installed app (standalone)
-//   - NOT inside an in-app webview (FB / IG / etc., where Add-to-Home-Screen isn't offered)
+//   - NOT inside an in-app webview (FB / IG / etc.)
 //   - NOT recently dismissed (14-day snooze, stored locally on the device)
 //   - NOT on an auth/checkout flow (login, signup, pricing, checkout, reset)
+//   - Android: only when Chrome says the app is actually installable (event fired)
+//   - iOS: when on iOS and not yet installed
 //
-// It touches no existing page, style, or route — purely additive. Placement: bottom,
-// lifted above the sport bar on app pages (env(safe-area-inset-bottom) aware), at the
-// bottom on the landing page. Dismiss (x) snoozes it for 14 days.
+// Purely additive — touches no existing page, style, or route.
 
 import { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
 
-// Auth / conversion flows where a banner would get in the way. (Shows everywhere
-// else: landing, dashboard, props, games, etc.)
 const HIDE_ON = ["/login", "/signup", "/pricing", "/checkout", "/reset-password"];
-// Routes where the bottom sport bar is NOT shown (mirrors SportNav). Anywhere else on
-// mobile the sport bar is present, so the nudge lifts above it.
 const NO_SPORTBAR = ["/", "/login", "/signup", "/pricing", "/terms", "/privacy", "/reset-password"];
 
 const DISMISS_KEY = "wz_getapp_dismissed_at";
@@ -50,12 +49,13 @@ function isSnoozed() {
   } catch { return false; }
 }
 function snooze() {
-  try { window.localStorage.setItem(DISMISS_KEY, String(Date.now())); } catch { /* private mode: fine, just re-shows next visit */ }
+  try { window.localStorage.setItem(DISMISS_KEY, String(Date.now())); } catch { /* private mode: fine */ }
 }
 
 export default function InstallNudge() {
   const { pathname } = useLocation();
   const [isMobile, setIsMobile] = useState(typeof window !== "undefined" && window.innerWidth < 1024);
+  const [deferredPrompt, setDeferredPrompt] = useState(null); // Android/Chrome install event
   const [show, setShow] = useState(false);
 
   useEffect(() => {
@@ -64,13 +64,42 @@ export default function InstallNudge() {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
+  // Android / Chrome: capture the install prompt so we can trigger it from our button.
   useEffect(() => {
-    setShow(isMobile && isIOS() && !isStandalone() && !isInAppWebview() && !isSnoozed());
-  }, [isMobile, pathname]);
+    const onBIP = (e) => {
+      e.preventDefault(); // stop Chrome's default mini-infobar; we present our own
+      if (isSnoozed()) return;
+      setDeferredPrompt(e);
+    };
+    const onInstalled = () => { setDeferredPrompt(null); setShow(false); snooze(); };
+    window.addEventListener("beforeinstallprompt", onBIP);
+    window.addEventListener("appinstalled", onInstalled);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onBIP);
+      window.removeEventListener("appinstalled", onInstalled);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isMobile || isStandalone() || isInAppWebview() || isSnoozed()) { setShow(false); return; }
+    const androidReady = !!deferredPrompt && !isIOS();
+    setShow(isIOS() || androidReady);
+  }, [isMobile, pathname, deferredPrompt]);
 
   if (!show || HIDE_ON.includes(pathname)) return null;
 
+  const android = !!deferredPrompt && !isIOS();
   const overSportBar = isMobile && !NO_SPORTBAR.includes(pathname);
+
+  const install = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    let outcome = "dismissed";
+    try { const c = await deferredPrompt.userChoice; outcome = (c && c.outcome) || "dismissed"; } catch { /* ignore */ }
+    setDeferredPrompt(null);
+    setShow(false);
+    if (outcome !== "accepted") snooze(); // said no -> don't nag; yes -> appinstalled handles it
+  };
   const dismiss = () => { snooze(); setShow(false); };
 
   return (
@@ -81,13 +110,20 @@ export default function InstallNudge() {
         <div className="wzget-bd">
           <div className="wzget-t">Get the <i>app</i></div>
           <div className="wzget-s">
-            Tap
-            <span className="wzget-share" aria-hidden="true">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 15V3" /><path d="m7 8 5-5 5 5" /><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7" /></svg>
-            </span>
-            then <b>Add to Home Screen</b>
+            {android ? (
+              <>One tap to install WizePicks</>
+            ) : (
+              <>
+                Tap
+                <span className="wzget-share" aria-hidden="true">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 15V3" /><path d="m7 8 5-5 5 5" /><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7" /></svg>
+                </span>
+                then <b>Add to Home Screen</b>
+              </>
+            )}
           </div>
         </div>
+        {android && <button className="wzget-install" onClick={install}>Install</button>}
         <button className="wzget-x" onClick={dismiss} aria-label="Dismiss">&times;</button>
       </div>
     </>
@@ -99,7 +135,7 @@ const CSS = `
   max-width:440px;margin:0 auto;
   background:linear-gradient(180deg,#171b20,#101317);
   border:1px solid rgba(201,168,106,.38);border-radius:16px;
-  padding:12px 12px 12px 13px;display:flex;align-items:center;gap:11px;
+  padding:12px 12px 12px 13px;display:flex;align-items:center;gap:10px;
   box-shadow:0 14px 40px rgba(0,0,0,.55);
   font-family:-apple-system,'SF Pro Display',system-ui,sans-serif;
   animation:wzgetin .35s cubic-bezier(.2,.7,.2,1)}
@@ -116,6 +152,10 @@ const CSS = `
 .wzget-s b{color:#cfd6de;font-weight:600}
 .wzget-share{display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;
   border-radius:4px;background:rgba(63,203,145,.14);color:#3FCB91}
+.wzget-install{flex:0 0 auto;appearance:none;border:0;cursor:pointer;
+  background:#C9A86A;color:#0A0B0D;font-family:-apple-system,system-ui,sans-serif;font-weight:700;font-size:13px;
+  padding:9px 15px;border-radius:10px;white-space:nowrap}
+.wzget-install:active{opacity:.85}
 .wzget-x{flex:0 0 auto;width:26px;height:26px;border-radius:8px;border:1px solid #232830;background:#0e1116;
   color:#5b636e;display:flex;align-items:center;justify-content:center;font-size:17px;line-height:1;cursor:pointer;padding:0}
 @media (min-width:1024px){.wzget{display:none}}
