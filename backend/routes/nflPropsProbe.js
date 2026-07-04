@@ -1,4 +1,4 @@
-// WZ-NFLPROPS-PROBE-V3-2026-07-05
+// WZ-NFLPROPS-PROBE-V4-2026-07-05
 // nflPropsProbe.js  —  WizePicks NFL Player Props, Phase 3 recon (READ-ONLY).
 //
 // Isolated router (its own express.Router, own fetches, writes NOTHING) so a bug
@@ -22,6 +22,10 @@
 //   GET /api/nfl-props-probe/projections[?season=2025][&teams=3]
 //       Read-only view of the projection engine (nflPropsData) run on real rosters,
 //       so projected per-game means can be eyeballed before anything is ever logged.
+//
+//   GET /api/nfl-props-probe/lines[?days=8][&maxEvents=16]
+//       Read-only view of the odds fetcher (nflPropsOdds): normalized per-player prop
+//       lines for the imminent slate. Empty until books post NFL props (~preseason).
 //
 // Delete this file (and its server.js mount) once the projection seed + prop fetcher
 // are built on the confirmed shapes.
@@ -335,6 +339,22 @@ router.get("/projections", async (req, res) => {
     res.json(result);
   } catch (e) {
     console.error("[nfl-props-probe/projections] error:", e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+router.get("/lines", async (req, res) => {
+  try {
+    const days = req.query.days != null ? parseInt(req.query.days, 10) : 8;
+    const maxEvents = req.query.maxEvents != null ? parseInt(req.query.maxEvents, 10) : 16;
+    const { getNflPropLines } = require("../services/nflPropsOdds");
+    const result = await getNflPropLines({
+      daysAhead: Number.isFinite(days) && days > 0 ? days : 8,
+      maxEvents: Number.isFinite(maxEvents) && maxEvents > 0 ? maxEvents : 16,
+    });
+    res.json(result);
+  } catch (e) {
+    console.error("[nfl-props-probe/lines] error:", e.message);
     res.status(500).json({ ok: false, error: e.message });
   }
 });
