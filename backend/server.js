@@ -38,6 +38,7 @@ const umpiresRoutes = require("./routes/umpires");
 const liveProbeRoutes = require("./routes/liveProbe");
 const liveWinProbRoutes = require("./routes/liveWinProb");
 const newsRoutes = require("./routes/news"); // WZ-NEWS-MOUNT-2026-06-26
+const nflPropsProbeRoutes = require("./routes/nflPropsProbe"); // WZ-NFLPROPS-MOUNT-2026-07-05
 
 const { refreshDailyGames } = require("./services/sportsData");
 const { gradeFinishedGames, captureClosingLines, captureNbaClosingLines, captureOddsTicks, voidUnmatchedProps } = require("./services/predictionTracker");
@@ -144,6 +145,7 @@ app.use("/api/umpires", umpiresRoutes);
 app.use("/api/live-probe", liveProbeRoutes);
 app.use("/api/live-winprob", liveWinProbRoutes);
 app.use("/api/news", newsRoutes); // WZ-NEWS-MOUNT-2026-06-26 :: blended ESPN+RotoWire feed
+app.use("/api/nfl-props-probe", nflPropsProbeRoutes); // WZ-NFLPROPS-MOUNT-2026-07-05 :: Phase 3 recon (read-only, temp)
 
 // Health check
 app.get("/api/health", (req, res) => {
