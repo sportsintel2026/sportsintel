@@ -259,6 +259,12 @@ cron.schedule("0 * * * *", async () => {
   console.log("[CRON] Grading finished-game predictions...");
   try {
     await gradeFinishedGames();
+    // WZ-NFLPROPSGRADER-CRON-2026-07-05 :: grade NFL player-prop shadow rows from box
+    // scores (own resolver: matchup+date). No-op until shadow rows exist in-season.
+    try {
+      const { gradeNflPropShadows } = require("./services/nflPropsGrader");
+      await gradeNflPropShadows();
+    } catch (e) { console.error("[CRON] NFL prop-shadow grading failed:", e.message); }
     // Retire DNP/scratched props (player never batted/pitched → can't grade) as
     // no-action push. Runs every hour right after grading so "stuck pending" props
     // clear themselves instead of accumulating until a manual ?void_unmatched=1.
