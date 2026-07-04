@@ -94,13 +94,85 @@ function resolveTeam(resolver, oddsTeamName) {
   return null;
 }
 
+// ── Rolling season blend (2025->2026 rollover; mirrors nflEdges) ─────────────
+// WZ-CFBROLLOVER-2026-07-05
+// Rate on the PRIOR completed season early, letting the CURRENT season take over as
+// its games accumulate (weight = g/(g+K)). Before CFB's late-August opener there are
+// zero current-season games, so this is PURE PRIOR — identical to the old fixed-2025
+// behavior — and it transitions on its own. Season year is derived (no manual bump),
+// and it blends over the UNION of both seasons' FBS teams since membership shifts with
+// realignment. K is lower than NFL's: CFB's ~12-game season is shorter and rosters
+// turn over harder year to year (recruiting, transfer portal), so the current season
+// earns trust a touch faster. Uncalibrated default pending in-season shadow grading.
+const SEASON_BLEND_K = 4;
+
+// Season whose regular season is current/most-recent (Jan bowls/playoff belong to the
+// prior year's season, same convention as NFL).
+function currentCfbSeasonYear(now = new Date()) {
+  const m = now.getUTCMonth(); // 0=Jan
+  return m <= 1 ? now.getUTCFullYear() - 1 : now.getUTCFullYear();
+}
+
+// Late-August floor (year-rolling). Used ONLY to skip the expensive ~146-team current
+// season crawl before any games exist; correctness comes from the per-team games
+// weighting regardless of this boundary.
+function cfbRegularSeasonStart(year) {
+  return new Date(Date.UTC(year, 7, 20)); // Aug 20
+}
+
+function round2(n) { return n == null ? null : Math.round(n * 100) / 100; }
+
+// PURE: blend two buildTeamRatings() results by per-team current-season games, over the
+// UNION of both seasons' teams. Preserves every non-rating field of each team object.
+function blendRatings(prior, current, k = SEASON_BLEND_K) {
+  const priTeams = (prior && prior.teams) || {};
+  const curTeams = (current && current.teams) || {};
+  const ids = new Set([...Object.keys(priTeams), ...Object.keys(curTeams)]);
+  const teams = {};
+  let blendedTeams = 0;
+  for (const id of ids) {
+    const pt = priTeams[id];
+    const ct = curTeams[id];
+    const gCur = ct ? (ct.gp || 0) : 0;
+    if (gCur > 0 && ct.rating != null && pt && pt.rating != null) {
+      const w = gCur / (gCur + k);
+      teams[id] = { ...pt, rating: round2(w * ct.rating + (1 - w) * pt.rating), priorRating: pt.rating, currentRating: ct.rating, currentGp: gCur, blendWeight: round2(w) };
+      blendedTeams++;
+    } else if (gCur > 0 && ct.rating != null) {
+      teams[id] = { ...ct }; // new-to-FBS team: no prior to blend
+    } else if (pt) {
+      teams[id] = { ...pt, currentGp: gCur };
+    } else if (ct) {
+      teams[id] = { ...ct };
+    }
+  }
+  return { ...prior, teams, rated: Object.keys(teams).length, blend: { mode: blendedTeams ? "blended" : "prior-only", k, blendedTeams } };
+}
+
+// Build the rolling-blend ratings for the live model. Prior season always; current
+// season fetched and blended only once its regular season has opened.
+async function buildBlendedTeamRatings({ now = new Date() } = {}) {
+  const currentSeason = currentCfbSeasonYear(now);
+  const priorSeason = currentSeason - 1;
+  const prior = await buildTeamRatings(priorSeason);
+
+  const regStart = cfbRegularSeasonStart(currentSeason);
+  if (now.getTime() < regStart.getTime()) {
+    return { ...prior, blend: { mode: "prior-only", priorSeason, currentSeason, k: SEASON_BLEND_K, blendedTeams: 0 } };
+  }
+  const current = await buildTeamRatings(currentSeason);
+  const out = blendRatings(prior, current, SEASON_BLEND_K);
+  out.blend = { ...out.blend, priorSeason, currentSeason };
+  return out;
+}
+
 // Run the full CFB slate: { season, weekWindow, ratingsMeta, match, games }.
 // CFB has no preseason, so (unlike NFL) there's no phase split — just the rolling
 // week window anchored to the earliest upcoming game (weeks=1 → next ~7 days).
-async function runCFBSlate({ season = 2025, weeks = 1 } = {}) {
+async function runCFBSlate({ season = null, weeks = 1 } = {}) {
   const [eventsRaw, ratings] = await Promise.all([
     getCFBMainOdds(),
-    buildTeamRatings(season),
+    season == null ? buildBlendedTeamRatings() : buildTeamRatings(season),
   ]);
 
   let events = Array.isArray(eventsRaw) ? eventsRaw.slice() : [];
@@ -152,7 +224,7 @@ async function runCFBSlate({ season = 2025, weeks = 1 } = {}) {
   });
 
   return {
-    season,
+    season: ratings.season != null ? ratings.season : season,
     weekWindow,
     phase: { selected: "regular", available: ["regular"] }, // shape parity with NFL
     ratingsMeta: {
@@ -161,6 +233,7 @@ async function runCFBSlate({ season = 2025, weeks = 1 } = {}) {
       fbsListed: ratings.fbsListed || null,
       sosApplied: ratings.sosApplied || false,
       note: ratings.note || null,
+      blend: ratings.blend || null,
     },
     match: {
       matched, unmatched,
@@ -174,7 +247,7 @@ async function runCFBSlate({ season = 2025, weeks = 1 } = {}) {
   };
 }
 
-module.exports = { runCFBSlate, captureCFBOddsTicks, getCFBMarketMovers, _internal: { normName, schoolKey, resolveTeam, buildResolver } };
+module.exports = { runCFBSlate, captureCFBOddsTicks, getCFBMarketMovers, _internal: { normName, schoolKey, resolveTeam, buildResolver, currentCfbSeasonYear, cfbRegularSeasonStart, blendRatings, buildBlendedTeamRatings, SEASON_BLEND_K } };
 
 // ── CFB odds-tick snapshots (line-movement history) ──────────────────────────
 // Mirrors NFL ticks but writes to cfb_odds_ticks. Best-effort: if the table doesn't
