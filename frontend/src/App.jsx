@@ -30,6 +30,7 @@ import NewsPage from "./pages/News"; // WZ-NEWS-ROUTE-2026-06-27 (nba/nhl)
 import { TermsPage, PrivacyPage } from "./pages/Legal"; // LEGAL-PAGES-2026-06-24
 import MobileShell from "./pages/MobileShell"; // MOBILESHELL-ROUTE-2026-06-24
 import SportBar, { SportTabsHeader } from "./pages/SportNav"; // WIZEPICKS-SPORTNAV-2026-06-25
+import InstallNudge from "./pages/InstallNudge"; // WZ-GETAPP-2026-07-05 :: iOS "Get the app" nudge
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth();
   if (loading) return <LoadingScreen />;
@@ -324,6 +325,7 @@ export default function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         <SportBar />
+        <InstallNudge />
         <LegalFooter />
       </BrowserRouter>
     </AuthProvider>
