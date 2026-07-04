@@ -3,12 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#0A0B0D" />
+    <meta name="theme-color" content="#000000" />
     <meta name="description" content="WizePicks — Live scores, H2H records, player stats, and weather analysis for MLB, NBA, and NFL." />
     <title>WizePicks — Your Edge on Every Game</title>
 
-    <!-- WZ-PWA-SAFEAREA-2026-07-05 :: installable app. Opaque status bar (black) so content
-         sits BELOW the clock/battery instead of under a translucent bar. -->
+    <!-- WZ-PWA-RESTORE-2026-07-05 :: site look reverted to original. Only PWA hooks + the
+         installed-app status bar remain below; these do NOT affect the website's appearance. -->
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -16,9 +16,9 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black" />
     <meta name="apple-mobile-web-app-title" content="WizePicks" />
 
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='38' fill='%23C9A86A'/></svg>" />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='38' fill='%231D9E75'/></svg>" />
     <style>
-      body { margin: 0; background: #0A0B0D !important; }
+      body { margin: 0; background: #20201E !important; }
       /* Kill the Safari focus/tap outline that draws a ring around the
          scrollable sheet and other focusable elements on tap. Touch-first app. */
       * { -webkit-tap-highlight-color: transparent; }
@@ -29,7 +29,7 @@
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
     <script>
-      /* WZ-PWA-SAFEAREA-2026-07-05 :: register the service worker (offline shell; live /api is never cached) */
+      /* WZ-PWA-RESTORE-2026-07-05 :: register the service worker (offline shell; live /api is never cached) */
       if ("serviceWorker" in navigator) {
         window.addEventListener("load", function () {
           navigator.serviceWorker.register("/sw.js").catch(function () {});
