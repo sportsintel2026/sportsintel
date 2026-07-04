@@ -1549,7 +1549,11 @@ router.get("/nfl", async (req, res) => {
 //   /api/edges/cfb[?season=2025][&weeks=1]
 router.get("/cfb", async (req, res) => {
   try {
-    const season = parseInt(req.query.season, 10) || 2025;
+    // No ?season= -> null, so runCFBSlate uses the rolling 2025->2026 blend. An
+    // explicit ?season=YYYY still forces a single pure season (for probes/backfill).
+    // WZ-CFBROLLOVER-ROUTE-2026-07-05
+    const sQ = req.query.season != null ? parseInt(req.query.season, 10) : null;
+    const season = Number.isFinite(sQ) ? sQ : null;
     const weeksParam = req.query.weeks != null ? parseInt(req.query.weeks, 10) : 1;
     const weeks = Number.isFinite(weeksParam) && weeksParam >= 0 ? weeksParam : 1;
     const { runCFBSlate } = require("../services/cfbEdges");
