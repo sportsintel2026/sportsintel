@@ -119,6 +119,7 @@ export default function HomePage(){
   const [newsFeed,setNewsFeed]=useState([]); // WZ-LIVEWIRE-2026-06-27 :: MLB live wire (news + injuries)
   const prev=useRef({}); const [flash,setFlash]=useState({});
   const hasFull=plan.isAdmin===true||plan.tier==="pro"||plan.tier==="elite"||user?.email==="r7002g@gmail.com";
+  const [face,setFace]=useState("winners"); // WZ-WINNERS-M-2026-07-03 :: hook placed above ALL early returns
   const sp=SPORTS[sport]||SPORTS.mlb;
   const [isDesktop,setIsDesktop]=useState(typeof window!=="undefined"&&window.innerWidth>=1024);
   const [heroIdx,setHeroIdx]=useState(0);
@@ -319,9 +320,8 @@ export default function HomePage(){
   // game), not just the single highest per game. Only one side of a market can be +edge, so a
   // game surfaces at most one pick per market — fuller board, run line included, conviction-sorted.
   // WZ-WINNERS-M-2026-07-03 :: Winners face — the casual-bettor lens over the same
-  // calibrated math. "winners" = every game called + Best Bets (winner AND underpaid).
-  // "edges" = today's board, untouched. Toggle only swaps the board section.
-  const [face,setFace]=useState("winners");
+  // calibrated math. (The face useState lives with the other hooks at the top of the
+  // component — it MUST run before the loading early-return, per Rules of Hooks.)
   const winnersRows=(()=>{
     const out=[];
     const fmtOddsW=(o)=>o==null?"\u2014":(o>0?"+"+o:""+o);
