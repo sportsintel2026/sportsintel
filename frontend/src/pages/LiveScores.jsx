@@ -369,8 +369,8 @@ function ScoresTerminal({ activeLeague, meta, goSport, navigate, filter, setFilt
   // WZ-SPORT-TERMINAL-2026-07-02 :: sport-first sections, mirroring the mobile nav.
   const [tab,setTab]=useState("edges");
   useEffect(()=>{ setTab("edges"); },[activeLeague]); // WZ-DASH-PARITY-2026-07-02
-  const [ebMkt,setEbMkt]=useState("winners"); // WZ-WINNERS-D-2026-07-03
-  useEffect(()=>{ setEbMkt("winners"); },[activeLeague]);
+  const [ebMkt,setEbMkt]=useState("ml"); // WZ-WINNERS-V2-2026-07-04 :: Edge Board leads
+  useEffect(()=>{ setEbMkt("ml"); },[activeLeague]);
   // WZ-ODDS-BOARD-2026-07-02 :: football odds are grouped into betting weeks
   // (Thu–Mon window; a 36h shift maps every game to its week's Monday anchor).
   const [weekIdx,setWeekIdx]=useState(0);
@@ -479,7 +479,7 @@ function ScoresTerminal({ activeLeague, meta, goSport, navigate, filter, setFilt
             </div>
             <div className="panel">
               <div className="phead"><div className="t">Edge Board</div>
-                <div className="seg">{[["winners","Winners"],["ml","Moneyline"],["spread","Spread"],["totals","Totals"]].map(([m,lb])=>(<b key={m} className={ebMkt===m?"on":""} onClick={()=>setEbMkt(m)}>{lb}</b>))}</div>
+                <div className="seg">{[["ml","Moneyline"],["spread","Spread"],["totals","Totals"],["winners","Winners"]].map(([m,lb])=>(<b key={m} className={ebMkt===m?"on":""} onClick={()=>setEbMkt(m)}>{lb}</b>))}</div>
                 <div className="right">provisional — 2025-seeded ratings, ungraded</div>
               </div>
               {fbBoard===null && <div className="empty">Running the model…</div>}
