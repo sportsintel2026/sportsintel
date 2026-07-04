@@ -1404,7 +1404,11 @@ router.get("/nflratings", async (req, res) => {
 //   /api/edges/nfl[?season=2025]
 router.get("/nfl", async (req, res) => {
   try {
-    const season = parseInt(req.query.season, 10) || 2025;
+    // No ?season= -> null, so runNFLSlate uses the rolling 2025->2026 blend. An
+    // explicit ?season=YYYY still forces a single pure season (for probes/backfill).
+    // WZ-NFLROLLOVER-ROUTE-2026-07-05
+    const sQ = req.query.season != null ? parseInt(req.query.season, 10) : null;
+    const season = Number.isFinite(sQ) ? sQ : null;
     // weeks: default 1 (show only the next NFL week so each team appears once,
     // like the MLB board). ?weeks=0 returns the full multi-week lookahead slate.
     const weeksParam = req.query.weeks != null ? parseInt(req.query.weeks, 10) : 1;
