@@ -119,7 +119,7 @@ export default function HomePage(){
   const [newsFeed,setNewsFeed]=useState([]); // WZ-LIVEWIRE-2026-06-27 :: MLB live wire (news + injuries)
   const prev=useRef({}); const [flash,setFlash]=useState({});
   const hasFull=plan.isAdmin===true||plan.tier==="pro"||plan.tier==="elite"||user?.email==="r7002g@gmail.com";
-  const [face,setFace]=useState("winners"); // WZ-WINNERS-M-2026-07-03 :: hook placed above ALL early returns
+  const [face,setFace]=useState("edges"); // WZ-WINNERS-V2-2026-07-04 :: Edge Board leads; Winners one tap away
   const sp=SPORTS[sport]||SPORTS.mlb;
   const [isDesktop,setIsDesktop]=useState(typeof window!=="undefined"&&window.innerWidth>=1024);
   const [heroIdx,setHeroIdx]=useState(0);
@@ -362,12 +362,16 @@ export default function HomePage(){
     out.sort((a,b)=>(b.prob||0)-(a.prob||0));
     return out;
   })();
-  const bestBets=winnersRows.filter(r=>r.best).sort((a,b)=>(b.edge||0)-(a.edge||0)).slice(0,5);
 
   const boardSrc = board==="all" ? allAdj.filter(x=>sport==="mlb"?(x.edge??0)>0:(x.edge??0)>=1).sort(sortBoard) : boardEdges;
   const boardItems = boardSrc.map(toBoard);
   const boardDate = fmtSlateFull(e.date || todayISO());
-  const heroItems = oneSidePerGame(allAdj).filter(x=>(x.edge??0)>0).sort((a,b)=>(b.edge||0)-(a.edge||0)).slice(0,3).map(toBoard);
+  // WZ-WINNERS-V2-2026-07-04 :: Best Plays carousel = winner+value plays first (our
+  // winner AND the books underpay it), then the top pure-value plays. One card zone.
+  const wvItems = oneSidePerGame(mlAdj||[]).filter(x=>(x.edge??0)>0 && (x.modelProb??0)>=0.5).sort((a,b)=>(b.edge||0)-(a.edge||0)).slice(0,3).map(x=>({...toBoard(x),_wv:true}));
+  const wvKeys = new Set(wvItems.map(h=>h.k));
+  const evItems = oneSidePerGame(allAdj).filter(x=>(x.edge??0)>0).sort((a,b)=>(b.edge||0)-(a.edge||0)).map(toBoard).filter(h=>!wvKeys.has(h.k));
+  const heroItems = [...wvItems, ...evItems].slice(0,4);
   const moverItems = movers.map((m)=>{return {p:edgeLabel(m),g:(abbrById[m.gameId]?abbrById[m.gameId].a+" @ "+abbrById[m.gameId].h:m.matchup),mv:(m._open!=null&&m._now!=null&&m._delta!=null)?[formatOdds(m._open),formatOdds(m._now),(m._delta>0?"up":m._delta<0?"dn":"")]:null,odds:formatOdds(m.odds),model:m.modelProb!=null?Math.round(m.modelProb*100):null,delta:m._delta};});
   // WZ-LIVETICKER-2026-06-27 :: ticker = live scores (the backbone) with injury + late-scratch
   // alerts woven in. MLB pulls injuries/scratches from the RotoWire wire; other sports show
@@ -496,26 +500,9 @@ export default function HomePage(){
       {hasFull && moverItems.length>0 && <MarketMovers movers={moverItems} navigate={navigate}/>}
 
         {/* WZ-WINNERS-M-2026-07-03 :: face toggle + Winners view */}
-        <div className="wntog"><b className={face==="winners"?"on":""} onClick={()=>setFace("winners")}>WINNERS</b><b className={face==="edges"?"on":""} onClick={()=>setFace("edges")}>EDGE BOARD</b></div>
+        <div className="wntog"><b className={face==="edges"?"on":""} onClick={()=>setFace("edges")}>EDGE BOARD</b><b className={face==="winners"?"on":""} onClick={()=>setFace("winners")}>WINNERS</b></div>
 
         {face==="winners" && (hasFull ? <>
-          {bestBets.length>0 && <>
-            <div className="seclbl" style={{marginTop:4}}>BEST BETS <span className="ct">our winner + the books underpay it</span></div>
-            {bestBets.map((r,i)=>(
-              <div key={i} className="wnbb">
-                <span className="wncrown">{r.prov?"WINNER + VALUE \u00b7 PROVISIONAL":"WINNER + VALUE"}</span>
-                <div className="wnbbtop">
-                  <div><div className="wnteam">{r.ab}</div><div className="wnmk">to win · {r.matchup}{r.time?` \u00b7 ${r.time}`:""}</div></div>
-                  <div className="wnbbr"><div className="wnodds">{r.fmt(r.odds)}</div>{r.book&&<div className="wnbook">{r.book} \u00b7 best price</div>}</div>
-                </div>
-                <div className="wnchips">
-                  <div className="wnchip"><div className="k">WIN CHANCE</div><div className="v t">{Math.round((r.prob||0)*100)}%</div></div>
-                  <div className="wnchip"><div className="k">BOOKS SAY</div><div className="v">{r.edge!=null?(Math.round(((r.prob||0)*100-r.edge)*10)/10)+"%":"\u2014"}</div></div>
-                  <div className="wnchip"><div className="k">YOUR EDGE</div><div className="v g">+{(r.edge||0).toFixed(1)}%</div></div>
-                </div>
-              </div>
-            ))}
-          </>}
           <div className="seclbl">EVERY GAME, CALLED <span className="ct">who the model says wins</span></div>
           {winnersRows.length===0 && <div className="estate"><div className="et">No games to call yet</div><div className="es">Winner calls post when the board fills.</div></div>}
           {winnersRows.map((r,i)=>(
@@ -651,7 +638,7 @@ function HeroChartM({series,seed=0}){ const W=150,H=42;
 function HeroSlide({h,i,navigate,sport,rolled}){ const lg=(SPORTS[sport]||SPORTS.mlb).lg;
   const mv=h.mv?<>{h.mv[0]} <span className="up">{"\u2192"} {h.mv[1]}</span></>:h.odds;
   return (<div className="hslide"><div className="hero" onClick={()=>h.gameId&&navigate(`/game/${sport}/${h.gameId}`)}>
-    <div className="htop"><div className="eb">{rolled?"BEST PLAY \u00b7 TOMORROW":"BEST PLAY RIGHT NOW"}</div><div className="hbadges">{h.model!=null&&<span className="hwin">{h.model}% TO WIN</span>}<span className="hedge">+{h.edge.toFixed(1)}% edge</span></div></div>
+    <div className="htop"><div className="eb">{h._wv?(rolled?"WINNER + VALUE \u00b7 TOMORROW":"WINNER + VALUE"):(rolled?"VALUE PLAY \u00b7 TOMORROW":"VALUE PLAY")}</div><div className="hbadges">{h.model!=null&&<span className="hwin">{h.model}% TO WIN</span>}<span className="hedge">+{h.edge.toFixed(1)}% edge</span></div></div>
     <div className="hpick">{h.p}<span className="mk">{h.mk}</span></div>
     <div className="hpg"><span className="lgs" style={{display:"inline-flex",verticalAlign:"-6px",marginRight:6}}><LogoM ab={h.a[0]} col={h.a[1]} lg={lg}/><LogoM ab={h.h[0]} col={h.h[1]} lg={lg}/></span>{h.g}</div>
     <div className="hmid">
