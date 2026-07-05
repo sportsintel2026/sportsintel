@@ -293,13 +293,65 @@ function summarizeHrFeeds(edges) {
   };
 }
 
+// ── READ-ONLY: "Line Tight vs Talent" flag (WZ-TIGHTLINE-2026-07-05) ─────────
+// Master G's read: when the book prices the team the model rates as the UNDERDOG
+// at a short number (+130 or shorter, down through pick'em / slight favorite) yet
+// the model's own talent-based fair price says that dog should be LONGER, the tight
+// line is the book telling on itself — sharp money likely knows something the talent
+// model can't see (banged-up ace, gassed pen, getaway-day lineup, weather). This is
+// a HUMILITY flag, not a bet signal: it points at the exact games where the model's
+// talent edge is least trustworthy, so the human read takes over. Writes NOTHING,
+// re-anchors NOTHING. Reuses the already-computed slate — no extra Odds API cost
+// beyond one normal edges rebuild. Tunable live:  ?tightline=1&hi=130&gap=40
+//   hi  = book dog-price ceiling (default +130 — "120 to 130 or less")
+//   gap = min cents the talent fair price must sit LONGER than the book price
+function buildTightLine(gameEdges, slateDate, opts) {
+  const HI  = Number.isFinite(+opts.hi)  ? +opts.hi  : 130;
+  const GAP = Number.isFinite(+opts.gap) ? +opts.gap : 40;
+  const amToProb = (o) => o == null ? null : (o > 0 ? 100 / (o + 100) : Math.abs(o) / (Math.abs(o) + 100));
+  const probToAm = (p) => (p == null || p <= 0 || p >= 1) ? null : (p >= 0.5 ? -Math.round((p / (1 - p)) * 100) : Math.round(((1 - p) / p) * 100));
+  const rows = gameEdges.map((ge) => {
+    const m = ge.moneyline || {};
+    const aP = m.awayWinProb, hP = m.homeWinProb, aO = m.awayOdds, hO = m.homeOdds;
+    if (aP == null || hP == null || aO == null || hO == null) return null;
+    const dogIsAway  = aP < hP; // talent-underdog = lower model win prob
+    const dogTeam    = dogIsAway ? ge.game.awayAbbr : ge.game.homeAbbr;
+    const favTeam    = dogIsAway ? ge.game.homeAbbr : ge.game.awayAbbr;
+    const bookOdds   = dogIsAway ? aO : hO;   // book price for the talent-dog
+    const talentProb = dogIsAway ? aP : hP;   // model talent prob for the dog
+    const bookProb   = amToProb(bookOdds);
+    const talentAm   = probToAm(talentProb);  // talent fair price for the dog
+    const gapCents   = (talentAm != null && bookOdds != null) ? (talentAm - bookOdds) : null; // + = talent says a BIGGER dog than the book
+    const shortPrice = bookOdds <= HI;        // +130 or shorter, incl pick'em / slight fav
+    const flag       = shortPrice && gapCents != null && gapCents >= GAP;
+    return {
+      matchup: `${ge.game.awayAbbr}@${ge.game.homeAbbr}`,
+      dog: dogTeam, fav: favTeam,
+      bookDogPrice: bookOdds,
+      bookDogPct: bookProb == null ? null : Math.round(bookProb * 1000) / 10,
+      talentDogPct: Math.round(talentProb * 1000) / 10,
+      talentDogFairPrice: talentAm,
+      gapCents,
+      shortPrice, flag,
+    };
+  }).filter(Boolean);
+  const flagged = rows.filter(r => r.flag).sort((a, b) => b.gapCents - a.gapCents);
+  return {
+    ok: true, slateDate, band: { dogPriceCeiling: HI, minGapCents: GAP }, games: rows.length,
+    flaggedCount: flagged.length,
+    note: `READ-ONLY. Flags games where the model's UNDERDOG is priced short (<= +${HI}) yet the model's talent fair price says it should be a bigger dog by >= ${GAP}c. Positive gapCents = the book gives the dog MORE credit than the talent model does = the book may know something the math can't see. NOT a bet signal — a "go read this game by hand" flag. bookDogPct = dog's implied win% from the book price; talentDogPct = the model's talent win% for that same team.`,
+    flagged,
+    all: rows,
+  };
+}
+
 router.get("/mlb", async (req, res) => {
   let weBuild = false;
   try {
     const { date: slateDate, rolled } = await resolveSlateDate();
 
     // Cache is valid only if it's fresh AND for the same date we now want to serve.
-    if (!req.query.hits_debug && !req.query.edges_debug && !req.query.hr_audit && !req.query.tb_shadow && edgesCache && edgesCacheDate === slateDate && (Date.now() - edgesCacheAt) < CACHE_TTL_MS) {
+    if (!req.query.hits_debug && !req.query.edges_debug && !req.query.hr_audit && !req.query.tb_shadow && !req.query.tightline && edgesCache && edgesCacheDate === slateDate && (Date.now() - edgesCacheAt) < CACHE_TTL_MS) {
       console.log(`[Edges] Returning cached results for ${slateDate}`);
       return res.json({ ...edgesCache, cached: true });
     }
@@ -309,7 +361,7 @@ router.get("/mlb", async (req, res) => {
     // it to fill the cache instead of starting a duplicate recompute (which would also
     // duplicate Odds API calls). Bounded wait + finally-released flag => never stampedes
     // and never deadlocks.
-    const isDebugQ = !!(req.query.hits_debug || req.query.edges_debug || req.query.hr_audit || req.query.tb_shadow);
+    const isDebugQ = !!(req.query.hits_debug || req.query.edges_debug || req.query.hr_audit || req.query.tb_shadow || req.query.tightline);
     if (!isDebugQ) {
       if (edgesBuilding) {
         const t0 = Date.now();
@@ -359,6 +411,9 @@ router.get("/mlb", async (req, res) => {
     const gameEdges = allEdges.filter(Boolean);
     if (req.query.edges_debug) {
       return res.json(buildEdgesDebug(gameEdges, gamesWithOdds, slateDate));
+    }
+    if (req.query.tightline) {
+      return res.json(buildTightLine(gameEdges, slateDate, { hi: req.query.hi, gap: req.query.gap }));
     }
     // The pre-game model is only valid for games that HAVEN'T STARTED. Once a game
     // is live, the sportsbook re-prices to live odds (and live totals), but our
