@@ -142,7 +142,9 @@ export default function LiveScoresPage({ league = "mlb" }) {
       {/* WZ-MTICKER-2026-07-03 :: mobile live ticker tape (this league's scores backbone,
           news/injury alerts woven in). Explicitly requested for nfl/cfb/nhl (+nba on its
           own page); mirrors the MLB Home ticker's classes and rhythm. */}
+      {/* WZ-MTICKER-MOVED-2026-07-05 :: NFL/CFB ticker moved to the Edges board; suppressed here so it isn't duplicated on the Games tab. NHL keeps it. */}
       {(()=>{
+        if(activeLeague==="nfl"||activeLeague==="cfb") return null;
         const sc=(g)=>({kind:"score",a:g.away?.abbrev||"",h:g.home?.abbrev||"",as:g.away?.score??null,hs:g.home?.score??null,state:g.statusDetail||""});
         const backbone=(live.length||final.length)?[...live.map(sc),...final.slice(0,6).map(g=>({...sc(g),state:"Final"}))]:upcoming.slice(0,10).map(g=>({kind:"score",a:g.away?.abbrev||"",h:g.home?.abbrev||"",as:null,hs:null,state:g.statusDetail||""}));
         const alerts=(news||[]).filter(n=>n.scratch||n.status==="injury"||n.type==="headline").slice(0,6)
