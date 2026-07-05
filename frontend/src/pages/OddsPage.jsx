@@ -182,9 +182,21 @@ export default function MarketPage() {
         </div>
       </div>
 
-      <div className="subnav">{VIEWS.map(v=><b key={v[0]} className={v[0]===view?"on":""} onClick={()=>setView(v[0])}>{v[1]}</b>)}</div>
+      {/* WZ-ODDS-SUBNAV-BELOW-WARN-2026-07-05 :: MLB keeps the subnav here (above #wrap); NFL/CFB render it inside #wrap, below the preview warning card. */}
+      {!isFb && <div className="subnav">{VIEWS.map(v=><b key={v[0]} className={v[0]===view?"on":""} onClick={()=>setView(v[0])}>{v[1]}</b>)}</div>}
 
       <div id="wrap">
+        {sport==="nfl" && (
+          <div style={{margin:"11px 0 0",padding:"9px 12px",border:"1px solid #6b4a16",background:"linear-gradient(180deg,#1a1305,#0d0a02)",borderRadius:10,fontFamily:"var(--mono)",fontSize:11,lineHeight:1.45,color:"#f3b94f"}}>
+            ⚠ NFL preview — market data is live, but the model behind it is uncalibrated (2025 seed). Movement history fills in as books adjust toward the season.
+          </div>
+        )}
+        {sport==="cfb" && (
+          <div style={{margin:"11px 0 0",padding:"9px 12px",border:"1px solid #6b4a16",background:"linear-gradient(180deg,#1a1305,#0d0a02)",borderRadius:10,fontFamily:"var(--mono)",fontSize:11,lineHeight:1.45,color:"#f3b94f"}}>
+            ⚠ CFB preview — book prices are live, but the model behind the edges is uncalibrated (2025 seed, strength-of-schedule applied). Movement history fills in as books adjust toward the season.
+          </div>
+        )}
+        {isFb && <div className="subnav">{VIEWS.map(v=><b key={v[0]} className={v[0]===view?"on":""} onClick={()=>setView(v[0])}>{v[1]}</b>)}</div>}
         {loading ? <div className="mvlist">{[0,1,2,3,4].map(i=>(
           <div key={i} className="skrow">
             <div className="sk skc"/>
@@ -194,17 +206,6 @@ export default function MarketPage() {
             </div>
             <div className="sk" style={{width:46,height:14}}/>
           </div>))}</div> : <>
-          {sport==="nfl" && (
-            <div style={{margin:"0 0 10px",padding:"9px 12px",border:"1px solid #6b4a16",background:"linear-gradient(180deg,#1a1305,#0d0a02)",borderRadius:10,fontFamily:"var(--mono)",fontSize:11,lineHeight:1.45,color:"#f3b94f"}}>
-              ⚠ NFL preview — market data is live, but the model behind it is uncalibrated (2025 seed). Movement history fills in as books adjust toward the season.
-            </div>
-          )}
-          {sport==="cfb" && (
-            <div style={{margin:"0 0 10px",padding:"9px 12px",border:"1px solid #6b4a16",background:"linear-gradient(180deg,#1a1305,#0d0a02)",borderRadius:10,fontFamily:"var(--mono)",fontSize:11,lineHeight:1.45,color:"#f3b94f"}}>
-              ⚠ CFB preview — book prices are live, but the model behind the edges is uncalibrated (2025 seed, strength-of-schedule applied). Movement history fills in as books adjust toward the season.
-            </div>
-          )}
-
           {view==="odds" && (oddsList.length ? <>
             <div className="cap">Best available price across all books for each game. Tap any game for the full book-by-book grid{isFb?" — moneyline, spread and total":""}.</div>
             <div className="oddsgrp">{/* ODDSGRP-LEDGER-SURFACE-2026-06-27 */}{oddsList.map((g,i)=><OddsCard key={i} g={g} onOpen={()=>setSel(g)}/>)}</div>
