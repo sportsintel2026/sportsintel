@@ -308,39 +308,80 @@ function summarizeHrFeeds(edges) {
 function buildTightLine(gameEdges, slateDate, opts) {
   const HI  = Number.isFinite(+opts.hi)  ? +opts.hi  : 130;
   const GAP = Number.isFinite(+opts.gap) ? +opts.gap : 40;
+  const TJ  = Number.isFinite(+opts.tjuice) ? +opts.tjuice : -125; // totals juice trigger
   const amToProb = (o) => o == null ? null : (o > 0 ? 100 / (o + 100) : Math.abs(o) / (Math.abs(o) + 100));
   const probToAm = (p) => (p == null || p <= 0 || p >= 1) ? null : (p >= 0.5 ? -Math.round((p / (1 - p)) * 100) : Math.round(((1 - p) / p) * 100));
+  // Master G favorite-price band. -165..-195 = 65%, -155 or weaker = 55%.
+  const masterBand = (favAm) => {
+    if (favAm == null || favAm >= 0) return null;
+    if (favAm <= -165 && favAm >= -195) return "65%";
+    if (favAm < -195) return "heavy (>-195)";
+    if (favAm >= -155) return "55%";
+    return "~60% (between bands)";
+  };
   const rows = gameEdges.map((ge) => {
     const m = ge.moneyline || {};
+    const t = ge.totals || {};
     const aP = m.awayWinProb, hP = m.homeWinProb, aO = m.awayOdds, hO = m.homeOdds;
-    if (aP == null || hP == null || aO == null || hO == null) return null;
-    const dogIsAway  = aP < hP; // talent-underdog = lower model win prob
-    const dogTeam    = dogIsAway ? ge.game.awayAbbr : ge.game.homeAbbr;
-    const favTeam    = dogIsAway ? ge.game.homeAbbr : ge.game.awayAbbr;
-    const bookOdds   = dogIsAway ? aO : hO;   // book price for the talent-dog
-    const talentProb = dogIsAway ? aP : hP;   // model talent prob for the dog
-    const bookProb   = amToProb(bookOdds);
-    const talentAm   = probToAm(talentProb);  // talent fair price for the dog
-    const gapCents   = (talentAm != null && bookOdds != null) ? (talentAm - bookOdds) : null; // + = talent says a BIGGER dog than the book
-    const shortPrice = bookOdds <= HI;        // +130 or shorter, incl pick'em / slight fav
-    const flag       = shortPrice && gapCents != null && gapCents >= GAP;
-    return {
-      matchup: `${ge.game.awayAbbr}@${ge.game.homeAbbr}`,
-      dog: dogTeam, fav: favTeam,
-      bookDogPrice: bookOdds,
-      bookDogPct: bookProb == null ? null : Math.round(bookProb * 1000) / 10,
-      talentDogPct: Math.round(talentProb * 1000) / 10,
-      talentDogFairPrice: talentAm,
-      gapCents,
-      shortPrice, flag,
-    };
+
+    // (2) BOOK CONFIDENCE — de-vig the two ML prices for the no-vig favorite win%
+    let bookConfidence = null;
+    if (aO != null && hO != null) {
+      const aRaw = amToProb(aO), hRaw = amToProb(hO), sum = aRaw + hRaw;
+      const awayIsFav = aO < hO; // more negative = favorite
+      const favPrice = awayIsFav ? aO : hO;
+      const favRaw = awayIsFav ? aRaw : hRaw;
+      bookConfidence = {
+        fav: awayIsFav ? ge.game.awayAbbr : ge.game.homeAbbr,
+        favPrice,
+        noVigFavPct: sum > 0 ? Math.round((favRaw / sum) * 1000) / 10 : null,
+        masterBand: masterBand(favPrice),
+      };
+    }
+
+    // (1) TIGHT LINE — model underdog priced short vs its talent fair price
+    let tightLine = null;
+    if (aP != null && hP != null && aO != null && hO != null) {
+      const dogIsAway  = aP < hP;
+      const bookOdds   = dogIsAway ? aO : hO;
+      const talentProb = dogIsAway ? aP : hP;
+      const talentAm   = probToAm(talentProb);
+      const gapCents   = (talentAm != null && bookOdds != null) ? (talentAm - bookOdds) : null;
+      tightLine = {
+        dog: dogIsAway ? ge.game.awayAbbr : ge.game.homeAbbr,
+        bookDogPrice: bookOdds,
+        bookDogPct: Math.round(amToProb(bookOdds) * 1000) / 10,
+        talentDogPct: Math.round(talentProb * 1000) / 10,
+        talentDogFairPrice: talentAm,
+        gapCents,
+        flag: bookOdds <= HI && gapCents != null && gapCents >= GAP,
+      };
+    }
+
+    // (3) TOTALS JUICE — an over/under bought to <= TJ means the book leans that side
+    let totalsJuice = null;
+    const oO = t.overOdds, uO = t.underOdds;
+    if (oO != null && uO != null) {
+      const overJuiced = oO <= TJ, underJuiced = uO <= TJ;
+      const leans = (overJuiced && oO <= uO) ? "OVER" : (underJuiced && uO < oO) ? "UNDER" : null;
+      totalsJuice = { line: t.line, overOdds: oO, underOdds: uO, juicedSide: leans, flag: leans != null };
+    }
+
+    return { matchup: `${ge.game.awayAbbr}@${ge.game.homeAbbr}`, bookConfidence, tightLine, totalsJuice };
   }).filter(Boolean);
-  const flagged = rows.filter(r => r.flag).sort((a, b) => b.gapCents - a.gapCents);
+
+  const tightFlagged  = rows.filter(r => r.tightLine && r.tightLine.flag)
+                            .sort((a, b) => (b.tightLine.gapCents || 0) - (a.tightLine.gapCents || 0));
+  const totalsFlagged = rows.filter(r => r.totalsJuice && r.totalsJuice.flag);
   return {
-    ok: true, slateDate, band: { dogPriceCeiling: HI, minGapCents: GAP }, games: rows.length,
-    flaggedCount: flagged.length,
-    note: `READ-ONLY. Flags games where the model's UNDERDOG is priced short (<= +${HI}) yet the model's talent fair price says it should be a bigger dog by >= ${GAP}c. Positive gapCents = the book gives the dog MORE credit than the talent model does = the book may know something the math can't see. NOT a bet signal — a "go read this game by hand" flag. bookDogPct = dog's implied win% from the book price; talentDogPct = the model's talent win% for that same team.`,
-    flagged,
+    ok: true, slateDate,
+    thresholds: { dogPriceCeiling: HI, minGapCents: GAP, totalsJuiceAt: TJ },
+    games: rows.length,
+    tightLineFlaggedCount: tightFlagged.length,
+    totalsJuicedCount: totalsFlagged.length,
+    note: `READ-ONLY. Three reads per game. tightLine = model underdog priced <= +${HI} while talent says a bigger dog by >= ${GAP}c (book may know something; read-by-hand flag, not a bet). bookConfidence = no-vig favorite win% + Master G band (-165..-195 = 65%, -155 or weaker = 55%). totalsJuice = over/under bought to <= ${TJ} = book leans that side. Directions/labels only; no win rate shown to users until backtested.`,
+    tightLineFlagged: tightFlagged,
+    totalsJuiced: totalsFlagged,
     all: rows,
   };
 }
