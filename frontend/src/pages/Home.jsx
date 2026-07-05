@@ -156,8 +156,9 @@ export default function HomePage(){
   useEffect(()=>{ if(!SPORTS[sport].hasLive){ setLive([]); return; } let t; const pull=async()=>{ try{ const d=await liveApi.getMLB(); setLive(d?.games||[]); }catch(_){ setLive([]); } t=setTimeout(pull,60000); }; pull(); return ()=>clearTimeout(t); },[sport]);
   useEffect(()=>{ if(!SPORTS[sport].hasHist){ setOddsHist([]); return; } let t; const pull=async()=>{ try{ const d=await edgesApi.getOddsHistory(); setOddsHist(d?.games||[]); }catch(_){ setOddsHist([]); } t=setTimeout(pull,300000); }; pull(); return ()=>clearTimeout(t); },[sport]);
   useEffect(()=>{ if(sport!=="mlb"){ setMarketRead([]); return; } let t; const pull=async()=>{ try{ const d=await edgesApi.getMarketRead(); setMarketRead(d?.games||[]); }catch(_){ setMarketRead([]); } t=setTimeout(pull,120000); }; pull(); return ()=>clearTimeout(t); },[sport]);
-  // WZ-LIVEWIRE-2026-06-27 :: MLB live wire — pull news feed (headlines + injury wire) for the ticker, MLB only.
-  useEffect(()=>{ if(sport!=="mlb"){ setNewsFeed([]); return; } let t,dead=false; const pull=async()=>{ try{ const d=await newsApi.getFeed("mlb"); if(!dead) setNewsFeed(Array.isArray(d?.items)?d.items:[]); }catch(_){ if(!dead) setNewsFeed([]); } t=setTimeout(pull,300000); }; pull(); return ()=>{dead=true;clearTimeout(t);}; },[sport]);
+  // WZ-LIVEWIRE-2026-06-27 :: live wire — pull news feed (headlines + injury wire) for the ticker.
+  // WZ-EDGETICKER-NEWS-2026-07-05 :: extended MLB-only -> also NFL/CFB, so the Edges-board ticker carries league news, not just scores.
+  useEffect(()=>{ if(sport!=="mlb"&&sport!=="nfl"&&sport!=="cfb"){ setNewsFeed([]); return; } let t,dead=false; const pull=async()=>{ try{ const d=await newsApi.getFeed(sport); if(!dead) setNewsFeed(Array.isArray(d?.items)?d.items:[]); }catch(_){ if(!dead) setNewsFeed([]); } t=setTimeout(pull,300000); }; pull(); return ()=>{dead=true;clearTimeout(t);}; },[sport]);
   // Tracked record (ROI / win rate / CLV) for the stats row, per current sport.
   // Honest: only real graded numbers; falls back to em-dashes if a league has none yet.
   useEffect(()=>{ let c=false; setPerf(null);
@@ -343,6 +344,10 @@ export default function HomePage(){
     const inj=(newsFeed||[]).filter(n=>n.source==="rotowire"&&n.status==="injury"&&!n.scratch).slice(0,6)
       .map(n=>({kind:"inj",name:n.playerName||"",text:wireBlurb(n)}));
     return [...scr,...inj];
+  })() : (sport==="nfl"||sport==="cfb") ? (()=>{
+    // WZ-EDGETICKER-NEWS-2026-07-05 :: football news/injuries/scratches woven into the Edges ticker (mirrors the LiveScores Games tape).
+    return (newsFeed||[]).filter(n=>n.scratch||n.status==="injury"||n.type==="headline").slice(0,6)
+      .map(n=>({kind:n.scratch?"scr":n.status==="injury"?"inj":"news",name:n.playerName||"",text:String(n.headline||"").slice(0,80)}));
   })() : [];
   // Scores are the backbone; weave one alert in after roughly every two scores so both stay visible.
   const tickerItems = (()=>{
@@ -419,7 +424,7 @@ export default function HomePage(){
           <div className="stwrap"><div className="sttrack">{[...tickerLoop,...tickerLoop].map((s,i)=>(
             s.kind==="score"
               ? <span key={i}><span className="g">{s.a}</span> {s.as!=null?<span className="sc">{s.as}</span>:null} <span className="g">{s.h}</span> {s.hs!=null?<span className="sc">{s.hs}</span>:null} <span className="st">{s.state}</span></span>
-              : <span key={i} className="it"><span className={"tg "+s.kind}>{s.kind==="scr"?"SCR":"INJ"}</span><span className="tx">{s.name?<b>{s.name}</b>:null}{s.name?" ":""}{s.text}</span></span>
+              : <span key={i} className="it"><span className={"tg "+s.kind}>{s.kind==="scr"?"SCR":s.kind==="inj"?"INJ":"NEWS"}</span><span className="tx">{s.name?<b>{s.name}</b>:null}{s.name?" ":""}{s.text}</span></span>
           ))}</div></div>
         </div>
       ) : null}
