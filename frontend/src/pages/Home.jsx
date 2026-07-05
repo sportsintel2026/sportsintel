@@ -401,13 +401,25 @@ export default function HomePage(){
         </div>
       </div>
 
+      {/* WZ-LIVETICKER-2026-06-27 :: live-scores ticker (all sports) with MLB injury + late-scratch alerts woven in */}
+      {/* WZ-TICKER-ABOVE-WARN-2026-07-05 :: ticker sits above the NFL/CFB preview warning, matching the MLB layout */}
+      {tickerItems.length>0 ? (
+        <div className="scoretape"><span className="lvpill"><span className="d"/>{scoreTape.some(t=>t.live)?"LIVE":scoreTape.some(t=>t.as!=null)?"SCORES":"TODAY"}</span>
+          <div className="stwrap"><div className="sttrack" style={{animationDuration:tapeDur+"s"}}>{[...tickerLoop,...tickerLoop].map((s,i)=>(
+            s.kind==="score"
+              ? <span key={i}><span className="g">{s.a}</span> {s.as!=null?<span className="sc">{s.as}</span>:null} <span className="g">{s.h}</span> {s.hs!=null?<span className="sc">{s.hs}</span>:null} <span className="st">{s.state}</span></span>
+              : <span key={i} className="it"><span className={"tg "+s.kind}>{s.kind==="scr"?"SCR":s.kind==="inj"?"INJ":"NEWS"}</span><span className="tx">{s.name?<b>{s.name}</b>:null}{s.name?" ":""}{s.text}</span></span>
+          ))}</div></div>
+        </div>
+      ) : null}
+
       {sport==="nfl" && (
-        <div style={{margin:"0 4px 10px",padding:"9px 12px",border:"1px solid #6b4a16",background:"linear-gradient(180deg,#1a1305,#0d0a02)",borderRadius:10,fontFamily:"var(--mono)",fontSize:11,lineHeight:1.45,color:"#f3b94f"}}>
+        <div style={{margin:"12px 4px 10px",padding:"9px 12px",border:"1px solid #6b4a16",background:"linear-gradient(180deg,#1a1305,#0d0a02)",borderRadius:10,fontFamily:"var(--mono)",fontSize:11,lineHeight:1.45,color:"#f3b94f"}}>
           ⚠ NFL MODEL IN TRAINING — preseason preview. Ratings are seeded from 2025 results and are <b>not yet calibrated</b> against 2026 games. Edges shown are provisional, for preview only — not betting advice until validated in-season.
         </div>
       )}
       {sport==="cfb" && (
-        <div style={{margin:"0 4px 10px",padding:"9px 12px",border:"1px solid #6b4a16",background:"linear-gradient(180deg,#1a1305,#0d0a02)",borderRadius:10,fontFamily:"var(--mono)",fontSize:11,lineHeight:1.45,color:"#f3b94f"}}>
+        <div style={{margin:"12px 4px 10px",padding:"9px 12px",border:"1px solid #6b4a16",background:"linear-gradient(180deg,#1a1305,#0d0a02)",borderRadius:10,fontFamily:"var(--mono)",fontSize:11,lineHeight:1.45,color:"#f3b94f"}}>
           ⚠ CFB MODEL IN TRAINING — preseason preview. FBS power ratings are seeded from 2025 results with <b>no strength-of-schedule layer</b> yet, and are not yet calibrated against 2026 games. Edges shown are provisional, for preview only — not betting advice until validated in-season.
         </div>
       )}
@@ -420,16 +432,6 @@ export default function HomePage(){
         </div>
       )}
 
-      {/* WZ-LIVETICKER-2026-06-27 :: live-scores ticker (all sports) with MLB injury + late-scratch alerts woven in */}
-      {tickerItems.length>0 ? (
-        <div className="scoretape"><span className="lvpill"><span className="d"/>{scoreTape.some(t=>t.live)?"LIVE":scoreTape.some(t=>t.as!=null)?"SCORES":"TODAY"}</span>
-          <div className="stwrap"><div className="sttrack" style={{animationDuration:tapeDur+"s"}}>{[...tickerLoop,...tickerLoop].map((s,i)=>(
-            s.kind==="score"
-              ? <span key={i}><span className="g">{s.a}</span> {s.as!=null?<span className="sc">{s.as}</span>:null} <span className="g">{s.h}</span> {s.hs!=null?<span className="sc">{s.hs}</span>:null} <span className="st">{s.state}</span></span>
-              : <span key={i} className="it"><span className={"tg "+s.kind}>{s.kind==="scr"?"SCR":s.kind==="inj"?"INJ":"NEWS"}</span><span className="tx">{s.name?<b>{s.name}</b>:null}{s.name?" ":""}{s.text}</span></span>
-          ))}</div></div>
-        </div>
-      ) : null}
 
         <div className="seclbl">HOW TO USE WIZEPICKS</div>
         <div className="guide" onClick={()=>navigate("/guide")}><div className="gi"/><div className="gt"><div className="gh">New here? Start with the basics</div><div className="gs">Edges, props, line shopping &amp; the full board {"\u2014"} a quick walkthrough.</div></div><div className="ga">{"\u203a"}</div></div>
@@ -877,7 +879,7 @@ function Gate({title,navigate}){
 
 const S={ shell:{minHeight:"100vh",background:"#0b0d11",color:"#f2f6f4",fontFamily:"'Inter',system-ui,sans-serif"} };
 
-const CSS=`@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700;800&display=swap');
+const CSS=`@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap');
 
 :root{--bg:#0A0B0D;--panel:#14171B;--panel2:#1B2025;--line:rgba(255,255,255,.06);--line2:rgba(255,255,255,.12);
 --gold:#C9A86A;--red:#E2655C;--blue:#5DA9E8;--steel:#2A6F97;--green:#3FCB91;--neg:#E2655C;--tx:#ECEFF2;--mut:#99A2AA;--mut2:#5B646C;
@@ -923,7 +925,7 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .sttrack .g{color:#cfd7e2;font-weight:600}.sttrack .sc{color:#fff;font-weight:700}.sttrack .st{color:var(--mut2)}
 /* WZ-LIVEWIRE-2026-06-27 :: MLB live wire — tagged items (movers / injuries / headlines) */
 .sttrack .it{display:inline-flex;align-items:center;gap:7px}
-.sttrack .tg{font-family:var(--mono);font-weight:700;font-size:8.5px;letter-spacing:.6px;padding:2px 5px;border-radius:4px;border:1px solid}
+.sttrack .tg{font-family:var(--mono);font-weight:700;font-size:8.5px;line-height:1;letter-spacing:.6px;padding:1px 5px;border-radius:4px;border:1px solid}/* WZ-TICKER-CHIP-TIGHT-2026-07-05 :: keep chip within the text line height so the bar matches the MLB tape */
 .sttrack .tg.move{color:var(--gold);border-color:rgba(201,168,106,.4);background:rgba(201,168,106,.08)}
 .sttrack .tg.inj{color:var(--neg);border-color:rgba(226,101,92,.4);background:rgba(226,101,92,.08)}
 .sttrack .tg.news{color:var(--blue);border-color:rgba(93,169,232,.35);background:rgba(93,169,232,.07)}
