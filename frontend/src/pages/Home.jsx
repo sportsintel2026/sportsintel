@@ -471,7 +471,7 @@ export default function HomePage(){
         </div>
         {hasFull
           ? <>
-              <div className="chips">{BF.map(([lb,key])=><span key={key} className={"chipf "+(board===key?"on":"")} onClick={()=>setBoard(key)}>{lb}</span>)}</div>
+              <div className="bseg">{BF.map(([lb,key])=><span key={key} className={"bseg-b "+(board===key?"on":"")} onClick={()=>setBoard(key)}>{lb}</span>)}</div>
               {boardItems.length>0
                 ? <>
                     <div className="grid">{boardItems.map((d,i)=>{const id=d.gameId+d.cat+i;return openId===id?<BoardRow key={id} d={d} i={i} open={true} onToggle={()=>setOpenId(null)} navigate={navigate} sport={sport}/>:<BoardCardCompact key={id} d={d} i={i} sport={sport} onClick={()=>setOpenId(id)}/>;})}</div>
@@ -1024,6 +1024,10 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 
 .chips{display:flex;align-items:center;gap:7px;padding:14px 4px 0;overflow-x:auto;scrollbar-width:none}.chips::-webkit-scrollbar{display:none}
 .chipf{font-family:var(--mono);font-size:10px;color:var(--mut);border:1px solid var(--line2);border-radius:999px;padding:4px 10px;white-space:nowrap;cursor:pointer}.chipf.on{color:var(--gold);background:transparent;border-color:rgba(201,168,106,.55);font-weight:600}
+/* WZ-FILTER-SEG-2026-07-05 :: board market filter as a clean, readable segmented control (bigger text, solid gold active state). Stays in flow (not sticky) per owner. */
+.bseg{display:flex;gap:3px;background:#101317;border:1px solid var(--line);border-radius:13px;padding:4px;margin:14px 12px 6px}
+.bseg-b{flex:1;text-align:center;font-family:var(--mono);font-size:13px;font-weight:600;letter-spacing:.5px;color:#a3abb4;padding:9px 4px;border-radius:9px;cursor:pointer;transition:background .16s ease,color .16s ease;-webkit-tap-highlight-color:transparent}
+.bseg-b.on{background:var(--gold);color:#0A0B0D;font-weight:700}
 
 .grid{margin:12px 4px 0;background:var(--panel);border-radius:14px;overflow:hidden}
 .gr{position:relative;margin-bottom:0;background:transparent;border-radius:0;overflow:hidden}.gr+.gr{border-top:1px solid var(--line)}
