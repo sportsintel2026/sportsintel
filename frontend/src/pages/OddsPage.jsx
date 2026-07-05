@@ -371,9 +371,9 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .sports b{flex:0 0 auto;font-family:var(--disp);font-weight:700;font-size:13px;letter-spacing:.4px;color:var(--mut);border:1px solid var(--line2);border-radius:999px;padding:6px 13px;display:inline-flex;align-items:center;gap:6px;cursor:pointer}
 .sports b.on{color:var(--tx);border-color:rgba(63,203,145,.4);background:rgba(63,203,145,.12)}
 .sports b .dot{width:6px;height:6px;border-radius:50%;background:#2a3640}.sports b.on .dot{background:var(--green)}
-.subnav{display:flex;gap:0;border:1px solid var(--line2);border-radius:10px;overflow:hidden;margin:11px 4px 0}
-.subnav b{flex:1;text-align:center;font-family:var(--disp);font-weight:800;font-size:13px;letter-spacing:.4px;color:var(--mut);padding:9px;cursor:pointer}
-.subnav b.on{background:#141d24;color:var(--gold)}/* SUBNAV-DARK-GOLDTEXT-2026-06-27 */
+.subnav{display:flex;gap:3px;background:#101317;border:1px solid var(--line);border-radius:13px;padding:4px;margin:11px 4px 0}/* WZ-MARKET-SUBNAV-SEG-2026-07-05 :: match the Edges board All/ML/Spread/Totals segmented control (gold-fill active, dark text) */
+.subnav b{flex:1;text-align:center;font-family:var(--mono);font-size:13px;font-weight:600;letter-spacing:.5px;color:#a3abb4;padding:9px 4px;border-radius:9px;cursor:pointer;transition:background .16s ease,color .16s ease;-webkit-tap-highlight-color:transparent}
+.subnav b.on{background:var(--gold);color:#0A0B0D;font-weight:700}
 .cap{font-family:var(--mono);font-size:10px;color:var(--mut2);margin:10px 4px 0;line-height:1.4}
 /* odds (line shop) card — ODDSCARD-C2-LEDGER-2026-06-27 :: box-free hairline ledger */
 .oddsgrp{background:var(--panel);border:1px solid var(--line);border-radius:14px;margin:9px 4px 0;overflow:hidden}
