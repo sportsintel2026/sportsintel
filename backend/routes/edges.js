@@ -387,13 +387,74 @@ function buildTightLine(gameEdges, slateDate, opts) {
   };
 }
 
+// WZ-WINNERBOARD-2026-07-06 :: READ-ONLY preview of the winner-first board (Master G's
+// ruleset, all data-locked from tonight's queries). Reuses the computed slate, no extra
+// cost, changes NOTHING live. Selects/ranks by WIN PROBABILITY, not edge, so winners lead
+// instead of getting buried under longshots. Totals untouched. Props excluded entirely.
+//   Favorites : ML favorite priced -160 to -200, ranked by win%.
+//   Dogs      : ONLY when the game's favorite is -140 or WEAKER, no dog +200 or longer,
+//               top N (default 4) by the DOG's win%.
+//   Run line  : the -1.5 favorite side only (no run-line dogs), ranked by cover%.
+// Tunable: ?winnerboard=1&dogcap=4
+function buildWinnerBoard(gameEdges, slateDate, opts) {
+  const DOG_CAP = Number.isFinite(+opts.dogcap) ? +opts.dogcap : 4;
+  const FAV_HI = -160, FAV_LO = -200;
+  const DOG_FAV_MAX = -140;
+  const DOG_MAX = 200;
+  const pctOf = (p) => p == null ? null : Math.round(p * 1000) / 10;
+  const favorites = [], dogPool = [], runLine = [];
+  for (const ge of gameEdges) {
+    const m = ge.moneyline || {}, rl = ge.runLine || {};
+    const aP = m.awayWinProb, hP = m.homeWinProb, aO = m.awayOdds, hO = m.homeOdds;
+    if (aP == null || hP == null || aO == null || hO == null) continue;
+    const matchup = `${ge.game.awayAbbr}@${ge.game.homeAbbr}`;
+    const awayIsFav = aO < hO;
+    const favAbbr = awayIsFav ? ge.game.awayAbbr : ge.game.homeAbbr;
+    const dogAbbr = awayIsFav ? ge.game.homeAbbr : ge.game.awayAbbr;
+    const favPrice = awayIsFav ? aO : hO;
+    const dogPrice = awayIsFav ? hO : aO;
+    const favProb  = awayIsFav ? aP : hP;
+    const dogProb  = awayIsFav ? hP : aP;
+    if (favPrice <= FAV_HI && favPrice >= FAV_LO) {
+      favorites.push({ matchup, pick: `${favAbbr} ML`, price: favPrice, winPct: pctOf(favProb) });
+    }
+    if (favPrice >= DOG_FAV_MAX && dogPrice < DOG_MAX) {
+      dogPool.push({ matchup, pick: `${dogAbbr} ML`, price: dogPrice, winPct: pctOf(dogProb), _p: dogProb });
+    }
+    const rlLine = awayIsFav ? rl.awayLine : rl.homeLine;
+    const rlOdds = awayIsFav ? rl.awayOdds : rl.homeOdds;
+    const rlCover = awayIsFav ? rl.awayCoverProb : rl.homeCoverProb;
+    if (rlLine != null && rlLine < 0 && rlCover != null) {
+      runLine.push({ matchup, pick: `${favAbbr} ${rlLine}`, price: rlOdds, coverPct: pctOf(rlCover) });
+    }
+  }
+  favorites.sort((a, b) => (b.winPct ?? -1) - (a.winPct ?? -1));
+  runLine.sort((a, b) => (b.coverPct ?? -1) - (a.coverPct ?? -1));
+  dogPool.sort((a, b) => (b._p ?? -1) - (a._p ?? -1));
+  const dogs = dogPool.slice(0, DOG_CAP).map(({ _p, ...r }) => r);
+  return {
+    ok: true, slateDate,
+    rules: {
+      favorites: "ML fav -160 to -200, ranked by win%",
+      dogs: `max ${DOG_CAP}/day, only when game favorite is -140 or weaker, no dog +200 or longer, ranked by dog win%`,
+      runLine: "-1.5 favorite only, ranked by cover%",
+      totals: "UNTOUCHED (not in this board)", props: "EXCLUDED",
+    },
+    counts: { favorites: favorites.length, dogs: dogs.length, runLine: runLine.length },
+    favoritesBoard: favorites,
+    dogsBoard: dogs,
+    runLineBoard: runLine,
+    note: "READ-ONLY preview. This changes NOTHING on the live board. It shows what the winner-first board WOULD surface on this slate so you can eyeball it before we flip it live.",
+  };
+}
+
 router.get("/mlb", async (req, res) => {
   let weBuild = false;
   try {
     const { date: slateDate, rolled } = await resolveSlateDate();
 
     // Cache is valid only if it's fresh AND for the same date we now want to serve.
-    if (!req.query.hits_debug && !req.query.edges_debug && !req.query.hr_audit && !req.query.tb_shadow && !req.query.tightline && edgesCache && edgesCacheDate === slateDate && (Date.now() - edgesCacheAt) < CACHE_TTL_MS) {
+    if (!req.query.hits_debug && !req.query.edges_debug && !req.query.hr_audit && !req.query.tb_shadow && !req.query.tightline && !req.query.winnerboard && edgesCache && edgesCacheDate === slateDate && (Date.now() - edgesCacheAt) < CACHE_TTL_MS) {
       console.log(`[Edges] Returning cached results for ${slateDate}`);
       return res.json({ ...edgesCache, cached: true });
     }
@@ -403,7 +464,7 @@ router.get("/mlb", async (req, res) => {
     // it to fill the cache instead of starting a duplicate recompute (which would also
     // duplicate Odds API calls). Bounded wait + finally-released flag => never stampedes
     // and never deadlocks.
-    const isDebugQ = !!(req.query.hits_debug || req.query.edges_debug || req.query.hr_audit || req.query.tb_shadow || req.query.tightline);
+    const isDebugQ = !!(req.query.hits_debug || req.query.edges_debug || req.query.hr_audit || req.query.tb_shadow || req.query.tightline || req.query.winnerboard);
     if (!isDebugQ) {
       if (edgesBuilding) {
         const t0 = Date.now();
@@ -456,6 +517,9 @@ router.get("/mlb", async (req, res) => {
     }
     if (req.query.tightline) {
       return res.json(buildTightLine(gameEdges, slateDate, { hi: req.query.hi, gap: req.query.gap }));
+    }
+    if (req.query.winnerboard) {
+      return res.json(buildWinnerBoard(gameEdges, slateDate, { dogcap: req.query.dogcap }));
     }
     // The pre-game model is only valid for games that HAVEN'T STARTED. Once a game
     // is live, the sportsbook re-prices to live odds (and live totals), but our
