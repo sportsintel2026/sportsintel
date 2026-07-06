@@ -594,6 +594,16 @@ router.get("/mlb", async (req, res) => {
       }
     }
     moneylineEdges.sort((a, b) => (b.edge ?? -1) - (a.edge ?? -1));
+    // WZ-DOGCAP-2026-07-06 :: cap true dogs (+130 or longer) at DOG_CAP, keep the highest
+    // win-probability ones, favorites fill the freed slots. Model logic untouched.
+    const DOG_CAP = 4, DOG_MIN_ODDS = 130;
+    const keptDogs = new Set(
+      moneylineEdges
+        .filter(e => (e.odds ?? 0) >= DOG_MIN_ODDS)
+        .sort((a, b) => (b.modelProb ?? -1) - (a.modelProb ?? -1))
+        .slice(0, DOG_CAP)
+    );
+    const moneylineBoard = moneylineEdges.filter(e => (e.odds ?? 0) < DOG_MIN_ODDS || keptDogs.has(e));
     const totalsEdges = [];
     for (const ge of gameEdges) {
       const sourceGame = gamesWithOdds.find(g => g.id === ge.game.id);
@@ -802,7 +812,7 @@ router.get("/mlb", async (req, res) => {
           homeScore: sourceGame?.homeScore,
         };
       }),
-      moneylineEdges: moneylineEdges.slice(0, 10),
+      moneylineEdges: moneylineBoard.slice(0, 10),
       totalsEdges: totalsEdges.slice(0, 10),
       runLineEdges: runLineEdges.slice(0, 10),
       hrPropEdges: hrPropEdges.slice(0, MLB_PROP_DISPLAY_CAP),
