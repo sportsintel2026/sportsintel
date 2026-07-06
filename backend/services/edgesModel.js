@@ -726,6 +726,12 @@ async function getUmpKFactorForGame(gamePk) {
   }
 }
 
+// WZ-KMEAN-HAIRCUT-2026-07-05 :: K shadow (n=353) showed the projection runs ~10% hot
+// (proj 5.80 vs actual 5.21 Ks/start). ~78% of that miss is the K-RATE, not innings, so we
+// center the whole projection with a mean haircut (same calibration pattern as Total Bases).
+// This fixes the over-projection that made K OVER picks a confirmed leak (the reason overs
+// are currently disabled). Re-measure via the K shadow after deploy before re-enabling overs.
+const K_MEAN_HAIRCUT = 0.90;
 // Recent-aware K projection. expIP from recent starts + season; strikeout RATE from
 // Savant k% (preferred) blended with recent form; opponent-adjusted. savantK is the
 // pitcher's Savant row {kPct, whiffPct, pa} or null. umpKFactor (optional) is the
@@ -795,7 +801,7 @@ function kProjection(pitcherStats, recentStarts, oppTeamStats, savantK, umpKFact
   // investigation reads clean; the ump lives in its own factor: lambda = kRate x expBF
   // x oppFactor x umpFactor.
   const umpF = (Number.isFinite(umpKFactor) && umpKFactor > 0) ? umpKFactor : 1.0;
-  const lambda = kRate * expBF * oppFactor * umpF;
+  const lambda = kRate * expBF * oppFactor * umpF * K_MEAN_HAIRCUT;
   return { lambda: lambda > 0 ? lambda : null, expIP: round2(expIP), kRate: round3(kRate), expBF: round2(expBF), oppFactor: round3(oppFactor), umpFactor: round3(umpF), usedSavant: haveSavant };
 }
 
