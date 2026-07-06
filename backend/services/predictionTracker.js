@@ -172,7 +172,7 @@ async function captureClosingLines() {
     try {
       const schedule = await getScheduleForDate(date);
       for (const g of schedule) {
-        gameNames[String(g.id)] = { away: g.away, home: g.home };
+        gameNames[String(g.id)] = { away: g.away, home: g.home, date };
         if (g.status !== "scheduled" || !g.startTimeUTC) continue;
         const msToStart = new Date(g.startTimeUTC).getTime() - now;
         if (msToStart > 0 && msToStart <= CLOSING_WINDOW_MS) {
@@ -186,7 +186,10 @@ async function captureClosingLines() {
   }
 
   const toCapture = pending.filter(p => closingWindowGameIds.has(String(p.game_id)));
-  if (toCapture.length === 0) { console.log("[CLV] no games in pre-game closing window"); return 0; }
+  // WZ-CLOSINGLINES-2026-07-05 :: proceed if ANY scheduled game is in the pre-pitch
+  // window (not only our picks), so the closing_lines ledger below captures the full
+  // slate. The pick-CLV loop still only processes toCapture, so CLV is unchanged.
+  if (closingWindowGameIds.size === 0) { console.log("[CLV] no games in pre-game closing window"); return 0; }
 
   // One FRESH odds fetch (bypass the 30-min cache) so the captured price is the
   // true current line, not an up-to-30-min-stale cached one. ~3 credits, and only
@@ -199,7 +202,7 @@ async function captureClosingLines() {
   // allowed to break the US capture: a failure here just leaves pinnacle_* null. ~2 eu
   // credits, fired sparingly. This is the benchmark that actually validates edge.
   let pinEvents = [];
-  if (pinWindowGameIds.size > 0) {
+  if (pinWindowGameIds.size > 0 && toCapture.length > 0) {
     try { pinEvents = await getMLBPinnacleClose({ forceFresh: true }); }
     catch (e) { console.error("[CLV] Pinnacle close fetch failed:", e.message); pinEvents = []; }
   }
@@ -275,6 +278,42 @@ async function captureClosingLines() {
       .eq("id", pick.id);
     if (!upErr) captured++;
   }
+
+  // WZ-CLOSINGLINES-2026-07-05 :: permanent closing-line ledger for EVERY in-window
+  // game (not just our picks), so price-based reads (favorite bands, juiced totals) can
+  // be backtested against true league-wide base rates. Reuses the oddsEvents fetch above
+  // (no extra credits). Ratchet: upsert overwrites each tick so the last pre-pitch price
+  // wins. Fully isolated in try/catch — a failure here can NEVER affect CLV/grading.
+  try {
+    const clRows = [];
+    for (const gid of closingWindowGameIds) {
+      const nm = gameNames[gid];
+      if (!nm || !nm.date) continue;
+      const ev = matchPickToOddsEvent({ away: nm.away, home: nm.home }, oddsEvents);
+      if (!ev) continue;
+      const aML = ev.h2h ? ev.h2h.away : null;
+      const hML = ev.h2h ? ev.h2h.home : null;
+      const tLine = ev.totals ? ev.totals.line : null;
+      const oO = ev.totals ? ev.totals.over : null;
+      const uO = ev.totals ? ev.totals.under : null;
+      if (aML == null && hML == null && oO == null && uO == null) continue;
+      const fav = (aML != null && hML != null) ? (aML < hML ? nm.away : nm.home) : null;
+      clRows.push({
+        game_date: nm.date, game_id: gid,
+        away_team: nm.away, home_team: nm.home,
+        away_ml: aML, home_ml: hML, favorite: fav,
+        total_line: tLine, over_odds: oO, under_odds: uO,
+        captured_at: new Date().toISOString(),
+      });
+    }
+    if (clRows.length) {
+      const { error: clErr } = await supabase
+        .from("closing_lines")
+        .upsert(clRows, { onConflict: "game_date,game_id" });
+      if (clErr) console.error("[ClosingLines] upsert failed:", clErr.message);
+      else console.log(`[ClosingLines] captured ${clRows.length} game closing lines`);
+    }
+  } catch (e) { console.error("[ClosingLines] capture error:", e.message); }
 
   console.log(`[CLV] captured closing lines for ${captured}/${toCapture.length} picks`
     + ` | misses: noOddsEvent=${miss.noOddsEvent} noClosingPrice=${miss.noClosingPrice} byMarket=${JSON.stringify(miss.byMarket)}`);
