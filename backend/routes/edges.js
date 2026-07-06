@@ -397,54 +397,67 @@ function buildTightLine(gameEdges, slateDate, opts) {
 //   Run line  : the -1.5 favorite side only (no run-line dogs), ranked by cover%.
 // Tunable: ?winnerboard=1&dogcap=4
 function buildWinnerBoard(gameEdges, slateDate, opts) {
-  const DOG_CAP = Number.isFinite(+opts.dogcap) ? +opts.dogcap : 4;
-  const FAV_HI = -160, FAV_LO = -200;
-  const DOG_FAV_MAX = -140;
-  const DOG_MAX = 200;
   const pctOf = (p) => p == null ? null : Math.round(p * 1000) / 10;
-  const favorites = [], dogPool = [], runLine = [];
+  const mlBoard = [], rlBoard = [];
   for (const ge of gameEdges) {
     const m = ge.moneyline || {}, rl = ge.runLine || {};
     const aP = m.awayWinProb, hP = m.homeWinProb, aO = m.awayOdds, hO = m.homeOdds;
-    if (aP == null || hP == null || aO == null || hO == null) continue;
     const matchup = `${ge.game.awayAbbr}@${ge.game.homeAbbr}`;
-    const awayIsFav = aO < hO;
-    const favAbbr = awayIsFav ? ge.game.awayAbbr : ge.game.homeAbbr;
-    const dogAbbr = awayIsFav ? ge.game.homeAbbr : ge.game.awayAbbr;
-    const favPrice = awayIsFav ? aO : hO;
-    const dogPrice = awayIsFav ? hO : aO;
-    const favProb  = awayIsFav ? aP : hP;
-    const dogProb  = awayIsFav ? hP : aP;
-    if (favPrice <= FAV_HI && favPrice >= FAV_LO) {
-      favorites.push({ matchup, pick: `${favAbbr} ML`, price: favPrice, winPct: pctOf(favProb) });
+    // MONEYLINE three-tier ladder (Master G's rule):
+    //   fav <= -175            -> auto-take the favorite (price alone carries the win rate)
+    //   fav -174 to -121       -> the model picks the side it favors, by edge (like it does now)
+    //   fav >= -120 (close)    -> lean the dog (genuinely live in a near-pickem game)
+    if (aP != null && hP != null && aO != null && hO != null) {
+      const awayIsFav = aO < hO;
+      const favPrice = awayIsFav ? aO : hO;
+      const favAbbr = awayIsFav ? ge.game.awayAbbr : ge.game.homeAbbr;
+      const dogAbbr = awayIsFav ? ge.game.homeAbbr : ge.game.awayAbbr;
+      const favProb = awayIsFav ? aP : hP;
+      const dogProb = awayIsFav ? hP : aP;
+      const dogPrice = awayIsFav ? hO : aO;
+      let entry;
+      if (favPrice <= -175) {
+        entry = { pick: `${favAbbr} ML`, price: favPrice, winPct: pctOf(favProb), side: "fav", tier: "1 heavy-fav auto (<=-175)" };
+      } else if (favPrice <= -121) {
+        const modelPicksAway = ((m.awayEdge ?? -1) >= (m.homeEdge ?? -1));
+        const team = modelPicksAway ? ge.game.awayAbbr : ge.game.homeAbbr;
+        const price = modelPicksAway ? aO : hO;
+        const prob = modelPicksAway ? aP : hP;
+        const isFav = modelPicksAway === awayIsFav;
+        entry = { pick: `${team} ML`, price, winPct: pctOf(prob), side: isFav ? "fav" : "dog", tier: "2 model-edge (-174..-121)" };
+      } else {
+        entry = { pick: `${dogAbbr} ML`, price: dogPrice, winPct: pctOf(dogProb), side: "dog", tier: "3 close-game lean dog (>=-120)" };
+      }
+      mlBoard.push({ matchup, ...entry });
     }
-    if (favPrice >= DOG_FAV_MAX && dogPrice < DOG_MAX) {
-      dogPool.push({ matchup, pick: `${dogAbbr} ML`, price: dogPrice, winPct: pctOf(dogProb), _p: dogProb });
-    }
-    const rlLine = awayIsFav ? rl.awayLine : rl.homeLine;
-    const rlOdds = awayIsFav ? rl.awayOdds : rl.homeOdds;
-    const rlCover = awayIsFav ? rl.awayCoverProb : rl.homeCoverProb;
-    if (rlLine != null && rlLine < 0 && rlCover != null) {
-      runLine.push({ matchup, pick: `${favAbbr} ${rlLine}`, price: rlOdds, coverPct: pctOf(rlCover) });
+    // RUN LINE: model picks the side with the cover edge (either -1.5 fav or +1.5 dog),
+    // not auto -1.5 and not chasing the +1.5 payout. Ranked by cover%.
+    const aRLc = rl.awayCoverProb, hRLc = rl.homeCoverProb;
+    if (aRLc != null || hRLc != null) {
+      const byEdge = (rl.awayEdge != null || rl.homeEdge != null);
+      const pickAway = byEdge ? ((rl.awayEdge ?? -1) >= (rl.homeEdge ?? -1)) : ((aRLc ?? -1) >= (hRLc ?? -1));
+      const team = pickAway ? ge.game.awayAbbr : ge.game.homeAbbr;
+      const line = pickAway ? rl.awayLine : rl.homeLine;
+      const price = pickAway ? rl.awayOdds : rl.homeOdds;
+      const cover = pickAway ? aRLc : hRLc;
+      if (line != null && cover != null) {
+        rlBoard.push({ matchup, pick: `${team} ${line}`, price, coverPct: pctOf(cover), side: line < 0 ? "fav -1.5" : "dog +1.5" });
+      }
     }
   }
-  favorites.sort((a, b) => (b.winPct ?? -1) - (a.winPct ?? -1));
-  runLine.sort((a, b) => (b.coverPct ?? -1) - (a.coverPct ?? -1));
-  dogPool.sort((a, b) => (b._p ?? -1) - (a._p ?? -1));
-  const dogs = dogPool.slice(0, DOG_CAP).map(({ _p, ...r }) => r);
+  mlBoard.sort((a, b) => (b.winPct ?? -1) - (a.winPct ?? -1));
+  rlBoard.sort((a, b) => (b.coverPct ?? -1) - (a.coverPct ?? -1));
   return {
     ok: true, slateDate,
     rules: {
-      favorites: "ML fav -160 to -200, ranked by win%",
-      dogs: `max ${DOG_CAP}/day, only when game favorite is -140 or weaker, no dog +200 or longer, ranked by dog win%`,
-      runLine: "-1.5 favorite only, ranked by cover%",
-      totals: "UNTOUCHED (not in this board)", props: "EXCLUDED",
+      moneyline: "Ladder: fav <=-175 auto-take fav; -174..-121 model picks its edge side; fav >=-120 lean dog. Ranked by win%.",
+      runLine: "Model picks the side with the cover edge (either -1.5 fav or +1.5 dog). Ranked by cover%.",
+      totals: "UNTOUCHED", props: "EXCLUDED",
     },
-    counts: { favorites: favorites.length, dogs: dogs.length, runLine: runLine.length },
-    favoritesBoard: favorites,
-    dogsBoard: dogs,
-    runLineBoard: runLine,
-    note: "READ-ONLY preview. This changes NOTHING on the live board. It shows what the winner-first board WOULD surface on this slate so you can eyeball it before we flip it live.",
+    counts: { moneyline: mlBoard.length, runLine: rlBoard.length },
+    moneylineBoard: mlBoard,
+    runLineBoard: rlBoard,
+    note: "READ-ONLY preview. Changes NOTHING live. Shows the winner-first ladder on this slate so you can eyeball it before we flip it live.",
   };
 }
 
