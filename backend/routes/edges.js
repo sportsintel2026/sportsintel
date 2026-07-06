@@ -594,16 +594,22 @@ router.get("/mlb", async (req, res) => {
       }
     }
     moneylineEdges.sort((a, b) => (b.edge ?? -1) - (a.edge ?? -1));
-    // WZ-DOGCAP-2026-07-06 :: cap true dogs (+130 or longer) at DOG_CAP, keep the highest
-    // win-probability ones, favorites fill the freed slots. Model logic untouched.
-    const DOG_CAP = 4, DOG_MIN_ODDS = 130;
-    const keptDogs = new Set(
-      moneylineEdges
-        .filter(e => (e.odds ?? 0) >= DOG_MIN_ODDS)
-        .sort((a, b) => (b.modelProb ?? -1) - (a.modelProb ?? -1))
-        .slice(0, DOG_CAP)
-    );
-    const moneylineBoard = moneylineEdges.filter(e => (e.odds ?? 0) < DOG_MIN_ODDS || keptDogs.has(e));
+    // WZ-WINPROB-2026-07-06 :: rank the board by WIN PROBABILITY so the model's most-confident
+    // winners (heavy/strong favorites) lead, instead of by edge (which buried them under longshots).
+    // The model still analyzes every game and picks the side it favors; this only changes the ORDER
+    // and trims the tail. Caps: slight favorites (-101 to -129) at SLIGHTFAV_CAP; true dogs (+130 or
+    // longer) at DOG_CAP, appended at the end so up to DOG_CAP live dogs still show. Model untouched.
+    const DOG_CAP = 3, DOG_MIN_ODDS = 130, SLIGHTFAV_CAP = 7, FAV_SLOTS = 12;
+    const isDog = (e) => (e.odds ?? 0) >= DOG_MIN_ODDS;
+    const isSlightFav = (e) => (e.odds ?? 0) <= -101 && (e.odds ?? 0) >= -129;
+    const byProb = (a, b) => (b.modelProb ?? -1) - (a.modelProb ?? -1);
+    const keptSlight = new Set(moneylineEdges.filter(isSlightFav).sort(byProb).slice(0, SLIGHTFAV_CAP));
+    const favSide = moneylineEdges
+      .filter((e) => !isDog(e) && (!isSlightFav(e) || keptSlight.has(e)))
+      .sort(byProb)
+      .slice(0, FAV_SLOTS);
+    const dogSide = moneylineEdges.filter(isDog).sort(byProb).slice(0, DOG_CAP);
+    const moneylineBoard = [...favSide, ...dogSide];
     const totalsEdges = [];
     for (const ge of gameEdges) {
       const sourceGame = gamesWithOdds.find(g => g.id === ge.game.id);
@@ -812,7 +818,7 @@ router.get("/mlb", async (req, res) => {
           homeScore: sourceGame?.homeScore,
         };
       }),
-      moneylineEdges: moneylineBoard.slice(0, 10),
+      moneylineEdges: moneylineBoard,
       totalsEdges: totalsEdges.slice(0, 10),
       runLineEdges: runLineEdges.slice(0, 10),
       hrPropEdges: hrPropEdges.slice(0, MLB_PROP_DISPLAY_CAP),
