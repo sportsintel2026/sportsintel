@@ -311,13 +311,14 @@ function buildTightLine(gameEdges, slateDate, opts) {
   const TJ  = Number.isFinite(+opts.tjuice) ? +opts.tjuice : -125; // totals juice trigger
   const amToProb = (o) => o == null ? null : (o > 0 ? 100 / (o + 100) : Math.abs(o) / (Math.abs(o) + 100));
   const probToAm = (p) => (p == null || p <= 0 || p >= 1) ? null : (p >= 0.5 ? -Math.round((p / (1 - p)) * 100) : Math.round(((1 - p) / p) * 100));
-  // Master G favorite-price band. -165..-195 = 65%, -155 or weaker = 55%.
+  // Master G favorite-price bands (contiguous, no gaps): -156..-210 = 60% fav wins, -131..-155 = 55% fav wins, -100..-130 = 55% dog wins.
   const masterBand = (favAm) => {
     if (favAm == null || favAm >= 0) return null;
-    if (favAm <= -165 && favAm >= -195) return "65%";
-    if (favAm < -195) return "heavy (>-195)";
-    if (favAm >= -155) return "55%";
-    return "~60% (between bands)";
+    if (favAm <= -156 && favAm >= -210) return "60% (fav wins)";
+    if (favAm < -210) return "heavy fav (>-210)";
+    if (favAm <= -131 && favAm >= -155) return "55% (fav wins)";
+    if (favAm >= -130) return "55% (dog wins)";
+    return "between bands";
   };
   const rows = gameEdges.map((ge) => {
     const m = ge.moneyline || {};
@@ -379,7 +380,7 @@ function buildTightLine(gameEdges, slateDate, opts) {
     games: rows.length,
     tightLineFlaggedCount: tightFlagged.length,
     totalsJuicedCount: totalsFlagged.length,
-    note: `READ-ONLY. Three reads per game. tightLine = model underdog priced <= +${HI} while talent says a bigger dog by >= ${GAP}c (book may know something; read-by-hand flag, not a bet). bookConfidence = no-vig favorite win% + Master G band (-165..-195 = 65%, -155 or weaker = 55%). totalsJuice = over/under bought to <= ${TJ} = book leans that side. Directions/labels only; no win rate shown to users until backtested.`,
+    note: `READ-ONLY. Three reads per game. tightLine = model underdog priced <= +${HI} while talent says a bigger dog by >= ${GAP}c (book may know something; read-by-hand flag, not a bet). bookConfidence = no-vig favorite win% + Master G bands (-156..-210 = 60% fav, -131..-155 = 55% fav, -100..-130 = 55% dog). totalsJuice = over/under bought to <= ${TJ} = book leans that side. Directions/labels only; no win rate shown to users until backtested.`,
     tightLineFlagged: tightFlagged,
     totalsJuiced: totalsFlagged,
     all: rows,
