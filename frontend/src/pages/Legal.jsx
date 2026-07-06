@@ -18,7 +18,6 @@ function LegalShell({ title, intro, children }) {
         </div>
         <h1 className="lg-h1">{title}</h1>
         <div className="lg-upd">Last updated: {UPDATED}</div>
-        <div className="lg-tmpl"><b>Template notice.</b> This is a general starting template provided for convenience, not legal advice. WizePicks should have a licensed attorney review and finalize this document for its specific business and jurisdiction before relying on it.</div>
         {intro && <p className="lg-p lg-intro">{intro}</p>}
         {children}
         <div className="lg-foot"><span>21+</span><i/><span>Gamble Responsibly</span><i/><span>1-800-GAMBLER</span><i/><span>ncpgambling.org</span></div>
