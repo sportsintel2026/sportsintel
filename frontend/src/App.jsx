@@ -5,7 +5,6 @@ import { supabase } from "./lib/api";
 import LandingPage from "./pages/Landing";
 import { LoginPage } from "./pages/Login";
 import { SignupPage } from "./pages/Login";
-import DashboardPage from "./pages/Dashboard";
 import HomePage from "./pages/Home";
 import PropsPage from "./pages/Props";
 import GameDetailPage from "./pages/GameDetail";
@@ -15,7 +14,6 @@ import PricingPage from "./pages/Pricing";
 import ResetPasswordPage from "./pages/ResetPassword";
 import AdminPage from "./pages/Admin";
 import SettingsPage from "./pages/Settings";
-import MyPicksPage from "./pages/MyPicks";
 import ExpertPicksPage from "./pages/ExpertPicks";
 import ConsensusPage from "./pages/Consensus";
 import OddsPage from "./pages/OddsPage";
@@ -28,7 +26,6 @@ import DailyCardPage from "./pages/DailyCard";
 import MarketReadPage from "./pages/MarketRead";
 import NewsPage from "./pages/News"; // WZ-NEWS-ROUTE-2026-06-27 (nba/nhl)
 import { TermsPage, PrivacyPage } from "./pages/Legal"; // LEGAL-PAGES-2026-06-24
-import MobileShell from "./pages/MobileShell"; // MOBILESHELL-ROUTE-2026-06-24
 import SportBar, { SportTabsHeader } from "./pages/SportNav"; // WIZEPICKS-SPORTNAV-2026-06-25
 import InstallNudge from "./pages/InstallNudge"; // WZ-GETAPP-2026-07-05 :: iOS "Get the app" nudge
 function PrivateRoute({ children }) {
@@ -269,11 +266,6 @@ export default function App() {
               <SettingsPage />
             </PrivateRoute>
           } />
-          <Route path="/my-picks" element={
-            <PrivateRoute>
-              <MyPicksPage />
-            </PrivateRoute>
-          } />
           <Route path="/expert-picks" element={
             <PrivateRoute>
               <ExpertPicksPage />
@@ -315,11 +307,6 @@ export default function App() {
               <SportGate section="News" allow={["mlb", "nfl", "cfb", "nba", "nhl"]}>
                 <NewsPage />
               </SportGate>
-            </PrivateRoute>
-          } />
-          <Route path="/m" element={
-            <PrivateRoute>
-              <MobileShell />
             </PrivateRoute>
           } />
           <Route path="*" element={<Navigate to="/" replace />} />
