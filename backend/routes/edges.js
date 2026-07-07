@@ -484,73 +484,48 @@ router.get("/mlb", async (req, res) => {
     // can never slip into the rankings, whatever the exact status word is.
     // (Live games still get accurate LIVE edges on their own detail page.)
     const isPreGame = (status) => status === "scheduled";
-    const moneylineEdges = [];
+    // WZ-WINNERS-2026-07-07 :: MONEYLINE = WINNERS. For each game we take the ONE side our model
+    // gives the higher win probability (the team we think WINS -- favorite OR underdog), and keep it
+    // only when that win% clears the floor. No edge gate and no dog cap: an underdog appears ONLY when
+    // OUR model genuinely has it winning (>= WINNER_MIN), never for the payout; a heavy favorite still
+    // has to clear the floor too. Ranked purely by win%. Price never chooses the pick -- when a winner
+    // is also underpriced it just carries an isValue flag ("+VALUE"). This structurally ends the old
+    // edge-ranked board that kept surfacing sub-50% dogs for the money (the 35-42% win leak).
+    const WINNER_MIN = 0.55; // 55% floor -- below this is a coin-flip, not a winner
+    const moneylineBoard = [];
     for (const ge of gameEdges) {
       const sourceGame = gamesWithOdds.find(g => g.id === ge.game.id);
-      // Only rank edges for not-yet-started games.
       if (!isPreGame(sourceGame?.status)) continue;
-      if (ge.moneyline.awayEdge != null) {
-        moneylineEdges.push({
-          gameId: ge.game.id,
-          matchup: `${ge.game.awayAbbr} @ ${ge.game.homeAbbr}`,
-          fullMatchup: `${ge.game.away} @ ${ge.game.home}`,
-          side: "away",
-          team: ge.game.away,
-          teamAbbr: ge.game.awayAbbr,
-          modelProb: ge.moneyline.awayWinProb,
-          odds: ge.moneyline.awayOdds,
-          edge: ge.moneyline.awayEdge,
-          confidence: ge.moneyline.awayConfidence,
-          conviction: ge.moneyline.awayConviction,
-          convictionScore: ge.moneyline.awayConvictionScore,
-          reason: ge.moneyline.awayReason || null,
-          trust: ge.moneyline.awayTrust || null,
-          inflation: ge.moneyline.awayInflation || null,
-          time: ge.game.time,
-          status: sourceGame?.status,
-          inning: sourceGame?.inning,
-        });
-      }
-      if (ge.moneyline.homeEdge != null) {
-        moneylineEdges.push({
-          gameId: ge.game.id,
-          matchup: `${ge.game.awayAbbr} @ ${ge.game.homeAbbr}`,
-          fullMatchup: `${ge.game.away} @ ${ge.game.home}`,
-          side: "home",
-          team: ge.game.home,
-          teamAbbr: ge.game.homeAbbr,
-          modelProb: ge.moneyline.homeWinProb,
-          odds: ge.moneyline.homeOdds,
-          edge: ge.moneyline.homeEdge,
-          confidence: ge.moneyline.homeConfidence,
-          conviction: ge.moneyline.homeConviction,
-          convictionScore: ge.moneyline.homeConvictionScore,
-          reason: ge.moneyline.homeReason || null,
-          trust: ge.moneyline.homeTrust || null,
-          inflation: ge.moneyline.homeInflation || null,
-          time: ge.game.time,
-          status: sourceGame?.status,
-          inning: sourceGame?.inning,
-        });
-      }
+      const ml = ge.moneyline;
+      if (ml?.awayWinProb == null || ml?.homeWinProb == null) continue;
+      // The pick = the side our model gives the higher win probability (who we think WINS).
+      const pickHome = (ml.homeWinProb ?? 0) >= (ml.awayWinProb ?? 0);
+      const prob = pickHome ? ml.homeWinProb : ml.awayWinProb;
+      if (prob < WINNER_MIN) continue; // coin-flip or worse -> not a winner, leave it off the board
+      const edge = pickHome ? ml.homeEdge : ml.awayEdge;
+      moneylineBoard.push({
+        gameId: ge.game.id,
+        matchup: `${ge.game.awayAbbr} @ ${ge.game.homeAbbr}`,
+        fullMatchup: `${ge.game.away} @ ${ge.game.home}`,
+        side: pickHome ? "home" : "away",
+        team: pickHome ? ge.game.home : ge.game.away,
+        teamAbbr: pickHome ? ge.game.homeAbbr : ge.game.awayAbbr,
+        modelProb: prob,
+        odds: pickHome ? ml.homeOdds : ml.awayOdds,
+        edge,
+        isValue: (edge ?? 0) > 0, // "+VALUE" tag when the winner is also underpriced -- NEVER the sort key
+        confidence: pickHome ? ml.homeConfidence : ml.awayConfidence,
+        conviction: pickHome ? ml.homeConviction : ml.awayConviction,
+        convictionScore: pickHome ? ml.homeConvictionScore : ml.awayConvictionScore,
+        reason: (pickHome ? ml.homeReason : ml.awayReason) || null,
+        trust: (pickHome ? ml.homeTrust : ml.awayTrust) || null,
+        inflation: (pickHome ? ml.homeInflation : ml.awayInflation) || null,
+        time: ge.game.time,
+        status: sourceGame?.status,
+        inning: sourceGame?.inning,
+      });
     }
-    moneylineEdges.sort((a, b) => (b.edge ?? -1) - (a.edge ?? -1));
-    // WZ-WINPROB-2026-07-06 :: rank the board by WIN PROBABILITY so the model's most-confident
-    // winners (heavy/strong favorites) lead, instead of by edge (which buried them under longshots).
-    // The model still analyzes every game and picks the side it favors; this only changes the ORDER
-    // and trims the tail. Caps: slight favorites (-101 to -129) at SLIGHTFAV_CAP; true dogs (+130 or
-    // longer) at DOG_CAP, appended at the end so up to DOG_CAP live dogs still show. Model untouched.
-    const DOG_CAP = 3, DOG_MIN_ODDS = 130, SLIGHTFAV_CAP = 7, FAV_SLOTS = 12;
-    const isDog = (e) => (e.odds ?? 0) >= DOG_MIN_ODDS;
-    const isSlightFav = (e) => (e.odds ?? 0) <= -101 && (e.odds ?? 0) >= -129;
-    const byProb = (a, b) => (b.modelProb ?? -1) - (a.modelProb ?? -1);
-    const keptSlight = new Set(moneylineEdges.filter(isSlightFav).sort(byProb).slice(0, SLIGHTFAV_CAP));
-    const favSide = moneylineEdges
-      .filter((e) => !isDog(e) && (!isSlightFav(e) || keptSlight.has(e)))
-      .sort(byProb)
-      .slice(0, FAV_SLOTS);
-    const dogSide = moneylineEdges.filter(isDog).sort(byProb).slice(0, DOG_CAP);
-    const moneylineBoard = [...favSide, ...dogSide];
+    moneylineBoard.sort((a, b) => (b.modelProb ?? -1) - (a.modelProb ?? -1)); // winners lead, ranked by win%
     const totalsEdges = [];
     for (const ge of gameEdges) {
       const sourceGame = gamesWithOdds.find(g => g.id === ge.game.id);
