@@ -196,8 +196,12 @@ router.get("/:league", async (req, res) => {
     const rangeStats = (cut) => {
       const set = qualifiedRows.filter(r => inWindow(r.game_date, cut));
       const sorted = [...set].sort((a, b) => String(a.game_date || "").localeCompare(String(b.game_date || "")));
-      let cum = 0, wins = 0, losses = 0; const series = [0];
-      for (const r of sorted) { const won = r.result === "win"; const p = won ? unitProfit(r.odds) : -1; cum += p; if (won) wins++; else losses++; series.push(Math.round(cum * 100) / 100); }
+      // WZ-WINRATE-CURVE-2026-07-06 :: build a range-aware cumulative WIN RATE curve alongside the
+      // units curve, so the Performance win-rate chart redraws per window (7D/30D/Season/All) just
+      // like the units chart already does. winSeries[k] = win% after the first k+1 graded picks in
+      // this window. Additive: new field only; nothing existing changes.
+      let cum = 0, wins = 0, losses = 0; const series = [0]; const winSeries = [];
+      for (const r of sorted) { const won = r.result === "win"; const p = won ? unitProfit(r.odds) : -1; cum += p; if (won) wins++; else losses++; series.push(Math.round(cum * 100) / 100); winSeries.push(Math.round((wins / (wins + losses)) * 1000) / 10); }
       const total = wins + losses;
       const cwin = clvRows.filter(r => inWindow(r.game_date, cut));
       const beat = cwin.filter(r => r.beat_close === true).length;
@@ -210,6 +214,7 @@ router.get("/:league", async (req, res) => {
         bc: cwin.length ? Math.round((beat / cwin.length) * 1000) / 10 : 0,
         n: total,
         series: series.length > 1 ? series : [0, 0],
+        winSeries,
       };
     };
     const ranges = {};
