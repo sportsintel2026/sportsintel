@@ -103,6 +103,7 @@ export default function HomePage(){
   const navigate=useNavigate();
   const { user, signOut }=useAuth();
   const [edges,setEdges]=useState(null);
+  const [preview,setPreview]=useState(null); // WZ-TOMORROW-PREVIEW-2026-07-07 :: display-only next-day board
   const [nflPhase,setNflPhase]=useState(null); // null=auto; "preseason"|"regular" when user picks
   const [phaseAvail,setPhaseAvail]=useState([]); // which phase sub-tabs to show
   const [loading,setLoading]=useState(true);
@@ -153,6 +154,9 @@ export default function HomePage(){
     setFlash(f); setEdges(d);
   }catch(e){} setLoading(false); },[sport,nflPhase]);
   useEffect(()=>{ setEdges(null); setLoading(true); prev.current={}; load(); const id=setInterval(load,45000); return ()=>clearInterval(id); },[load]);
+  // WZ-TOMORROW-PREVIEW-2026-07-07 :: once today's slate is underway (backend flag) pull tomorrow's
+  // board as a DISPLAY-ONLY preview (?date=). Never recorded/graded -- guaranteed server-side.
+  useEffect(()=>{ if(sport!=="mlb"||!edges||!edges.slateUnderway||edges.rolledToNextDay||!edges.previewDate){ setPreview(null); return; } let dead=false; (async()=>{ try{ const d=await edgesApi.getMLBPreview(edges.previewDate); if(!dead) setPreview(d&&!d.rolledToNextDay?d:null); }catch(_){ if(!dead) setPreview(null); } })(); return ()=>{dead=true;}; },[sport,edges?.previewDate,edges?.slateUnderway,edges?.rolledToNextDay]);
   useEffect(()=>{ if(!SPORTS[sport].hasLive){ setLive([]); return; } let t; const pull=async()=>{ try{ const d=await liveApi.getMLB(); setLive(d?.games||[]); }catch(_){ setLive([]); } t=setTimeout(pull,60000); }; pull(); return ()=>clearTimeout(t); },[sport]);
   useEffect(()=>{ if(!SPORTS[sport].hasHist){ setOddsHist([]); return; } let t; const pull=async()=>{ try{ const d=await edgesApi.getOddsHistory(); setOddsHist(d?.games||[]); }catch(_){ setOddsHist([]); } t=setTimeout(pull,300000); }; pull(); return ()=>clearTimeout(t); },[sport]);
   useEffect(()=>{ if(sport!=="mlb"){ setMarketRead([]); return; } let t; const pull=async()=>{ try{ const d=await edgesApi.getMarketRead(); setMarketRead(d?.games||[]); }catch(_){ setMarketRead([]); } t=setTimeout(pull,120000); }; pull(); return ()=>clearTimeout(t); },[sport]);
@@ -331,6 +335,15 @@ export default function HomePage(){
 
   const boardSrc = board==="all" ? allAdj.filter(x=>sport==="mlb"?(x.edge??0)>0:(x.edge??0)>=1).sort(sortBoard) : boardEdges;
   const boardItems = boardSrc.map(toBoard);
+  // WZ-TOMORROW-PREVIEW-2026-07-07 :: tomorrow's edges for the active tab, built through the SAME
+  // pipeline (moveAdjust -> oneSidePerGame -> win-first sort -> toBoard) so it matches today exactly.
+  const pv = (sport==="mlb"&&preview&&!preview.rolledToNextDay) ? preview : null;
+  const pvMlAdj=(pv?.moneylineEdges||[]).map(moveAdjust), pvTotAdj=(pv?.totalsEdges||[]).map(moveAdjust), pvSpAdj=[...(pv?.runLineEdges||[]),...(pv?.spreadEdges||[])].map(moveAdjust);
+  const previewItems = pv ? (board==="all"
+        ? [...pvMlAdj,...pvTotAdj,...pvSpAdj].filter(x=>(x.edge??0)>0).sort(byWinProb).map(toBoard)
+        : oneSidePerGame((board==="ml"?pvMlAdj:board==="spread"?pvSpAdj:pvTotAdj)||[]).filter(x=>(x.edge??0)>0).sort(byWinProb).map(toBoard)
+      ) : [];
+  const previewLabel = pv&&pv.date ? fmtSlate(pv.date).toUpperCase() : "";
   const boardDate = fmtSlateFull(e.date || todayISO());
   // WZ-WINNERS-V2-2026-07-04 :: Best Plays carousel = winner+value plays first (our
   // winner AND the books underpay it), then the top pure-value plays. One card zone.
@@ -492,6 +505,11 @@ export default function HomePage(){
                     <div className="sum"><span className="l">{boardItems.length} game edges</span><span className="sp"/><span>avg <span className="p">+{kpiHas?kAvg:"0.0"}%</span></span></div>
                   </>
                 : <div className="estate"><div className="et">No edges on the board yet</div><div className="es">Edges appear as books post tonight's lines.</div></div>}
+              {previewItems.length>0 && <>
+                <div className="tmrwdiv"><span className="tln"/><span className="tlbl">TOMORROW{previewLabel&&<small>{previewLabel}</small>}</span><span className="tln r"/></div>
+                <div className="tmrwnote">Today{"\u2019"}s slate is underway {"\u00b7"} an early look at tomorrow</div>
+                <div className="grid tmrwgrid">{previewItems.map((d,i)=>{const id="pv"+d.gameId+d.cat+i;return openId===id?<BoardRow key={id} d={d} i={i} open={true} onToggle={()=>setOpenId(null)} navigate={navigate} sport={sport}/>:<BoardCardCompact key={id} d={d} i={i} sport={sport} onClick={()=>setOpenId(id)}/>;})}</div>
+              </>}
             </>
           : <Gate title="Edges are an All-Access feature" navigate={navigate}/>}
         </>}
@@ -1044,6 +1062,13 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .bseg-b.on{background:var(--gold);color:#0A0B0D;font-weight:700}
 
 .grid{margin:12px 4px 0;background:var(--panel);border-radius:14px;overflow:hidden}
+.tmrwgrid{margin-top:8px;box-shadow:inset 3px 0 0 rgba(201,168,106,.5)}
+.tmrwdiv{display:flex;align-items:center;gap:10px;margin:22px 14px 2px}
+.tmrwdiv .tln{flex:1;height:1px;background:linear-gradient(90deg,transparent,rgba(201,168,106,.5))}
+.tmrwdiv .tln.r{background:linear-gradient(90deg,rgba(201,168,106,.5),transparent)}
+.tmrwdiv .tlbl{font-family:var(--disp);font-weight:800;font-size:15px;letter-spacing:2px;color:var(--gold);white-space:nowrap;text-align:center;line-height:1.05}
+.tmrwdiv .tlbl small{display:block;font-family:var(--mono);font-size:8px;letter-spacing:.5px;color:var(--mut2);font-weight:400;margin-top:1px}
+.tmrwnote{font-family:var(--mono);font-size:9px;color:var(--mut2);text-align:center;margin:0 14px 2px}
 .gr{position:relative;margin-bottom:0;background:transparent;border-radius:0;overflow:hidden}.gr+.gr{border-top:1px solid var(--line)}
 .gr::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--mut2);z-index:2}
 .gr.high::before{background:var(--gold)}.gr.med::before{background:var(--green)}.gr.low::before{background:var(--mut2)}
