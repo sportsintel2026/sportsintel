@@ -228,7 +228,7 @@ export default function HomePage(){
   // WZ-WINNERS-2026-07-07 :: the Moneyline board is now the WINNERS board -- the backend sends every
   // 55%+ winner (one side per game), so NO edge gate here (a fairly-priced winner still shows). Run
   // Line / Totals keep the value (edge) gate. Sorted by win% either way.
-  const boardEdges=oneSidePerGame(boardArr||[]).filter(x=>board==="ml"?true:(sport==="mlb"?(x.edge??0)>0:(x.edge??0)>=1)).sort(byWinProb);
+  const boardEdges=oneSidePerGame(boardArr||[]).filter(x=>(board==="ml"&&sport==="mlb")?true:(sport==="mlb"?(x.edge??0)>0:(x.edge??0)>=1)).sort(byWinProb);
   const moverPool=[...(e.moneylineEdges||[]),...(e.totalsEdges||[]),...(e.runLineEdges||[]),...(e.spreadEdges||[])].map(x=>{ const ser=seriesFor(x); const open=(ser&&ser.length)?ser[0].o:null; const now=(ser&&ser.length)?ser[ser.length-1].o:x.odds; const delta=(open!=null&&ser&&ser.length>1)?(amCents(now)-amCents(open)):null; return {...x,_open:open,_now:now,_delta:delta}; });
   const movers=moverPool.filter(m=>m._delta!=null).sort((a,b)=>{ const ad=Math.abs(a._delta); const bd=Math.abs(b._delta); return (bd-ad)||((b.edge??0)-(a.edge??0)); }).slice(0,12);
   const hasMoves=movers.some(m=>m._delta!=null);
@@ -325,7 +325,7 @@ export default function HomePage(){
       if(mr.total&&(mr.total.lean||mr.total.side||mr.total.favTeam))read.total=[mr.total.tier,String(mr.total.lean||mr.total.side||mr.total.favTeam).toUpperCase()+(mr.total.line!=null?" "+mr.total.line:""),formatOdds(mr.total.odds),!!mr.total.agrees];}
     const park=[];if(gm&&gm.parkRunFactor!=null)park.push((gm.parkRunFactor>1?"+":"")+Math.round((gm.parkRunFactor-1)*100)+"%");
     const wx=gm&&gm.weather&&gm.weather.tempF!=null?(Math.round(gm.weather.tempF)+"\u00b0F"+(gm.weather.windMph?" \u00b7 "+gm.weather.windMph+" mph":"")):null;
-    return {p:edgeLabel(x),mk:mkOf(x),cat:catOf(x),conv:convOf(x),edge:edgeNum(x),odds:formatOdds(x.odds),mv:mvOf(x),delta:x._delta,clv:null,a,h,g:x.matchup,starts:gm&&gm.time?fmtTime(gm.time):null,model,mkt,flags:flags.length?flags:null,read,why:x.reason,park:park.length?park:null,wx,series:lineSeries[x.gameId+x.side]||null,gameId:x.gameId,seed:i};
+    return {p:edgeLabel(x),mk:mkOf(x),cat:catOf(x),tier:(mkOf(x)==="ML"&&model!=null)?(model>=65?"LOCK":model>=58?"STRONG":model>=55?"LEAN":null):null,value:(mkOf(x)==="ML"&&(x.edge??0)>0),conv:convOf(x),edge:edgeNum(x),odds:formatOdds(x.odds),mv:mvOf(x),delta:x._delta,clv:null,a,h,g:x.matchup,starts:gm&&gm.time?fmtTime(gm.time):null,model,mkt,flags:flags.length?flags:null,read,why:x.reason,park:park.length?park:null,wx,series:lineSeries[x.gameId+x.side]||null,gameId:x.gameId,seed:i};
   };
   const allAdj=[...mlAdj,...totAdj,...spAdj];
   const sortBoard=byWinProb;  // WZ-BOARD-WINFIRST-2026-07-06 :: All tab uses the same winner-first order (win/cover prob leads).
@@ -404,7 +404,7 @@ export default function HomePage(){
     const clvNum=(rng&&typeof rng.clv==="number")?rng.clv:(typeof d.clv==="number"?d.clv:null);
     return { roi, roiLbl, winRate, graded, clv:clvNum };
   })();
-  const BF=[["All","all"],["ML","ml"],["Spread","spread"],["Totals","totals"]];
+  const BF=[["All","all"],["Moneyline","ml"],["Spread","spread"],["Totals","totals"]]; // WZ-WINNERS-BADGES-2026-07-07
 
   return (
     <div className="app"><style>{CSS}</style>
@@ -707,10 +707,10 @@ function BoardCardCompact({d,i,sport,onClick}){
     <div className={"gr gcompact erow "+conv} onClick={onClick}>
       <div className="erk">{i+1}</div>
       <div className="ein">
-        <div className="epick">{d.p}{d.mk&&<span className="emk">{d.mk}</span>}</div>
+        <div className="epick">{d.p}{d.mk&&<span className="emk">{d.mk}</span>}{d.tier&&<span className={"etier "+d.tier.toLowerCase()}>{d.tier}</span>}{d.value&&<span className="eval">+VALUE</span>}</div>
         <div className="emu">{d.g}</div>
       </div>
-      <div className="ecol"><div className={"ecv "+(d.edge<0?"neg":"pos")}>{d.edge>=0?"+":""}{Number(d.edge).toFixed(1)}%</div><div className="ecl">EDGE</div></div>
+      {!(sport==="mlb"&&d.cat==="ml")&&<div className="ecol"><div className={"ecv "+(d.edge<0?"neg":"pos")}>{d.edge>=0?"+":""}{Number(d.edge).toFixed(1)}%</div><div className="ecl">EDGE</div></div>}
       <div className="ecol odds"><div className="ecv">{d.odds}</div><div className="ecl">BEST ODDS</div></div>
       {wpv!=null&&<div className="ering"><svg viewBox="0 0 46 46"><circle cx="23" cy="23" r="18" fill="none" stroke="rgba(255,255,255,.08)" strokeWidth="4"/><circle cx="23" cy="23" r="18" fill="none" stroke="#3FCB91" strokeWidth="4" strokeLinecap="round" strokeDasharray={dash.toFixed(1)+" "+C} transform="rotate(-90 23 23)"/></svg><div className="epct">{Math.round(wpv)}%</div></div>}
       <div className="echev">{"\u203a"}</div>
@@ -1310,7 +1310,12 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .gr.erow{display:flex;align-items:center;gap:10px;padding:13px 12px 13px 16px}
 .erow .erk{width:25px;height:25px;flex:0 0 auto;border-radius:50%;border:1px solid rgba(63,203,145,.45);color:var(--green);font-family:var(--disp);font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center}
 .erow .ein{flex:1;min-width:0}
-.erow .epick{font-family:var(--disp);font-weight:800;font-size:18px;color:#fff;line-height:1;letter-spacing:-.2px;display:flex;align-items:center;gap:7px}
+.erow .epick{font-family:var(--disp);font-weight:800;font-size:18px;color:#fff;line-height:1;letter-spacing:-.2px;display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.erow .etier{font-family:var(--mono);font-size:8px;font-weight:700;letter-spacing:1px;padding:2px 6px;border-radius:5px}
+.erow .etier.lock{color:#0a0b0d;background:var(--gold)}
+.erow .etier.strong{color:#46E0A9;border:1px solid rgba(63,203,145,.45)}
+.erow .etier.lean{color:#5AC8C8;border:1px solid rgba(90,200,200,.4)}
+.erow .eval{font-family:var(--mono);font-size:8px;font-weight:700;letter-spacing:.5px;color:#0a0b0d;background:var(--green);padding:2px 6px;border-radius:5px}
 .erow .emk{font-family:var(--mono);font-size:8.5px;font-weight:600;color:var(--gold);border:1px solid rgba(201,168,106,.4);border-radius:4px;padding:1px 5px}
 .erow .emu{font-family:var(--mono);font-size:10.5px;color:var(--mut);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .erow .ecol{flex:0 0 auto;text-align:center}
