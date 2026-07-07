@@ -430,17 +430,18 @@ function buildWinnerBoard(gameEdges, slateDate, opts) {
       }
       mlBoard.push({ matchup, ...entry });
     }
-    // RUN LINE: model picks the side with the cover edge (either -1.5 fav or +1.5 dog),
-    // not auto -1.5 and not chasing the +1.5 payout. Ranked by cover%.
+    // RUN LINE (matches the live board, WZ-RUNLINE-COVERFIRST): take the HIGHER-cover side
+    // (the >50% side) and only when it carries a positive cover edge. No auto -1.5, no +1.5
+    // payout chase, no sub-coinflip cover side. Ranked by cover%.
     const aRLc = rl.awayCoverProb, hRLc = rl.homeCoverProb;
     if (aRLc != null || hRLc != null) {
-      const byEdge = (rl.awayEdge != null || rl.homeEdge != null);
-      const pickAway = byEdge ? ((rl.awayEdge ?? -1) >= (rl.homeEdge ?? -1)) : ((aRLc ?? -1) >= (hRLc ?? -1));
-      const team = pickAway ? ge.game.awayAbbr : ge.game.homeAbbr;
+      const pickAway = (aRLc ?? -1) >= (hRLc ?? -1);
+      const cover = pickAway ? aRLc : hRLc;
+      const edge = pickAway ? rl.awayEdge : rl.homeEdge;
       const line = pickAway ? rl.awayLine : rl.homeLine;
       const price = pickAway ? rl.awayOdds : rl.homeOdds;
-      const cover = pickAway ? aRLc : hRLc;
-      if (line != null && cover != null) {
+      const team = pickAway ? ge.game.awayAbbr : ge.game.homeAbbr;
+      if (line != null && cover != null && (edge ?? 0) > 0) {
         rlBoard.push({ matchup, pick: `${team} ${line}`, price, coverPct: pctOf(cover), side: line < 0 ? "fav -1.5" : "dog +1.5" });
       }
     }
@@ -663,13 +664,24 @@ router.get("/mlb", async (req, res) => {
       }
     }
     totalsEdges.sort((a, b) => (b.edge ?? -1) - (a.edge ?? -1));
+    // WZ-RUNLINE-COVERFIRST-2026-07-06 :: winner-first run line. For each game the board takes
+    // ONE side only -- the side the model gives the HIGHER cover probability (the >50% side) --
+    // and keeps it only when that side also carries a positive cover edge. We never surface both
+    // sides, never auto-take -1.5, and never chase the +1.5 payout. A sub-coinflip cover side
+    // (e.g. a 40% -1.5 favorite) can no longer reach the board OR the graded record, because its
+    // complement (the +1.5 side at ~60%) is the higher-cover side and is taken instead. Ranked by
+    // cover% so genuine covers lead. Model math is untouched -- this only picks the side + order.
+    // The grader records the edge>0 side; gating the board on edge>0 too keeps the shown board and
+    // the recorded board identical (board == record stays true).
     const runLineEdges = [];
     for (const ge of gameEdges) {
       const sourceGame = gamesWithOdds.find(g => g.id === ge.game.id);
       if (!isPreGame(sourceGame?.status)) continue;
       const rl = ge.runLine;
-      if (rl?.awayEdge != null) {
-        runLineEdges.push({
+      if (!rl) continue;
+      const sides = [];
+      if (rl.awayCoverProb != null && rl.awayEdge != null) {
+        sides.push({
           gameId: ge.game.id,
           matchup: `${ge.game.awayAbbr} @ ${ge.game.homeAbbr}`,
           fullMatchup: `${ge.game.away} @ ${ge.game.home}`,
@@ -688,8 +700,8 @@ router.get("/mlb", async (req, res) => {
           inning: sourceGame?.inning,
         });
       }
-      if (rl?.homeEdge != null) {
-        runLineEdges.push({
+      if (rl.homeCoverProb != null && rl.homeEdge != null) {
+        sides.push({
           gameId: ge.game.id,
           matchup: `${ge.game.awayAbbr} @ ${ge.game.homeAbbr}`,
           fullMatchup: `${ge.game.away} @ ${ge.game.home}`,
@@ -708,8 +720,13 @@ router.get("/mlb", async (req, res) => {
           inning: sourceGame?.inning,
         });
       }
+      if (!sides.length) continue;
+      // The covering side = the one with the HIGHER cover probability (the >50% side). Take it
+      // only if it also has a positive cover edge; otherwise this game has no winner-first run line.
+      const pick = sides.reduce((best, s) => ((s.modelProb ?? -1) > (best.modelProb ?? -1) ? s : best));
+      if ((pick.edge ?? 0) > 0) runLineEdges.push(pick);
     }
-    runLineEdges.sort((a, b) => (b.edge ?? -1) - (a.edge ?? -1));
+    runLineEdges.sort((a, b) => (b.modelProb ?? -1) - (a.modelProb ?? -1));
     let hrPropEdges = [];
     let kPropEdges = [];
     let hitsPropEdges = [];
