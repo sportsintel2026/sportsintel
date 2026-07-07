@@ -225,7 +225,10 @@ export default function HomePage(){
   // (All, ML, Spread, Totals). Display order ONLY -- the graded record reads the backend board and
   // is unaffected; no picks, no model math, and no totals math change here.
   const byWinProb=(a,b)=>(((b.modelProb??-1)-(a.modelProb??-1))||(tierRank(b._convAdj)-tierRank(a._convAdj))||((b.convictionScore||0)-(a.convictionScore||0))||((b.edge||0)-(a.edge||0)));
-  const boardEdges=oneSidePerGame(boardArr||[]).filter(x=>sport==="mlb"?(x.edge??0)>0:(x.edge??0)>=1).sort(byWinProb);
+  // WZ-WINNERS-2026-07-07 :: the Moneyline board is now the WINNERS board -- the backend sends every
+  // 55%+ winner (one side per game), so NO edge gate here (a fairly-priced winner still shows). Run
+  // Line / Totals keep the value (edge) gate. Sorted by win% either way.
+  const boardEdges=oneSidePerGame(boardArr||[]).filter(x=>board==="ml"?true:(sport==="mlb"?(x.edge??0)>0:(x.edge??0)>=1)).sort(byWinProb);
   const moverPool=[...(e.moneylineEdges||[]),...(e.totalsEdges||[]),...(e.runLineEdges||[]),...(e.spreadEdges||[])].map(x=>{ const ser=seriesFor(x); const open=(ser&&ser.length)?ser[0].o:null; const now=(ser&&ser.length)?ser[ser.length-1].o:x.odds; const delta=(open!=null&&ser&&ser.length>1)?(amCents(now)-amCents(open)):null; return {...x,_open:open,_now:now,_delta:delta}; });
   const movers=moverPool.filter(m=>m._delta!=null).sort((a,b)=>{ const ad=Math.abs(a._delta); const bd=Math.abs(b._delta); return (bd-ad)||((b.edge??0)-(a.edge??0)); }).slice(0,12);
   const hasMoves=movers.some(m=>m._delta!=null);
