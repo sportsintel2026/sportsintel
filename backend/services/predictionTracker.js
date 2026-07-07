@@ -1013,8 +1013,78 @@ async function gradeFinishedGames() {
   graded += await gradeNba(supabase, nbaPending);
   graded += await gradeNFL(supabase, nflPending);
 
+  // WZ-CLOSINGLINE-RESULTS-2026-07-06 :: stamp final score + winner into the league-wide
+  // closing_lines ledger so base-rate backtests (does a -175 fav actually win? do juiced overs
+  // hit?) can run once volume accumulates. Fully isolated -- wrapped so a failure here can NEVER
+  // affect grading or CLV.
+  try { await backfillClosingLineResults(supabase); } catch (e) { console.error("[ClosingLines] result backfill error:", e.message); }
+
   console.log(`[Tracker] Graded ${graded} predictions`);
   return graded;
+}
+
+// WZ-CLOSINGLINE-RESULTS-2026-07-06 :: backfill final score + winner into closing_lines rows that
+// don't have an outcome yet. League-wide (every captured game, not just our picks), so the ledger
+// can power true base rates. Resolves scores the SAME way grading does: trust a clean schedule
+// final, else consult the authoritative feed; a past game that never finaled (postponed/cancelled)
+// is marked 'void' so it stops retrying and is excluded from base rates. MLB StatsAPI only -- no
+// Odds API credits. Idempotent: only touches rows where winner IS NULL; bounded to the last 45 days.
+async function backfillClosingLineResults(supabase) {
+  const since = new Date(Date.now() - 45 * 864e5).toISOString().slice(0, 10);
+  const today = getEasternDate(0);
+  const { data: rows, error } = await supabase
+    .from("closing_lines")
+    .select("game_date, game_id, away_team, home_team")
+    .is("winner", null)
+    .gte("game_date", since)
+    .lte("game_date", today);
+  if (error) { console.error("[ClosingLines] backfill fetch error:", error.message); return; }
+  if (!rows || !rows.length) return;
+
+  const byDate = {};
+  for (const r of rows) (byDate[r.game_date] ||= []).push(r);
+
+  const updates = [];
+  for (const [date, dateRows] of Object.entries(byDate)) {
+    let schedule;
+    try { schedule = await getScheduleForDate(date); }
+    catch (e) { console.error(`[ClosingLines] schedule fetch failed for ${date}:`, e.message); continue; }
+    const gameById = {};
+    for (const g of schedule) gameById[g.id] = g;
+
+    for (const r of dateRows) {
+      const g = gameById[r.game_id];
+      let aS = null, hS = null;
+      if (g && g.status === "final" && g.awayScore != null && g.homeScore != null) {
+        aS = g.awayScore; hS = g.homeScore;
+      } else {
+        let auth = null;
+        try { auth = await getGameStatusAndScore(r.game_id); } catch (_) { auth = null; }
+        if (!auth || !auth.ok) continue; // feed unreadable -> retry next run
+        if (auth.abstractGameState === "Final" && auth.awayRuns != null && auth.homeRuns != null) {
+          aS = auth.awayRuns; hS = auth.homeRuns;
+        } else {
+          const past = r.game_date < today;
+          const ds = auth.detailedState || "";
+          if (past && (auth.abstractGameState === "Preview" || ds === "Postponed" || ds === "Cancelled")) {
+            updates.push({ game_date: r.game_date, game_id: r.game_id, winner: "void" });
+          }
+          continue; // in-progress / suspended / future -> leave pending, retry next run
+        }
+      }
+      if (aS == null || hS == null) continue;
+      const winner = aS > hS ? r.away_team : hS > aS ? r.home_team : "push";
+      updates.push({ game_date: r.game_date, game_id: r.game_id, final_away: aS, final_home: hS, winner });
+    }
+  }
+
+  if (updates.length) {
+    const { error: upErr } = await supabase
+      .from("closing_lines")
+      .upsert(updates, { onConflict: "game_date,game_id" });
+    if (upErr) console.error("[ClosingLines] backfill upsert failed:", upErr.message);
+    else console.log(`[ClosingLines] backfilled results for ${updates.length} games`);
+  }
 }
 
 // Resolve a pick's player name against the game's HR map. Exact normalized match
