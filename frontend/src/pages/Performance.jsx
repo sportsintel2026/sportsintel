@@ -1,5 +1,10 @@
 // PERFORMANCE-PREMIUM-DARK-RESKIN-2026-06-23
 // PERFORMANCE-RECENT-REMOVED-2026-06-23
+// WZ-PERF-WINFIRST-2026-07-06 :: win-rate-first layout. Win rate is the hero (record beside it,
+// range-aware win-rate curve beneath); ROI / Units / CLV kept VISIBLE but secondary. By-Conviction
+// and By-Market now lead with win rate (ROI kept as the smaller figure). CLV reframed as the honesty
+// check. Display/order only -- every number comes from fields the backend already returns; the new
+// win-rate chart reads the range-aware winSeries added to /api/performance. No model or grading change.
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
@@ -15,26 +20,41 @@ const MKT_NAME = {
   player_threes:"3PT Props", player_props:"Player Props",
 };
 const prettyMkt = (k) => MKT_NAME[k] || String(k||"").replace(/_/g," ").replace(/\b\w/g,c=>c.toUpperCase());
-const fmtDate = (iso) => { if(!iso) return ""; try { const d = new Date(String(iso).slice(0,10)+"T00:00:00"); return d.toLocaleDateString("en-US",{month:"short",day:"numeric"}); } catch { return String(iso); } };
+const winPct = (w, l) => ((w+l) > 0 ? Math.round((w/(w+l))*1000)/10 : 0);
 
-function UnitsChart({ series }) {
+// Range-aware cumulative win-rate curve. 50% (coin flip) is always kept in view as the reference
+// floor; the line runs green when it ends above 50, red below.
+function WinRateChart({ series }) {
   const W = 320, H = 120;
-  const s = (series && series.length) ? series : [0, 0];
-  const mn = Math.min(0, ...s), mx = Math.max(0, ...s), rng = (mx - mn) || 1;
+  const s = (series && series.length) ? series : [];
+  if (s.length < 2) return <div className="chartempty">Win-rate trend appears once a few picks are graded in this window.</div>;
+  const mn = Math.min(50, ...s), mx = Math.max(50, ...s), rng = (mx - mn) || 1;
   const X = (i) => (s.length>1 ? i/(s.length-1) : 0) * W, Y = (v) => H - 6 - ((v - mn) / rng) * (H - 14);
   const ln = s.map((v,i)=>`${i?"L":"M"}${X(i).toFixed(1)} ${Y(v).toFixed(1)}`).join(" ");
   const ar = ln + `L${W} ${H} L0 ${H} Z`;
-  const zeroY = Y(0); const end = s[s.length-1]; const col = end>=0 ? "var(--green)" : "var(--neg)";
+  const fiftyY = Y(50); const end = s[s.length-1]; const col = end>=50 ? "var(--green)" : "var(--neg)";
   return (
     <div className="chartwrap">
       <svg viewBox={`0 0 ${W} ${H}`} width="100%" height="120" preserveAspectRatio="none">
-        <defs><linearGradient id="ug" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={col} stopOpacity=".28"/><stop offset="100%" stopColor={col} stopOpacity="0"/></linearGradient></defs>
-        <line x1="0" y1={zeroY.toFixed(1)} x2={W} y2={zeroY.toFixed(1)} stroke="#2a3640" strokeWidth="1" strokeDasharray="3 3"/>
-        <path d={ar} fill="url(#ug)"/>
+        <defs><linearGradient id="wrg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={col} stopOpacity=".26"/><stop offset="100%" stopColor={col} stopOpacity="0"/></linearGradient></defs>
+        <line x1="0" y1={fiftyY.toFixed(1)} x2={W} y2={fiftyY.toFixed(1)} stroke="#2a3640" strokeWidth="1" strokeDasharray="3 3"/>
+        <path d={ar} fill="url(#wrg)"/>
         <path d={ln} fill="none" stroke={col} strokeWidth="2.2" strokeLinejoin="round" vectorEffect="non-scaling-stroke"/>
       </svg>
     </div>
   );
+}
+
+// Compact hero sparkline of the same win-rate curve.
+function MiniSpark({ series }) {
+  const W = 300, H = 40;
+  const s = (series && series.length) ? series : [];
+  if (s.length < 2) return null;
+  const mn = Math.min(50, ...s), mx = Math.max(50, ...s), rng = (mx - mn) || 1;
+  const X = (i) => (i/(s.length-1)) * W, Y = (v) => H - 4 - ((v - mn) / rng) * (H - 10);
+  const ln = s.map((v,i)=>`${i?"L":"M"}${X(i).toFixed(1)} ${Y(v).toFixed(1)}`).join(" ");
+  const end = s[s.length-1]; const col = end>=50 ? "var(--green)" : "var(--neg)";
+  return <svg className="mspk" viewBox={`0 0 ${W} ${H}`} width="100%" height="40" preserveAspectRatio="none"><path d={ln} fill="none" stroke={col} strokeWidth="2" vectorEffect="non-scaling-stroke"/></svg>;
 }
 
 export default function PerformancePage() {
@@ -60,14 +80,12 @@ export default function PerformancePage() {
 
   const D = data || {};
   const d = (D.ranges && D.ranges[range]) || null;
-  const tiers = TIER_ORDER.map(([k,lbl]) => { const b = D.byConfidence?.[k]; return b ? [lbl, b.roi ?? 0, `${b.wins}-${b.losses}`] : null; }).filter(Boolean);
+  const tiers = TIER_ORDER.map(([k,lbl]) => { const b = D.byConfidence?.[k]; return b ? { lbl, w:b.wins, l:b.losses, roi:b.roi ?? 0 } : null; }).filter(Boolean);
   const markets = [
-    ...Object.entries(D.byMarket || {}).map(([k,b]) => [prettyMkt(k), b.roi ?? 0, `${b.wins}-${b.losses}`]),
-    // HIDE-NEG-PROPS-2026-06-24 — props aren't the headline; only surface a prop market here if it's net positive
-    ...Object.entries(D.props?.byMarket || {}).filter(([k,b]) => (b.roi ?? 0) >= 0).map(([k,b]) => [prettyMkt(k), b.roi ?? 0, `${b.hits}-${b.misses}`]),
+    ...Object.entries(D.byMarket || {}).map(([k,b]) => ({ nm:prettyMkt(k), w:b.wins, l:b.losses, roi:b.roi ?? 0 })),
+    // HIDE-NEG-PROPS-2026-06-24 -- props aren't the headline; only surface a prop market here if it's net positive
+    ...Object.entries(D.props?.byMarket || {}).filter(([k,b]) => (b.roi ?? 0) >= 0).map(([k,b]) => ({ nm:prettyMkt(k), w:b.hits, l:b.misses, roi:b.roi ?? 0 })),
   ];
-  const recent = D.recent || [];
-  const tmax = Math.max(1, ...tiers.map(t => Math.abs(t[1])));
 
   return (
     <div className="app"><style>{CSS}</style>
@@ -87,43 +105,53 @@ export default function PerformancePage() {
       <div className="ranges">{RNGS.map(r=><b key={r} className={r===range?"on":""} onClick={()=>setRange(r)}>{r}</b>)}</div>
 
       <div id="wrap">
-        {loading ? <div className="estate"><div className="et">Loading record…</div><div className="es">Pulling every graded pick.</div></div>
-        : error ? <div className="estate"><div className="et">Couldn’t load performance</div><div className="es">Try again in a moment.</div></div>
+        {loading ? <div className="estate"><div className="et">Loading record...</div><div className="es">Pulling every graded pick.</div></div>
+        : error ? <div className="estate"><div className="et">Couldn't load performance</div><div className="es">Try again in a moment.</div></div>
         : !d ? <div className="estate"><div className="et">No tracked record yet</div><div className="es">Graded picks for {league.toUpperCase()} will appear here.</div></div>
         : <>
-          <div className="kpis">
-            <div className="kpi"><div className="k">ROI</div><div className={"v "+(d.roi>=0?"g":"r")}>{d.roi>=0?"+":""}{d.roi}%</div><div className="sub">{d.n} settled picks</div></div>
-            <div className="kpi"><div className="k">UNITS</div><div className={"v "+(d.units>=0?"g":"r")}>{d.units>=0?"+":""}{d.units}u</div><div className="sub">1u flat staking</div></div>
-            <div className="kpi"><div className="k">RECORD</div><div className="v">{d.w}-{d.l}<span style={{fontSize:16,color:"var(--mut)"}}>-{d.p}</span></div><div className="sub">W-L-push · {(d.w+d.l)>0 ? (d.w/(d.w+d.l)*100).toFixed(1) : "0.0"}% win</div></div>
-            <div className="kpi"><div className="k">CLV</div><div className={"v "+(d.clv>=0?"g":"r")}>{d.clv>=0?"+":""}{d.clv}%</div><div className="sub">beat close · {d.bc}%</div></div>
+          <div className="hero">
+            <div className="herotop"><div className="herok">WIN RATE</div><div className="herorec">{range} {"\u00b7"} qualified plays</div></div>
+            <div className="herobig">
+              <div className="herov">{winPct(d.w,d.l)}<span className="pct">%</span></div>
+              <div className="recbadge">{d.w}{"\u2013"}{d.l}<small>{"\u2013"}{d.p}</small></div>
+            </div>
+            <div className="herosub">{d.n} SETTLED PICKS {"\u00b7"} W{"\u2013"}L{"\u2013"}PUSH</div>
+            <div className="spark"><MiniSpark series={d.winSeries}/></div>
           </div>
 
-          <div className="blk"><div className="bl">UNITS OVER TIME <span className="bx">{range} · cumulative</span></div><UnitsChart series={d.series}/></div>
+          <div className="kpis3">
+            <div className="kpi"><div className="k">ROI</div><div className={"v "+(d.roi>=0?"g":"r")}>{d.roi>=0?"+":""}{d.roi}%</div><div className="sub">1u flat</div></div>
+            <div className="kpi"><div className="k">UNITS</div><div className={"v "+(d.units>=0?"g":"r")}>{d.units>=0?"+":""}{d.units}u</div><div className="sub">cumulative</div></div>
+            <div className="kpi"><div className="k">CLV</div><div className={"v "+(d.clv>=0?"g":"")}>{d.clv>=0?"+":""}{d.clv}%</div><div className="sub">beat {d.bc}%</div></div>
+          </div>
 
-          {tiers.length>0 && <div className="blk"><div className="bl">BY CONVICTION <span className="bx">season · the core signal</span></div>
-            {tiers.map((t,i)=>{ const pos=t[1]>=0, w=Math.abs(t[1])/tmax*50; return (
+          <div className="blk"><div className="bl">WIN RATE OVER TIME <span className="bx">{range} {"\u00b7"} cumulative</span></div>
+            <WinRateChart series={d.winSeries}/>
+            <div className="clvnote" style={{marginTop:8}}>Dashed line = 50% (a coin flip). Holding above it is the model picking winners at better than chance.</div>
+          </div>
+
+          {tiers.length>0 && <div className="blk"><div className="bl">BY CONVICTION <span className="bx">{range} {"\u00b7"} win rate</span></div>
+            {tiers.map((t,i)=>{ const wr=winPct(t.w,t.l); const bw=Math.max(2,Math.min(100,wr)); return (
               <div className="dbar" key={i}>
-                <div className="nm"><div className="n">{t[0]}</div><div className="r">{t[2]}</div></div>
-                <div className="track"><div className="z"/><div className={"f "+(pos?"pos":"neg")} style={pos?{left:"50%",width:w+"%"}:{right:"50%",width:w+"%"}}/></div>
-                <div className={"v "+(pos?"pos":"neg")}>{pos?"+":""}{t[1]}%</div>
+                <div className="nm"><div className="n">{t.lbl}</div><div className="r">{t.w}{"\u2013"}{t.l}</div></div>
+                <div className="track"><div className="z"/><div className="f" style={{width:bw+"%"}}/></div>
+                <div className="v">{wr}%</div>
               </div>); })}
           </div>}
 
-          {markets.length>0 && <div className="blk"><div className="bl">BY MARKET <span className="bx">season ROI</span></div>
-            {markets.map((m,i)=>{ const pos=m[1]>=0; return (
-              <div className="mrow" key={i}><div><div className="mn">{m[0]}</div><div className="mr">{m[2]}</div></div><div style={{flex:1}}/><div className={"mv "+(pos?"pos":"neg")}>{pos?"+":""}{m[1]}%</div></div>); })}
+          {markets.length>0 && <div className="blk"><div className="bl">BY MARKET <span className="bx">{range} {"\u00b7"} win rate {"\u00b7"} roi</span></div>
+            {markets.map((m,i)=>{ const wr=winPct(m.w,m.l); const pos=m.roi>=0; return (
+              <div className="mrow" key={i}><div style={{flex:1}}><div className="mn">{m.nm}</div><div className="mr">{m.w}{"\u2013"}{m.l}</div></div><div className="mwin">{wr}%</div><div className={"mroi "+(pos?"pos":"neg")}>{pos?"+":""}{m.roi}%</div></div>); })}
           </div>}
 
-          <div className="blk"><div className="bl">CLOSING LINE VALUE <span className="bx">are we beating the close?</span></div>
+          <div className="blk"><div className="bl">CLOSING LINE VALUE <span className="bx">secondary {"\u00b7"} is the edge real?</span></div>
             <div className="clvgrid">
               <div className="c"><div className="k">AVG CLV</div><div className={"v "+(d.clv>=0?"g":"")}>{d.clv>=0?"+":""}{d.clv}%</div></div>
               <div className="c"><div className="k">BEAT CLOSE</div><div className="v">{d.bc}%</div></div>
               <div className="c"><div className="k">PICKS</div><div className="v">{d.n}</div></div>
             </div>
-            <div className="clvnote">CLV measures whether our number beat the line’s final price. Positive CLV over a large sample is the strongest sign an edge is real — independent of short-term wins and losses.</div>
+            <div className="clvnote">Win rate is the headline. CLV stays as the honesty check: over a large sample it separates a real edge from variance, independent of short-term wins and losses.</div>
           </div>
-
-
 
           <div className="disc">All results are model picks graded at settled prices, 1-unit flat. Past performance does not guarantee future results. Bet responsibly.</div>
         </>}
@@ -160,33 +188,43 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .ranges{display:flex;gap:7px;padding:11px 14px 2px}
 .ranges b{flex:0 0 auto;font-family:var(--mono);font-size:11px;font-weight:600;color:var(--mut);border:1px solid var(--line2);border-radius:8px;padding:6px 13px;cursor:pointer}
 .ranges b.on{color:#06090b;background:var(--gold);border-color:var(--gold);font-weight:700}
-.kpis{display:grid;grid-template-columns:1fr 1fr;gap:9px;padding:11px 14px 0}
-.kpi{border:1px solid var(--line);border-radius:13px;background:var(--panel);padding:13px}
-.kpi .k{font-family:var(--mono);font-size:9px;color:var(--mut);font-weight:600;letter-spacing:.3px}
-.kpi .v{font-family:var(--disp);font-weight:800;font-size:30px;color:#fff;margin-top:4px;line-height:1}.kpi .v.g{color:var(--green)}.kpi .v.gold{color:var(--gold)}.kpi .v.r{color:var(--neg)}
-.kpi .sub{font-family:var(--mono);font-size:9px;color:var(--mut2);margin-top:4px}
+
+.hero{margin:12px 14px 0;border:1px solid rgba(201,168,106,.28);border-radius:16px;background:linear-gradient(160deg,#1a1c18,#14171B 60%);padding:16px 16px 14px;position:relative;overflow:hidden}
+.hero:after{content:"";position:absolute;right:-40px;top:-40px;width:160px;height:160px;background:radial-gradient(circle,rgba(201,168,106,.14),transparent 70%);pointer-events:none}
+.herotop{display:flex;align-items:center;justify-content:space-between;position:relative;z-index:1}
+.herok{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:1px;color:var(--gold)}
+.herorec{font-family:var(--mono);font-size:10px;color:var(--mut)}
+.herobig{display:flex;align-items:flex-end;gap:14px;position:relative;z-index:1}
+.herov{font-family:var(--disp);font-weight:800;font-size:64px;line-height:.92;color:#fff;margin-top:6px}
+.herov .pct{font-size:32px;color:var(--gold);margin-left:2px}
+.recbadge{font-family:var(--disp);font-weight:800;font-size:26px;color:#dbe4e2;padding-bottom:8px}
+.recbadge small{font-size:15px;color:var(--mut)}
+.herosub{font-family:var(--mono);font-size:9.5px;color:var(--mut2);margin-top:8px;position:relative;z-index:1}
+.spark{margin-top:10px;position:relative;z-index:1}.mspk{display:block}
+
+.kpis3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px;padding:10px 14px 0}
+.kpi{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:11px 10px}
+.kpi .k{font-family:var(--mono);font-size:8.5px;color:var(--mut);font-weight:600;letter-spacing:.3px}
+.kpi .v{font-family:var(--disp);font-weight:800;font-size:23px;color:#fff;margin-top:3px;line-height:1}.kpi .v.g{color:var(--green)}.kpi .v.r{color:var(--neg)}
+.kpi .sub{font-family:var(--mono);font-size:8px;color:var(--mut2);margin-top:3px}
+
 .blk{margin:14px 14px 0;border:1px solid var(--line);border-radius:14px;background:var(--panel);padding:13px}
 .bl{font-family:var(--disp);font-weight:800;font-size:13px;letter-spacing:.7px;color:var(--mut);margin-bottom:11px;display:flex;align-items:center;justify-content:space-between}
 .bl .bx{font-family:var(--mono);font-size:9px;color:var(--mut2);letter-spacing:0;font-weight:500}
 .chartwrap{position:relative}
-.cylab{position:absolute;left:0;font-family:var(--mono);font-size:8px;color:var(--mut2)}
+.chartempty{font-family:var(--mono);font-size:10px;color:var(--mut2);padding:24px 4px;text-align:center;line-height:1.5}
 .dbar{display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid rgba(255,255,255,.05)}.dbar:first-of-type{border-top:none}
-.dbar .nm{width:78px;flex:0 0 auto}.dbar .nm .n{font-family:var(--disp);font-weight:800;font-size:14px;color:#dbe4e2}.dbar .nm .r{font-family:var(--mono);font-size:8.5px;color:var(--mut2);margin-top:1px}
-.dbar .track{flex:1;height:20px;position:relative;background:#0e1620;border-radius:5px;border:1px solid var(--line)}
-.dbar .track .z{position:absolute;left:50%;top:0;bottom:0;width:1px;background:#39454f}
-.dbar .track .f{position:absolute;top:1px;bottom:1px;border-radius:3px}
-.dbar .track .f.pos{background:var(--green)}.dbar .track .f.neg{background:var(--neg)}
-.dbar .v{width:52px;text-align:right;font-family:var(--disp);font-weight:800;font-size:16px;flex:0 0 auto}.dbar .v.pos{color:var(--green)}.dbar .v.neg{color:var(--neg)}
+.dbar .nm{width:82px;flex:0 0 auto}.dbar .nm .n{font-family:var(--disp);font-weight:800;font-size:14px;color:#dbe4e2}.dbar .nm .r{font-family:var(--mono);font-size:8.5px;color:var(--mut2);margin-top:1px}
+.dbar .track{flex:1;height:20px;position:relative;background:#0e1620;border-radius:5px;border:1px solid var(--line);overflow:hidden}
+.dbar .track .z{position:absolute;left:50%;top:0;bottom:0;width:1px;background:#39454f;z-index:1}
+.dbar .track .f{position:absolute;top:1px;bottom:1px;left:1px;border-radius:3px;background:var(--green)}
+.dbar .v{width:52px;text-align:right;font-family:var(--disp);font-weight:800;font-size:16px;flex:0 0 auto;color:#fff}
 .mrow{display:flex;align-items:center;gap:9px;padding:9px 0;border-top:1px solid rgba(255,255,255,.05)}.mrow:first-of-type{border-top:none}
-.mrow .mn{font-family:var(--disp);font-weight:800;font-size:14px;color:#dbe4e2;flex:1}.mrow .mr{font-family:var(--mono);font-size:9px;color:var(--mut)}
-.mrow .mv{font-family:var(--disp);font-weight:800;font-size:16px;width:54px;text-align:right;flex:0 0 auto}.mv.pos{color:var(--green)}.mv.neg{color:var(--neg)}
+.mrow .mn{font-family:var(--disp);font-weight:800;font-size:14px;color:#dbe4e2}.mrow .mr{font-family:var(--mono);font-size:9px;color:var(--mut)}
+.mrow .mwin{font-family:var(--disp);font-weight:800;font-size:16px;width:56px;text-align:right;flex:0 0 auto;color:#fff}
+.mrow .mroi{font-family:var(--mono);font-size:10px;width:50px;text-align:right;flex:0 0 auto}.mroi.pos{color:var(--green)}.mroi.neg{color:var(--neg)}
 .clvgrid{display:flex;gap:9px}.clvgrid .c{flex:1;text-align:center;border:1px solid var(--line);border-radius:10px;padding:11px 6px}.clvgrid .c .k{font-family:var(--mono);font-size:8px;color:var(--mut2);font-weight:600}.clvgrid .c .v{font-family:var(--disp);font-weight:800;font-size:22px;color:#cfe2f5;margin-top:3px}.clvgrid .c .v.g{color:var(--green)}
 .clvnote{font-family:var(--ui);font-size:10.5px;color:var(--mut);margin-top:10px;line-height:1.5}
-.rrow{display:flex;align-items:center;gap:9px;padding:9px 0;border-top:1px solid rgba(255,255,255,.05)}.rrow:first-of-type{border-top:none}
-.rres{width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-family:var(--disp);font-weight:800;font-size:11px;flex:0 0 auto}.rres.W{background:rgba(63,203,145,.18);color:var(--green)}.rres.L{background:rgba(226,101,92,.18);color:var(--neg)}.rres.P{background:#1B2025;color:var(--mut)}
-.rrow .rp{flex:1;min-width:0}.rrow .rpk{font-weight:600;font-size:13px;color:#eaf1ee;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.rrow .rd{font-family:var(--mono);font-size:9px;color:var(--mut2)}
-.rrow .re{font-family:var(--mono);font-size:11px;color:var(--green);font-weight:600;flex:0 0 auto}
-.rrow .rclv{font-family:var(--mono);font-size:9px;width:42px;text-align:right;flex:0 0 auto}.rclv.p{color:var(--green)}.rclv.n{color:var(--mut)}
 .disc{font-family:var(--ui);font-size:10px;color:var(--mut2);margin:14px 14px 0;line-height:1.5;text-align:center}
 .estate{margin:40px 14px;border:1px dashed var(--line2);border-radius:14px;padding:36px 18px;text-align:center}.estate .et{font-family:var(--disp);font-weight:800;font-size:18px;color:#cfd7e2}.estate .es{font-size:12px;color:var(--mut);margin-top:6px;font-family:var(--mono)}
 .nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:460px;display:flex;justify-content:space-around;padding:7px 4px;background:rgba(0,0,0,.96);backdrop-filter:blur(12px);border-top:1px solid var(--line);z-index:20}
