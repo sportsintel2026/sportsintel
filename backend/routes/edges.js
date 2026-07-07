@@ -41,6 +41,11 @@ const { recordPredictions, recordTotalBasesShadow, recordStrikeoutShadow, record
 let edgesCache = null;
 let edgesCacheAt = 0;
 let edgesCacheDate = null; // which ET date the cached payload is for
+// WZ-TOMORROW-PREVIEW-2026-07-07 :: separate cache for display-only next-day previews so a
+// preview never clobbers the recorded primary-day cache.
+let previewCache = null;
+let previewCacheAt = 0;
+let previewCacheDate = null;
 const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
 // WZ-MLBPROPS-FULLSLATE-2026-07-05 :: prop coverage was capped at the first 5 games
 // (a free-tier-era throttle). On the 100K plan at ~4%/period usage there's ample
@@ -143,13 +148,16 @@ async function resolveSlateDate() {
   // Stay on today's board until the WHOLE West Coast slate is FINAL. While any of today's games is
   // still scheduled or live, this is TODAY'S board -- tomorrow's games never show early.
   const allFinal = playable.length > 0 && playable.every(g => g.status === "final");
+  // "underway" = today's slate has started (any game live or final). Used to decide when to
+  // surface tomorrow's preview beneath today's board.
+  const underway = playable.some(g => g.status === "live" || g.status === "final");
 
   if (playable.length > 0 && !allFinal) {
-    return { date: today, rolled: false };
+    return { date: today, rolled: false, underway };
   }
   // No games today, or every one is final -> the slate is over, roll to tomorrow.
   const tomorrow = getPacificDate(1);
-  return { date: tomorrow, rolled: true };
+  return { date: tomorrow, rolled: true, underway: false };
 }
 
 // ── Main endpoint ─────────────────────────────────────────────────────────────
@@ -388,10 +396,22 @@ function buildTightLine(gameEdges, slateDate, opts) {
 router.get("/mlb", async (req, res) => {
   let weBuild = false;
   try {
-    const { date: slateDate, rolled } = await resolveSlateDate();
+    // WZ-TOMORROW-PREVIEW-2026-07-07 :: an explicit ?date=YYYY-MM-DD makes this a DISPLAY-ONLY
+    // preview of another day (used to show tomorrow's edges beneath today's once today is underway).
+    // A preview is NEVER recorded/graded and uses its own cache, so tomorrow's games can never
+    // overload today's grading. No ?date => byte-for-byte the original behavior.
+    const dateOverride = (typeof req.query.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date)) ? req.query.date : null;
+    const isPreview = !!dateOverride;
+    const { date: resolvedDate, rolled, underway } = await resolveSlateDate();
+    const slateDate = dateOverride || resolvedDate;
+    const previewDate = (!isPreview && underway && !rolled) ? getPacificDate(1) : null;
 
     // Cache is valid only if it's fresh AND for the same date we now want to serve.
-    if (!req.query.hits_debug && !req.query.edges_debug && !req.query.hr_audit && !req.query.tb_shadow && !req.query.tightline && edgesCache && edgesCacheDate === slateDate && (Date.now() - edgesCacheAt) < CACHE_TTL_MS) {
+    if (isPreview) {
+      if (previewCache && previewCacheDate === slateDate && (Date.now() - previewCacheAt) < CACHE_TTL_MS) {
+        return res.json({ ...previewCache, cached: true });
+      }
+    } else if (!req.query.hits_debug && !req.query.edges_debug && !req.query.hr_audit && !req.query.tb_shadow && !req.query.tightline && edgesCache && edgesCacheDate === slateDate && (Date.now() - edgesCacheAt) < CACHE_TTL_MS) {
       console.log(`[Edges] Returning cached results for ${slateDate}`);
       return res.json({ ...edgesCache, cached: true });
     }
@@ -402,7 +422,7 @@ router.get("/mlb", async (req, res) => {
     // duplicate Odds API calls). Bounded wait + finally-released flag => never stampedes
     // and never deadlocks.
     const isDebugQ = !!(req.query.hits_debug || req.query.edges_debug || req.query.hr_audit || req.query.tb_shadow || req.query.tightline);
-    if (!isDebugQ) {
+    if (!isDebugQ && !isPreview) {
       if (edgesBuilding) {
         const t0 = Date.now();
         while (edgesBuilding && (Date.now() - t0) < 45000) {
@@ -425,10 +445,9 @@ router.get("/mlb", async (req, res) => {
     const games = allGames.filter(g => g.status !== "postponed" && g.status !== "cancelled");
     console.log(`[Edges] Found ${games.length} MLB games for ${slateDate}`);
     if (games.length === 0) {
-      const empty = { date: slateDate, rolledToNextDay: rolled, games: [], moneylineEdges: [], totalsEdges: [], runLineEdges: [], hrPropEdges: [], kPropEdges: [], hitsPropEdges: [], computedAt: new Date().toISOString() };
-      edgesCache = empty;
-      edgesCacheAt = Date.now();
-      edgesCacheDate = slateDate;
+      const empty = { date: slateDate, rolledToNextDay: rolled, isPreview, slateUnderway: isPreview ? false : underway, previewDate, games: [], moneylineEdges: [], totalsEdges: [], runLineEdges: [], hrPropEdges: [], kPropEdges: [], hitsPropEdges: [], computedAt: new Date().toISOString() };
+      if (isPreview) { previewCache = empty; previewCacheAt = Date.now(); previewCacheDate = slateDate; }
+      else { edgesCache = empty; edgesCacheAt = Date.now(); edgesCacheDate = slateDate; }
       return res.json(empty);
     }
     let oddsEvents = [];
@@ -741,6 +760,9 @@ router.get("/mlb", async (req, res) => {
     const result = {
       date: slateDate,
       rolledToNextDay: rolled,
+      isPreview,
+      slateUnderway: isPreview ? false : underway,
+      previewDate,
       games: gameEdges.map(ge => {
         const sourceGame = gamesWithOdds.find(g => g.id === ge.game.id);
         return {
@@ -768,10 +790,15 @@ router.get("/mlb", async (req, res) => {
       computedAt: new Date().toISOString(),
       cached: false,
     };
-    edgesCache = result;
-    edgesCacheAt = Date.now();
-    edgesCacheDate = slateDate;
+    if (isPreview) {
+      previewCache = result; previewCacheAt = Date.now(); previewCacheDate = slateDate;
+    } else {
+      edgesCache = result; edgesCacheAt = Date.now(); edgesCacheDate = slateDate;
+    }
 
+    // WZ-TOMORROW-PREVIEW-2026-07-07 :: previews are DISPLAY-ONLY -- never record and never run
+    // shadows, so tomorrow's games can NEVER enter today's grading.
+    if (!isPreview) {
     // Snapshot predictions for performance tracking (fire-and-forget; deduped by
     // unique constraint so repeated computes during the day are no-ops).
     recordPredictions(result).catch(e => console.error("[Edges] recordPredictions failed:", e.message));
@@ -815,6 +842,7 @@ router.get("/mlb", async (req, res) => {
         }
       })();
     }
+    } // end if (!isPreview) -- WZ-TOMORROW-PREVIEW-2026-07-07
 
     res.json(result);
   } catch (err) {
