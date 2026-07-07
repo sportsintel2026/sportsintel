@@ -29,6 +29,7 @@ export const newsApi = {
 // NEW — edges API for MLB analytics dashboard
 export const edgesApi = {
   getMLB: () => apiFetch("/api/edges/mlb"),
+  getMLBPreview: (date) => apiFetch(`/api/edges/mlb?date=${encodeURIComponent(date)}`), // WZ-TOMORROW-PREVIEW-2026-07-07
   getNBA: () => apiFetch("/api/edges/nba"),
   getNFL: (phase) => apiFetch(`/api/edges/nfl${phase?`?phase=${phase}`:""}`),
   getCFB: () => apiFetch("/api/edges/cfb"),
