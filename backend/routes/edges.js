@@ -120,37 +120,35 @@ function matchOddsToGame(game, oddsEvents) {
   return null; // ambiguous or no match → no odds, never WRONG odds
 }
 
-// Decide which date to serve. If every one of today's games is final (or there
-// are no games today), roll over to tomorrow. Postponed/cancelled don't count
-// as "live/upcoming", so they don't block rollover.
+// WZ-WESTCOAST-SLATE-2026-07-07 :: anchor the betting day to WEST COAST (Pacific) time and only
+// roll to tomorrow once EVERY one of today's games is FINAL. MLB games end late out West; anchoring
+// to Eastern flipped the day ~3 hours early (ET midnight = 9pm PT, while West Coast games were still
+// being played) and, from ET-midnight until the first pitch, mislabeled today's pre-game board as
+// "TOMORROW'S BOARD". Pacific anchor + roll-on-all-final fixes both: no tomorrow games show until
+// tonight's slate is completely final in Pacific time.
+function getPacificDate(offsetDays = 0) {
+  const d = new Date();
+  d.setDate(d.getDate() + offsetDays);
+  return d.toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
+}
+
 async function resolveSlateDate() {
-  const today = getEasternDate(0);
+  const today = getPacificDate(0);
   let todayGames = [];
   try { todayGames = await getScheduleForDate(today); } catch (e) { todayGames = []; }
 
+  // Postponed/cancelled aren't part of the live slate, so they never block the roll.
   const playable = todayGames.filter(g => g.status !== "postponed" && g.status !== "cancelled");
 
-  // This board shows PRE-GAME edges/props, which only exist for not-yet-started
-  // ("scheduled") games. Stay on the current ET day while it still has a game that
-  // hasn't started; once they've all started/finished, serve tomorrow's slate.
-  const anyPreGameToday = playable.some(g => g.status === "scheduled");
-  const anyLiveToday    = playable.some(g => g.status === "live");
-  const anyDoneToday    = playable.some(g => g.status === "final");
+  // Stay on today's board until the WHOLE West Coast slate is FINAL. While any of today's games is
+  // still scheduled or live, this is TODAY'S board -- tomorrow's games never show early.
+  const allFinal = playable.length > 0 && playable.every(g => g.status === "final");
 
-  if (anyPreGameToday) {
-    // Today still has pre-game games. But across the midnight-ET seam, the games
-    // currently scheduled for "today" (the new ET date) may have NOT been preceded
-    // by any live/final games yet — meaning from a still-awake user's perspective
-    // (evening on the US west coast = just-past-midnight ET) these are really
-    // TOMORROW'S games and tonight's slate just finished. Detect that: if the
-    // current ET day has produced no live or final games at all, it's the fresh
-    // overnight slate that hasn't arrived yet → label it as rolled (TOMORROW'S)
-    // until the day actually gets underway.
-    const dayUnderway = anyLiveToday || anyDoneToday;
-    return { date: today, rolled: !dayUnderway };
+  if (playable.length > 0 && !allFinal) {
+    return { date: today, rolled: false };
   }
-  // No more pre-game games today (all started or finished) → roll to tomorrow.
-  const tomorrow = getEasternDate(1);
+  // No games today, or every one is final -> the slate is over, roll to tomorrow.
+  const tomorrow = getPacificDate(1);
   return { date: tomorrow, rolled: true };
 }
 
