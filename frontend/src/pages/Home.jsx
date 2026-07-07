@@ -216,7 +216,12 @@ export default function HomePage(){
   const hero=pool[0]||null;
   const topHeroes=pool.slice(0,5);
   const boardArr=board==="ml"?mlAdj:board==="spread"?spAdj:totAdj;
-  const boardEdges=oneSidePerGame(boardArr||[]).filter(x=>sport==="mlb"?(x.edge??0)>0:(x.edge??0)>=1).sort((a,b)=>((tierRank(b._convAdj)-tierRank(a._convAdj))||((b.convictionScore||0)-(a.convictionScore||0))||((b.edge||0)-(a.edge||0))));
+  // WZ-BOARD-WINFIRST-2026-07-06 :: winner-first board order -- win/cover probability (modelProb)
+  // leads; conviction tier, conviction score, then edge break ties. Applies to every board tab
+  // (All, ML, Spread, Totals). Display order ONLY -- the graded record reads the backend board and
+  // is unaffected; no picks, no model math, and no totals math change here.
+  const byWinProb=(a,b)=>(((b.modelProb??-1)-(a.modelProb??-1))||(tierRank(b._convAdj)-tierRank(a._convAdj))||((b.convictionScore||0)-(a.convictionScore||0))||((b.edge||0)-(a.edge||0)));
+  const boardEdges=oneSidePerGame(boardArr||[]).filter(x=>sport==="mlb"?(x.edge??0)>0:(x.edge??0)>=1).sort(byWinProb);
   const moverPool=[...(e.moneylineEdges||[]),...(e.totalsEdges||[]),...(e.runLineEdges||[]),...(e.spreadEdges||[])].map(x=>{ const ser=seriesFor(x); const open=(ser&&ser.length)?ser[0].o:null; const now=(ser&&ser.length)?ser[ser.length-1].o:x.odds; const delta=(open!=null&&ser&&ser.length>1)?(amCents(now)-amCents(open)):null; return {...x,_open:open,_now:now,_delta:delta}; });
   const movers=moverPool.filter(m=>m._delta!=null).sort((a,b)=>{ const ad=Math.abs(a._delta); const bd=Math.abs(b._delta); return (bd-ad)||((b.edge??0)-(a.edge??0)); }).slice(0,12);
   const hasMoves=movers.some(m=>m._delta!=null);
@@ -316,7 +321,7 @@ export default function HomePage(){
     return {p:edgeLabel(x),mk:mkOf(x),cat:catOf(x),conv:convOf(x),edge:edgeNum(x),odds:formatOdds(x.odds),mv:mvOf(x),delta:x._delta,clv:null,a,h,g:x.matchup,starts:gm&&gm.time?fmtTime(gm.time):null,model,mkt,flags:flags.length?flags:null,read,why:x.reason,park:park.length?park:null,wx,series:lineSeries[x.gameId+x.side]||null,gameId:x.gameId,seed:i};
   };
   const allAdj=[...mlAdj,...totAdj,...spAdj];
-  const sortBoard=(a,b)=>((tierRank(b._convAdj)-tierRank(a._convAdj))||((b.convictionScore||0)-(a.convictionScore||0))||((b.edge||0)-(a.edge||0)));
+  const sortBoard=byWinProb;  // WZ-BOARD-WINFIRST-2026-07-06 :: All tab uses the same winner-first order (win/cover prob leads).
   // WZ-FULLBOARD-2026-06-30 :: "All" shows every qualifying edge (ML + total + run line per
   // game), not just the single highest per game. Only one side of a market can be +edge, so a
   // game surfaces at most one pick per market — fuller board, run line included, conviction-sorted.
