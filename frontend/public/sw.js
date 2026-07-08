@@ -4,7 +4,11 @@
 // even touched here, and any same-origin /api path is skipped — so scores, odds, and
 // edges are always fresh. Bump CACHE (v1 -> v2 ...) to force a clean refresh of the shell.
 
-const CACHE = "wizepicks-shell-v1";
+// WZ-PWA-FRESH-2026-07-08 :: cache bumped to v2 (one-time clean-out of the stale shell) and
+// navigations now fetch with cache:"no-store" (below) so every online load pulls the freshest
+// index.html -> the freshest hashed JS/CSS, ending the manual "clear cache after each deploy"
+// dance. Live data is still never touched here -- the /api + cross-origin skips are unchanged.
+const CACHE = "wizepicks-shell-v2";
 const SHELL = [
   "/",
   "/index.html",
@@ -43,7 +47,7 @@ self.addEventListener("fetch", (event) => {
   // cached shell only when offline.
   if (req.mode === "navigate") {
     event.respondWith(
-      fetch(req).catch(() => caches.match("/index.html").then((r) => r || caches.match("/")))
+      fetch(req, { cache: "no-store" }).catch(() => caches.match("/index.html").then((r) => r || caches.match("/")))
     );
     return;
   }
