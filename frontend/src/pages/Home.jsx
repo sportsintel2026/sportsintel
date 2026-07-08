@@ -551,6 +551,9 @@ export default function HomePage(){
           </div>
         </div>
 
+      {/* WZ-INTEL-WPLOGO-2026-07-08 :: MARKET & INTEL divider groups Pulse + Movers (shows only when there's intel) */}
+      {hasFull && (pulseAlerts.length>0 || moverItems.length>0) && <div className="inteldiv"><span className="iln"/><span className="ilbl">MARKET {"\u0026"} INTEL</span><span className="iln r"/></div>}
+
       {hasFull && pulseAlerts.length>0 && <MarketPulse alerts={pulseAlerts} rolled={e.rolledToNextDay}/>}
 
       {hasFull && moverItems.length>0 && <MarketMovers movers={moverItems} navigate={navigate}/>}
@@ -1106,7 +1109,7 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .wpempty{border-top:1px solid rgba(255,255,255,.06);padding:18px 14px;text-align:center}
 .wpempty .et{font-family:var(--disp);font-weight:800;font-size:15px;color:#cdd6da}
 .wpempty .es{font-family:var(--mono);font-size:9.5px;color:var(--mut2);margin-top:5px;line-height:1.5}
-.wpbar .ic{width:36px;height:36px;border-radius:10px;background:rgba(243,185,79,.16);border:1px solid rgba(243,185,79,.42);display:flex;align-items:center;justify-content:center;color:var(--gold);font-family:var(--disp);font-weight:800;font-size:18px}
+.wpbar .ic{width:50px;height:50px;border-radius:13px;background:linear-gradient(180deg,#d8b878,#b98f45);display:flex;align-items:center;justify-content:center;color:#161007;font-family:var(--serif);font-weight:800;font-size:26px} /* WZ-INTEL-WPLOGO-2026-07-08 :: gold-fill serif W (logo C) */
 .wpbar .tx{flex:1;min-width:0}.wpbar .h{font-family:var(--disp);font-weight:800;font-size:15px;color:#fff;letter-spacing:.3px}.wpbar .h .new{font-size:8px;font-weight:800;background:var(--gold);color:#1a1408;border-radius:4px;padding:1px 4px;margin-left:6px;vertical-align:middle;font-family:var(--ui)}
 .wpbar .s{font-size:11px;color:var(--mut);margin-top:2px}.wpbar .rec{text-align:right}.wpbar .rec .r{font-family:var(--disp);font-weight:800;font-size:20px;color:#fff;line-height:1}.wpbar .rec .u{font-family:var(--mono);font-size:11px;color:var(--green);margin-top:1px}
 
@@ -1136,6 +1139,10 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .tmrwdiv .tln.r{background:linear-gradient(90deg,rgba(201,168,106,.5),transparent)}
 .tmrwdiv .tlbl{font-family:var(--disp);font-weight:800;font-size:15px;letter-spacing:2px;color:var(--gold);white-space:nowrap;text-align:center;line-height:1.05}
 .tmrwdiv .tlbl small{display:block;font-family:var(--mono);font-size:8px;letter-spacing:.5px;color:var(--mut2);font-weight:400;margin-top:1px}
+.inteldiv{display:flex;align-items:center;gap:12px;margin:26px 10px 14px} /* WZ-INTEL-WPLOGO-2026-07-08 */
+.inteldiv .iln{flex:1;height:1px;background:linear-gradient(90deg,transparent,rgba(201,168,106,.55))}
+.inteldiv .iln.r{background:linear-gradient(90deg,rgba(201,168,106,.55),transparent)}
+.inteldiv .ilbl{font-family:var(--mono);font-weight:600;font-size:11px;letter-spacing:5px;color:var(--gold);white-space:nowrap}
 .tmrwnote{font-family:var(--mono);font-size:9px;color:var(--mut2);text-align:center;margin:0 14px 2px}
 .gr{position:relative;margin-bottom:0;background:transparent;border-radius:0;overflow:hidden}.gr+.gr{border-top:1px solid var(--line)}
 .gr::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--mut2);z-index:2}
