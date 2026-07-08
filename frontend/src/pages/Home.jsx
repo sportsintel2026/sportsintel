@@ -1171,9 +1171,10 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .ppc{padding:12px 8px 10px;text-align:center;cursor:pointer}
 .ppc:not(:nth-child(3n)){border-right:1px solid var(--line)}
 .ppc:nth-child(-n+3){border-bottom:1px solid var(--line)}
-.ppav{width:38px;height:38px;border-radius:50%;margin:0 auto 6px;overflow:hidden;display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto}
+/* WZ-TOPPROPS-BIGFACE-2026-07-08 :: larger player headshots */
+.ppav{width:56px;height:56px;border-radius:50%;margin:0 auto 7px;overflow:hidden;display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto}
 .ppav img{width:100%;height:100%;object-fit:cover;border-radius:50%}
-.ppini{font-family:var(--disp);font-weight:800;font-size:14px;color:#fff}
+.ppini{font-family:var(--disp);font-weight:800;font-size:20px;color:#fff}
 .ppn{font-family:var(--disp);font-weight:700;font-size:15px;line-height:1;letter-spacing:.2px}
 .ppv{color:var(--green);font-size:7px;position:relative;top:-3px;margin-left:3px}
 .pptm{font-family:var(--mono);font-size:8px;color:var(--mut2);letter-spacing:.5px;margin-top:2px}
