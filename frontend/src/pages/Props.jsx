@@ -102,7 +102,9 @@ export default function PropsPage() {
     g: p.game || p.team || "", pos: p.pos || p.position || "",
     line: lineOf(p, unit), odds: formatOdds(p.odds), edge: (p.edge||0)*100,
     mk, conv: convOf(p),
-    model: p.modelProb!=null ? Math.round(p.modelProb*100) : null,
+    // WZ-PROPS-WINFIX-2026-07-08 :: win% comes from the per-type prob fields (hrProb/hitsProb/kProb),
+    // not modelProb -- HR/Hits/K props don't carry modelProb, which was zeroing the winners-first board.
+    model: (()=>{ const m = p.hrProb ?? p.hitsProb ?? p.kProb ?? p.modelProb; return m!=null ? Math.round(m*100) : null; })(),
     mkt: p.marketProb!=null ? Math.round(p.marketProb*100) : (p.impliedProb!=null ? Math.round(p.impliedProb*100) : null),
     gameId: p.gameId, id: p.playerId || p.id, teamRaw: p.team, pid: p.playerId
   });
@@ -176,11 +178,11 @@ export default function PropsPage() {
                  A thin board is calibration doing its job (hits haircut live 07-02;
                  K unders-only + honest projections) — say so instead of looking broken. */
               const COPY={
-                Hits:["No hits edges clear the bar today","Every batter gets priced, but only picks that beat the book after calibration make the board. An empty board means the model found no real value tonight \u2014 that\u2019s the discipline working, not a glitch."],
-                K:["No strikeout edges today","K picks only post when the projection genuinely beats the price. Quiet board = the market has these priced right."],
-                HR:["No HR edges right now","Home-run prices are juiced hard \u2014 the model only surfaces bats with real value against them."],
-                TB:["No total-bases plays yet","TB rows post from the model\u2019s probability board as games firm up."],
-                All:["No props clear the bar today","We only show picks the model has actually earned an edge on. Check back closer to first pitch \u2014 lines and lineups move."],
+                Hits:["No hits plays right now","Hits props post a couple hours before first pitch and clear once games start. Check back when tonight's slate is upcoming."],
+                K:["No strikeout plays right now","Strikeout props post from the model as starters and lines firm up. Check back closer to first pitch."],
+                HR:["No HR plays right now","Home-run props post a couple hours before first pitch and clear once games start. Check back when tonight's slate is upcoming."],
+                TB:["No total-bases plays yet","TB rows post from the model's probability board as games firm up."],
+                All:["No props right now","Props post a couple hours before first pitch and clear once games start. Check back when tonight's slate is upcoming."],
               };
               const [t,d]=COPY[mfilter]||COPY.All;
               return <div className="estate"><div className="et">{t}</div><div className="es">{d}</div></div>; })()}
