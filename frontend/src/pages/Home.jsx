@@ -593,8 +593,19 @@ function SparkM({dir,seed=0}){ const n=7,w=40,h=15,z=[1.4,-1,.8,-1.6,.6,0,-1.2];
 }
 function Spark({data,color}){
   if(!Array.isArray(data)||data.length<2) return null;
-  const W=100,H=26,mn=Math.min(...data),mx=Math.max(...data),rng=(mx-mn)||1;
-  const X=i=>i/(data.length-1)*W,Y=v=>H-2-((v-mn)/rng)*(H-4);
+  // WZ-KPISPARK-ZOOM-2026-07-08 :: fit the axis to where the trend actually LIVES, same idea as
+  // the Performance charts. The early small-sample ticks (a metric's first few graded picks swing
+  // wide) were stretching the domain and flattening the settled line into a worm. Skip a short
+  // warmup for the domain, pad a touch, and clamp early outliers so they can't dominate the scale.
+  // Short arrays fall back to the full set so nothing collapses. No 50% reference here -- these are
+  // ROI / win / CLV trends, not the win-rate curve, so the domain is purely data-driven.
+  const W=100,H=26;
+  const warm=Math.min(6,Math.floor(data.length*0.15));
+  const stable=data.slice(warm).length>=3?data.slice(warm):data;
+  let mn=Math.min(...stable),mx=Math.max(...stable);
+  const pad=((mx-mn)||1)*0.15; mn-=pad; mx+=pad;
+  const rng=(mx-mn)||1; const clampV=v=>Math.max(mn,Math.min(mx,v));
+  const X=i=>i/(data.length-1)*W,Y=v=>H-2-((clampV(v)-mn)/rng)*(H-4);
   const pts=data.map((v,i)=>`${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(" ");
   return <svg className="kspark" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none"><polyline points={pts} fill="none" stroke={color||"#3FCB91"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke"/></svg>;
 }
