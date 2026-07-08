@@ -354,7 +354,7 @@ export default function HomePage(){
   const wvKeys = new Set(wvItems.map(h=>h.k));
   const evItems = oneSidePerGame(allAdj).filter(x=>(x.edge??0)>0).sort((a,b)=>(b.edge||0)-(a.edge||0)).map(toBoard).filter(h=>!wvKeys.has(h.k));
   const heroItems = [...wvItems, ...evItems].slice(0,4);
-  const moverItems = movers.map((m)=>{return {p:edgeLabel(m),g:(abbrById[m.gameId]?abbrById[m.gameId].a+" @ "+abbrById[m.gameId].h:m.matchup),mv:(m._open!=null&&m._now!=null&&m._delta!=null)?[formatOdds(m._open),formatOdds(m._now),(m._delta>0?"up":m._delta<0?"dn":"")]:null,odds:formatOdds(m.odds),model:m.modelProb!=null?Math.round(m.modelProb*100):null,delta:m._delta};});
+  const moverItems = movers.map((m)=>{return {p:edgeLabel(m),logo:edgeTeam(m)||(abbrById[m.gameId]?abbrById[m.gameId].h:""),g:(abbrById[m.gameId]?abbrById[m.gameId].a+" @ "+abbrById[m.gameId].h:m.matchup),mv:(m._open!=null&&m._now!=null&&m._delta!=null)?[formatOdds(m._open),formatOdds(m._now),(m._delta>0?"up":m._delta<0?"dn":"")]:null,odds:formatOdds(m.odds),model:m.modelProb!=null?Math.round(m.modelProb*100):null,delta:m._delta};});
   // WZ-LIVETICKER-2026-06-27 :: ticker = live scores (the backbone) with injury + late-scratch
   // alerts woven in. MLB pulls injuries/scratches from the RotoWire wire; other sports show
   // plain scores. A late scratch (player pulled from tonight's lineup) is the more urgent
@@ -853,10 +853,15 @@ function MarketMovers({movers,navigate}){
       <span className="mvtl">MARKET MOVERS</span>
       <span className="mvall" onClick={()=>navigate("/odds")}>View all {"\u203a"}</span>
     </div>
-    <div className="mvscroll">{mv.slice(0,10).map((d,i)=>{const up=d.delta>0;return (
-      <div className="mvchip" key={i}>
-        <span className="mvtxt"><span className="mvp">{d.p}</span>{d.g&&<span className="mvg">{d.g}</span>}</span>
-        <span className={"mvd "+(up?"up":"dn")}>{up?"\u2191":"\u2193"} {up?"+":"\u2212"}{Math.abs(d.delta)}{"\u00a2"}</span>
+    {/* WZ-MOVERS-LIST-2026-07-08 :: vertical list w/ team logos + open->now line move (was horizontal scroll) */}
+    <div className="mvlist">{mv.slice(0,6).map((d,i)=>{const up=d.delta>0;return (
+      <div className="mvrow" key={i}>
+        {d.logo&&<LogoM ab={d.logo} col="#3a4653"/>}
+        <span className="mvtxt2"><span className="mvp">{d.p}</span>{d.g&&<span className="mvg">{d.g}</span>}</span>
+        <span className="mvright">
+          {d.mv&&<span className="mvmove">{d.mv[0]} {"\u2192"} {d.mv[1]}</span>}
+          <span className={"mvd "+(up?"up":"dn")}>{up?"\u2191":"\u2193"} {up?"+":"\u2212"}{Math.abs(d.delta)}{"\u00a2"}</span>
+        </span>
       </div>);})}</div>
     {/* WZ-MVNOTE-COLLAPSE-2026-07-01 :: green/red legend collapsed behind a tap-to-expand toggle (default closed) */}
     <div className="mvnote">
@@ -947,14 +952,18 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .mvpulse{color:var(--green);display:inline-flex}
 .mvhd .mvtl{font-family:var(--disp);font-weight:700;font-size:14px;letter-spacing:.8px;color:var(--tx)}
 .mvall{margin-left:auto;color:var(--green);font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap}
-.mvscroll{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
+.mvlist{border:1px solid var(--line2);border-radius:12px;background:var(--panel);overflow:hidden} /* WZ-MOVERS-LIST-2026-07-08 */
+.mvrow{display:flex;align-items:center;gap:10px;padding:10px 12px;border-top:1px solid rgba(255,255,255,.05)}
+.mvrow:first-child{border-top:none}
+.mvrow .mvtxt2{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1}
+.mvrow .mvp{font-family:var(--disp);font-weight:700;font-size:15px;color:var(--tx);white-space:nowrap;line-height:1}
+.mvrow .mvg{font-family:var(--mono);font-size:9px;color:var(--mut);white-space:nowrap;line-height:1;letter-spacing:.3px}
+.mvrow .mvright{margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:3px;text-align:right;white-space:nowrap}
+.mvrow .mvmove{font-family:var(--mono);font-size:10px;color:#cdd6da}
+.mvrow .mvd{font-family:var(--mono);font-size:12px;font-weight:700}
+.mvrow .mvd.up{color:var(--green)}.mvrow .mvd.dn{color:var(--red)}
 .mvscroll::-webkit-scrollbar{display:none}
-.mvchip{flex:0 0 auto;display:flex;align-items:center;gap:10px;border:1px solid var(--line2);border-radius:11px;background:var(--panel);padding:9px 13px}
-.mvchip .mvtxt{display:flex;flex-direction:column;gap:3px;min-width:0}
-.mvchip .mvp{font-family:var(--disp);font-weight:700;font-size:14px;color:var(--tx);white-space:nowrap;line-height:1}
-.mvchip .mvg{font-family:var(--mono);font-size:9px;color:var(--mut);white-space:nowrap;line-height:1;letter-spacing:.3px}
-.mvchip .mvd{font-family:var(--mono);font-size:12px;font-weight:700;white-space:nowrap}
-.mvchip .mvd.up{color:var(--green)}.mvchip .mvd.dn{color:var(--red)}
+/* .mvchip removed -- movers are now a vertical list (WZ-MOVERS-LIST-2026-07-08) */
 .mvnote{margin-top:16px;padding:0 2px;border:none;border-radius:0;background:none}
 .mvkeytoggle{display:flex;align-items:center;gap:9px;width:100%;background:var(--panel2);border:1px solid var(--line2);border-radius:9px;padding:10px 13px;cursor:pointer;font-family:var(--mono);font-size:10.5px;letter-spacing:.3px;color:var(--mut)}/* WZ-MVNOTE-COLLAPSE-2026-07-01 */
 .mvkeytoggle .lbl{flex:1;text-align:left}
