@@ -460,9 +460,7 @@ export default function HomePage(){
       )}
 
 
-        <div className="seclbl">HOW TO USE WIZEPICKS</div>
-        <div className="guide" onClick={()=>navigate("/guide")}><div className="gi"/><div className="gt"><div className="gh">New here? Start with the basics</div><div className="gs">Edges, props, line shopping &amp; the full board {"\u2014"} a quick walkthrough.</div></div><div className="ga">{"\u203a"}</div></div>
-
+        {/* WZ-HOME-REORDER-2026-07-08 :: proof -> WizeBoard -> Live Edges -> Top Play -> WizePlays -> Market Pulse/Movers -> onboarding (How-To + Wize Spin) last */}
         {hasFull && <div className="kpis">
           <div className="kpi"><div className="k">ROI</div><div className={"v "+(perfStats&&perfStats.roi!=null?(perfStats.roi>=0?"g":"red"):"")}>{perfStats&&perfStats.roi!=null?(perfStats.roi>=0?"+":"")+perfStats.roi+"%":"\u2014"}</div><div className="ksub">{perfStats?perfStats.roiLbl:"tracked"}</div><Spark data={perf&&perf.spark&&perf.spark.roi} color="#3FCB91"/></div>
           <div className="kpi"><div className="k">WIN RATE</div><div className="v">{perfStats&&perfStats.winRate!=null?perfStats.winRate.toFixed(1)+"%":"\u2014"}</div><div className="ksub">{perfStats&&perfStats.graded!=null?perfStats.graded+" graded":"tracking"}</div><Spark data={perf&&perf.spark&&perf.spark.win} color="#ECEFF2"/></div>
@@ -470,44 +468,6 @@ export default function HomePage(){
         </div>}
 
       <div id="content">
-        {/* WZ-WIZEPLAYS-LIST-2026-07-08 :: record bar + today's plays as a vertical list (empty state when none) */}
-        <div className="wpsec">
-          <div className="wpbar" onClick={()=>navigate("/expert-picks")}>
-            <div className="ic">W</div>
-            <div className="tx"><div className="h">WIZEPLAYS <span className="new">CURATED</span></div><div className="s">{hasFull?"Hand-picked after extra review":"See every pick"}</div></div>
-            {wpRecord&&(wpRecord.wins+wpRecord.losses+wpRecord.pushes)>0
-              ? <div className="rec"><div className="r">{wpRecord.wins}-{wpRecord.losses}{wpRecord.pushes?"-"+wpRecord.pushes:""}</div><div className="u">{wpRecord.units>=0?"+":""}{wpRecord.units.toFixed(1)}u</div></div>
-              : <div className="rec"><div className="r" style={{fontSize:13,color:"#f3b94f"}}>View {"\u203a"}</div></div>}
-          </div>
-          {wpToday.length>0
-            ? <div className="wplist">{wpToday.map((pk,i)=>(
-                <div className="wprow" key={i} onClick={()=>navigate("/expert-picks")}>
-                  <LogoM ab={wpAbbr(pk)} col="#3a4653"/>
-                  <div className="wpmid"><div className="wpp">{pk.pick}</div>{pk.game&&<div className="wpg">{pk.game}</div>}</div>
-                  {pk.odds!=null&&<div className="wpo">{formatOdds(pk.odds)}</div>}
-                </div>))}</div>
-            : <div className="wpempty">
-                <div className="et">No WizePlays posted yet</div>
-                <div className="es">Curated plays go up after extra review, usually before first pitch. The full WizeBoard is live above.</div>
-              </div>}
-        </div>
-
-        {/* WIZESPIN-MOVED-UNDER-WIZEPLAYS-2026-06-26 */}
-        <div className="spincard" onClick={()=>navigate("/daily-card")}>
-          <div className="h">WIZE SPIN <span className="new">NEW</span></div><div className="wheel"/>
-          <div className="d">Need a play fast? Spin for a model-qualified pick.</div><div className="cta">Spin the wheel {"\u203a"}</div>
-        </div>
-
-        {/* WZ-EDGES-REORDER-2026-06-26 :: Best Play -> Market Pulse -> Market Movers (under Wize Spin) */}
-        {hasFull
-          ? (heroItems.length>0
-              ? <Swiper cls="herocar" dotcls="hdots">{heroItems.map((h,i)=><HeroSlide key={i} h={h} i={i} navigate={navigate} sport={sport} rolled={e.rolledToNextDay}/>)}</Swiper>
-              : <div className="herocar"><div className="hslide"><div className="hero" style={{textAlign:"center"}}><div className="eb">BEST EDGE</div><div className="heh">Edges post soon</div><div className="hes">Top edges appear ~2 hrs before first pitch.</div></div></div></div>)
-          : <Gate title="Today's top edge is locked" navigate={navigate}/>}
-
-      {hasFull && pulseAlerts.length>0 && <MarketPulse alerts={pulseAlerts} rolled={e.rolledToNextDay}/>}
-
-      {hasFull && moverItems.length>0 && <MarketMovers movers={moverItems} navigate={navigate}/>}
 
         {/* WZ-WINNERS-REMOVED-2026-07-05 :: toggle + Winners view removed; Edge Board only */}
         {face==="edges" && <>
@@ -551,12 +511,50 @@ export default function HomePage(){
             </div>);})}</div>
         </div>}
 
+        {/* WZ-EDGES-REORDER-2026-06-26 :: Best Play -> Market Pulse -> Market Movers (under Wize Spin) */}
+        {hasFull
+          ? (heroItems.length>0
+              ? <Swiper cls="herocar" dotcls="hdots">{heroItems.map((h,i)=><HeroSlide key={i} h={h} i={i} navigate={navigate} sport={sport} rolled={e.rolledToNextDay}/>)}</Swiper>
+              : <div className="herocar"><div className="hslide"><div className="hero" style={{textAlign:"center"}}><div className="eb">BEST EDGE</div><div className="heh">Edges post soon</div><div className="hes">Top edges appear ~2 hrs before first pitch.</div></div></div></div>)
+          : <Gate title="Today's top edge is locked" navigate={navigate}/>}
+
+        {/* WZ-WIZEPLAYS-LIST-2026-07-08 :: record bar + today's plays as a vertical list (empty state when none) */}
+        <div className="wpsec">
+          <div className="wpbar" onClick={()=>navigate("/expert-picks")}>
+            <div className="ic">W</div>
+            <div className="tx"><div className="h">WIZEPLAYS <span className="new">CURATED</span></div><div className="s">{hasFull?"Hand-picked after extra review":"See every pick"}</div></div>
+            {wpRecord&&(wpRecord.wins+wpRecord.losses+wpRecord.pushes)>0
+              ? <div className="rec"><div className="r">{wpRecord.wins}-{wpRecord.losses}{wpRecord.pushes?"-"+wpRecord.pushes:""}</div><div className="u">{wpRecord.units>=0?"+":""}{wpRecord.units.toFixed(1)}u</div></div>
+              : <div className="rec"><div className="r" style={{fontSize:13,color:"#f3b94f"}}>View {"\u203a"}</div></div>}
+          </div>
+          {wpToday.length>0
+            ? <div className="wplist">{wpToday.map((pk,i)=>(
+                <div className="wprow" key={i} onClick={()=>navigate("/expert-picks")}>
+                  <LogoM ab={wpAbbr(pk)} col="#3a4653"/>
+                  <div className="wpmid"><div className="wpp">{pk.pick}</div>{pk.game&&<div className="wpg">{pk.game}</div>}</div>
+                  {pk.odds!=null&&<div className="wpo">{formatOdds(pk.odds)}</div>}
+                </div>))}</div>
+            : <div className="wpempty">
+                <div className="et">No WizePlays posted yet</div>
+                <div className="es">Curated plays go up after extra review, usually before first pitch. The full WizeBoard is live above.</div>
+              </div>}
+        </div>
+
+      {hasFull && pulseAlerts.length>0 && <MarketPulse alerts={pulseAlerts} rolled={e.rolledToNextDay}/>}
+
+      {hasFull && moverItems.length>0 && <MarketMovers movers={moverItems} navigate={navigate}/>}
+
+        <div className="seclbl">HOW TO USE WIZEPICKS</div>
+        <div className="guide" onClick={()=>navigate("/guide")}><div className="gi"/><div className="gt"><div className="gh">New here? Start with the basics</div><div className="gs">Edges, props, line shopping &amp; the full board {"\u2014"} a quick walkthrough.</div></div><div className="ga">{"\u203a"}</div></div>
+
+        {/* WIZESPIN-MOVED-UNDER-WIZEPLAYS-2026-06-26 */}
+        <div className="spincard" onClick={()=>navigate("/daily-card")}>
+          <div className="h">WIZE SPIN <span className="new">NEW</span></div><div className="wheel"/>
+          <div className="d">Need a play fast? Spin for a model-qualified pick.</div><div className="cta">Spin the wheel {"\u203a"}</div>
+        </div>
+
         {/* WZ-HOME-DECLUTTER-2026-07-08 :: Player Props + Park Factors removed from Home -- props live in
             the Props tab; park factors are now attached to each game card in the Games tab. */}
-
-
-
-
 
       </div>
 
