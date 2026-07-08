@@ -217,9 +217,9 @@ const CSS = `
 .wpnav-tabs::-webkit-scrollbar{display:none}
 /* TAB-FULLWORD-SWIPE-2026-06-26 :: keep full "Performance" label + roomy 12px padding; row scrolls (overflow-x:auto) so off-screen tabs are reachable by a sideways swipe — chosen over shortening any label */
 .wpnav-tab{flex:0 0 auto;appearance:none;background:none;border:0;cursor:pointer;position:relative;
-  font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:13.5px;font-weight:600;letter-spacing:.5px;color:#C3CBD2; /* WZ-TOPTABS-BRIGHT-2026-07-07 :: inactive section tabs brighter + less shrunk */
+  font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:13.5px;font-weight:600;letter-spacing:.5px;color:#EDF1F4; /* WZ-TOPTABS-BRIGHT2-2026-07-07 :: inactive section tabs near-white */
   padding:9px 12px 13px;white-space:nowrap;text-transform:uppercase;
-  transform-origin:center bottom;opacity:.8;transform:scale(.88);
+  transform-origin:center bottom;opacity:1;transform:scale(.9);
   transition:opacity .3s cubic-bezier(.4,0,.2,1),transform .3s cubic-bezier(.4,0,.2,1),color .3s ease}
 .wpnav-tab.on{color:#C9A86A;opacity:1;transform:scale(1.16)}
 .wpnav-tab.on::after{content:"";position:absolute;left:9px;right:9px;bottom:0;height:2px;background:#C9A86A;border-radius:2px 2px 0 0;transform-origin:left center;animation:wpnavbar .32s cubic-bezier(.4,0,.2,1)}
