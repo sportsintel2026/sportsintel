@@ -522,32 +522,8 @@ export default function HomePage(){
           <Swiper cls="car" dotcls="dots">{liveItems.map((g,i)=><LiveEdgeCard key={i} g={g} navigate={navigate} locked={!hasFull}/>)}</Swiper>
         </div>}
 
-        {sp.hasProps && hasFull && propItems.length>0 && <>
-          {/* WZ-PROPS-HEADER-2026-06-26 :: Player Props header matched to board (gold title + arrows + divider) */}
-          <div className="boardhd">
-            <div className="bhtitle">
-              <svg className="bharw" width="34" height="10" viewBox="0 0 34 10" aria-hidden="true"><line x1="0" y1="5" x2="28" y2="5"/><path d="M22 1 L30 5 L22 9" fill="none"/></svg>
-              <span className="bht">PLAYER PROPS</span>
-              <svg className="bharw" width="34" height="10" viewBox="0 0 34 10" aria-hidden="true"><line x1="6" y1="5" x2="34" y2="5"/><path d="M12 1 L4 5 L12 9" fill="none"/></svg>
-            </div>
-            <div className="bhsub">HR <span className="bhd">{"\u00b7"}</span> Hits <span className="bhd">{"\u00b7"}</span> Strikeouts</div>
-          </div>
-          <Swiper cls="car" dotcls="dots">{propItems.map((d,i)=><PropCardM key={i} d={d} rank={i+1} navigate={navigate}/>)}</Swiper>
-          <div className="seeall" onClick={()=>navigate("/props")}>See all props {"\u203a"}</div>
-        </>}
-
-        {parkItems.length>0 && <>
-          {/* WZ-PARKFACTORS-HEADER-2026-06-27 :: own identity — green title + wind/flight wave flourishes */}
-          <div className="boardhd pfhd">
-            <div className="bhtitle">
-              <svg className="pfarw" width="34" height="10" viewBox="0 0 34 10" aria-hidden="true"><path d="M1 5 Q7 1.5 13 5 T25 5" fill="none"/></svg>
-              <span className="bht">PARK FACTORS</span>
-              <svg className="pfarw" width="34" height="10" viewBox="0 0 34 10" aria-hidden="true"><path d="M9 5 Q15 1.5 21 5 T33 5" fill="none"/></svg>
-            </div>
-            <div className="bhsub">Run &amp; HR environment <span className="bhd">{"\u00b7"}</span> <span className="gd">hitter</span> vs <span className="gd">pitcher</span> friendly</div>
-          </div>
-          <Swiper cls="car" dotcls="dots">{parkItems.map((d,i)=><ParkCardM key={i} d={d}/>)}</Swiper>
-        </>}
+        {/* WZ-HOME-DECLUTTER-2026-07-08 :: Player Props + Park Factors removed from Home -- props live in
+            the Props tab; park factors are now attached to each game card in the Games tab. */}
 
 
 
