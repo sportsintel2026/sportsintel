@@ -202,7 +202,7 @@ export default function HomePage(){
   const slateLower=e.rolledToNextDay?"Tomorrow's":"Today's";
   const histByKey={}; (oddsHist||[]).forEach(g=>{ histByKey[normName(g.away_team)+"|"+normName(g.home_team)]=g; });
   const findHist=(gm)=> gm?(histByKey[normName(gm.away)+"|"+normName(gm.home)]||null):null;
-  const seriesFor=(edge)=>{ const gm=games.find(x=>x.id===edge.gameId); const h=findHist(gm); if(!h)return null; return (isTotal(edge)?h.total[edge.side]:h.ml[edge.side])||null; };
+  const seriesFor=(edge)=>{ const gm=games.find(x=>x.id===edge.gameId)||(preview?.games||[]).find(x=>x.id===edge.gameId); const h=findHist(gm); if(!h)return null; return (isTotal(edge)?h.total[edge.side]:h.ml[edge.side])||null; };
   // Movement guardrail: per pick, compute open→now cent move on its OWN side and
   // nudge conviction one tier. _delta>0 = drifted longer (money OFF our side →
   // market fading the pick → downgrade ⚠). _delta<0 = shortened (money IN on our
@@ -232,7 +232,8 @@ export default function HomePage(){
   // 55%+ winner (one side per game), so NO edge gate here (a fairly-priced winner still shows). Run
   // Line / Totals keep the value (edge) gate. Sorted by win% either way.
   const boardEdges=oneSidePerGame(boardArr||[]).filter(x=>(board==="ml"&&sport==="mlb")?true:(sport==="mlb"?(x.edge??0)>0:(x.edge??0)>=1)).sort(byWinProb);
-  const moverPool=[...(e.moneylineEdges||[]),...(e.totalsEdges||[]),...(e.runLineEdges||[]),...(e.spreadEdges||[])].map(x=>{ const ser=seriesFor(x); const open=(ser&&ser.length)?ser[0].o:null; const now=(ser&&ser.length)?ser[ser.length-1].o:x.odds; const delta=(open!=null&&ser&&ser.length>1)?(amCents(now)-amCents(open)):null; return {...x,_open:open,_now:now,_delta:delta}; });
+  const _todayEdgeN=(e.moneylineEdges||[]).length+(e.totalsEdges||[]).length+(e.runLineEdges||[]).length+(e.spreadEdges||[]).length; const _mb=(_todayEdgeN===0&&preview&&!preview.rolledToNextDay)?preview:e; /* WZ-BOARD-NEVER-EMPTY-2026-07-08 :: movers follow tomorrow when today is empty */
+  const moverPool=[...(_mb.moneylineEdges||[]),...(_mb.totalsEdges||[]),...(_mb.runLineEdges||[]),...(_mb.spreadEdges||[])].map(x=>{ const ser=seriesFor(x); const open=(ser&&ser.length)?ser[0].o:null; const now=(ser&&ser.length)?ser[ser.length-1].o:x.odds; const delta=(open!=null&&ser&&ser.length>1)?(amCents(now)-amCents(open)):null; return {...x,_open:open,_now:now,_delta:delta}; });
   const movers=moverPool.filter(m=>m._delta!=null).sort((a,b)=>{ const ad=Math.abs(a._delta); const bd=Math.abs(b._delta); return (bd-ad)||((b.edge??0)-(a.edge??0)); }).slice(0,12);
   const hasMoves=movers.some(m=>m._delta!=null);
   const hrP=(e.hrPropEdges||[]).slice(0,6);
@@ -396,6 +397,7 @@ export default function HomePage(){
   const propItems = topProps.map(p=>{const col=teamCol(shortTeam(p.team||p.game||""));const initials=((p.name||"").split(" ").map(s=>s[0]).join("").slice(0,2))||(p.name||"").slice(0,2);return {player:[p.name,initials,col],g:p.game||p.team||"",edge:(p.edge||0)*100,mk:p.market,p:p.betSide,odds:formatOdds(p.odds),id:p.id};});
   const parkItems = parks.map(g=>{const f=g.parkRunFactor,hf=g.parkHRFactor,w=g.weather||{};const hot=(hf??f)>1.05,cold=(hf??f)<0.95;const tag=hot?["HITTER FRIENDLY","h"]:cold?["PITCHER FRIENDLY","p"]:["NEUTRAL","n"];const ab=mlbAbbr(g.home||"");const t=w.tempF!=null?Math.round(w.tempF):null;const wind=w.windMph?(w.windMph+" mph"+(w.windEffect?" "+w.windEffect:"")):null;const wx=w.indoor?"Dome \u00b7 roof closed":([t!=null?t+"\u00b0F":null,wind].filter(Boolean).join(" \u00b7 ")||"Forecast pending");return {venue:g.venue||g.park||((g.home||"")+" Park"),g:g.home||"",a:[ab,teamCol(ab)],tag,hr:(hf!=null?((hf>1?"+":"")+Math.round((hf-1)*100)+"%"):"0%"),run:((f>1?"+":"")+Math.round((f-1)*100)+"%"),wx};});
   const liveItems = liveGames.map(g=>{const a=g.awayAbbr||(abbrById[g.gameId]?abbrById[g.gameId].a:shortTeam(g.away||""));const h=g.homeAbbr||(abbrById[g.gameId]?abbrById[g.gameId].h:shortTeam(g.home||""));const rows=[];const ml=(g.awayEdge??-9)>=(g.homeEdge??-9)?[a+" ML",g.awayWinProb,g.awayEdge,g.awayOdds]:[h+" ML",g.homeWinProb,g.homeEdge,g.homeOdds];if(ml[2]!=null)rows.push([ml[0],(ml[1]!=null?Math.round(ml[1]*100)+"%":"\u2014"),formatOdds(ml[3]),ml[2]*100]);if(g.totalLine!=null){const tt=(g.overEdge??-9)>=(g.underEdge??-9)?["Over "+g.totalLine,g.overProb,g.overEdge,g.overOdds]:["Under "+g.totalLine,g.underProb,g.underEdge,g.underOdds];if(tt[2]!=null)rows.push([tt[0],(tt[1]!=null?Math.round(tt[1]*100)+"%":"\u2014"),formatOdds(tt[3]),tt[2]*100]);}return {a,h,ac:colFor(a,sport),hc:colFor(h,sport),state:(g.half==="bottom"?"Bot":"Top")+" "+(g.inning||"")+(g.outs!=null?" \u00b7 "+g.outs+" out":""),rows,gameId:g.gameId};});
+  const isTomorrowMain = boardItems.length===0 && previewItems.length>0; // WZ-BOARD-NEVER-EMPTY-2026-07-08
   const kpiHas=boardItems.length>0;
   const kAvg=kpiHas?(boardItems.reduce((a,x)=>a+x.edge,0)/boardItems.length).toFixed(1):null;
   const kBest=kpiHas?Math.max(...boardItems.map(x=>x.edge)).toFixed(1):null;
@@ -478,22 +480,28 @@ export default function HomePage(){
             <span className="bht"><span className="bhwize">Wize</span>Board</span>{/* WZ-WIZEBOARD-2026-07-08 */}
             <svg className="bharw" width="34" height="10" viewBox="0 0 34 10" aria-hidden="true"><line x1="6" y1="5" x2="34" y2="5"/><path d="M12 1 L4 5 L12 9" fill="none"/></svg>
           </div>
-          <div className="bhsub">{boardItems.length>0?boardItems.length+" winners":"Ranked by win %"}{boardDate&&<> <span className="bhd">{"\u00b7"}</span> {boardDate}</>}</div>{/* WZ-SLATE-STATE-2026-07-08 */}
+          <div className="bhsub">{(isTomorrowMain?previewItems.length:boardItems.length)>0?(isTomorrowMain?previewItems.length:boardItems.length)+" winners":"Ranked by win %"}{(isTomorrowMain?("Tomorrow"+(previewLabel?", "+previewLabel:"")):boardDate)&&<> <span className="bhd">{"\u00b7"}</span> {isTomorrowMain?("Tomorrow"+(previewLabel?", "+previewLabel:"")):boardDate}</>}</div>{/* WZ-BOARD-NEVER-EMPTY-2026-07-08 */}
         </div>
         {hasFull
           ? <>
               <div className="bseg">{BF.map(([lb,key])=><span key={key} className={"bseg-b "+(board===key?"on":"")} onClick={()=>setBoard(key)}>{lb}</span>)}</div>
+              {/* WZ-BOARD-NEVER-EMPTY-2026-07-08 :: today's board when it has games (tomorrow preview below); when today is empty, tomorrow IS the board -- never blank */}
               {boardItems.length>0
                 ? <>
                     <div className="grid">{boardItems.map((d,i)=>{const id=d.gameId+d.cat+i;return openId===id?<BoardRow key={id} d={d} i={i} open={true} onToggle={()=>setOpenId(null)} navigate={navigate} sport={sport}/>:<BoardCardCompact key={id} d={d} i={i} sport={sport} onClick={()=>setOpenId(id)}/>;})}</div>
                     <div className="sum"><span className="l">{boardItems.length} game edges</span><span className="sp"/><span>avg <span className="p">+{kpiHas?kAvg:"0.0"}%</span></span></div>
+                    {previewItems.length>0 && <>
+                      <div className="tmrwdiv"><span className="tln"/><span className="tlbl">TOMORROW{previewLabel&&<small>{previewLabel}</small>}</span><span className="tln r"/></div>
+                      <div className="tmrwnote">Today{"\u2019"}s slate is underway {"\u00b7"} an early look at tomorrow</div>
+                      <div className="grid tmrwgrid">{previewItems.map((d,i)=>{const id="pv"+d.gameId+d.cat+i;return openId===id?<BoardRow key={id} d={d} i={i} open={true} onToggle={()=>setOpenId(null)} navigate={navigate} sport={sport}/>:<BoardCardCompact key={id} d={d} i={i} sport={sport} onClick={()=>setOpenId(id)}/>;})}</div>
+                    </>}
                   </>
-                : <div className="estate"><div className="et">{previewItems.length>0?"Today\u2019s slate is underway":"No winners on the board yet"}</div><div className="es">{previewItems.length>0?"Tomorrow\u2019s board is below \u2014 an early look.":"Winners post as books release tonight\u2019s lines."}</div></div>}
-              {previewItems.length>0 && <>
-                <div className="tmrwdiv"><span className="tln"/><span className="tlbl">TOMORROW{previewLabel&&<small>{previewLabel}</small>}</span><span className="tln r"/></div>
-                <div className="tmrwnote">Today{"\u2019"}s slate is underway {"\u00b7"} an early look at tomorrow</div>
-                <div className="grid tmrwgrid">{previewItems.map((d,i)=>{const id="pv"+d.gameId+d.cat+i;return openId===id?<BoardRow key={id} d={d} i={i} open={true} onToggle={()=>setOpenId(null)} navigate={navigate} sport={sport}/>:<BoardCardCompact key={id} d={d} i={i} sport={sport} onClick={()=>setOpenId(id)}/>;})}</div>
-              </>}
+                : previewItems.length>0
+                  ? <>
+                      <div className="grid">{previewItems.map((d,i)=>{const id="pv"+d.gameId+d.cat+i;return openId===id?<BoardRow key={id} d={d} i={i} open={true} onToggle={()=>setOpenId(null)} navigate={navigate} sport={sport}/>:<BoardCardCompact key={id} d={d} i={i} sport={sport} onClick={()=>setOpenId(id)}/>;})}</div>
+                      <div className="sum"><span className="l">{previewItems.length} game winners</span><span className="sp"/><span className="p">Tomorrow</span></div>
+                    </>
+                  : <div className="estate"><div className="et">No winners on the board yet</div><div className="es">Winners post as books release tonight{"\u2019"}s lines.</div></div>}
             </>
           : <Gate title="Edges are an All-Access feature" navigate={navigate}/>}
         </>}
