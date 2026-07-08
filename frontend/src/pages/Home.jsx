@@ -962,7 +962,6 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .mvrow .mvmove{font-family:var(--mono);font-size:10px;color:#cdd6da}
 .mvrow .mvd{font-family:var(--mono);font-size:12px;font-weight:700}
 .mvrow .mvd.up{color:var(--green)}.mvrow .mvd.dn{color:var(--red)}
-.mvscroll::-webkit-scrollbar{display:none}
 /* .mvchip removed -- movers are now a vertical list (WZ-MOVERS-LIST-2026-07-08) */
 .mvnote{margin-top:16px;padding:0 2px;border:none;border-radius:0;background:none}
 .mvkeytoggle{display:flex;align-items:center;gap:9px;width:100%;background:var(--panel2);border:1px solid var(--line2);border-radius:9px;padding:10px 13px;cursor:pointer;font-family:var(--mono);font-size:10.5px;letter-spacing:.3px;color:var(--mut)}/* WZ-MVNOTE-COLLAPSE-2026-07-01 */
