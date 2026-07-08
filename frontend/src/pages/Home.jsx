@@ -555,14 +555,15 @@ export default function HomePage(){
 
       {hasFull && moverItems.length>0 && <MarketMovers movers={moverItems} navigate={navigate}/>}
 
-        <div className="seclbl">HOW TO USE WIZEPICKS</div>
-        <div className="guide" onClick={()=>navigate("/guide")}><div className="gi"/><div className="gt"><div className="gh">New here? Start with the basics</div><div className="gs">Edges, props, line shopping &amp; the full board {"\u2014"} a quick walkthrough.</div></div><div className="ga">{"\u203a"}</div></div>
-
-        {/* WIZESPIN-MOVED-UNDER-WIZEPLAYS-2026-06-26 */}
+        {/* WZ-SPIN-ABOVE-HOWTO-2026-07-08 :: Wize Spin moved above the How-To onboarding so the
+            onboarding card sits last (matches the established "onboarding last" home order). */}
         <div className="spincard" onClick={()=>navigate("/daily-card")}>
           <div className="h">WIZE SPIN <span className="new">NEW</span></div><div className="wheel"/>
           <div className="d">Need a play fast? Spin for a model-qualified pick.</div><div className="cta">Spin the wheel {"\u203a"}</div>
         </div>
+
+        <div className="seclbl">HOW TO USE WIZEPICKS</div>
+        <div className="guide" onClick={()=>navigate("/guide")}><div className="gi"/><div className="gt"><div className="gh">New here? Start with the basics</div><div className="gs">Edges, props, line shopping &amp; the full board {"\u2014"} a quick walkthrough.</div></div><div className="ga">{"\u203a"}</div></div>
 
         {/* WZ-HOME-DECLUTTER-2026-07-08 :: Player Props + Park Factors removed from Home -- props live in
             the Props tab; park factors are now attached to each game card in the Games tab. */}
