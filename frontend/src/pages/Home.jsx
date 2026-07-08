@@ -538,8 +538,17 @@ export default function HomePage(){
         </>}
 
         {liveItems.length>0 && <div id="livesec">
-          <div className="seclbl">LIVE EDGES <span className="ct">in-game {"\u00b7"} updates 60s</span><span className="lk">swipe {"\u203a"}</span></div>
-          <Swiper cls="car" dotcls="dots">{liveItems.map((g,i)=><LiveEdgeCard key={i} g={g} navigate={navigate} locked={!hasFull}/>)}</Swiper>
+          {/* WZ-LIVE-LIST-2026-07-08 :: vertical list (was a swiper) -- every live game visible, no swipe */}
+          <div className="seclbl">LIVE EDGES <span className="ct">in-game {"\u00b7"} updates 60s</span><span className="lk" onClick={()=>navigate("/games")}>See all {"\u203a"}</span></div>
+          <div className="livelist">{liveItems.slice(0,5).map((g,i)=>{const top=(g.rows||[])[0];const two=(g.rows||[])[1];return (
+            <div className="liverow" key={i} onClick={()=>g.gameId&&navigate(!hasFull?"/pricing":`/game/mlb/${g.gameId}`)}>
+              <LogoM ab={g.h} col={g.hc}/>
+              <div className="livemid">
+                <div className="livet">{g.a} @ {g.h} <span className="livest">{"\u00b7"} {g.state}</span></div>
+                {top&&<div className="livesub"><b>{top[0]}</b> {top[2]}{two?<> {"\u00b7"} {two[0]} {two[2]}</>:null}</div>}
+              </div>
+              {top&&<div className={"liveedge "+(top[3]>=0?"pos":"neg")}>{top[3]>=0?"+":""}{top[3].toFixed(1)}%</div>}
+            </div>);})}</div>
         </div>}
 
         {/* WZ-HOME-DECLUTTER-2026-07-08 :: Player Props + Park Factors removed from Home -- props live in
@@ -1027,6 +1036,15 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .pfarw{flex:0 0 auto}.pfarw path{stroke:var(--green);stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round}
 .bhsub .gd{color:var(--green)}
 .seclbl .lk{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--mut)}
+.livelist{margin-top:8px;border:1px solid rgba(226,101,92,.22);border-radius:12px;background:linear-gradient(180deg,rgba(226,101,92,.05),transparent);overflow:hidden} /* WZ-LIVE-LIST-2026-07-08 */
+.liverow{display:flex;align-items:center;gap:10px;padding:11px 12px;border-top:1px solid rgba(255,255,255,.05);cursor:pointer}
+.liverow:first-child{border-top:none}
+.liverow .livemid{flex:1;min-width:0}
+.liverow .livet{font-family:var(--disp);font-weight:800;font-size:15px;color:#fff;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.liverow .livest{font-family:var(--mono);font-size:8px;color:var(--red);font-weight:600}
+.liverow .livesub{font-family:var(--mono);font-size:9.5px;color:var(--mut);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.liverow .livesub b{color:#cdd6da}
+.liverow .liveedge{margin-left:auto;font-family:var(--disp);font-weight:800;font-size:16px;white-space:nowrap}
+.liverow .liveedge.pos{color:var(--green)}.liverow .liveedge.neg{color:var(--red)}
 .seclbl::before{content:"";width:3px;height:13px;border-radius:2px;background:var(--red)}
 
 /* hero */
