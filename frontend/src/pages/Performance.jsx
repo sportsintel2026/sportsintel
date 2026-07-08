@@ -61,8 +61,15 @@ function MiniSpark({ series }) {
   const W = 300, H = 40;
   const s = (series && series.length) ? series : [];
   if (s.length < 2) return null;
-  const mn = Math.min(50, ...s), mx = Math.max(50, ...s), rng = (mx - mn) || 1;
-  const X = (i) => (i/(s.length-1)) * W, Y = (v) => H - 4 - ((v - mn) / rng) * (H - 10);
+  // WZ-MINISPARK-ZOOM-2026-07-08 :: same axis fit as the main WinRateChart so the two match --
+  // fit the domain to the settled portion (past a short warmup), keep 50% in view, pad, and
+  // clamp early small-sample outliers so they can't flatten the line into a squiggle.
+  const warm = Math.min(25, Math.floor(s.length * 0.05));
+  const stable = s.slice(warm).length >= 3 ? s.slice(warm) : s;
+  let lo = Math.min(50, ...stable), hi = Math.max(50, ...stable);
+  const pad = Math.max(2, (hi - lo) * 0.18); lo -= pad; hi += pad;
+  const rng = (hi - lo) || 1; const clampV = (v) => Math.max(lo, Math.min(hi, v));
+  const X = (i) => (i/(s.length-1)) * W, Y = (v) => H - 4 - ((clampV(v) - lo) / rng) * (H - 10);
   const ln = s.map((v,i)=>`${i?"L":"M"}${X(i).toFixed(1)} ${Y(v).toFixed(1)}`).join(" ");
   const end = s[s.length-1]; const col = end>=50 ? "var(--green)" : "var(--neg)";
   return <svg className="mspk" viewBox={`0 0 ${W} ${H}`} width="100%" height="40" preserveAspectRatio="none"><path d={ln} fill="none" stroke={col} strokeWidth="2" vectorEffect="non-scaling-stroke"/></svg>;
