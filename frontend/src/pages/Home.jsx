@@ -624,19 +624,21 @@ function HeroChartM({series,seed=0}){ const W=150,H=42;
 }
 function HeroSlide({h,i,navigate,sport,rolled}){ const lg=(SPORTS[sport]||SPORTS.mlb).lg;
   const mv=h.mv?<>{h.mv[0]} <span className="up">{"\u2192"} {h.mv[1]}</span></>:h.odds;
+  const tier=(h.model!=null)?(h.model>=65?"LOCK":h.model>=58?"STRONG":h.model>=55?"LEAN":String(h.conv||"").toUpperCase()):String(h.conv||"").toUpperCase();
   return (<div className="hslide"><div className="hero" onClick={()=>h.gameId&&navigate(`/game/${sport}/${h.gameId}`)}>
-    {/* WZ-VALUEPLAY-WINFIRST-2026-07-07 :: winners-first hero -- lead with % TO WIN; edge is just a
-        small "+VALUE" tag (matching the board), never a headline number; "VALUE PLAY" -> "TOP PLAY". */}
-    <div className="htop"><div className="eb">{h._wv?(rolled?"WINNER + VALUE \u00b7 TOMORROW":"WINNER + VALUE"):(rolled?"TOP PLAY \u00b7 TOMORROW":"TOP PLAY")}</div><div className="hbadges">{h.model!=null&&<span className="hwin">{h.model}% TO WIN</span>}{h.edge>0&&<span className="hedge">+VALUE</span>}</div></div>
-    <div className="hpick">{h.p}<span className="mk">{h.mk}</span></div>
-    <div className="hpg"><span className="lgs" style={{display:"inline-flex",verticalAlign:"-6px",marginRight:6}}><LogoM ab={h.a[0]} col={h.a[1]} lg={lg}/><LogoM ab={h.h[0]} col={h.h[1]} lg={lg}/></span>{h.g}</div>
-    <div className="hmid">
-      <div className="hcell"><div className="k">ODDS / MOVE</div><div className="v">{mv}</div></div>
-      <div className="hcell"><div className="k">STARTS</div><div className="v">{h.starts||"\u2014"}</div></div>
-      <div className="hchart"><div className="k">LINE MOVE</div><HeroChartM series={h.series} seed={i}/></div>
+    {/* WZ-MARQUEE-HERO-2026-07-08 :: Top Play as the marquee -- big glowing win% over the infield diamond; odds/conviction/line-move below; full breakdown one tap away */}
+    <div className="diamond"/>
+    <div className="heyebrow">{h._wv?(rolled?"TOP PLAY \u00b7 WINNER + VALUE \u00b7 TOMORROW":"TOP PLAY \u00b7 WINNER + VALUE"):(rolled?"TOP PLAY \u00b7 TOMORROW":"TOP PLAY \u00b7 #1 EDGE TODAY")}</div>
+    <div className="hteam">{h.p}{h.mk&&<span className="hmk">{h.mk}</span>}</div>
+    <div className="hmatch">{h.g}{h.starts?" \u00b7 "+h.starts:""}</div>
+    <div className="hbig">{h.model!=null?h.model+"%":"\u2014"}</div>
+    <div className="hbiglbl">MODEL TO WIN</div>
+    {h.edge>0&&<span className="hval">+{Number(h.edge).toFixed(1)}% VALUE</span>}
+    <div className="hsplit">
+      <div className="hcell"><div className="v">{mv}</div><div className="k">ODDS / MOVE</div></div>
+      <div className="hcell"><div className="v">{tier}</div><div className="k">CONVICTION</div></div>
+      <div className="hcell"><HeroChartM series={h.series} seed={i}/><div className="k">LINE MOVE</div></div>
     </div>
-    <div className="hmm">model <b>{h.model}%</b> vs market {h.mkt}% {"\u00b7"} {String(h.conv).toUpperCase()} conviction</div>
-    <div className="hexp">Win % is how often we project this hits. Edge is the gap between our price and the market's — that 2-3% difference is our edge, and even a few points is a strong, profitable spot.</div>
     <div className="hf"><span>Tap for the full matchup breakdown</span><span>{"\u203a"}</span></div>
   </div></div>);
 }
@@ -1071,19 +1073,25 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 /* hero */
 .herocar{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;margin-top:24px}.herocar::-webkit-scrollbar{display:none}
 .hslide{flex:0 0 100%;scroll-snap-align:start;padding:0 4px}
-.hero{border:1.5px solid rgba(201,168,106,.5);border-radius:15px;background:var(--panel);position:relative;overflow:hidden}
+.hero{position:relative;border:1.5px solid rgba(201,168,106,.5);border-radius:18px;overflow:hidden;padding:24px 18px 0;background:radial-gradient(120% 85% at 50% -8%,rgba(201,168,106,.16),rgba(201,168,106,.02) 46%,transparent 70%),linear-gradient(180deg,#131007,#0b0c0e 62%)}
 .hero>*{position:relative}
-.htop{display:flex;align-items:center;justify-content:space-between;padding:12px 12px 0}.eb{font-size:11px;font-weight:800;color:var(--gold)}
-.hbadges{display:flex;gap:7px;align-items:center}.hwin{font-family:var(--disp);font-weight:800;font-size:16px;color:#1a1408;background:var(--gold);border-radius:8px;padding:3px 10px;letter-spacing:-.01em}.hedge{font-family:var(--mono);font-weight:700;font-size:12px;color:var(--green);background:rgba(63,203,145,.12);border:1px solid rgba(63,203,145,.4);border-radius:8px;padding:3px 9px}
-.hot{font-size:9px;font-weight:800;color:var(--red);border:1px solid rgba(255,93,77,.4);background:rgba(255,93,77,.12);border-radius:999px;padding:2px 7px}
-.hpick{font-family:var(--disp);font-weight:800;font-size:34px;color:#fff;line-height:.9;padding:8px 12px 0}.hpick .mk{font-family:var(--mono);font-size:9px;color:var(--gold);border:1px solid rgba(201,168,106,.4);border-radius:4px;padding:1px 5px;margin-left:7px;vertical-align:middle}
-.hpg{font-size:12px;color:var(--mut);font-weight:600;padding:3px 12px 0}
-.hmid{display:flex;gap:8px;padding:10px 12px 0;align-items:stretch}
-.hcell{border:1px solid rgba(255,255,255,.08);border-radius:9px;padding:6px 9px;flex:1}.hcell .k{font-size:8px;color:var(--mut);font-weight:800}.hcell .v{font-family:var(--mono);font-size:12.5px;color:#fff;margin-top:2px}.hcell .v .up{color:var(--green)}
-.hchart{flex:1.1;border:1px solid rgba(255,255,255,.08);border-radius:9px;padding:6px 8px;display:flex;flex-direction:column;justify-content:center}.hchart .k{font-size:8px;color:var(--mut);font-weight:800}
-.hmm{padding:9px 12px 0;font-family:var(--mono);font-size:10.5px;color:#b9c2cc}.hmm b{color:#fff}
-.hexp{padding:6px 12px 0;font-size:10.5px;line-height:1.5;color:#6f7b85}
-.hf{display:flex;align-items:center;justify-content:space-between;border-top:1px solid rgba(243,185,79,.16);margin-top:10px;padding:9px 14px;color:var(--gold);font-size:11px;font-weight:600}
+.hero .diamond{position:absolute;left:50%;top:44%;width:250px;height:250px;transform:translate(-50%,-50%) rotate(45deg);border:1px solid rgba(201,168,106,.16);border-radius:16px;pointer-events:none}
+.hero .diamond:after{content:"";position:absolute;inset:38px;border:1px solid rgba(201,168,106,.1);border-radius:12px}
+.eb{font-size:11px;font-weight:800;color:var(--gold);text-align:center}
+.heyebrow{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:1.6px;color:var(--gold);text-align:center}
+.hteam{font-family:var(--disp);font-weight:800;font-size:36px;letter-spacing:.5px;color:#fff;text-align:center;margin-top:6px;line-height:1;display:flex;align-items:center;justify-content:center;gap:9px}
+.hteam .hmk{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--gold);border:1px solid rgba(201,168,106,.4);border-radius:5px;padding:2px 6px;letter-spacing:.3px}
+.hmatch{font-family:var(--mono);font-size:11px;color:var(--mut);text-align:center;margin-top:6px}
+.hbig{font-family:var(--disp);font-weight:800;font-size:70px;line-height:.88;color:var(--gold);text-align:center;margin:14px 0 2px;text-shadow:0 0 28px rgba(201,168,106,.45)}
+.hbiglbl{font-family:var(--mono);font-size:10px;letter-spacing:3px;color:var(--mut);text-align:center}
+.hval{display:block;width:max-content;margin:15px auto 0;font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.5px;color:var(--green);border:1px solid rgba(63,203,145,.4);background:rgba(63,203,145,.08);border-radius:999px;padding:5px 13px}
+.hsplit{display:flex;margin-top:16px;border-top:1px solid rgba(255,255,255,.07)}
+.hsplit .hcell{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;border-left:1px solid rgba(255,255,255,.06);padding:11px 6px 13px}
+.hsplit .hcell:first-child{border-left:none}
+.hcell .v{font-family:var(--mono);font-size:13px;color:var(--tx);font-weight:600;line-height:1.2}
+.hcell .v .up{color:var(--green)}
+.hcell .k{font-family:var(--mono);font-size:8px;letter-spacing:1px;color:var(--mut2);margin-top:5px}
+.hf{display:flex;align-items:center;justify-content:space-between;border-top:1px solid rgba(243,185,79,.16);margin-top:2px;padding:12px 0;color:var(--gold);font-size:11px;font-weight:600}
 .hdots{display:flex;gap:6px;justify-content:center;margin-top:9px}.hdots i{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.2)}.hdots i.on{background:var(--gold);width:16px;border-radius:3px}
 
 /* WizePlays (alone) */
