@@ -254,6 +254,12 @@ export default function HomePage(){
     hits:(e.hitsPropEdges||[]).slice(0,14).map(x=>mkPropFull(x,"hits")),
     ks:(e.kPropEdges||[]).slice(0,14).map(x=>mkPropFull(x,"ks")),
   };
+  // WZ-TOPPROPS-2026-07-08 :: bottom-of-home "Top Prop Plays" grid -- a balanced 6 (best two by
+  // model win% from each type: Hits / K / HR, interleaved) so no single prop type floods the grid.
+  // Reuses the Props-tab prop pipeline; win% = model P(hit); edge>0 flags a +VALUE play.
+  const _lastNm=(n)=>{ const q=String(n||"").trim().split(/\s+/); return q.length>1?q[q.length-1].replace(/[.,]/g,""):(q[0]||""); };
+  const _tpMk=(p)=>({id:p.id,name:p.name,nm:_lastNm(p.name),col:teamCol(shortTeam(p.team||p.game||"")),tm:shortTeam(p.team||p.game||""),g:p.game||"",side:p.betSide,prob:p.prob!=null?Math.round(p.prob*100):null,odds:formatOdds(p.odds),val:(p.edge||0)>0});
+  const topPropCards=(()=>{ const byP=(arr)=>[...(arr||[])].sort((a,b)=>(b.prob||0)-(a.prob||0)); const h=byP(propsByType.hits),k=byP(propsByType.ks),r=byP(propsByType.hr); return [h[0],k[0],r[0],h[1],k[1],r[1]].filter(Boolean).map(_tpMk); })();
   const parks=games.filter(g=>g.parkRunFactor!=null).slice(0,8);
   const upcoming=games.filter(g=>g.status!=="final").slice(0,6);
   const abbrById={}; games.forEach(g=>{ abbrById[g.id]={a:g.awayAbbr||shortTeam(g.away||""),h:g.homeAbbr||shortTeam(g.home||"")}; });
@@ -555,6 +561,24 @@ export default function HomePage(){
 
       {hasFull && moverItems.length>0 && <MarketMovers movers={moverItems} navigate={navigate}/>}
 
+        {/* WZ-TOPPROPS-2026-07-08 :: Top Prop Plays -- last content block before the onboarding cards.
+            Balanced top-6 (Hits/K/HR) as a tight edge-to-edge 3x2 grid; tap a card -> Props tab. */}
+        {hasFull && topPropCards.length>0 && <>
+          <div className="tpdiv"><span className="tpln"/><span className="tplbl"><span className="tpdia">{"\u25c6"}</span>TOP PROP PLAYS<span className="tpdia">{"\u25c6"}</span></span><span className="tpln r"/></div>
+          <div className="propgrid">
+            {topPropCards.map((p,i)=>(
+              <div className="ppc" key={i} onClick={()=>navigate("/props")}>
+                <PropFace id={p.id} name={p.name} col={p.col}/>
+                <div className="ppn">{p.nm}{p.val&&<span className="ppv">{"\u25cf"}</span>}</div>
+                <div className="pptm">{p.g||p.tm}</div>
+                <div className="ppchip">{p.side}</div>
+                <div className="ppb">{p.prob!=null?p.prob+"%":"\u2014"}</div><div className="ppl">MODEL WIN</div>
+                <div className="ppo">{p.odds}</div>
+              </div>
+            ))}
+          </div>
+        </>}
+
         {/* WZ-SPIN-ABOVE-HOWTO-2026-07-08 :: Wize Spin moved above the How-To onboarding so the
             onboarding card sits last (matches the established "onboarding last" home order). */}
         <div className="spincard" onClick={()=>navigate("/daily-card")}>
@@ -601,6 +625,15 @@ function KArrow({series}){
   if(!a) return null;
   const up=a[a.length-1]>=a[0];
   return <span className={"karw "+(up?"u":"d")}>{up?"\u25B2":"\u25BC"}</span>;
+}
+// WZ-TOPPROPS-2026-07-08 :: player headshot with a team-colored initials fallback (mirrors the
+// Logo component + the app's existing midfield.mlbstatic headshot pattern). id = MLB person id
+// from the prop feed; on a missing/failed photo we fall back to the initials chip from the mock.
+function PropFace({id,name,col}){ const [bad,setBad]=useState(false);
+  const ini=String(name||"").split(" ").map(s=>s[0]).join("").slice(0,2).toUpperCase();
+  const bg={background:`radial-gradient(circle at 50% 30%, ${col||"#3a4a57"}, #0a0d11 82%)`,boxShadow:`inset 0 0 0 1px ${col||"#3a4a57"}88`};
+  if(bad||!id) return <span className="ppav" style={bg}><span className="ppini">{ini||"?"}</span></span>;
+  return <span className="ppav" style={bg}><img src={`https://midfield.mlbstatic.com/v1/people/${id}/spots/120`} alt="" onError={()=>setBad(true)}/></span>;
 }
 function HeroChartM({series,seed=0}){ const W=150,H=42;
   let raw=Array.isArray(series)?series.map(amCents).filter(v=>v!=null):[];
@@ -1133,6 +1166,26 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .bseg-b.on{background:var(--gold);color:#0A0B0D;font-weight:700}
 
 .grid{margin:12px 4px 0;background:var(--panel);border-radius:14px;overflow:hidden}
+/* WZ-TOPPROPS-2026-07-08 :: tight edge-to-edge 3x2 prop grid + headshot cards */
+.propgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin:12px 4px 0;background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.ppc{padding:12px 8px 10px;text-align:center;cursor:pointer}
+.ppc:not(:nth-child(3n)){border-right:1px solid var(--line)}
+.ppc:nth-child(-n+3){border-bottom:1px solid var(--line)}
+.ppav{width:38px;height:38px;border-radius:50%;margin:0 auto 6px;overflow:hidden;display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto}
+.ppav img{width:100%;height:100%;object-fit:cover;border-radius:50%}
+.ppini{font-family:var(--disp);font-weight:800;font-size:14px;color:#fff}
+.ppn{font-family:var(--disp);font-weight:700;font-size:15px;line-height:1;letter-spacing:.2px}
+.ppv{color:var(--green);font-size:7px;position:relative;top:-3px;margin-left:3px}
+.pptm{font-family:var(--mono);font-size:8px;color:var(--mut2);letter-spacing:.5px;margin-top:2px}
+.ppchip{display:inline-block;font-family:var(--mono);font-size:8.5px;color:var(--gold);border:1px solid rgba(201,168,106,.38);border-radius:20px;padding:2px 7px;margin:7px 0 6px;white-space:nowrap}
+.ppb{font-family:var(--disp);font-weight:800;font-size:24px;line-height:1;color:var(--green)}
+.ppl{font-family:var(--mono);font-size:7px;color:var(--mut2);letter-spacing:1px;margin-top:1px}
+.ppo{font-family:var(--mono);font-size:9.5px;color:var(--mut);margin-top:7px}
+.tpdiv{display:flex;align-items:center;gap:12px;margin:24px 10px 2px}
+.tpdiv .tpln{flex:1;height:1px;background:linear-gradient(90deg,transparent,rgba(63,203,145,.5))}
+.tpdiv .tpln.r{background:linear-gradient(90deg,rgba(63,203,145,.5),transparent)}
+.tpdiv .tplbl{font-family:var(--mono);font-weight:600;font-size:11px;letter-spacing:4px;color:var(--tx);white-space:nowrap}
+.tpdiv .tpdia{color:var(--green);font-size:8px;margin:0 8px;position:relative;top:-1px}
 .tmrwgrid{margin-top:8px;box-shadow:inset 3px 0 0 rgba(201,168,106,.5)}
 .tmrwdiv{display:flex;align-items:center;gap:10px;margin:22px 14px 2px}
 .tmrwdiv .tln{flex:1;height:1px;background:linear-gradient(90deg,transparent,rgba(201,168,106,.5))}
