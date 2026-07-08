@@ -463,7 +463,12 @@ export default function HomePage(){
       )}
 
 
-        {/* WZ-HOME-REORDER-2026-07-08 :: proof -> WizeBoard -> Live Edges -> Top Play -> WizePlays -> Market Pulse/Movers -> onboarding (How-To + Wize Spin) last */}
+        {/* WZ-HERO-TOP-2026-07-08 :: Top Play marquee pinned to top -> proof strip -> WizeBoard -> Live Edges -> WizePlays -> Market Pulse/Movers -> onboarding last */}
+        {hasFull
+          ? (heroItems.length>0
+              ? <Swiper cls="herocar" dotcls="hdots">{heroItems.map((h,i)=><HeroSlide key={i} h={h} i={i} navigate={navigate} sport={sport} rolled={e.rolledToNextDay}/>)}</Swiper>
+              : <div className="herocar"><div className="hslide"><div className="hero" style={{textAlign:"center"}}><div className="eb">BEST EDGE</div><div className="heh">Edges post soon</div><div className="hes">Top edges appear ~2 hrs before first pitch.</div></div></div></div>)
+          : <Gate title="Today's top edge is locked" navigate={navigate}/>}
         {hasFull && <div className="kpis">
           <div className="kpi"><div className="k">ROI</div><div className={"v "+(perfStats&&perfStats.roi!=null?(perfStats.roi>=0?"g":"red"):"")}>{perfStats&&perfStats.roi!=null?(perfStats.roi>=0?"+":"")+perfStats.roi+"%":"\u2014"}</div><div className="ksub">{perfStats?perfStats.roiLbl:"tracked"}</div><Spark data={perf&&perf.spark&&perf.spark.roi} color="#3FCB91"/></div>
           <div className="kpi"><div className="k">WIN RATE</div><div className="v">{perfStats&&perfStats.winRate!=null?perfStats.winRate.toFixed(1)+"%":"\u2014"}</div><div className="ksub">{perfStats&&perfStats.graded!=null?perfStats.graded+" graded":"tracking"}</div><Spark data={perf&&perf.spark&&perf.spark.win} color="#ECEFF2"/></div>
@@ -520,12 +525,6 @@ export default function HomePage(){
             </div>);})}</div>
         </div>}
 
-        {/* WZ-EDGES-REORDER-2026-06-26 :: Best Play -> Market Pulse -> Market Movers (under Wize Spin) */}
-        {hasFull
-          ? (heroItems.length>0
-              ? <Swiper cls="herocar" dotcls="hdots">{heroItems.map((h,i)=><HeroSlide key={i} h={h} i={i} navigate={navigate} sport={sport} rolled={e.rolledToNextDay}/>)}</Swiper>
-              : <div className="herocar"><div className="hslide"><div className="hero" style={{textAlign:"center"}}><div className="eb">BEST EDGE</div><div className="heh">Edges post soon</div><div className="hes">Top edges appear ~2 hrs before first pitch.</div></div></div></div>)
-          : <Gate title="Today's top edge is locked" navigate={navigate}/>}
 
         {/* WZ-WIZEPLAYS-LIST-2026-07-08 :: record bar + today's plays as a vertical list (empty state when none) */}
         {/* WZ-WIZEPLAYS-UNIFY-2026-07-08 :: record + plays in ONE card (was two separate blocks) */}
