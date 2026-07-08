@@ -494,7 +494,7 @@ export default function HomePage(){
         <div className="boardhd">
           <div className="bhtitle">
             <svg className="bharw" width="34" height="10" viewBox="0 0 34 10" aria-hidden="true"><line x1="0" y1="5" x2="28" y2="5"/><path d="M22 1 L30 5 L22 9" fill="none"/></svg>
-            <span className="bht">{e.rolledToNextDay?"TOMORROW'S BOARD":"TODAY'S BOARD"}</span>
+            <span className="bht"><span className="bhwize">Wize</span>Board</span>{/* WZ-WIZEBOARD-2026-07-08 */}
             <svg className="bharw" width="34" height="10" viewBox="0 0 34 10" aria-hidden="true"><line x1="6" y1="5" x2="34" y2="5"/><path d="M12 1 L4 5 L12 9" fill="none"/></svg>
           </div>
           <div className="bhsub">{boardItems.length} Model Qualified Edges{boardDate&&<> <span className="bhd">{"\u00b7"}</span> {boardDate}</>}</div>
@@ -991,6 +991,7 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .boardhd{text-align:center;margin:28px 4px 2px;padding-top:28px;border-top:1px solid var(--line)} /* WZ-BOARD-BREATHE-2026-06-26 :: more breathing room */
 .bhtitle{display:flex;align-items:center;justify-content:center;gap:12px}
 .bht{font-family:var(--disp);font-weight:700;font-size:27px;letter-spacing:.5px;color:var(--gold);line-height:1}
+.bht .bhwize{color:#ECEFF2} /* WZ-WIZEBOARD-2026-07-08 :: Wize white / Board gold */
 .bharw{flex:0 0 auto}.bharw line,.bharw path{stroke:var(--gold);stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round}
 .bhsub{font-family:var(--mono);font-size:11px;color:var(--mut);margin-top:10px;letter-spacing:.2px}.bhsub .bhd{color:var(--mut2)}
 /* WZ-PARKFACTORS-HEADER-2026-06-27 :: Park Factors identity — green title + wind/flight wave */
