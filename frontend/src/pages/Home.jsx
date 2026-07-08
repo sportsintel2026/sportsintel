@@ -1099,7 +1099,8 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .wheel{width:52px;height:52px;border-radius:50%;position:absolute;top:24px;right:16px;background:radial-gradient(circle,#3a2c0a,#14110a 72%);border:2px solid var(--gold);animation:spin 7s linear infinite}.wheel::before{content:"";position:absolute;inset:6px;border-radius:50%;border:1px dashed rgba(243,185,79,.6)}
 @keyframes spin{to{transform:rotate(360deg)}}
 
-.kpis{display:flex;gap:5px;margin:18px 4px 0}.kpi{flex:1;border:none;border-radius:11px;background:var(--panel);padding:7px 9px;text-align:left}
+.kpis{display:flex;margin:18px 4px 0;background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden} /* WZ-KPI-ONESTRIP-2026-07-08 :: one strip, hairline dividers */
+.kpi{flex:1;padding:9px 11px;text-align:left}.kpi+.kpi{border-left:1px solid var(--line)}
 .kpi .k{font-family:var(--mono);font-size:8.5px;color:var(--mut2);letter-spacing:.5px}.kpi .v{font-family:var(--mono);font-weight:600;font-size:19px;color:var(--tx);margin-top:2px;line-height:1}.kpi .v.g{color:var(--green)}.kpi .v.gold{color:var(--gold)}.kpi .v.red{color:var(--red)}.kpi .ksub{font-family:var(--mono);font-size:8.5px;color:var(--mut2);margin-top:2px}
 .kpi .kspark{display:block;width:100%;height:15px;margin-top:4px;overflow:visible}
 
