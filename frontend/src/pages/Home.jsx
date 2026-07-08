@@ -610,7 +610,9 @@ function HeroChartM({series,seed=0}){ const W=150,H=42;
 function HeroSlide({h,i,navigate,sport,rolled}){ const lg=(SPORTS[sport]||SPORTS.mlb).lg;
   const mv=h.mv?<>{h.mv[0]} <span className="up">{"\u2192"} {h.mv[1]}</span></>:h.odds;
   return (<div className="hslide"><div className="hero" onClick={()=>h.gameId&&navigate(`/game/${sport}/${h.gameId}`)}>
-    <div className="htop"><div className="eb">{h._wv?(rolled?"WINNER + VALUE \u00b7 TOMORROW":"WINNER + VALUE"):(rolled?"VALUE PLAY \u00b7 TOMORROW":"VALUE PLAY")}</div><div className="hbadges">{h.model!=null&&<span className="hwin">{h.model}% TO WIN</span>}<span className="hedge">+{h.edge.toFixed(1)}% edge</span></div></div>
+    {/* WZ-VALUEPLAY-WINFIRST-2026-07-07 :: winners-first hero -- lead with % TO WIN; edge is just a
+        small "+VALUE" tag (matching the board), never a headline number; "VALUE PLAY" -> "TOP PLAY". */}
+    <div className="htop"><div className="eb">{h._wv?(rolled?"WINNER + VALUE \u00b7 TOMORROW":"WINNER + VALUE"):(rolled?"TOP PLAY \u00b7 TOMORROW":"TOP PLAY")}</div><div className="hbadges">{h.model!=null&&<span className="hwin">{h.model}% TO WIN</span>}{h.edge>0&&<span className="hedge">+VALUE</span>}</div></div>
     <div className="hpick">{h.p}<span className="mk">{h.mk}</span></div>
     <div className="hpg"><span className="lgs" style={{display:"inline-flex",verticalAlign:"-6px",marginRight:6}}><LogoM ab={h.a[0]} col={h.a[1]} lg={lg}/><LogoM ab={h.h[0]} col={h.h[1]} lg={lg}/></span>{h.g}</div>
     <div className="hmid">
