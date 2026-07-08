@@ -76,6 +76,8 @@ const tierRank=(c)=>{ const i=CONV_TIERS.indexOf(String(c||"").toUpperCase()); r
 // adjusts at the margin, it never overrides the model (HIGH can't fall past MED, etc.).
 const tierBump=(c,dir)=>{ const i=tierRank(c); if(i<0)return c; return CONV_TIERS[Math.max(0,Math.min(CONV_TIERS.length-1,i+dir))]; };
 const isTotal=(e)=>e.side==="over"||e.side==="under";
+// WZ-WIZEPLAYS-LIST-2026-07-08 :: pull a team abbr from a curated pick for its logo
+const wpAbbr=(pk)=>{ const f=String((pk&&pk.pick)||"").trim().split(/\s+/)[0]; if(/^[A-Za-z]{2,4}$/.test(f))return f.toUpperCase(); const g=String((pk&&pk.game)||"").trim().split(/\s+/)[0]; return /^[A-Za-z]{2,4}$/.test(g)?g.toUpperCase():""; };
 const edgeLabel=(e)=>isTotal(e)?`${e.side==="over"?"Over":"Under"} ${e.line}`:(e.line!=null?`${e.teamAbbr||shortTeam(e.matchup)} ${e.line>0?"+":""}${e.line}`:`${e.teamAbbr||shortTeam(e.matchup)} ML`);
 const edgeTeam=(e)=>isTotal(e)?null:(e.teamAbbr||"");
 const pct1=(f)=>`${(f??0)>0?"+":""}${((f??0)*100).toFixed(1)}%`;
@@ -113,6 +115,7 @@ export default function HomePage(){
   const [board,setBoard]=useState("ml");
   const [propTab,setPropTab]=useState("hr");
   const [wpRecord,setWpRecord]=useState(null);
+  const [wpRows,setWpRows]=useState([]); // WZ-WIZEPLAYS-LIST-2026-07-08 :: keep picks for the list
   const [perf,setPerf]=useState(null);
   const [live,setLive]=useState(null);
   const [oddsHist,setOddsHist]=useState(null);
@@ -146,7 +149,7 @@ export default function HomePage(){
   useEffect(()=>{(async()=>{ try{
     const { data }=await supabase.from("expert_picks").select("*").order("date",{ascending:false});
     const rows=(data||[]).map(r=>{ let picks=[]; try{picks=r.picks?JSON.parse(r.picks):[];}catch(_){picks=[];} return {date:r.date,picks}; });
-    setWpRecord(computeRecord(rows));
+    setWpRecord(computeRecord(rows)); setWpRows(rows);
   }catch(_){ setWpRecord(null); } })();},[]);
   const load=useCallback(async()=>{ try{ const d=await (sport==="nfl"?SPORTS.nfl.feed(nflPhase):SPORTS[sport].feed());
     if(sport==="nfl"&&d&&d.phase){ setPhaseAvail(d.phase.available||[]); if(nflPhase==null&&d.phase.selected) setNflPhase(d.phase.selected); }
@@ -253,6 +256,9 @@ export default function HomePage(){
   const parks=games.filter(g=>g.parkRunFactor!=null).slice(0,8);
   const upcoming=games.filter(g=>g.status!=="final").slice(0,6);
   const abbrById={}; games.forEach(g=>{ abbrById[g.id]={a:g.awayAbbr||shortTeam(g.away||""),h:g.homeAbbr||shortTeam(g.home||"")}; });
+  // WZ-WIZEPLAYS-LIST-2026-07-08 :: today's curated plays (rows are date-desc); empty -> empty state
+  const wpTodayStr=new Date().toLocaleDateString("en-CA");
+  const wpToday=(()=>{ const row=(wpRows||[]).find(r=>String(r.date)>=wpTodayStr); return (row&&Array.isArray(row.picks))?row.picks.slice(0,5):[]; })();
   const liveGames=(live||[]).filter(g=>[g.awayEdge,g.homeEdge,g.overEdge,g.underEdge].some(x=>x!=null));
 
   const lineSeries={};
@@ -464,12 +470,26 @@ export default function HomePage(){
         </div>}
 
       <div id="content">
-        <div className="wpbar" onClick={()=>navigate("/expert-picks")}>
-          <div className="ic">W</div>
-          <div className="tx"><div className="h">WIZEPLAYS <span className="new">CURATED</span></div><div className="s">{hasFull?"Hand-picked after extra review":"See every pick"}</div></div>
-          {wpRecord&&(wpRecord.wins+wpRecord.losses+wpRecord.pushes)>0
-            ? <div className="rec"><div className="r">{wpRecord.wins}-{wpRecord.losses}{wpRecord.pushes?"-"+wpRecord.pushes:""}</div><div className="u">{wpRecord.units>=0?"+":""}{wpRecord.units.toFixed(1)}u</div></div>
-            : <div className="rec"><div className="r" style={{fontSize:13,color:"#f3b94f"}}>View {"\u203a"}</div></div>}
+        {/* WZ-WIZEPLAYS-LIST-2026-07-08 :: record bar + today's plays as a vertical list (empty state when none) */}
+        <div className="wpsec">
+          <div className="wpbar" onClick={()=>navigate("/expert-picks")}>
+            <div className="ic">W</div>
+            <div className="tx"><div className="h">WIZEPLAYS <span className="new">CURATED</span></div><div className="s">{hasFull?"Hand-picked after extra review":"See every pick"}</div></div>
+            {wpRecord&&(wpRecord.wins+wpRecord.losses+wpRecord.pushes)>0
+              ? <div className="rec"><div className="r">{wpRecord.wins}-{wpRecord.losses}{wpRecord.pushes?"-"+wpRecord.pushes:""}</div><div className="u">{wpRecord.units>=0?"+":""}{wpRecord.units.toFixed(1)}u</div></div>
+              : <div className="rec"><div className="r" style={{fontSize:13,color:"#f3b94f"}}>View {"\u203a"}</div></div>}
+          </div>
+          {wpToday.length>0
+            ? <div className="wplist">{wpToday.map((pk,i)=>(
+                <div className="wprow" key={i} onClick={()=>navigate("/expert-picks")}>
+                  <LogoM ab={wpAbbr(pk)} col="#3a4653"/>
+                  <div className="wpmid"><div className="wpp">{pk.pick}</div>{pk.game&&<div className="wpg">{pk.game}</div>}</div>
+                  {pk.odds!=null&&<div className="wpo">{formatOdds(pk.odds)}</div>}
+                </div>))}</div>
+            : <div className="wpempty">
+                <div className="et">No WizePlays posted yet</div>
+                <div className="es">Curated plays go up after extra review, usually before first pitch. The full WizeBoard is live above.</div>
+              </div>}
         </div>
 
         {/* WIZESPIN-MOVED-UNDER-WIZEPLAYS-2026-06-26 */}
@@ -1028,7 +1048,19 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .hdots{display:flex;gap:6px;justify-content:center;margin-top:9px}.hdots i{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.2)}.hdots i.on{background:var(--gold);width:16px;border-radius:3px}
 
 /* WizePlays (alone) */
+.wpsec{margin:24px 4px 0} /* WZ-WIZEPLAYS-LIST-2026-07-08 */
+.wpsec .wpbar{margin:0}
 .wpbar{display:flex;align-items:center;gap:11px;margin:24px 4px 0;border:1px solid rgba(201,168,106,.4);border-radius:13px;background:var(--panel);padding:13px;cursor:pointer}
+.wplist{margin-top:7px;border:1px solid var(--line2);border-radius:12px;background:var(--panel);overflow:hidden}
+.wprow{display:flex;align-items:center;gap:10px;padding:10px 12px;border-top:1px solid rgba(255,255,255,.05);cursor:pointer}
+.wprow:first-child{border-top:none}
+.wprow .wpmid{flex:1;min-width:0}
+.wprow .wpp{font-family:var(--disp);font-weight:800;font-size:15px;color:#fff;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wprow .wpg{font-family:var(--mono);font-size:9px;color:var(--mut);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wprow .wpo{margin-left:auto;font-family:var(--disp);font-weight:800;font-size:15px;color:#dbe4e2;white-space:nowrap}
+.wpempty{margin-top:7px;border:1px dashed var(--line2);border-radius:12px;background:rgba(255,255,255,.015);padding:18px 14px;text-align:center}
+.wpempty .et{font-family:var(--disp);font-weight:800;font-size:15px;color:#cdd6da}
+.wpempty .es{font-family:var(--mono);font-size:9.5px;color:var(--mut2);margin-top:5px;line-height:1.5}
 .wpbar .ic{width:36px;height:36px;border-radius:10px;background:rgba(243,185,79,.16);border:1px solid rgba(243,185,79,.42);display:flex;align-items:center;justify-content:center;color:var(--gold);font-family:var(--disp);font-weight:800;font-size:18px}
 .wpbar .tx{flex:1;min-width:0}.wpbar .h{font-family:var(--disp);font-weight:800;font-size:15px;color:#fff;letter-spacing:.3px}.wpbar .h .new{font-size:8px;font-weight:800;background:var(--gold);color:#1a1408;border-radius:4px;padding:1px 4px;margin-left:6px;vertical-align:middle;font-family:var(--ui)}
 .wpbar .s{font-size:11px;color:var(--mut);margin-top:2px}.wpbar .rec{text-align:right}.wpbar .rec .r{font-family:var(--disp);font-weight:800;font-size:20px;color:#fff;line-height:1}.wpbar .rec .u{font-family:var(--mono);font-size:11px;color:var(--green);margin-top:1px}
