@@ -1124,12 +1124,12 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .chips{display:flex;align-items:center;gap:7px;padding:14px 4px 0;overflow-x:auto;scrollbar-width:none}.chips::-webkit-scrollbar{display:none}
 .chipf{font-family:var(--mono);font-size:10px;color:var(--mut);border:1px solid var(--line2);border-radius:999px;padding:4px 10px;white-space:nowrap;cursor:pointer}.chipf.on{color:var(--gold);background:transparent;border-color:rgba(201,168,106,.55);font-weight:600}
 /* WZ-FILTER-SEG-2026-07-05 :: board market filter as a clean, readable segmented control (bigger text, solid gold active state). Stays in flow (not sticky) per owner. */
-.bseg{display:flex;gap:3px;background:#101317;border:1px solid rgba(201,168,106,.4);border-radius:14px 14px 0 0;padding:4px;margin:10px 4px 0} /* WZ-WIZEBOARD-CARDBORDER-2026-07-08 :: visible gold border (matches WizePlays) */
+.bseg{display:flex;gap:3px;background:#101317;border:1px solid var(--line);border-radius:13px;padding:4px;margin:14px 12px 6px}
 .bseg-b{flex:1;text-align:center;font-family:var(--mono);font-size:13px;font-weight:600;letter-spacing:.5px;color:#D2D7DD;padding:9px 4px;border-radius:9px;cursor:pointer;transition:background .16s ease,color .16s ease;-webkit-tap-highlight-color:transparent}
 .bseg-b.on{background:var(--gold);color:#0A0B0D;font-weight:700}
 
-.grid{margin:0 4px;background:var(--panel);border-left:1px solid rgba(201,168,106,.4);border-right:1px solid rgba(201,168,106,.4);border-radius:0;overflow:hidden} /* WZ-WIZEBOARD-CARDBORDER-2026-07-08 */
-.tmrwgrid{margin-top:8px;border:1px solid var(--line);border-radius:14px;box-shadow:inset 3px 0 0 rgba(201,168,106,.5)}
+.grid{margin:12px 4px 0;background:var(--panel);border-radius:14px;overflow:hidden}
+.tmrwgrid{margin-top:8px;box-shadow:inset 3px 0 0 rgba(201,168,106,.5)}
 .tmrwdiv{display:flex;align-items:center;gap:10px;margin:22px 14px 2px}
 .tmrwdiv .tln{flex:1;height:1px;background:linear-gradient(90deg,transparent,rgba(201,168,106,.5))}
 .tmrwdiv .tln.r{background:linear-gradient(90deg,rgba(201,168,106,.5),transparent)}
@@ -1252,7 +1252,7 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .rdrow .pk{flex:1;color:#cfd7e2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .rdrow .ag{flex:0 0 auto}.ag.y{color:var(--green)}.ag.n{color:var(--mut)}
 .dlink{font-family:var(--disp);font-weight:800;font-size:13px;color:var(--gold)}
-.sum{display:flex;align-items:center;gap:12px;margin:0 4px;padding:11px 14px;font-family:var(--mono);font-size:11px;color:var(--mut);border-top:1px solid var(--line2);border-left:1px solid rgba(201,168,106,.4);border-right:1px solid rgba(201,168,106,.4);border-bottom:1px solid rgba(201,168,106,.4);border-radius:0 0 14px 14px}.sum .l{color:#cfd7e2;font-weight:600}.sum .p{color:var(--green)}.sum .sp{flex:1}
+.sum{display:flex;align-items:center;gap:12px;margin:0 14px;padding:11px 14px;font-family:var(--mono);font-size:11px;color:var(--mut);border-top:1px solid var(--line2)}.sum .l{color:#cfd7e2;font-weight:600}.sum .p{color:var(--green)}.sum .sp{flex:1}
 
 /* live edge cards */
 .lec{width:230px;border:1px solid rgba(255,90,90,.28);border-radius:13px;background:linear-gradient(180deg,#160d0e,#090d12);padding:11px 12px}
