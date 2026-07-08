@@ -28,8 +28,19 @@ function WinRateChart({ series }) {
   const W = 320, H = 120;
   const s = (series && series.length) ? series : [];
   if (s.length < 2) return <div className="chartempty">Win-rate trend appears once a few picks are graded in this window.</div>;
-  const mn = Math.min(50, ...s), mx = Math.max(50, ...s), rng = (mx - mn) || 1;
-  const X = (i) => (s.length>1 ? i/(s.length-1) : 0) * W, Y = (v) => H - 6 - ((v - mn) / rng) * (H - 14);
+  // WZ-WINRATE-ZOOM-2026-07-08 :: fit the axis to where the line actually LIVES. The first
+  // handful of picks swing the cumulative rate wildly (1 pick = 0% or 100%), and the old
+  // domain [min(50,...all), max(50,...all)] let those outliers blow the scale out to ~30-100%,
+  // crushing the real, stable line into a flat worm. We now fit the domain to the SETTLED
+  // portion (past a short warmup), always keep 50% in view, pad a touch, then clamp the early
+  // outliers to the domain so they ride the edge instead of exploding the scale. Full data
+  // still drawn; nothing is hidden -- the axis just stops being dominated by a 3-pick sample.
+  const warm = Math.min(25, Math.floor(s.length * 0.05));
+  const stable = s.slice(warm).length >= 3 ? s.slice(warm) : s;
+  let lo = Math.min(50, ...stable), hi = Math.max(50, ...stable);
+  const pad = Math.max(2, (hi - lo) * 0.18); lo -= pad; hi += pad;
+  const rng = (hi - lo) || 1; const clampV = (v) => Math.max(lo, Math.min(hi, v));
+  const X = (i) => (s.length>1 ? i/(s.length-1) : 0) * W, Y = (v) => H - 6 - ((clampV(v) - lo) / rng) * (H - 14);
   const ln = s.map((v,i)=>`${i?"L":"M"}${X(i).toFixed(1)} ${Y(v).toFixed(1)}`).join(" ");
   const ar = ln + `L${W} ${H} L0 ${H} Z`;
   const fiftyY = Y(50); const end = s[s.length-1]; const col = end>=50 ? "var(--green)" : "var(--neg)";
