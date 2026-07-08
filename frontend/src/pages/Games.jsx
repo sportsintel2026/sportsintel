@@ -39,6 +39,24 @@ const edgeLabel = (e) => {
   return `${ab} ML`;
 };
 
+// WZ-GAMES-PARK-2026-07-08 :: build a park/weather summary from a feed game (data already present on it).
+const parkOf = (g) => {
+  const prf = g.parkRunFactor, phf = g.parkHRFactor, w = g.weather || {};
+  if (prf == null && phf == null) return null;
+  const hf = (phf != null ? phf : prf);
+  const hot = hf > 1.05, cold = hf < 0.95;
+  const t = w.tempF != null ? Math.round(w.tempF) : null;
+  const wind = w.windMph ? (w.windMph + " mph" + (w.windEffect ? " " + w.windEffect : "")) : null;
+  return {
+    venue: g.venue || g.park || ((g.home || "") + " Park"),
+    team: g.home || "",
+    tag: hot ? ["HITTER FRIENDLY", "h"] : cold ? ["PITCHER FRIENDLY", "p"] : ["NEUTRAL", "n"],
+    hr: (phf != null ? ((phf > 1 ? "+" : "") + Math.round((phf - 1) * 100) + "%") : "0%"),
+    run: (prf != null ? ((prf > 1 ? "+" : "") + Math.round((prf - 1) * 100) + "%") : "0%"),
+    wx: w.indoor ? "Dome \u00b7 roof closed" : ([t != null ? t + "\u00b0F" : null, wind].filter(Boolean).join(" \u00b7 ") || null),
+  };
+};
+
 export default function GamesPage() {
   const [winW,setWinW]=useState(typeof window!=="undefined"?window.innerWidth:0); // WZ-GAMES-DESKGATE-2026-07-02
   useEffect(()=>{ const on=()=>setWinW(window.innerWidth); window.addEventListener("resize",on); return ()=>window.removeEventListener("resize",on); },[]);
@@ -82,6 +100,7 @@ export default function GamesPage() {
       : (ml.awayWinProb!=null ? ((ml.awayWinProb>=ml.homeWinProb?aAb:hAb)+" ML") : "");
     const edge = be ? ((be.edge>=0?"+":"")+(be.edge*100).toFixed(1)+"%") : "";
     const pa = g.pitchers?.away, ph = g.pitchers?.home;
+    const park = parkOf(g);
     return {
       id: g.id, st,
       a:{ ab:aAb, col:colFor(aAb), rec:"", s:g.awayScore },
@@ -94,7 +113,8 @@ export default function GamesPage() {
       hsp: [ ph?.name || "TBD", "", ph?.stats?.era!=null ? Number(ph.stats.era).toFixed(2) : "—" ],
       state: g.status==="live" ? ((g.half==="bottom"?"Bot ":"Top ")+(g.inning||"")).trim() : "",
       lean, edge,
-      win: g.status==="final" ? (((g.awayScore||0)>(g.homeScore||0))?"a":"h") : null
+      win: g.status==="final" ? (((g.awayScore||0)>(g.homeScore||0))?"a":"h") : null,
+      park
     };
   };
   const cards = games.map(toCard);
@@ -222,6 +242,10 @@ function GameCard({ g, navigate }) {
         <div className="prob"><span className="h">AWAY</span><span className="nm2">{g.asp[0]}</span><span className="era">{g.asp[2]} ERA</span></div>
         <div className="prob"><span className="h">HOME</span><span className="nm2">{g.hsp[0]}</span><span className="era">{g.hsp[2]} ERA</span></div>
       </div>
+      {g.park && <div className={"gpark "+g.park.tag[1]}>
+        <div className="gpktop"><div><div className="gpkv">{g.park.venue}</div><div className="gpkg">{g.park.team}</div></div><span className={"gpktag "+g.park.tag[1]}>{g.park.tag[0]}</span></div>
+        <div className="gpkbot"><div className="gpkb"><div className="kk">HR BOOST</div><div className={"vv "+(g.park.hr.startsWith("-")?"dn":"")}>{g.park.hr}</div></div><div className="gpkb"><div className="kk">RUN BOOST</div><div className={"vv "+(g.park.run.startsWith("-")?"dn":"")}>{g.park.run}</div></div>{g.park.wx&&<div className="gpkwx">{g.park.wx}</div>}</div>
+      </div>}
       <div className="gfoot"><span className="lean"><span className="lb">EDGE</span>{g.lean} {g.edge && <span className="e">{g.edge}</span>}</span><span className="go">Details {"\u203a"}</span></div>
     </div>
   );
@@ -279,6 +303,17 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .prob{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;color:#aeb9c8}
 .prob .h{color:var(--mut2);font-size:9px;width:30px;flex:0 0 auto}.prob .nm2{color:#cdd7e1}.prob .era{margin-left:auto;color:var(--mut)}
 .gfoot{display:flex;align-items:center;gap:8px;padding:9px 13px;border-top:1px solid var(--line);background:rgba(201,168,106,.04)}
+.gpark{margin:0 13px 11px;border:1px solid var(--line);border-radius:12px;background:#0e1216;padding:10px 11px}
+.gpark.h{border-color:rgba(226,101,92,.28)}.gpark.p{border-color:rgba(93,169,232,.28)}
+.gpktop{display:flex;align-items:center;justify-content:space-between}
+.gpkv{font-family:var(--disp);font-weight:800;font-size:14px;color:#e6ebef}
+.gpkg{font-family:var(--mono);font-size:8px;color:var(--mut2);margin-top:1px}
+.gpktag{font-family:var(--mono);font-size:8px;font-weight:700;letter-spacing:.5px;padding:3px 7px;border-radius:5px}
+.gpktag.h{color:var(--neg);border:1px solid rgba(226,101,92,.4)}.gpktag.p{color:var(--blue);border:1px solid rgba(93,169,232,.4)}.gpktag.n{color:var(--mut);border:1px solid var(--line2)}
+.gpkbot{display:flex;align-items:center;gap:14px;margin-top:9px}
+.gpkb .kk{font-family:var(--mono);font-size:7.5px;color:var(--mut2)}
+.gpkb .vv{font-family:var(--disp);font-weight:800;font-size:17px;color:var(--green)}.gpkb .vv.dn{color:var(--neg)}
+.gpkwx{margin-left:auto;font-family:var(--mono);font-size:9px;color:var(--mut);text-align:right}
 .lean{font-family:var(--mono);font-size:11px;color:#cdd7e1}.lean .lb{color:var(--gold);font-weight:700;font-family:var(--disp);font-size:11px;letter-spacing:.3px;margin-right:5px}.lean .e{color:var(--green);font-weight:600}
 .gfoot .go{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--blue);font-weight:600}
 .estate{margin:40px 14px;border:1px dashed var(--line2);border-radius:14px;padding:36px 18px;text-align:center}
