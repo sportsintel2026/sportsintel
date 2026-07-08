@@ -234,7 +234,7 @@ export default function HomePage(){
   const boardEdges=oneSidePerGame(boardArr||[]).filter(x=>(board==="ml"&&sport==="mlb")?true:(sport==="mlb"?(x.edge??0)>0:(x.edge??0)>=1)).sort(byWinProb);
   const _todayEdgeN=(e.moneylineEdges||[]).length+(e.totalsEdges||[]).length+(e.runLineEdges||[]).length+(e.spreadEdges||[]).length; const _mb=(_todayEdgeN===0&&preview&&!preview.rolledToNextDay)?preview:e; /* WZ-BOARD-NEVER-EMPTY-2026-07-08 :: movers follow tomorrow when today is empty */
   const moverPool=[...(_mb.moneylineEdges||[]),...(_mb.totalsEdges||[]),...(_mb.runLineEdges||[]),...(_mb.spreadEdges||[])].map(x=>{ const ser=seriesFor(x); const open=(ser&&ser.length)?ser[0].o:null; const now=(ser&&ser.length)?ser[ser.length-1].o:x.odds; const delta=(open!=null&&ser&&ser.length>1)?(amCents(now)-amCents(open)):null; return {...x,_open:open,_now:now,_delta:delta}; });
-  const movers=moverPool.filter(m=>m._delta!=null).sort((a,b)=>{ const ad=Math.abs(a._delta); const bd=Math.abs(b._delta); return (bd-ad)||((b.edge??0)-(a.edge??0)); }).slice(0,12);
+  const movers=moverPool.filter(m=>m._delta!=null).sort((a,b)=>{ const ad=Math.abs(a._delta); const bd=Math.abs(b._delta); return (bd-ad)||((b.edge??0)-(a.edge??0)); }).slice(0,30);
   const hasMoves=movers.some(m=>m._delta!=null);
   const hrP=(e.hrPropEdges||[]).slice(0,6);
   const hitsP=(e.hitsPropEdges||[]).slice(0,6);
@@ -893,15 +893,19 @@ function MarketMovers({movers,navigate}){
       <span className="mvall" onClick={()=>navigate("/odds")}>View all {"\u203a"}</span>
     </div>
     {/* WZ-MOVERS-LIST-2026-07-08 :: vertical list w/ team logos + open->now line move (was horizontal scroll) */}
-    <div className="mvlist">{mv.slice(0,6).map((d,i)=>{const up=d.delta>0;return (
-      <div className="mvrow" key={i}>
-        {d.logo&&<LogoM ab={d.logo} col="#3a4653"/>}
-        <span className="mvtxt2"><span className="mvp">{d.p}</span>{d.g&&<span className="mvg">{d.g}</span>}</span>
-        <span className="mvright">
-          {d.mv&&<span className="mvmove">{d.mv[0]} {"\u2192"} {d.mv[1]}</span>}
-          <span className={"mvd "+(up?"up":"dn")}>{up?"\u2191":"\u2193"} {up?"+":"\u2212"}{Math.abs(d.delta)}{"\u00a2"}</span>
-        </span>
-      </div>);})}</div>
+    {/* WZ-MOVERS-SCROLL-2026-07-08 :: fixed-height scroll list -> see every mover (was capped at 6) */}
+    <div className="mvwrap">
+      <div className="mvlist">{mv.map((d,i)=>{const up=d.delta>0;return (
+        <div className="mvrow" key={i}>
+          {d.logo&&<LogoM ab={d.logo} col="#3a4653"/>}
+          <span className="mvtxt2"><span className="mvp">{d.p}</span>{d.g&&<span className="mvg">{d.g}</span>}</span>
+          <span className="mvright">
+            {d.mv&&<span className="mvmove">{d.mv[0]} {"\u2192"} {d.mv[1]}</span>}
+            <span className={"mvd "+(up?"up":"dn")}>{up?"\u2191":"\u2193"} {up?"+":"\u2212"}{Math.abs(d.delta)}{"\u00a2"}</span>
+          </span>
+        </div>);})}</div>
+      {mv.length>6&&<div className="mvfade"/>}
+    </div>
     {/* WZ-MVNOTE-COLLAPSE-2026-07-01 :: green/red legend collapsed behind a tap-to-expand toggle (default closed) */}
     <div className="mvnote">
       <button className="mvkeytoggle" onClick={()=>setShowKey(s=>!s)} aria-expanded={showKey}>
@@ -991,7 +995,10 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .mvpulse{color:var(--green);display:inline-flex}
 .mvhd .mvtl{font-family:var(--disp);font-weight:700;font-size:14px;letter-spacing:.8px;color:var(--tx)}
 .mvall{margin-left:auto;color:var(--green);font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap}
-.mvlist{border:1px solid var(--line2);border-radius:12px;background:var(--panel);overflow:hidden} /* WZ-MOVERS-LIST-2026-07-08 */
+.mvwrap{position:relative;border:1px solid var(--line2);border-radius:12px;background:var(--panel);overflow:hidden} /* WZ-MOVERS-SCROLL-2026-07-08 */
+.mvlist{max-height:294px;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.mvlist::-webkit-scrollbar{width:5px}.mvlist::-webkit-scrollbar-track{background:transparent}.mvlist::-webkit-scrollbar-thumb{background:rgba(201,168,106,.35);border-radius:3px}
+.mvfade{position:absolute;left:1px;right:6px;bottom:1px;height:26px;border-radius:0 0 12px 12px;pointer-events:none;background:linear-gradient(180deg,rgba(20,23,27,0),rgba(20,23,27,.96))}
 .mvrow{display:flex;align-items:center;gap:10px;padding:10px 12px;border-top:1px solid rgba(255,255,255,.05)}
 .mvrow:first-child{border-top:none}
 .mvrow .mvtxt2{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1}
