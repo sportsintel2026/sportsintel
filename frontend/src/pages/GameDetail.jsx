@@ -418,6 +418,24 @@ function SheetPre({ game, aAb, hAb, gEdges, mlPick, totPick, rlPick, bestEdge, m
       {reads.map((r,i)=><div key={i} className="mr"><span className={"md "+(r.agrees?"strong":"split")}/><span className="mk">{r.k}</span><div className="mv"><div className="mvtop"><b>{r.lean}</b>{r.odds&&r.odds!=="\u2014"?` \u00b7 ${r.odds}`:""}{r.prob!=null?` \u00b7 ${r.prob}%`:""}</div>{r.mv&&<div className={"mvmoney "+(r.mv.toward?"toward":"off")}>{r.mv.toward?`money coming in on ${r.mv.team}`:`money drifting off ${r.mv.team}`} · {r.mv.cents}{"\u00a2"} since open</div>}</div><Agree ok={r.agrees}/></div>)}
     </Block>}
 
+    {/* WZ-DETAIL-PARK-2026-07-08 :: fuller park-factors breakdown on the detail page */}
+    {(game.parkRunFactor!=null||game.parkHRFactor!=null) && (()=>{
+      const rf=game.parkRunFactor, hf=game.parkHRFactor, key=(hf!=null?hf:rf);
+      const tag=key>1.05?["HITTER-FRIENDLY","h"]:key<0.95?["PITCHER-FRIENDLY","p"]:["NEUTRAL","n"];
+      const line=tag[1]==="h"?"Hitter's park -- it nudges the total toward the Over and lifts power numbers.":tag[1]==="p"?"Pitcher's park -- it nudges the total toward the Under and tamps down power.":"Plays roughly neutral -- little push on runs or homers here.";
+      const pct=(x)=>x!=null?((x>1?"+":"")+Math.round((x-1)*100)+"%"):"\u2014";
+      return <Block label="PARK FACTORS" bx={game.venue||""}>
+        <div className="pkfull">
+          <span className={"pkftag "+tag[1]}>{tag[0]}</span>
+          <div className="pkfstats">
+            <div className="pkfb"><div className="kk">HR</div><div className={"vv "+(hf!=null&&hf<1?"dn":"")}>{pct(hf)}</div></div>
+            <div className="pkfb"><div className="kk">RUNS</div><div className={"vv "+(rf!=null&&rf<1?"dn":"")}>{pct(rf)}</div></div>
+          </div>
+          <div className="pkfline">{line}</div>
+        </div>
+      </Block>;
+    })()}
+
     <Block label="TONIGHT'S CONDITIONS" bx={!w.indoor && w.forecastAtGameTime ? "at first pitch" : "conditions"}><div className="ctx">
       {venueChip(game.venue||scoresGame_venue(game))}
       <span className="ch">Runs <b>{parkTxt}</b></span>
@@ -692,6 +710,15 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .mr .ma{font-family:var(--mono);font-size:10px;font-weight:600;flex:0 0 auto}.ma.ag{color:var(--green)}.ma.df{color:var(--gold)}
 .ctx{display:flex;flex-wrap:wrap;gap:7px}
 .ctx .ch{font-family:var(--mono);font-size:10px;color:#aeb9c8;background:#1B2025;border:1px solid var(--line2);border-radius:7px;padding:5px 9px}.ctx .ch b{color:#fff}
+.pkfull{display:flex;flex-wrap:wrap;align-items:center;gap:12px}
+.pkftag{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:1px;padding:5px 10px;border-radius:7px}
+.pkftag.h{color:var(--neg);border:1px solid rgba(226,101,92,.45);background:rgba(226,101,92,.08)}
+.pkftag.p{color:var(--blue);border:1px solid rgba(93,169,232,.45);background:rgba(93,169,232,.08)}
+.pkftag.n{color:var(--mut);border:1px solid var(--line2)}
+.pkfstats{display:flex;gap:20px}
+.pkfb .kk{font-family:var(--mono);font-size:8px;color:var(--mut2);letter-spacing:.5px}
+.pkfb .vv{font-family:var(--disp);font-weight:800;font-size:26px;color:var(--green);line-height:1}.pkfb .vv.dn{color:var(--neg)}
+.pkfline{flex-basis:100%;font-family:var(--mono);font-size:11px;color:#aeb9c8;line-height:1.5}
 .ctx .ch.wout{color:#7ee0a8;border-color:rgba(126,224,168,.32)}.ctx .ch.win{color:#ff8f80;border-color:rgba(255,143,128,.32)}
 .why{font-size:12.5px;color:#c4cfd9;line-height:1.55}.why .wl{font-family:var(--disp);font-weight:800;font-size:11px;letter-spacing:.5px;color:var(--gold);display:block;margin-bottom:4px}
 
