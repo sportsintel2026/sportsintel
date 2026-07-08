@@ -720,17 +720,21 @@ function BoardCardCompact({d,i,sport,onClick}){
   const wpv=isFinite(wp)?Math.max(0,Math.min(100,wp)):null;
   const C=113.1; // 2·π·18
   const dash=wpv!=null?(wpv/100*C):0;
+  const showEdge=!(sport==="mlb"&&d.cat==="ml");
   return (
-    <div className={"gr gcompact erow "+conv} onClick={onClick}>
-      <div className="erk">{i+1}</div>
+    /* WZ-BOARD-READOUT-2026-07-08 :: win% ring = left anchor; odds folded into matchup; tier/edge on right; #1 gets gold peak */
+    <div className={"gr gcompact erow "+conv+(i===0?" etop":"")} onClick={onClick}>
+      {wpv!=null
+        ? <div className="ering"><svg viewBox="0 0 46 46"><circle cx="23" cy="23" r="18" fill="none" stroke="rgba(255,255,255,.08)" strokeWidth="4"/><circle cx="23" cy="23" r="18" fill="none" stroke="#3FCB91" strokeWidth="4" strokeLinecap="round" strokeDasharray={dash.toFixed(1)+" "+C} transform="rotate(-90 23 23)"/></svg><div className="epct">{Math.round(wpv)}%</div></div>
+        : <div className="erk">{i+1}</div>}
       <div className="ein">
-        <div className="epick">{d.p}{d.mk&&<span className="emk">{d.mk}</span>}{d.tier&&<span className={"etier "+d.tier.toLowerCase()}>{d.tier}</span>}{d.value&&<span className="eval">+VALUE</span>}</div>
-        <div className="emu">{d.g}</div>
+        <div className="epick">{d.p}{d.mk&&<span className="emk">{d.mk}</span>}{d.value&&<span className="eval">+VALUE</span>}</div>
+        <div className="emu">{d.g}{d.odds?" \u00b7 "+d.odds:""}</div>
       </div>
-      {!(sport==="mlb"&&d.cat==="ml")&&<div className="ecol"><div className={"ecv "+(d.edge<0?"neg":"pos")}>{d.edge>=0?"+":""}{Number(d.edge).toFixed(1)}%</div><div className="ecl">EDGE</div></div>}
-      <div className="ecol odds"><div className="ecv">{d.odds}</div><div className="ecl">BEST ODDS</div></div>
-      {wpv!=null&&<div className="ering"><svg viewBox="0 0 46 46"><circle cx="23" cy="23" r="18" fill="none" stroke="rgba(255,255,255,.08)" strokeWidth="4"/><circle cx="23" cy="23" r="18" fill="none" stroke="#3FCB91" strokeWidth="4" strokeLinecap="round" strokeDasharray={dash.toFixed(1)+" "+C} transform="rotate(-90 23 23)"/></svg><div className="epct">{Math.round(wpv)}%</div></div>}
-      <div className="echev">{"\u203a"}</div>
+      <div className="eright">
+        {d.tier&&<span className={"etier "+d.tier.toLowerCase()}>{d.tier}</span>}
+        {showEdge&&<div className={"ecv "+(d.edge<0?"neg":"pos")}>{d.edge>=0?"+":""}{Number(d.edge).toFixed(1)}%</div>}
+      </div>
     </div>
   );
 }
@@ -1360,26 +1364,24 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .gcbody{padding:0 15px 13px 17px}
 .gcwhy{font-size:11.5px;color:#aeb8c2;line-height:1.45}.gcwhy b{color:#fff;font-weight:700}
 .gctap{font-family:var(--mono);font-size:9px;color:var(--mut2);margin-top:8px;letter-spacing:.5px}
-/* ranked edge-board row — FULL-EDGE-BOARD-RANKED-2026-06-26. keeps conviction ::before accent; tap still swaps to BoardRow breakdown */
-.gr.erow{display:flex;align-items:center;gap:10px;padding:13px 12px 13px 16px}
-.erow .erk{width:25px;height:25px;flex:0 0 auto;border-radius:50%;border:1px solid rgba(63,203,145,.45);color:var(--green);font-family:var(--disp);font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center}
+/* ranked edge-board row — WZ-BOARD-READOUT-2026-07-08. win% ring is the left anchor; keeps conviction ::before accent; tap still swaps to BoardRow breakdown */
+.gr.erow{display:flex;align-items:center;gap:11px;padding:13px 12px 13px 16px}
+.erow.etop{background:linear-gradient(90deg,rgba(201,168,106,.09),transparent 62%)}
+.erow .ering{width:44px;height:44px;flex:0 0 auto;position:relative}
+.erow .ering svg{width:44px;height:44px;display:block}
+.erow .epct{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:var(--disp);font-weight:700;font-size:13px;color:var(--green)}
+.erow .erk{width:44px;height:44px;flex:0 0 auto;border-radius:50%;border:1px solid rgba(63,203,145,.45);color:var(--green);font-family:var(--disp);font-weight:700;font-size:16px;display:flex;align-items:center;justify-content:center}
 .erow .ein{flex:1;min-width:0}
 .erow .epick{font-family:var(--disp);font-weight:800;font-size:18px;color:#fff;line-height:1;letter-spacing:-.2px;display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.erow .emk{font-family:var(--mono);font-size:8.5px;font-weight:600;color:var(--gold);border:1px solid rgba(201,168,106,.4);border-radius:4px;padding:1px 5px}
+.erow .eval{font-family:var(--mono);font-size:8px;font-weight:700;letter-spacing:.5px;color:#0a0b0d;background:var(--green);padding:2px 6px;border-radius:5px}
+.erow .emu{font-family:var(--mono);font-size:10.5px;color:var(--mut);margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.erow .eright{flex:0 0 auto;display:flex;flex-direction:column;align-items:flex-end;gap:5px;text-align:right}
 .erow .etier{font-family:var(--mono);font-size:8px;font-weight:700;letter-spacing:1px;padding:2px 6px;border-radius:5px}
 .erow .etier.lock{color:#0a0b0d;background:var(--gold)}
 .erow .etier.strong{color:#46E0A9;border:1px solid rgba(63,203,145,.45)}
 .erow .etier.lean{color:#5AC8C8;border:1px solid rgba(90,200,200,.4)}
-.erow .eval{font-family:var(--mono);font-size:8px;font-weight:700;letter-spacing:.5px;color:#0a0b0d;background:var(--green);padding:2px 6px;border-radius:5px}
-.erow .emk{font-family:var(--mono);font-size:8.5px;font-weight:600;color:var(--gold);border:1px solid rgba(201,168,106,.4);border-radius:4px;padding:1px 5px}
-.erow .emu{font-family:var(--mono);font-size:10.5px;color:var(--mut);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.erow .ecol{flex:0 0 auto;text-align:center}
-.erow .ecv{font-family:var(--disp);font-weight:700;font-size:15px;color:#fff;line-height:1;font-variant-numeric:tabular-nums}
+.erow .ecv{font-family:var(--disp);font-weight:700;font-size:16px;line-height:1;font-variant-numeric:tabular-nums}
 .erow .ecv.pos{color:var(--green)}.erow .ecv.neg{color:var(--neg)}
-.erow .ecl{font-family:var(--mono);font-size:8px;letter-spacing:.4px;color:var(--mut2);margin-top:3px;white-space:nowrap}
-.erow .ering{width:44px;height:44px;flex:0 0 auto;position:relative}
-.erow .ering svg{width:44px;height:44px;display:block}
-.erow .epct{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:var(--disp);font-weight:700;font-size:12px;color:var(--green)}
-.erow .echev{flex:0 0 auto;color:var(--mut2);font-family:var(--disp);font-size:21px;line-height:1}
-@media (max-width:380px){.erow .ecol.odds{display:none}}
 /* WZ-WINNERS-REMOVED-2026-07-05 :: dead Winners CSS swept — every .wn* class had 0 usage in JSX and appeared in no other file. */
 `;
