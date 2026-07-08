@@ -258,7 +258,8 @@ export default function HomePage(){
   const abbrById={}; games.forEach(g=>{ abbrById[g.id]={a:g.awayAbbr||shortTeam(g.away||""),h:g.homeAbbr||shortTeam(g.home||"")}; });
   // WZ-WIZEPLAYS-LIST-2026-07-08 :: today's curated plays (rows are date-desc); empty -> empty state
   const wpTodayStr=new Date().toLocaleDateString("en-CA");
-  const wpToday=(()=>{ const row=(wpRows||[]).find(r=>String(r.date)>=wpTodayStr); return (row&&Array.isArray(row.picks))?row.picks.slice(0,5):[]; })();
+  // WZ-SLATE-STATE-2026-07-08 :: only show plays still pending -- finished/graded ones clear out
+  const wpToday=(()=>{ const row=(wpRows||[]).find(r=>String(r.date)>=wpTodayStr); if(!row||!Array.isArray(row.picks))return []; return row.picks.filter(pk=>{const rr=String((pk&&pk.result)||"pending").toLowerCase();return rr==="pending"||rr==="";}).slice(0,5); })();
   const liveGames=(live||[]).filter(g=>[g.awayEdge,g.homeEdge,g.overEdge,g.underEdge].some(x=>x!=null));
 
   const lineSeries={};
@@ -477,7 +478,7 @@ export default function HomePage(){
             <span className="bht"><span className="bhwize">Wize</span>Board</span>{/* WZ-WIZEBOARD-2026-07-08 */}
             <svg className="bharw" width="34" height="10" viewBox="0 0 34 10" aria-hidden="true"><line x1="6" y1="5" x2="34" y2="5"/><path d="M12 1 L4 5 L12 9" fill="none"/></svg>
           </div>
-          <div className="bhsub">{boardItems.length} Model Qualified Edges{boardDate&&<> <span className="bhd">{"\u00b7"}</span> {boardDate}</>}</div>
+          <div className="bhsub">{boardItems.length>0?boardItems.length+" winners":"Ranked by win %"}{boardDate&&<> <span className="bhd">{"\u00b7"}</span> {boardDate}</>}</div>{/* WZ-SLATE-STATE-2026-07-08 */}
         </div>
         {hasFull
           ? <>
@@ -487,7 +488,7 @@ export default function HomePage(){
                     <div className="grid">{boardItems.map((d,i)=>{const id=d.gameId+d.cat+i;return openId===id?<BoardRow key={id} d={d} i={i} open={true} onToggle={()=>setOpenId(null)} navigate={navigate} sport={sport}/>:<BoardCardCompact key={id} d={d} i={i} sport={sport} onClick={()=>setOpenId(id)}/>;})}</div>
                     <div className="sum"><span className="l">{boardItems.length} game edges</span><span className="sp"/><span>avg <span className="p">+{kpiHas?kAvg:"0.0"}%</span></span></div>
                   </>
-                : <div className="estate"><div className="et">No edges on the board yet</div><div className="es">Edges appear as books post tonight's lines.</div></div>}
+                : <div className="estate"><div className="et">{previewItems.length>0?"Today\u2019s slate is underway":"No winners on the board yet"}</div><div className="es">{previewItems.length>0?"Tomorrow\u2019s board is below \u2014 an early look.":"Winners post as books release tonight\u2019s lines."}</div></div>}
               {previewItems.length>0 && <>
                 <div className="tmrwdiv"><span className="tln"/><span className="tlbl">TOMORROW{previewLabel&&<small>{previewLabel}</small>}</span><span className="tln r"/></div>
                 <div className="tmrwnote">Today{"\u2019"}s slate is underway {"\u00b7"} an early look at tomorrow</div>
@@ -537,8 +538,8 @@ export default function HomePage(){
                     {pk.odds!=null&&<div className="wpo">{formatOdds(pk.odds)}</div>}
                   </div>))
               : <div className="wpempty">
-                  <div className="et">No WizePlays posted yet</div>
-                  <div className="es">Curated plays go up after extra review, usually before first pitch. The full WizeBoard is live above.</div>
+                  <div className="et">No active WizePlays right now</div>
+                  <div className="es">Curated plays post before first pitch. The full WizeBoard is live above.</div>
                 </div>}
           </div>
         </div>
