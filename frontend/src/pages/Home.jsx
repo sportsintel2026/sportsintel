@@ -470,9 +470,9 @@ export default function HomePage(){
               : <div className="herocar"><div className="hslide"><div className="hero" style={{textAlign:"center"}}><div className="eb">BEST EDGE</div><div className="heh">Edges post soon</div><div className="hes">Top edges appear ~2 hrs before first pitch.</div></div></div></div>)
           : <Gate title="Today's top edge is locked" navigate={navigate}/>}
         {hasFull && <div className="kpis">
-          <div className="kpi"><div className="k">ROI</div><div className={"v "+(perfStats&&perfStats.roi!=null?(perfStats.roi>=0?"g":"red"):"")}>{perfStats&&perfStats.roi!=null?(perfStats.roi>=0?"+":"")+perfStats.roi+"%":"\u2014"}</div><div className="ksub">{perfStats?perfStats.roiLbl:"tracked"}</div><Spark data={perf&&perf.spark&&perf.spark.roi} color="#3FCB91"/></div>
-          <div className="kpi"><div className="k">WIN RATE</div><div className="v">{perfStats&&perfStats.winRate!=null?perfStats.winRate.toFixed(1)+"%":"\u2014"}</div><div className="ksub">{perfStats&&perfStats.graded!=null?perfStats.graded+" graded":"tracking"}</div><Spark data={perf&&perf.spark&&perf.spark.win} color="#ECEFF2"/></div>
-          <div className="kpi"><div className="k">CLV</div><div className={"v "+(perfStats&&perfStats.clv!=null?(perfStats.clv>=0?"g":"red"):"")}>{perfStats&&perfStats.clv!=null?(perfStats.clv>=0?"+":"")+perfStats.clv+"%":"\u2014"}</div><div className="ksub">beat close</div><Spark data={perf&&perf.spark&&perf.spark.clv} color="#3FCB91"/></div>
+          <div className="kpi"><div className="k">ROI</div><div className={"v "+(perfStats&&perfStats.roi!=null?(perfStats.roi>=0?"g":"red"):"")}>{perfStats&&perfStats.roi!=null?(perfStats.roi>=0?"+":"")+perfStats.roi+"%":"\u2014"}<KArrow series={perf&&perf.spark&&perf.spark.roi}/></div><div className="ksub">{perfStats?perfStats.roiLbl:"tracked"}</div></div>
+          <div className="kpi"><div className="k">WIN RATE</div><div className="v">{perfStats&&perfStats.winRate!=null?perfStats.winRate.toFixed(1)+"%":"\u2014"}<KArrow series={perf&&perf.spark&&perf.spark.win}/></div><div className="ksub">{perfStats&&perfStats.graded!=null?perfStats.graded+" graded":"tracking"}</div></div>
+          <div className="kpi"><div className="k">CLV</div><div className={"v "+(perfStats&&perfStats.clv!=null?(perfStats.clv>=0?"g":"red"):"")}>{perfStats&&perfStats.clv!=null?(perfStats.clv>=0?"+":"")+perfStats.clv+"%":"\u2014"}<KArrow series={perf&&perf.spark&&perf.spark.clv}/></div><div className="ksub">beat close</div></div>
         </div>}
 
       <div id="content">
@@ -591,23 +591,15 @@ function SparkM({dir,seed=0}){ const n=7,w=40,h=15,z=[1.4,-1,.8,-1.6,.6,0,-1.2];
   const col=dir==="up"?"#33e991":dir==="dn"?"#ff6a5a":"#46505c";const path=pts.map((p,i)=>(i?"L":"M")+p[0].toFixed(1)+" "+p[1].toFixed(1)).join(" ");
   return <svg className="spk" width={w} height={h} viewBox={`0 0 ${w} ${h}`}><path d={path} fill="none" stroke={col} strokeWidth="1.4" strokeLinejoin="round"/></svg>;
 }
-function Spark({data,color}){
-  if(!Array.isArray(data)||data.length<2) return null;
-  // WZ-KPISPARK-ZOOM-2026-07-08 :: fit the axis to where the trend actually LIVES, same idea as
-  // the Performance charts. The early small-sample ticks (a metric's first few graded picks swing
-  // wide) were stretching the domain and flattening the settled line into a worm. Skip a short
-  // warmup for the domain, pad a touch, and clamp early outliers so they can't dominate the scale.
-  // Short arrays fall back to the full set so nothing collapses. No 50% reference here -- these are
-  // ROI / win / CLV trends, not the win-rate curve, so the domain is purely data-driven.
-  const W=100,H=26;
-  const warm=Math.min(6,Math.floor(data.length*0.15));
-  const stable=data.slice(warm).length>=3?data.slice(warm):data;
-  let mn=Math.min(...stable),mx=Math.max(...stable);
-  const pad=((mx-mn)||1)*0.15; mn-=pad; mx+=pad;
-  const rng=(mx-mn)||1; const clampV=v=>Math.max(mn,Math.min(mx,v));
-  const X=i=>i/(data.length-1)*W,Y=v=>H-2-((clampV(v)-mn)/rng)*(H-4);
-  const pts=data.map((v,i)=>`${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(" ");
-  return <svg className="kspark" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none"><polyline points={pts} fill="none" stroke={color||"#3FCB91"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke"/></svg>;
+// WZ-KPI-STRIP-C-2026-07-08 :: the KPI strip drops the flat sparklines for a clean terminal
+// readout (Option C, owner-approved). KArrow replaces each sparkline with a small trend arrow --
+// green up / red down -- computed from the metric's own trend series (first vs last point). No
+// series (or too short) -> no arrow, so nothing renders half-broken when data is missing.
+function KArrow({series}){
+  const a=Array.isArray(series)&&series.length>=2?series:null;
+  if(!a) return null;
+  const up=a[a.length-1]>=a[0];
+  return <span className={"karw "+(up?"u":"d")}>{up?"\u25B2":"\u25BC"}</span>;
 }
 function HeroChartM({series,seed=0}){ const W=150,H=42;
   let raw=Array.isArray(series)?series.map(amCents).filter(v=>v!=null):[];
@@ -1130,7 +1122,7 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .kpis{display:flex;margin:18px 4px 0;background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden} /* WZ-KPI-ONESTRIP-2026-07-08 :: one strip, hairline dividers */
 .kpi{flex:1;padding:9px 11px;text-align:left}.kpi+.kpi{border-left:1px solid var(--line)}
 .kpi .k{font-family:var(--mono);font-size:8.5px;color:var(--mut2);letter-spacing:.5px}.kpi .v{font-family:var(--mono);font-weight:600;font-size:19px;color:var(--tx);margin-top:2px;line-height:1}.kpi .v.g{color:var(--green)}.kpi .v.gold{color:var(--gold)}.kpi .v.red{color:var(--red)}.kpi .ksub{font-family:var(--mono);font-size:8.5px;color:var(--mut2);margin-top:2px}
-.kpi .kspark{display:block;width:100%;height:15px;margin-top:4px;overflow:visible}
+.kpi .karw{font-size:10px;font-weight:700;margin-left:5px;position:relative;top:-2px}.kpi .karw.u{color:var(--green)}.kpi .karw.d{color:var(--red)}
 
 .chips{display:flex;align-items:center;gap:7px;padding:14px 4px 0;overflow-x:auto;scrollbar-width:none}.chips::-webkit-scrollbar{display:none}
 .chipf{font-family:var(--mono);font-size:10px;color:var(--mut);border:1px solid var(--line2);border-radius:999px;padding:4px 10px;white-space:nowrap;cursor:pointer}.chipf.on{color:var(--gold);background:transparent;border-color:rgba(201,168,106,.55);font-weight:600}
