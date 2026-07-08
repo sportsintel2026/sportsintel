@@ -1035,7 +1035,7 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .seclbl{display:flex;align-items:center;gap:10px;margin:24px 4px 0;color:var(--mut);font-family:var(--disp);font-weight:800;font-size:13px;letter-spacing:.6px}
 .seclbl .ct{font-family:var(--mono);font-size:10px;color:var(--mut2);font-weight:500}
 .seclbl .rollpill{margin-left:auto;font-family:var(--mono);font-size:9px;font-weight:600;letter-spacing:.3px;color:var(--gold);background:rgba(201,168,106,.12);border:1px solid rgba(201,168,106,.3);border-radius:20px;padding:3px 9px;white-space:nowrap}
-.boardhd{text-align:center;margin:28px 4px 2px;padding-top:28px;border-top:1px solid var(--line)} /* WZ-BOARD-BREATHE-2026-06-26 :: more breathing room */
+.boardhd{text-align:center;margin:13px 4px 2px;padding-top:13px;border-top:1px solid var(--line)} /* WZ-TIGHTEN-PROOF-BOARD-2026-07-08 :: proof strip + board gap tightened */
 .bhtitle{display:flex;align-items:center;justify-content:center;gap:12px}
 .bht{font-family:var(--disp);font-weight:700;font-size:27px;letter-spacing:.5px;color:var(--gold);line-height:1}
 .bht .bhwize{color:#ECEFF2} /* WZ-WIZEBOARD-2026-07-08 :: Wize white / Board gold */
@@ -1099,9 +1099,9 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .wheel{width:52px;height:52px;border-radius:50%;position:absolute;top:24px;right:16px;background:radial-gradient(circle,#3a2c0a,#14110a 72%);border:2px solid var(--gold);animation:spin 7s linear infinite}.wheel::before{content:"";position:absolute;inset:6px;border-radius:50%;border:1px dashed rgba(243,185,79,.6)}
 @keyframes spin{to{transform:rotate(360deg)}}
 
-.kpis{display:flex;gap:8px;margin:24px 4px 0}.kpi{flex:1;border:none;border-radius:11px;background:var(--panel);padding:9px 11px;text-align:left}
-.kpi .k{font-family:var(--mono);font-size:8.5px;color:var(--mut2);letter-spacing:.5px}.kpi .v{font-family:var(--mono);font-weight:600;font-size:19px;color:var(--tx);margin-top:3px;line-height:1}.kpi .v.g{color:var(--green)}.kpi .v.gold{color:var(--gold)}.kpi .v.red{color:var(--red)}.kpi .ksub{font-family:var(--mono);font-size:8.5px;color:var(--mut2);margin-top:2px}
-.kpi .kspark{display:block;width:100%;height:22px;margin-top:5px;overflow:visible}
+.kpis{display:flex;gap:5px;margin:18px 4px 0}.kpi{flex:1;border:none;border-radius:11px;background:var(--panel);padding:7px 9px;text-align:left}
+.kpi .k{font-family:var(--mono);font-size:8.5px;color:var(--mut2);letter-spacing:.5px}.kpi .v{font-family:var(--mono);font-weight:600;font-size:19px;color:var(--tx);margin-top:2px;line-height:1}.kpi .v.g{color:var(--green)}.kpi .v.gold{color:var(--gold)}.kpi .v.red{color:var(--red)}.kpi .ksub{font-family:var(--mono);font-size:8.5px;color:var(--mut2);margin-top:2px}
+.kpi .kspark{display:block;width:100%;height:15px;margin-top:4px;overflow:visible}
 
 .chips{display:flex;align-items:center;gap:7px;padding:14px 4px 0;overflow-x:auto;scrollbar-width:none}.chips::-webkit-scrollbar{display:none}
 .chipf{font-family:var(--mono);font-size:10px;color:var(--mut);border:1px solid var(--line2);border-radius:999px;padding:4px 10px;white-space:nowrap;cursor:pointer}.chipf.on{color:var(--gold);background:transparent;border-color:rgba(201,168,106,.55);font-weight:600}
