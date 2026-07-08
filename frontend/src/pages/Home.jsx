@@ -241,7 +241,7 @@ export default function HomePage(){
   const ksP=(e.kPropEdges||[]).slice(0,6);
   const propArr=propTab==="hr"?hrP:propTab==="hits"?hitsP:propTab==="ks"?ksP:[];
   const mkProp=(p,kind)=>{
-    const b={k:kind+(p.playerId||p.player),id:p.playerId,name:p.player,team:p.team,game:p.game,edge:p.edge??0,odds:p.odds};
+    const b={k:kind+(p.playerId||p.player),id:p.playerId,gameId:p.gameId,name:p.player,team:p.team,game:p.game,edge:p.edge??0,odds:p.odds};
     if(kind==="hr") return {...b,market:"HR",betSide:"Anytime HR"};
     if(kind==="hits") return {...b,market:"HITS",betSide:(p.line===0.5?(p.side==="under"?"No Hits":"1+ Hits"):`${p.side==="under"?"U":"O"} ${p.line} Hits`)}; // WZ-PROP-UNDER-NOX-2026-06-26 :: under-0.5 hits was mislabeled "1+ Hits"
     return {...b,market:"K",betSide:`K ${p.side==="under"?"U":"O"}${p.line}`};
@@ -258,7 +258,10 @@ export default function HomePage(){
   // model win% from each type: Hits / K / HR, interleaved) so no single prop type floods the grid.
   // Reuses the Props-tab prop pipeline; win% = model P(hit); edge>0 flags a +VALUE play.
   const _lastNm=(n)=>{ const q=String(n||"").trim().split(/\s+/); return q.length>1?q[q.length-1].replace(/[.,]/g,""):(q[0]||""); };
-  const _tpMk=(p)=>({id:p.id,name:p.name,nm:_lastNm(p.name),col:teamCol(shortTeam(p.team||p.game||"")),tm:shortTeam(p.team||p.game||""),g:p.game||"",side:p.betSide,prob:p.prob!=null?Math.round(p.prob*100):null,odds:formatOdds(p.odds),val:(p.edge||0)>0});
+  const _tpMk=(p)=>({id:p.id,gameId:p.gameId,name:p.name,nm:_lastNm(p.name),mk:p.market,col:teamCol(shortTeam(p.team||p.game||"")),tm:shortTeam(p.team||p.game||""),g:p.game||"",side:p.betSide,prob:p.prob!=null?Math.round(p.prob*100):null,odds:formatOdds(p.odds),val:(p.edge||0)>0});
+  // WZ-TOPPROPS-DEEPLINK-2026-07-08 :: tapping a card opens THAT player's card on the Props page
+  // (via ?pid=...), instead of just dumping you on the tab. Falls back to the plain tab if no id.
+  const openTopProp=(p)=>{ if(!p||p.id==null){ navigate("/props"); return; } const q=new URLSearchParams({pid:String(p.id),gid:String(p.gameId||""),nm:p.name||"",mk:p.mk||"",ln:p.side||"",g:p.g||"",tm:p.tm||""}); navigate("/props?"+q.toString()); };
   // WZ-TOPPROPS-FILL6-2026-07-08 :: prefer variety (best 2 of each type, interleaved), THEN backfill
   // to 6 from the best remaining by win% -- so a thin/empty type (e.g. no Hits props tonight) can no
   // longer shrink the grid below 6 when there are enough props overall. Deduped on each pick's key.
@@ -570,7 +573,7 @@ export default function HomePage(){
           <div className="tpdiv"><span className="tpln"/><span className="tplbl"><span className="tpdia">{"\u25c6"}</span>TOP PROP PLAYS<span className="tpdia">{"\u25c6"}</span></span><span className="tpln r"/></div>
           <div className="propgrid">
             {topPropCards.map((p,i)=>(
-              <div className="ppc" key={i} onClick={()=>navigate("/props")}>
+              <div className="ppc" key={i} onClick={()=>openTopProp(p)}>
                 <PropFace id={p.id} name={p.name} col={p.col}/>
                 <div className="ppn">{p.nm}{p.val&&<span className="ppv">{"\u25cf"}</span>}</div>
                 <div className="pptm">{p.g||p.tm}</div>
