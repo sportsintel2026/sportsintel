@@ -259,7 +259,10 @@ export default function HomePage(){
   // Reuses the Props-tab prop pipeline; win% = model P(hit); edge>0 flags a +VALUE play.
   const _lastNm=(n)=>{ const q=String(n||"").trim().split(/\s+/); return q.length>1?q[q.length-1].replace(/[.,]/g,""):(q[0]||""); };
   const _tpMk=(p)=>({id:p.id,name:p.name,nm:_lastNm(p.name),col:teamCol(shortTeam(p.team||p.game||"")),tm:shortTeam(p.team||p.game||""),g:p.game||"",side:p.betSide,prob:p.prob!=null?Math.round(p.prob*100):null,odds:formatOdds(p.odds),val:(p.edge||0)>0});
-  const topPropCards=(()=>{ const byP=(arr)=>[...(arr||[])].sort((a,b)=>(b.prob||0)-(a.prob||0)); const h=byP(propsByType.hits),k=byP(propsByType.ks),r=byP(propsByType.hr); return [h[0],k[0],r[0],h[1],k[1],r[1]].filter(Boolean).map(_tpMk); })();
+  // WZ-TOPPROPS-FILL6-2026-07-08 :: prefer variety (best 2 of each type, interleaved), THEN backfill
+  // to 6 from the best remaining by win% -- so a thin/empty type (e.g. no Hits props tonight) can no
+  // longer shrink the grid below 6 when there are enough props overall. Deduped on each pick's key.
+  const topPropCards=(()=>{ const byP=(arr)=>[...(arr||[])].sort((a,b)=>(b.prob||0)-(a.prob||0)); const h=byP(propsByType.hits),k=byP(propsByType.ks),r=byP(propsByType.hr); const seen=new Set(),out=[]; const add=(p)=>{ if(p&&!seen.has(p.k)){ seen.add(p.k); out.push(p); } }; [h[0],k[0],r[0],h[1],k[1],r[1]].forEach(add); if(out.length<6) byP([...h,...k,...r]).forEach(p=>{ if(out.length<6) add(p); }); return out.slice(0,6).map(_tpMk); })();
   const parks=games.filter(g=>g.parkRunFactor!=null).slice(0,8);
   const upcoming=games.filter(g=>g.status!=="final").slice(0,6);
   const abbrById={}; games.forEach(g=>{ abbrById[g.id]={a:g.awayAbbr||shortTeam(g.away||""),h:g.homeAbbr||shortTeam(g.home||"")}; });
@@ -1172,9 +1175,9 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .ppc:not(:nth-child(3n)){border-right:1px solid var(--line)}
 .ppc:nth-child(-n+3){border-bottom:1px solid var(--line)}
 /* WZ-TOPPROPS-BIGFACE-2026-07-08 :: larger player headshots */
-.ppav{width:56px;height:56px;border-radius:50%;margin:0 auto 7px;overflow:hidden;display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto}
+.ppav{width:64px;height:64px;border-radius:50%;margin:0 auto 8px;overflow:hidden;display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto}
 .ppav img{width:100%;height:100%;object-fit:cover;border-radius:50%}
-.ppini{font-family:var(--disp);font-weight:800;font-size:20px;color:#fff}
+.ppini{font-family:var(--disp);font-weight:800;font-size:23px;color:#fff}
 .ppn{font-family:var(--disp);font-weight:700;font-size:15px;line-height:1;letter-spacing:.2px}
 .ppv{color:var(--green);font-size:7px;position:relative;top:-3px;margin-left:3px}
 .pptm{font-family:var(--mono);font-size:8px;color:var(--mut2);letter-spacing:.5px;margin-top:2px}
