@@ -479,13 +479,10 @@ export default function HomePage(){
 
         {/* WZ-WINNERS-REMOVED-2026-07-05 :: toggle + Winners view removed; Edge Board only */}
         {face==="edges" && <>
-        <div className="boardhd">
-          <div className="bhtitle">
-            <svg className="bharw" width="34" height="10" viewBox="0 0 34 10" aria-hidden="true"><line x1="0" y1="5" x2="28" y2="5"/><path d="M22 1 L30 5 L22 9" fill="none"/></svg>
-            <span className="bht"><span className="bhwize">Wize</span>Board</span>{/* WZ-WIZEBOARD-2026-07-08 */}
-            <svg className="bharw" width="34" height="10" viewBox="0 0 34 10" aria-hidden="true"><line x1="6" y1="5" x2="34" y2="5"/><path d="M12 1 L4 5 L12 9" fill="none"/></svg>
-          </div>
-          <div className="bhsub">{(isTomorrowMain?previewItems.length:boardItems.length)>0?(isTomorrowMain?previewItems.length:boardItems.length)+" winners":"Ranked by win %"}{(isTomorrowMain?("Tomorrow"+(previewLabel?", "+previewLabel:"")):boardDate)&&<> <span className="bhd">{"\u00b7"}</span> {isTomorrowMain?("Tomorrow"+(previewLabel?", "+previewLabel:"")):boardDate}</>}</div>{/* WZ-BOARD-NEVER-EMPTY-2026-07-08 */}
+        <div className="boardhd">{/* WZ-WIZEBOARD-BAND-2026-07-08 :: full-width serif band + glow + winners/date subline */}
+          <span className="bht"><span className="bhwize">Wize</span>Board</span>
+          <div className="bhglow"/>
+          <div className="bhsub">{(isTomorrowMain?previewItems.length:boardItems.length)>0?(isTomorrowMain?previewItems.length:boardItems.length)+" winners":"Ranked by win %"}{(isTomorrowMain?("Tomorrow"+(previewLabel?", "+previewLabel:"")):boardDate)&&<> <span className="bhd">{"\u00b7"}</span> {isTomorrowMain?("Tomorrow"+(previewLabel?", "+previewLabel:"")):boardDate}</>}</div>
         </div>
         {hasFull
           ? <>
@@ -941,7 +938,7 @@ const S={ shell:{minHeight:"100vh",background:"#0b0d11",color:"#f2f6f4",fontFami
 
 const CSS=`@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap');
 
-:root{--bg:#0A0B0D;--panel:#14171B;--panel2:#1B2025;--line:rgba(255,255,255,.06);--line2:rgba(255,255,255,.12);
+:root{--bg:#0A0B0D;--panel:#0C0D10;--panel2:#1B2025;--line:rgba(255,255,255,.06);--line2:rgba(255,255,255,.12);
 --gold:#C9A86A;--red:#E2655C;--blue:#5DA9E8;--steel:#2A6F97;--green:#3FCB91;--neg:#E2655C;--tx:#ECEFF2;--mut:#99A2AA;--mut2:#5B646C;
 --disp:'Barlow Condensed',sans-serif;--mono:'IBM Plex Mono',ui-monospace,monospace;--ui:'Inter',system-ui,sans-serif;--serif:Georgia,'Times New Roman',serif;}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}html,body{margin:0}
@@ -1050,16 +1047,15 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .seclbl{display:flex;align-items:center;gap:10px;margin:24px 4px 0;color:var(--mut);font-family:var(--disp);font-weight:800;font-size:13px;letter-spacing:.6px}
 .seclbl .ct{font-family:var(--mono);font-size:10px;color:var(--mut2);font-weight:500}
 .seclbl .rollpill{margin-left:auto;font-family:var(--mono);font-size:9px;font-weight:600;letter-spacing:.3px;color:var(--gold);background:rgba(201,168,106,.12);border:1px solid rgba(201,168,106,.3);border-radius:20px;padding:3px 9px;white-space:nowrap}
-.boardhd{text-align:center;margin:13px 4px 2px;padding-top:13px;border-top:1px solid var(--line)} /* WZ-TIGHTEN-PROOF-BOARD-2026-07-08 :: proof strip + board gap tightened */
-.bhtitle{display:flex;align-items:center;justify-content:center;gap:12px}
-.bht{font-family:var(--disp);font-weight:700;font-size:27px;letter-spacing:.5px;color:var(--gold);line-height:1}
-.bht .bhwize{color:#ECEFF2} /* WZ-WIZEBOARD-2026-07-08 :: Wize white / Board gold */
-.bharw{flex:0 0 auto}.bharw line,.bharw path{stroke:var(--gold);stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round}
-.bhsub{font-family:var(--mono);font-size:11px;color:var(--mut);margin-top:10px;letter-spacing:.2px}.bhsub .bhd{color:var(--mut2)}
+/* WZ-WIZEBOARD-BAND-2026-07-08 :: full-width thin serif band + glow + subline */
+.boardhd{margin:16px 0 0;background:var(--panel);border-top:1px solid rgba(201,168,106,.4);border-bottom:1px solid var(--line);padding:9px 14px 10px;text-align:center}
+.bht{font-family:var(--serif);font-weight:700;font-size:40px;letter-spacing:2.5px;line-height:1;color:var(--gold)}
+.bht .bhwize{color:#ECEFF2}
+.bhglow{width:150px;height:1.5px;background:linear-gradient(90deg,transparent,var(--gold),transparent);border-radius:2px;margin:6px auto 0;box-shadow:0 0 12px rgba(201,168,106,.55)}
+.bhsub{font-family:var(--mono);font-size:10.5px;color:var(--mut);margin-top:6px;letter-spacing:.3px}.bhsub .bhd{color:var(--mut2)}
 /* WZ-PARKFACTORS-HEADER-2026-06-27 :: Park Factors identity — green title + wind/flight wave */
 .pfhd .bht{color:var(--green)}
 .pfarw{flex:0 0 auto}.pfarw path{stroke:var(--green);stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round}
-.bhsub .gd{color:var(--green)}
 .seclbl .lk{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--mut)}
 .livelist{margin-top:8px;border:1px solid rgba(226,101,92,.22);border-radius:12px;background:linear-gradient(180deg,rgba(226,101,92,.05),transparent);overflow:hidden} /* WZ-LIVE-LIST-2026-07-08 */
 .liverow{display:flex;align-items:center;gap:10px;padding:11px 12px;border-top:1px solid rgba(255,255,255,.05);cursor:pointer}
