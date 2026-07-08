@@ -1408,16 +1408,36 @@ async function calculateGameEdges(game, oddsForGame) {
   // through sanitizeEdge() so an implausible number can never surface.
   const awayEdge = sanitizeEdge(blendedEdge(ml.awayWinProb, awayML, homeML));
   const homeEdge = sanitizeEdge(blendedEdge(ml.homeWinProb, homeML, awayML));
-  // WZ-CAL-LIVE-2026-07-02 :: ML win-prob calibration, promoted from shadow to LIVE on
-  // out-of-sample evidence (n=61 forward picks: the 23 picks this would have pruned won
-  // 14-25%). Exactly the shadow's validated semantics: displayed/recorded prob is the
-  // calibrated claim, edge takes the full haircut. Pick-level only — ml.awayWinProb /
-  // ml.homeWinProb stay RAW below where they feed the run-line margin blend, which has
-  // its own independently fitted cover curve (never stack the two corrections).
-  const awayWinProbCal = ml.awayWinProb != null ? round3(calibrateWinProb(ml.awayWinProb)) : null;
-  const homeWinProbCal = ml.homeWinProb != null ? round3(calibrateWinProb(ml.homeWinProb)) : null;
-  const awayEdgeCal = awayEdge != null ? round3(awayEdge - winProbHaircut(ml.awayWinProb)) : null;
-  const homeEdgeCal = homeEdge != null ? round3(homeEdge - winProbHaircut(ml.homeWinProb)) : null;
+  // WZ-ML-WINBLEND-2026-07-08 :: anchor the WIN PROBABILITY (the number that PICKS and ranks
+  // moneyline winners, and gates the >=55% floor) to the sharp de-vigged market -- the SAME
+  // 55/45 blend the moneyline EDGE (blendedEdge) and the run-line margin already use. Until now
+  // the board's win% was the raw strength model alone (market-blind), which is why moneyline
+  // lagged (~43.7%) while totals and hits -- both market-anchored -- profited. The model keeps
+  // its opinion; it just stops ignoring the sharpest who-wins estimate there is. The edge is
+  // derived from the SAME blended number, so on every card win% - edge == the fair market price
+  // (fully consistent). No clean two-way price to blend against -> fall back to the prior
+  // calibrated-raw prob (WZ-CAL-LIVE-2026-07-02, n=61 forward-validated) so nothing breaks. Raw
+  // ml.awayWinProb / ml.homeWinProb are UNTOUCHED -- the run line derives its own blend below,
+  // and we never stack the win-prob haircut on top of the market blend (one correction, not two).
+  const fairAwayWin = devigTwoWay(awayML, homeML);
+  const fairHomeWin = devigTwoWay(homeML, awayML);
+  const awayWinProbCal = ml.awayWinProb == null ? null
+    : (MARKET_BLEND_ENABLED && fairAwayWin != null)
+      ? round3(W_MODEL * ml.awayWinProb + (1 - W_MODEL) * fairAwayWin)
+      : round3(calibrateWinProb(ml.awayWinProb));
+  const homeWinProbCal = ml.homeWinProb == null ? null
+    : (MARKET_BLEND_ENABLED && fairHomeWin != null)
+      ? round3(W_MODEL * ml.homeWinProb + (1 - W_MODEL) * fairHomeWin)
+      : round3(calibrateWinProb(ml.homeWinProb));
+  // Edge = blended win% - fair (exactly what blendedEdge already returns). When we blended the
+  // win% above, take that edge as-is; only in the no-market fallback do we apply the raw-model
+  // haircut that matches the calibrated-raw prob -- so the correction is never double-counted.
+  const awayEdgeCal = awayEdge == null ? null
+    : (MARKET_BLEND_ENABLED && fairAwayWin != null) ? round3(awayEdge)
+      : round3(awayEdge - winProbHaircut(ml.awayWinProb));
+  const homeEdgeCal = homeEdge == null ? null
+    : (MARKET_BLEND_ENABLED && fairHomeWin != null) ? round3(homeEdge)
+      : round3(homeEdge - winProbHaircut(ml.homeWinProb));
   // Neutral "market overreaction" context (the side the market is high on).
   const awayInflation = overreactionNote(ml.awayWinProb, awayML, homeML);
   const homeInflation = overreactionNote(ml.homeWinProb, homeML, awayML);
