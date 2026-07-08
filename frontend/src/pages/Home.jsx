@@ -519,25 +519,28 @@ export default function HomePage(){
           : <Gate title="Today's top edge is locked" navigate={navigate}/>}
 
         {/* WZ-WIZEPLAYS-LIST-2026-07-08 :: record bar + today's plays as a vertical list (empty state when none) */}
+        {/* WZ-WIZEPLAYS-UNIFY-2026-07-08 :: record + plays in ONE card (was two separate blocks) */}
         <div className="wpsec">
-          <div className="wpbar" onClick={()=>navigate("/expert-picks")}>
-            <div className="ic">W</div>
-            <div className="tx"><div className="h">WIZEPLAYS <span className="new">CURATED</span></div><div className="s">{hasFull?"Hand-picked after extra review":"See every pick"}</div></div>
-            {wpRecord&&(wpRecord.wins+wpRecord.losses+wpRecord.pushes)>0
-              ? <div className="rec"><div className="r">{wpRecord.wins}-{wpRecord.losses}{wpRecord.pushes?"-"+wpRecord.pushes:""}</div><div className="u">{wpRecord.units>=0?"+":""}{wpRecord.units.toFixed(1)}u</div></div>
-              : <div className="rec"><div className="r" style={{fontSize:13,color:"#f3b94f"}}>View {"\u203a"}</div></div>}
+          <div className="wpcard">
+            <div className="wpbar" onClick={()=>navigate("/expert-picks")}>
+              <div className="ic">W</div>
+              <div className="tx"><div className="h">WIZEPLAYS <span className="new">CURATED</span></div><div className="s">{hasFull?"Hand-picked after extra review":"See every pick"}</div></div>
+              {wpRecord&&(wpRecord.wins+wpRecord.losses+wpRecord.pushes)>0
+                ? <div className="rec"><div className="r">{wpRecord.wins}-{wpRecord.losses}{wpRecord.pushes?"-"+wpRecord.pushes:""}</div><div className="u">{wpRecord.units>=0?"+":""}{wpRecord.units.toFixed(1)}u</div></div>
+                : <div className="rec"><div className="r" style={{fontSize:13,color:"#f3b94f"}}>View {"\u203a"}</div></div>}
+            </div>
+            {wpToday.length>0
+              ? wpToday.map((pk,i)=>(
+                  <div className="wprow" key={i} onClick={()=>navigate("/expert-picks")}>
+                    <LogoM ab={wpAbbr(pk)} col="#3a4653"/>
+                    <div className="wpmid"><div className="wpp">{pk.pick}</div>{pk.game&&<div className="wpg">{pk.game}</div>}</div>
+                    {pk.odds!=null&&<div className="wpo">{formatOdds(pk.odds)}</div>}
+                  </div>))
+              : <div className="wpempty">
+                  <div className="et">No WizePlays posted yet</div>
+                  <div className="es">Curated plays go up after extra review, usually before first pitch. The full WizeBoard is live above.</div>
+                </div>}
           </div>
-          {wpToday.length>0
-            ? <div className="wplist">{wpToday.map((pk,i)=>(
-                <div className="wprow" key={i} onClick={()=>navigate("/expert-picks")}>
-                  <LogoM ab={wpAbbr(pk)} col="#3a4653"/>
-                  <div className="wpmid"><div className="wpp">{pk.pick}</div>{pk.game&&<div className="wpg">{pk.game}</div>}</div>
-                  {pk.odds!=null&&<div className="wpo">{formatOdds(pk.odds)}</div>}
-                </div>))}</div>
-            : <div className="wpempty">
-                <div className="et">No WizePlays posted yet</div>
-                <div className="es">Curated plays go up after extra review, usually before first pitch. The full WizeBoard is live above.</div>
-              </div>}
         </div>
 
       {hasFull && pulseAlerts.length>0 && <MarketPulse alerts={pulseAlerts} rolled={e.rolledToNextDay}/>}
@@ -1064,17 +1067,16 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .hdots{display:flex;gap:6px;justify-content:center;margin-top:9px}.hdots i{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.2)}.hdots i.on{background:var(--gold);width:16px;border-radius:3px}
 
 /* WizePlays (alone) */
-.wpsec{margin:24px 4px 0} /* WZ-WIZEPLAYS-LIST-2026-07-08 */
-.wpsec .wpbar{margin:0}
-.wpbar{display:flex;align-items:center;gap:11px;margin:24px 4px 0;border:1px solid rgba(201,168,106,.4);border-radius:13px;background:var(--panel);padding:13px;cursor:pointer}
-.wplist{margin-top:7px;border:1px solid var(--line2);border-radius:12px;background:var(--panel);overflow:hidden}
-.wprow{display:flex;align-items:center;gap:10px;padding:10px 12px;border-top:1px solid rgba(255,255,255,.05);cursor:pointer}
-.wprow:first-child{border-top:none}
+.wpsec{margin:24px 4px 0} /* WZ-WIZEPLAYS-UNIFY-2026-07-08 :: record + plays in ONE card */
+.wpcard{border:1px solid rgba(201,168,106,.4);border-radius:13px;background:var(--panel);overflow:hidden}
+.wpcard .wpbar{margin:0;border:none;border-radius:0;background:transparent}
+.wpbar{display:flex;align-items:center;gap:11px;padding:13px;cursor:pointer}
+.wprow{display:flex;align-items:center;gap:10px;padding:11px 13px;border-top:1px solid rgba(255,255,255,.06);cursor:pointer}
 .wprow .wpmid{flex:1;min-width:0}
 .wprow .wpp{font-family:var(--disp);font-weight:800;font-size:15px;color:#fff;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .wprow .wpg{font-family:var(--mono);font-size:9px;color:var(--mut);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .wprow .wpo{margin-left:auto;font-family:var(--disp);font-weight:800;font-size:15px;color:#dbe4e2;white-space:nowrap}
-.wpempty{margin-top:7px;border:1px dashed var(--line2);border-radius:12px;background:rgba(255,255,255,.015);padding:18px 14px;text-align:center}
+.wpempty{border-top:1px solid rgba(255,255,255,.06);padding:18px 14px;text-align:center}
 .wpempty .et{font-family:var(--disp);font-weight:800;font-size:15px;color:#cdd6da}
 .wpempty .es{font-family:var(--mono);font-size:9.5px;color:var(--mut2);margin-top:5px;line-height:1.5}
 .wpbar .ic{width:36px;height:36px;border-radius:10px;background:rgba(243,185,79,.16);border:1px solid rgba(243,185,79,.42);display:flex;align-items:center;justify-content:center;color:var(--gold);font-family:var(--disp);font-weight:800;font-size:18px}
