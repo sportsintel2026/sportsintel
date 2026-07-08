@@ -1,8 +1,8 @@
 // PROPS-TB-BOARD-WIRED-2026-06-23
 // PROPS-PREMIUM-DARK-RESKIN-2026-06-23
 // PROPS-PLAYERCARD-GREEN-2026-06-23
-import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect, useRef } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { edgesApi, subscriptionApi, playerCardApi } from "../lib/api";
 
@@ -39,7 +39,7 @@ export default function PropsPage() {
   const [mlb, setMlb] = useState(null);
   const [loading, setLoading] = useState(true);
   const [mfilter, setMfilter] = useState("All");
-  const [sortBy, setSortBy] = useState("edge");
+  const [sortBy, setSortBy] = useState("win");
   const [selProp, setSelProp] = useState(null);
   const [card, setCard] = useState(null);
   const [cardLoading, setCardLoading] = useState(false);
@@ -58,6 +58,26 @@ export default function PropsPage() {
       .then(d => setCard(d)).catch(()=>setCard(null)).finally(()=>setCardLoading(false));
   };
   const closeP = () => { setSelProp(null); setCard(null); };
+
+  // WZ-TOPPROPS-DEEPLINK-2026-07-08 :: when arriving from Home's Top Prop Plays (/props?pid=...),
+  // open that player's card directly. The card fetches by player id, so it opens even for a player
+  // the edge>0 list filter would hide. Fires once per navigation (guarded by dlRef).
+  const location = useLocation();
+  const dlRef = useRef(false);
+  useEffect(() => {
+    if (dlRef.current) return;
+    const q = new URLSearchParams(location.search);
+    const pid = q.get("pid");
+    if (!pid) return;
+    dlRef.current = true;
+    const nm = q.get("nm") || "";
+    const tm = q.get("tm") || "";
+    openP({
+      id: pid, gameId: q.get("gid") || undefined, teamRaw: tm,
+      pl: [nm, initialsOf(nm), teamCol(shortTeam(tm))],
+      g: q.get("g") || "", line: q.get("ln") || "", mk: q.get("mk") || "", mkt: null,
+    });
+  }, [location.search]);
 
   const M = mlb || {};
   const convOf = (p) => {
@@ -110,18 +130,14 @@ export default function PropsPage() {
   const FILT = ["All","HR","Hits","K","TB"];
   const fmap = { HR:"HR", Hits:"HITS", K:"K", TB:"TB" };
   let list = mfilter==="All" ? allProps : allProps.filter(p => p.mk === fmap[mfilter]);
-  const rank = { high:3, med:2, low:1 };
-  // Null-safe sort. TB rows (lk) carry no validated edge/tier, so they rank by model prob
-  // and sit below the edge-filtered picks; never let a null edge produce NaN ordering.
-  const sortKey = (p) => p.lk
-    ? -1000 + (p.model ?? 0)
-    : (sortBy==="edge" ? (p.edge ?? 0) : (rank[p.conv]||0)*1000 + (p.edge ?? 0));
-  // Only surface POSITIVE-edge picks. TB rows (lk:true) are model-probability, not
-  // edge-gated, so they're exempt; everything else must beat the market (edge > 0).
-  list = list.filter(p => p.lk || (p.edge!=null && p.edge > 0));
+  // WZ-PROPS-WINNERS-2026-07-08 :: winners-first, same as the moneyline board. Rank by model win%
+  // by default (edge is a bonus, not the sort key and not a gate); "Value" re-ranks by edge for line
+  // shopping. The old edge>0 filter is gone -- every play with a model win% shows, and edge appears
+  // only as a +VALUE tag on the row. Null-safe so a missing value never produces NaN ordering.
+  const sortKey = (p) => sortBy==="edge" ? (p.edge ?? -1) : (p.model ?? -1);
+  list = list.filter(p => p.lk || p.model != null);
   list = [...list].sort((a,b) => sortKey(b) - sortKey(a));
-  const edged = list.filter(p => !p.lk && p.edge!=null);
-  const avg = (edged.reduce((s,p)=>s+p.edge,0)/Math.max(edged.length,1)).toFixed(1);
+  const nVal = list.filter(p => !p.lk && p.edge!=null && p.edge>0).length; // +VALUE = model beats the market price
 
   return (
     <div className="app"><style>{CSS}</style>
@@ -142,8 +158,8 @@ export default function PropsPage() {
       {!hasFull ? <Gate navigate={navigate}/> : <>
         <div className="chips">{FILT.map(f=><b key={f} className={f===mfilter?"on":""} onClick={()=>setMfilter(f)}>{f}</b>)}</div>
         <div className="bar">
-          <span>{list.length} props · {mfilter==="TB" ? "ranked by model probability" : `avg edge +${avg}%`}</span>
-          <span className="sort"><b className={sortBy==="edge"?"on":""} onClick={()=>setSortBy("edge")}>Edge</b><b className={sortBy==="conv"?"on":""} onClick={()=>setSortBy("conv")}>Conviction</b></span>
+          <span>{list.length} props {"\u00b7"} ranked by win%{nVal>0?` \u00b7 ${nVal} +VALUE`:""}</span>
+          <span className="sort"><b className={sortBy==="win"?"on":""} onClick={()=>setSortBy("win")}>Win %</b><b className={sortBy==="edge"?"on":""} onClick={()=>setSortBy("edge")}>Value</b></span>
         </div>
         <div id="wrap">
           {loading ? <div className="plist">{[0,1,2,3,4,5].map(i=>(
@@ -196,9 +212,8 @@ function PropRow({ p, onOpen }) {
         <div className="pline">{p.line}<span className="od">{p.odds}</span></div>
       </div>
       <div className="pr">
-        {p.lk
-          ? <><div className="ped">{p.model!=null?p.model+"%":"\u2014"}</div><div className="plb">MODEL</div></>
-          : <><div className={"ped "+((p.edge??0)>=0?"":"neg")}>{((p.edge??0)>=0?"+":"")+(p.edge??0).toFixed(1)}%</div><div className="plb">EDGE</div></>}
+        <div className="ped">{p.model!=null?p.model+"%":"\u2014"}</div><div className="plb">MODEL WIN</div>
+        {!p.lk && p.edge!=null && p.edge>0 && <div className="pval">+VALUE</div>}
         <div className={"ptag "+p.mk}>{p.mk}</div>
       </div>
     </div>
@@ -527,6 +542,7 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .prow .pr{text-align:right;flex:0 0 auto}
 .prow .ped{font-family:var(--disp);font-weight:800;font-size:22px;color:var(--green);line-height:1}.prow .ped.neg{color:var(--neg)}
 .prow .plb{font-family:var(--mono);font-size:8px;color:var(--mut);font-weight:700;margin-top:2px;letter-spacing:.3px}
+.prow .pval{display:inline-block;font-family:var(--mono);font-size:8px;font-weight:600;color:var(--green);border:1px solid rgba(63,203,145,.4);border-radius:20px;padding:1px 6px;margin-top:5px}
 .prow .ptag{display:inline-block;font-family:var(--mono);font-size:8px;font-weight:700;border-radius:5px;padding:2px 6px;margin-top:5px}
 .ptag.HR{color:var(--gold);background:rgba(201,168,106,.14)}.ptag.HITS{color:var(--blue);background:rgba(93,169,232,.12)}.ptag.K{color:#c08bff;background:rgba(155,123,255,.14)}.ptag.TB{color:#7fdcc0;background:rgba(45,160,120,.16)}
 .seclbl{font-family:var(--disp);font-weight:800;font-size:13px;letter-spacing:1px;color:var(--mut);margin:24px 4px 2px}
