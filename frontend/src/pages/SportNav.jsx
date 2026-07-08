@@ -182,7 +182,7 @@ export default function SportBar() {
             onClick={() => pickSport(sp.key)}
             aria-current={on ? "true" : undefined}
           >
-            <span className="wpnav-spl">{sp.lb}<i className={"wpnav-dot " + (sp.status === "LIVE" ? "live" : sp.status === "TRAIN" ? "train" : "soon")} /></span>
+            <span className="wpnav-spl">{sp.lb}</span>
           </button>
         );
       })}
@@ -231,11 +231,8 @@ const CSS = `
   background:linear-gradient(180deg,#0c0f13,#070809);border-top:1px solid rgba(255,255,255,.07)}
 .wpnav-sp{flex:1;min-width:0;appearance:none;background:none;cursor:pointer;position:relative;
   display:flex;align-items:center;justify-content:center;
-  padding:9px 2px;border:1px solid transparent;border-radius:12px;color:#8A929A}
-.wpnav-sp.on{border-color:rgba(201,168,106,.45);background:rgba(201,168,106,.08);color:#C9A86A}
+  padding:9px 2px;border:1px solid transparent;border-radius:12px;color:#E4E8EC;transition:background .15s ease,color .15s ease}
+.wpnav-sp.on{border-color:#C9A86A;background:linear-gradient(180deg,#e7cf9a,#C9A86A);color:#0A0B0D;box-shadow:0 4px 16px rgba(201,168,106,.28)} /* WZ-SPORTBAR-GOLDPILL-2026-07-07 :: Option A gold pill on the selected sport */
 .wpnav-sp .wpnav-spl{position:relative;font-family:'Oswald',sans-serif;font-weight:700;font-size:19px;letter-spacing:.4px;line-height:1;color:inherit}
-.wpnav-dot{position:absolute;top:-3px;right:-9px;width:7px;height:7px;border-radius:50%;border:1.5px solid #0b0d11}
-.wpnav-dot.live{background:#3FCB91}
-.wpnav-dot.train{background:#D9A441}
-.wpnav-dot.soon{background:transparent;border-color:#3a4148}
+/* WZ-SPORTBAR-GOLDPILL-2026-07-07 :: status dots removed -- every sport treated the same; only the selected sport is marked (gold pill) */
 `;
