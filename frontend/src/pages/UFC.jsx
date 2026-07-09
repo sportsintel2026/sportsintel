@@ -1,11 +1,10 @@
-// UFC.jsx :: WZ-UFC-PAGE-2026-07-09
-// Self-contained UFC/MMA card page (the "Edges" view for UFC). Reads /api/ufc/card and
-// renders the REAL upcoming fights (fighter names, event, venue) on the WizePicks Terminal
-// skin. There are no odds/win-model yet, so the endpoint returns modelPending:true and every
-// fight shows a clean "MODEL PENDING" state where the pick / win% / edge will go -- no fake
-// numbers. Additive: this is a brand-new page, styled with its own scoped `ufc-` classes, so
-// it touches no global CSS and no other sport. The global SportTabsHeader + SportBar (App.jsx)
-// provide the top tabs and bottom sport bar; this file is only the page body.
+// UFC.jsx :: WZ-UFC-PAGE-2026-07-09 / WZ-UFC-ODDS-2026-07-09
+// Self-contained UFC/MMA card page (the "Edges" view for UFC). Reads /api/ufc/card and renders
+// the upcoming fights on the WizePicks Terminal skin. When the Odds API is wired, each fight
+// shows a market-anchored PICK (the favorite) + a de-vigged WIN% ring; the picked fighter is
+// highlighted in gold. EDGE stays "pending" until a real fighter model is added (edge = beating
+// the market, which a market-anchored pick can't claim). If odds are missing, it degrades to the
+// schedule with a PENDING pick. Additive: brand-new page, scoped `ufc-` classes, no global CSS.
 
 import { useState, useEffect, useCallback } from "react";
 
@@ -14,10 +13,9 @@ const API_BASE = import.meta.env.VITE_API_URL || "";
 const CSS = `
 .ufc-wrap{min-height:100vh;background:#0A0B0D;color:#ECEFF2;font-family:'Inter',system-ui,-apple-system,sans-serif;padding:0 0 96px}
 .ufc-in{max-width:480px;margin:0 auto;padding:14px 12px 0}
-.ufc-mono{font-family:'IBM Plex Mono',ui-monospace,monospace}
-.ufc-disp{font-family:'Barlow Condensed','Inter',sans-serif}
 
-.ufc-note{display:flex;align-items:center;gap:8px;margin:2px 4px 0;padding:10px 12px;border:1px solid rgba(201,168,106,.28);background:rgba(201,168,106,.06);border-radius:10px;font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.3px;color:#C9A86A;line-height:1.5}
+.ufc-note{display:flex;align-items:flex-start;gap:8px;margin:2px 4px 0;padding:10px 12px;border:1px solid rgba(201,168,106,.28);background:rgba(201,168,106,.06);border-radius:10px;font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.3px;color:#C9A86A;line-height:1.5}
+.ufc-note.live{border-color:rgba(63,203,145,.28);background:rgba(63,203,145,.06);color:#3FCB91}
 .ufc-note b{color:#ECEFF2}
 
 .ufc-evt{margin:12px 4px 0;padding:15px 16px 14px;border:1px solid rgba(255,255,255,.06);border-radius:16px;background:radial-gradient(120% 100% at 100% 0,rgba(201,168,106,.11),transparent 55%),#0C0D10}
@@ -35,12 +33,20 @@ const CSS = `
 .ufc-f:first-child{border-top:none}
 .ufc-corners{flex:1;min-width:0}
 .ufc-row1{display:flex;align-items:center;gap:8px}
-.ufc-fa,.ufc-fb{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:16px;letter-spacing:.3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.ufc-fa{color:#ECEFF2}.ufc-fb{color:#ECEFF2}
+.ufc-fa,.ufc-fb{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:16px;letter-spacing:.3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#99A2AA}
+.ufc-fa.pick,.ufc-fb.pick{color:#C9A86A}
 .ufc-vs{font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5B646C;flex:0 0 auto;padding:0 1px}
 .ufc-dot{width:7px;height:7px;border-radius:50%;flex:0 0 auto}
 .ufc-dot.r{background:#E2655C}.ufc-dot.b{background:#5DA9E8}
 .ufc-sub{font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5B646C;margin-top:5px;letter-spacing:.2px}
+.ufc-sub b{color:#99A2AA}
+
+.ufc-ring{flex:0 0 44px;width:44px;height:44px;position:relative}
+.ufc-ring svg{transform:rotate(-90deg)}
+.ufc-ring .pc{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.ufc-ring .pct{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:14px;color:#ECEFF2;line-height:1}
+.ufc-ring .pl{font-family:'IBM Plex Mono',monospace;font-size:5.5px;letter-spacing:.5px;color:#C9A86A;margin-top:1px}
+
 .ufc-pend{flex:0 0 auto;text-align:right}
 .ufc-pend .l{font-family:'IBM Plex Mono',monospace;font-size:7px;letter-spacing:.5px;color:#5B646C;text-transform:uppercase}
 .ufc-pend .v{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:12px;color:#99A2AA;line-height:1.1;margin-top:2px}
@@ -61,10 +67,10 @@ function fmtWhen(iso) {
       " \u00b7 " + d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
   } catch (_) { return ""; }
 }
-function initials(name) {
-  const parts = String(name || "").trim().split(/\s+/);
-  const last = parts[parts.length - 1] || "";
-  return (last.slice(0, 2) || "--").toUpperCase();
+function fmtOdds(o) {
+  const n = Number(o);
+  if (!Number.isFinite(n)) return "";
+  return n > 0 ? "+" + n : "" + n;
 }
 
 export default function UFCPage() {
@@ -87,6 +93,7 @@ export default function UFCPage() {
   useEffect(() => { load(); }, [load]);
 
   const fights = (data && Array.isArray(data.fights)) ? data.fights : [];
+  const picksLive = !!(data && data.picksLive);
   const first = fights[0] || null;
   const eventMeta = first ? [fmtWhen(first.time), first.venue, first.city].filter(Boolean).join(" \u00b7 ") : "";
 
@@ -95,10 +102,17 @@ export default function UFCPage() {
       <style>{CSS}</style>
       <div className="ufc-in">
 
-        <div className="ufc-note">
-          <span>&#9679;</span>
-          <span><b>Model pending.</b> Live fight card below. Win%, picks &amp; edges turn on once fighter odds and the model are wired &mdash; no fake numbers until then.</span>
-        </div>
+        {picksLive ? (
+          <div className="ufc-note live">
+            <span>&#9679;</span>
+            <span><b>Market winners live.</b> Pick &amp; win% come from the de-vigged moneyline. Edge (beating the price) turns on once the fighter model is wired.</span>
+          </div>
+        ) : (
+          <div className="ufc-note">
+            <span>&#9679;</span>
+            <span><b>Model pending.</b> Live fight card below. Win%, picks &amp; edges turn on once fighter odds and the model are wired &mdash; no fake numbers until then.</span>
+          </div>
+        )}
 
         {loading && (
           <>
@@ -134,24 +148,41 @@ export default function UFCPage() {
             <div className="ufc-tier"><span className="t">Upcoming</span><span className="l"></span><span className="c">{fights.length} FIGHTS</span></div>
 
             <div className="ufc-grid">
-              {fights.map((f, i) => (
-                <div className="ufc-f" key={f.id || i}>
-                  <div className="ufc-corners">
-                    <div className="ufc-row1">
-                      <span className="ufc-dot r"></span>
-                      <span className="ufc-fa">{f.fighterA}</span>
-                      <span className="ufc-vs">VS</span>
-                      <span className="ufc-fb">{f.fighterB}</span>
-                      <span className="ufc-dot b"></span>
+              {fights.map((f, i) => {
+                const hasPick = f && f.winPct != null;
+                const aPick = hasPick && f.pickCorner === "A";
+                const bPick = hasPick && f.pickCorner === "B";
+                const dash = hasPick ? Math.round((f.winPct / 100) * 104) : 0;
+                return (
+                  <div className="ufc-f" key={f.id || i}>
+                    <div className="ufc-corners">
+                      <div className="ufc-row1">
+                        <span className="ufc-dot r"></span>
+                        <span className={"ufc-fa" + (aPick ? " pick" : "")}>{f.fighterA}</span>
+                        <span className="ufc-vs">VS</span>
+                        <span className={"ufc-fb" + (bPick ? " pick" : "")}>{f.fighterB}</span>
+                        <span className="ufc-dot b"></span>
+                      </div>
+                      <div className="ufc-sub">
+                        {hasPick
+                          ? <>Pick: <b>{f.pick}</b>{f.odds != null ? " " + fmtOdds(f.odds) : ""} &middot; {[fmtWhen(f.time)].filter(Boolean).join("")}</>
+                          : ([fmtWhen(f.time), f.venue].filter(Boolean).join(" \u00b7 ") || "Time TBA")}
+                      </div>
                     </div>
-                    <div className="ufc-sub">{[fmtWhen(f.time), f.venue].filter(Boolean).join(" \u00b7 ") || "Time TBA"}</div>
+                    {hasPick ? (
+                      <div className="ufc-ring">
+                        <svg width="44" height="44">
+                          <circle cx="22" cy="22" r="16.5" fill="none" stroke="rgba(255,255,255,.09)" strokeWidth="4" />
+                          <circle cx="22" cy="22" r="16.5" fill="none" stroke="#C9A86A" strokeWidth="4" strokeLinecap="round" strokeDasharray={`${dash} 104`} />
+                        </svg>
+                        <div className="pc"><span className="pct">{f.winPct}%</span><span className="pl">WIN</span></div>
+                      </div>
+                    ) : (
+                      <div className="ufc-pend"><div className="l">Pick</div><div className="v">PENDING</div></div>
+                    )}
                   </div>
-                  <div className="ufc-pend">
-                    <div className="l">Pick</div>
-                    <div className="v">PENDING</div>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </>
         )}
