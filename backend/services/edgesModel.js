@@ -308,7 +308,7 @@ function ouDeviation(entry) {
   return (entry.over / entry.n) - 0.50;
 }
 
-function calculateTotalProjection(game, awayPitcher, homePitcher, awayTeamHit, homeTeamHit, weather, awayBullpen, homeBullpen, awayHandMult, homeHandMult, awayFatigue, homeFatigue, awayOuDev = 0, homeOuDev = 0) {
+function calculateTotalProjection(game, awayPitcher, homePitcher, awayTeamHit, homeTeamHit, weather, awayBullpen, homeBullpen, awayHandMult, homeHandMult, awayFatigue, homeFatigue, awayOuDev = 0, homeOuDev = 0, umpRunsAdj = 0) {
   // Offense scaled by handedness vs the opposing starter
   const awayRPG = (awayTeamHit?.runsPerGame ?? LEAGUE_AVG.runsPerGame) * (awayHandMult || 1.0);
   const homeRPG = (homeTeamHit?.runsPerGame ?? LEAGUE_AVG.runsPerGame) * (homeHandMult || 1.0);
@@ -350,7 +350,9 @@ function calculateTotalProjection(game, awayPitcher, homePitcher, awayTeamHit, h
   // Zero whenever a team's record is missing/thin (ouDeviation returns 0), so this
   // line is a no-op unless real tendency data is present.
   const ouAdj = Math.max(-OU_MAX_NUDGE, Math.min(OU_MAX_NUDGE, OU_TENDENCY_WEIGHT * ((awayOuDev || 0) + (homeOuDev || 0))));
-  const projected = baseTotal + pitcherAdj + parkAdj + weatherAdj + bullpenAdj + fatigueAdj + ouAdj + TOTAL_MEAN_ADJ;
+  // WZ-UMP-RUNS-2026-07-09 :: additive plate-ump run-environment nudge (0 when unknown/thin).
+  const umpAdj = Number.isFinite(umpRunsAdj) ? umpRunsAdj : 0;
+  const projected = baseTotal + pitcherAdj + parkAdj + weatherAdj + bullpenAdj + fatigueAdj + ouAdj + umpAdj + TOTAL_MEAN_ADJ;
   return {
     projectedTotal: round2(projected),
     breakdown: {
@@ -362,6 +364,7 @@ function calculateTotalProjection(game, awayPitcher, homePitcher, awayTeamHit, h
       bullpenAdj: round2(bullpenAdj),
       fatigueAdj: round2(fatigueAdj),
       ouAdj: round2(ouAdj),
+      umpAdj: round2(umpAdj),
       awayBullpenFatigue: awayFatigue || null,
       homeBullpenFatigue: homeFatigue || null,
     },
@@ -785,6 +788,30 @@ async function getUmpKFactorForGame(gamePk) {
     return { factor: round3(f), name: u.name, kIndex: u.kIndex, games: u.games };
   } catch (_) {
     return null;
+  }
+}
+
+// WZ-UMP-RUNS-2026-07-09 :: umpire RUN-environment nudge for the game TOTAL. Same data
+// and same late-arriving, default-safe pattern as the K factor above, but on the RUNS
+// dimension: an ump whose games average more (or fewer) total runs than league average
+// nudges the projected total up (or down). Half-weight, clamped to +/-UMP_RUNS_MAX runs.
+// Returns 0 -- a clean no-op -- whenever the ump isn't posted yet, isn't in the store, is
+// thin (<10 games), or anything throws. Additive (runs), consistent with park/weather adj.
+const UMP_RUNS_WEIGHT = 0.5;     // use half the ump's runs/game distance from league avg
+const UMP_RUNS_MAX = 0.35;       // clamp the runs nudge to +/-0.35 runs
+async function getUmpRunsForGame(gamePk) {
+  try {
+    const name = await getGameHPUmpire(gamePk);
+    if (!name) return 0;
+    const res = await getUmpireByName(name);
+    const u = res && res.umpire;
+    const la = res && res.leagueAvg;
+    if (!u || u.thin || !la) return 0;
+    if (!Number.isFinite(u.runsPerGame) || !Number.isFinite(la.runsPerGame)) return 0;
+    const diff = (u.runsPerGame - la.runsPerGame) * UMP_RUNS_WEIGHT;
+    return Math.max(-UMP_RUNS_MAX, Math.min(UMP_RUNS_MAX, diff));
+  } catch (_) {
+    return 0;
   }
 }
 
@@ -1457,7 +1484,9 @@ async function calculateGameEdges(game, oddsForGame) {
   const _ouMap = await getTeamOuTendency();
   const awayOuDev = ouDeviation(_ouMap.get(game.awayAbbr));
   const homeOuDev = ouDeviation(_ouMap.get(game.homeAbbr));
-  const totals = calculateTotalProjection(game, awayPitcherForm, homePitcherForm, awayHit, homeHit, weather, awayBullpen, homeBullpen, awayHandMult, homeHandMult, awayFatigue, homeFatigue, awayOuDev, homeOuDev);
+  // WZ-UMP-RUNS-2026-07-09 :: plate-ump run-environment nudge for the total (0 when unknown).
+  const umpRunsAdj = await getUmpRunsForGame(game.id);
+  const totals = calculateTotalProjection(game, awayPitcherForm, homePitcherForm, awayHit, homeHit, weather, awayBullpen, homeBullpen, awayHandMult, homeHandMult, awayFatigue, homeFatigue, awayOuDev, homeOuDev, umpRunsAdj);
   // SHADOW: pitching-built multiplicative projection computed in parallel, stored
   // for grading, never used to price a pick (see calculateTotalProjectionShadow).
   const totalsShadow = calculateTotalProjectionShadow(game, awayPitcherForm, homePitcherForm, awayHit, homeHit, weather, awayBullpen, homeBullpen, awayHandMult, homeHandMult);
