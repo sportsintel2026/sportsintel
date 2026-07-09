@@ -50,7 +50,14 @@ function calibrateWinProb(p) {
 }
 
 const RL_CAL_KNEE = 0.57;   // identity below this claimed cover prob
-const RL_CAL_SLOPE = 0.45;  // credit per point of claimed confidence above the knee
+// WZ-RL-RECAL-2026-07-09 :: slope 0.45 -> 0.35. Re-measured claimed-vs-actual cover
+// (pre-cal n=485 + post-cal n=78): actual cover still flatlines ~57-62% while the model
+// keeps overclaiming ~5 pts at the 60-65 bucket (and +11 pre-cal at 70+). The 07-02 curve
+// helped (no post-cal picks now clear 65% claimed) but is still too soft. Dropping to 0.35
+// keeps only 35 cents of each extra confidence point above the 0.57 knee, pulling high
+// claims toward the real ~60% ceiling. Conservative on purpose -- post-cal sample is thin
+// (n~19-30/bucket) -- re-run the cover bucket query in ~2 wks and tighten more only if it holds.
+const RL_CAL_SLOPE = 0.35;  // credit per point of claimed confidence above the knee (was 0.45; see note)
 const RL_CAL_MAX_HAIRCUT = 0.13;
 
 function coverProbHaircut(c) {
