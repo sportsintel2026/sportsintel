@@ -12,7 +12,8 @@ const express = require("express");
 const router = express.Router();
 const axios = require("axios");
 const { fetchMMASchedule } = require("../services/sportsData");
-const { getNextPPVEvent, getEventBouts } = require("../services/citoApi");
+const { getNextPPVEvent, getEventBouts, getFighter } = require("../services/citoApi");
+const { scoreBout } = require("../services/mmaModel"); // WZ-UFC-MODEL-2026-07-09
 const { createClient } = require("@supabase/supabase-js"); // WZ-UFC-REC-2026-07-09
 
 const ODDS_BASE = "https://api.the-odds-api.com/v4";
@@ -92,6 +93,7 @@ function fighterByCorner(bout, corner) {
   if (!f) return null;
   const p = f.profile || {};
   return {
+    slug: f.fighterSlug || p.slug || null,
     name: f.fighterName || p.name || "TBD",
     record: p.recordText || (p.record ? `${p.record.wins}-${p.record.losses}-${p.record.draws}` : ""),
     headshot: p.headshotUrl || f.imageUrl || null,
@@ -100,11 +102,12 @@ function fighterByCorner(bout, corner) {
   };
 }
 
-function parseBout(bout, oddsMap) {
+async function parseBout(bout, oddsMap) {
   const red = fighterByCorner(bout, "red");
   const blue = fighterByCorner(bout, "blue");
   if (!red || !blue) return null;
 
+  // market odds: Cito per-bout first, else The Odds API by name
   let implRed = impliedFromAny(bout.odds && bout.odds.red);
   let implBlue = impliedFromAny(bout.odds && bout.odds.blue);
   let amRed = Number.isFinite(Number(bout.odds && bout.odds.red)) ? Number(bout.odds.red) : null;
@@ -115,15 +118,7 @@ function parseBout(bout, oddsMap) {
     if (oR && oB) { implRed = oR.impl; implBlue = oB.impl; amRed = oR.american; amBlue = oB.american; }
   }
 
-  let pick = null, winPct = null, pickCorner = null, odds = null;
-  if (implRed != null && implBlue != null && implRed + implBlue > 0) {
-    const dvR = implRed / (implRed + implBlue);
-    const dvB = implBlue / (implRed + implBlue);
-    if (dvR >= dvB) { pick = red.name; winPct = Math.round(dvR * 100); pickCorner = "red"; odds = amRed; }
-    else { pick = blue.name; winPct = Math.round(dvB * 100); pickCorner = "blue"; odds = amBlue; }
-  }
-
-  return {
+  const out = {
     id: bout.id,
     cardSection: bout.cardSection || "Prelims",
     cardPosition: bout.cardPosition || "",
@@ -131,9 +126,33 @@ function parseBout(bout, oddsMap) {
     weightClass: (bout.weightClass || "").replace(/ Bout$/i, ""),
     titleBout: !!bout.titleBout,
     red, blue,
-    pick, winPct, pickCorner, odds,
-    edgePct: null,
+    pick: null, winPct: null, pickCorner: null, odds: null,
+    marketWinPct: null, edgePct: null, value: false,
   };
+
+  // no market -> pending (no pick/edge until sportsbooks post the line)
+  if (implRed == null || implBlue == null || implRed + implBlue <= 0) return out;
+  const pMktRed = implRed / (implRed + implBlue);
+
+  // fetch fighter profiles + run the factor model. Fail-safe: null profiles => neutral => market.
+  let modelRed = pMktRed;
+  try {
+    const [rp, bp] = await Promise.all([getFighter(red.slug), getFighter(blue.slug)]);
+    const scored = scoreBout(rp, bp, pMktRed);
+    if (scored && Number.isFinite(scored.modelRed)) modelRed = scored.modelRed;
+  } catch (_) { /* stay at market */ }
+
+  const pickRed = modelRed >= 0.5;
+  out.pickCorner = pickRed ? "red" : "blue";
+  out.pick = pickRed ? red.name : blue.name;
+  out.winPct = Math.round((pickRed ? modelRed : 1 - modelRed) * 100);
+  out.odds = pickRed ? amRed : amBlue;
+  const pickMkt = pickRed ? pMktRed : 1 - pMktRed;
+  const pickModel = pickRed ? modelRed : 1 - modelRed;
+  out.marketWinPct = Math.round(pickMkt * 100);
+  out.edgePct = Math.round((pickModel - pickMkt) * 100); // model - market on our pick
+  out.value = out.edgePct >= 4; // meaningful positive edge -> VALUE
+  return out;
 }
 
 async function buildCitoCard() {
@@ -143,7 +162,8 @@ async function buildCitoCard() {
   if (!Array.isArray(rawBouts) || !rawBouts.length) return null;
 
   const oddsMap = await getOddsMap();
-  const parsed = rawBouts.map((b) => parseBout(b, oddsMap)).filter(Boolean);
+  const parsedAll = await Promise.all(rawBouts.map((b) => parseBout(b, oddsMap)));
+  const parsed = parsedAll.filter(Boolean);
   if (!parsed.length) return null;
 
   const mainCard = parsed
@@ -230,7 +250,10 @@ async function recordUFCPicks(card) {
         blue_name: b.blue ? b.blue.name : null,
         pick: b.pick,
         pick_corner: b.pickCorner || null,
-        win_pct: b.winPct,
+        win_pct: b.winPct,                                  // model win% (the pick's)
+        market_win_pct: b.marketWinPct != null ? b.marketWinPct : null,
+        edge_pct: b.edgePct != null ? b.edgePct : null,     // model - market
+        is_value: !!b.value,
         odds: b.odds != null ? b.odds : null,
       }));
     if (!rows.length) return;
