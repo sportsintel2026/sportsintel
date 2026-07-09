@@ -19,6 +19,7 @@ import ConsensusPage from "./pages/Consensus";
 import OddsPage from "./pages/OddsPage";
 import ClvPage from "./pages/Clv";
 import NBAPage from "./pages/NBA";
+import UFCPage from "./pages/UFC"; // WZ-UFC-PAGE-2026-07-09 :: additive UFC/MMA page
 import NBADetailPage from "./pages/NBADetail";
 import LiveScoresPage from "./pages/LiveScores";
 import GuidePage from "./pages/Guide";
@@ -239,6 +240,12 @@ export default function App() {
           <Route path="/nba" element={
             <PrivateRoute>
               <NBAPage />
+            </PrivateRoute>
+          } />
+          {/* WZ-UFC-PAGE-2026-07-09 :: additive UFC/MMA route */}
+          <Route path="/ufc" element={
+            <PrivateRoute>
+              <UFCPage />
             </PrivateRoute>
           } />
           <Route path="/game/nba/:gameId" element={
