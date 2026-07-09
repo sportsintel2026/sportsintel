@@ -1,10 +1,9 @@
-// UFC.jsx :: WZ-UFC-PAGE-2026-07-09 / WZ-UFC-ODDS-2026-07-09
-// Self-contained UFC/MMA card page (the "Edges" view for UFC). Reads /api/ufc/card and renders
-// the upcoming fights on the WizePicks Terminal skin. When the Odds API is wired, each fight
-// shows a market-anchored PICK (the favorite) + a de-vigged WIN% ring; the picked fighter is
-// highlighted in gold. EDGE stays "pending" until a real fighter model is added (edge = beating
-// the market, which a market-anchored pick can't claim). If odds are missing, it degrades to the
-// schedule with a PENDING pick. Additive: brand-new page, scoped `ufc-` classes, no global CSS.
+// UFC.jsx :: WZ-UFC-PAGE-2026-07-09 / WZ-UFC-ODDS-2026-07-09 / WZ-UFC-CITO-2026-07-09
+// UFC/MMA card page (the "Edges" view for UFC). Reads /api/ufc/card, which returns the next
+// PPV event only, split into Main Card / Prelims, with weight classes, title badges, fighter
+// records + headshots (Cito), and a de-vigged market pick + win% ring (odds). Fighters render
+// as a face-off (red corner vs blue corner); the model's pick is highlighted gold. EDGE stays
+// "pending" until a fighter model beats the market. Self-contained scoped `ufc-` styles.
 
 import { useState, useEffect, useCallback } from "react";
 
@@ -13,7 +12,6 @@ const API_BASE = import.meta.env.VITE_API_URL || "";
 const CSS = `
 .ufc-wrap{min-height:100vh;background:#0A0B0D;color:#ECEFF2;font-family:'Inter',system-ui,-apple-system,sans-serif;padding:0 0 96px}
 .ufc-in{max-width:480px;margin:0 auto;padding:14px 12px 0}
-
 .ufc-note{display:flex;align-items:flex-start;gap:8px;margin:2px 4px 0;padding:10px 12px;border:1px solid rgba(201,168,106,.28);background:rgba(201,168,106,.06);border-radius:10px;font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.3px;color:#C9A86A;line-height:1.5}
 .ufc-note.live{border-color:rgba(63,203,145,.28);background:rgba(63,203,145,.06);color:#3FCB91}
 .ufc-note b{color:#ECEFF2}
@@ -24,53 +22,111 @@ const CSS = `
 .ufc-evt .m{font-family:'IBM Plex Mono',monospace;font-size:10px;color:#99A2AA;margin-top:6px}
 
 .ufc-tier{display:flex;align-items:center;gap:9px;margin:20px 8px 9px}
-.ufc-tier .t{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:15px;letter-spacing:1.3px;color:#ECEFF2;text-transform:uppercase}
+.ufc-tier .t{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:15px;letter-spacing:1.4px;color:#ECEFF2;text-transform:uppercase}
 .ufc-tier .l{flex:1;height:1px;background:rgba(255,255,255,.12)}
 .ufc-tier .c{font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5B646C}
 
 .ufc-grid{margin:0 4px;background:#0C0D10;border-radius:14px;overflow:hidden}
-.ufc-f{display:flex;align-items:center;gap:11px;padding:14px;border-top:1px solid rgba(255,255,255,.06)}
-.ufc-f:first-child{border-top:none}
-.ufc-corners{flex:1;min-width:0}
-.ufc-row1{display:flex;align-items:center;gap:8px}
-.ufc-fa,.ufc-fb{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:16px;letter-spacing:.3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#99A2AA}
-.ufc-fa.pick,.ufc-fb.pick{color:#C9A86A}
-.ufc-vs{font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5B646C;flex:0 0 auto;padding:0 1px}
-.ufc-dot{width:7px;height:7px;border-radius:50%;flex:0 0 auto}
-.ufc-dot.r{background:#E2655C}.ufc-dot.b{background:#5DA9E8}
-.ufc-sub{font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5B646C;margin-top:5px;letter-spacing:.2px}
-.ufc-sub b{color:#99A2AA}
-
-.ufc-ring{flex:0 0 44px;width:44px;height:44px;position:relative}
+.ufc-b{padding:12px 12px 13px;border-top:1px solid rgba(255,255,255,.06)}
+.ufc-b:first-child{border-top:none}
+.ufc-b.main{background:linear-gradient(90deg,rgba(201,168,106,.06),transparent 70%)}
+.ufc-btop{display:flex;align-items:center;gap:8px}
+.ufc-side{flex:1;min-width:0;display:flex;align-items:center;gap:9px}
+.ufc-side.r{flex-direction:row}
+.ufc-side.b{flex-direction:row-reverse;text-align:right}
+.ufc-av{width:44px;height:44px;border-radius:50%;flex:0 0 44px;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#1B2025;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:15px;color:#99A2AA}
+.ufc-av img{width:100%;height:100%;object-fit:cover;object-position:top}
+.ufc-av.r{border:2px solid #E2655C}.ufc-av.b{border:2px solid #5DA9E8}
+.ufc-nm{min-width:0}
+.ufc-nm .fn{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:16px;letter-spacing:.2px;line-height:1.05;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#ECEFF2}
+.ufc-nm .fn.pick{color:#C9A86A}
+.ufc-nm .rec{font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5B646C;margin-top:2px}
+.ufc-mid{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;padding:0 2px}
+.ufc-ring{width:42px;height:42px;position:relative}
 .ufc-ring svg{transform:rotate(-90deg)}
 .ufc-ring .pc{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
-.ufc-ring .pct{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:14px;color:#ECEFF2;line-height:1}
-.ufc-ring .pl{font-family:'IBM Plex Mono',monospace;font-size:5.5px;letter-spacing:.5px;color:#C9A86A;margin-top:1px}
-
-.ufc-pend{flex:0 0 auto;text-align:right}
-.ufc-pend .l{font-family:'IBM Plex Mono',monospace;font-size:7px;letter-spacing:.5px;color:#5B646C;text-transform:uppercase}
-.ufc-pend .v{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:12px;color:#99A2AA;line-height:1.1;margin-top:2px}
+.ufc-ring .pct{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:13px;color:#ECEFF2;line-height:1}
+.ufc-ring .pl{font-family:'IBM Plex Mono',monospace;font-size:5px;letter-spacing:.4px;color:#C9A86A}
+.ufc-vs{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:13px;color:#5B646C;letter-spacing:1px}
+.ufc-bbot{display:flex;align-items:center;gap:7px;margin-top:8px;padding-left:2px}
+.ufc-wc{font-family:'IBM Plex Mono',monospace;font-size:8.5px;letter-spacing:.4px;color:#99A2AA;text-transform:uppercase}
+.ufc-badge{font-family:'IBM Plex Mono',monospace;font-size:7.5px;font-weight:700;letter-spacing:.4px;border-radius:4px;padding:1px 5px}
+.ufc-badge.title{color:#C9A86A;border:1px solid rgba(201,168,106,.5);background:rgba(201,168,106,.08)}
+.ufc-badge.pick{color:#3FCB91;border:1px solid rgba(63,203,145,.4);background:rgba(63,203,145,.07)}
+.ufc-bbot .odds{margin-left:auto;font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5B646C}
 
 .ufc-state{margin:40px 12px;text-align:center;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#5B646C;line-height:1.9}
 .ufc-state .big{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:22px;color:#99A2AA;letter-spacing:1px;display:block;margin-bottom:6px}
 .ufc-retry{margin-top:14px;display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#C9A86A;border:1px solid rgba(201,168,106,.4);border-radius:8px;padding:8px 16px;cursor:pointer;background:none}
-.ufc-skel{height:70px;margin:0 4px;border-top:1px solid rgba(255,255,255,.06);background:linear-gradient(90deg,#0C0D10,#14171B,#0C0D10);background-size:200% 100%;animation:ufcsh 1.3s linear infinite}
+.ufc-skel{height:74px;margin:0 4px;border-top:1px solid rgba(255,255,255,.06);background:linear-gradient(90deg,#0C0D10,#14171B,#0C0D10);background-size:200% 100%;animation:ufcsh 1.3s linear infinite}
 @keyframes ufcsh{0%{background-position:200% 0}100%{background-position:-200% 0}}
 `;
 
-function fmtWhen(iso) {
-  if (!iso) return "";
-  try {
-    const d = new Date(iso);
-    if (isNaN(d.getTime())) return "";
-    return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" }) +
-      " \u00b7 " + d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-  } catch (_) { return ""; }
+function initials(name) {
+  const parts = String(name || "").trim().split(/\s+/);
+  const last = parts[parts.length - 1] || "";
+  return (last.slice(0, 2) || "--").toUpperCase();
 }
 function fmtOdds(o) {
   const n = Number(o);
   if (!Number.isFinite(n)) return "";
   return n > 0 ? "+" + n : "" + n;
+}
+
+function Avatar({ src, name, corner }) {
+  const [err, setErr] = useState(false);
+  return (
+    <div className={"ufc-av " + corner}>
+      {src && !err
+        ? <img src={src} alt="" onError={() => setErr(true)} />
+        : <span>{initials(name)}</span>}
+    </div>
+  );
+}
+
+function Bout({ b, main }) {
+  const hasPick = b && b.winPct != null;
+  const redPick = hasPick && b.pickCorner === "red";
+  const bluePick = hasPick && b.pickCorner === "blue";
+  const dash = hasPick ? Math.round((b.winPct / 100) * 104) : 0;
+  return (
+    <div className={"ufc-b" + (main ? " main" : "")}>
+      <div className="ufc-btop">
+        <div className="ufc-side r">
+          <Avatar src={b.red && b.red.headshot} name={b.red && b.red.name} corner="r" />
+          <div className="ufc-nm">
+            <div className={"fn" + (redPick ? " pick" : "")}>{b.red ? b.red.name : "TBD"}</div>
+            {b.red && b.red.record ? <div className="rec">{b.red.record}</div> : null}
+          </div>
+        </div>
+        <div className="ufc-mid">
+          {hasPick ? (
+            <div className="ufc-ring">
+              <svg width="42" height="42">
+                <circle cx="21" cy="21" r="16.5" fill="none" stroke="rgba(255,255,255,.09)" strokeWidth="4" />
+                <circle cx="21" cy="21" r="16.5" fill="none" stroke="#C9A86A" strokeWidth="4" strokeLinecap="round" strokeDasharray={`${dash} 104`} />
+              </svg>
+              <div className="pc"><span className="pct">{b.winPct}%</span><span className="pl">WIN</span></div>
+            </div>
+          ) : (
+            <span className="ufc-vs">VS</span>
+          )}
+        </div>
+        <div className="ufc-side b">
+          <Avatar src={b.blue && b.blue.headshot} name={b.blue && b.blue.name} corner="b" />
+          <div className="ufc-nm">
+            <div className={"fn" + (bluePick ? " pick" : "")}>{b.blue ? b.blue.name : "TBD"}</div>
+            {b.blue && b.blue.record ? <div className="rec">{b.blue.record}</div> : null}
+          </div>
+        </div>
+      </div>
+      <div className="ufc-bbot">
+        {b.weightClass ? <span className="ufc-wc">{b.weightClass}</span> : null}
+        {b.titleBout ? <span className="ufc-badge title">TITLE</span> : null}
+        {hasPick ? <span className="ufc-badge pick">PICK: {b.pick}{b.odds != null ? " " + fmtOdds(b.odds) : ""}</span> : null}
+      </div>
+    </div>
+  );
 }
 
 export default function UFCPage() {
@@ -92,10 +148,11 @@ export default function UFCPage() {
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  const fights = (data && Array.isArray(data.fights)) ? data.fights : [];
+  const event = data && data.event;
+  const mainCard = (data && Array.isArray(data.mainCard)) ? data.mainCard : [];
+  const prelims = (data && Array.isArray(data.prelims)) ? data.prelims : [];
+  const total = mainCard.length + prelims.length;
   const picksLive = !!(data && data.picksLive);
-  const first = fights[0] || null;
-  const eventMeta = first ? [fmtWhen(first.time), first.venue, first.city].filter(Boolean).join(" \u00b7 ") : "";
 
   return (
     <div className="ufc-wrap">
@@ -110,14 +167,14 @@ export default function UFCPage() {
         ) : (
           <div className="ufc-note">
             <span>&#9679;</span>
-            <span><b>Model pending.</b> Live fight card below. Win%, picks &amp; edges turn on once fighter odds and the model are wired &mdash; no fake numbers until then.</span>
+            <span><b>Odds pending.</b> The card is live below. Picks &amp; win% light up when the sportsbooks post moneylines (usually the week of the fight).</span>
           </div>
         )}
 
         {loading && (
           <>
             <div className="ufc-evt"><div className="k">Next Event</div><div className="n">Loading Card&hellip;</div></div>
-            <div className="ufc-tier"><span className="t">Upcoming</span><span className="l"></span></div>
+            <div className="ufc-tier"><span className="t">Main Card</span><span className="l"></span></div>
             <div className="ufc-grid"><div className="ufc-skel"></div><div className="ufc-skel"></div><div className="ufc-skel"></div></div>
           </>
         )}
@@ -130,60 +187,40 @@ export default function UFCPage() {
           </div>
         )}
 
-        {!loading && !error && fights.length === 0 && (
+        {!loading && !error && total === 0 && (
           <div className="ufc-state">
             <span className="big">No Card Scheduled</span>
-            There&rsquo;s no upcoming UFC card right now.<br />Check back when the next event is announced.
+            There&rsquo;s no upcoming UFC pay-per-view right now.<br />Check back when the next card is announced.
           </div>
         )}
 
-        {!loading && !error && fights.length > 0 && (
+        {!loading && !error && total > 0 && (
           <>
             <div className="ufc-evt">
               <div className="k">Next Event</div>
-              <div className="n">UFC Fight Card</div>
-              {eventMeta && <div className="m">{eventMeta}</div>}
+              <div className="n">{event ? event.name : "UFC Fight Card"}</div>
+              {event && (event.dateLabel || event.venue) ? (
+                <div className="m">{[event.dateLabel, event.venue, event.city].filter(Boolean).join(" \u00b7 ")}</div>
+              ) : null}
             </div>
 
-            <div className="ufc-tier"><span className="t">Upcoming</span><span className="l"></span><span className="c">{fights.length} FIGHTS</span></div>
+            {mainCard.length > 0 && (
+              <>
+                <div className="ufc-tier"><span className="t">Main Card</span><span className="l"></span><span className="c">{mainCard.length} FIGHTS</span></div>
+                <div className="ufc-grid">
+                  {mainCard.map((b, i) => <Bout key={b.id || "m" + i} b={b} main />)}
+                </div>
+              </>
+            )}
 
-            <div className="ufc-grid">
-              {fights.map((f, i) => {
-                const hasPick = f && f.winPct != null;
-                const aPick = hasPick && f.pickCorner === "A";
-                const bPick = hasPick && f.pickCorner === "B";
-                const dash = hasPick ? Math.round((f.winPct / 100) * 104) : 0;
-                return (
-                  <div className="ufc-f" key={f.id || i}>
-                    <div className="ufc-corners">
-                      <div className="ufc-row1">
-                        <span className="ufc-dot r"></span>
-                        <span className={"ufc-fa" + (aPick ? " pick" : "")}>{f.fighterA}</span>
-                        <span className="ufc-vs">VS</span>
-                        <span className={"ufc-fb" + (bPick ? " pick" : "")}>{f.fighterB}</span>
-                        <span className="ufc-dot b"></span>
-                      </div>
-                      <div className="ufc-sub">
-                        {hasPick
-                          ? <>Pick: <b>{f.pick}</b>{f.odds != null ? " " + fmtOdds(f.odds) : ""} &middot; {[fmtWhen(f.time)].filter(Boolean).join("")}</>
-                          : ([fmtWhen(f.time), f.venue].filter(Boolean).join(" \u00b7 ") || "Time TBA")}
-                      </div>
-                    </div>
-                    {hasPick ? (
-                      <div className="ufc-ring">
-                        <svg width="44" height="44">
-                          <circle cx="22" cy="22" r="16.5" fill="none" stroke="rgba(255,255,255,.09)" strokeWidth="4" />
-                          <circle cx="22" cy="22" r="16.5" fill="none" stroke="#C9A86A" strokeWidth="4" strokeLinecap="round" strokeDasharray={`${dash} 104`} />
-                        </svg>
-                        <div className="pc"><span className="pct">{f.winPct}%</span><span className="pl">WIN</span></div>
-                      </div>
-                    ) : (
-                      <div className="ufc-pend"><div className="l">Pick</div><div className="v">PENDING</div></div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+            {prelims.length > 0 && (
+              <>
+                <div className="ufc-tier"><span className="t">{mainCard.length > 0 ? "Prelims" : "Upcoming"}</span><span className="l"></span><span className="c">{prelims.length} FIGHTS</span></div>
+                <div className="ufc-grid">
+                  {prelims.map((b, i) => <Bout key={b.id || "p" + i} b={b} />)}
+                </div>
+              </>
+            )}
           </>
         )}
 
