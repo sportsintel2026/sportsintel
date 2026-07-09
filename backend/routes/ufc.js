@@ -13,6 +13,7 @@ const router = express.Router();
 const axios = require("axios");
 const { fetchMMASchedule } = require("../services/sportsData");
 const { getNextPPVEvent, getEventBouts } = require("../services/citoApi");
+const { createClient } = require("@supabase/supabase-js"); // WZ-UFC-REC-2026-07-09
 
 const ODDS_BASE = "https://api.the-odds-api.com/v4";
 const ODDS_API_KEY = process.env.ODDS_API_KEY;
@@ -157,7 +158,9 @@ async function buildCitoCard() {
     source: "cito",
     picksLive: parsed.some((b) => b.winPct != null),
     edgePending: true,
+    eventSlug: event.slug || null,
     event: {
+      slug: event.slug || null,
       name: event.title || event.shortTitle || "UFC",
       dateLabel: event.eventDateLabel || "",
       venue: event.venue || "",
@@ -200,6 +203,43 @@ async function fetchOddsFallbackCard() {
   }
 }
 
+// WZ-UFC-REC-2026-07-09 :: snapshot each Cito card's picks into Supabase so we can grade
+// them after the event (Cito fills in winnerFighterSlug post-fight) and build a UFC record.
+// Fire-and-forget + fail-safe; upsert on bout_id so repeated loads just refresh the row.
+let _sbClient = null;
+function sb() {
+  if (_sbClient) return _sbClient;
+  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) return null;
+  _sbClient = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+  return _sbClient;
+}
+async function recordUFCPicks(card) {
+  try {
+    const c = sb();
+    if (!c || !card || card.source !== "cito") return;
+    const bouts = [...(card.mainCard || []), ...(card.prelims || [])];
+    const rows = bouts
+      .filter((b) => b.pick && b.winPct != null && b.id != null)
+      .map((b) => ({
+        bout_id: String(b.id),
+        event_slug: card.eventSlug || null,
+        event_name: card.event ? card.event.name : null,
+        card_section: b.cardSection || null,
+        weight_class: b.weightClass || null,
+        red_name: b.red ? b.red.name : null,
+        blue_name: b.blue ? b.blue.name : null,
+        pick: b.pick,
+        pick_corner: b.pickCorner || null,
+        win_pct: b.winPct,
+        odds: b.odds != null ? b.odds : null,
+      }));
+    if (!rows.length) return;
+    await c.from("ufc_picks").upsert(rows, { onConflict: "bout_id" });
+  } catch (e) {
+    console.error("[UFC] recordUFCPicks failed:", e.message);
+  }
+}
+
 async function loadCard() {
   const now = Date.now();
   if (cardCache.data && now - cardCache.at < CARD_TTL_MS) return cardCache.data;
@@ -207,7 +247,7 @@ async function loadCard() {
   cardInflight = (async () => {
     try {
       const cito = await buildCitoCard();
-      if (cito) { cardCache = { at: Date.now(), data: cito }; return cito; }
+      if (cito) { cardCache = { at: Date.now(), data: cito }; recordUFCPicks(cito).catch(() => {}); return cito; }
       let fights = await fetchOddsFallbackCard();
       if (!fights.length) {
         const sched = await fetchMMASchedule().catch(() => []);
