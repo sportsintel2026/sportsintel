@@ -37,6 +37,13 @@ const SPORTS = [
   { key: "cfb", lb: "CFB", status: "TRAIN" },
   { key: "nba", lb: "NBA", status: "SOON" },
   { key: "nhl", lb: "NHL", status: "SOON" },
+  { key: "ufc", lb: "UFC", status: "NEW" }, // WZ-UFC-NAV-2026-07-09 :: additive; UFC only
+];
+
+// WZ-UFC-NAV-2026-07-09 :: UFC's own section set (v1: just the card). Record turns on when
+// there are graded fights to show. Does NOT touch any other sport's SECTIONS above.
+const UFC_SECTIONS = [
+  { key: "edges", lb: "Edges", to: "/ufc", match: ["/ufc"] },
 ];
 
 const FB = (
@@ -78,6 +85,7 @@ const GAMES_ROUTE = { mlb: "/games", nfl: "/nfl-games", cfb: "/cfb-games", nba: 
 
 // resolve the destination path for a section under a given sport
 function routeFor(section, sport) {
+  if (sport === "ufc") return "/ufc"; // WZ-UFC-NAV-2026-07-09 :: UFC is one self-contained page
   if (section.key === "games") return GAMES_ROUTE[sport] || "/games";
   return section.to;
 }
@@ -110,6 +118,9 @@ export function SportTabsHeader() {
   if (!visible) return null;
 
   const params = new URLSearchParams(search);
+  // WZ-UFC-NAV-2026-07-09 :: UFC shows only its own section tab(s). Every other sport is untouched.
+  const isUFC = pathname.startsWith("/ufc") || (params.get("sport") || "").toLowerCase() === "ufc";
+  const sectionsToShow = isUFC ? UFC_SECTIONS : SECTIONS;
   const goSection = (s) => {
     if (sectionOn(s, pathname)) return;
     const sport = (params.get("sport") || "mlb").toLowerCase();
@@ -130,7 +141,7 @@ export function SportTabsHeader() {
           </div>
         </div>
         <nav className="wpnav-tabs" aria-label="Sections">
-          {SECTIONS.map((s) => {
+          {sectionsToShow.map((s) => {
             const on = sectionOn(s, pathname);
             return (
               <button
@@ -162,6 +173,7 @@ export default function SportBar() {
   else if (pathname.startsWith("/nba")) curSport = "nba";
   else if (pathname.startsWith("/nfl-games")) curSport = "nfl";
   else if (pathname.startsWith("/cfb-games")) curSport = "cfb";
+  else if (pathname.startsWith("/ufc")) curSport = "ufc"; // WZ-UFC-NAV-2026-07-09
 
   const pickSport = (key) => {
     if (key === curSport) return;
