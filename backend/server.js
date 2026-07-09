@@ -254,11 +254,24 @@ cron.schedule("20 9 * * *", async () => {
   }
 }, { timezone: "America/New_York" });
 
-// Grade finished-game predictions — runs hourly, and a final sweep at 3am ET
-cron.schedule("0 * * * *", async () => {
-  console.log("[CRON] Grading finished-game predictions...");
+// WZ-FASTGRADE-2026-07-09 :: grade finished MLB games every 15 min (was hourly) so results
+// post within ~15 min of the final out instead of up to ~59 min. gradeFinishedGames only flips
+// pending->win/loss and is idempotent, so frequent runs are cheap (a no-op query when nothing
+// new is final). The heavier hourly block below keeps NFL props / expert picks / daily card /
+// DNP void on their hourly cadence -- only MLB game grading was moved to the fast lane.
+cron.schedule("*/15 * * * *", async () => {
   try {
     await gradeFinishedGames();
+  } catch (err) {
+    console.error("[CRON] Fast grade (MLB) failed:", err.message);
+  }
+}, { timezone: "America/New_York" });
+
+// Hourly sweep: NFL prop shadows / expert picks / daily card / DNP void.
+// (MLB finished-game grading moved to the every-15-min fast lane above.)
+cron.schedule("0 * * * *", async () => {
+  console.log("[CRON] Hourly grading sweep...");
+  try {
     // WZ-NFLPROPSGRADER-CRON-2026-07-05 :: grade NFL player-prop shadow rows from box
     // scores (own resolver: matchup+date). No-op until shadow rows exist in-season.
     try {
