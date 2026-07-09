@@ -251,7 +251,64 @@ function aceSuppression(era) {
   return -Math.min(ACE_SUPPRESS_MAX, (ACE_ERA_THRESHOLD - era) * ACE_SUPPRESS_PER);
 }
 
-function calculateTotalProjection(game, awayPitcher, homePitcher, awayTeamHit, homeTeamHit, weather, awayBullpen, homeBullpen, awayHandMult, homeHandMult, awayFatigue, homeFatigue) {
+// ===== WZ-OU-TENDENCY-2026-07-09 =====
+// Team over/under TENDENCY nudge for the totals projection. Validated on graded
+// history (n=642, baseline 52.5% over): games where BOTH teams' own games lean over
+// hit the over 62.9%; both-under games went UNDER ~77% (only 23.1% over). Each team's
+// prior over-rate (vs the total line) nudges the projected total up or down.
+// DEFAULT-SAFE: a team with no record or fewer than OU_MIN_GAMES graded games
+// contributes ZERO, so a missing/failed lookup leaves the frozen projection exactly
+// as it was. Sourced from model_predictions (the graded-totals ledger); cached per run.
+const { createClient: _ouCreateClient } = require("@supabase/supabase-js");
+const OU_TENDENCY_WEIGHT = 1.6;      // runs per unit of summed over-rate deviation (both teams)
+const OU_MAX_NUDGE = 0.70;           // hard cap on the tendency nudge (runs), either direction
+const OU_MIN_GAMES = 8;              // a team needs >= this many graded totals before its tendency counts
+const OU_CACHE_MS = 20 * 60 * 1000;  // re-fetch the tendency table at most every 20 min
+let _ouCache = { at: 0, map: null };
+
+async function getTeamOuTendency() {
+  const now = Date.now();
+  if (_ouCache.map && (now - _ouCache.at) < OU_CACHE_MS) return _ouCache.map;
+  const map = new Map(); // abbr -> { over, n }
+  try {
+    const sb = _ouCreateClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+    const { data, error } = await sb
+      .from("model_predictions")
+      .select("matchup, selection, result")
+      .eq("league", "mlb").eq("market", "total")
+      .in("result", ["win", "loss"]);
+    if (error || !data) { _ouCache = { at: now, map }; return map; }
+    for (const r of data) {
+      const over = (r.result === "win" && r.selection === "over")
+        || (r.result === "loss" && r.selection === "under");
+      const under = (r.result === "win" && r.selection === "under")
+        || (r.result === "loss" && r.selection === "over");
+      if (!over && !under) continue; // selection wasn't over/under -> skip
+      const m = String(r.matchup || "");
+      const at = m.indexOf("@");
+      if (at < 0) continue;
+      const teams = [m.slice(0, at).trim(), m.slice(at + 1).trim()];
+      for (const team of teams) {
+        if (!team) continue;
+        const cur = map.get(team) || { over: 0, n: 0 };
+        cur.n += 1;
+        if (over) cur.over += 1;
+        map.set(team, cur);
+      }
+    }
+  } catch (_) { /* leave map as-is (possibly empty) -> nudge defaults to 0 */ }
+  _ouCache = { at: now, map };
+  return map;
+}
+
+// A team's over-rate deviation from even (0.50), or 0 when unknown / below the
+// games threshold. This is the per-team signal fed into the totals nudge.
+function ouDeviation(entry) {
+  if (!entry || entry.n < OU_MIN_GAMES) return 0;
+  return (entry.over / entry.n) - 0.50;
+}
+
+function calculateTotalProjection(game, awayPitcher, homePitcher, awayTeamHit, homeTeamHit, weather, awayBullpen, homeBullpen, awayHandMult, homeHandMult, awayFatigue, homeFatigue, awayOuDev = 0, homeOuDev = 0) {
   // Offense scaled by handedness vs the opposing starter
   const awayRPG = (awayTeamHit?.runsPerGame ?? LEAGUE_AVG.runsPerGame) * (awayHandMult || 1.0);
   const homeRPG = (homeTeamHit?.runsPerGame ?? LEAGUE_AVG.runsPerGame) * (homeHandMult || 1.0);
@@ -289,7 +346,11 @@ function calculateTotalProjection(game, awayPitcher, homePitcher, awayTeamHit, h
   // 3-IP baseline — a worn pen behind an ace barely pitches, so it inflates little.
   const fatigueAdj = fatigueRunAdj(awayFatigue, homeFatigue, awayPenIP / 3.0, homePenIP / 3.0);
 
-  const projected = baseTotal + pitcherAdj + parkAdj + weatherAdj + bullpenAdj + fatigueAdj + TOTAL_MEAN_ADJ;
+  // WZ-OU-TENDENCY-2026-07-09 :: bounded nudge from both teams' over/under tendency.
+  // Zero whenever a team's record is missing/thin (ouDeviation returns 0), so this
+  // line is a no-op unless real tendency data is present.
+  const ouAdj = Math.max(-OU_MAX_NUDGE, Math.min(OU_MAX_NUDGE, OU_TENDENCY_WEIGHT * ((awayOuDev || 0) + (homeOuDev || 0))));
+  const projected = baseTotal + pitcherAdj + parkAdj + weatherAdj + bullpenAdj + fatigueAdj + ouAdj + TOTAL_MEAN_ADJ;
   return {
     projectedTotal: round2(projected),
     breakdown: {
@@ -300,6 +361,7 @@ function calculateTotalProjection(game, awayPitcher, homePitcher, awayTeamHit, h
       weatherAdj: round2(weatherAdj),
       bullpenAdj: round2(bullpenAdj),
       fatigueAdj: round2(fatigueAdj),
+      ouAdj: round2(ouAdj),
       awayBullpenFatigue: awayFatigue || null,
       homeBullpenFatigue: homeFatigue || null,
     },
@@ -1391,7 +1453,11 @@ async function calculateGameEdges(game, oddsForGame) {
   const ml = calculateMoneylineProjection(game, awayPitcherForm, homePitcherForm, awayHit, homeHit, awayBullpen, homeBullpen, awayHandMult, homeHandMult);
   const awayFatigue = describeFatigue(awayBullpenUsage);
   const homeFatigue = describeFatigue(homeBullpenUsage);
-  const totals = calculateTotalProjection(game, awayPitcherForm, homePitcherForm, awayHit, homeHit, weather, awayBullpen, homeBullpen, awayHandMult, homeHandMult, awayFatigue, homeFatigue);
+  // WZ-OU-TENDENCY-2026-07-09 :: look up each team's over/under tendency (cached; default-safe).
+  const _ouMap = await getTeamOuTendency();
+  const awayOuDev = ouDeviation(_ouMap.get(game.awayAbbr));
+  const homeOuDev = ouDeviation(_ouMap.get(game.homeAbbr));
+  const totals = calculateTotalProjection(game, awayPitcherForm, homePitcherForm, awayHit, homeHit, weather, awayBullpen, homeBullpen, awayHandMult, homeHandMult, awayFatigue, homeFatigue, awayOuDev, homeOuDev);
   // SHADOW: pitching-built multiplicative projection computed in parallel, stored
   // for grading, never used to price a pick (see calculateTotalProjectionShadow).
   const totalsShadow = calculateTotalProjectionShadow(game, awayPitcherForm, homePitcherForm, awayHit, homeHit, weather, awayBullpen, homeBullpen, awayHandMult, homeHandMult);
