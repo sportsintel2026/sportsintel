@@ -67,6 +67,34 @@ async function getEventBouts(slug) {
   return data;
 }
 
+// WZ-UFC-MODEL-2026-07-09 :: full fighter profile (age, reach, height, stance, record with
+// method splits, recent fight history) for the edge model. Static-ish data -> cache 24h so we
+// almost never re-fetch a fighter (keeps us far under the 500-calls/month free tier). Returns
+// the profile OBJECT (not the {data:[]} list) or null. Fail-safe.
+const fighterCache = new Map(); // slug -> { at, data }
+const FIGHTER_TTL_MS = 24 * 60 * 60 * 1000;
+async function getFighter(slug) {
+  if (!slug) return null;
+  const now = Date.now();
+  const hit = fighterCache.get(slug);
+  if (hit && now - hit.at < FIGHTER_TTL_MS) return hit.data;
+  if (!CITO_API_KEY) return hit ? hit.data : null;
+  try {
+    const res = await axios.get(`${CITO_BASE}/ufc/fighters/${encodeURIComponent(slug)}`, {
+      headers: { "x-api-key": CITO_API_KEY },
+      timeout: 12000,
+    });
+    // endpoint may return {data:{...}} or the object directly
+    const body = res.data;
+    const prof = body && body.data ? body.data : body;
+    fighterCache.set(slug, { at: now, data: prof || null });
+    return prof || null;
+  } catch (e) {
+    console.error(`[Cito] getFighter ${slug} failed:`, e.message);
+    return hit ? hit.data : null;
+  }
+}
+
 // Find the next upcoming PPV whose bouts are available. Falls back to the soonest PPV,
 // then the soonest event of any kind, so we always return something if events exist.
 async function getNextPPVEvent() {
@@ -86,5 +114,6 @@ module.exports = {
   isPPV,
   getUpcomingEvents,
   getEventBouts,
+  getFighter,
   getNextPPVEvent,
 };
