@@ -48,13 +48,13 @@ const CSS = `
 .ufc-ring .pct{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:13px;color:#ECEFF2;line-height:1}
 .ufc-ring .pl{font-family:'IBM Plex Mono',monospace;font-size:5px;letter-spacing:.4px;color:#C9A86A}
 .ufc-vs{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:13px;color:#5B646C;letter-spacing:1px}
-.ufc-bbot{display:flex;align-items:center;gap:7px;margin-top:8px;padding-left:2px}
+.ufc-bbot{display:flex;align-items:center;flex-wrap:wrap;gap:7px;margin-top:8px;padding-left:2px}
 .ufc-wc{font-family:'IBM Plex Mono',monospace;font-size:8.5px;letter-spacing:.4px;color:#99A2AA;text-transform:uppercase}
 .ufc-badge{font-family:'IBM Plex Mono',monospace;font-size:7.5px;font-weight:700;letter-spacing:.4px;border-radius:4px;padding:1px 5px}
 .ufc-badge.title{color:#C9A86A;border:1px solid rgba(201,168,106,.5);background:rgba(201,168,106,.08)}
 .ufc-badge.pick{color:#3FCB91;border:1px solid rgba(63,203,145,.4);background:rgba(63,203,145,.07)}
 .ufc-badge.value{color:#C9A86A;border:1px solid rgba(201,168,106,.55);background:rgba(201,168,106,.12)}
-.ufc-bbot .edge{margin-left:auto;font-family:'IBM Plex Mono',monospace;font-size:9px;font-weight:700;color:#3FCB91;flex:0 0 auto}
+.ufc-bbot .edge{font-family:'IBM Plex Mono',monospace;font-size:9px;font-weight:700;color:#3FCB91;flex:0 0 auto}
 .ufc-bbot .edge.neg{color:#5B646C}
 .ufc-bbot .odds{margin-left:auto;font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5B646C}
 
