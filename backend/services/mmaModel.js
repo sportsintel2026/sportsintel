@@ -1,16 +1,23 @@
-// mmaModel.js :: WZ-UFC-MODEL-2026-07-09
-// Market-anchored MMA edge model. It does NOT try to out-think the sharp line from scratch --
-// it STARTS from the de-vigged market probability and applies small, CAPPED tilts from the
-// fight factors a good handicapper reads: age, reach, layoff (ring rust), finishing ability,
-// experience, and recent form. The total tilt is capped (+/-0.42 logit ~= +/-9%) so the model
-// can never wildly diverge from the market -- it only nudges. edge = model - market; a positive
-// edge on our pick means the model thinks the book is a little light on that side.
+// mmaModel.js :: WZ-UFC-MODEL-2026-07-09 / WZ-UFC-STYLE-2026-07-09
+// Market-anchored MMA edge model. Starts from the de-vigged market probability and applies
+// small, CAPPED tilts from real fight factors, then edge = model - market. The cap (+/-0.42
+// logit ~= +/-9%) keeps the model a scalpel, not a wrecking ball -- it nudges the sharp line,
+// never overrides it. Every factor is individually capped too, so no single read dominates.
 //
-// IMPORTANT (honesty): this is a v1 model. It is UNVALIDATED for MMA until it grades against
-// real cards (the ufc_picks recorder captures every pick for exactly this). The route records
-// model_win% + edge so we can prove or disprove it over the coming events. Caps keep it safe in
-// the meantime. Factor parsing is defensive across likely Cito field names; any field we can't
-// read contributes 0 (neutral), so a thin profile degrades gracefully to near-market.
+// FACTORS (all read from Cito's fighter profile; any field we can't read = neutral):
+//   age        - decline curve, penalty past ~35
+//   reach      - reach advantage (unit-agnostic difference)
+//   striking   - output x accuracy vs opponent's strike DEFENSE, minus damage absorbed
+//   grappling  - realistic takedown success (TD avg x accuracy) vs opponent's takedown DEFENSE,
+//                plus submission threat and ground tendency  --> this is the striker-vs-grappler
+//                clash: a grappler only gets the edge if the opponent can't stop the takedown
+//   cardio     - gas tank: avg fight time + decision-win rate, minus damage taken (faders bleed)
+//   finishing  - KO+sub rate (finishers close the show)
+//   experience - seasoned vs green (diminishing, capped small)
+//
+// HONESTY: v1, UNVALIDATED for MMA until it grades against real cards. The ufc_picks recorder
+// captures model_win% + edge on every pick so we can prove/disprove it starting this weekend.
+// Caps keep it safe in the meantime.
 
 function logit(p) { const q = Math.min(0.995, Math.max(0.005, p)); return Math.log(q / (1 - q)); }
 function sigmoid(x) { return 1 / (1 + Math.exp(-x)); }
@@ -21,65 +28,78 @@ function toNum(v) {
   return Number.isFinite(n) ? n : null;
 }
 
-// ---- defensive field extraction (works across common UFC profile shapes) ---
+// ---- field extraction (matches Cito fighter-profile shape) -----------------
 function getAge(p) {
   if (!p) return null;
-  const direct = toNum(p.age);
-  if (direct != null && direct > 15 && direct < 60) return direct;
-  const dob = p.dateOfBirth || p.dob || p.birthDate || p.birthdate || p.born;
+  const a = toNum(p.age);
+  if (a != null && a > 15 && a < 60) return a;
+  const dob = p.birthDate || p.dateOfBirth || p.dob;
   if (dob) { const d = new Date(dob); if (!isNaN(d.getTime())) return (Date.now() - d.getTime()) / (365.25 * 864e5); }
   return null;
 }
-function getReach(p) { // unit-agnostic: only the DIFFERENCE between the two fighters is used
-  if (!p) return null;
-  return toNum(p.reach != null ? p.reach : (p.reachInches != null ? p.reachInches : (p.reachCm != null ? p.reachCm : (p.measurements && p.measurements.reach))));
-}
-function getFightsArray(p) {
-  if (!p) return [];
-  const a = p.fights || p.recentFights || p.fightHistory || p.results || p.bouts;
-  return Array.isArray(a) ? a : [];
-}
-function getLayoffDays(p) {
-  const arr = getFightsArray(p);
-  let last = null;
-  if (arr.length) {
-    const d = arr[0].date || arr[0].eventDate || arr[0].fightDate;
-    if (d) { const dd = new Date(d); if (!isNaN(dd.getTime())) last = dd; }
-  }
-  if (!last && p && p.lastFightDate) { const dd = new Date(p.lastFightDate); if (!isNaN(dd.getTime())) last = dd; }
-  if (!last) return null;
-  return (Date.now() - last.getTime()) / 864e5;
-}
+function getReach(p) { return p ? toNum(p.reachInches != null ? p.reachInches : p.reach) : null; }
 function getRecord(p) {
   const r = (p && (p.record || p)) || {};
-  const w = toNum(r.wins), l = toNum(r.losses), d = toNum(r.draws);
+  const w = toNum(r.wins != null ? r.wins : p && p.recordWins);
+  const l = toNum(r.losses != null ? r.losses : p && p.recordLosses);
+  const d = toNum(r.draws != null ? r.draws : p && p.recordDraws);
   return { wins: w || 0, losses: l || 0, draws: d || 0, has: w != null && l != null };
 }
-function getFinishRate(p) {
-  if (!p) return null;
-  const rec = p.record || {};
-  const w = getRecord(p).wins;
-  const ko = toNum(rec.winsByKnockout != null ? rec.winsByKnockout : (rec.ko != null ? rec.ko : (p.wins && (p.wins["ko/tko"] != null ? p.wins["ko/tko"] : p.wins.ko))));
-  const sub = toNum(rec.winsBySubmission != null ? rec.winsBySubmission : (rec.sub != null ? rec.sub : (p.wins && p.wins.submissions)));
-  if (w > 0 && (ko != null || sub != null)) return ((ko || 0) + (sub || 0)) / w;
-  return null;
+// pull the stats block and normalize the numbers we use
+function getStats(p) {
+  const s = (p && p.stats) || {};
+  const pos = s.sigStrikesByPosition || {};
+  const wbm = s.winsByMethod || {};
+  const pct = (o) => (o && o.percent != null ? toNum(o.percent) : null);
+  return {
+    strLpm: toNum(s.sigStrikesLandedPerMin),
+    strApm: toNum(s.sigStrikesAbsorbedPerMin),
+    strAcc: toNum(s.strikingAccuracy),
+    strDef: toNum(s.sigStrikeDefense),
+    tdAvg: toNum(s.takedownAvgPer15Min),
+    tdAcc: toNum(s.takedownAccuracy),
+    tdDef: toNum(s.takedownDefense),
+    subAvg: toNum(s.submissionAvgPer15Min),
+    kdAvg: toNum(s.knockdownAvg),
+    avgTime: toNum(s.averageFightTimeSeconds),
+    groundPct: pct(pos.ground),
+    standPct: pct(pos.standing),
+    decPct: pct(wbm.dec),
+    koPct: pct(wbm["ko-tko"] || wbm.ko),
+    subPct: pct(wbm.sub),
+  };
 }
-function getRecentForm(p) { // fraction of last <=3 fights won, minus 0.5 (so streak=+, skid=-)
-  const arr = getFightsArray(p).slice(0, 3);
-  if (!arr.length) return null;
-  let wins = 0, counted = 0;
-  for (const f of arr) {
-    const res = String(f.result || f.outcome || "").toLowerCase();
-    if (res.includes("win") || res === "w") { wins++; counted++; }
-    else if (res.includes("loss") || res === "l") { counted++; }
-  }
-  if (!counted) return null;
-  return wins / counted - 0.5;
+function finishRate(st) {
+  if (st.koPct == null && st.subPct == null) return null;
+  return (st.koPct || 0) + (st.subPct || 0);
+}
+
+// striking output score of `a` against defender `b`
+function strikeScore(a, b) {
+  if (a.strLpm == null || a.strAcc == null) return null;
+  const def = b.strDef != null ? b.strDef : 0.5;
+  const offense = a.strLpm * a.strAcc * (1 - def);
+  const damage = (a.strApm != null ? a.strApm : 3) * 0.30;
+  return offense - damage;
+}
+// grappling control score of `a` against defender `b` (TD defense-adjusted) + sub/ground
+function grapScore(a, b) {
+  if (a.tdAvg == null && a.subAvg == null) return null;
+  const tddOpp = b.tdDef != null ? b.tdDef : 0.6;
+  const td = (a.tdAvg || 0) * (a.tdAcc != null ? a.tdAcc : 0.4) * (1 - tddOpp);
+  const sub = (a.subAvg || 0) * 0.5;
+  const ground = (a.groundPct != null ? a.groundPct : 0) * 0.4;
+  return td + sub + ground;
+}
+function cardioScore(st) {
+  let s = 0, any = false;
+  if (st.avgTime != null) { s += (st.avgTime / 600 - 1) * 0.5; any = true; }   // longer avg = tank
+  if (st.decPct != null) { s += st.decPct * 0.5; any = true; }                 // decision-heavy = paces
+  if (st.strApm != null) { s -= (st.strApm - 3) * 0.05; any = true; }          // damage taken = fades
+  return any ? s : null;
 }
 
 // ---- the model -------------------------------------------------------------
-// Returns { modelRed, edgeRed, factors:[{name, delta, detail}], usedFactors }
-// pMktRed = de-vigged market win probability for the RED corner.
 function scoreBout(redProfile, blueProfile, pMktRed) {
   if (pMktRed == null || !Number.isFinite(pMktRed)) return null;
   const factors = [];
@@ -87,54 +107,50 @@ function scoreBout(redProfile, blueProfile, pMktRed) {
   const add = (name, delta, detail) => {
     if (delta && Number.isFinite(delta)) { factors.push({ name, delta, detail }); used++; }
   };
+  const R = getStats(redProfile), B = getStats(blueProfile);
 
-  // 1) AGE -- decline curve. Younger edge; extra penalty for being old (esp > 35).
+  // 1) AGE
   const ageR = getAge(redProfile), ageB = getAge(blueProfile);
   if (ageR != null && ageB != null) {
-    let d = clamp((ageB - ageR) * 0.02, -0.18, 0.18);         // younger red -> +
+    let d = clamp((ageB - ageR) * 0.02, -0.18, 0.18);
     const pen = (a) => (a > 38 ? -0.10 : a > 35 ? -0.05 : a > 33 ? -0.02 : 0);
     d += clamp(pen(ageR) - pen(ageB), -0.14, 0.14);
-    add("age", clamp(d, -0.22, 0.22), `R ${Math.round(ageR)} vs B ${Math.round(ageB)}`);
+    add("age", clamp(d, -0.22, 0.22), `${Math.round(ageR)} vs ${Math.round(ageB)}`);
   }
 
-  // 2) REACH -- longer reach small edge (unit-agnostic difference).
+  // 2) REACH
   const rR = getReach(redProfile), rB = getReach(blueProfile);
-  if (rR != null && rB != null) add("reach", clamp((rR - rB) * 0.010, -0.10, 0.10), `${rR} vs ${rB}`);
+  if (rR != null && rB != null) add("reach", clamp((rR - rB) * 0.010, -0.08, 0.08), `${rR}" vs ${rB}"`);
 
-  // 3) LAYOFF / ring rust -- penalty for long inactivity vs opponent.
-  const loR = getLayoffDays(redProfile), loB = getLayoffDays(blueProfile);
-  if (loR != null && loB != null) {
-    const rust = (days) => (days > 730 ? -0.12 : days > 540 ? -0.08 : days > 365 ? -0.04 : 0);
-    add("layoff", clamp(rust(loR) - rust(loB), -0.14, 0.14), `${Math.round(loR)}d vs ${Math.round(loB)}d`);
-  }
+  // 3) STRIKING (output vs opponent defense, minus damage)
+  const sR = strikeScore(R, B), sB = strikeScore(B, R);
+  if (sR != null && sB != null) add("striking", clamp((sR - sB) * 0.045, -0.11, 0.11), null);
 
-  // 4) FINISHING -- higher KO+sub rate, slight edge (finishers close the show).
-  const fR = getFinishRate(redProfile), fB = getFinishRate(blueProfile);
-  if (fR != null && fB != null) add("finishing", clamp((fR - fB) * 0.16, -0.08, 0.08), `${Math.round(fR * 100)}% vs ${Math.round(fB * 100)}%`);
+  // 4) GRAPPLING (takedown success vs opponent TDD -- the striker-vs-grappler clash)
+  const gR = grapScore(R, B), gB = grapScore(B, R);
+  if (gR != null && gB != null) add("grappling", clamp((gR - gB) * 0.055, -0.11, 0.11), null);
 
-  // 5) EXPERIENCE -- seasoned vs green (diminishing; capped small).
+  // 5) CARDIO (gas tank)
+  const cR = cardioScore(R), cB = cardioScore(B);
+  if (cR != null && cB != null) add("cardio", clamp((cR - cB) * 0.12, -0.08, 0.08), null);
+
+  // 6) FINISHING
+  const fR = finishRate(R), fB = finishRate(B);
+  if (fR != null && fB != null) add("finishing", clamp((fR - fB) * 0.10, -0.06, 0.06), null);
+
+  // 7) EXPERIENCE
   const recR = getRecord(redProfile), recB = getRecord(blueProfile);
   if (recR.has && recB.has) {
-    const expR = Math.log1p(recR.wins + recR.losses + recR.draws);
-    const expB = Math.log1p(recB.wins + recB.losses + recB.draws);
-    add("experience", clamp((expR - expB) * 0.05, -0.08, 0.08), `${recR.wins + recR.losses} vs ${recB.wins + recB.losses} fights`);
+    const eR = Math.log1p(recR.wins + recR.losses + recR.draws);
+    const eB = Math.log1p(recB.wins + recB.losses + recB.draws);
+    add("experience", clamp((eR - eB) * 0.05, -0.07, 0.07), `${recR.wins + recR.losses} vs ${recB.wins + recB.losses}`);
   }
-
-  // 6) RECENT FORM -- win streak vs skid over last 3.
-  const formR = getRecentForm(redProfile), formB = getRecentForm(blueProfile);
-  if (formR != null && formB != null) add("form", clamp((formR - formB) * 0.20, -0.10, 0.10), null);
 
   let total = factors.reduce((s, f) => s + f.delta, 0);
   total = clamp(total, -0.42, 0.42); // hard cap: model only nudges the market
 
   const modelRed = sigmoid(logit(pMktRed) + total);
-  return {
-    modelRed,
-    edgeRed: modelRed - pMktRed,
-    totalTilt: total,
-    factors,
-    usedFactors: used,
-  };
+  return { modelRed, edgeRed: modelRed - pMktRed, totalTilt: total, factors, usedFactors: used };
 }
 
 module.exports = { scoreBout };
