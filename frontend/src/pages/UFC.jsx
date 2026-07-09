@@ -38,7 +38,7 @@ const CSS = `
 .ufc-av img{width:100%;height:100%;object-fit:cover;object-position:top}
 .ufc-av.r{border:2px solid #E2655C}.ufc-av.b{border:2px solid #5DA9E8}
 .ufc-nm{min-width:0}
-.ufc-nm .fn{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:16px;letter-spacing:.2px;line-height:1.05;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#ECEFF2}
+.ufc-nm .fn{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:15px;letter-spacing:.2px;line-height:1.0;color:#ECEFF2;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:break-word}
 .ufc-nm .fn.pick{color:#C9A86A}
 .ufc-nm .rec{font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5B646C;margin-top:2px}
 .ufc-mid{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;padding:0 2px}
@@ -53,6 +53,9 @@ const CSS = `
 .ufc-badge{font-family:'IBM Plex Mono',monospace;font-size:7.5px;font-weight:700;letter-spacing:.4px;border-radius:4px;padding:1px 5px}
 .ufc-badge.title{color:#C9A86A;border:1px solid rgba(201,168,106,.5);background:rgba(201,168,106,.08)}
 .ufc-badge.pick{color:#3FCB91;border:1px solid rgba(63,203,145,.4);background:rgba(63,203,145,.07)}
+.ufc-badge.value{color:#C9A86A;border:1px solid rgba(201,168,106,.55);background:rgba(201,168,106,.12)}
+.ufc-bbot .edge{margin-left:auto;font-family:'IBM Plex Mono',monospace;font-size:9px;font-weight:700;color:#3FCB91;flex:0 0 auto}
+.ufc-bbot .edge.neg{color:#5B646C}
 .ufc-bbot .odds{margin-left:auto;font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5B646C}
 
 .ufc-state{margin:40px 12px;text-align:center;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#5B646C;line-height:1.9}
@@ -123,7 +126,11 @@ function Bout({ b, main }) {
       <div className="ufc-bbot">
         {b.weightClass ? <span className="ufc-wc">{b.weightClass}</span> : null}
         {b.titleBout ? <span className="ufc-badge title">TITLE</span> : null}
+        {b.value ? <span className="ufc-badge value">+VALUE</span> : null}
         {hasPick ? <span className="ufc-badge pick">PICK: {b.pick}{b.odds != null ? " " + fmtOdds(b.odds) : ""}</span> : null}
+        {hasPick && b.edgePct != null && b.edgePct !== 0
+          ? <span className={"edge" + (b.edgePct < 0 ? " neg" : "")}>{b.edgePct > 0 ? "+" : ""}{b.edgePct}% edge</span>
+          : null}
       </div>
     </div>
   );
@@ -162,7 +169,7 @@ export default function UFCPage() {
         {picksLive ? (
           <div className="ufc-note live">
             <span>&#9679;</span>
-            <span><b>Market winners live.</b> Pick &amp; win% come from the de-vigged moneyline. Edge (beating the price) turns on once the fighter model is wired.</span>
+            <span><b>Model picks live.</b> Win% is our fighter model; <b>+VALUE</b> flags where the model beats the market price. Model is new &mdash; it grades live starting this card.</span>
           </div>
         ) : (
           <div className="ufc-note">
