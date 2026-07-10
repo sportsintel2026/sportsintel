@@ -75,41 +75,6 @@ const CSS = `
 .ufc-retry{margin-top:14px;display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#C9A86A;border:1px solid rgba(201,168,106,.4);border-radius:8px;padding:8px 16px;cursor:pointer;background:none}
 .ufc-skel{height:120px;margin:0 4px 10px;border-radius:14px;background:linear-gradient(90deg,#0C0D10,#14171B,#0C0D10);background-size:200% 100%;animation:ufcsh 1.3s linear infinite}
 @keyframes ufcsh{0%{background-position:200% 0}100%{background-position:-200% 0}}
-
-/* WZ-UFC-CARDV4-2026-07-09 :: Clean Confidence fight card. Red corner left, blue right; GOLD = our
-   pick. A single calm gold bar fills to the pick's model win% -- how strong the pick is, at a glance.
-   Larger headshots per request. Sits inside the existing .ufc-grid. */
-.kc-card{border:1px solid rgba(255,255,255,.07);border-radius:14px;background:#0C0D10;padding:13px 14px 14px}
-.kc-card.main{border-color:rgba(201,168,106,.16)}
-.kc-top{display:flex;align-items:center;gap:7px;margin-bottom:13px}
-.kc-wc{font-family:'IBM Plex Mono',monospace;font-size:8.5px;letter-spacing:1px;color:#99A2AA;text-transform:uppercase}
-.kc-title{font-family:'IBM Plex Mono',monospace;font-size:7.5px;font-weight:700;letter-spacing:.5px;color:#C9A86A;border:1px solid rgba(201,168,106,.5);border-radius:4px;padding:1px 5px}
-.kc-sp{flex:1}
-.kc-read{font-family:'IBM Plex Mono',monospace;font-size:8px;color:#8b939b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px}
-.kc-read i{font-style:normal;color:#5B646C;font-weight:700;letter-spacing:.5px;margin-right:5px}
-.kc-names{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px}
-.kc-side{display:flex;align-items:center;gap:10px;min-width:0;flex:1}
-.kc-side.b{flex-direction:row-reverse;text-align:right}
-.kc-av{width:46px;height:46px;border-radius:50%;flex:0 0 46px;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#1B2025;border:2px solid rgba(255,255,255,.14);font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:14px;color:#99A2AA}
-.kc-av img{width:100%;height:100%;object-fit:cover;object-position:top}
-.kc-side.red .kc-av{border-color:rgba(224,107,98,.5)}
-.kc-side.blue .kc-av{border-color:rgba(91,141,239,.5)}
-.kc-side.pick .kc-av{border-color:#C9A86A;box-shadow:0 0 0 3px rgba(201,168,106,.15)}
-.kc-nm{min-width:0;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:18px;line-height:1;letter-spacing:.2px;color:#8b939b;overflow:hidden;text-overflow:ellipsis}
-.kc-side.pick .kc-nm{color:#C9A86A}
-.kc-nm .od{display:block;font-family:'IBM Plex Mono',monospace;font-size:9.5px;font-weight:500;color:#5B646C;margin-top:3px}
-.kc-conf{margin-bottom:12px}
-.kc-track{position:relative;height:6px;border-radius:4px;background:#14171B;overflow:hidden}
-.kc-fill{position:absolute;top:0;left:0;bottom:0;border-radius:4px;background:linear-gradient(90deg,#e7cf9a,#C9A86A);transition:width .5s cubic-bezier(.4,0,.2,1)}
-.kc-scale{display:flex;justify-content:space-between;margin-top:5px}
-.kc-scale span{font-family:'IBM Plex Mono',monospace;font-size:7.5px;color:#5B646C;text-transform:uppercase;letter-spacing:.5px}
-.kc-foot{display:flex;align-items:center;gap:8px}
-.kc-pick{font-family:'IBM Plex Mono',monospace;font-size:8px;font-weight:700;letter-spacing:.5px;color:#5B646C;text-transform:uppercase}
-.kc-pick b{font-family:'Barlow Condensed',sans-serif;font-size:15px;font-weight:800;color:#C9A86A;letter-spacing:.3px;margin-left:6px;text-transform:none}
-.kc-badge{font-family:'IBM Plex Mono',monospace;font-size:8px;font-weight:700;letter-spacing:.3px;color:#3FCB91;border:1px solid rgba(63,203,145,.5);background:rgba(63,203,145,.12);border-radius:4px;padding:2px 6px}
-.kc-edge{font-family:'IBM Plex Mono',monospace;font-size:9.5px;font-weight:600;color:#3FCB91}
-.kc-edge.flat{color:#5B646C}
-.kc-pending{font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.5px;color:#5B646C;text-align:center;padding:11px;border:1px dashed rgba(255,255,255,.07);border-radius:8px}
 `;
 
 function initials(name) {
@@ -123,10 +88,10 @@ function fmtOdds(o) {
   return n > 0 ? "+" + n : "" + n;
 }
 
-function Avatar({ src, name, isPick, cls }) {
+function Avatar({ src, name, isPick }) {
   const [err, setErr] = useState(false);
   return (
-    <div className={(cls || "ufc-av") + (isPick ? " pick" : "")}>
+    <div className={"ufc-av" + (isPick ? " pick" : "")}>
       {src && !err ? <img src={src} alt="" onError={() => setErr(true)} /> : <span>{initials(name)}</span>}
     </div>
   );
@@ -136,48 +101,62 @@ function Bout({ b, main }) {
   const hasPick = b && b.winPct != null;
   const redPick = hasPick && b.pickCorner === "red";
   const bluePick = hasPick && b.pickCorner === "blue";
+  const dash = hasPick ? Math.round((b.winPct / 100) * 104) : 0;
   const value = !!(b && b.value);
-  const lean = b.methodLean && b.methodLean.lean && b.methodLean.lean !== "EVEN" ? b.methodLean : null;
   return (
-    <div className={"kc-card" + (main ? " main" : "")}>
-      <div className="kc-top">
-        {b.weightClass ? <span className="kc-wc">{b.weightClass}</span> : null}
-        {b.titleBout ? <span className="kc-title">TITLE</span> : null}
-        <span className="kc-sp" />
-        {lean ? <span className="kc-read"><i>READ</i>{lean.label}</span> : null}
+    <div className={"ufc-b" + (main ? " main" : "")}>
+      <div className="ufc-head">
+        {b.weightClass ? <span className="ufc-wc">{b.weightClass}</span> : null}
+        {b.titleBout ? <span className="ufc-title">TITLE</span> : null}
       </div>
 
-      <div className="kc-names">
-        <div className={"kc-side red" + (redPick ? " pick" : "")}>
-          <Avatar cls="kc-av" src={b.red && b.red.headshot} name={b.red && b.red.name} isPick={redPick} />
-          <div className="kc-nm">{b.red ? b.red.name : "TBD"}
-            {b.red && b.red.odds != null ? <span className="od">{fmtOdds(b.red.odds)}</span> : null}
+      <div className="ufc-fo">
+        <div className="ufc-side">
+          <Avatar src={b.red && b.red.headshot} name={b.red && b.red.name} isPick={redPick} />
+          <div className="ufc-nm">
+            <div className={"fn" + (redPick ? " pick" : "")}>{b.red ? b.red.name : "TBD"}</div>
+            {b.red && b.red.record ? <div className="rec">{b.red.record}</div> : null}
           </div>
         </div>
-        <div className={"kc-side blue b" + (bluePick ? " pick" : "")}>
-          <Avatar cls="kc-av" src={b.blue && b.blue.headshot} name={b.blue && b.blue.name} isPick={bluePick} />
-          <div className="kc-nm">{b.blue ? b.blue.name : "TBD"}
-            {b.blue && b.blue.odds != null ? <span className="od">{fmtOdds(b.blue.odds)}</span> : null}
+        <div className="ufc-vs">VS</div>
+        <div className="ufc-side b">
+          <Avatar src={b.blue && b.blue.headshot} name={b.blue && b.blue.name} isPick={bluePick} />
+          <div className="ufc-nm">
+            <div className={"fn" + (bluePick ? " pick" : "")}>{b.blue ? b.blue.name : "TBD"}</div>
+            {b.blue && b.blue.record ? <div className="rec">{b.blue.record}</div> : null}
           </div>
         </div>
       </div>
 
       {hasPick ? (
-        <>
-          <div className="kc-conf">
-            <div className="kc-track"><div className="kc-fill" style={{ width: b.winPct + "%" }} /></div>
-            <div className="kc-scale"><span>even</span><span>strong</span></div>
+        <div className={"ufc-pb" + (value ? " val" : "")}>
+          <div className="ufc-ring">
+            <svg width="40" height="40">
+              <circle cx="20" cy="20" r="16.5" fill="none" stroke="rgba(255,255,255,.09)" strokeWidth="4" />
+              <circle cx="20" cy="20" r="16.5" fill="none" stroke="#C9A86A" strokeWidth="4" strokeLinecap="round" strokeDasharray={`${dash} 104`} />
+            </svg>
+            <div className="pc"><span className="pct">{b.winPct}%</span><span className="pl">WIN</span></div>
           </div>
-          <div className="kc-foot">
-            <span className="kc-pick">Pick<b>{b.pick} {b.winPct}%</b></span>
-            <span className="kc-sp" />
-            {value ? <span className="kc-badge">+VALUE</span> : null}
-            {b.edgePct != null ? <span className={"kc-edge" + (value ? "" : " flat")}>{b.edgePct > 0 ? "+" : ""}{b.edgePct}% edge</span> : null}
+          <div className="ufc-pbmid">
+            <div className="lbl">Our Pick</div>
+            <div className="who">{b.pick}{b.odds != null ? <span className="od">{fmtOdds(b.odds)}</span> : null}</div>
           </div>
-        </>
+          <div className="ufc-pbright">
+            {value ? <span className="ufc-vbadge">+VALUE</span> : null}
+            {b.edgePct != null ? <span className={"ufc-edge" + (b.edgePct < 0 ? " neg" : "")}>{b.edgePct > 0 ? "+" : ""}{b.edgePct}% edge</span> : null}
+          </div>
+        </div>
       ) : (
-        <div className="kc-pending">ODDS PENDING &mdash; no line posted yet</div>
+        <div className="ufc-pb pending"><span className="pnd">ODDS PENDING &mdash; no line posted yet</span></div>
       )}
+
+      {b.methodLean && b.methodLean.lean && b.methodLean.lean !== "EVEN" ? (
+        <div className="ufc-lean">
+          <span className="tag">READ</span>
+          <span className="txt">{b.methodLean.label}</span>
+          {b.methodLean.note ? <span className="sub">{b.methodLean.note}</span> : null}
+        </div>
+      ) : null}
     </div>
   );
 }
