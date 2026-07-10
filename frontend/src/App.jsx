@@ -20,6 +20,7 @@ import OddsPage from "./pages/OddsPage";
 import ClvPage from "./pages/Clv";
 import NBAPage from "./pages/NBA";
 import UFCPage from "./pages/UFC"; // WZ-UFC-PAGE-2026-07-09 :: additive UFC/MMA page
+import UFCRecordPage from "./pages/UFCRecord"; // WZ-UFC-RECORD-2026-07-09 :: UFC Record tab
 import NBADetailPage from "./pages/NBADetail";
 import LiveScoresPage from "./pages/LiveScores";
 import GuidePage from "./pages/Guide";
@@ -246,6 +247,12 @@ export default function App() {
           <Route path="/ufc" element={
             <PrivateRoute>
               <UFCPage />
+            </PrivateRoute>
+          } />
+          {/* WZ-UFC-RECORD-2026-07-09 :: UFC Record tab (flat route, mirrors /nfl-games convention) */}
+          <Route path="/ufc-record" element={
+            <PrivateRoute>
+              <UFCRecordPage />
             </PrivateRoute>
           } />
           <Route path="/game/nba/:gameId" element={
