@@ -397,8 +397,8 @@ router.get("/probe", async (_req, res) => {
       : (body && typeof body === "object" ? "object{" + Object.keys(body).slice(0, 6).join(",") + "}" : typeof body);
     // WZ-UFC-PROBE-MSG-2026-07-10 :: surface Cito's actual error text (the real reason)
     out.citoSuccess = body && body.success;
-    out.citoError = body && body.error ? String(body.error).slice(0, 300) : null;
-    out.citoHelp = body && body.developer_help ? String(body.developer_help).slice(0, 400) : null;
+    out.citoError = body && body.error != null ? JSON.stringify(body.error).slice(0, 400) : null;
+    out.citoHelp = body && body.developer_help != null ? JSON.stringify(body.developer_help).slice(0, 500) : null;
     const list = body && Array.isArray(body.data) ? body.data : [];
     out.eventCount = list.length;
     out.firstEvents = list.slice(0, 5).map((e) => ({
