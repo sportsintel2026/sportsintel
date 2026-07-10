@@ -11,6 +11,7 @@ import { useAuth } from "../hooks/useAuth";
 import { subscriptionApi } from "../lib/api";
 
 const API_BASE = import.meta.env.VITE_API_URL || "https://sportsintel-production.up.railway.app";
+const OWNER_EMAIL = "r7002g@gmail.com"; // WZ-PERF-ADMIN-ONLY-2026-07-10 :: same owner check as Admin/Settings
 const RNGS = ["7D", "30D", "Season", "All"];
 const TIER_ORDER = [["HIGH", "HIGH"], ["MEDIUM", "MED"], ["LOW", "LOW"], ["NEUTRAL", "NEUTRAL"]];
 const MKT_NAME = {
@@ -85,16 +86,18 @@ export default function PerformancePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
-  // WZ-PERF-ADMIN-ONLY-2026-07-10 :: Performance is admin-only now (pulled from subscriber nav).
-  // Load the plan; if the viewer isn't an admin, bounce to the dashboard -- this blocks
-  // direct-URL access too, not just the hidden nav link.
+  // WZ-PERF-ADMIN-ONLY-2026-07-10 :: Performance is admin-only (pulled from subscriber nav). Admin =
+  // the DB is_admin flag (plan.isAdmin) OR the owner email -- the SAME robust check Admin/Settings use,
+  // so the owner is never locked out if the DB flag isn't set. /performance is behind PrivateRoute so
+  // `user` is loaded here; non-admins bounce to the dashboard (blocks direct-URL access too).
+  const isOwner = user?.email === OWNER_EMAIL;
   useEffect(() => {
     let done = false;
     subscriptionApi.getMyPlan()
-      .then(p => { if (done) return; setPlan(p || { tier:"free", isAdmin:false }); if (!p || p.isAdmin !== true) navigate("/dashboard", { replace: true }); })
-      .catch(() => { if (!done) navigate("/dashboard", { replace: true }); });
+      .then(p => { if (done) return; setPlan(p || { tier:"free", isAdmin:false }); if (!isOwner && !(p && p.isAdmin === true)) navigate("/dashboard", { replace: true }); })
+      .catch(() => { if (!done && !isOwner) navigate("/dashboard", { replace: true }); });
     return () => { done = true; };
-  }, [navigate]);
+  }, [navigate, isOwner]);
   useEffect(() => {
     let c = false;
     setLoading(true); setError(false); setData(null);
