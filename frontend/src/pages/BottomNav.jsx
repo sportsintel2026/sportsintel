@@ -11,7 +11,6 @@ const TABS = [
   { label: "Games",       icon: "\u25a6", path: "/games",       match: (p) => p.includes("games") },
   { label: "Props",       icon: "\u25c8", path: "/props",       match: (p) => p === "/props" },
   { label: "Market",      icon: "\u25d0", path: "/odds",        match: (p) => p === "/odds" },
-  { label: "Performance", icon: "\u25b2", path: "/performance", match: (p) => p === "/performance" },
   { label: "Account",     icon: "\u25cd", path: "/settings",    match: (p) => p === "/settings" },
 ];
 
