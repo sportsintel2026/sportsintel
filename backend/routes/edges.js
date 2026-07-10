@@ -579,6 +579,19 @@ router.get("/mlb", async (req, res) => {
       }
     }
     totalsEdges.sort((a, b) => (b.edge ?? -1) - (a.edge ?? -1));
+    // WZ-TBC-2026-07-10 :: TOTALS 3-6% BAND-CUT. Audit 2026-07-09 (post-calibration): the
+    // [3%,6%) totals edge band is the model's single WORST slice -- -22% ROI on n=27 -- while
+    // <3% is ~flat (-1.3%) and >=6% is +EV (+6.4%). Same overconfident-mid-band failure the
+    // hits shadow showed, so this is a bleed-stopper, NOT a claim the band is fixed; the real
+    // fix is the mid-edge totals recalibration. Suppress [3%,6%) from BOTH the shown board and
+    // the recorded set -- result.totalsEdges below feeds recordPredictions too, so board==record
+    // stays true. Reversible: set TOTALS_BANDCUT_ENABLED=false to show/record every edge again.
+    const TOTALS_BANDCUT_ENABLED = true;
+    const TOTALS_BANDCUT_LO = 0.03; // inclusive lower bound of the suppressed edge band
+    const TOTALS_BANDCUT_HI = 0.06; // exclusive upper bound (>=6% survives -- the +EV slice)
+    const totalsEdgesShown = TOTALS_BANDCUT_ENABLED
+      ? totalsEdges.filter(t => !(t.edge != null && t.edge >= TOTALS_BANDCUT_LO && t.edge < TOTALS_BANDCUT_HI))
+      : totalsEdges;
     // WZ-RUNLINE-COVERFIRST-2026-07-06 :: winner-first run line. For each game the board takes
     // ONE side only -- the side the model gives the HIGHER cover probability (the >50% side) --
     // and keeps it only when that side also carries a positive cover edge. We never surface both
@@ -754,7 +767,7 @@ router.get("/mlb", async (req, res) => {
         };
       }),
       moneylineEdges: moneylineBoard,
-      totalsEdges: totalsEdges.slice(0, 10),
+      totalsEdges: totalsEdgesShown.slice(0, 10),
       runLineEdges: runLineEdges.slice(0, 10),
       hrPropEdges: hrPropEdges.slice(0, MLB_PROP_DISPLAY_CAP),
       kPropEdges: kPropEdges.slice(0, MLB_PROP_DISPLAY_CAP),
