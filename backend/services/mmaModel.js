@@ -165,6 +165,40 @@ function formScore(fights, asOf) {
   return wsum ? s / wsum : null;
 }
 
+// WZ-UFC-LEVEL-2026-07-09 :: LEVEL OF COMPETITION -- strength of recent schedule + how a fighter
+// performed against it. A fight counts as "elite" if the opponent was a champion (opponent
+// .championStatus === "champion") or it was a title bout (bout.titleBout). Beating elite opposition
+// is the strongest quality signal; FACING elite even in a loss still earns high credit (you belong
+// at the top) -- and a non-elite LOSS is scored 0 here, NOT negative, so we don't double-count the
+// loss that `form` already penalizes. This keeps the factor about WHO you fought, not just W/L.
+// Recency-weighted over the last up-to-6 completed fights, deduped by event. Returns ~[0, 1.5].
+function competitionQuality(fights, asOf) {
+  if (!Array.isArray(fights)) return null;
+  const done = fights
+    .filter((f) => isCompletedResult(f) && fightDateMs(f) != null && fightDateMs(f) <= asOf)
+    .sort((a, b) => fightDateMs(b) - fightDateMs(a));
+  const seen = new Set(); const uniq = [];
+  for (const f of done) {
+    const key = (f.event && f.event.slug) || (f.bout && f.bout.id);
+    if (key && seen.has(key)) continue;
+    if (key) seen.add(key);
+    uniq.push(f);
+    if (uniq.length >= 6) break;
+  }
+  if (!uniq.length) return null;
+  const wRec = [1.0, 0.85, 0.7, 0.55, 0.4, 0.3];
+  let s = 0, wsum = 0;
+  uniq.forEach((f, i) => {
+    const w = wRec[i] != null ? wRec[i] : 0.25;
+    const elite = (f.opponent && f.opponent.championStatus === "champion") ||
+      (f.bout && f.bout.titleBout === true);
+    // elite win 1.5 (best) / elite loss 0.8 (faced the top) / beat non-elite 0.2 / lost non-elite 0
+    const v = f.outcome === "win" ? (elite ? 1.5 : 0.2) : (elite ? 0.8 : 0.0);
+    s += v * w; wsum += w;
+  });
+  return wsum ? s / wsum : null;
+}
+
 // ---- the model -------------------------------------------------------------
 function scoreBout(redProfile, blueProfile, pMktRed, opts) {
   if (pMktRed == null || !Number.isFinite(pMktRed)) return null;
@@ -228,6 +262,13 @@ function scoreBout(redProfile, blueProfile, pMktRed, opts) {
     const formR = formScore(opts.redFights, asOf);
     const formB = formScore(opts.blueFights, asOf);
     if (formR != null && formB != null) add("form", clamp((formR - formB) * 0.05, -0.08, 0.08), null);
+
+    // 10) LEVEL OF COMPETITION -- WZ-UFC-LEVEL-2026-07-09 :: quality of recent schedule (champions
+    // / title bouts faced + results). Smaller cap than form since it partly overlaps; it separates
+    // a fighter tested at the top from one padding a record against journeymen.
+    const qR = competitionQuality(opts.redFights, asOf);
+    const qB = competitionQuality(opts.blueFights, asOf);
+    if (qR != null && qB != null) add("level", clamp((qR - qB) * 0.04, -0.06, 0.06), null);
   }
 
   let total = factors.reduce((s, f) => s + f.delta, 0);
