@@ -13,7 +13,7 @@ const router = express.Router();
 const axios = require("axios");
 const { fetchMMASchedule } = require("../services/sportsData");
 const { getNextPPVEvent, getEventBouts, getFighter } = require("../services/citoApi");
-const { scoreBout } = require("../services/mmaModel"); // WZ-UFC-MODEL-2026-07-09
+const { scoreBout, methodLean } = require("../services/mmaModel"); // WZ-UFC-MODEL-2026-07-09 / WZ-UFC-METHOD-2026-07-09
 const { createClient } = require("@supabase/supabase-js"); // WZ-UFC-REC-2026-07-09
 
 const ODDS_BASE = "https://api.the-odds-api.com/v4";
@@ -128,6 +128,7 @@ async function parseBout(bout, oddsMap) {
     red, blue,
     pick: null, winPct: null, pickCorner: null, odds: null,
     marketWinPct: null, edgePct: null, value: false,
+    methodLean: null, // WZ-UFC-METHOD-2026-07-09 :: info-only KO/SUB/DEC read (no market to beat)
   };
 
   // no market -> pending (no pick/edge until sportsbooks post the line)
@@ -140,6 +141,7 @@ async function parseBout(bout, oddsMap) {
     const [rp, bp] = await Promise.all([getFighter(red.slug), getFighter(blue.slug)]);
     const scored = scoreBout(rp, bp, pMktRed);
     if (scored && Number.isFinite(scored.modelRed)) modelRed = scored.modelRed;
+    if (typeof methodLean === "function") out.methodLean = methodLean(rp, bp) || null; // WZ-UFC-METHOD-2026-07-09
   } catch (_) { /* stay at market */ }
 
   const pickRed = modelRed >= 0.5;
