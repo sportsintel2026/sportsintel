@@ -185,9 +185,10 @@ export default function HomeDesktop(props) {
 
           {/* INDEX ROW */}
                     <div className="indices">
-            <div className="idx teal"><div className="k">ROI</div><div className="v num">{perfStats && perfStats.roi != null ? `${perfStats.roi >= 0 ? "+" : ""}${perfStats.roi}%` : "—"}</div><div className="chg">{perfStats ? perfStats.roiLbl : "tracked record"}</div></div>
-            <div className="idx green"><div className="k">Win Rate</div><div className="v num">{perfStats && perfStats.winRate != null ? `${perfStats.winRate.toFixed(1)}%` : "—"}</div><div className="chg">{perfStats && perfStats.graded != null ? `${perfStats.graded} graded` : "tracking"}</div></div>
-            <div className="idx amber"><div className="k">CLV</div><div className="v num">{perfStats && perfStats.clv != null ? `${perfStats.clv >= 0 ? "+" : ""}${perfStats.clv}%` : "—"}</div><div className="chg">beat close</div></div>
+            {/* WZ-EDGES-WIZEPLAYS-KPI-2026-07-10 :: desktop index row leads with the real WizePlays record (wl/winPct/units from wpRecord). */}
+            <div className="idx green"><div className="k">WizePlays</div><div className="v num">{wl}</div><div className="chg">{wpRecord && (wpRecord.wins+wpRecord.losses+wpRecord.pushes)>0 ? "W-L-P · all graded" : "tracking"}</div></div>
+            <div className="idx green"><div className="k">Win Rate</div><div className="v num">{winPct != null ? `${winPct}%` : "—"}</div><div className="chg">{wpRecord ? `${wpRecord.wins+wpRecord.losses+wpRecord.pushes} graded` : "tracking"}</div></div>
+            <div className="idx teal"><div className="k">Units</div><div className="v num">{units != null ? `${units >= 0 ? "+" : ""}${units.toFixed(1)}u` : "—"}</div><div className="chg">all plays</div></div>
             <div className="idx purple"><div className="k">Edges Live</div><div className="v num">{edgeCount}</div><div className="chg">{market.toUpperCase()} board · {rows.length} shown</div></div>
           </div>
 
