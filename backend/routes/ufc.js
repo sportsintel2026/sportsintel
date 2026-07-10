@@ -307,4 +307,69 @@ router.get("/card", async (_req, res) => {
   }
 });
 
+// WZ-UFC-RECORD-2026-07-09 :: served record for the UFC Record tab. Reads graded ufc_picks
+// (result in win/loss/push) and computes two honest splits: MODEL OVERALL (every graded pick)
+// and +VALUE ONLY (is_value picks -- the real test of the edge). Flat 1 unit/pick; ROI = net
+// units / units risked (pushes return the stake, so they aren't counted as risked). Also returns
+// the most recent graded fights for the "recent" list. Read-only; fail-safe empty on any error.
+function unitsForWin(american) {
+  const n = Number(american);
+  if (!Number.isFinite(n) || n === 0) return 1; // even-money fallback if odds are missing
+  return n > 0 ? n / 100 : 100 / Math.abs(n);
+}
+function tallyUFC(rows) {
+  let w = 0, l = 0, p = 0, net = 0;
+  for (const r of rows) {
+    if (r.result === "win") { w++; net += unitsForWin(r.odds); }
+    else if (r.result === "loss") { l++; net -= 1; }
+    else if (r.result === "push") { p++; }
+  }
+  const decided = w + l;
+  return {
+    w, l, p, decided,
+    winPct: decided ? Math.round((w / decided) * 1000) / 10 : null,
+    netUnits: Math.round(net * 100) / 100,
+    roiPct: decided ? Math.round((net / decided) * 1000) / 10 : null,
+  };
+}
+
+router.get("/record", async (_req, res) => {
+  try {
+    const c = sb();
+    if (!c) return res.json({ ok: true, hasData: false, sinceLabel: null, overall: null, value: null, recent: [] });
+    const { data, error } = await c
+      .from("ufc_picks")
+      .select("event_name,event_slug,red_name,blue_name,pick,pick_corner,edge_pct,is_value,odds,result,winner_name,graded_at")
+      .in("result", ["win", "loss", "push"])
+      .order("graded_at", { ascending: false });
+    if (error) throw error;
+    const rows = Array.isArray(data) ? data : [];
+    const overall = tallyUFC(rows);
+    const value = tallyUFC(rows.filter((r) => r.is_value));
+    const recent = rows.slice(0, 8).map((r) => ({
+      pick: r.pick || null,
+      opponent: (r.pick_corner === "red" ? r.blue_name : r.red_name) || null,
+      result: r.result,
+      odds: r.odds != null ? r.odds : null,
+      event: r.event_name || null,
+      isValue: !!r.is_value,
+      winnerName: r.winner_name || null,
+    }));
+    // "since ___" label = the earliest graded event we have (oldest row by graded_at desc order)
+    const oldest = rows.length ? rows[rows.length - 1] : null;
+    const sinceLabel = oldest && oldest.event_name ? oldest.event_name : null;
+    res.json({
+      ok: true,
+      hasData: overall.decided > 0 || overall.p > 0,
+      sinceLabel,
+      overall,
+      value,
+      recent,
+    });
+  } catch (e) {
+    console.error("[UFC] record endpoint failed:", e.message);
+    res.json({ ok: true, hasData: false, sinceLabel: null, overall: null, value: null, recent: [] });
+  }
+});
+
 module.exports = router;
