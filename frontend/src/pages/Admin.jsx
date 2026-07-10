@@ -196,6 +196,13 @@ export default function AdminPage() {
 
       <div className="blk"><div className="prof"><div className="av">MG</div><div><div className="pn">Master G</div><div className="pe">owner · wizepicks.com</div><div className="pp">{"\u25cf"} OWNER · ALL-ACCESS</div></div></div></div>
 
+{/* WZ-ADMIN-PERF-BTN-2026-07-10 :: admin-only Model Performance button (Admin page already bounces non-admins) */}
+      <div className="perfbtn" onClick={()=>navigate("/performance")}>
+        <div className="pli">{"\u25b2"}</div>
+        <div className="plt"><b>MODEL PERFORMANCE</b><span>core record {"\u00b7"} ROI {"\u00b7"} CLV {"\u00b7"} by-market</span></div>
+        <div className="plc">{"\u203a"}</div>
+      </div>
+
       <div className="blk"><div className="bl">WIZEPLAYS STUDIO <span className="bx">straight bets · auto-graded hourly</span></div>
         <div className="wprec">
           <div className="r"><div className="k">RECORD</div><div className="v">{rec.w}-{rec.l}-{rec.p}</div></div>
@@ -321,6 +328,13 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .placeholder{font-family:var(--mono);font-size:9px;color:var(--mut2);text-align:center;margin-top:8px}
 .signout{margin:14px 14px 0;text-align:center;font-family:var(--disp);font-weight:800;font-size:14px;color:#dbe4e2;border:1px solid var(--line2);border-radius:12px;padding:13px;cursor:pointer}
 .ver{text-align:center;font-family:var(--mono);font-size:9px;color:var(--mut2);margin:16px 0 0}
+/* WZ-ADMIN-PERF-BTN-2026-07-10 */
+.perfbtn{margin:13px 14px 0;display:flex;align-items:center;gap:11px;border:1px solid rgba(243,185,79,.35);border-radius:13px;background:linear-gradient(180deg,rgba(243,185,79,.07),rgba(243,185,79,.01));padding:13px 14px;cursor:pointer}
+.perfbtn .pli{width:30px;height:30px;border-radius:8px;border:1px solid rgba(243,185,79,.4);background:#0e1620;display:flex;align-items:center;justify-content:center;color:var(--gold);flex:0 0 auto;font-size:14px}
+.perfbtn .plt{flex:1}
+.perfbtn .plt b{display:block;font-family:var(--disp);font-weight:800;font-size:16px;color:#fff;letter-spacing:.3px}
+.perfbtn .plt span{font-family:var(--mono);font-size:9.5px;color:var(--mut)}
+.perfbtn .plc{color:var(--mut2);font-size:16px}
 .nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:460px;display:flex;justify-content:space-around;padding:7px 4px;background:rgba(0,0,0,.96);backdrop-filter:blur(12px);border-top:1px solid var(--line);z-index:20}
 .nav a{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;font-family:var(--disp);font-weight:700;font-size:10px;letter-spacing:.3px;color:var(--mut2);text-decoration:none}.nav a.on{color:var(--gold)}.nav a .i{font-size:15px;line-height:1}.nav a .dbars rect{fill:var(--mut2)}
 /* new-play sheet */
