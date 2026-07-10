@@ -73,6 +73,7 @@ export default function SettingsPage() {
           <div className="blk"><div className="bl">ADMIN</div>
             <div className="lrow" onClick={()=>navigate("/admin")}><div className="li">{"\u270e"}</div><div className="lt">Manage WizePlays</div><div className="lc">{"\u203a"}</div></div>
             <div className="lrow" onClick={()=>navigate("/expert-picks")}><div className="li">{"\u25c8"}</div><div className="lt">View posted picks</div><div className="lc">{"\u203a"}</div></div>
+            <div className="lrow" onClick={()=>navigate("/performance")}><div className="li">{"\u25b2"}</div><div className="lt">Model Performance</div><div className="lc">{"\u203a"}</div></div>{/* WZ-ADMIN-PERF-LINK-2026-07-10 :: admin-only Performance entry (legacy bottom navs are display:none on mobile) */}
           </div>
         )}
 
