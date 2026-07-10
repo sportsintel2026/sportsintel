@@ -403,6 +403,55 @@ async function probeTeamFielding(year) {
   };
 }
 
+// ── TEAM FIELDING / OAA (daily-cached, live) ─────────────────────────────────
+// WZ-FIELDING-2026-07-10 :: team defensive quality from the Savant Fielding_Team
+// leaderboard confirmed by probeTeamFielding (2026-07-10). Keyed by MLB team_id
+// (== game.awayId/homeId), value = season Outs Above Average (OAA, in OUTS) + name.
+// Daily fetch + cache, same idiom as the batter leaderboards. Returns null on
+// failure so callers default the run factor to 0 (no-op) -- a bad fetch never
+// moves a total.
+function teamFieldingUrl(year) {
+  return `${SAVANT_BASE}/leaderboard/outs_above_average?type=Fielding_Team&startYear=${year}&endYear=${year}&split=no&team=&range=year&min=q&pos=&roles=&viz=hide&csv=true`;
+}
+function parseTeamFieldingCsv(text) {
+  const map = new Map(); // team_id (String) -> { oaa:Number, name:String|null }
+  if (!text || typeof text !== "string") return map;
+  const lines = text.split(/\r?\n/).filter(Boolean);
+  if (lines.length < 2) return map;
+  const header = parseCsvLine(lines[0]);
+  const idIdx = header.indexOf("team_id");
+  const oaaIdx = header.indexOf("outs_above_average");
+  const nameIdx = header.indexOf("team_name");
+  if (idIdx < 0 || oaaIdx < 0) return map;
+  for (let i = 1; i < lines.length; i++) {
+    const cols = parseCsvLine(lines[i]);
+    const id = String(cols[idIdx] || "").trim();
+    const oaa = Number(cols[oaaIdx]);
+    if (!id || !Number.isFinite(oaa)) continue;
+    map.set(id, { oaa, name: nameIdx >= 0 ? cols[nameIdx] : null });
+  }
+  return map;
+}
+let _fieldCache = { date: null, map: null };
+async function getTeamFielding(year) {
+  const y = year || new Date().getFullYear();
+  const today = new Date().toISOString().slice(0, 10);
+  if (_fieldCache.map && _fieldCache.date === today) return _fieldCache.map;
+  try {
+    const res = await axios.get(teamFieldingUrl(y), {
+      timeout: 15000,
+      responseType: "text",
+      transformResponse: (x) => x,
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; WizePicks/1.0)", Accept: "text/csv,*/*" },
+    });
+    const map = parseTeamFieldingCsv(typeof res.data === "string" ? res.data : "");
+    if (map.size > 0) { _fieldCache = { date: today, map }; return map; }
+    return null;
+  } catch (e) {
+    return null;
+  }
+}
+
 module.exports = {
   getBatterExpectedStats, parseExpectedStatsCsv, parseCsvLine,
   probeExpectedStats, expectedStatsUrl, SAVANT_BASE,
@@ -410,4 +459,5 @@ module.exports = {
   probePitcherWhiff,
   pitcherWhiffUrl, parsePitcherWhiffCsv, getPitcherWhiffStats, probePitcherWhiffData,
   probeTeamFielding, teamFieldingUrlCandidates,
+  teamFieldingUrl, parseTeamFieldingCsv, getTeamFielding,
 };
