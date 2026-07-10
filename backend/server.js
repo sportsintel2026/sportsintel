@@ -269,6 +269,21 @@ cron.schedule("*/15 * * * *", async () => {
   }
 }, { timezone: "America/New_York" });
 
+// WZ-UFC-GRADE-CRON-2026-07-09 :: grade recorded UFC picks (ufc_picks) as fights decide.
+// Every 30 min. Budget-safe on the Cito free tier: the grader only force-fetches a card's
+// bouts for events that have STARTED or already dropped off the upcoming list, so between
+// events this is a near-zero no-op (one cached upcoming-events read, no per-event calls) and
+// it comes alive automatically on fight night. Lazy require so a load error can't crash boot;
+// idempotent (only flips pending -> win/loss/push), so frequent runs are cheap and harmless.
+cron.schedule("*/30 * * * *", async () => {
+  try {
+    const { gradeUFCPicks } = require("./services/ufcGrader");
+    await gradeUFCPicks();
+  } catch (err) {
+    console.error("[CRON] UFC grade failed:", err.message);
+  }
+}, { timezone: "America/New_York" });
+
 // Hourly sweep: NFL prop shadows / expert picks / daily card / DNP void.
 // (MLB finished-game grading moved to the every-15-min fast lane above.)
 cron.schedule("0 * * * *", async () => {
