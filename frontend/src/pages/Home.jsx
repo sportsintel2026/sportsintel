@@ -481,10 +481,11 @@ export default function HomePage(){
               ? <Swiper cls="herocar" dotcls="hdots">{heroItems.map((h,i)=><HeroSlide key={i} h={h} i={i} navigate={navigate} sport={sport} rolled={e.rolledToNextDay}/>)}</Swiper>
               : <div className="herocar"><div className="hslide"><div className="hero" style={{textAlign:"center"}}><div className="eb">BEST EDGE</div><div className="heh">Edges post soon</div><div className="hes">Top edges appear ~2 hrs before first pitch.</div></div></div></div>)
           : <Gate title="Today's top edge is locked" navigate={navigate}/>}
-        {hasFull && <div className="kpis">
-          <div className="kpi"><div className="k">ROI</div><div className={"v "+(perfStats&&perfStats.roi!=null?(perfStats.roi>=0?"g":"red"):"")}>{perfStats&&perfStats.roi!=null?(perfStats.roi>=0?"+":"")+perfStats.roi+"%":"\u2014"}<KArrow series={perf&&perf.spark&&perf.spark.roi}/></div><div className="ksub">{perfStats?perfStats.roiLbl:"tracked"}</div></div>
-          <div className="kpi"><div className="k">WIN RATE</div><div className="v">{perfStats&&perfStats.winRate!=null?perfStats.winRate.toFixed(1)+"%":"\u2014"}<KArrow series={perf&&perf.spark&&perf.spark.win}/></div><div className="ksub">{perfStats&&perfStats.graded!=null?perfStats.graded+" graded":"tracking"}</div></div>
-          <div className="kpi"><div className="k">CLV</div><div className={"v "+(perfStats&&perfStats.clv!=null?(perfStats.clv>=0?"g":"red"):"")}>{perfStats&&perfStats.clv!=null?(perfStats.clv>=0?"+":"")+perfStats.clv+"%":"\u2014"}<KArrow series={perf&&perf.spark&&perf.spark.clv}/></div><div className="ksub">beat close</div></div>
+        {/* WZ-EDGES-WIZEPLAYS-KPI-2026-07-10 :: Edges top strip leads with the real, fully-graded WizePlays record (live from expert_picks). Shows for any signed-in user once graded; the >0 guard means nothing is ever fabricated. */}
+        {wpRecord && (wpRecord.wins+wpRecord.losses+wpRecord.pushes)>0 && <div className="kpis">
+          <div className="kpi"><div className="k">WIZEPLAYS</div><div className="v g">{wpRecord.wins}{"\u2013"}{wpRecord.losses}</div><div className="ksub">{wpRecord.pushes?"\u2013"+wpRecord.pushes+" push \u00b7 ":""}W{"\u2013"}L{"\u2013"}P</div></div>
+          <div className="kpi"><div className="k">WIN RATE</div><div className="v">{(wpRecord.wins+wpRecord.losses)>0?Math.round(wpRecord.wins/(wpRecord.wins+wpRecord.losses)*100)+"%":"\u2014"}</div><div className="ksub">{wpRecord.wins+wpRecord.losses+wpRecord.pushes} graded</div></div>
+          <div className="kpi"><div className="k">UNITS</div><div className={"v "+(wpRecord.units>=0?"g":"red")}>{wpRecord.units>=0?"+":""}{wpRecord.units.toFixed(1)}u</div><div className="ksub">all plays</div></div>
         </div>}
 
       <div id="content">
