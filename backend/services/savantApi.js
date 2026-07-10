@@ -344,10 +344,70 @@ async function probePitcherWhiffData(year) {
   return { ok: map.size > 0, year: y, mapSize: map.size, url: pitcherWhiffUrl(y), sample };
 }
 
+// ── TEAM FIELDING / OAA PROBE (read-only endpoint discovery) ─────────────────
+// WZ-FIELDPROBE-2026-07-10 :: BEFORE wiring a team-defense factor into the totals
+// projection we must confirm Baseball Savant's team-fielding CSV endpoint AND its
+// REAL column names -- they drift across Savant versions, and a parser built on
+// guessed columns silently returns nothing, leaving the factor wired-but-dead
+// (the exact wired != flowing trap). Same proven pattern as probeBarrels /
+// probePitcherWhiff: try candidate URLs, return the first that yields CSV plus its
+// header row + one sample row so the parser can be built on confirmed fields.
+// Reads once, writes NOTHING, prices NOTHING.
+function teamFieldingUrlCandidates(year) {
+  const y = year;
+  return [
+    `${SAVANT_BASE}/leaderboard/outs_above_average?type=Fielding_Team&startYear=${y}&endYear=${y}&split=no&team=&range=year&min=q&pos=&roles=&viz=hide&csv=true`,
+    `${SAVANT_BASE}/leaderboard/outs_above_average?type=Fielding_Team&year=${y}&min=q&csv=true`,
+    `${SAVANT_BASE}/leaderboard/fielding_run_value?type=Fielding_Team&year=${y}&min=q&csv=true`,
+    `${SAVANT_BASE}/leaderboard/outs_above_average?type=Fielder&startYear=${y}&endYear=${y}&split=no&team=&range=year&min=q&pos=&roles=&viz=hide&csv=true`,
+  ];
+}
+async function probeTeamFielding(year) {
+  const y = year || new Date().getFullYear();
+  const urls = teamFieldingUrlCandidates(y);
+  const attempts = [];
+  let winner = null;
+  for (const url of urls) {
+    try {
+      const res = await axios.get(url, {
+        timeout: 15000,
+        responseType: "text",
+        transformResponse: (x) => x,
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; WizePicks/1.0)", Accept: "text/csv,*/*" },
+      });
+      const text = typeof res.data === "string" ? res.data : "";
+      const lines = text.split(/\r?\n/).filter(Boolean);
+      const header = lines[0] || "";
+      const looksCsv = res.status === 200 && header.includes(",") && lines.length > 1;
+      const cols = looksCsv ? parseCsvLine(header) : [];
+      const a = {
+        url, httpStatus: res.status, looksCsv,
+        rowCount: lines.length > 0 ? lines.length - 1 : 0,
+        colCount: cols.length,
+        columns: cols,
+        headerLine: header.slice(0, 500),
+        sampleRow: (lines[1] || "").slice(0, 500),
+      };
+      attempts.push(a);
+      if (looksCsv) { winner = a; break; } // found a working CSV endpoint -- stop here
+    } catch (e) {
+      attempts.push({ url, error: e.message });
+    }
+  }
+  return {
+    ok: !!winner, year: y,
+    winningUrl: winner ? winner.url : null,
+    columns: winner ? winner.columns : null,
+    sampleRow: winner ? winner.sampleRow : null,
+    attempts,
+  };
+}
+
 module.exports = {
   getBatterExpectedStats, parseExpectedStatsCsv, parseCsvLine,
   probeExpectedStats, expectedStatsUrl, SAVANT_BASE,
   probeBarrels, getBatterBarrels, parseBarrelsCsv, barrelsUrl,
   probePitcherWhiff,
   pitcherWhiffUrl, parsePitcherWhiffCsv, getPitcherWhiffStats, probePitcherWhiffData,
+  probeTeamFielding, teamFieldingUrlCandidates,
 };
