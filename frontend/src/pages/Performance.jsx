@@ -85,7 +85,16 @@ export default function PerformancePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
-  useEffect(() => { subscriptionApi.getMyPlan().then(setPlan).catch(()=>{}); }, []);
+  // WZ-PERF-ADMIN-ONLY-2026-07-10 :: Performance is admin-only now (pulled from subscriber nav).
+  // Load the plan; if the viewer isn't an admin, bounce to the dashboard -- this blocks
+  // direct-URL access too, not just the hidden nav link.
+  useEffect(() => {
+    let done = false;
+    subscriptionApi.getMyPlan()
+      .then(p => { if (done) return; setPlan(p || { tier:"free", isAdmin:false }); if (!p || p.isAdmin !== true) navigate("/dashboard", { replace: true }); })
+      .catch(() => { if (!done) navigate("/dashboard", { replace: true }); });
+    return () => { done = true; };
+  }, [navigate]);
   useEffect(() => {
     let c = false;
     setLoading(true); setError(false); setData(null);
