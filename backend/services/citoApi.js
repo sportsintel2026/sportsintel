@@ -56,11 +56,16 @@ async function getUpcomingEvents() {
   return data;
 }
 
-async function getEventBouts(slug) {
+// WZ-UFC-GRADE-FRESH-2026-07-09 :: pass { fresh:true } to bypass the 3h cache. The
+// grader needs this: right after a fight, winnerFighterSlug fills in, but a cached copy
+// from up to 3h earlier still shows it null. Fresh forces a live read (and refreshes the
+// cache for the card too). Default callers pass nothing -> unchanged cached behavior.
+async function getEventBouts(slug, opts) {
   if (!slug) return [];
+  const fresh = !!(opts && opts.fresh);
   const now = Date.now();
   const hit = boutsCache.get(slug);
-  if (hit && now - hit.at < BOUTS_TTL_MS) return hit.data;
+  if (!fresh && hit && now - hit.at < BOUTS_TTL_MS) return hit.data;
   const data = await citoGet(`/ufc/events/${encodeURIComponent(slug)}/bouts`);
   if (data == null) return hit ? hit.data : []; // keep stale on failure
   boutsCache.set(slug, { at: now, data });
