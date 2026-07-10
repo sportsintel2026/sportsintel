@@ -63,6 +63,13 @@ const CSS = `
 .ufc-edge.neg{color:#5B646C}
 .ufc-pb.pending .pnd{font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.5px;color:#5B646C}
 
+/* WZ-UFC-METHOD-2026-07-09 :: method LEAN -- info-only handicapping read. Neutral/gold, never green
+   (green is reserved for market-beating edge/value). "READ" tag makes clear it is not a priced bet. */
+.ufc-lean{display:flex;align-items:center;gap:8px;margin-top:8px;padding:6px 10px;border-radius:9px;background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.05)}
+.ufc-lean .tag{font-family:'IBM Plex Mono',monospace;font-size:7.5px;font-weight:700;letter-spacing:1px;color:#C9A86A;border:1px solid rgba(201,168,106,.4);border-radius:4px;padding:1px 5px;flex:0 0 auto}
+.ufc-lean .txt{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13.5px;letter-spacing:.3px;color:#ECEFF2;flex:0 0 auto}
+.ufc-lean .sub{font-family:'IBM Plex Mono',monospace;font-size:8.5px;color:#5B646C;margin-left:auto;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
 .ufc-state{margin:40px 12px;text-align:center;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#5B646C;line-height:1.9}
 .ufc-state .big{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:22px;color:#99A2AA;letter-spacing:1px;display:block;margin-bottom:6px}
 .ufc-retry{margin-top:14px;display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#C9A86A;border:1px solid rgba(201,168,106,.4);border-radius:8px;padding:8px 16px;cursor:pointer;background:none}
@@ -142,6 +149,14 @@ function Bout({ b, main }) {
       ) : (
         <div className="ufc-pb pending"><span className="pnd">ODDS PENDING &mdash; no line posted yet</span></div>
       )}
+
+      {b.methodLean && b.methodLean.lean && b.methodLean.lean !== "EVEN" ? (
+        <div className="ufc-lean">
+          <span className="tag">READ</span>
+          <span className="txt">{b.methodLean.label}</span>
+          {b.methodLean.note ? <span className="sub">{b.methodLean.note}</span> : null}
+        </div>
+      ) : null}
     </div>
   );
 }
