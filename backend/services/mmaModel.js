@@ -99,8 +99,74 @@ function cardioScore(st) {
   return any ? s : null;
 }
 
+// ---- WZ-UFC-FORM-2026-07-09 :: fight-history helpers (layoff / recent form) ------------------
+// Read from Cito's fighter-fights rows. A row is a real, gradable past result only if the bout
+// completed, wasn't cancelled, has a win/loss outcome, and happened on/before `asOf` -- that last
+// guard drops both the upcoming bout (outcome null) and any future-dated duplicate the feed emits.
+const DAY_MS = 864e5;
+function fightDateMs(f) {
+  const s = f && f.event && (f.event.startsAt || f.event.eventDate);
+  if (!s) return null;
+  const t = new Date(s).getTime();
+  return Number.isFinite(t) ? t : null;
+}
+function isCompletedResult(f) {
+  return !!(f && f.bout && f.bout.status === "completed" && !f.bout.isCancelled &&
+    (f.outcome === "win" || f.outcome === "loss"));
+}
+function isFinishMethod(m) { return /ko|tko|sub/i.test(String(m || "")); }
+
+// most recent completed past-fight timestamp (for ring-rust)
+function lastFightMs(fights, asOf) {
+  if (!Array.isArray(fights)) return null;
+  let best = null;
+  for (const f of fights) {
+    if (!isCompletedResult(f)) continue;
+    const t = fightDateMs(f);
+    if (t == null || t > asOf) continue;
+    if (best == null || t > best) best = t;
+  }
+  return best;
+}
+// ring-rust penalty (negative) as a function of days since last fight. Normal ~annual cadence is
+// no penalty; long absences fade sharpness. Values are small -- a nudge, never a verdict.
+function layoffPenalty(days) {
+  if (days == null) return 0;
+  if (days <= 400) return 0;      // <~13 months: normal
+  if (days <= 550) return -0.03;  // ~13-18 months
+  if (days <= 750) return -0.06;  // ~18-25 months
+  return -0.10;                   // 2+ years off
+}
+// recency-weighted form over the last up-to-5 completed fights. Win-by-finish rates highest; a loss
+// by finish (got KO'd/subbed) is the worst signal (durability). Dedups by event so a doubled row
+// can't double-count. Returns ~[-1.4, 1.2] or null if no history.
+function formScore(fights, asOf) {
+  if (!Array.isArray(fights)) return null;
+  const done = fights
+    .filter((f) => isCompletedResult(f) && fightDateMs(f) != null && fightDateMs(f) <= asOf)
+    .sort((a, b) => fightDateMs(b) - fightDateMs(a));
+  const seen = new Set(); const uniq = [];
+  for (const f of done) {
+    const key = (f.event && f.event.slug) || (f.bout && f.bout.id);
+    if (key && seen.has(key)) continue;
+    if (key) seen.add(key);
+    uniq.push(f);
+    if (uniq.length >= 5) break;
+  }
+  if (!uniq.length) return null;
+  const wRec = [1.0, 0.8, 0.6, 0.45, 0.35];
+  let s = 0, wsum = 0;
+  uniq.forEach((f, i) => {
+    const w = wRec[i] != null ? wRec[i] : 0.3;
+    const finish = isFinishMethod(f.bout && f.bout.method);
+    const v = f.outcome === "win" ? (finish ? 1.2 : 1.0) : (finish ? -1.4 : -1.0);
+    s += v * w; wsum += w;
+  });
+  return wsum ? s / wsum : null;
+}
+
 // ---- the model -------------------------------------------------------------
-function scoreBout(redProfile, blueProfile, pMktRed) {
+function scoreBout(redProfile, blueProfile, pMktRed, opts) {
   if (pMktRed == null || !Number.isFinite(pMktRed)) return null;
   const factors = [];
   let used = 0;
@@ -144,6 +210,24 @@ function scoreBout(redProfile, blueProfile, pMktRed) {
     const eR = Math.log1p(recR.wins + recR.losses + recR.draws);
     const eB = Math.log1p(recB.wins + recB.losses + recB.draws);
     add("experience", clamp((eR - eB) * 0.05, -0.07, 0.07), `${recR.wins + recR.losses} vs ${recB.wins + recB.losses}`);
+  }
+
+  // 8) LAYOFF (ring rust) + 9) RECENT FORM -- WZ-UFC-FORM-2026-07-09. Only when fight histories
+  // are supplied (opts.redFights / opts.blueFights); otherwise both stay neutral. asOf defaults to
+  // now. Each is individually capped and folds into the same hard total cap below, so they nudge.
+  if (opts && (Array.isArray(opts.redFights) || Array.isArray(opts.blueFights))) {
+    const asOf = Number.isFinite(opts.asOf) ? opts.asOf : Date.now();
+    const lastR = lastFightMs(opts.redFights, asOf);
+    const lastB = lastFightMs(opts.blueFights, asOf);
+    const daysR = lastR != null ? (asOf - lastR) / DAY_MS : null;
+    const daysB = lastB != null ? (asOf - lastB) / DAY_MS : null;
+    if (daysR != null || daysB != null) {
+      const d = clamp(layoffPenalty(daysR) - layoffPenalty(daysB), -0.10, 0.10);
+      add("layoff", d, `${daysR != null ? Math.round(daysR) : "?"}d vs ${daysB != null ? Math.round(daysB) : "?"}d`);
+    }
+    const formR = formScore(opts.redFights, asOf);
+    const formB = formScore(opts.blueFights, asOf);
+    if (formR != null && formB != null) add("form", clamp((formR - formB) * 0.05, -0.08, 0.08), null);
   }
 
   let total = factors.reduce((s, f) => s + f.delta, 0);
