@@ -44,6 +44,7 @@ const SPORTS = [
 // there are graded fights to show. Does NOT touch any other sport's SECTIONS above.
 const UFC_SECTIONS = [
   { key: "edges", lb: "Edges", to: "/ufc", match: ["/ufc"] },
+  { key: "record", lb: "Record", to: "/ufc-record", match: ["/ufc-record"] }, // WZ-UFC-RECORD-2026-07-09
 ];
 
 const FB = (
@@ -85,7 +86,10 @@ const GAMES_ROUTE = { mlb: "/games", nfl: "/nfl-games", cfb: "/cfb-games", nba: 
 
 // resolve the destination path for a section under a given sport
 function routeFor(section, sport) {
-  if (sport === "ufc") return "/ufc"; // WZ-UFC-NAV-2026-07-09 :: UFC is one self-contained page
+  // WZ-UFC-RECORD-2026-07-09 :: within UFC, honor the section's own /ufc* path (Edges -> /ufc,
+  // Record -> /ufc-record). Coming FROM a non-UFC section (bottom bar), section.to isn't a /ufc
+  // path, so we land on the UFC card (/ufc) by default.
+  if (sport === "ufc") return String(section.to || "").startsWith("/ufc") ? section.to : "/ufc";
   if (section.key === "games") return GAMES_ROUTE[sport] || "/games";
   return section.to;
 }
