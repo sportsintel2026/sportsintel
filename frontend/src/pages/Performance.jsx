@@ -100,9 +100,9 @@ export default function PerformancePage() {
   const d = (D.ranges && D.ranges[range]) || null;
   const tiers = TIER_ORDER.map(([k,lbl]) => { const b = D.byConfidence?.[k]; return b ? { lbl, w:b.wins, l:b.losses, roi:b.roi ?? 0 } : null; }).filter(Boolean);
   const markets = [
+    // WZ-PROPS-DARK-2026-07-10 :: core markets only. Props are graded behind the scenes but
+    // never shown as a record (no win rate / ROI / CLV), so no prop rows are appended here.
     ...Object.entries(D.byMarket || {}).map(([k,b]) => ({ nm:prettyMkt(k), w:b.wins, l:b.losses, roi:b.roi ?? 0 })),
-    // HIDE-NEG-PROPS-2026-06-24 -- props aren't the headline; only surface a prop market here if it's net positive
-    ...Object.entries(D.props?.byMarket || {}).filter(([k,b]) => (b.roi ?? 0) >= 0).map(([k,b]) => ({ nm:prettyMkt(k), w:b.hits, l:b.misses, roi:b.roi ?? 0 })),
   ];
 
   return (
