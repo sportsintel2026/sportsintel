@@ -12,7 +12,7 @@ const express = require("express");
 const router = express.Router();
 const axios = require("axios");
 const { fetchMMASchedule } = require("../services/sportsData");
-const { getNextPPVEvent, getEventBouts, getFighter } = require("../services/citoApi");
+const { getNextPPVEvent, getEventBouts, getFighter, getFighterFights } = require("../services/citoApi"); // WZ-UFC-FORM-2026-07-09
 const { scoreBout, methodLean } = require("../services/mmaModel"); // WZ-UFC-MODEL-2026-07-09 / WZ-UFC-METHOD-2026-07-09
 const { createClient } = require("@supabase/supabase-js"); // WZ-UFC-REC-2026-07-09
 
@@ -138,8 +138,11 @@ async function parseBout(bout, oddsMap) {
   // fetch fighter profiles + run the factor model. Fail-safe: null profiles => neutral => market.
   let modelRed = pMktRed;
   try {
-    const [rp, bp] = await Promise.all([getFighter(red.slug), getFighter(blue.slug)]);
-    const scored = scoreBout(rp, bp, pMktRed);
+    const [rp, bp, rf, bf] = await Promise.all([
+      getFighter(red.slug), getFighter(blue.slug),
+      getFighterFights(red.slug), getFighterFights(blue.slug), // WZ-UFC-FORM-2026-07-09
+    ]);
+    const scored = scoreBout(rp, bp, pMktRed, { redFights: rf, blueFights: bf, asOf: Date.now() });
     if (scored && Number.isFinite(scored.modelRed)) modelRed = scored.modelRed;
     if (typeof methodLean === "function") out.methodLean = methodLean(rp, bp) || null; // WZ-UFC-METHOD-2026-07-09
   } catch (_) { /* stay at market */ }
