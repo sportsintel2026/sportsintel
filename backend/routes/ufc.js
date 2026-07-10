@@ -378,4 +378,47 @@ router.get("/record", async (_req, res) => {
   }
 });
 
+// WZ-UFC-PROBE-2026-07-10 :: read-only Cito diagnostic. Additive; touches no existing logic.
+// Never echoes the key -- returns only keyPresent (boolean), HTTP status, and shape/counts so we
+// can see exactly why buildCitoCard() went empty. GET /api/ufc/probe . Remove after we diagnose.
+router.get("/probe", async (_req, res) => {
+  const out = { token: "WZ-UFC-PROBE-2026-07-10", ts: new Date().toISOString(), keyPresent: !!process.env.CITO_API_KEY };
+  const KEY = process.env.CITO_API_KEY || "";
+  const BASE = "https://api.citoapi.com/api/v1";
+  // 1) raw upcoming-events read, cache-bypassed, never throws (captures 401/403/429/etc.)
+  try {
+    const r = await axios.get(`${BASE}/ufc/events/upcoming`, {
+      headers: { "x-api-key": KEY }, timeout: 12000, validateStatus: () => true,
+    });
+    out.eventsHttpStatus = r.status;
+    const body = r.data;
+    out.eventsBodyType = Array.isArray(body && body.data)
+      ? "data[]"
+      : (body && typeof body === "object" ? "object{" + Object.keys(body).slice(0, 6).join(",") + "}" : typeof body);
+    const list = body && Array.isArray(body.data) ? body.data : [];
+    out.eventCount = list.length;
+    out.firstEvents = list.slice(0, 5).map((e) => ({
+      slug: e && e.slug, startsAt: e && e.startsAt,
+      bouts: e && e.dataAvailability && e.dataAvailability.bouts,
+    }));
+  } catch (e) {
+    out.eventsError = String((e.response && e.response.status) || e.code || e.message);
+  }
+  // 2) what the real card-builder resolves + a fresh bouts read on that event
+  try {
+    const ev = await getNextPPVEvent();
+    out.nextPPVSlug = ev ? (ev.slug || null) : null;
+    out.nextPPVName = ev ? (ev.title || ev.shortTitle || null) : null;
+    if (ev && ev.slug) {
+      const b = await getEventBouts(ev.slug, { fresh: true });
+      out.boutCount = Array.isArray(b) ? b.length : 0;
+    } else {
+      out.boutCount = null;
+    }
+  } catch (e) {
+    out.nextPPVError = String(e.message || e);
+  }
+  res.json(out);
+});
+
 module.exports = router;
