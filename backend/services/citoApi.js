@@ -115,10 +115,31 @@ async function getNextPPVEvent() {
   return events.slice().sort(byDate)[0] || null;
 }
 
+// WZ-UFC-FIGHTS-2026-07-09 :: a fighter's bout history (GET /ufc/fighters/{slug}/fights) -- powers
+// the layoff (ring-rust) and recent-form model factors. Each row: { outcome:"win"/"loss"/null,
+// opponent:{...}, event:{ startsAt, eventDate }, bout:{ status:"completed"/"confirmed", method,
+// isCancelled } }. Cached 24h (history changes only when a fighter fights) to keep us well under
+// the Cito free tier -- one fetch per fighter per day. Returns [] on any error (model then treats
+// layoff/form as neutral). NOTE: history is not reliably ordered and can contain a duplicate/
+// future-dated row, so the model sorts by date and filters to completed past bouts itself.
+const fightsCache = new Map(); // slug -> { at, data }
+const FIGHTS_TTL_MS = 24 * 60 * 60 * 1000;
+async function getFighterFights(slug) {
+  if (!slug) return [];
+  const now = Date.now();
+  const hit = fightsCache.get(slug);
+  if (hit && now - hit.at < FIGHTS_TTL_MS) return hit.data;
+  const data = await citoGet(`/ufc/fighters/${encodeURIComponent(slug)}/fights`);
+  if (data == null) return hit ? hit.data : []; // keep stale on failure
+  fightsCache.set(slug, { at: now, data });
+  return data;
+}
+
 module.exports = {
   isPPV,
   getUpcomingEvents,
   getEventBouts,
   getFighter,
+  getFighterFights,
   getNextPPVEvent,
 };
