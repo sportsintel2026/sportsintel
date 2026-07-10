@@ -152,6 +152,7 @@ async function parseBout(bout, oddsMap) {
   out.pick = pickRed ? red.name : blue.name;
   out.winPct = Math.round((pickRed ? modelRed : 1 - modelRed) * 100);
   out.odds = pickRed ? amRed : amBlue;
+  red.odds = amRed; blue.odds = amBlue; // WZ-UFC-CARDV3-2026-07-09 :: both corners' odds for the head-to-head card
   const pickMkt = pickRed ? pMktRed : 1 - pMktRed;
   const pickModel = pickRed ? modelRed : 1 - modelRed;
   out.marketWinPct = Math.round(pickMkt * 100);
