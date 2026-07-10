@@ -48,6 +48,24 @@ function afterReset(r) {
   const cut = MARKET_RESET[r.market];
   return !cut || (r.game_date && r.game_date >= cut);
 }
+// WZ-CORE-RESET-2026-07-10 :: MLB CORE track-record resets. Audit 2026-07-09 found the
+// published MLB record was contaminated by two non-current-model sources: (a) a pre-launch
+// backfill (246 rows on 2026-06-11, before the 2026-06-22 launch), and (b) the RETIRED
+// edge-first board's sub-55% moneyline dogs -- 513 rows the current winners-first model
+// structurally never picks. Count each MLB core market only from the date its CURRENT model
+// took over: moneyline from the winners-first pivot, total/run_line from the win-prob
+// calibration deploy. Same NON-DESTRUCTIVE, reversible idiom as MARKET_RESET above (rows
+// stay in the DB, just aren't counted). Scoped to MLB so NBA/NFL/CFB records are untouched.
+const MLB_CORE_RESET = {
+  moneyline: "2026-07-08", // winners-first pivot clean window (drops pre-launch + sub-55 dog junk)
+  total:     "2026-07-02", // win-prob calibration deploy
+  run_line:  "2026-07-02", // win-prob calibration deploy
+};
+function afterCoreReset(league, r) {
+  if (league !== "mlb") return true;      // only MLB core is being reset here
+  const cut = MLB_CORE_RESET[r.market];
+  return !cut || (r.game_date && r.game_date >= cut);
+}
 // ----------------------------------------------------------------------------
 
 function db() {
@@ -100,7 +118,7 @@ router.get("/:league", async (req, res) => {
     }
 
     // Props are kept entirely out of the core record and CLV — own table only.
-    const coreRows = rows.filter(r => cfg.core.includes(r.market));
+    const coreRows = rows.filter(r => cfg.core.includes(r.market) && afterCoreReset(league, r));
     const propRows = rows.filter(r => cfg.props.includes(r.market) && afterReset(r));
 
     // Qualified set drives the headline; full set kept for transparency.
