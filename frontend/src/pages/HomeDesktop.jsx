@@ -140,7 +140,6 @@ export default function HomeDesktop(props) {
     ["", "Market Read", "/market-read"],
     ["", "Props", "/props"],
     ["TRACK", null],
-    ["", "Performance", "/performance"],
     ["", "WizePlays", "/expert-picks"],
     ["", "Wize Spin", "/daily-card"],
     ["SCORES", null],
