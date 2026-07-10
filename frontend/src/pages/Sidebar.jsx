@@ -42,12 +42,6 @@ export default function Sidebar({ user, plan, signOut, navigate }) {
         label="Market Price"
         dot
       />
-      <NavLink
-        to="/performance"
-        active={isActive("/performance")}
-        icon="📈"
-        label="Performance"
-      />
       {/* Scores — games by sport */}
       <div style={{ ...sectionLabelStyle, marginTop: 18 }}>SCORES</div>
       <NavLink
