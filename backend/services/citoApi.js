@@ -19,6 +19,66 @@
 
 const axios = require("axios");
 
+// WZ-CITO-THROTTLE-2026-07-10 :: ROOT FIX for the Cito 429s. buildCitoCard() fired ~50 calls
+// at once on cold start (events + bouts + 4 fighter calls x ~13 bouts via Promise.all), tripping
+// Cito's rate/burst limit -> 429 -> empty card -> odds-only fallback, and repeated tripping put
+// us in a lockout. Fix = SELF-CORRECTING throttle: one request at a time through a queue with a
+// minimum gap that AUTO-WIDENS whenever Cito answers 429 (honoring Retry-After) and eases back
+// down when calls succeed. No hard-coded limit to guess -- it tunes itself to Cito's real cap.
+// All Cito calls route through citoAxios().
+const GAP_MIN_MS = 300;     // floor when everything is healthy
+const GAP_MAX_MS = 4000;    // ceiling so we never stall forever
+const MAX_RETRIES_429 = 4;  // per request, before giving up to the fallback
+let _gapMs = 700;           // current adaptive gap (starts conservative)
+let _cQueue = Promise.resolve();
+let _cLast = 0;
+
+function _sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
+
+// serialize + pace: never two Cito calls at once, always >= _gapMs apart
+function _paced(fn) {
+  const run = async () => {
+    const wait = _cLast + _gapMs - Date.now();
+    if (wait > 0) await _sleep(wait);
+    _cLast = Date.now();
+    return fn();
+  };
+  _cQueue = _cQueue.then(run, run);
+  return _cQueue;
+}
+
+// GET with adaptive 429 back-off. Returns an axios-style response ({status,data}) or throws on
+// network error. On 429: widen the global gap, wait (Retry-After if given, else exponential),
+// and retry. On success: gently relax the gap back toward the floor.
+async function citoAxios(url) {
+  let attempt = 0;
+  while (true) {
+    const res = await _paced(() =>
+      axios.get(url, {
+        headers: { "x-api-key": CITO_API_KEY },
+        timeout: 12000,
+        validateStatus: () => true, // don't throw on 429 -- we handle it
+      })
+    );
+    if (res.status !== 429) {
+      if (res.status >= 200 && res.status < 300) {
+        _gapMs = Math.max(GAP_MIN_MS, Math.round(_gapMs * 0.9)); // healthy -> ease off
+      }
+      return res;
+    }
+    // 429: back off and retry
+    attempt++;
+    if (attempt > MAX_RETRIES_429) return res; // give up -> caller falls back
+    const ra = Number(res.headers && (res.headers["retry-after"] || res.headers["Retry-After"]));
+    const backoff = Number.isFinite(ra) && ra > 0
+      ? Math.min(ra * 1000, 30000)
+      : Math.min(GAP_MAX_MS, 800 * Math.pow(2, attempt - 1)); // 800,1600,3200,4000...
+    _gapMs = Math.min(GAP_MAX_MS, Math.max(_gapMs * 1.8, 1200)); // widen future pacing
+    console.error(`[Cito] 429 on ${url} -- backing off ${backoff}ms, gap now ${_gapMs}ms (try ${attempt})`);
+    await _sleep(backoff);
+  }
+}
+
 const CITO_BASE = "https://api.citoapi.com/api/v1";
 const CITO_API_KEY = process.env.CITO_API_KEY;
 const EVENTS_TTL_MS = 6 * 60 * 60 * 1000; // 6h -- the upcoming-events list changes slowly
@@ -30,10 +90,11 @@ const boutsCache = new Map(); // slug -> { at, data }
 async function citoGet(path) {
   if (!CITO_API_KEY) return null;
   try {
-    const res = await axios.get(`${CITO_BASE}${path}`, {
-      headers: { "x-api-key": CITO_API_KEY },
-      timeout: 12000,
-    });
+    const res = await citoAxios(`${CITO_BASE}${path}`);
+    if (res.status < 200 || res.status >= 300) {
+      console.error(`[Cito] GET ${path} -> HTTP ${res.status}`);
+      return null; // 429-after-retries or other error -> caller falls back / keeps stale
+    }
     return res.data && Array.isArray(res.data.data) ? res.data.data : [];
   } catch (e) {
     console.error(`[Cito] GET ${path} failed:`, e.message);
@@ -85,10 +146,8 @@ async function getFighter(slug) {
   if (hit && now - hit.at < FIGHTER_TTL_MS) return hit.data;
   if (!CITO_API_KEY) return hit ? hit.data : null;
   try {
-    const res = await axios.get(`${CITO_BASE}/ufc/fighters/${encodeURIComponent(slug)}`, {
-      headers: { "x-api-key": CITO_API_KEY },
-      timeout: 12000,
-    });
+    const res = await citoAxios(`${CITO_BASE}/ufc/fighters/${encodeURIComponent(slug)}`);
+    if (res.status < 200 || res.status >= 300) { return hit ? hit.data : null; }
     // endpoint may return {data:{...}} or the object directly
     const body = res.data;
     const prof = body && body.data ? body.data : body;
