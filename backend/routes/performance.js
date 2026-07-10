@@ -278,13 +278,13 @@ router.get("/:league", async (req, res) => {
         .from("model_predictions")
         .select(sel)
         .eq("league", league)
-        .in("market", [...cfg.core, ...cfg.props])
+        .in("market", cfg.core) // WZ-PROPS-DARK-2026-07-10 :: recent list is core-only; props stay unpublished
         .in("result", ["win", "loss"])
         .order("game_date", { ascending: false })
         .order("id", { ascending: false })
         .limit(60);
       if (recErr) { console.warn("[performance] recent query failed:", recErr.message); }
-      const elig = (recRows || []).filter(r => cfg.core.includes(r.market) ? isQualified(r) : afterReset(r));
+      const elig = (recRows || []).filter(r => isQualified(r)); // WZ-PROPS-DARK-2026-07-10 :: core-only
       recent = elig.slice(0, 20).map(r => {
         const won = r.result === "win";
         return {
@@ -303,13 +303,12 @@ router.get("/:league", async (req, res) => {
     // Overall props summary PLUS a per-stat breakdown (points / rebounds /
     // assists / 3PT for NBA; a single HR-props entry for MLB). Each stat type
     // becomes its own sub-row on the page.
-    let props = null;
-    if (propRows.length > 0) {
-      props = { label: cfg.propsLabel, ...propSummary(propRows), byMarket: {} };
-      const byMkt = {};
-      for (const r of propRows) { (byMkt[r.market] ||= []).push(r); }
-      for (const mkt of Object.keys(byMkt)) props.byMarket[mkt] = propSummary(byMkt[mkt]);
-    }
+    // WZ-PROPS-DARK-2026-07-10 :: props are GRADED behind the scenes (the recorder +
+    // grader still settle every prop for our own measurement/R&D) but their record --
+    // win rate, ROI, CLV, recent rows -- is NEVER surfaced to subscribers. Props are
+    // props for a reason: the honest expectation is a negative return, so we do not
+    // publish one. Held null so the page renders no prop record of any kind.
+    const props = null;
 
     res.json({
       league,
