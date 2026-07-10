@@ -26,10 +26,12 @@ const axios = require("axios");
 // minimum gap that AUTO-WIDENS whenever Cito answers 429 (honoring Retry-After) and eases back
 // down when calls succeed. No hard-coded limit to guess -- it tunes itself to Cito's real cap.
 // All Cito calls route through citoAxios().
-const GAP_MIN_MS = 300;     // floor when everything is healthy
-const GAP_MAX_MS = 4000;    // ceiling so we never stall forever
+// Paid Basic/Starter cap is 30 calls/min -> 2000ms/call. Floor at 2100ms (~28/min) for margin so
+// we sit UNDER the cap from the first call and never thrash into a 429. WZ-CITO-30PM-2026-07-10
+const GAP_MIN_MS = 2100;    // floor: ~28 req/min, safely under the 30/min paid cap
+const GAP_MAX_MS = 12000;   // ceiling so we never stall forever
 const MAX_RETRIES_429 = 4;  // per request, before giving up to the fallback
-let _gapMs = 700;           // current adaptive gap (starts conservative)
+let _gapMs = 2100;          // current adaptive gap (starts at the safe floor)
 let _cQueue = Promise.resolve();
 let _cLast = 0;
 
