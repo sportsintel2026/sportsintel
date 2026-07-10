@@ -37,6 +37,7 @@ const {
   debugHitsProps,
 } = require("../services/edgesModel");
 const { recordPredictions, recordTotalBasesShadow, recordStrikeoutShadow, recordHitsShadow } = require("../services/predictionTracker"); // WZ-HITSSHADOW-WIRE-2026-07-02
+const { probeTeamFielding } = require("../services/savantApi"); // WZ-FIELDPROBE-2026-07-10 :: team-defense endpoint discovery (read-only)
 // In-memory cache
 let edgesCache = null;
 let edgesCacheAt = 0;
@@ -1363,6 +1364,23 @@ router.get("/oddsprobe", async (req, res) => {
     res.json(result);
   } catch (e) {
     console.error("[oddsprobe] error:", e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ── TEMP DIAGNOSTIC: Savant team-fielding endpoint probe (read-only) ─────────
+// WZ-FIELDPROBE-2026-07-10 :: confirms the team-defense CSV endpoint + its REAL
+// columns before the defenseAdj totals factor is wired. Reads once, writes and
+// prices NOTHING. Returns winningUrl + columns + a sample row to build against.
+//   /api/edges/fieldingprobe            → current year
+//   /api/edges/fieldingprobe?year=2026
+router.get("/fieldingprobe", async (req, res) => {
+  try {
+    const year = req.query.year ? parseInt(req.query.year, 10) : undefined;
+    const result = await probeTeamFielding(year);
+    res.json(result);
+  } catch (e) {
+    console.error("[fieldingprobe] error:", e.message);
     res.status(500).json({ ok: false, error: e.message });
   }
 });
