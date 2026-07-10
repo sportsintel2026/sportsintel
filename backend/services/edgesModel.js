@@ -23,7 +23,7 @@ const {
 const { getUmpireByName } = require("./umpireStore");
 const { winProbHaircut, calibrateWinProb, calibrateCoverProb, calibrateHitsProb } = require("./winProbCalibration"); // WZ-CAL-LIVE-2026-07-02 + WZ-HITS-CAL-2026-07-02
 const { americanToImpliedProb } = require("./oddsApi");
-const { getBatterExpectedStats, getBatterBarrels, getPitcherWhiffStats } = require("./savantApi");
+const { getBatterExpectedStats, getBatterBarrels, getPitcherWhiffStats, getTeamFielding } = require("./savantApi");
 const { getWeatherForVenue } = require("./weatherApi");
 
 const LEAGUE_AVG = {
@@ -308,7 +308,48 @@ function ouDeviation(entry) {
   return (entry.over / entry.n) - 0.50;
 }
 
-function calculateTotalProjection(game, awayPitcher, homePitcher, awayTeamHit, homeTeamHit, weather, awayBullpen, homeBullpen, awayHandMult, homeHandMult, awayFatigue, homeFatigue, awayOuDev = 0, homeOuDev = 0, umpRunsAdj = 0) {
+// WZ-FIELDING-2026-07-10 :: team DEFENSE (OAA) run factor for the game TOTAL.
+// A team's season Outs Above Average converts to runs (~0.75 runs per out saved)
+// and is spread across games played, giving a per-game run rate. Good gloves
+// (positive OAA) SUPPRESS the total; poor gloves (negative OAA, e.g. Angels -22)
+// inflate it. Both teams' defenses act on the game's total runs, so the two OAA
+// values combine. Shrunk toward 0 (season OAA -> single-game-total transfer is
+// imperfect) and hard-clamped. Default-safe: contributes 0 whenever a team's OAA
+// is missing/thin, so a failed Savant fetch never moves a total.
+const OAA_RUNS_PER_OUT = 0.75;   // Statcast run value of an out prevented
+const DEF_WEIGHT = 0.8;          // shrink the raw OAA-derived runs toward the mean
+const DEF_MAX = 0.40;            // clamp the combined defensive nudge to +/-0.40 runs
+function estTeamGamesPlayed() {
+  const SEASON_START = Date.UTC(2026, 2, 26); // ~Opening Day 2026
+  const days = Math.max(1, Math.floor((Date.now() - SEASON_START) / 86400000));
+  return Math.max(10, Math.min(162, Math.round(days * 0.885))); // ~0.885 team games/day
+}
+function defRunsAdj(awayOaa, homeOaa) {
+  const gp = estTeamGamesPlayed();
+  const a = Number.isFinite(awayOaa) ? awayOaa : 0;
+  const h = Number.isFinite(homeOaa) ? homeOaa : 0;
+  // per-game runs SAVED by both defenses; positive saved -> total goes DOWN (negative adj)
+  const savedPerGame = ((a + h) * OAA_RUNS_PER_OUT) / gp;
+  const adj = -savedPerGame * DEF_WEIGHT;
+  return Math.max(-DEF_MAX, Math.min(DEF_MAX, adj));
+}
+// Look up both teams' season OAA from the cached Savant fielding map, keyed by MLB
+// team_id (== game.awayId/homeId). Default-safe: returns 0/0 on any miss or error.
+async function getFieldingOaaForGame(awayId, homeId) {
+  try {
+    const map = await getTeamFielding();
+    if (!map) return { away: 0, home: 0 };
+    const a = map.get(String(awayId));
+    const h = map.get(String(homeId));
+    return {
+      away: a && Number.isFinite(a.oaa) ? a.oaa : 0,
+      home: h && Number.isFinite(h.oaa) ? h.oaa : 0,
+    };
+  } catch (_) {
+    return { away: 0, home: 0 };
+  }
+}
+function calculateTotalProjection(game, awayPitcher, homePitcher, awayTeamHit, homeTeamHit, weather, awayBullpen, homeBullpen, awayHandMult, homeHandMult, awayFatigue, homeFatigue, awayOuDev = 0, homeOuDev = 0, umpRunsAdj = 0, defAdj = 0) {
   // Offense scaled by handedness vs the opposing starter
   const awayRPG = (awayTeamHit?.runsPerGame ?? LEAGUE_AVG.runsPerGame) * (awayHandMult || 1.0);
   const homeRPG = (homeTeamHit?.runsPerGame ?? LEAGUE_AVG.runsPerGame) * (homeHandMult || 1.0);
@@ -352,7 +393,9 @@ function calculateTotalProjection(game, awayPitcher, homePitcher, awayTeamHit, h
   const ouAdj = Math.max(-OU_MAX_NUDGE, Math.min(OU_MAX_NUDGE, OU_TENDENCY_WEIGHT * ((awayOuDev || 0) + (homeOuDev || 0))));
   // WZ-UMP-RUNS-2026-07-09 :: additive plate-ump run-environment nudge (0 when unknown/thin).
   const umpAdj = Number.isFinite(umpRunsAdj) ? umpRunsAdj : 0;
-  const projected = baseTotal + pitcherAdj + parkAdj + weatherAdj + bullpenAdj + fatigueAdj + ouAdj + umpAdj + TOTAL_MEAN_ADJ;
+  // WZ-FIELDING-2026-07-10 :: additive team-defense (OAA) run nudge (0 when unknown/thin).
+  const defAdjSafe = Number.isFinite(defAdj) ? defAdj : 0;
+  const projected = baseTotal + pitcherAdj + parkAdj + weatherAdj + bullpenAdj + fatigueAdj + ouAdj + umpAdj + defAdjSafe + TOTAL_MEAN_ADJ;
   return {
     projectedTotal: round2(projected),
     breakdown: {
@@ -365,6 +408,7 @@ function calculateTotalProjection(game, awayPitcher, homePitcher, awayTeamHit, h
       fatigueAdj: round2(fatigueAdj),
       ouAdj: round2(ouAdj),
       umpAdj: round2(umpAdj),
+      defAdj: round2(defAdjSafe),
       awayBullpenFatigue: awayFatigue || null,
       homeBullpenFatigue: homeFatigue || null,
     },
@@ -1486,7 +1530,10 @@ async function calculateGameEdges(game, oddsForGame) {
   const homeOuDev = ouDeviation(_ouMap.get(game.homeAbbr));
   // WZ-UMP-RUNS-2026-07-09 :: plate-ump run-environment nudge for the total (0 when unknown).
   const umpRunsAdj = await getUmpRunsForGame(game.id);
-  const totals = calculateTotalProjection(game, awayPitcherForm, homePitcherForm, awayHit, homeHit, weather, awayBullpen, homeBullpen, awayHandMult, homeHandMult, awayFatigue, homeFatigue, awayOuDev, homeOuDev, umpRunsAdj);
+  // WZ-FIELDING-2026-07-10 :: team-defense (OAA) run nudge for the total (0 when unknown).
+  const _oaa = await getFieldingOaaForGame(game.awayId, game.homeId);
+  const defAdj = defRunsAdj(_oaa.away, _oaa.home);
+  const totals = calculateTotalProjection(game, awayPitcherForm, homePitcherForm, awayHit, homeHit, weather, awayBullpen, homeBullpen, awayHandMult, homeHandMult, awayFatigue, homeFatigue, awayOuDev, homeOuDev, umpRunsAdj, defAdj);
   // SHADOW: pitching-built multiplicative projection computed in parallel, stored
   // for grading, never used to price a pick (see calculateTotalProjectionShadow).
   const totalsShadow = calculateTotalProjectionShadow(game, awayPitcherForm, homePitcherForm, awayHit, homeHit, weather, awayBullpen, homeBullpen, awayHandMult, homeHandMult);
