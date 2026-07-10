@@ -153,4 +153,41 @@ function scoreBout(redProfile, blueProfile, pMktRed) {
   return { modelRed, edgeRed: modelRed - pMktRed, totalTilt: total, factors, usedFactors: used };
 }
 
-module.exports = { scoreBout };
+// WZ-UFC-METHOD-2026-07-09 :: method LEAN -- an info-only read of how a fight is most likely to
+// end (KO/TKO, submission, or decision), from both fighters' win-method splits plus pace/durability.
+// NOT a priced bet: The Odds API doesn't price MMA method markets, so there's no line to beat -- we
+// never attach an edge or a +VALUE tag to this. It's a handicapping read, shown neutral/gold; green
+// (edge/value) stays reserved for real market-beating picks. Any missing data => no lean (null).
+function methodLean(redProfile, blueProfile) {
+  const R = getStats(redProfile), B = getStats(blueProfile);
+  const rHas = R.koPct != null || R.subPct != null || R.decPct != null;
+  const bHas = B.koPct != null || B.subPct != null || B.decPct != null;
+  if (!rHas || !bHas) return null;
+
+  const ko  = ((R.koPct  || 0) + (B.koPct  || 0)) / 2;
+  const sub = ((R.subPct || 0) + (B.subPct || 0)) / 2;
+  const dec = ((R.decPct || 0) + (B.decPct || 0)) / 2;
+  const finish = ko + sub;
+
+  // pace/durability nudge: a long average fight time on both sides leans the read toward the
+  // scorecards; a short one leans it toward an early finish. avgTime is in seconds.
+  let decBias = 0;
+  if (R.avgTime != null && B.avgTime != null) {
+    const avg = (R.avgTime + B.avgTime) / 2;
+    decBias = clamp((avg - 600) / 900, -0.15, 0.20);
+  }
+  const decScore = dec + decBias;
+
+  const SEP = 0.08; // need a clear gap to call a lean, else "competitive / no strong lean"
+  if (finish - decScore > SEP) {
+    if (ko - sub > 0.05) return { lean: "KO",     label: "Leans KO/TKO",     note: "both tend to finish standing" };
+    if (sub - ko > 0.05) return { lean: "SUB",    label: "Leans submission", note: "grappling-heavy finishers" };
+    return { lean: "FINISH", label: "Leans finish", note: "high finish rate on both sides" };
+  }
+  if (decScore - finish > SEP) {
+    return { lean: "DEC", label: "Leans decision", note: "durable, distance-going styles" };
+  }
+  return { lean: "EVEN", label: "No strong lean", note: "could end either way" };
+}
+
+module.exports = { scoreBout, methodLean };
