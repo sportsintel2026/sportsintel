@@ -88,6 +88,154 @@ function decimalToAmerican(d) {
   return d >= 2 ? Math.round((d - 1) * 100) : -Math.round(100 / (d - 1));
 }
 
+// -- WZ-CALIB-PROBE-2026-07-10 :: TEMPORARY read-only calibration probe --------
+// GET /api/performance/calibprobe
+// Phone-friendly diagnostics so no Supabase SQL editor is needed:
+//   1. calibration    - claimed model_prob vs actual win rate, banded, per core
+//                       market, counted ONLY inside each market's current reset
+//                       window (same afterCoreReset() scoping as the record).
+//                       gapPts positive = model overconfident in that band.
+//   2. pipeline       - pending/win/loss/push counts per core market, split
+//                       before vs since its reset cutoff (answers "where's
+//                       moneyline": young window vs dead pipeline).
+//   3. moneylineGap   - moneyline rows dated 2026-07-02..2026-07-07, the data
+//                       for the "pull ML cutoff back to 7/02?" decision.
+//   4. totalsSides    - totals split by over/under since 2026-07-02: record,
+//                       ROI, avg CLV per side (quantifies the over-lean flag).
+// Read-only: SELECTs only, echoes no secrets, mutates nothing. Units match the
+// main route: edge and clv are stored as fractions and reported here as percent.
+// REMOVE this route together with /api/ufc/probe once calibration work is done.
+// Registered BEFORE "/:league" so Express does not swallow it as a league name.
+router.get("/calibprobe", async (req, res) => {
+  try {
+    const supabase = db();
+    const core = LEAGUE_CONFIG.mlb.core;
+    const rows = [];
+    const PAGE = 1000;
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await supabase
+        .from("model_predictions")
+        .select("market, selection, model_prob, odds, edge, confidence, result, game_date, clv")
+        .eq("league", "mlb")
+        .in("market", core)
+        .order("id", { ascending: true })
+        .range(from, from + PAGE - 1);
+      if (error) throw new Error(error.message);
+      const batch = data || [];
+      rows.push(...batch);
+      if (batch.length < PAGE) break;
+    }
+
+    const settled = (r) => r.result === "win" || r.result === "loss";
+    const pct1 = (x) => Math.round(x * 1000) / 10;          // fraction -> percent, 1 dp
+    const pct2 = (x) => Math.round(x * 10000) / 100;        // fraction -> percent, 2 dp (CLV)
+
+    // ---- 1. calibration bands (settled, since each market's reset) ----------
+    const BANDS = [
+      { key: "<0.50", lo: -Infinity, hi: 0.50 },
+      { key: "0.50-0.55", lo: 0.50, hi: 0.55 },
+      { key: "0.55-0.60", lo: 0.55, hi: 0.60 },
+      { key: "0.60+", lo: 0.60, hi: Infinity },
+    ];
+    const bandKey = (p) => { for (const b of BANDS) { if (p >= b.lo && p < b.hi) return b.key; } return null; };
+    const calibration = {};
+    for (const m of core) calibration[m] = { settledNoModelProb: 0, bands: {} };
+    for (const r of rows) {
+      if (!settled(r) || !afterCoreReset("mlb", r)) continue;
+      const c = calibration[r.market];
+      if (r.model_prob == null) { c.settledNoModelProb++; continue; }
+      const k = bandKey(Number(r.model_prob));
+      if (!k) continue;
+      const b = (c.bands[k] ||= { n: 0, wins: 0, probSum: 0, edgeSum: 0, edgeN: 0, clvSum: 0, clvN: 0 });
+      b.n++;
+      if (r.result === "win") b.wins++;
+      b.probSum += Number(r.model_prob);
+      if (r.edge != null) { b.edgeSum += Number(r.edge); b.edgeN++; }
+      if (r.clv != null) { b.clvSum += Number(r.clv); b.clvN++; }
+    }
+    for (const m of Object.keys(calibration)) {
+      for (const k of Object.keys(calibration[m].bands)) {
+        const b = calibration[m].bands[k];
+        calibration[m].bands[k] = {
+          n: b.n,
+          wins: b.wins,
+          claimedPct: pct1(b.probSum / b.n),
+          actualPct: pct1(b.wins / b.n),
+          gapPts: Math.round(((b.probSum / b.n) - (b.wins / b.n)) * 1000) / 10,
+          avgEdgePct: b.edgeN ? pct1(b.edgeSum / b.edgeN) : null,
+          avgClvPct: b.clvN ? pct2(b.clvSum / b.clvN) : null,
+        };
+      }
+    }
+
+    // ---- 2. pipeline: result counts before vs since each market's reset -----
+    const pipeline = {};
+    for (const m of core) pipeline[m] = { resetCutoff: MLB_CORE_RESET[m] || null, sinceReset: {}, beforeReset: {}, sinceResetDates: null };
+    for (const r of rows) {
+      const p = pipeline[r.market];
+      if (!p) continue;
+      const since = afterCoreReset("mlb", r);
+      const bucket = since ? p.sinceReset : p.beforeReset;
+      const key = r.result || "unknown";
+      bucket[key] = (bucket[key] || 0) + 1;
+      if (since && r.game_date) {
+        if (!p.sinceResetDates) p.sinceResetDates = { first: r.game_date, last: r.game_date };
+        else {
+          if (r.game_date < p.sinceResetDates.first) p.sinceResetDates.first = r.game_date;
+          if (r.game_date > p.sinceResetDates.last) p.sinceResetDates.last = r.game_date;
+        }
+      }
+    }
+
+    // ---- 3. moneyline gap window (cutoff decision data) ----------------------
+    const moneylineGap = { window: "2026-07-02 to 2026-07-07", counts: {} };
+    for (const r of rows) {
+      if (r.market !== "moneyline" || !r.game_date) continue;
+      if (r.game_date < "2026-07-02" || r.game_date > "2026-07-07") continue;
+      const key = r.result || "unknown";
+      moneylineGap.counts[key] = (moneylineGap.counts[key] || 0) + 1;
+    }
+
+    // ---- 4. totals over/under split since 2026-07-02 -------------------------
+    const sideBlank = () => ({ settled: 0, wins: 0, units: 0, pending: 0, clvSum: 0, clvN: 0 });
+    const totalsSides = { since: "2026-07-02", over: sideBlank(), under: sideBlank() };
+    for (const r of rows) {
+      if (r.market !== "total" || !r.game_date || r.game_date < "2026-07-02") continue;
+      const side = r.selection === "over" ? totalsSides.over : r.selection === "under" ? totalsSides.under : null;
+      if (!side) continue;
+      if (settled(r)) {
+        side.settled++;
+        const won = r.result === "win";
+        if (won) side.wins++;
+        side.units += won ? unitProfit(r.odds) : -1;
+        if (r.clv != null) { side.clvSum += Number(r.clv); side.clvN++; }
+      } else if (r.result === "pending" || r.result == null) {
+        side.pending++;
+      }
+    }
+    for (const s of [totalsSides.over, totalsSides.under]) {
+      s.winPct = s.settled ? pct1(s.wins / s.settled) : null;
+      s.roi = s.settled ? pct1(s.units / s.settled) : null;
+      s.units = Math.round(s.units * 100) / 100;
+      s.avgClvPct = s.clvN ? pct2(s.clvSum / s.clvN) : null;
+      delete s.clvSum; delete s.clvN;
+    }
+
+    res.json({
+      token: "WZ-CALIB-PROBE-2026-07-10",
+      generatedAt: new Date().toISOString(),
+      rowsScanned: rows.length,
+      calibration,
+      pipeline,
+      moneylineGap,
+      totalsSides,
+    });
+  } catch (err) {
+    res.status(500).json({ token: "WZ-CALIB-PROBE-2026-07-10", error: String(err && err.message || err) });
+  }
+});
+// -- end WZ-CALIB-PROBE-2026-07-10 ---------------------------------------------
+
 router.get("/:league", async (req, res) => {
   const league = String(req.params.league || "").toLowerCase();
   const cfg = LEAGUE_CONFIG[league];
