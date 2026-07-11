@@ -360,15 +360,17 @@ export default function HomePage(){
   // and it headlined uncalibrated raw win% — off the storefront until the model earns it.)
 
   const boardSrc = board==="all" ? allAdj.filter(x=>sport==="mlb"?(x.edge??0)>0:(x.edge??0)>=1).sort(sortBoard) : boardEdges;
-  const boardItems = boardSrc.map(toBoard);
+  // WZ-BOARD-UFC-CARD-2026-07-11 :: one card per game — keep each game's single best (highest) edge, winner-first order.
+  const bestPerGame=(arr)=>{ const m=new Map(); for(const d of arr){ const g=d.gameId; const p=m.get(g); if(!p||(d.edge??-99)>(p.edge??-99)) m.set(g,d); } return [...m.values()].sort((a,b)=>((b.model??-1)-(a.model??-1))||((b.edge??0)-(a.edge??0))); };
+  const boardItems = bestPerGame(boardSrc.map(toBoard));
   // WZ-TOMORROW-PREVIEW-2026-07-07 :: tomorrow's edges for the active tab, built through the SAME
   // pipeline (moveAdjust -> oneSidePerGame -> win-first sort -> toBoard) so it matches today exactly.
   const pv = (sport==="mlb"&&preview&&!preview.rolledToNextDay) ? preview : null;
   const pvMlAdj=(pv?.moneylineEdges||[]).map(moveAdjust), pvTotAdj=(pv?.totalsEdges||[]).map(moveAdjust), pvSpAdj=[...(pv?.runLineEdges||[]),...(pv?.spreadEdges||[])].map(moveAdjust);
-  const previewItems = pv ? (board==="all"
+  const previewItems = bestPerGame(pv ? (board==="all"
         ? [...pvMlAdj,...pvTotAdj,...pvSpAdj].filter(x=>(x.edge??0)>0).sort(byWinProb).map(toBoard)
         : oneSidePerGame((board==="ml"?pvMlAdj:board==="spread"?pvSpAdj:pvTotAdj)||[]).filter(x=>(x.edge??0)>0).sort(byWinProb).map(toBoard)
-      ) : [];
+      ) : []);
   const previewLabel = pv&&pv.date ? fmtSlate(pv.date).toUpperCase() : "";
   const boardDate = fmtSlateFull(e.date || todayISO());
   // WZ-WINNERS-V2-2026-07-04 :: Best Plays carousel = winner+value plays first (our
@@ -506,17 +508,17 @@ export default function HomePage(){
               {/* WZ-BOARD-NEVER-EMPTY-2026-07-08 :: today's board when it has games (tomorrow preview below); when today is empty, tomorrow IS the board -- never blank */}
               {boardItems.length>0
                 ? <>
-                    <div className="grid">{boardItems.map((d,i)=>{const id=d.gameId+d.cat+i;return openId===id?<BoardRow key={id} d={d} i={i} open={true} onToggle={()=>setOpenId(null)} navigate={navigate} sport={sport}/>:<BoardCardCompact key={id} d={d} i={i} sport={sport} onClick={()=>setOpenId(id)}/>;})}</div>
+                    <div className="ufboard">{boardItems.map((d,i)=>{const id=d.gameId+d.cat+i;return openId===id?<BoardRow key={id} d={d} i={i} open={true} onToggle={()=>setOpenId(null)} navigate={navigate} sport={sport}/>:<BoardCardCompact key={id} d={d} i={i} sport={sport} onClick={()=>setOpenId(id)}/>;})}</div>
                     <div className="sum"><span className="l">{boardItems.length} game edges</span><span className="sp"/><span>avg <span className="p">+{kpiHas?kAvg:"0.0"}%</span></span></div>
                     {previewItems.length>0 && <>
                       <div className="tmrwdiv"><span className="tln"/><span className="tlbl">TOMORROW{previewLabel&&<small>{previewLabel}</small>}</span><span className="tln r"/></div>
                       <div className="tmrwnote">Today{"\u2019"}s slate is underway {"\u00b7"} an early look at tomorrow</div>
-                      <div className="grid tmrwgrid">{previewItems.map((d,i)=>{const id="pv"+d.gameId+d.cat+i;return openId===id?<BoardRow key={id} d={d} i={i} open={true} onToggle={()=>setOpenId(null)} navigate={navigate} sport={sport}/>:<BoardCardCompact key={id} d={d} i={i} sport={sport} onClick={()=>setOpenId(id)}/>;})}</div>
+                      <div className="ufboard tmrw">{previewItems.map((d,i)=>{const id="pv"+d.gameId+d.cat+i;return openId===id?<BoardRow key={id} d={d} i={i} open={true} onToggle={()=>setOpenId(null)} navigate={navigate} sport={sport}/>:<BoardCardCompact key={id} d={d} i={i} sport={sport} onClick={()=>setOpenId(id)}/>;})}</div>
                     </>}
                   </>
                 : previewItems.length>0
                   ? <>
-                      <div className="grid">{previewItems.map((d,i)=>{const id="pv"+d.gameId+d.cat+i;return openId===id?<BoardRow key={id} d={d} i={i} open={true} onToggle={()=>setOpenId(null)} navigate={navigate} sport={sport}/>:<BoardCardCompact key={id} d={d} i={i} sport={sport} onClick={()=>setOpenId(id)}/>;})}</div>
+                      <div className="ufboard">{previewItems.map((d,i)=>{const id="pv"+d.gameId+d.cat+i;return openId===id?<BoardRow key={id} d={d} i={i} open={true} onToggle={()=>setOpenId(null)} navigate={navigate} sport={sport}/>:<BoardCardCompact key={id} d={d} i={i} sport={sport} onClick={()=>setOpenId(id)}/>;})}</div>
                       <div className="sum"><span className="l">{previewItems.length} game winners</span><span className="sp"/><span className="p">Tomorrow</span></div>
                     </>
                   : <div className="estate"><div className="et">No winners on the board yet</div><div className="es">Winners post as books release tonight{"\u2019"}s lines.</div></div>}
@@ -768,27 +770,45 @@ function BoardRow({d,i,open,onToggle,navigate,sport}){ const lg=(SPORTS[sport]||
 }
 /* BOARD-VIEW-TOGGLE-CARDS-GRID-2026-06-24 — spreadsheet view of the same boardItems */
 /* CARDS-COMPACT-GRID-EXPAND-2026-06-24 — compact card; taps open the full BoardRow */
+// WZ-BOARD-UFC-CARD-2026-07-11 :: one card per game — matchup header (picked side in accent) + OUR PICK
+// (win-prob ring, pick, market, odds, edge, +VALUE) + a READ line from the model reason. Tap opens the
+// full breakdown (BoardRow) exactly as before. Gold accent = a team side, green = a total.
 function BoardCardCompact({d,i,sport,onClick}){
-  const conv=String(d.conv||"low");
+  const lg=(SPORTS[sport]||SPORTS.mlb).lg;
   const wp=Number(d.model);
   const wpv=isFinite(wp)?Math.max(0,Math.min(100,wp)):null;
-  const C=113.1; // 2·π·18
+  const C=125.7; // 2·π·20
   const dash=wpv!=null?(wpv/100*C):0;
+  const tok=String(d.p||"").trim().split(/\s+/);
+  const isTot=tok[0]==="Over"||tok[0]==="Under";
+  const pickAb=isTot?"":String(tok[0]||"").toUpperCase();
+  const awayPk=!isTot&&pickAb===String(d.a[0]||"").toUpperCase();
+  const homePk=!isTot&&pickAb===String(d.h[0]||"").toUpperCase();
+  const accent=isTot?"#3FCB91":"#C9A86A";
   const showEdge=!(sport==="mlb"&&d.cat==="ml");
+  const showValue=showEdge&&Number(d.edge)>=1.0;
   return (
-    /* WZ-BOARD-READOUT-2026-07-08 :: win% ring = left anchor; odds folded into matchup; tier/edge on right; #1 gets gold peak */
-    <div className={"gr gcompact erow "+conv+(i===0?" etop":"")} onClick={onClick}>
-      {wpv!=null
-        ? <div className="ering"><svg viewBox="0 0 46 46"><circle cx="23" cy="23" r="18" fill="none" stroke="rgba(255,255,255,.08)" strokeWidth="4"/><circle cx="23" cy="23" r="18" fill="none" stroke="#3FCB91" strokeWidth="4" strokeLinecap="round" strokeDasharray={dash.toFixed(1)+" "+C} transform="rotate(-90 23 23)"/></svg><div className="epct">{Math.round(wpv)}%</div></div>
-        : <div className="erk">{i+1}</div>}
-      <div className="ein">
-        <div className="epick">{d.p}{d.mk&&<span className="emk">{d.mk}</span>}{d.value&&<span className="eval">+VALUE</span>}</div>
-        <div className="emu">{d.g}{d.odds?" \u00b7 "+d.odds:""}</div>
+    <div className={"ufcard"+(isTot?" tot":"")} onClick={onClick}>
+      <div className="ufm">
+        <span className="ufc"><Logo ab={d.a[0]} size={28} col={d.a[1]} lg={lg}/></span>
+        <span className={"uft"+(awayPk?" pk":"")}>{d.a[0]}</span>
+        <span className="ufat">@</span>
+        <span className="ufc"><Logo ab={d.h[0]} size={28} col={d.h[1]} lg={lg}/></span>
+        <span className={"uft"+(homePk?" pk":"")}>{d.h[0]}</span>
+        {d.starts&&<span className="uftime">{d.starts}</span>}
       </div>
-      <div className="eright">
-        {d.tier&&<span className={"etier "+d.tier.toLowerCase()}>{d.tier}</span>}
-        {showEdge&&<div className={"ecv "+(d.edge<0?"neg":"pos")}>{d.edge>=0?"+":""}{Number(d.edge).toFixed(1)}%</div>}
+      <div className="ufop">
+        {wpv!=null&&<div className="ufring"><svg viewBox="0 0 48 48"><circle cx="24" cy="24" r="20" fill="none" stroke="rgba(255,255,255,.08)" strokeWidth="4.5"/><circle cx="24" cy="24" r="20" fill="none" stroke={accent} strokeWidth="4.5" strokeLinecap="round" strokeDasharray={dash.toFixed(1)+" "+C} transform="rotate(-90 24 24)"/></svg><div className="ufpc" style={{color:accent}}>{Math.round(wpv)}<i>%</i></div></div>}
+        <div className="ufpk">
+          <div className="ufl">OUR PICK</div>
+          <div className="ufp" style={{color:accent}}>{d.p}{d.mk&&<span className="ufmk">{d.mk}</span>}{d.odds&&<span className="ufod">{d.odds}</span>}</div>
+        </div>
+        <div className="ufr">
+          {showValue&&<span className="ufval">+VALUE</span>}
+          {showEdge&&<div className="ufedge">{d.edge>=0?"+":""}{Number(d.edge).toFixed(1)}%<small>EDGE</small></div>}
+        </div>
       </div>
+      {d.why&&<div className="ufread"><span className="ufrk">READ</span><span className="uftx">{d.why}</span></div>}
     </div>
   );
 }
@@ -1187,6 +1207,30 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .bseg-b.on{background:var(--gold);color:#0A0B0D;font-weight:700}
 
 .grid{margin:12px 4px 0;background:var(--panel);border-radius:14px;overflow:hidden}
+/* WZ-BOARD-UFC-CARD-2026-07-11 :: one-card-per-game UFC-style board card */
+.ufboard{margin:12px 12px 0}
+.ufcard{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:11px 13px;margin-bottom:9px;cursor:pointer}
+.ufboard .gr.open{background:var(--panel);border:1px solid var(--line);border-radius:14px;margin-bottom:9px}
+.ufcard .ufm{display:flex;align-items:center;gap:7px;margin-bottom:10px}
+.ufcard .ufm .ufc{flex:none;display:inline-flex}
+.ufcard .ufm .uft{font-family:var(--disp);font-weight:800;font-size:15px;color:var(--mut)}
+.ufcard .ufm .uft.pk{color:var(--gold)}
+.ufcard .ufm .ufat{font-family:var(--mono);font-size:11px;color:var(--mut2);margin:0 1px}
+.ufcard .ufm .uftime{margin-left:auto;font-family:var(--mono);font-size:9.5px;color:var(--mut2);letter-spacing:.04em}
+.ufcard .ufop{display:flex;align-items:center;gap:11px}
+.ufcard .ufring{position:relative;width:44px;height:44px;flex:none}.ufcard .ufring svg{width:44px;height:44px;display:block}
+.ufcard .ufpc{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:var(--disp);font-weight:800;font-size:14px}.ufcard .ufpc i{font-size:8px;font-style:normal;margin-left:1px}
+.ufcard .ufpk{flex:1;min-width:0}
+.ufcard .ufpk .ufl{font-family:var(--mono);font-size:8px;letter-spacing:.16em;color:var(--mut2);margin-bottom:3px}
+.ufcard .ufpk .ufp{font-family:var(--disp);font-weight:800;font-size:18px;line-height:1;display:flex;align-items:baseline;gap:7px;flex-wrap:wrap}
+.ufcard .ufpk .ufp .ufmk{font-family:var(--mono);font-size:8.5px;font-weight:600;color:var(--gold);border:1px solid rgba(201,168,106,.3);border-radius:4px;padding:1px 5px;position:relative;top:-2px}
+.ufcard .ufpk .ufp .ufod{font-family:var(--mono);font-size:12.5px;color:var(--mut);font-weight:400}
+.ufcard .ufr{text-align:right;flex:none}
+.ufcard .ufr .ufval{display:inline-block;font-family:var(--mono);font-size:8px;font-weight:600;color:var(--green);border:1px solid rgba(63,203,145,.4);border-radius:5px;padding:2px 6px;margin-bottom:3px}
+.ufcard .ufr .ufedge{font-family:var(--mono);font-size:14px;font-weight:600;color:var(--green);line-height:1}.ufcard .ufr .ufedge small{display:block;font-size:7px;color:var(--mut2);letter-spacing:.1em;margin-top:1px}
+.ufcard .ufread{display:flex;gap:8px;align-items:baseline;margin-top:10px;padding-top:9px;border-top:1px solid var(--line);font-size:11.5px;color:#aeb8c2;line-height:1.4}
+.ufcard .ufread .ufrk{font-family:var(--mono);font-size:8px;font-weight:600;letter-spacing:.1em;color:var(--gold);border:1px solid rgba(201,168,106,.3);border-radius:5px;padding:2px 6px;flex:none;align-self:center}
+.ufcard .ufread .uftx{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 /* WZ-TOPPROPS-2026-07-08 :: tight edge-to-edge 3x2 prop grid + headshot cards */
 .propgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin:12px 4px 0;background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
 .ppc{padding:12px 8px 10px;text-align:center;cursor:pointer}
