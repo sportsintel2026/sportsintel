@@ -6,6 +6,15 @@ import Sidebar from "./Sidebar";
 import TerminalShell from "./TerminalShell";
 import BottomNav from "./BottomNav";
 
+// WZ-WIZEPLAYS-PAGE-REDESIGN-2026-07-11 :: standalone WizePlays page rebuilt to
+// match the Edge-board WizePlays card exactly — gold serif W mark, real ESPN team
+// logos, hairline pick rows, one clean record header. Data/logic unchanged: same
+// expert_picks fetch, same honest computeRecord (nothing shown until graded), same
+// access gate for non-subscribers, same parlay calculator + empty/loading states.
+
+const MONO = "'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace";
+const SERIF = "'Fraunces',Georgia,'Times New Roman',serif";
+
 // The six sports the picks can be tagged with. Keyed by the short id we store
 // on each pick/leg; label + icon are for display. Matches the league style used
 // across the rest of the app.
@@ -26,6 +35,30 @@ function sportTag(id) {
       <span style={{ fontSize: 11 }}>{s.icon}</span>{s.label}
     </span>
   );
+}
+
+// ── Team logo (same source + look as the Edge-board WizePlays card) ──────────
+// Neutral slate crest with the real ESPN logo on top; falls back to the abbr if
+// the image 404s, so a missing logo never breaks the row.
+const SLUGM = { CWS: "chw", CHW: "chw" };
+const ESPN_ALIAS = { az: "ari" }; // ESPN files the D-backs under "ari"
+const LGSLUG = { mlb: "mlb", nba: "nba", nfl: "nfl", nhl: "nhl", ncaafb: "college-football", ncaamb: "mens-college-basketball" };
+function shortTeam(t) { const m = String(t).match(/[A-Z]{2,3}/); return m ? m[0] : String(t).slice(0, 3).toUpperCase(); }
+// Pull a team abbr from a curated pick for its logo ("LAD ML" -> LAD).
+const wpAbbr = (pk) => {
+  const f = String((pk && pk.pick) || "").trim().split(/\s+/)[0];
+  if (/^[A-Za-z]{2,4}$/.test(f)) return f.toUpperCase();
+  const g = String((pk && pk.game) || "").trim().split(/\s+/)[0];
+  return /^[A-Za-z]{2,4}$/.test(g) ? g.toUpperCase() : "";
+};
+function TeamCrest({ ab, size = 36, lg = "mlb" }) {
+  const [bad, setBad] = useState(false);
+  const up = String(ab || "").toUpperCase();
+  const low = String(ab || "").toLowerCase();
+  const slug = SLUGM[up] || ESPN_ALIAS[low] || low;
+  const box = { width: size, height: size, flex: "0 0 auto", borderRadius: "50%", display: "inline-flex", alignItems: "center", justifyContent: "center", overflow: "hidden", background: "radial-gradient(circle at 50% 32%, #3a4653aa, #0c1018 82%)", boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.10)" };
+  if (bad || !ab) return <span style={box}><span style={{ fontWeight: 800, fontSize: Math.round(size * 0.3), color: "#cbd3da" }}>{String(ab || "?").slice(0, 3)}</span></span>;
+  return <span style={box}><img src={`https://a.espncdn.com/i/teamlogos/${lg}/500/${slug}.png`} alt="" onError={() => setBad(true)} style={{ width: Math.round(size * 0.74), height: Math.round(size * 0.74), objectFit: "contain" }} /></span>;
 }
 
 // ── American odds helpers ───────────────────────────────────────────────────
@@ -106,7 +139,7 @@ export default function ExpertPicksPage() {
     <TerminalShell active="/expert-picks" plan={plan} navigate={navigate}>
     <div style={{ minHeight: "100vh", background: "#0a0e14", color: "#e4e7eb", fontFamily: "'Inter',system-ui,-apple-system,sans-serif" }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700;800;900&display=swap');
         *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
         @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
         @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
@@ -117,10 +150,6 @@ export default function ExpertPicksPage() {
         .hamburger-btn{display:none}
         .mobile-only{display:none}
         .desktop-sidebar{display:block}
-         (min-width: 1024px) {
-          .desktop-sidebar{display:none!important}
-          .main-content{margin-left:0!important}
-        }
 
         @media (min-width: 1024px) {
           .desktop-sidebar{display:none!important}
@@ -131,10 +160,8 @@ export default function ExpertPicksPage() {
           .main-content{margin-left:0!important;padding-top:0!important}
           .hamburger-btn{display:flex!important}
           .mobile-only{display:flex!important}
-          .ep-grid-2{grid-template-columns:1fr!important}
           .ep-content{padding:16px 14px 60px!important}
-          .ep-stats{gap:14px!important}
-          h1{font-size:22px!important}
+          h1{font-size:30px!important}
         }
       `}</style>
 
@@ -169,12 +196,19 @@ export default function ExpertPicksPage() {
       <div className="main-content" style={{ marginLeft: 200 }}>
         <div className="ep-content" style={{ maxWidth: 1000, margin: "0 auto", padding: "24px 24px 60px" }}>
           <div onClick={() => navigate(-1)} style={{ color: "#6b7280", fontSize: 13, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6, marginBottom: 14, userSelect: "none" }}>← Back</div>
-          <div style={{ marginBottom: 6 }}>
-            <h1 style={{ margin: 0, fontSize: 26, fontWeight: 800, letterSpacing: "-0.5px" }}>Wize<span style={{ color: "#ef4444" }}>Plays</span></h1>
+
+          {/* Page title — WizePicks trademark treatment: gold second word, serif. */}
+          <div style={{ marginBottom: 12 }}>
+            <h1 style={{ margin: 0, fontFamily: SERIF, fontSize: 33, fontWeight: 600, letterSpacing: "-0.02em" }}>Wize<span style={{ color: "#C9A86A" }}>Plays</span></h1>
           </div>
-          <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 10, padding: "14px 16px", margin: "0 0 14px", fontSize: 13, color: "#9ca3af", lineHeight: 1.6 }}>
-            <p style={{ margin: "0 0 10px" }}>Handpicked by our analysts — a fresh slate of plays every day, across MLB, NBA, NFL, NHL &amp; college.</p>
-            <p style={{ margin: 0, color: "#e4e7eb", fontWeight: 700 }}>Every play is tracked — wins <em style={{ fontStyle: "normal" }}>and</em> losses — with complete transparency. Nothing hidden, nothing fabricated.</p>
+
+          {/* WizePlays header + honest record — the Edge-board card, page-sized. */}
+          <WizeHero record={record} />
+
+          {/* What WizePlays is (unchanged copy, lighter styling) */}
+          <div style={{ fontSize: 12.5, color: "#9ca3af", lineHeight: 1.55, margin: "0 0 12px" }}>
+            <p style={{ margin: "0 0 8px" }}>Handpicked by our analysts — a fresh slate of plays every day, across MLB, NBA, NFL, NHL &amp; college.</p>
+            <p style={{ margin: 0, color: "#e4e7eb", fontWeight: 600 }}>Every play is tracked — wins <em style={{ fontStyle: "normal" }}>and</em> losses — with complete transparency. Nothing hidden, nothing fabricated.</p>
           </div>
 
           {/* Posting-time note */}
@@ -182,9 +216,6 @@ export default function ExpertPicksPage() {
             <span style={{ fontSize: 13 }}>🕒</span>
             <span>New picks are posted <strong style={{ color: "#9ca3af" }}>2–3 hours before</strong> the first games of the day.</span>
           </div>
-
-          {/* Honest performance strip — only shows numbers once picks are graded */}
-          <PerformanceStrip record={record} />
 
           {loading ? (
             <Loader />
@@ -203,8 +234,8 @@ export default function ExpertPicksPage() {
               )}
               {straights.length > 0 && (
                 <Section title="Straight bets" count={straights.length}>
-                  <div className="ep-grid-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                    {straights.map((p, i) => <StraightCard key={i} pick={p} />)}
+                  <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 14, overflow: "hidden" }}>
+                    {straights.map((p, i) => <StraightRow key={i} pick={p} first={i === 0} />)}
                   </div>
                 </Section>
               )}
@@ -223,64 +254,52 @@ export default function ExpertPicksPage() {
   );
 }
 
-// ── Performance strip ───────────────────────────────────────────────────────
-function PerformanceStrip({ record }) {
+// ── WizePlays header card — gold W mark + CURATED + honest record ────────────
+// Mirrors the Edge-board card. The record strip only renders once picks are
+// graded (graded > 0); before that we show the honest "building" line, never a
+// fabricated number.
+function WizeHero({ record }) {
   const graded = record.wins + record.losses;
-  if (graded === 0) {
-    return (
-      <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 8, padding: "14px 18px", marginBottom: 20, display: "flex", alignItems: "center", gap: 10 }}>
-        <span style={{ fontSize: 16 }}>📈</span>
-        <span style={{ fontSize: 12, color: "#9ca3af" }}>Building our verified track record — full results post here as picks settle.</span>
-      </div>
-    );
-  }
-  const winPct = Math.round((record.wins / graded) * 100);
+  const has = graded > 0;
+  const winPct = has ? Math.round((record.wins / graded) * 100) : 0;
+  const recStr = `${record.wins}-${record.losses}${record.pushes ? `-${record.pushes}` : ""}`;
   const unitsColor = record.units >= 0 ? "#22c55e" : "#ef4444";
-  const unitsSign = record.units >= 0 ? "+" : "";
+  const unitsStr = `${record.units >= 0 ? "+" : ""}${record.units.toFixed(2)}u`;
   return (
-    <div className="ep-stats" style={{ background: "linear-gradient(180deg,#11161f 0%,#0f1419 100%)", border: "1px solid #1f2937", borderRadius: 8, padding: "16px 20px", marginBottom: 22, display: "flex", gap: 28, flexWrap: "wrap" }}>
-      <Stat label="Record" value={`${record.wins}-${record.losses}${record.pushes ? `-${record.pushes}` : ""}`} />
-      <Stat label="Win rate" value={`${winPct}%`} />
-      <Stat label="Units" value={`${unitsSign}${record.units.toFixed(2)}u`} color={unitsColor} />
-    </div>
-  );
-}
-
-function Stat({ label, value, color }) {
-  return (
-    <div>
-      <div style={{ fontSize: 10, color: "#6b7280", letterSpacing: "0.08em", fontWeight: 700, marginBottom: 4 }}>{label.toUpperCase()}</div>
-      <div style={{ fontSize: 22, fontWeight: 800, color: color || "#e4e7eb", fontVariantNumeric: "tabular-nums" }}>{value}</div>
-    </div>
-  );
-}
-
-// ── Locked teaser (one clean gate, no per-pick blur, no $7 buttons inline) ──
-function LockedTeaser({ record, navigate }) {
-  const graded = record.wins + record.losses;
-  const hook = graded > 0
-    ? `${record.wins}-${record.losses} on tracked picks · ${record.units >= 0 ? "+" : ""}${record.units.toFixed(2)} units`
-    : "Daily WizePlays — parlays & straight bets across MLB, NBA, NFL, NHL & college";
-  return (
-    <div style={{ position: "relative", background: "linear-gradient(180deg,#1a1410 0%,#0f1419 100%)", border: "1px solid #ef444433", borderLeft: "3px solid #ef4444", borderRadius: 10, padding: "40px 28px", textAlign: "center" }}>
-      <div style={{ fontSize: 38, marginBottom: 12 }}>🔒</div>
-      <div style={{ fontSize: 20, fontWeight: 800, marginBottom: 8 }}>Subscribe to see WizePlays</div>
-      <div style={{ fontSize: 13, color: "#9ca3af", maxWidth: 460, margin: "0 auto 22px", lineHeight: 1.6 }}>
-        {hook}. Full parlay breakdowns, straight bets, and an honest, fully-tracked record.
+    <div style={{ position: "relative", border: "1px solid rgba(201,168,106,0.40)", borderRadius: 14, background: "#0f1419", overflow: "hidden", marginBottom: 16 }}>
+      <div style={{ position: "absolute", top: 0, left: 16, right: 16, height: 1, background: "linear-gradient(90deg,transparent,#C9A86A,transparent)", opacity: 0.5 }} />
+      <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "16px 16px 14px" }}>
+        {/* the existing WizePlays logo mark: gold-fill serif W */}
+        <div style={{ width: 52, height: 52, flex: "0 0 auto", borderRadius: 13, background: "linear-gradient(180deg,#d8b878,#b98f45)", display: "flex", alignItems: "center", justifyContent: "center", color: "#161007", fontFamily: SERIF, fontWeight: 700, fontSize: 28, boxShadow: "0 6px 16px rgba(201,168,106,0.28),inset 0 1px 0 rgba(255,255,255,0.40)" }}>W</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontWeight: 800, fontSize: 15, letterSpacing: "0.10em" }}>WIZEPLAYS</span>
+            <span style={{ fontFamily: MONO, fontSize: 9, fontWeight: 600, letterSpacing: "0.08em", color: "#E4C88A", background: "rgba(201,168,106,0.12)", border: "1px solid rgba(201,168,106,0.35)", borderRadius: 6, padding: "2px 7px" }}>CURATED</span>
+          </div>
+          <div style={{ fontSize: 12.5, color: "#9ca3af", marginTop: 4 }}>Hand-picked after extra review.</div>
+        </div>
       </div>
-      <button onClick={() => navigate("/pricing")} style={{ background: "#ef4444", color: "#fff", border: "none", borderRadius: 8, padding: "12px 28px", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
-        Subscribe — $7/mo
-      </button>
+      {has ? (
+        <div style={{ display: "grid", gridTemplateColumns: "1.35fr 1fr 1fr", borderTop: "1px solid #1f2937" }}>
+          <HeroStat k="RECORD" v={recStr} />
+          <HeroStat k="WIN RATE" v={`${winPct}%`} />
+          <HeroStat k="UNITS" v={unitsStr} color={unitsColor} last />
+        </div>
+      ) : (
+        <div style={{ borderTop: "1px solid #1f2937", padding: "14px 16px", display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontSize: 15 }}>📈</span>
+          <span style={{ fontSize: 12, color: "#9ca3af" }}>Building our verified track record — full results post here as picks settle.</span>
+        </div>
+      )}
     </div>
   );
 }
 
-function EmptyState() {
+function HeroStat({ k, v, color, last }) {
   return (
-    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 8, padding: "48px 24px", textAlign: "center" }}>
-      <div style={{ fontSize: 34, marginBottom: 12 }}>🗓️</div>
-      <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>No picks posted yet today</div>
-      <div style={{ fontSize: 12, color: "#6b7280" }}>New WizePlays drop here daily. Check back soon.</div>
+    <div style={{ padding: "13px 14px", borderRight: last ? "none" : "1px solid #1f2937" }}>
+      <div style={{ fontFamily: MONO, fontSize: 9.5, letterSpacing: "0.12em", color: "#6b7280", marginBottom: 6 }}>{k}</div>
+      <div style={{ fontWeight: 800, fontSize: 19, letterSpacing: "-0.02em", whiteSpace: "nowrap", color: color || "#e4e7eb", fontVariantNumeric: "tabular-nums" }}>{v}</div>
     </div>
   );
 }
@@ -289,27 +308,26 @@ function Section({ title, count, children }) {
   return (
     <div style={{ marginBottom: 24 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
-        <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, letterSpacing: "0.02em" }}>{title}</h2>
-        <span style={{ fontSize: 11, color: "#6b7280" }}>{count} {count === 1 ? "pick" : "picks"}</span>
+        <h2 style={{ margin: 0, fontSize: 16, fontWeight: 800, letterSpacing: "0.02em" }}>{title}</h2>
+        <span style={{ fontFamily: MONO, fontSize: 11, color: "#6b7280" }}>{count} {count === 1 ? "pick" : "picks"}</span>
       </div>
       {children}
     </div>
   );
 }
 
-// ── Straight bet card ───────────────────────────────────────────────────────
-function StraightCard({ pick }) {
+// ── Straight bet row (Edge-board style: crest · pick/matchup · odds) ─────────
+function StraightRow({ pick, first }) {
   return (
-    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 8, padding: 14, position: "relative" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 8 }}>
-        {sportTag(pick.sport)}
-        <ResultBadge result={pick.result} />
+    <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "15px 16px", borderTop: first ? "none" : "1px solid rgba(255,255,255,0.055)" }}>
+      <TeamCrest ab={wpAbbr(pick)} lg={LGSLUG[pick.sport] || "mlb"} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontWeight: 800, fontSize: 16.5, letterSpacing: "-0.01em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{pick.pick}</div>
+        {pick.game && <div style={{ fontFamily: MONO, fontSize: 11.5, color: "#6b7280", marginTop: 5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{pick.game}</div>}
+        {pick.analysis && <div style={{ fontSize: 11, color: "#9ca3af", lineHeight: 1.5, marginTop: 6 }}>{pick.analysis}</div>}
       </div>
-      <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 3 }}>{pick.pick}</div>
-      <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: pick.analysis ? 8 : 0 }}>
-        {pick.game}{pick.odds != null && pick.game ? " · " : ""}<span style={{ color: "#e4e7eb", fontWeight: 600 }}>{formatOdds(pick.odds)}</span>
-      </div>
-      {pick.analysis && <div style={{ fontSize: 11, color: "#9ca3af", lineHeight: 1.5 }}>{pick.analysis}</div>}
+      {pick.odds != null && <div style={{ fontWeight: 800, fontSize: 18, letterSpacing: "-0.01em", fontVariantNumeric: "tabular-nums", flex: "0 0 auto" }}>{formatOdds(pick.odds)}</div>}
+      <ResultBadge result={pick.result} />
     </div>
   );
 }
@@ -409,7 +427,7 @@ function ResultBadge({ result }) {
   const c = map[normRes(result)];
   if (!c) return null;
   return (
-    <span style={{ fontSize: 9, fontWeight: 800, padding: "3px 8px", borderRadius: 4, background: c.bg, color: c.fg, border: `1px solid ${c.border}`, letterSpacing: "0.06em" }}>
+    <span style={{ fontSize: 9, fontWeight: 800, padding: "3px 8px", borderRadius: 4, background: c.bg, color: c.fg, border: `1px solid ${c.border}`, letterSpacing: "0.06em", flex: "0 0 auto" }}>
       {c.text}
     </span>
   );
@@ -418,8 +436,38 @@ function ResultBadge({ result }) {
 function Loader() {
   return (
     <div style={{ textAlign: "center", padding: 56 }}>
-      <div style={{ width: 30, height: 30, border: "3px solid #1f2937", borderTopColor: "#ef4444", borderRadius: "50%", animation: "spin .8s linear infinite", margin: "0 auto 12px" }} />
+      <div style={{ width: 30, height: 30, border: "3px solid #1f2937", borderTopColor: "#C9A86A", borderRadius: "50%", animation: "spin .8s linear infinite", margin: "0 auto 12px" }} />
       <div style={{ fontSize: 13, color: "#6b7280" }}>Loading WizePlays…</div>
+    </div>
+  );
+}
+
+// ── Locked teaser (one clean gate, no per-pick blur, no $7 buttons inline) ──
+function LockedTeaser({ record, navigate }) {
+  const graded = record.wins + record.losses;
+  const hook = graded > 0
+    ? `${record.wins}-${record.losses} on tracked picks · ${record.units >= 0 ? "+" : ""}${record.units.toFixed(2)} units`
+    : "Daily WizePlays — parlays & straight bets across MLB, NBA, NFL, NHL & college";
+  return (
+    <div style={{ position: "relative", background: "linear-gradient(180deg,#1a1410 0%,#0f1419 100%)", border: "1px solid #ef444433", borderLeft: "3px solid #ef4444", borderRadius: 10, padding: "40px 28px", textAlign: "center" }}>
+      <div style={{ fontSize: 38, marginBottom: 12 }}>🔒</div>
+      <div style={{ fontSize: 20, fontWeight: 800, marginBottom: 8 }}>Subscribe to see WizePlays</div>
+      <div style={{ fontSize: 13, color: "#9ca3af", maxWidth: 460, margin: "0 auto 22px", lineHeight: 1.6 }}>
+        {hook}. Full parlay breakdowns, straight bets, and an honest, fully-tracked record.
+      </div>
+      <button onClick={() => navigate("/pricing")} style={{ background: "#ef4444", color: "#fff", border: "none", borderRadius: 8, padding: "12px 28px", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+        Subscribe — $7/mo
+      </button>
+    </div>
+  );
+}
+
+function EmptyState() {
+  return (
+    <div style={{ background: "#0f1419", border: "1px solid #1f2937", borderRadius: 8, padding: "48px 24px", textAlign: "center" }}>
+      <div style={{ fontSize: 34, marginBottom: 12 }}>🗓️</div>
+      <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>No picks posted yet today</div>
+      <div style={{ fontSize: 12, color: "#6b7280" }}>New WizePlays drop here daily. Check back soon.</div>
     </div>
   );
 }
