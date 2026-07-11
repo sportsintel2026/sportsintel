@@ -53,7 +53,7 @@ export default function HomeDesktop(props) {
 
   const { edges, games = [], movers = [], live = [], abbrById = {}, topProps = [], propList = [], propsByType = {}, hero, hasFull, planLoaded = true, lineSeries = {}, moveByPick = {},
     wpRecord, navigate, plan = {}, sport = "mlb", setSport, marketsLive, anyLive, marketRead = [], perf = null, wpToday = [] } = props;
-  const lg = sport === "nba" ? "nba" : "mlb";
+  const lg = sport === "mlb" ? "mlb" : sport; // WZ-DESKTOP-FBALL-2026-07-11 :: NFL/CFB render in-board
   // Real tracked-record stats for the index cards (high-conviction ROI, honest beat-close CLV).
   const perfStats = (() => { const d = perf; if (!d) return null;
     const hi = d.byConfidence && d.byConfidence.HIGH ? d.byConfidence.HIGH : null;
@@ -177,13 +177,17 @@ export default function HomeDesktop(props) {
 
         <div className="content">
           <div className="maintop">
-            <div><h1>Today's Board</h1><div className="sub">{games.length} games · {sport.toUpperCase()} · model live</div></div>
+            <div><h1>Today's Board</h1><div className="sub">{sport === "mlb" ? games.length : rows.length} {sport === "mlb" ? "games" : "edges"} · {sport.toUpperCase()} · {(sport === "nfl" || sport === "cfb") ? "market live · model preview" : "model live"}</div></div>
             <div className="sportbar">
               {[["MLB", "mlb"], ["NBA", "nba"], ["NFL", "nfl"], ["NHL", "nhl"], ["CFB", "cfb"], ["UFC", "ufc"]].map(([lb, k]) => (
-                <div key={k} className={"sp" + (sport === k ? " on" : "")} onClick={() => (k === "mlb" || k === "nba") ? (setSport && setSport(k)) : navigate(k === "ufc" ? "/ufc" : `/${k}-games`)}><span className="d" />{lb}{k === "ufc" ? <span className="spnew">NEW</span> : null}</div>
+                <div key={k} className={"sp" + (sport === k ? " on" : "")} onClick={() => (k === "mlb" || k === "nba" || k === "nfl" || k === "cfb") ? (setSport && setSport(k)) : navigate(k === "ufc" ? "/ufc" : `/${k}-games`)}><span className="d" />{lb}{k === "ufc" ? <span className="spnew">NEW</span> : null}</div>
               ))}
             </div>
           </div>
+
+          {(sport === "nfl" || sport === "cfb") ? (
+            <div className="provbar">{sport.toUpperCase()} preview &mdash; book prices are live, but the model behind these edges is uncalibrated (2025 seed). Treat edges as directional until the season calibrates.</div>
+          ) : null}
 
           {/* INDEX ROW */}
                     <div className="indices">
@@ -217,7 +221,7 @@ export default function HomeDesktop(props) {
           {/* EDGE BOARD */}
           <div className="panel">
             <div className="phead"><div className="t">Edge Board</div>
-              <div className="seg">{[["ml", "Moneyline"], ["totals", "Totals"], ...(sport === "nba" ? [["spread", "Spread"]] : [])].map(([m, lb]) => (
+              <div className="seg">{[["ml", "Moneyline"], ["totals", "Totals"], ...(sport !== "mlb" ? [["spread", "Spread"]] : [])].map(([m, lb]) => (
                 <b key={m} className={market === m ? "on" : ""} onClick={() => setMarket(m)}>{lb}</b>))}</div>
               <div className="right"><span className="ldot" />click a column to sort</div>
             </div>
@@ -667,4 +671,6 @@ const TCSS = `
 .wpterm .idx.lead{border-color:var(--goldln)}
 .wpterm .idx.lead .v{font-family:var(--serif);color:var(--amber);font-weight:700;letter-spacing:-.3px}
 /* WZ-DESKTOP-VAULT-FIX-2026-07-11 */
+
+.wpterm .provbar{margin-top:6px;padding:9px 13px;border:1px solid rgba(201,168,106,.28);background:linear-gradient(180deg,rgba(201,168,106,.06),transparent);border-radius:11px;font-family:var(--mono);font-size:11px;line-height:1.45;color:var(--goldsoft)}
 `;
