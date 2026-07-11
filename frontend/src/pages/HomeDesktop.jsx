@@ -13,6 +13,8 @@ const formatOdds = (a) => { if (a == null || isNaN(a)) return "—"; const n = M
 const isTotal = (e) => e.side === "over" || e.side === "under";
 const shortTeam = (t) => { const m = String(t).match(/[A-Z]{2,3}/); return m ? m[0] : String(t).slice(0, 3).toUpperCase(); };
 const wpAbbr = (pk) => { const f = String((pk && pk.pick) || "").trim().split(/\s+/)[0]; if (/^[A-Za-z]{2,4}$/.test(f)) return f.toUpperCase(); const g = String((pk && pk.game) || "").trim().split(/\s+/)[0]; return /^[A-Za-z]{2,4}$/.test(g) ? g.toUpperCase() : ""; };
+// WZ-DESKTOP-VAULT-FIX2-2026-07-11 :: line-move uses amCents (matches movers rail); props above weather; props lead with HR.
+const amCents = (o) => { if (o == null || isNaN(o)) return null; const n = Number(o); return n >= 100 ? n - 100 : n <= -100 ? n + 100 : 0; };
 const edgeLabel = (e) => isTotal(e) ? `${e.side === "over" ? "Over" : "Under"} ${e.line}` : (e.line != null ? `${e.teamAbbr || shortTeam(e.matchup)} ${e.line > 0 ? "+" : ""}${e.line}` : `${e.teamAbbr || shortTeam(e.matchup)} ML`);
 const sideOf = (e) => e.side === "over" ? "ov" : e.side === "under" ? "un" : "ml";
 const sideTag = (e) => { const s = sideOf(e); return `<span class="side ${s}">${s === "ov" ? "OVER" : s === "un" ? "UNDER" : "PICK"}</span>`; };
@@ -67,7 +69,7 @@ export default function HomeDesktop(props) {
     return { roi, roiLbl, winRate, graded, clv: clvNum };
   })();
   const [market, setMarket] = useState("ml"); // WZ-WINNERS-V2-2026-07-04 :: Edge Board leads
-  const [propTab, setPropTab] = useState("hits");
+  const [propTab, setPropTab] = useState("hr");
   const [propSort, setPropSort] = useState({ key: "edge", dir: -1 });
   const [sortKey, setSortKey] = useState("edge");
   const [sortDir, setSortDir] = useState(-1);
@@ -246,7 +248,7 @@ export default function HomeDesktop(props) {
                             <td><div className="pick" dangerouslySetInnerHTML={{ __html: sideTag(x) + edgeLabel(x) }} /></td>
                             <td className="model-p">{x.modelProb != null ? `${Math.round(x.modelProb * 100)}%` : "—"}</td>
                             <td className="book">{formatOdds(x.odds)}{x.book ? <><br /><span className="bk">{x.book}</span></> : ""}</td>
-                            <td className="c">{(() => { const s = lineSeries[x.gameId + x.side]; if (!s || s.length < 2) return <span className="mvflat">flat</span>; const d = Math.round(s[s.length - 1] - s[0]); if (d === 0) return <span className="mvflat">flat</span>; const up = d > 0; return <span className={"mvchip " + (up ? "up" : "dn")}>{(up ? "\u25B2 " : "\u25BC ") + Math.abs(d) + "\u00A2"}</span>; })()}</td>
+                            <td className="c">{(() => { const s = lineSeries[x.gameId + x.side]; if (!s || s.length < 2) return <span className="mvflat">flat</span>; const a0 = amCents(s[0]), a1 = amCents(s[s.length - 1]); if (a0 == null || a1 == null) return <span className="mvflat">flat</span>; const d = Math.round(a1 - a0); if (d === 0) return <span className="mvflat">flat</span>; const up = d > 0; return <span className={"mvchip " + (up ? "up" : "dn")}>{(up ? "\u25B2 " : "\u25BC ") + Math.abs(d) + "\u00A2"}</span>; })()}</td>
                             <td className="edge-cell">{hasE ? <><div className={"edge-v " + (pos ? "up" : "dn")}>{fmtEdge(x, sport)}</div><div className="edge-bar"><i style={{ width: Math.min(100, Math.abs(ep) * 12 + 8) + "%" }} /></div></> : <span className="nomove">no edge</span>}</td>
                             <td className="c"><span className={"conv " + convClass(x._convAdj || x.conviction)}>{(x._convAdj || x.conviction || "—")}{x._moveDir > 0 ? " ↑" : x._moveDir < 0 ? " ↓" : ""}</span>{x._moveFlag === "against" && <div className="dmove against"> moving against</div>}{x._moveFlag === "toward" && <div className="dmove toward">↘ money in</div>}</td>
                           </tr>
@@ -287,43 +289,12 @@ export default function HomeDesktop(props) {
             </div>
           )}
 
-          {/* WEATHER FACTOR */}
-          {wx.length > 0 && (
-            <div className="panel">
-              <div className="phead"><div className="t">Weather Factor</div><div className="right">first-pitch forecast → run environment</div></div>
-              <table className="tbl">
-                <thead><tr><th>Matchup</th><th className="c">Temp</th><th>Wind</th><th className="c">Sky</th><th className="c">Park RF</th><th>Model Read</th></tr></thead>
-                <tbody>
-                  {wx.map((g, i) => {
-                    const w = g.weather; const a = g.awayAbbr || shortTeam(g.away); const h = g.homeAbbr || shortTeam(g.home);
-                    const tC = w.tempEffect === "hot" ? "hot" : w.tempEffect === "cold" ? "cold" : "mild";
-                    const wc = w.windEffect === "out" ? "out" : w.windEffect === "in" ? "in" : "cross";
-                    const wAr = w.windEffect === "out" ? "↗" : w.windEffect === "in" ? "↘" : "→";
-                    const rf = g.parkRunFactor; const rfc = rf > 1.01 ? "up" : rf < 0.99 ? "dn" : "";
-                    return (
-                      <tr key={g.id || i}>
-                        <td><div className="matchup"><span className="logos"><TLogo ab={a} /><TLogo ab={h} /></span><span className="mu"><span className="mua">{a}<span className="at"> @ </span>{h}</span></span></div></td>
-                        {w.indoor
-                          ? <><td className="c"><span className="dome">roof closed</span></td><td><span className="dome">no wind</span></td><td className="c"><span className="sky"></span></td></>
-                          : <><td className="c"><span className={"temp " + tC}>{w.tempF != null ? `${w.tempF}°` : "—"}</span></td>
-                            <td><span className={"wind " + wc}><span className="war">{wAr}</span>{w.windMph != null ? `${w.windMph} mph` : "calm"}</span></td>
-                            <td className="c"><span className="sky">{w.isRaining ? "Rain" : "Clear"}</span></td></>}
-                        <td className="c">{rf != null ? <span className={"rf " + rfc}>{rf.toFixed(2)}×</span> : "—"}</td>
-                        <td className="wsum">{w.summary || w.conditions || "—"}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-
           {/* PLAYER PROPS */}
           <div className="panel">
             <div className="phead">
               <div className="t">Player Props</div>
               <div className="ptabs">
-                {[["hits", "Hits"], ["ks", "Strikeouts"], ["hr", "Home Runs"]].map(([k, lb]) => (
+                {[["hr", "Home Runs"], ["hits", "Hits"], ["ks", "Strikeouts"]].map(([k, lb]) => (
                   <button key={k} className={"ptab" + (propTab === k ? " on" : "")} onClick={() => setPropTab(k)}>{lb}</button>
                 ))}
               </div>
@@ -362,6 +333,37 @@ export default function HomeDesktop(props) {
                 </table>
               </>}
           </div>
+
+          {/* WEATHER FACTOR */}
+          {wx.length > 0 && (
+            <div className="panel">
+              <div className="phead"><div className="t">Weather Factor</div><div className="right">first-pitch forecast → run environment</div></div>
+              <table className="tbl">
+                <thead><tr><th>Matchup</th><th className="c">Temp</th><th>Wind</th><th className="c">Sky</th><th className="c">Park RF</th><th>Model Read</th></tr></thead>
+                <tbody>
+                  {wx.map((g, i) => {
+                    const w = g.weather; const a = g.awayAbbr || shortTeam(g.away); const h = g.homeAbbr || shortTeam(g.home);
+                    const tC = w.tempEffect === "hot" ? "hot" : w.tempEffect === "cold" ? "cold" : "mild";
+                    const wc = w.windEffect === "out" ? "out" : w.windEffect === "in" ? "in" : "cross";
+                    const wAr = w.windEffect === "out" ? "↗" : w.windEffect === "in" ? "↘" : "→";
+                    const rf = g.parkRunFactor; const rfc = rf > 1.01 ? "up" : rf < 0.99 ? "dn" : "";
+                    return (
+                      <tr key={g.id || i}>
+                        <td><div className="matchup"><span className="logos"><TLogo ab={a} /><TLogo ab={h} /></span><span className="mu"><span className="mua">{a}<span className="at"> @ </span>{h}</span></span></div></td>
+                        {w.indoor
+                          ? <><td className="c"><span className="dome">roof closed</span></td><td><span className="dome">no wind</span></td><td className="c"><span className="sky"></span></td></>
+                          : <><td className="c"><span className={"temp " + tC}>{w.tempF != null ? `${w.tempF}°` : "—"}</span></td>
+                            <td><span className={"wind " + wc}><span className="war">{wAr}</span>{w.windMph != null ? `${w.windMph} mph` : "calm"}</span></td>
+                            <td className="c"><span className="sky">{w.isRaining ? "Rain" : "Clear"}</span></td></>}
+                        <td className="c">{rf != null ? <span className={"rf " + rfc}>{rf.toFixed(2)}×</span> : "—"}</td>
+                        <td className="wsum">{w.summary || w.conditions || "—"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           <div className="footnote">Sample of the desktop terminal · all figures live from your models. Mobile layout unchanged.</div>
         </div>
