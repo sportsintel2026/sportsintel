@@ -7,6 +7,10 @@
 // No top banner (removed by request).
 
 import { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
+import { subscriptionApi } from "../lib/api";
+import TerminalShell from "./TerminalShell";
+// WZ-UFC-DESKTOP-2026-07-11 :: UFC card gains a desktop layout inside the shared Vault shell; mobile untouched.
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
@@ -75,6 +79,15 @@ const CSS = `
 .ufc-retry{margin-top:14px;display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#C9A86A;border:1px solid rgba(201,168,106,.4);border-radius:8px;padding:8px 16px;cursor:pointer;background:none}
 .ufc-skel{height:120px;margin:0 4px 10px;border-radius:14px;background:linear-gradient(90deg,#0C0D10,#14171B,#0C0D10);background-size:200% 100%;animation:ufcsh 1.3s linear infinite}
 @keyframes ufcsh{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
+.ufc-reclink{margin-top:11px;display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.5px;color:#C9A86A;border:1px solid rgba(201,168,106,.3);border-radius:8px;padding:6px 12px;cursor:pointer}
+.ufc-reclink:hover{background:rgba(201,168,106,.08)}
+@media (min-width:1024px){
+  .ufc-wrap{background:transparent;padding:0 0 40px}
+  .ufc-in{max-width:none;margin:0;padding:20px 26px 0}
+  .ufc-evt{max-width:none}
+  .ufc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px;margin:0}
+}
 `;
 
 function initials(name) {
@@ -165,6 +178,9 @@ export default function UFCPage() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const navigate = useNavigate();
+  const [plan, setPlan] = useState({ tier: "free", isAdmin: false });
+  useEffect(() => { subscriptionApi.getMyPlan().then(setPlan).catch(() => {}); }, []);
 
   const load = useCallback(async () => {
     setLoading(true); setError(false);
@@ -186,6 +202,7 @@ export default function UFCPage() {
   const total = mainCard.length + prelims.length;
 
   return (
+    <TerminalShell active="/ufc" plan={plan} navigate={navigate}>
     <div className="ufc-wrap">
       <style>{CSS}</style>
       <div className="ufc-in">
@@ -221,6 +238,7 @@ export default function UFCPage() {
               {event && (event.dateLabel || event.venue) ? (
                 <div className="m">{[event.dateLabel, event.venue, event.city].filter(Boolean).join(" \u00b7 ")}</div>
               ) : null}
+              <div className="ufc-reclink" onClick={() => navigate("/ufc-record")}>View record &rarr;</div>
             </div>
 
             {mainCard.length > 0 && (
@@ -241,5 +259,6 @@ export default function UFCPage() {
 
       </div>
     </div>
+    </TerminalShell>
   );
 }
