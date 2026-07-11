@@ -186,7 +186,7 @@ export default function HomeDesktop(props) {
           {/* INDEX ROW */}
                     <div className="indices">
             {/* WZ-EDGES-WIZEPLAYS-KPI-2026-07-10 :: desktop index row leads with the real WizePlays record (wl/winPct/units from wpRecord). */}
-            <div className="idx green"><div className="k">WizePlays</div><div className="v num">{wl}</div><div className="chg">{wpRecord && (wpRecord.wins+wpRecord.losses+wpRecord.pushes)>0 ? "W-L-P · all graded" : "tracking"}</div></div>
+            <div className="idx lead"><div className="k">WizePlays</div><div className="v num">{wl}</div><div className="chg">{wpRecord && (wpRecord.wins+wpRecord.losses+wpRecord.pushes)>0 ? "W-L-P · all graded" : "tracking"}</div></div>
             <div className="idx green"><div className="k">Win Rate</div><div className="v num">{winPct != null ? `${winPct}%` : "—"}</div><div className="chg">{wpRecord ? `${wpRecord.wins+wpRecord.losses+wpRecord.pushes} graded` : "tracking"}</div></div>
             <div className="idx teal"><div className="k">Units</div><div className="v num">{units != null ? `${units >= 0 ? "+" : ""}${units.toFixed(1)}u` : "—"}</div><div className="chg">all plays</div></div>
             <div className="idx purple"><div className="k">Edges Live</div><div className="v num">{edgeCount}</div><div className="chg">{market.toUpperCase()} board · {rows.length} shown</div></div>
@@ -246,7 +246,7 @@ export default function HomeDesktop(props) {
                             <td><div className="pick" dangerouslySetInnerHTML={{ __html: sideTag(x) + edgeLabel(x) }} /></td>
                             <td className="model-p">{x.modelProb != null ? `${Math.round(x.modelProb * 100)}%` : "—"}</td>
                             <td className="book">{formatOdds(x.odds)}{x.book ? <><br /><span className="bk">{x.book}</span></> : ""}</td>
-                            <td className="c">{(() => { const s = lineSeries[x.gameId + x.side]; if (!s || s.length < 2) return <span className="mvflat">flat</span>; const d = Math.round(s[s.length - 1] - s[0]); if (d === 0) return <span className="mvflat">flat</span>; const up = d > 0; return <span className={"mvchip " + (up ? "up" : "dn")}>{up ? "\u25B2" : "\u25BC"} {Math.abs(d)}\u00A2</span>; })()}</td>
+                            <td className="c">{(() => { const s = lineSeries[x.gameId + x.side]; if (!s || s.length < 2) return <span className="mvflat">flat</span>; const d = Math.round(s[s.length - 1] - s[0]); if (d === 0) return <span className="mvflat">flat</span>; const up = d > 0; return <span className={"mvchip " + (up ? "up" : "dn")}>{(up ? "\u25B2 " : "\u25BC ") + Math.abs(d) + "\u00A2"}</span>; })()}</td>
                             <td className="edge-cell">{hasE ? <><div className={"edge-v " + (pos ? "up" : "dn")}>{fmtEdge(x, sport)}</div><div className="edge-bar"><i style={{ width: Math.min(100, Math.abs(ep) * 12 + 8) + "%" }} /></div></> : <span className="nomove">no edge</span>}</td>
                             <td className="c"><span className={"conv " + convClass(x._convAdj || x.conviction)}>{(x._convAdj || x.conviction || "—")}{x._moveDir > 0 ? " ↑" : x._moveDir < 0 ? " ↓" : ""}</span>{x._moveFlag === "against" && <div className="dmove against"> moving against</div>}{x._moveFlag === "toward" && <div className="dmove toward">↘ money in</div>}</td>
                           </tr>
@@ -656,4 +656,13 @@ const TCSS = `
 .wpterm .mvchip.up{color:var(--up);background:rgba(70,224,169,.09)}.wpterm .mvchip.dn{color:var(--dn);background:rgba(226,101,92,.1)}
 .wpterm .mvflat{font-family:var(--mono);font-size:11px;color:var(--mut2)}
 .wpterm .sportbar .spnew{margin-left:5px;font-family:var(--mono);font-size:7.5px;font-weight:700;letter-spacing:.5px;color:#1a1206;background:var(--amber);border-radius:4px;padding:1px 4px;vertical-align:middle}
+
+.wpterm .tk .s{font-family:'Manrope',system-ui,sans-serif}
+.wpterm .mrtbl .mu{font-family:'Manrope',system-ui,sans-serif}
+.wpterm .rmv .ml{font-family:'Manrope',system-ui,sans-serif}
+.wpterm .idx{position:relative}
+.wpterm .idx::before{content:"";position:absolute;left:14px;right:14px;top:0;height:1px;background:linear-gradient(90deg,transparent,var(--goldln),transparent)}
+.wpterm .idx.lead{border-color:var(--goldln)}
+.wpterm .idx.lead .v{font-family:var(--serif);color:var(--amber);font-weight:700;letter-spacing:-.3px}
+/* WZ-DESKTOP-VAULT-FIX-2026-07-11 */
 `;
