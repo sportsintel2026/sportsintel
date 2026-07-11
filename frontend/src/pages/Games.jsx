@@ -318,10 +318,11 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .estate{margin:40px 14px;border:1px dashed var(--line2);border-radius:14px;padding:36px 18px;text-align:center}
 .estate .et{font-family:var(--disp);font-weight:800;font-size:18px;color:#cfd7e2}.estate .es{font-size:12px;color:var(--mut);margin-top:6px;font-family:var(--mono)}
 #wrap{padding-bottom:96px}
-.nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:460px;display:flex;justify-content:space-around;padding:7px 4px;background:rgba(0,0,0,.96);backdrop-filter:blur(12px);border-top:1px solid var(--line);z-index:20}
-.nav a{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;font-family:var(--disp);font-weight:700;font-size:10px;letter-spacing:.3px;color:var(--mut2);text-decoration:none}
+/* WZ-DESKTOP-NAVSCOPE-2026-07-11 */
+.app .nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:460px;display:flex;justify-content:space-around;padding:7px 4px;background:rgba(0,0,0,.96);backdrop-filter:blur(12px);border-top:1px solid var(--line);z-index:20}
+.app .nav a{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;font-family:var(--disp);font-weight:700;font-size:10px;letter-spacing:.3px;color:var(--mut2);text-decoration:none}
 .nav a.on{color:var(--gold)}.nav a .i{font-size:15px;line-height:1}
-.nav a .dbars rect{fill:var(--mut2)}.nav a.on .dbars rect{fill:var(--gold)}
+.nav a .dbars rect{fill:var(--mut2)}.app .nav a.on .dbars rect{fill:var(--gold)}
 /* detail sheet */
 .sheet{position:fixed;top:0;bottom:0;left:50%;width:100%;max-width:460px;z-index:200;background:var(--bg);overflow-y:auto;transform:translate(-50%,100%);transition:transform .28s cubic-bezier(.4,0,.2,1);visibility:hidden}
 .sheet.open{transform:translate(-50%,0);visibility:visible}
