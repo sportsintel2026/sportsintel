@@ -191,13 +191,17 @@ export default function HomeDesktop(props) {
 
         <div className="content">
           <div className="maintop">
-            <div><h1>Today's Board</h1><div className="sub">{sport === "mlb" ? games.length : rows.length} {sport === "mlb" ? "games" : "edges"} · {sport.toUpperCase()} · {(sport === "nfl" || sport === "cfb") ? "market live · model preview" : "model live"}</div></div>
+            <div><h1>Today's Board</h1><div className="sub">{sport === "mlb" ? games.length : rows.length} {sport === "mlb" ? "games" : "edges"} · {sport.toUpperCase()} · {sport === "nhl" ? "season opens — model arrives with games" : (sport === "nfl" || sport === "cfb") ? "market live · model preview" : "model live"}</div></div>
             <div className="sportbar">
               {[["MLB", "mlb"], ["NBA", "nba"], ["NFL", "nfl"], ["NHL", "nhl"], ["CFB", "cfb"], ["UFC", "ufc"]].map(([lb, k]) => (
-                <div key={k} className={"sp" + (sport === k ? " on" : "")} onClick={() => (k === "mlb" || k === "nba" || k === "nfl" || k === "cfb") ? (setSport && setSport(k)) : navigate(k === "ufc" ? "/ufc" : `/${k}-games`)}><span className="d" />{lb}{k === "ufc" ? <span className="spnew">NEW</span> : null}</div>
+                <div key={k} className={"sp" + (sport === k ? " on" : "")} onClick={() => (k === "ufc") ? navigate("/ufc") : (setSport && setSport(k))} /* WZ-DESKTOP-NHL-INBOARD-2026-07-11 :: all sports switch in-board; only UFC navigates */><span className="d" />{lb}{k === "ufc" ? <span className="spnew">NEW</span> : null}</div>
               ))}
             </div>
           </div>
+
+          {sport === "nhl" ? (
+            <div className="provbar">NHL board opens at the season &mdash; the model posts edges here from day one. Live scores are under Games &amp; Scores.</div>
+          ) : null}
 
           {(sport === "nfl" || sport === "cfb") ? (
             <div className="provbar">{sport.toUpperCase()} preview &mdash; book prices are live, but the model behind these edges is uncalibrated (2025 seed). Treat edges as directional until the season calibrates.</div>
