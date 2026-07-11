@@ -180,6 +180,9 @@ function SportGate({ section, allow, children }) {
   const [params] = useSearchParams();
   const sport = (params.get("sport") || "mlb").toLowerCase();
   if (allow.includes(sport)) return children;
+  // WZ-DESKTOP-NHL-GATE-2026-07-11 :: NHL Edges renders inside the desktop board (>=1024) with an
+  // honest "arrives with the season" state; mobile keeps the coming-soon placeholder untouched.
+  if (sport === "nhl" && section === "Edges" && typeof window !== "undefined" && window.innerWidth >= 1024) return children;
   const SP = sport.toUpperCase();
   return <ComingSoon title={`${SP} · ${section}`} note={`${section} for ${SP} is coming soon — we'll wire it in as the data lands.`} />;
 }
