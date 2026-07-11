@@ -136,7 +136,8 @@ export function SportTabsHeader() {
       <style>{CSS}</style>
       <header className="wpnav-hd">
         <div className="wpnav-hr">
-          <div className="wpnav-bd">Wize<i>Picks</i></div>
+          {/* WZ-WIZEPLAYS-BRAND-2026-07-11 :: this shared header shows WizePlays only on the WizePlays page (/expert-picks); every other page keeps WizePicks. */}
+          <div className="wpnav-bd">Wize<i>{pathname === "/expert-picks" ? "Plays" : "Picks"}</i></div>
           <span className="wpnav-op"><span className="dot" />OPEN</span>
           <div className="wpnav-spacer" />
           <div className="wpnav-ib" onClick={() => navigate("/settings")} aria-label="Account">
