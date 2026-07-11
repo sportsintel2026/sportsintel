@@ -12,6 +12,7 @@ const ESPN = (ab, lg = "mlb") => { const a = String(ab || "").toLowerCase(); con
 const formatOdds = (a) => { if (a == null || isNaN(a)) return "—"; const n = Math.round(Number(a)); return n > 0 ? `+${n}` : `${n}`; };
 const isTotal = (e) => e.side === "over" || e.side === "under";
 const shortTeam = (t) => { const m = String(t).match(/[A-Z]{2,3}/); return m ? m[0] : String(t).slice(0, 3).toUpperCase(); };
+const wpAbbr = (pk) => { const f = String((pk && pk.pick) || "").trim().split(/\s+/)[0]; if (/^[A-Za-z]{2,4}$/.test(f)) return f.toUpperCase(); const g = String((pk && pk.game) || "").trim().split(/\s+/)[0]; return /^[A-Za-z]{2,4}$/.test(g) ? g.toUpperCase() : ""; };
 const edgeLabel = (e) => isTotal(e) ? `${e.side === "over" ? "Over" : "Under"} ${e.line}` : (e.line != null ? `${e.teamAbbr || shortTeam(e.matchup)} ${e.line > 0 ? "+" : ""}${e.line}` : `${e.teamAbbr || shortTeam(e.matchup)} ML`);
 const sideOf = (e) => e.side === "over" ? "ov" : e.side === "under" ? "un" : "ml";
 const sideTag = (e) => { const s = sideOf(e); return `<span class="side ${s}">${s === "ov" ? "OVER" : s === "un" ? "UNDER" : "PICK"}</span>`; };
@@ -49,7 +50,7 @@ export default function HomeDesktop(props) {
   // WZ-WINNERS-REMOVED-2026-07-05 :: Winners lens removed — Edge Board is the sole board.
 
   const { edges, games = [], movers = [], live = [], abbrById = {}, topProps = [], propList = [], propsByType = {}, hero, hasFull, planLoaded = true, lineSeries = {}, moveByPick = {},
-    wpRecord, navigate, plan = {}, sport = "mlb", setSport, marketsLive, anyLive, marketRead = [], perf = null } = props;
+    wpRecord, navigate, plan = {}, sport = "mlb", setSport, marketsLive, anyLive, marketRead = [], perf = null, wpToday = [] } = props;
   const lg = sport === "nba" ? "nba" : "mlb";
   // Real tracked-record stats for the index cards (high-conviction ROI, honest beat-close CLV).
   const perfStats = (() => { const d = perf; if (!d) return null;
@@ -135,7 +136,7 @@ export default function HomeDesktop(props) {
 
   const NAV = [
     ["BOARD", null],
-    ["", "Dashboard", "/home", true],
+    ["", "Edges", "/home", true],
     ["", "Market Price", "/odds"],
     ["", "Market Read", "/market-read"],
     ["", "Props", "/props"],
@@ -176,8 +177,8 @@ export default function HomeDesktop(props) {
           <div className="maintop">
             <div><h1>Today's Board</h1><div className="sub">{games.length} games · {sport.toUpperCase()} · model live</div></div>
             <div className="sportbar">
-              {[["MLB", "mlb"], ["NBA", "nba"], ["NFL", "nfl"], ["NHL", "nhl"], ["CFB", "cfb"]].map(([lb, k]) => (
-                <div key={k} className={"sp" + (sport === k ? " on" : "")} onClick={() => (k === "mlb" || k === "nba") ? (setSport && setSport(k)) : navigate(`/${k}-games`)}><span className="d" />{lb}</div>
+              {[["MLB", "mlb"], ["NBA", "nba"], ["NFL", "nfl"], ["NHL", "nhl"], ["CFB", "cfb"], ["UFC", "ufc"]].map(([lb, k]) => (
+                <div key={k} className={"sp" + (sport === k ? " on" : "")} onClick={() => (k === "mlb" || k === "nba") ? (setSport && setSport(k)) : navigate(k === "ufc" ? "/ufc" : `/${k}-games`)}><span className="d" />{lb}{k === "ufc" ? <span className="spnew">NEW</span> : null}</div>
               ))}
             </div>
           </div>
@@ -189,6 +190,26 @@ export default function HomeDesktop(props) {
             <div className="idx green"><div className="k">Win Rate</div><div className="v num">{winPct != null ? `${winPct}%` : "—"}</div><div className="chg">{wpRecord ? `${wpRecord.wins+wpRecord.losses+wpRecord.pushes} graded` : "tracking"}</div></div>
             <div className="idx teal"><div className="k">Units</div><div className="v num">{units != null ? `${units >= 0 ? "+" : ""}${units.toFixed(1)}u` : "—"}</div><div className="chg">all plays</div></div>
             <div className="idx purple"><div className="k">Edges Live</div><div className="v num">{edgeCount}</div><div className="chg">{market.toUpperCase()} board · {rows.length} shown</div></div>
+          </div>
+
+          {/* WZ-DESKTOP-WIZEPLAYS-PANEL-2026-07-11 :: record always visible; today's curated picks gated to All-Access (matches mobile). Reads wpToday (added prop) + wpRecord. */}
+          <div className="panel wpsec">
+            <div className="phead"><div className="t">WizePlays</div><span className="wpbadge">CURATED</span><span className="wplock">PICKS · ALL-ACCESS</span><div className="right" onClick={() => navigate("/expert-picks")} style={{ cursor: "pointer" }}>record always visible · picks unlock with All-Access &rarr;</div></div>
+            <div className="wprec">
+              <div className="wprl"><span className="wpk">Record</span><span className="wpv">{wl}</span></div>
+              <div className="wprl"><span className="wpk">Units</span><span className={"wpv " + (units != null && units >= 0 ? "up" : units != null ? "dn" : "")}>{units != null ? `${units >= 0 ? "+" : ""}${units.toFixed(1)}u` : "\u2014"}</span></div>
+              <div className="wprl"><span className="wpk">Win rate</span><span className="wpv">{winPct != null ? `${winPct}%` : "\u2014"}</span></div>
+            </div>
+            {!hasFull
+              ? <Lock title="WizePlays picks are All-Access" sub={<>Every curated play, every day &mdash; losses included. <b>From $7/wk</b></>} navigate={navigate} />
+              : wpToday.length > 0
+                ? wpToday.map((pk, i) => (
+                    <div className="wprow" key={i} onClick={() => navigate("/expert-picks")}>
+                      <span className="wplogo">{wpAbbr(pk) || "\u2022"}</span>
+                      <div className="wpmid"><div className="wpp">{pk.pick}</div>{pk.game && <div className="wpg">{pk.game}</div>}</div>
+                      {pk.odds != null && <div className="wpo">{formatOdds(pk.odds)}</div>}
+                    </div>))
+                : <div className="empty">No active WizePlays right now &mdash; curated plays post before first pitch.</div>}
           </div>
 
           {/* EDGE BOARD */}
@@ -225,7 +246,7 @@ export default function HomeDesktop(props) {
                             <td><div className="pick" dangerouslySetInnerHTML={{ __html: sideTag(x) + edgeLabel(x) }} /></td>
                             <td className="model-p">{x.modelProb != null ? `${Math.round(x.modelProb * 100)}%` : "—"}</td>
                             <td className="book">{formatOdds(x.odds)}{x.book ? <><br /><span className="bk">{x.book}</span></> : ""}</td>
-                            <td className="c">{(() => { const s = lineSeries[x.gameId + x.side]; return s && s.length > 1 ? <span dangerouslySetInnerHTML={{ __html: miniSpark(s) }} /> : <span className="nomove">—</span>; })()}</td>
+                            <td className="c">{(() => { const s = lineSeries[x.gameId + x.side]; if (!s || s.length < 2) return <span className="mvflat">flat</span>; const d = Math.round(s[s.length - 1] - s[0]); if (d === 0) return <span className="mvflat">flat</span>; const up = d > 0; return <span className={"mvchip " + (up ? "up" : "dn")}>{up ? "\u25B2" : "\u25BC"} {Math.abs(d)}\u00A2</span>; })()}</td>
                             <td className="edge-cell">{hasE ? <><div className={"edge-v " + (pos ? "up" : "dn")}>{fmtEdge(x, sport)}</div><div className="edge-bar"><i style={{ width: Math.min(100, Math.abs(ep) * 12 + 8) + "%" }} /></div></> : <span className="nomove">no edge</span>}</td>
                             <td className="c"><span className={"conv " + convClass(x._convAdj || x.conviction)}>{(x._convAdj || x.conviction || "—")}{x._moveDir > 0 ? " ↑" : x._moveDir < 0 ? " ↓" : ""}</span>{x._moveFlag === "against" && <div className="dmove against"> moving against</div>}{x._moveFlag === "toward" && <div className="dmove toward">↘ money in</div>}</td>
                           </tr>
@@ -413,9 +434,9 @@ export default function HomeDesktop(props) {
 }
 
 const TCSS = `
-.wpterm{--ink:#0A0B0D;--panel:#14171B;--line:rgba(255,255,255,.06);--line2:rgba(255,255,255,.12);--teal:#3FCB91;--up:#46E0A9;--dn:#E2655C;--model:#C08BFF;--amber:#C9A86A;--cold:#5DA9E8;--tx:#ECEFF2;--mut:#99A2AA;--mut2:#5B646C;--mono:'IBM Plex Mono',ui-monospace,monospace;--disp:'Barlow Condensed',sans-serif;--serif:Georgia,'Times New Roman',serif;
-  position:relative;min-height:100vh;width:100%;background:var(--ink);color:var(--tx);font-family:'Inter',system-ui,sans-serif;display:flex;flex-direction:column;
-  background-image:none}
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700;9..144,900&family=Manrope:wght@400;500;600;700;800&display=swap');
+.wpterm{--ink:#101013;--panel:#17171B;--line:rgba(201,168,106,.14);--line2:rgba(255,255,255,.06);--teal:#3FCB91;--up:#46E0A9;--dn:#E2655C;--model:#C08BFF;--amber:#C9A86A;--goldsoft:#D8BE8C;--goldbg:rgba(201,168,106,.10);--goldln:rgba(201,168,106,.30);--cold:#7FB6E6;--tx:#EDEBE6;--mut:#9A958A;--mut2:#6A6459;--mono:'IBM Plex Mono',ui-monospace,monospace;--disp:'Fraunces',Georgia,serif;--serif:'Fraunces',Georgia,serif;
+  position:relative;min-height:100vh;width:100%;background:radial-gradient(130% 70% at 50% -8%,rgba(201,168,106,.06),transparent 55%),var(--ink);color:var(--tx);font-family:'Manrope',system-ui,sans-serif;display:flex;flex-direction:column}
 .wpterm .num{font-family:var(--mono);font-variant-numeric:tabular-nums}
 .wpterm .status{position:sticky;top:0;z-index:30;flex:0 0 52px;display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:18px;height:52px;padding:0 18px;border-bottom:1px solid var(--line);background:#0E1013}
 .wpterm .brand{display:flex;align-items:center;gap:9px}
@@ -618,4 +639,21 @@ const TCSS = `
 .wpterm .mrtbl .mu{font-family:var(--disp);font-weight:700;font-size:14px}.wpterm .mrtbl .mu .at{color:var(--mut2)}
 .wpterm .mrtag{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:800}.wpterm .mrtag .dot{width:8px;height:8px;border-radius:50%}
 .wpterm .mrtbl .magree{color:var(--up);font-weight:800}.wpterm .mrtbl .mdiff{color:var(--amber);font-weight:800}.wpterm .mrtbl .mnone{color:var(--mut2)}
+
+.wpterm .wpsec .wpbadge{font-family:var(--mono);font-size:9px;letter-spacing:1px;color:var(--amber);border:1px solid var(--goldln);border-radius:5px;padding:2px 7px;margin-left:-2px}
+.wpterm .wpsec .wplock{font-family:var(--mono);font-size:8.5px;letter-spacing:.8px;color:var(--goldsoft);background:var(--goldbg);border:1px solid var(--goldln);border-radius:5px;padding:2px 7px}
+.wpterm .wprec{display:flex;gap:26px;padding:13px 16px;border-bottom:1px solid var(--line2);background:rgba(201,168,106,.03)}
+.wpterm .wprl{display:flex;flex-direction:column;gap:3px}
+.wpterm .wpk{font-size:9.5px;font-weight:800;letter-spacing:.7px;text-transform:uppercase;color:var(--mut)}
+.wpterm .wpv{font-family:var(--serif);font-weight:700;font-size:19px;color:var(--amber);letter-spacing:-.3px}
+.wpterm .wpv.up{color:var(--up)}.wpterm .wpv.dn{color:var(--dn)}
+.wpterm .wprow{display:flex;align-items:center;gap:11px;padding:11px 16px;border-bottom:1px solid var(--line2);cursor:pointer}
+.wpterm .wprow:last-child{border-bottom:0}.wpterm .wprow:hover{background:rgba(201,168,106,.03)}
+.wpterm .wplogo{width:24px;height:24px;flex:0 0 auto;border-radius:6px;background:#232019;border:1px solid var(--line2);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:9px;font-weight:700;color:var(--goldsoft)}
+.wpterm .wpmid{flex:1;min-width:0}.wpterm .wpp{font-weight:700;font-size:13.5px}.wpterm .wpg{font-family:var(--mono);font-size:11px;color:var(--mut);margin-top:2px}
+.wpterm .wpo{font-family:var(--mono);font-size:13px;color:#c4cdd9}
+.wpterm .mvchip{font-family:var(--mono);font-size:11px;font-weight:700;border-radius:5px;padding:3px 8px}
+.wpterm .mvchip.up{color:var(--up);background:rgba(70,224,169,.09)}.wpterm .mvchip.dn{color:var(--dn);background:rgba(226,101,92,.1)}
+.wpterm .mvflat{font-family:var(--mono);font-size:11px;color:var(--mut2)}
+.wpterm .sportbar .spnew{margin-left:5px;font-family:var(--mono);font-size:7.5px;font-weight:700;letter-spacing:.5px;color:#1a1206;background:var(--amber);border-radius:4px;padding:1px 4px;vertical-align:middle}
 `;
