@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { edgesApi, scoresApi, subscriptionApi } from "../lib/api";
+import TerminalShell from "./TerminalShell";
 
 // ---- helpers ----
 const TEAMCOL = {
@@ -156,14 +157,11 @@ export default function GamesPage() {
   const showFin  = (filter==="All"||filter==="Final") && fin.length;
   const nothing = !loading && !(showLive||showPre||showFin);
 
-  // WZ-GAMES-DESKGATE-2026-07-02 :: >=1024px the MLB experience IS the Dashboard
-  // terminal (per Master G's dashboard-parity directive) — redirect there. Mobile
-  // below is untouched. Detection mirrors Home.jsx.
-  const isDesk = typeof window !== "undefined" && winW >= 1024;
-  useEffect(()=>{ if(isDesk) navigate("/home?sport=mlb",{replace:true}); },[isDesk]);
-  if (isDesk) return null;
+  // WZ-GAMES-DESKTOP-2026-07-11 :: >=1024px Games renders its own desktop surface inside the
+  // shared Vault shell (supersedes the old dashboard redirect). Mobile layout below untouched.
 
   return (
+    <TerminalShell active="/games" plan={plan} navigate={navigate}>
     <div className="app"><style>{CSS}</style>
       <div className="hd">
         <div className="hrow">
@@ -185,15 +183,15 @@ export default function GamesPage() {
         {loading && <div className="estate"><div className="et">Loading today's games…</div><div className="es">Pulling the slate.</div></div>}
         {!loading && showLive && <>
           <div className="seclbl"><span className="ld"/>LIVE NOW <span className="c">{live.length} in play</span></div>
-          {live.map(g=><GameCard key={g.id} g={g} navigate={navigate}/>)}
+          <div className="glist">{live.map(g=><GameCard key={g.id} g={g} navigate={navigate}/>)}</div>
         </>}
         {!loading && showPre && <>
           <div className="seclbl">UPCOMING <span className="c">{pre.length} games · probables &amp; lines</span></div>
-          {pre.map(g=><GameCard key={g.id} g={g} navigate={navigate}/>)}
+          <div className="glist">{pre.map(g=><GameCard key={g.id} g={g} navigate={navigate}/>)}</div>
         </>}
         {!loading && showFin && <>
           <div className="seclbl">FINAL <span className="c">today</span></div>
-          {fin.map(g=><GameCard key={g.id} g={g} navigate={navigate}/>)}
+          <div className="glist">{fin.map(g=><GameCard key={g.id} g={g} navigate={navigate}/>)}</div>
         </>}
         {nothing && <div className="estate"><div className="et">Nothing here yet</div><div className="es">No {filter.toLowerCase()} games right now.</div></div>}
       </div>
@@ -207,6 +205,7 @@ export default function GamesPage() {
         <a onClick={()=>navigate("/settings")}><span className="i">{"\u25cd"}</span>Account</a>
       </nav>
     </div>
+    </TerminalShell>
   );
 }
 
@@ -400,4 +399,15 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .lsc{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11px}
 .lsc th{color:var(--mut2);font-weight:500;font-size:9px;padding:3px 5px;text-align:center}.lsc td{padding:4px 5px;text-align:center;color:#cdd7e1;border-top:1px solid var(--line)}
 .lsc td.tm{text-align:left;font-family:var(--disp);font-weight:800;font-size:13px;color:#fff}.lsc td.rh{color:#fff;font-weight:700}
+
+@media (min-width:1024px){
+  .app{background:transparent;padding:0}
+  .app .hd{display:none}
+  .app .nav{display:none}
+  .app .sports,.app .chips{padding-left:26px;padding-right:26px}
+  .app #wrap{max-width:none;padding:16px 26px 40px}
+  .app .glist{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:10px}
+  .app .seclbl{margin:16px 4px 8px}
+}
+/* WZ-GAMES-DESKTOP-2026-07-11 */
 `;
