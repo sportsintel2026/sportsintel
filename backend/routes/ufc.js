@@ -313,6 +313,34 @@ router.get("/card", async (_req, res) => {
   }
 });
 
+// WZ-UFC-GRADERDIAG-2026-07-11 :: TEMPORARY, read-only. Fresh Cito read of the current event's
+// bouts, surfacing ONLY the two fields the grader settles on -- winnerFighterSlug (win/loss path)
+// and status (the TERMINAL_RE draw/no-contest path) -- so a real settled fight can be verified
+// against the grader before the main card grades. Bypasses the card cache. Safe to delete after
+// the event. Exposes nothing sensitive (public fight results/status).
+router.get("/diag", async (_req, res) => {
+  try {
+    const event = await getNextPPVEvent();
+    if (!event || !event.slug) return res.json({ ok: false, reason: "no-event" });
+    const bouts = await getEventBouts(event.slug, { fresh: true });
+    const nameOf = (b, corner) => {
+      const list = Array.isArray(b.fighters) ? b.fighters : [];
+      const f = list.find((x) => String(x.corner || "").toLowerCase() === corner);
+      return f ? (f.fighterName || (f.profile && f.profile.name) || f.fighterSlug || "") : "";
+    };
+    const rows = (Array.isArray(bouts) ? bouts : []).map((b) => ({
+      id: b.id,
+      cardPosition: b.cardPosition || "",
+      bout: `${nameOf(b, "red")} vs ${nameOf(b, "blue")}`,
+      status: b.status != null ? b.status : null,
+      winnerFighterSlug: b.winnerFighterSlug != null ? b.winnerFighterSlug : null,
+    }));
+    res.json({ ok: true, event: event.slug, count: rows.length, bouts: rows });
+  } catch (e) {
+    res.json({ ok: false, error: String((e && e.message) || e) });
+  }
+});
+
 // WZ-UFC-RECORD-2026-07-09 :: served record for the UFC Record tab. Reads graded ufc_picks
 // (result in win/loss/push) and computes two honest splits: MODEL OVERALL (every graded pick)
 // and +VALUE ONLY (is_value picks -- the real test of the edge). Flat 1 unit/pick; ROI = net
