@@ -274,7 +274,8 @@ export default function HomePage(){
   // WZ-WIZEPLAYS-LIST-2026-07-08 :: today's curated plays (rows are date-desc); empty -> empty state
   const wpTodayStr=new Date().toLocaleDateString("en-CA");
   // WZ-SLATE-STATE-2026-07-08 :: only show plays still pending -- finished/graded ones clear out
-  const wpToday=(()=>{ const row=(wpRows||[]).find(r=>String(r.date)>=wpTodayStr); if(!row||!Array.isArray(row.picks))return []; return row.picks.filter(pk=>{const rr=String((pk&&pk.result)||"pending").toLowerCase();return rr==="pending"||rr==="";}).slice(0,5); })();
+  // WZ-WIZEPLAYS-SHOWALL-2026-07-11 :: board shows EVERY pick for the day (pending + settled, each with its WON/LOST/PUSH outcome); the list clears only once every game has finished.
+  const wpToday=(()=>{ const row=(wpRows||[]).find(r=>String(r.date)>=wpTodayStr); if(!row||!Array.isArray(row.picks))return []; const picks=row.picks; const isDone=(pk)=>{const rr=String((pk&&pk.result)||"").toLowerCase();return rr==="win"||rr==="loss"||rr==="push"||rr==="won"||rr==="lost";}; const allDone=picks.length>0&&picks.every(isDone); return allDone?[]:picks; })();
   const liveGames=(live||[]).filter(g=>[g.awayEdge,g.homeEdge,g.overEdge,g.underEdge].some(x=>x!=null));
 
   const lineSeries={};
@@ -550,12 +551,18 @@ export default function HomePage(){
                 : <div className="rec"><div className="r" style={{fontSize:13,color:"#f3b94f"}}>View {"\u203a"}</div></div>}
             </div>
             {wpToday.length>0
-              ? wpToday.map((pk,i)=>(
-                  <div className="wprow" key={i} onClick={()=>navigate("/expert-picks")}>
+              ? wpToday.map((pk,i)=>{
+                  const rr=String((pk&&pk.result)||"").toLowerCase();
+                  const res=rr==="won"?"win":rr==="lost"?"loss":rr;
+                  const isDone=res==="win"||res==="loss"||res==="push";
+                  return (
+                  <div className={"wprow"+(isDone?" "+res:"")} key={i} onClick={()=>navigate("/expert-picks")}>
                     <LogoM ab={wpAbbr(pk)} col="#3a4653"/>
                     <div className="wpmid"><div className="wpp">{pk.pick}</div>{pk.game&&<div className="wpg">{pk.game}</div>}</div>
-                    {pk.odds!=null&&<div className="wpo">{formatOdds(pk.odds)}</div>}
-                  </div>))
+                    {isDone
+                      ? <span className={"wpres "+res}>{res==="win"?"WON":res==="loss"?"LOST":"PUSH"}</span>
+                      : (pk.odds!=null&&<div className="wpo">{formatOdds(pk.odds)}</div>)}
+                  </div>);})
               : <div className="wpempty">
                   <div className="et">No active WizePlays right now</div>
                   <div className="es">Curated plays post before first pitch. The full WizeBoard is live above.</div>
@@ -1148,6 +1155,11 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .wprow .wpp{font-family:var(--disp);font-weight:800;font-size:15px;color:#fff;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .wprow .wpg{font-family:var(--mono);font-size:9px;color:var(--mut);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .wprow .wpo{margin-left:auto;font-family:var(--disp);font-weight:800;font-size:15px;color:#dbe4e2;white-space:nowrap}
+.wprow.won{box-shadow:inset 3px 0 0 var(--green)}.wprow.lost{box-shadow:inset 3px 0 0 var(--neg)}.wprow.push{box-shadow:inset 3px 0 0 var(--mut)}
+.wprow .wpres{margin-left:auto;font-family:var(--mono);font-weight:700;font-size:10px;letter-spacing:.06em;padding:4px 9px;border-radius:5px;white-space:nowrap}
+.wprow .wpres.win{color:var(--green);background:rgba(63,203,145,.12);border:1px solid rgba(63,203,145,.30)}
+.wprow .wpres.loss{color:var(--neg);background:rgba(226,101,92,.12);border:1px solid rgba(226,101,92,.30)}
+.wprow .wpres.push{color:var(--mut);background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.10)}
 .wpempty{border-top:1px solid rgba(255,255,255,.06);padding:18px 14px;text-align:center}
 .wpempty .et{font-family:var(--disp);font-weight:800;font-size:15px;color:#cdd6da}
 .wpempty .es{font-family:var(--mono);font-size:9.5px;color:var(--mut2);margin-top:5px;line-height:1.5}
