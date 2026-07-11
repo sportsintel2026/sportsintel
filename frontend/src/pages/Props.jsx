@@ -684,7 +684,7 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .hpFoot{text-align:center;font-size:12px;color:#7d8a98;margin:16px 0 6px}.hpFoot b{color:#3FCB91}
 
 @media (min-width:1024px){
-  .app{background:transparent;padding:0}
+  .app{background:transparent;padding:0;max-width:none;margin:0;width:100%} /* WZ-DESKTOP-SHELLFIT-2026-07-11 :: fill the shell content area, drop the 460px mobile column */
   .app .hd{display:none}
   .app .nav{display:none}
   .app .chips,.app .bar,.app .sports{padding-left:26px;padding-right:26px}
