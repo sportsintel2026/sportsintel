@@ -132,7 +132,9 @@ router.get("/calibprobe", async (req, res) => {
 
     // ---- 1. calibration bands (settled, since each market's reset) ----------
     const BANDS = [
-      { key: "<0.50", lo: -Infinity, hi: 0.50 },
+      { key: "<0.40", lo: -Infinity, hi: 0.40 },
+      { key: "0.40-0.45", lo: 0.40, hi: 0.45 },
+      { key: "0.45-0.50", lo: 0.45, hi: 0.50 },
       { key: "0.50-0.55", lo: 0.50, hi: 0.55 },
       { key: "0.55-0.60", lo: 0.55, hi: 0.60 },
       { key: "0.60+", lo: 0.60, hi: Infinity },
@@ -221,6 +223,58 @@ router.get("/calibprobe", async (req, res) => {
       delete s.clvSum; delete s.clvN;
     }
 
+    // ---- 5. WZ-SLATE-SHADOW-2026-07-10 :: full-slate shadow calibration ------
+    // Reads the *_shadow rows written by the full-slate shadow recorder in
+    // predictionTracker.js (one fixed-side row per game per core market, every
+    // scheduled game, no board filters). These rows never touch the published
+    // record; this section is their only readout.
+    const SHADOW_MARKETS = ["moneyline_shadow", "total_shadow", "run_line_shadow"];
+    const shadowRows = [];
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await supabase
+        .from("model_predictions")
+        .select("market, model_prob, result, game_date")
+        .eq("league", "mlb")
+        .in("market", SHADOW_MARKETS)
+        .order("id", { ascending: true })
+        .range(from, from + PAGE - 1);
+      if (error) throw new Error(error.message);
+      const batch = data || [];
+      shadowRows.push(...batch);
+      if (batch.length < PAGE) break;
+    }
+    const shadowFullSlate = {};
+    for (const m of SHADOW_MARKETS) shadowFullSlate[m] = { pending: 0, settled: 0, firstDate: null, lastDate: null, bands: {} };
+    for (const r of shadowRows) {
+      const s = shadowFullSlate[r.market];
+      if (!s) continue;
+      if (r.game_date) {
+        if (!s.firstDate || r.game_date < s.firstDate) s.firstDate = r.game_date;
+        if (!s.lastDate || r.game_date > s.lastDate) s.lastDate = r.game_date;
+      }
+      if (!settled(r)) { s.pending++; continue; }
+      s.settled++;
+      if (r.model_prob == null) continue;
+      const k = bandKey(Number(r.model_prob));
+      if (!k) continue;
+      const b = (s.bands[k] ||= { n: 0, wins: 0, probSum: 0 });
+      b.n++;
+      if (r.result === "win") b.wins++;
+      b.probSum += Number(r.model_prob);
+    }
+    for (const m of SHADOW_MARKETS) {
+      for (const k of Object.keys(shadowFullSlate[m].bands)) {
+        const b = shadowFullSlate[m].bands[k];
+        shadowFullSlate[m].bands[k] = {
+          n: b.n,
+          wins: b.wins,
+          claimedPct: pct1(b.probSum / b.n),
+          actualPct: pct1(b.wins / b.n),
+          gapPts: Math.round(((b.probSum / b.n) - (b.wins / b.n)) * 1000) / 10,
+        };
+      }
+    }
+
     res.json({
       token: "WZ-CALIB-PROBE-2026-07-10",
       generatedAt: new Date().toISOString(),
@@ -229,6 +283,7 @@ router.get("/calibprobe", async (req, res) => {
       pipeline,
       moneylineGap,
       totalsSides,
+      shadowFullSlate,
     });
   } catch (err) {
     res.status(500).json({ token: "WZ-CALIB-PROBE-2026-07-10", error: String(err && err.message || err) });
