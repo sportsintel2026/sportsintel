@@ -172,6 +172,38 @@ async function buildCitoCard() {
   const parsed = parsedAll.filter(Boolean);
   if (!parsed.length) return null;
 
+  // WZ-UFC-CLOSEDLINE-2026-07-11 :: books pull the MMA moneyline once a fight starts, so parseBout
+  // returns a null pick for in-progress/finished bouts even though we captured the pick pre-fight.
+  // Fill those from the pick we already banked in ufc_picks so the card keeps showing our pick +
+  // odds instead of flipping to "ODDS PENDING". Read-only; never overrides a still-live pick.
+  try {
+    if (parsed.some((b) => b.winPct == null)) {
+      const c = sb();
+      if (c) {
+        const { data: saved } = await c
+          .from("ufc_picks")
+          .select("bout_id,pick,pick_corner,win_pct,market_win_pct,edge_pct,is_value,odds")
+          .eq("event_slug", event.slug);
+        const byId = new Map((saved || []).map((r) => [String(r.bout_id), r]));
+        for (const b of parsed) {
+          if (b.winPct != null) continue;              // a still-live pick always wins
+          const s = byId.get(String(b.id));
+          if (!s || s.pick == null || s.win_pct == null) continue;
+          b.pick = s.pick;
+          b.pickCorner = s.pick_corner || null;
+          b.winPct = s.win_pct;
+          b.marketWinPct = s.market_win_pct != null ? s.market_win_pct : null;
+          b.edgePct = s.edge_pct != null ? s.edge_pct : null;
+          b.value = !!s.is_value;
+          b.odds = s.odds != null ? s.odds : null;
+          if (b.red && s.pick_corner === "red") b.red.odds = s.odds;
+          if (b.blue && s.pick_corner === "blue") b.blue.odds = s.odds;
+          b.lineClosed = true;                          // pick locked pre-fight; live line has since closed
+        }
+      }
+    }
+  } catch (e) { /* fail-safe: leave bouts exactly as parsed */ }
+
   const mainCard = parsed
     .filter((b) => String(b.cardSection).toLowerCase() === "main card")
     .sort((a, b) => a.boutOrder - b.boutOrder);
