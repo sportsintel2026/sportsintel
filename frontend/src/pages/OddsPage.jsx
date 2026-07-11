@@ -433,7 +433,7 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .legend{font-family:var(--mono);font-size:9px;color:var(--mut2);margin-top:9px}.legend .bx{color:var(--green)}
 
 @media (min-width:1024px){
-  .app{background:transparent;padding:0}
+  .app{background:transparent;padding:0;max-width:none;margin:0;width:100%} /* WZ-DESKTOP-SHELLFIT-2026-07-11 :: fill the shell content area, drop the 460px mobile column */
   .app .hd{display:none}
   .app .nav{display:none}
   .app .subnav{padding-left:26px;padding-right:26px}
