@@ -5,6 +5,7 @@
 // HOMEDESKTOP-PREMIUM-DARK-RESKIN-2026-06-23
 // FIX-CLV-DESKTOP-OBJECT-2026-06-24
 import { useState, useEffect, useRef } from "react";
+import { scoresApi } from "../lib/api"; // WZ-NBA-RECORDS-2026-07-11 :: real ESPN standings for the NBA board
 
 // ---- self-contained helpers (kept local so this file stands alone) ----
 const ESPN_ALIAS = { az: "ari" };
@@ -69,6 +70,19 @@ export default function HomeDesktop(props) {
     return { roi, roiLbl, winRate, graded, clv: clvNum };
   })();
   const [market, setMarket] = useState("ml"); // WZ-WINNERS-V2-2026-07-04 :: Edge Board leads
+  const [nbaStd, setNbaStd] = useState([]);
+  useEffect(() => {
+    if (sport !== "nba") { setNbaStd([]); return; }
+    let dead = false;
+    scoresApi.getStandings("nba").then((m) => {
+      if (dead || !m) return;
+      const seen = new Set(); const out = [];
+      for (const v of Object.values(m)) { if (v && v.abbrev && !seen.has(v.abbrev)) { seen.add(v.abbrev); out.push(v); } }
+      out.sort((a, b) => { const w = (r) => parseInt(String((r && r.record) || "0-0").split("-")[0], 10) || 0; return w(b) - w(a); });
+      setNbaStd(out);
+    }).catch(() => {});
+    return () => { dead = true; };
+  }, [sport]);
   const [propTab, setPropTab] = useState("hr");
   const [propSort, setPropSort] = useState({ key: "edge", dir: -1 });
   const [sortKey, setSortKey] = useState("edge");
@@ -217,6 +231,25 @@ export default function HomeDesktop(props) {
                     </div>))
                 : <div className="empty">No active WizePlays right now &mdash; curated plays post before first pitch.</div>}
           </div>
+
+          {sport === "nba" && nbaStd.length > 0 ? (
+            <div className="panel nbarec">
+              <div className="phead"><div className="t">NBA · Team Records</div><div className="right">standings · board goes live at tip-off</div></div>
+              <table>
+                <thead><tr><th>Team</th><th className="c">Record</th><th className="c">Streak</th><th className="c">Last 10</th></tr></thead>
+                <tbody>
+                  {nbaStd.map((t, i) => (
+                    <tr key={i}>
+                      <td><span className="teamab">{t.abbrev}</span></td>
+                      <td className="c num">{t.record || "\u2014"}</td>
+                      <td className="c"><span className={"strk " + ((t.streakValue || 0) >= 0 ? "up" : "dn")}>{t.streak || "\u2014"}</span></td>
+                      <td className="c num">{t.lastTen || "\u2014"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
 
           {/* EDGE BOARD */}
           <div className="panel">
@@ -673,4 +706,15 @@ const TCSS = `
 /* WZ-DESKTOP-VAULT-FIX-2026-07-11 */
 
 .wpterm .provbar{margin-top:6px;padding:9px 13px;border:1px solid rgba(201,168,106,.28);background:linear-gradient(180deg,rgba(201,168,106,.06),transparent);border-radius:11px;font-family:var(--mono);font-size:11px;line-height:1.45;color:var(--goldsoft)}
+
+.wpterm .nbarec table{width:100%;border-collapse:collapse}
+.wpterm .nbarec th{font-family:var(--mono);font-size:10px;letter-spacing:.5px;text-transform:uppercase;color:var(--mut);text-align:left;padding:9px 14px;border-bottom:1px solid var(--line)}
+.wpterm .nbarec th.c{text-align:center}
+.wpterm .nbarec td{padding:10px 14px;border-bottom:1px solid var(--line2);font-size:13px}
+.wpterm .nbarec tr:last-child td{border-bottom:0}
+.wpterm .nbarec td.c{text-align:center}
+.wpterm .nbarec .teamab{font-weight:700}
+.wpterm .nbarec .num{font-family:var(--mono);color:var(--tx)}
+.wpterm .nbarec .strk.up{color:var(--up)}
+.wpterm .nbarec .strk.dn{color:var(--dn)}
 `;
