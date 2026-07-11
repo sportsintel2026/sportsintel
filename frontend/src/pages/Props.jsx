@@ -5,6 +5,8 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { edgesApi, subscriptionApi, playerCardApi } from "../lib/api";
+import TerminalShell from "./TerminalShell";
+// WZ-PROPS-DESKTOP-2026-07-11 :: Props gains a desktop layout inside the shared Vault shell; mobile untouched.
 
 const TEAMCOL = {
   ARI:"#A71930",ATL:"#CE1141",BAL:"#DF4601",BOS:"#BD3039",CHC:"#0E3386",CWS:"#27251F",CHW:"#27251F",
@@ -142,6 +144,7 @@ export default function PropsPage() {
   const nVal = list.filter(p => !p.lk && p.edge!=null && p.edge>0).length; // +VALUE = model beats the market price
 
   return (
+    <TerminalShell active="/props" plan={plan} navigate={navigate}>
     <div className="app"><style>{CSS}</style>
       <div className="hd">
         <div className="hrow">
@@ -200,6 +203,7 @@ export default function PropsPage() {
 
       {selProp && <PlayerSheet p={selProp} card={card} loading={cardLoading} onClose={closeP}/>}
     </div>
+    </TerminalShell>
   );
 }
 
@@ -678,4 +682,13 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .hpPbar{height:6px;border-radius:4px;background:rgba(255,255,255,.06);margin-top:10px;overflow:hidden}
 .hpPbar i{display:block;height:100%;border-radius:4px;background:#3FCB91}
 .hpFoot{text-align:center;font-size:12px;color:#7d8a98;margin:16px 0 6px}.hpFoot b{color:#3FCB91}
+
+@media (min-width:1024px){
+  .app{background:transparent;padding:0}
+  .app .hd{display:none}
+  .app .nav{display:none}
+  .app .chips,.app .bar,.app .sports{padding-left:26px;padding-right:26px}
+  .app #wrap{max-width:none;padding:16px 26px 40px}
+  .app .plist{display:grid;grid-template-columns:repeat(auto-fill,minmax(440px,1fr));gap:10px}
+}
 `;
