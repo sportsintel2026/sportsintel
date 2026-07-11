@@ -54,6 +54,8 @@ const SPORTS={
   nba:{ feed:()=>edgesApi.getNBA(), lg:"nba", markets:[["ml","ML"],["spread","Spread"],["totals","Totals"]], propsCopy:"", hasLive:false, hasHist:false, hasParks:false, hasProps:false },
   nfl:{ feed:(phase)=>edgesApi.getNFL(phase), lg:"nfl", markets:[["ml","ML"],["spread","Spread"],["totals","Totals"]], propsCopy:"", hasLive:false, hasHist:false, hasParks:false, hasProps:false, provisional:true },
   cfb:{ feed:()=>edgesApi.getCFB(), lg:"cfb", markets:[["ml","ML"],["spread","Spread"],["totals","Totals"]], propsCopy:"", hasLive:false, hasHist:false, hasParks:false, hasProps:false, provisional:true },
+  // WZ-DESKTOP-NHL-INBOARD-2026-07-11 :: NHL renders in the board like the rest; empty feed until the season (no fabricated games, no MLB fallback).
+  nhl:{ feed:()=>Promise.resolve({ moneylineEdges:[], totalsEdges:[], spreadEdges:[], games:[] }), lg:"nhl", markets:[["ml","ML"],["spread","Spread"],["totals","Totals"]], propsCopy:"", hasLive:false, hasHist:false, hasParks:false, hasProps:false, provisional:true, comingSoon:true },
 };
 // Edge display differs by sport: MLB edge is a fraction (×100 → %); NBA ML edge is
 // already a % figure, and NBA spread/totals edges are POINT projections.
