@@ -523,6 +523,62 @@ async function recordPredictions(result) {
     });
   }
 
+  // WZ-SLATE-SHADOW-2026-07-10 :: full-slate shadow recorder (measurement only).
+  // The published board is heavily filtered (winners-first + edge>0 + bandcuts),
+  // so the graded record accumulates far too slowly to calibrate the model
+  // (moneyline: ~1-2 published picks/day vs ~15 evaluated games/day). This block
+  // records ONE fixed-side row per game per core market for EVERY scheduled game,
+  // regardless of edge sign or any board filter, into DISTINCT *_shadow markets:
+  //   moneyline_shadow (home side) / total_shadow (over side) / run_line_shadow (home side)
+  // Fixed sides remove selection bias (the complement side is just 1 - p). Rows
+  // grade via the normal cron (gradeOne strips the _shadow suffix) but are
+  // STRUCTURALLY excluded from the published record, CLV, and the board:
+  // performance.js counts only exact core market names, and nothing renders
+  // *_shadow. Same proven idiom as the K/hits/TB shadows. Dup-safe via the same
+  // (game_id, market, selection, game_date) upsert -- first pre-game snapshot wins.
+  // HARDENING: every shadow row REQUIRES a posted price (odds != null) and a
+  // non-null confidence, because one null hitting a DB not-null constraint would
+  // reject the WHOLE batch and silently kill CORE recording too (same failure
+  // mode the game_id filter below defends against). A game with no posted line
+  // is skipped -- honestly unmeasurable for ROI anyway.
+  let shadowPushed = 0;
+  for (const g of result.games) {
+    if (g.status !== "scheduled") continue; // pre-game snapshots only (mirrors the board's isPreGame gate)
+    const abbrs = `${g.awayAbbr || "?"} @ ${g.homeAbbr || "?"}`;
+    if (g.moneyline && g.moneyline.homeWinProb != null && g.moneyline.homeOdds != null) {
+      rows.push({
+        game_id: g.id, game_date: gameDate, league: "mlb",
+        matchup: abbrs, market: "moneyline_shadow", selection: "home",
+        description: `SHADOW ${g.homeAbbr || "home"} ML (full slate)`,
+        model_prob: g.moneyline.homeWinProb, odds: g.moneyline.homeOdds,
+        edge: g.moneyline.homeEdge ?? null, confidence: g.moneyline.homeConfidence ?? "NEUTRAL", line: null,
+      });
+      shadowPushed++;
+    }
+    if (g.totals && g.totals.overProb != null && g.totals.line != null && g.totals.overOdds != null) {
+      rows.push({
+        game_id: g.id, game_date: gameDate, league: "mlb",
+        matchup: abbrs, market: "total_shadow", selection: "over",
+        description: `SHADOW Over ${g.totals.line} (full slate)`,
+        model_prob: g.totals.overProb, odds: g.totals.overOdds,
+        edge: g.totals.overEdge ?? null, confidence: g.totals.overConfidence ?? "NEUTRAL", line: g.totals.line,
+      });
+      shadowPushed++;
+    }
+    if (g.runLine && g.runLine.homeCoverProb != null && g.runLine.homeLine != null && g.runLine.homeOdds != null) {
+      rows.push({
+        game_id: g.id, game_date: gameDate, league: "mlb",
+        matchup: abbrs, market: "run_line_shadow", selection: "home",
+        description: `SHADOW ${g.homeAbbr || "home"} ${g.runLine.homeLine > 0 ? "+" : ""}${g.runLine.homeLine} (full slate)`,
+        model_prob: g.runLine.homeCoverProb, odds: g.runLine.homeOdds,
+        edge: g.runLine.homeEdge ?? null, confidence: g.runLine.homeConfidence ?? "NEUTRAL", line: g.runLine.homeLine,
+      });
+      shadowPushed++;
+    }
+  }
+  if (shadowPushed > 0) console.log(`[Tracker] SLATE-SHADOW queued ${shadowPushed} full-slate shadow rows for ${gameDate}`);
+  else console.warn(`[Tracker] SLATE-SHADOW queued 0 rows for ${gameDate} (no scheduled games with odds in this tick)`);
+
   // HR props
   for (const e of result.hrPropEdges || []) {
     if (statusById[e.gameId] === "final") continue;
@@ -1473,6 +1529,12 @@ function gradeNbaProp(p, game, side) {
 
 // Decide win/loss/push for a single MLB prediction given the final game
 function gradeOne(p, g) {
+  // WZ-SLATE-SHADOW-2026-07-10 :: *_shadow team markets grade identically to
+  // their real market -- strip the suffix and re-dispatch. Rows stay distinct
+  // in the DB (market string is unchanged there); only grading logic is shared.
+  if (typeof p.market === "string" && p.market.endsWith("_shadow")) {
+    return gradeOne({ ...p, market: p.market.slice(0, -7) }, g);
+  }
   const total = g.awayScore + g.homeScore;
   const awayWon = g.awayScore > g.homeScore;
 
