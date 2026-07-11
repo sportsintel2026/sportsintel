@@ -317,7 +317,7 @@ export default function HomePage(){
   const tapeUpcoming=games.filter(g=>g.status!=="final"&&g.time).slice(0,10).map(g=>({ id:g.id, a:g.awayAbbr||shortTeam(g.away||""), h:g.homeAbbr||shortTeam(g.home||""), as:null, hs:null, state:fmtTime(g.time), live:false }));
   const scoreTape=(tapeLive.length||tapeFinal.length)?[...tapeLive,...tapeFinal]:tapeUpcoming;
 
-  if(isDesktop) return <HomeDesktop edges={edges} games={games} movers={movers} live={live||[]} abbrById={abbrById} topProps={topProps} propList={propList} propsByType={propsByType} hero={hero} hasFull={hasFull} planLoaded={planLoaded} lineSeries={lineSeries} moveByPick={moveByPick} wpRecord={wpRecord} navigate={navigate} plan={plan} sport={sport} setSport={(k)=>{setSport(k);setBoard("ml");}} marketsLive={marketsLive} anyLive={anyLive} marketRead={marketRead} perf={perf} />;
+  if(isDesktop) return <HomeDesktop edges={edges} games={games} movers={movers} live={live||[]} abbrById={abbrById} topProps={topProps} propList={propList} propsByType={propsByType} hero={hero} hasFull={hasFull} planLoaded={planLoaded} lineSeries={lineSeries} moveByPick={moveByPick} wpRecord={wpRecord} wpToday={wpToday} navigate={navigate} plan={plan} sport={sport} setSport={(k)=>{setSport(k);setBoard("ml");}} marketsLive={marketsLive} anyLive={anyLive} marketRead={marketRead} perf={perf} />;
 
   // ============ ADAPTERS: real data -> v11 mock shapes ============
   const edgeNum=(x)=> sport==="mlb" ? (x.edge??0)*100 : (x.edge??0);
