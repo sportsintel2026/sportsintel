@@ -6,6 +6,10 @@
 // GOLD = model/pick, GREEN/teal = value; Barlow Condensed + IBM Plex Mono on #0A0B0D.
 
 import { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
+import { subscriptionApi } from "../lib/api";
+import TerminalShell from "./TerminalShell";
+// WZ-UFCRECORD-DESKTOP-2026-07-11 :: UFC record page gains a desktop layout inside the shared Vault shell; mobile untouched.
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 const RC = 364.4; // 2 * pi * 58 -- hero ring circumference
@@ -60,6 +64,11 @@ const CSS = `
 .ufcr-state{margin:56px 12px;text-align:center;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#5B646C;line-height:1.9}
 .ufcr-state .big{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:22px;color:#99A2AA;letter-spacing:1px;display:block;margin-bottom:6px}
 .ufcr-retry{margin-top:14px;display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#C9A86A;border:1px solid rgba(201,168,106,.4);border-radius:8px;padding:8px 16px;cursor:pointer;background:none}
+
+@media (min-width:1024px){
+  .ufcr-wrap{background:transparent;padding:0 0 40px}
+  .ufcr-in{max-width:none;margin:0;padding:20px 26px 0}
+}
 `;
 
 function fmtOdds(o) {
@@ -77,6 +86,9 @@ export default function UFCRecord() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const navigate = useNavigate();
+  const [plan, setPlan] = useState({ tier: "free", isAdmin: false });
+  useEffect(() => { subscriptionApi.getMyPlan().then(setPlan).catch(() => {}); }, []);
 
   const load = useCallback(async () => {
     setLoading(true); setError(false);
@@ -104,6 +116,7 @@ export default function UFCRecord() {
   const valDecided = !!(val && val.decided);
 
   return (
+    <TerminalShell active="/ufc-record" plan={plan} navigate={navigate}>
     <div className="ufcr-wrap">
       <style>{CSS}</style>
       <div className="ufcr-in">
@@ -190,5 +203,6 @@ export default function UFCRecord() {
 
       </div>
     </div>
+    </TerminalShell>
   );
 }
