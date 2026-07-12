@@ -259,6 +259,7 @@ async function buildCitoCard() {
       venue: event.venue || "",
       city: event.city || event.locationText || "",
       imageUrl: event.imageUrl || null,
+      live: !!event._live, // WZ-UFC-HOLDEVENT-2026-07-11 :: true when we're holding the in-progress event
     },
     mainCard,
     prelims,
