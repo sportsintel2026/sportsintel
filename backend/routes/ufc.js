@@ -495,20 +495,85 @@ router.get("/diag", async (_req, res) => {
   }
 });
 
-// WZ-UFC-GRADENOW-2026-07-12 :: manual trigger for the UFC grader so a result that's already
-// resolvable (confirm on /diag) settles on demand instead of waiting up to 30 min for the cron.
-// Runs the SAME gradeUFCPicks() the cron runs -- idempotent (only flips pending -> win/loss/push)
-// and fail-safe. Then busts the assembled-card cache so the next /card rebuild reflects it
-// immediately (rolling forward to the next event once the last pending pick for the held event
-// settles). Read-mostly; touches no existing logic. Temporary; safe to delete with /diag.
+// WZ-UFC-GRADENOW-2026-07-12 :: manual, self-contained settle. Unlike the cron grader it applies
+// NO event-gating (no upcoming-list filter) and defers to nothing -- it reads every pending
+// ufc_picks row, fetches that event's bouts fresh + ESPN once, resolves each winner (Cito slug
+// first, then the ESPN fallback matcher), settles win/loss/push, busts the card cache so the next
+// /card rebuild rolls forward, and returns a per-fight report (including any DB update error) so a
+// single hit is fully self-diagnosing. Idempotent + fail-safe. Temporary; delete with /diag.
 router.get("/grade-now", async (_req, res) => {
+  const report = { ok: true, ran: true };
   try {
-    const { gradeUFCPicks } = require("../services/ufcGrader");
-    const out = await gradeUFCPicks();
-    cardCache = { at: 0, data: null }; // force a fresh card rebuild on the next /card call
-    res.json({ ok: true, ran: true, result: out });
+    const c = sb();
+    if (!c) return res.json({ ok: false, error: "no-supabase" });
+
+    const { data: pending, error } = await c
+      .from("ufc_picks")
+      .select("bout_id,event_slug,pick,pick_corner")
+      .eq("result", "pending");
+    if (error) return res.json({ ok: false, error: error.message });
+    report.pendingBefore = (pending || []).map((r) => ({
+      bout_id: r.bout_id, event_slug: r.event_slug, pick: r.pick, pick_corner: r.pick_corner,
+    }));
+    if (!pending || !pending.length) {
+      cardCache = { at: 0, data: null };
+      report.graded = 0; report.note = "no pending picks";
+      try { const ev = await pickCardEvent(); report.cardEventNow = ev && ev.slug ? ev.slug : null; } catch (_) {}
+      return res.json(report);
+    }
+
+    let espnResults = [];
+    try { espnResults = await getEspnUfcResults(); } catch (_) { espnResults = []; }
+
+    const TERMINAL_RE = /(final|complete|decision|ended|closed|result|draw|no.?contest|cancel|void)/i;
+    const citoWinner = (bout) => {
+      const slug = bout && bout.winnerFighterSlug;
+      if (!slug) return null;
+      const fs = Array.isArray(bout.fighters) ? bout.fighters : [];
+      const w = fs.find((f) => String(f.fighterSlug || (f.profile && f.profile.slug) || "") === String(slug));
+      return w ? { corner: String(w.corner || "").toLowerCase(), name: w.fighterName || (w.profile && w.profile.name) || null } : null;
+    };
+
+    const slugs = [...new Set(pending.map((r) => r.event_slug).filter(Boolean))];
+    const pendingByBout = new Map(pending.map((r) => [String(r.bout_id), r]));
+    const nowIso = new Date().toISOString();
+    let graded = 0, pushed = 0, still = 0;
+    const detail = [];
+
+    for (const slug of slugs) {
+      let bouts = [];
+      try { bouts = await getEventBouts(slug, { fresh: true }); } catch (e) { detail.push({ event: slug, fetchError: String(e && e.message || e) }); }
+      for (const bout of (Array.isArray(bouts) ? bouts : [])) {
+        const row = pendingByBout.get(String(bout.id));
+        if (!row) continue;
+        let win = citoWinner(bout); let via = win ? "cito" : null;
+        if (!win) { const ew = espnWinnerCorner(bout, espnResults); if (ew) { win = ew; via = "espn"; } }
+        if (win && win.corner) {
+          const result = win.corner === String(row.pick_corner || "").toLowerCase() ? "win" : "loss";
+          const { error: uerr } = await c.from("ufc_picks")
+            .update({ result, winner_name: win.name || null, graded_at: nowIso, updated_at: nowIso })
+            .eq("bout_id", String(bout.id));
+          detail.push({ bout: String(bout.id), pick: row.pick, settled: result, via, updateError: uerr ? uerr.message : null });
+          if (!uerr) graded++;
+        } else if (TERMINAL_RE.test(String(bout.status || ""))) {
+          const { error: uerr } = await c.from("ufc_picks")
+            .update({ result: "push", winner_name: null, graded_at: nowIso, updated_at: nowIso })
+            .eq("bout_id", String(bout.id));
+          detail.push({ bout: String(bout.id), pick: row.pick, settled: "push", via: "status", updateError: uerr ? uerr.message : null });
+          if (!uerr) pushed++;
+        } else {
+          still++;
+          detail.push({ bout: String(bout.id), pick: row.pick, settled: null, reason: "no winner from Cito or ESPN yet" });
+        }
+      }
+    }
+
+    cardCache = { at: 0, data: null }; // fresh rebuild -> rolls forward once nothing is pending
+    report.graded = graded; report.pushed = pushed; report.stillPending = still; report.detail = detail;
+    try { const ev = await pickCardEvent(); report.cardEventNow = ev && ev.slug ? ev.slug : null; } catch (_) {}
+    return res.json(report);
   } catch (e) {
-    res.json({ ok: false, error: String((e && e.message) || e) });
+    return res.json({ ok: false, error: String((e && e.message) || e) });
   }
 });
 
