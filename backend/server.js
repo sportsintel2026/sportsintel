@@ -40,6 +40,7 @@ const liveWinProbRoutes = require("./routes/liveWinProb");
 const newsRoutes = require("./routes/news"); // WZ-NEWS-MOUNT-2026-06-26
 const nflPropsProbeRoutes = require("./routes/nflPropsProbe"); // WZ-NFLPROPS-MOUNT-2026-07-05
 const ufcRoutes = require("./routes/ufc"); // WZ-UFC-CARD-2026-07-09 :: UFC/MMA card endpoint (read-only)
+const aiReadRoutes = require("./routes/aiRead"); // WZ-AI-READ-2026-07-12 :: on-demand AI read (B), fail-safe
 
 const { refreshDailyGames } = require("./services/sportsData");
 const { gradeFinishedGames, captureClosingLines, captureNbaClosingLines, captureOddsTicks, voidUnmatchedProps } = require("./services/predictionTracker");
@@ -148,6 +149,7 @@ app.use("/api/live-winprob", liveWinProbRoutes);
 app.use("/api/news", newsRoutes); // WZ-NEWS-MOUNT-2026-06-26 :: blended ESPN+RotoWire feed
 app.use("/api/nfl-props-probe", nflPropsProbeRoutes); // WZ-NFLPROPS-MOUNT-2026-07-05 :: Phase 3 recon (read-only, temp)
 app.use("/api/ufc", ufcRoutes); // WZ-UFC-CARD-2026-07-09 :: UFC/MMA card (read-only, additive)
+app.use("/api/ai-read", aiReadRoutes); // WZ-AI-READ-2026-07-12 :: on-demand AI read (B), env-gated + fail-safe
 
 // Health check
 app.get("/api/health", (req, res) => {
