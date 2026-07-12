@@ -15,6 +15,7 @@ const { fetchMMASchedule } = require("../services/sportsData");
 const { getNextPPVEvent, getEventBouts, getFighter, getFighterFights, getUpcomingEvents } = require("../services/citoApi"); // WZ-UFC-FORM-2026-07-09 / WZ-UFC-HOLDEVENT-2026-07-11
 const { scoreBout, methodLean } = require("../services/mmaModel"); // WZ-UFC-MODEL-2026-07-09 / WZ-UFC-METHOD-2026-07-09
 const { createClient } = require("@supabase/supabase-js"); // WZ-UFC-REC-2026-07-09
+const { getEspnUfcResults, espnWinnerCorner, normName: espnNorm } = require("../services/espnMma"); // WZ-UFC-DIAGV2-2026-07-12
 
 const ODDS_BASE = "https://api.the-odds-api.com/v4";
 const ODDS_API_KEY = process.env.ODDS_API_KEY;
@@ -386,24 +387,105 @@ router.get("/card", async (_req, res) => {
 // and status (the TERMINAL_RE draw/no-contest path) -- so a real settled fight can be verified
 // against the grader before the main card grades. Bypasses the card cache. Safe to delete after
 // the event. Exposes nothing sensitive (public fight results/status).
+// WZ-UFC-DIAGV2-2026-07-12 :: fallback verifier. Resolves the SAME event the live card is holding
+// (pickCardEvent, not getNextPPVEvent -- otherwise during an event-hold this points at the NEXT
+// event and reports the wrong card). For each bout it runs the grader's REAL matcher paths so we
+// can watch the ESPN fallback settle fights: Cito winnerFighterSlug (-> corner), and ESPN via the
+// exact espnWinnerCorner() the grader uses. verdict = what the grader would do THIS tick:
+//   CITO   Cito already has a winner (grades off Cito)
+//   ESPN   Cito null but ESPN fallback settles it (grades off ESPN)
+//   PUSH?  concluded status, no winner (draw / NC / cancel path)
+//   PENDING nothing yet (fight not done, or a name-match MISS)
+// When a fight is finished on ESPN but does NOT settle, `miss` shows the normalized candidate
+// name-sets from both sides + the matched ESPN fight, so a nickname miss is visible at a glance.
 router.get("/diag", async (_req, res) => {
   try {
-    const event = await getNextPPVEvent();
+    const event = await pickCardEvent();
     if (!event || !event.slug) return res.json({ ok: false, reason: "no-event" });
-    const bouts = await getEventBouts(event.slug, { fresh: true });
-    const nameOf = (b, corner) => {
-      const list = Array.isArray(b.fighters) ? b.fighters : [];
-      const f = list.find((x) => String(x.corner || "").toLowerCase() === corner);
-      return f ? (f.fighterName || (f.profile && f.profile.name) || f.fighterSlug || "") : "";
+    const [bouts, espnResults] = await Promise.all([
+      getEventBouts(event.slug, { fresh: true }),
+      getEspnUfcResults().catch(() => []),
+    ]);
+    const list = Array.isArray(bouts) ? bouts : [];
+    const TERMINAL_RE = /(final|complete|decision|ended|closed|result|draw|no.?contest|cancel|void)/i;
+
+    // mirror espnMma.espnWinnerCorner's per-fighter candidate set (name / profile name / slug)
+    const candSet = (f) => {
+      const s = new Set();
+      if (f && f.fighterName) s.add(espnNorm(f.fighterName));
+      if (f && f.profile && f.profile.name) s.add(espnNorm(f.profile.name));
+      if (f && f.fighterSlug) s.add(espnNorm(String(f.fighterSlug).replace(/-/g, " ")));
+      s.delete("");
+      return [...s];
     };
-    const rows = (Array.isArray(bouts) ? bouts : []).map((b) => ({
-      id: b.id,
-      cardPosition: b.cardPosition || "",
-      bout: `${nameOf(b, "red")} vs ${nameOf(b, "blue")}`,
-      status: b.status != null ? b.status : null,
-      winnerFighterSlug: b.winnerFighterSlug != null ? b.winnerFighterSlug : null,
-    }));
-    res.json({ ok: true, event: event.slug, count: rows.length, bouts: rows });
+    const cornerOf = (b, corner) => {
+      const fs = Array.isArray(b.fighters) ? b.fighters : [];
+      return fs.find((x) => String(x.corner || "").toLowerCase() === corner) || null;
+    };
+    const nameOf = (f) => (f ? (f.fighterName || (f.profile && f.profile.name) || f.fighterSlug || "") : "");
+    // Cito's own settle path: winnerFighterSlug -> corner
+    const citoCornerOf = (b) => {
+      const slug = b && b.winnerFighterSlug;
+      if (!slug) return null;
+      const fs = Array.isArray(b.fighters) ? b.fighters : [];
+      const w = fs.find((f) => String(f.fighterSlug || (f.profile && f.profile.slug) || "") === String(slug));
+      return w ? String(w.corner || "").toLowerCase() : null;
+    };
+
+    const rows = list.map((b) => {
+      const red = cornerOf(b, "red"), blue = cornerOf(b, "blue");
+      const citoCorner = citoCornerOf(b);
+      const espn = espnWinnerCorner(b, espnResults); // { corner, name } | null -- grader's real matcher
+      const status = b.status != null ? b.status : null;
+
+      let verdict = "PENDING";
+      if (citoCorner) verdict = "CITO";
+      else if (espn && espn.corner) verdict = "ESPN";
+      else if (TERMINAL_RE.test(String(status || ""))) verdict = "PUSH?";
+
+      const row = {
+        id: b.id,
+        cardPosition: b.cardPosition || "",
+        bout: `${nameOf(red)} vs ${nameOf(blue)}`,
+        status,
+        winnerFighterSlug: b.winnerFighterSlug != null ? b.winnerFighterSlug : null,
+        citoWinnerCorner: citoCorner,
+        espnSettles: !!(espn && espn.corner),
+        espnWinner: espn ? espn.name : null,
+        verdict,
+      };
+
+      // Diagnose a potential name-match MISS: ESPN knows this fight is done, but we don't settle.
+      if (!citoCorner && verdict === "PENDING") {
+        const rc = candSet(red), bc = candSet(blue);
+        const rset = new Set(rc), bset = new Set(bc);
+        const matched = espnResults.find(
+          (f) => f && f.completed && [f.a, f.b].some((n) => rset.has(n)) && [f.a, f.b].some((n) => bset.has(n))
+        );
+        const espnHasFinished = espnResults.some(
+          (f) => f && f.completed && f.winner && ([f.a, f.b].some((n) => rset.has(n)) || [f.a, f.b].some((n) => bset.has(n)))
+        );
+        if (espnHasFinished) {
+          row.miss = {
+            redCand: rc,
+            blueCand: bc,
+            espnMatch: matched ? { a: matched.a, b: matched.b, winner: matched.winner, completed: matched.completed } : null,
+            note: matched ? "both corners matched an ESPN fight but winner did not resolve" : "no ESPN fight matched BOTH corners -> name normalization gap",
+          };
+        }
+      }
+      return row;
+    });
+
+    const espnFinished = espnResults.filter((f) => f && f.completed).length;
+    res.json({
+      ok: true,
+      event: event.slug,
+      held: !!event._live,
+      count: rows.length,
+      espnFinishedFights: espnFinished,
+      bouts: rows,
+    });
   } catch (e) {
     res.json({ ok: false, error: String((e && e.message) || e) });
   }
