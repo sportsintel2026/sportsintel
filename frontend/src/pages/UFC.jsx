@@ -20,6 +20,7 @@ const CSS = `
 
 .ufc-evt{margin:2px 4px 0;padding:15px 16px 14px;border:1px solid rgba(255,255,255,.06);border-radius:16px;background:radial-gradient(120% 100% at 100% 0,rgba(201,168,106,.11),transparent 55%),#0C0D10}
 .ufc-evt .k{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:2px;color:#C9A86A;text-transform:uppercase}
+.ufc-evt .k.live{color:#3FCB91}
 .ufc-evt .n{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:28px;line-height:1;margin-top:5px;letter-spacing:.5px}
 .ufc-evt .m{font-family:'IBM Plex Mono',monospace;font-size:10px;color:#99A2AA;margin-top:6px}
 
@@ -274,7 +275,7 @@ export default function UFCPage() {
         {!loading && !error && total > 0 && (
           <>
             <div className="ufc-evt">
-              <div className="k">Next Event</div>
+              <div className={"k" + (event && event.live ? " live" : "")}>{event && event.live ? "Live" : "Next Event"}</div>
               <div className="n">{event ? event.name : "UFC Fight Card"}</div>
               {event && (event.dateLabel || event.venue) ? (
                 <div className="m">{[event.dateLabel, event.venue, event.city].filter(Boolean).join(" \u00b7 ")}</div>
