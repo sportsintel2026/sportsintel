@@ -1208,9 +1208,9 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 
 .grid{margin:12px 4px 0;background:var(--panel);border-radius:14px;overflow:hidden}
 /* WZ-BOARD-UFC-CARD-2026-07-11 :: one-card-per-game UFC-style board card */
-.ufboard{margin:12px 12px 0}
-.ufcard{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:11px 13px;margin-bottom:9px;cursor:pointer}
-.ufboard .gr.open{background:var(--panel);border:1px solid var(--line);border-radius:14px;margin-bottom:9px}
+.ufboard{margin:10px 6px 0}
+.ufcard{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:11px 12px;margin-bottom:7px;cursor:pointer}
+.ufboard .gr.open{background:var(--panel);border:1px solid var(--line);border-radius:14px;margin-bottom:7px}
 .ufcard .ufm{display:flex;align-items:center;gap:7px;margin-bottom:10px}
 .ufcard .ufm .ufc{flex:none;display:inline-flex}
 .ufcard .ufm .uft{font-family:var(--disp);font-weight:800;font-size:15px;color:var(--mut)}
