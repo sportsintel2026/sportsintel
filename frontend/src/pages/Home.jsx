@@ -23,6 +23,11 @@ import HomeDesktop from "./HomeDesktop";
 const PERF_API_BASE = import.meta.env.VITE_API_URL || "https://sportsintel-production.up.railway.app";
 // WZ-AI-READ-2026-07-12 :: session cache for AI reads so an opened card fetches at most once
 const AI_READ_CACHE = new Map();
+// WZ-BOARD-ASBREAK-2026-07-12 :: All-Star break placeholder window. 2026 break is dark Jul 13-15;
+// second half opens Jul 16. Self-clearing: once games return the board isn't empty, so this never
+// shows on a live day. (Could be made schedule-driven off a backend next-game date later.)
+const AS_BREAK = { fromISO: "2026-07-13", toISO: "2026-07-15", resume: "Wed, Jul 16" };
+function inAllStarBreak(){ const t = new Date().toISOString().slice(0,10); return t >= AS_BREAK.fromISO && t <= AS_BREAK.toISO; }
 
 function formatOdds(a){ if(a==null||isNaN(a))return "—"; const n=Math.round(Number(a)); return n>0?`+${n}`:`${n}`; }
 // Fair American odds implied by the model's win/cover/hit probability (e.g. 49% -> +105).
@@ -523,7 +528,15 @@ export default function HomePage(){
                       <div className="ufboard">{previewItems.map((d,i)=>{const id="pv"+d.gameId+d.cat+i;return openId===id?<BoardRow key={id} d={d} i={i} open={true} onToggle={()=>setOpenId(null)} navigate={navigate} sport={sport}/>:<BoardCardCompact key={id} d={d} i={i} sport={sport} onClick={()=>setOpenId(id)}/>;})}</div>
                       <div className="sum"><span className="l">{previewItems.length} game winners</span><span className="sp"/><span className="p">Tomorrow</span></div>
                     </>
-                  : <div className="estate"><div className="et">No winners on the board yet</div><div className="es">Winners post as books release tonight{"\u2019"}s lines.</div></div>}
+                  : (sport==="mlb" && inAllStarBreak())
+                    ? <div className="asbrk">
+                        <svg width="44" height="44" viewBox="0 0 24 24" fill="none"><path d="M12 2l2.9 6.26L22 9.27l-5 4.87L18.18 22 12 18.27 5.82 22 7 14.14l-5-4.87 7.1-1.01L12 2z" fill="#C9A86A"/></svg>
+                        <div className="ak">MLB {"\u00b7"} ALL-STAR BREAK</div>
+                        <div className="ah">NO EDGES TODAY</div>
+                        <div className="asub">The league{"\u2019"}s on the All-Star break — no games to model until the second half opens.</div>
+                        <div className="ares">Edges resume <b>{AS_BREAK.resume}</b></div>
+                      </div>
+                    : <div className="estate"><div className="et">No winners on the board yet</div><div className="es">Winners post as books release tonight{"\u2019"}s lines.</div></div>}
             </>
           : <Gate title="Edges are an All-Access feature" navigate={navigate}/>}
         </>}
@@ -1468,6 +1481,14 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .estate{margin:8px 4px 0;border:1px dashed var(--line2);border-radius:12px;padding:20px 16px;text-align:center}
 .estate .et{font-family:var(--disp);font-weight:800;font-size:14px;color:#cfd7e2}
 .estate .es{font-size:11px;color:var(--mut);margin-top:5px;font-family:var(--mono);line-height:1.45}
+/* WZ-BOARD-ASBREAK-2026-07-12 :: All-Star break placeholder */
+.asbrk{display:flex;flex-direction:column;align-items:center;text-align:center;padding:40px 26px 46px}
+.asbrk svg{margin-bottom:15px}
+.asbrk .ak{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.22em;color:var(--gold);margin-bottom:9px}
+.asbrk .ah{font-family:var(--disp);font-weight:800;font-size:28px;letter-spacing:.5px;line-height:1;color:#eef1f4}
+.asbrk .asub{font-family:var(--disp);font-weight:500;font-size:14.5px;color:var(--mut);margin-top:12px;line-height:1.5;max-width:280px}
+.asbrk .ares{margin-top:18px;font-family:var(--mono);font-size:12px;color:var(--tx);border:1px solid var(--line);border-radius:10px;padding:10px 16px;background:var(--panel2)}
+.asbrk .ares b{color:var(--green)}
 .hero .heh{font-family:var(--disp);font-weight:800;font-size:19px;color:#fff;margin-top:14px}
 .hero .hes{font-size:11.5px;color:var(--mut);margin-top:7px;font-family:var(--mono);line-height:1.55;margin-bottom:4px}
 #content,#freecontent,.offblock{padding-bottom:84px}
