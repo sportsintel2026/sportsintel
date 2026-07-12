@@ -182,7 +182,7 @@ async function buildCitoCard() {
       if (c) {
         const { data: saved } = await c
           .from("ufc_picks")
-          .select("bout_id,pick,pick_corner,win_pct,market_win_pct,edge_pct,is_value,odds")
+          .select("bout_id,pick,pick_corner,win_pct,market_win_pct,edge_pct,is_value,odds,result")
           .eq("event_slug", event.slug);
         const byId = new Map((saved || []).map((r) => [String(r.bout_id), r]));
         for (const b of parsed) {
@@ -199,6 +199,7 @@ async function buildCitoCard() {
           if (b.red && s.pick_corner === "red") b.red.odds = s.odds;
           if (b.blue && s.pick_corner === "blue") b.blue.odds = s.odds;
           b.lineClosed = true;                          // pick locked pre-fight; live line has since closed
+          b.result = s.result != null ? s.result : null; // win/loss/push once the grader settles it (else "pending")
         }
       }
     }
