@@ -26,8 +26,22 @@ const AI_READ_CACHE = new Map();
 // WZ-BOARD-ASBREAK-2026-07-12 :: All-Star break placeholder window. 2026 break is dark Jul 13-15;
 // second half opens Jul 16. Self-clearing: once games return the board isn't empty, so this never
 // shows on a live day. (Could be made schedule-driven off a backend next-game date later.)
-const AS_BREAK = { fromISO: "2026-07-13", toISO: "2026-07-15", resume: "Wed, Jul 16" };
+// WZ-BOARD-ASBREAK-2026-07-12 :: All-Star break placeholder window. Covers Jul 12 (today's slate is
+// already underway/done, next games are Jul 16) through Jul 15. Self-clearing: once the next slate's
+// lines post, the board isn't empty so this stops showing. (Could be schedule-driven later.)
+const AS_BREAK = { fromISO: "2026-07-12", toISO: "2026-07-15" };
 function inAllStarBreak(){ const t = new Date().toISOString().slice(0,10); return t >= AS_BREAK.fromISO && t <= AS_BREAK.toISO; }
+function AllStarBreak(){
+  return (
+    <div className="asbrk">
+      <svg width="44" height="44" viewBox="0 0 24 24" fill="none"><path d="M12 2l2.9 6.26L22 9.27l-5 4.87L18.18 22 12 18.27 5.82 22 7 14.14l-5-4.87 7.1-1.01L12 2z" fill="#C9A86A"/></svg>
+      <div className="ak">MLB {"\u00b7"} ALL-STAR BREAK</div>
+      <div className="ah">NO EDGES RIGHT NOW</div>
+      <div className="asub">The league{"\u2019"}s on the All-Star break — no games to model until the second half opens.</div>
+      <div className="ares">Picks and edges post <b>as soon as the odds show</b></div>
+    </div>
+  );
+}
 
 function formatOdds(a){ if(a==null||isNaN(a))return "—"; const n=Math.round(Number(a)); return n>0?`+${n}`:`${n}`; }
 // Fair American odds implied by the model's win/cover/hit probability (e.g. 49% -> +105).
@@ -422,6 +436,9 @@ export default function HomePage(){
   const parkItems = parks.map(g=>{const f=g.parkRunFactor,hf=g.parkHRFactor,w=g.weather||{};const hot=(hf??f)>1.05,cold=(hf??f)<0.95;const tag=hot?["HITTER FRIENDLY","h"]:cold?["PITCHER FRIENDLY","p"]:["NEUTRAL","n"];const ab=mlbAbbr(g.home||"");const t=w.tempF!=null?Math.round(w.tempF):null;const wind=w.windMph?(w.windMph+" mph"+(w.windEffect?" "+w.windEffect:"")):null;const wx=w.indoor?"Dome \u00b7 roof closed":([t!=null?t+"\u00b0F":null,wind].filter(Boolean).join(" \u00b7 ")||"Forecast pending");return {venue:g.venue||g.park||((g.home||"")+" Park"),g:g.home||"",a:[ab,teamCol(ab)],tag,hr:(hf!=null?((hf>1?"+":"")+Math.round((hf-1)*100)+"%"):"0%"),run:((f>1?"+":"")+Math.round((f-1)*100)+"%"),wx};});
   const liveItems = liveGames.map(g=>{const a=g.awayAbbr||(abbrById[g.gameId]?abbrById[g.gameId].a:shortTeam(g.away||""));const h=g.homeAbbr||(abbrById[g.gameId]?abbrById[g.gameId].h:shortTeam(g.home||""));const rows=[];const ml=(g.awayEdge??-9)>=(g.homeEdge??-9)?[a+" ML",g.awayWinProb,g.awayEdge,g.awayOdds]:[h+" ML",g.homeWinProb,g.homeEdge,g.homeOdds];if(ml[2]!=null)rows.push([ml[0],(ml[1]!=null?Math.round(ml[1]*100)+"%":"\u2014"),formatOdds(ml[3]),ml[2]*100]);if(g.totalLine!=null){const tt=(g.overEdge??-9)>=(g.underEdge??-9)?["Over "+g.totalLine,g.overProb,g.overEdge,g.overOdds]:["Under "+g.totalLine,g.underProb,g.underEdge,g.underOdds];if(tt[2]!=null)rows.push([tt[0],(tt[1]!=null?Math.round(tt[1]*100)+"%":"\u2014"),formatOdds(tt[3]),tt[2]*100]);}return {a,h,ac:colFor(a,sport),hc:colFor(h,sport),state:(g.half==="bottom"?"Bot":"Top")+" "+(g.inning||"")+(g.outs!=null?" \u00b7 "+g.outs+" out":""),rows,gameId:g.gameId};});
   const isTomorrowMain = boardItems.length===0 && previewItems.length>0; // WZ-BOARD-NEVER-EMPTY-2026-07-08
+  // WZ-BOARD-ASBREAK-2026-07-12 :: add ?break=1 to the URL to preview the All-Star break state on a
+  // live day (it's normally date-gated to Jul 13-15 and only shows when the board is empty).
+  const breakPreview = typeof window!=="undefined" && /[?&]break=1/.test(window.location.search);
   const kpiHas=boardItems.length>0;
   const kAvg=kpiHas?(boardItems.reduce((a,x)=>a+x.edge,0)/boardItems.length).toFixed(1):null;
   const kBest=kpiHas?Math.max(...boardItems.map(x=>x.edge)).toFixed(1):null;
@@ -510,7 +527,7 @@ export default function HomePage(){
           <div className="bhsub">{(isTomorrowMain?previewItems.length:boardItems.length)>0?(isTomorrowMain?previewItems.length:boardItems.length)+" winners":"Ranked by win %"}{(isTomorrowMain?("Tomorrow"+(previewLabel?", "+previewLabel:"")):boardDate)&&<> <span className="bhd">{"\u00b7"}</span> {isTomorrowMain?("Tomorrow"+(previewLabel?", "+previewLabel:"")):boardDate}</>}</div>
         </div>
         {hasFull
-          ? <>
+          ? (breakPreview ? <AllStarBreak/> : <>
               <div className="bseg">{BF.map(([lb,key])=><span key={key} className={"bseg-b "+(board===key?"on":"")} onClick={()=>setBoard(key)}>{lb}</span>)}</div>
               {/* WZ-BOARD-NEVER-EMPTY-2026-07-08 :: today's board when it has games (tomorrow preview below); when today is empty, tomorrow IS the board -- never blank */}
               {boardItems.length>0
@@ -529,15 +546,9 @@ export default function HomePage(){
                       <div className="sum"><span className="l">{previewItems.length} game winners</span><span className="sp"/><span className="p">Tomorrow</span></div>
                     </>
                   : (sport==="mlb" && inAllStarBreak())
-                    ? <div className="asbrk">
-                        <svg width="44" height="44" viewBox="0 0 24 24" fill="none"><path d="M12 2l2.9 6.26L22 9.27l-5 4.87L18.18 22 12 18.27 5.82 22 7 14.14l-5-4.87 7.1-1.01L12 2z" fill="#C9A86A"/></svg>
-                        <div className="ak">MLB {"\u00b7"} ALL-STAR BREAK</div>
-                        <div className="ah">NO EDGES TODAY</div>
-                        <div className="asub">The league{"\u2019"}s on the All-Star break — no games to model until the second half opens.</div>
-                        <div className="ares">Edges resume <b>{AS_BREAK.resume}</b></div>
-                      </div>
+                    ? <AllStarBreak/>
                     : <div className="estate"><div className="et">No winners on the board yet</div><div className="es">Winners post as books release tonight{"\u2019"}s lines.</div></div>}
-            </>
+            </>)
           : <Gate title="Edges are an All-Access feature" navigate={navigate}/>}
         </>}
 
