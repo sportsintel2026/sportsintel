@@ -21,6 +21,8 @@ import HomeDesktop from "./HomeDesktop";
 
 // Tracked-record feed (same source the Performance page reads).
 const PERF_API_BASE = import.meta.env.VITE_API_URL || "https://sportsintel-production.up.railway.app";
+// WZ-AI-READ-2026-07-12 :: session cache for AI reads so an opened card fetches at most once
+const AI_READ_CACHE = new Map();
 
 function formatOdds(a){ if(a==null||isNaN(a))return "—"; const n=Math.round(Number(a)); return n>0?`+${n}`:`${n}`; }
 // Fair American odds implied by the model's win/cover/hit probability (e.g. 49% -> +105).
@@ -697,6 +699,22 @@ function HeroSlide({h,i,navigate,sport,rolled}){ const lg=(SPORTS[sport]||SPORTS
   </div></div>);
 }
 function BoardRow({d,i,open,onToggle,navigate,sport}){ const lg=(SPORTS[sport]||SPORTS.mlb).lg;
+  // WZ-AI-READ-2026-07-12 :: when this card is open, fetch the AI (B) read for it. Fail-safe: any
+  // error or a null response leaves aiRead null and the card shows the deterministic A read (d.why).
+  const [aiRead,setAiRead]=useState(null);
+  useEffect(()=>{ if(!open||!d)return;
+    const sig=(d.gameId||"")+"|"+(d.p||"")+"|"+(d.why||"");
+    if(AI_READ_CACHE.has(sig)){ setAiRead(AI_READ_CACHE.get(sig)); return; }
+    let dead=false;
+    (async()=>{ try{
+      const r=await fetch(`${PERF_API_BASE}/api/ai-read`,{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({sig,pick:d.p,market:d.mk,matchup:d.g,odds:d.odds,model:d.model,market_pct:d.mkt,edge:d.edge,
+          lineMove:d.mv,moneyDir:d.delta>0?1:d.delta<0?-1:0,park:d.park,weather:d.wx,conviction:d.conv,booksLean:d.read,baseRead:d.why})});
+      const j=await r.json();
+      if(!dead&&j&&j.read){ AI_READ_CACHE.set(sig,j.read); setAiRead(j.read); }
+    }catch(_){} })();
+    return ()=>{dead=true;};
+  },[open,d]);
   // CARD-ONE-TAP-EXPAND-2026-06-24 — one tap shows the full breakdown; header/Hide collapses to compact
   const av=<div className="av"><LogoM ab={d.h?d.h[0]:d.a[0]} col={d.h?d.h[1]:d.a[1]} lg={lg}/></div>;
   const leg=(name,L)=> L?(<div className="rdrow"><span className="leg">{name}</span><span className={"tier "+String(L[0]).toLowerCase()}>{L[0]}</span><span className="pk">{L[1]} {"\u00b7"} {L[2]}</span><span className={"ag "+(L[3]?"y":"n")}>{L[3]?"\u2713 agrees":"differs"}</span></div>):null;
@@ -751,7 +769,7 @@ function BoardRow({d,i,open,onToggle,navigate,sport}){ const lg=(SPORTS[sport]||
         </div>}
         {d.read&&(d.read.win||d.read.cover||d.read.total)&&<div className="rdbox"><div className="rl">BOOKS LEAN {"\u2014"} WHERE THE MONEY IS</div>{leg("Win",d.read.win)}{leg("Cover",d.read.cover)}{leg("Total",d.read.total)}</div>}
         {d.flags&&d.flags.length>0&&<div className="pflags">{d.flags.map((x,k)=><span key={k} className={x[0]}>{x[1]}</span>)}</div>}
-        {(d.readB||d.readA||d.why)&&<div className="pread"><div className="pslbl">READ</div><div className="prtx">{d.readB||d.readA||d.why}</div></div>}
+        {(aiRead||d.readB||d.readA||d.why)&&<div className="pread"><div className="pslbl">READ</div><div className="prtx">{aiRead||d.readB||d.readA||d.why}</div></div>}
         <div className="pmore"><span className="dlink" onClick={(ev)=>{ev.stopPropagation();d.gameId&&navigate(`/game/${sport}/${d.gameId}`);}}>Full matchup breakdown {"\u203a"}</span></div>
       </div>
     </div>
