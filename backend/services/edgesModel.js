@@ -1586,6 +1586,10 @@ async function calculateGameEdges(game, oddsForGame) {
 
   let overProb = null;
   let underProb = null;
+  let overEdge = null;
+  let underEdge = null;
+  let overInflation = null;
+  let underInflation = null;
   if (totalLine != null) {
     // Convert the projected-vs-line gap into a probability. The divisor is the
     // approximate standard deviation of an MLB game total (~4 runs). The old
@@ -1593,13 +1597,30 @@ async function calculateGameEdges(game, oddsForGame) {
     // how confident we were on every total (inflated edges). ~4.0 is closer to
     // the real spread of game outcomes.
     const TOTAL_SD = 4.0;
-    overProb = sigmoid((totals.projectedTotal - totalLine) / TOTAL_SD);
-    underProb = 1 - overProb;
+    const rawOver = sigmoid((totals.projectedTotal - totalLine) / TOTAL_SD);
+    const rawUnder = 1 - rawOver;
+    // Edge + overreaction flag stay on the RAW model prob (fundamentals vs the market),
+    // exactly as moneyline does: blendedEdge already returns W_MODEL*(raw - fair), and the
+    // overreaction note flags when the market sits above our FUNDAMENTALS. Keeping these on raw
+    // is what lets us blend the displayed prob below without double-counting the market.
+    overEdge = sanitizeEdge(blendedEdge(rawOver, overOdds, underOdds));
+    underEdge = sanitizeEdge(blendedEdge(rawUnder, underOdds, overOdds));
+    overInflation = overreactionNote(rawOver, overOdds, underOdds);
+    underInflation = overreactionNote(rawUnder, underOdds, overOdds);
+    // WZ-TOT-WINBLEND-2026-07-12 :: anchor the DISPLAYED/ranking totals win% to the de-vigged
+    // over/under market -- the SAME 55/45 blend moneyline (WZ-ML-WINBLEND-2026-07-08) and the run
+    // line already use. Until now the totals win% was the raw projection-vs-line sigmoid, i.e.
+    // market-blind, so a bottom-up over-projection (e.g. 10.8 runs vs a 7.5 line) went straight to
+    // ~70% and topped the winners-first board. The edge + overreaction above stay on raw, so on
+    // every card win% - edge == the fair market price (no double-count) -- exactly the moneyline
+    // pattern. No clean two-way market to de-vig -> fall back to the raw prob so nothing breaks.
+    // Fully reversible via the existing MARKET_BLEND_ENABLED switch / W_MODEL knob.
+    const fairOver = devigTwoWay(overOdds, underOdds);
+    overProb = (MARKET_BLEND_ENABLED && fairOver != null)
+      ? round3(W_MODEL * rawOver + (1 - W_MODEL) * fairOver)
+      : round3(rawOver);
+    underProb = round3(1 - overProb);
   }
-  const overEdge = sanitizeEdge(blendedEdge(overProb, overOdds, underOdds));
-  const underEdge = sanitizeEdge(blendedEdge(underProb, underOdds, overOdds));
-  const overInflation = overreactionNote(overProb, overOdds, underOdds);
-  const underInflation = overreactionNote(underProb, underOdds, overOdds);
 
   // Run line (±1.5). Derive an expected run margin from the win prob, then the
   // probability each side covers. This is the moneyline opinion expressed at a
