@@ -478,12 +478,16 @@ router.get("/diag", async (_req, res) => {
     });
 
     const espnFinished = espnResults.filter((f) => f && f.completed).length;
+    // WZ-UFC-DIAGV21-2026-07-12 :: expose ESPN's own normalized names so a miss's spelling gap is
+    // readable directly (our candidate sets are already on each row; this is the other side).
+    const espnFights = espnResults.map((f) => ({ a: f.a, b: f.b, winner: f.winner, completed: f.completed }));
     res.json({
       ok: true,
       event: event.slug,
       held: !!event._live,
       count: rows.length,
       espnFinishedFights: espnFinished,
+      espnFights,
       bouts: rows,
     });
   } catch (e) {
