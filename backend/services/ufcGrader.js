@@ -17,6 +17,7 @@
 
 const { createClient } = require("@supabase/supabase-js");
 const { getUpcomingEvents, getEventBouts } = require("./citoApi");
+const { getEspnUfcResults, espnWinnerCorner } = require("./espnMma"); // WZ-UFC-ESPN-2026-07-11
 
 let _sb = null;
 function sb() {
@@ -83,6 +84,11 @@ async function gradeUFCPicks() {
 
   const pendingByBout = new Map(pending.map((r) => [String(r.bout_id), r]));
 
+  // WZ-UFC-ESPN-2026-07-11 :: faster winner source. ESPN posts results well ahead of Cito;
+  // fetch once and use it only as a fallback below when Cito's winnerFighterSlug is still null.
+  let espnResults = [];
+  try { espnResults = await getEspnUfcResults(); } catch (_) { espnResults = []; }
+
   let graded = 0, pushed = 0, stillPending = 0;
   for (const slug of gradableSlugs) {
     let bouts = [];
@@ -93,7 +99,10 @@ async function gradeUFCPicks() {
       const row = pendingByBout.get(String(bout.id));
       if (!row) continue; // not one of our pending picks (or already graded)
 
-      const win = winnerOf(bout);
+      // Cito first; if it hasn't posted a winner yet, fall back to ESPN (WZ-UFC-ESPN-2026-07-11).
+      let win = winnerOf(bout);
+      let winSource = win ? "cito" : null;
+      if (!win) { const ew = espnWinnerCorner(bout, espnResults); if (ew) { win = ew; winSource = "espn"; } }
       const nowIso = new Date().toISOString();
 
       if (win && win.corner) {
@@ -103,6 +112,7 @@ async function gradeUFCPicks() {
           .from("ufc_picks")
           .update({ result, winner_name: win.name || null, graded_at: nowIso, updated_at: nowIso })
           .eq("bout_id", String(bout.id));
+        if (winSource === "espn") console.log(`[UFC grade] bout ${bout.id} settled from ESPN (winner=${win.name || "?"})`);
         graded++;
       } else if (TERMINAL_RE.test(String(bout.status || ""))) {
         // Concluded with no winner -> draw / no-contest / cancelled = push (no action).
