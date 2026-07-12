@@ -8,6 +8,9 @@ const supabase = createClient(
 
 const SR_KEY = process.env.SPORTRADAR_API_KEY;
 const SR_BASE = "https://api.sportradar.com";
+// WZ-MLB-STATSAPI-2026-07-12 :: MLB game data moved off the expired SportRadar trial onto the free
+// official MLB Stats API (already powers the edges board). Used by fetchMLBSchedule below.
+const mlbStatsApi = require("./mlbStatsApi");
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
@@ -94,9 +97,11 @@ function parseNBAGame(g) {
 }
 
 async function fetchMLBSchedule(date) {
-  const [y,m,d] = date.split("-");
-  const data = await srGet(`/mlb/trial/v7/en/games/${y}/${m}/${d}/schedule.json`);
-  return (data.games||[]).map(parseMLBGame);
+  // WZ-MLB-STATSAPI-2026-07-12 :: was SportRadar trial (`/mlb/trial/...`), which expired -> 403 and
+  // an empty games cache. mlbStatsApi.getScheduleForDate hits the free official MLB Stats API and
+  // returns a SUPERSET of the old parseMLBGame shape (same id/league/away/home/status/time/etc.),
+  // so the daily-refresh + live-scores cache consumers keep working, now for free with no expiry.
+  return mlbStatsApi.getScheduleForDate(date);
 }
 
 async function fetchMLBBoxScore(gameId) {
