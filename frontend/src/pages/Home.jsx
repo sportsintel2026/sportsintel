@@ -23,6 +23,10 @@ import HomeDesktop from "./HomeDesktop";
 const PERF_API_BASE = import.meta.env.VITE_API_URL || "https://sportsintel-production.up.railway.app";
 // WZ-AI-READ-2026-07-12 :: session cache for AI reads so an opened card fetches at most once
 const AI_READ_CACHE = new Map();
+// WZ-GAMEDETAIL-GUARD-2026-07-12 :: only these sports have a /game/<sport>/:id detail route. Others
+// have none, so navigating there falls through the catch-all to "/" (the landing page) and looks
+// like a logout. Gate every breakdown link/tap on this.
+const hasGameDetail = (sport) => sport === "mlb" || sport === "nba";
 // WZ-BOARD-ASBREAK-2026-07-12 :: All-Star break placeholder window. 2026 break is dark Jul 13-15;
 // second half opens Jul 16. Self-clearing: once games return the board isn't empty, so this never
 // shows on a live day. (Could be made schedule-driven off a backend next-game date later.)
@@ -705,7 +709,7 @@ function HeroChartM({series,seed=0}){ const W=150,H=42;
 function HeroSlide({h,i,navigate,sport,rolled}){ const lg=(SPORTS[sport]||SPORTS.mlb).lg;
   const mv=h.mv?<>{h.mv[0]} <span className="up">{"\u2192"} {h.mv[1]}</span></>:h.odds;
   const tier=(h.model!=null)?(h.model>=65?"LOCK":h.model>=58?"STRONG":h.model>=55?"LEAN":String(h.conv||"").toUpperCase()):String(h.conv||"").toUpperCase();
-  return (<div className="hslide"><div className="hero" onClick={()=>h.gameId&&navigate(`/game/${sport}/${h.gameId}`)}>
+  return (<div className="hslide"><div className="hero" onClick={()=>{ if(hasGameDetail(sport)&&h.gameId) navigate(`/game/${sport}/${h.gameId}`); }}>
     {/* WZ-MARQUEE-HERO-2026-07-08 :: Top Play as the marquee -- big glowing win% over the infield diamond; odds/conviction/line-move below; full breakdown one tap away */}
     <div className="diamond"/>
     <div className="heyebrow">{h._wv?(rolled?"TOP PLAY \u00b7 WINNER + VALUE \u00b7 TOMORROW":"TOP PLAY \u00b7 WINNER + VALUE"):(rolled?"TOP PLAY \u00b7 TOMORROW":"TOP PLAY \u00b7 #1 EDGE TODAY")}</div>
@@ -719,7 +723,7 @@ function HeroSlide({h,i,navigate,sport,rolled}){ const lg=(SPORTS[sport]||SPORTS
       <div className="hcell"><div className="v">{tier}</div><div className="k">CONVICTION</div></div>
       <div className="hcell"><HeroChartM series={h.series} seed={i}/><div className="k">LINE MOVE</div></div>
     </div>
-    <div className="hf"><span>Tap for the full matchup breakdown</span><span>{"\u203a"}</span></div>
+    {hasGameDetail(sport)&&<div className="hf"><span>Tap for the full matchup breakdown</span><span>{"\u203a"}</span></div>}
   </div></div>);
 }
 function BoardRow({d,i,open,onToggle,navigate,sport}){ const lg=(SPORTS[sport]||SPORTS.mlb).lg;
@@ -794,7 +798,7 @@ function BoardRow({d,i,open,onToggle,navigate,sport}){ const lg=(SPORTS[sport]||
         {d.read&&(d.read.win||d.read.cover||d.read.total)&&<div className="rdbox"><div className="rl">BOOKS LEAN {"\u2014"} WHERE THE MONEY IS</div>{leg("Win",d.read.win)}{leg("Cover",d.read.cover)}{leg("Total",d.read.total)}</div>}
         {d.flags&&d.flags.length>0&&<div className="pflags">{d.flags.map((x,k)=><span key={k} className={x[0]}>{x[1]}</span>)}</div>}
         {(aiRead||d.readB||d.readA||d.why)&&<div className="pread"><div className="pslbl">READ</div><div className="prtx">{aiRead||d.readB||d.readA||d.why}</div></div>}
-        <div className="pmore"><span className="dlink" onClick={(ev)=>{ev.stopPropagation();d.gameId&&navigate(`/game/${sport}/${d.gameId}`);}}>Full matchup breakdown {"\u203a"}</span></div>
+        {hasGameDetail(sport)&&<div className="pmore"><span className="dlink" onClick={(ev)=>{ev.stopPropagation();d.gameId&&navigate(`/game/${sport}/${d.gameId}`);}}>Full matchup breakdown {"\u203a"}</span></div>}
       </div>
     </div>
   );
