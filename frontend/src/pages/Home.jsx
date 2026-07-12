@@ -773,42 +773,32 @@ function BoardRow({d,i,open,onToggle,navigate,sport}){ const lg=(SPORTS[sport]||
 // WZ-BOARD-UFC-CARD-2026-07-11 :: one card per game — matchup header (picked side in accent) + OUR PICK
 // (win-prob ring, pick, market, odds, edge, +VALUE) + a READ line from the model reason. Tap opens the
 // full breakdown (BoardRow) exactly as before. Gold accent = a team side, green = a total.
+// WZ-BOARD-TICKER-2026-07-12 :: single-line "ticker" board row (Option 1). One uniform-height row
+// per game: small win% ring, matchup + time, pick + market tag + odds, color-coded edge, chevron.
+// The READ (d.why) is intentionally NOT shown here anymore -- it lives in the expanded BoardRow
+// (tap the row). Edge color follows value: green when it qualifies (>=1.0), gold otherwise; ring
+// color follows the pick side (green totals / gold spread+ML), unchanged from before.
 function BoardCardCompact({d,i,sport,onClick}){
-  const lg=(SPORTS[sport]||SPORTS.mlb).lg;
   const wp=Number(d.model);
   const wpv=isFinite(wp)?Math.max(0,Math.min(100,wp)):null;
   const C=125.7; // 2·π·20
   const dash=wpv!=null?(wpv/100*C):0;
   const tok=String(d.p||"").trim().split(/\s+/);
   const isTot=tok[0]==="Over"||tok[0]==="Under";
-  const pickAb=isTot?"":String(tok[0]||"").toUpperCase();
-  const awayPk=!isTot&&pickAb===String(d.a[0]||"").toUpperCase();
-  const homePk=!isTot&&pickAb===String(d.h[0]||"").toUpperCase();
   const accent=isTot?"#3FCB91":"#C9A86A";
   const showEdge=!(sport==="mlb"&&d.cat==="ml");
-  const showValue=showEdge&&Number(d.edge)>=1.0;
+  const isVal=showEdge&&Number(d.edge)>=1.0;
   return (
     <div className={"ufcard"+(isTot?" tot":"")} onClick={onClick}>
-      <div className="ufm">
-        <span className="ufc"><Logo ab={d.a[0]} size={28} col={d.a[1]} lg={lg}/></span>
-        <span className={"uft"+(awayPk?" pk":"")}>{d.a[0]}</span>
-        <span className="ufat">@</span>
-        <span className="ufc"><Logo ab={d.h[0]} size={28} col={d.h[1]} lg={lg}/></span>
-        <span className={"uft"+(homePk?" pk":"")}>{d.h[0]}</span>
-        {d.starts&&<span className="uftime">{d.starts}</span>}
+      {wpv!=null&&<div className="ufring"><svg viewBox="0 0 48 48"><circle cx="24" cy="24" r="20" fill="none" stroke="rgba(255,255,255,.08)" strokeWidth="4.5"/><circle cx="24" cy="24" r="20" fill="none" stroke={accent} strokeWidth="4.5" strokeLinecap="round" strokeDasharray={dash.toFixed(1)+" "+C} transform="rotate(-90 24 24)"/></svg><div className="ufpc" style={{color:accent}}>{Math.round(wpv)}<i>WIN</i></div></div>}
+      <div className="ufmid">
+        <div className="l1"><span className="ufmatch">{d.a[0]} @ {d.h[0]}</span>{d.starts&&<span className="uftime">{d.starts}</span>}</div>
+        <div className="l2"><span className="ufp" style={{color:accent}}>{d.p}</span>{d.mk&&<span className="ufmk">{d.mk}</span>}{d.odds&&<span className="ufod">{d.odds}</span>}</div>
       </div>
-      <div className="ufop">
-        {wpv!=null&&<div className="ufring"><svg viewBox="0 0 48 48"><circle cx="24" cy="24" r="20" fill="none" stroke="rgba(255,255,255,.08)" strokeWidth="4.5"/><circle cx="24" cy="24" r="20" fill="none" stroke={accent} strokeWidth="4.5" strokeLinecap="round" strokeDasharray={dash.toFixed(1)+" "+C} transform="rotate(-90 24 24)"/></svg><div className="ufpc" style={{color:accent}}>{Math.round(wpv)}<i>%</i></div></div>}
-        <div className="ufpk">
-          <div className="ufl">OUR PICK</div>
-          <div className="ufp" style={{color:accent}}>{d.p}{d.mk&&<span className="ufmk">{d.mk}</span>}{d.odds&&<span className="ufod">{d.odds}</span>}</div>
-        </div>
-        <div className="ufr">
-          {showValue&&<span className="ufval">+VALUE</span>}
-          {showEdge&&<div className="ufedge">{d.edge>=0?"+":""}{Number(d.edge).toFixed(1)}%<small>EDGE</small></div>}
-        </div>
+      <div className="ufrt">
+        {showEdge&&<span className={"ufedge "+(isVal?"v":"n")}>{d.edge>=0?"+":""}{Number(d.edge).toFixed(1)}%</span>}
+        <span className="ufchev">{"\u203A"}</span>
       </div>
-      {d.why&&<div className="ufread"><span className="ufrk">READ</span><span className="uftx">{d.why}</span></div>}
     </div>
   );
 }
@@ -1208,29 +1198,27 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 
 .grid{margin:12px 4px 0;background:var(--panel);border-radius:14px;overflow:hidden}
 /* WZ-BOARD-UFC-CARD-2026-07-11 :: one-card-per-game UFC-style board card */
-.ufboard{margin:10px 6px 0}
-.ufcard{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:11px 12px;margin-bottom:7px;cursor:pointer}
-.ufboard .gr.open{background:var(--panel);border:1px solid var(--line);border-radius:14px;margin-bottom:7px}
-.ufcard .ufm{display:flex;align-items:center;gap:7px;margin-bottom:10px}
-.ufcard .ufm .ufc{flex:none;display:inline-flex}
-.ufcard .ufm .uft{font-family:var(--disp);font-weight:800;font-size:15px;color:var(--mut)}
-.ufcard .ufm .uft.pk{color:var(--gold)}
-.ufcard .ufm .ufat{font-family:var(--mono);font-size:11px;color:var(--mut2);margin:0 1px}
-.ufcard .ufm .uftime{margin-left:auto;font-family:var(--mono);font-size:9.5px;color:var(--mut2);letter-spacing:.04em}
-.ufcard .ufop{display:flex;align-items:center;gap:11px}
-.ufcard .ufring{position:relative;width:44px;height:44px;flex:none}.ufcard .ufring svg{width:44px;height:44px;display:block}
-.ufcard .ufpc{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:var(--disp);font-weight:800;font-size:14px}.ufcard .ufpc i{font-size:8px;font-style:normal;margin-left:1px}
-.ufcard .ufpk{flex:1;min-width:0}
-.ufcard .ufpk .ufl{font-family:var(--mono);font-size:8px;letter-spacing:.16em;color:var(--mut2);margin-bottom:3px}
-.ufcard .ufpk .ufp{font-family:var(--disp);font-weight:800;font-size:18px;line-height:1;display:flex;align-items:baseline;gap:7px;flex-wrap:wrap}
-.ufcard .ufpk .ufp .ufmk{font-family:var(--mono);font-size:8.5px;font-weight:600;color:var(--gold);border:1px solid rgba(201,168,106,.3);border-radius:4px;padding:1px 5px;position:relative;top:-2px}
-.ufcard .ufpk .ufp .ufod{font-family:var(--mono);font-size:12.5px;color:var(--mut);font-weight:400}
-.ufcard .ufr{text-align:right;flex:none}
-.ufcard .ufr .ufval{display:inline-block;font-family:var(--mono);font-size:8px;font-weight:600;color:var(--green);border:1px solid rgba(63,203,145,.4);border-radius:5px;padding:2px 6px;margin-bottom:3px}
-.ufcard .ufr .ufedge{font-family:var(--mono);font-size:14px;font-weight:600;color:var(--green);line-height:1}.ufcard .ufr .ufedge small{display:block;font-size:7px;color:var(--mut2);letter-spacing:.1em;margin-top:1px}
-.ufcard .ufread{display:flex;gap:8px;align-items:baseline;margin-top:10px;padding-top:9px;border-top:1px solid var(--line);font-size:11.5px;color:#aeb8c2;line-height:1.4}
-.ufcard .ufread .ufrk{font-family:var(--mono);font-size:8px;font-weight:600;letter-spacing:.1em;color:var(--gold);border:1px solid rgba(201,168,106,.3);border-radius:5px;padding:2px 6px;flex:none;align-self:center}
-.ufcard .ufread .uftx{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+/* WZ-BOARD-TICKER-2026-07-12 :: unified list panel of single-line ticker rows */
+.ufboard{margin:10px 6px 0;border:1px solid var(--line);border-radius:14px;background:var(--panel);overflow:hidden}
+.ufboard .gr.open{background:var(--panel2);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.ufcard{display:flex;align-items:center;gap:11px;padding:11px 13px;border-bottom:1px solid var(--line);cursor:pointer}
+.ufcard:last-child{border-bottom:0}
+.ufcard .ufring{position:relative;width:34px;height:34px;flex:none}.ufcard .ufring svg{width:34px;height:34px;display:block}
+.ufcard .ufpc{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:var(--mono);font-weight:600;font-size:11px;line-height:1}
+.ufcard .ufpc i{font-size:6.5px;font-style:normal;color:var(--mut2);letter-spacing:.06em;margin-top:1px}
+.ufcard .ufmid{flex:1;min-width:0}
+.ufcard .ufmid .l1{display:flex;align-items:center;gap:7px;margin-bottom:3px}
+.ufcard .ufmid .ufmatch{font-family:var(--disp);font-weight:700;font-size:13px;color:var(--mut);letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ufcard .ufmid .uftime{font-family:var(--mono);font-size:9px;color:var(--mut2);flex:none;letter-spacing:.03em}
+.ufcard .ufmid .l2{display:flex;align-items:center;gap:7px;min-width:0}
+.ufcard .ufmid .ufp{font-family:var(--disp);font-weight:800;font-size:16px;line-height:1;white-space:nowrap}
+.ufcard .ufmid .ufmk{font-family:var(--mono);font-size:8.5px;font-weight:600;color:var(--mut);border:1px solid var(--line);border-radius:4px;padding:2px 5px;flex:none}
+.ufcard .ufmid .ufod{font-family:var(--mono);font-size:12px;color:var(--mut);flex:none}
+.ufcard .ufrt{display:flex;align-items:center;gap:9px;flex:none}
+.ufcard .ufrt .ufedge{font-family:var(--mono);font-size:14px;font-weight:600;line-height:1;text-align:right}
+.ufcard .ufrt .ufedge.v{color:var(--green)}
+.ufcard .ufrt .ufedge.n{color:var(--gold)}
+.ufcard .ufrt .ufchev{font-family:var(--mono);font-size:15px;color:var(--mut2);line-height:1}
 /* WZ-TOPPROPS-2026-07-08 :: tight edge-to-edge 3x2 prop grid + headshot cards */
 .propgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin:12px 4px 0;background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
 .ppc{padding:12px 8px 10px;text-align:center;cursor:pointer}
