@@ -495,6 +495,23 @@ router.get("/diag", async (_req, res) => {
   }
 });
 
+// WZ-UFC-GRADENOW-2026-07-12 :: manual trigger for the UFC grader so a result that's already
+// resolvable (confirm on /diag) settles on demand instead of waiting up to 30 min for the cron.
+// Runs the SAME gradeUFCPicks() the cron runs -- idempotent (only flips pending -> win/loss/push)
+// and fail-safe. Then busts the assembled-card cache so the next /card rebuild reflects it
+// immediately (rolling forward to the next event once the last pending pick for the held event
+// settles). Read-mostly; touches no existing logic. Temporary; safe to delete with /diag.
+router.get("/grade-now", async (_req, res) => {
+  try {
+    const { gradeUFCPicks } = require("../services/ufcGrader");
+    const out = await gradeUFCPicks();
+    cardCache = { at: 0, data: null }; // force a fresh card rebuild on the next /card call
+    res.json({ ok: true, ran: true, result: out });
+  } catch (e) {
+    res.json({ ok: false, error: String((e && e.message) || e) });
+  }
+});
+
 // WZ-UFC-RECORD-2026-07-09 :: served record for the UFC Record tab. Reads graded ufc_picks
 // (result in win/loss/push) and computes two honest splits: MODEL OVERALL (every graded pick)
 // and +VALUE ONLY (is_value picks -- the real test of the edge). Flat 1 unit/pick; ROI = net
