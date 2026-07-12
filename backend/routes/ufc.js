@@ -12,7 +12,7 @@ const express = require("express");
 const router = express.Router();
 const axios = require("axios");
 const { fetchMMASchedule } = require("../services/sportsData");
-const { getNextPPVEvent, getEventBouts, getFighter, getFighterFights } = require("../services/citoApi"); // WZ-UFC-FORM-2026-07-09
+const { getNextPPVEvent, getEventBouts, getFighter, getFighterFights, getUpcomingEvents } = require("../services/citoApi"); // WZ-UFC-FORM-2026-07-09 / WZ-UFC-HOLDEVENT-2026-07-11
 const { scoreBout, methodLean } = require("../services/mmaModel"); // WZ-UFC-MODEL-2026-07-09 / WZ-UFC-METHOD-2026-07-09
 const { createClient } = require("@supabase/supabase-js"); // WZ-UFC-REC-2026-07-09
 
@@ -161,10 +161,44 @@ async function parseBout(bout, oddsMap) {
   return out;
 }
 
+// WZ-UFC-HOLDEVENT-2026-07-11 :: keep the UFC card on the event that's actually happening.
+// getNextPPVEvent() rolls to the NEXT upcoming PPV the moment Cito drops the current event off
+// the upcoming list (~main-card start) -- which yanks the live card away mid-event and shows the
+// following event instead. Instead: if we still have UNGRADED picks for an event that is NO
+// LONGER on the upcoming list (i.e. it has started / just finished), keep showing THAT event
+// until its picks all settle, then roll forward. Fully fail-safe: any error / no match returns
+// the normal next event, so worst case is exactly today's behavior.
+async function pickCardEvent() {
+  const next = await getNextPPVEvent();
+  try {
+    const c = sb();
+    if (!c) return next;
+    const upcoming = await getUpcomingEvents().catch(() => []);
+    const upcomingSlugs = new Set((upcoming || []).map((e) => e && e.slug).filter(Boolean));
+    const { data: pend } = await c
+      .from("ufc_picks")
+      .select("event_slug,event_name")
+      .eq("result", "pending")
+      .limit(200);
+    // a live / just-finished event = has ungraded picks but is no longer on the upcoming list
+    const live = (pend || []).find((r) => r.event_slug && !upcomingSlugs.has(r.event_slug));
+    if (live && (!next || live.event_slug !== next.slug)) {
+      return { slug: live.event_slug, title: live.event_name || "UFC", _live: true };
+    }
+  } catch (_) { /* fall through to the normal next event */ }
+  return next;
+}
+
 async function buildCitoCard() {
-  const event = await getNextPPVEvent();
+  let event = await pickCardEvent();
   if (!event || !event.slug) return null;
-  const rawBouts = await getEventBouts(event.slug);
+  let rawBouts = await getEventBouts(event.slug);
+  // if the held live event returns no bouts, fall back to the normal next event (never go empty)
+  if ((!Array.isArray(rawBouts) || !rawBouts.length) && event._live) {
+    event = await getNextPPVEvent();
+    if (!event || !event.slug) return null;
+    rawBouts = await getEventBouts(event.slug);
+  }
   if (!Array.isArray(rawBouts) || !rawBouts.length) return null;
 
   const oddsMap = await getOddsMap();
