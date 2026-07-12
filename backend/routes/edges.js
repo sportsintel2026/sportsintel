@@ -156,9 +156,19 @@ async function resolveSlateDate() {
   if (playable.length > 0 && !allFinal) {
     return { date: today, rolled: false, underway };
   }
-  // No games today, or every one is final -> the slate is over, roll to tomorrow.
-  const tomorrow = getPacificDate(1);
-  return { date: tomorrow, rolled: true, underway: false };
+  // WZ-SLATE-FWDROLL-2026-07-12 :: today is over (or empty) -> roll FORWARD to the next date that
+  // actually has games, skipping empty days (off-days, the All-Star break). The old code hopped a
+  // hardcoded +1 day and stopped even if that day was dark, so during the break it landed on an
+  // empty date and the board never reached the next real slate. Capped look-ahead so a genuine
+  // schedule gap can't loop; falls back to +1 (empty board / placeholder) if nothing's scheduled.
+  for (let off = 1; off <= 10; off++) {
+    const d = getPacificDate(off);
+    let g = [];
+    try { g = await getScheduleForDate(d); } catch (_) { g = []; }
+    const p = g.filter(x => x.status !== "postponed" && x.status !== "cancelled");
+    if (p.length > 0) return { date: d, rolled: true, underway: false };
+  }
+  return { date: getPacificDate(1), rolled: true, underway: false };
 }
 
 // ── Main endpoint ─────────────────────────────────────────────────────────────
