@@ -67,6 +67,23 @@ const CSS = `
 .ufc-edge.neg{color:#5B646C}
 .ufc-pb.pending .pnd{font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.5px;color:#5B646C}
 
+/* WZ-UFC-STATUS-2026-07-11 :: fight-status badge + FINAL (won/lost/push) states */
+.ufc-head .ufc-sp{flex:1}
+.ufc-st{font-family:'IBM Plex Mono',monospace;font-size:8px;font-weight:700;letter-spacing:.6px;padding:2px 8px;border-radius:999px;white-space:nowrap}
+.ufc-st.await{color:#C9A86A;border:1px solid rgba(201,168,106,.42)}
+.ufc-st.fin{color:#C9A86A;border:1px solid rgba(201,168,106,.32);background:rgba(201,168,106,.08)}
+.ufc-av.won{border-color:#3FCB91;box-shadow:0 0 0 3px rgba(63,203,145,.16)}
+.ufc-av.dim{filter:grayscale(.7) brightness(.62);border-color:rgba(255,255,255,.08)}
+.ufc-nm .fn.win{color:#3FCB91}
+.ufc-nm .fn.dim{color:#5B646C}
+.ufc-pb.win{background:rgba(63,203,145,.07);border-color:rgba(63,203,145,.30)}
+.ufc-pb.loss{background:rgba(226,101,92,.06);border-color:rgba(226,101,92,.28)}
+.ufc-pb.push{background:rgba(255,255,255,.03);border-color:rgba(255,255,255,.08)}
+.ufc-res{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.6px;padding:4px 10px;border-radius:6px}
+.ufc-res.w{color:#3FCB91;background:rgba(63,203,145,.12);border:1px solid rgba(63,203,145,.32)}
+.ufc-res.l{color:#E2655C;background:rgba(226,101,92,.12);border:1px solid rgba(226,101,92,.30)}
+.ufc-res.p{color:#99A2AA;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.10)}
+
 /* WZ-UFC-METHOD-2026-07-09 :: method LEAN -- info-only handicapping read. Neutral/gold, never green
    (green is reserved for market-beating edge/value). "READ" tag makes clear it is not a priced bet. */
 .ufc-lean{display:flex;align-items:center;gap:8px;margin-top:8px;padding:6px 10px;border-radius:9px;background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.05)}
@@ -101,10 +118,10 @@ function fmtOdds(o) {
   return n > 0 ? "+" + n : "" + n;
 }
 
-function Avatar({ src, name, isPick }) {
+function Avatar({ src, name, isPick, won, dim }) {
   const [err, setErr] = useState(false);
   return (
-    <div className={"ufc-av" + (isPick ? " pick" : "")}>
+    <div className={"ufc-av" + (isPick ? " pick" : "") + (won ? " won" : "") + (dim ? " dim" : "")}>
       {src && !err ? <img src={src} alt="" onError={() => setErr(true)} /> : <span>{initials(name)}</span>}
     </div>
   );
@@ -112,41 +129,61 @@ function Avatar({ src, name, isPick }) {
 
 function Bout({ b, main }) {
   const hasPick = b && b.winPct != null;
+  // WZ-UFC-STATUS-2026-07-11 :: fight status from data we already have.
+  // result (win/loss/push) once the grader settles -> FINAL. lineClosed with no result yet
+  // (book pulled the line, Cito hasn't posted the winner) -> AWAITING RESULT. Live line -> upcoming.
+  const res = b && b.result;
+  const isFinal = res === "win" || res === "loss" || res === "push";
+  const awaiting = !isFinal && !!(b && b.lineClosed);
+  // winner corner derived from result relative to our pick (win = our corner won; loss = the other)
+  let winnerCorner = null;
+  if (res === "win") winnerCorner = b.pickCorner;
+  else if (res === "loss") winnerCorner = b.pickCorner === "red" ? "blue" : "red";
+  const redWon = isFinal && winnerCorner === "red";
+  const blueWon = isFinal && winnerCorner === "blue";
+  const redDim = isFinal && res !== "push" && !redWon;
+  const blueDim = isFinal && res !== "push" && !blueWon;
   const redPick = hasPick && b.pickCorner === "red";
   const bluePick = hasPick && b.pickCorner === "blue";
   const dash = hasPick ? Math.round((b.winPct / 100) * 104) : 0;
   const value = !!(b && b.value);
+  const ringCol = res === "win" ? "#3FCB91" : res === "loss" ? "#E2655C" : "#C9A86A";
+  const resChip = res === "win" ? ["w", "WON"] : res === "loss" ? ["l", "LOST"] : res === "push" ? ["p", "PUSH"] : null;
   return (
-    <div className={"ufc-b" + (main ? " main" : "")}>
+    <div className={"ufc-b" + (main ? " main" : "") + (isFinal ? " final " + res : "")}>
       <div className="ufc-head">
         {b.weightClass ? <span className="ufc-wc">{b.weightClass}</span> : null}
         {b.titleBout ? <span className="ufc-title">TITLE</span> : null}
+        <span className="ufc-sp" />
+        {isFinal ? <span className="ufc-st fin">FINAL</span>
+          : awaiting ? <span className="ufc-st await">AWAITING RESULT</span>
+          : null}
       </div>
 
       <div className="ufc-fo">
         <div className="ufc-side">
-          <Avatar src={b.red && b.red.headshot} name={b.red && b.red.name} isPick={redPick} />
+          <Avatar src={b.red && b.red.headshot} name={b.red && b.red.name} isPick={!isFinal && redPick} won={redWon} dim={redDim} />
           <div className="ufc-nm">
-            <div className={"fn" + (redPick ? " pick" : "")}>{b.red ? b.red.name : "TBD"}</div>
+            <div className={"fn" + (redWon ? " win" : (!isFinal && redPick) ? " pick" : "") + (redDim ? " dim" : "")}>{b.red ? b.red.name : "TBD"}</div>
             {b.red && b.red.record ? <div className="rec">{b.red.record}</div> : null}
           </div>
         </div>
         <div className="ufc-vs">VS</div>
         <div className="ufc-side b">
-          <Avatar src={b.blue && b.blue.headshot} name={b.blue && b.blue.name} isPick={bluePick} />
+          <Avatar src={b.blue && b.blue.headshot} name={b.blue && b.blue.name} isPick={!isFinal && bluePick} won={blueWon} dim={blueDim} />
           <div className="ufc-nm">
-            <div className={"fn" + (bluePick ? " pick" : "")}>{b.blue ? b.blue.name : "TBD"}</div>
+            <div className={"fn" + (blueWon ? " win" : (!isFinal && bluePick) ? " pick" : "") + (blueDim ? " dim" : "")}>{b.blue ? b.blue.name : "TBD"}</div>
             {b.blue && b.blue.record ? <div className="rec">{b.blue.record}</div> : null}
           </div>
         </div>
       </div>
 
       {hasPick ? (
-        <div className={"ufc-pb" + (value ? " val" : "")}>
+        <div className={"ufc-pb" + (isFinal ? " " + res : value ? " val" : "")}>
           <div className="ufc-ring">
             <svg width="40" height="40">
               <circle cx="20" cy="20" r="16.5" fill="none" stroke="rgba(255,255,255,.09)" strokeWidth="4" />
-              <circle cx="20" cy="20" r="16.5" fill="none" stroke="#C9A86A" strokeWidth="4" strokeLinecap="round" strokeDasharray={`${dash} 104`} />
+              <circle cx="20" cy="20" r="16.5" fill="none" stroke={ringCol} strokeWidth="4" strokeLinecap="round" strokeDasharray={`${dash} 104`} />
             </svg>
             <div className="pc"><span className="pct">{b.winPct}%</span><span className="pl">WIN</span></div>
           </div>
@@ -155,15 +192,19 @@ function Bout({ b, main }) {
             <div className="who">{b.pick}{b.odds != null ? <span className="od">{fmtOdds(b.odds)}</span> : null}</div>
           </div>
           <div className="ufc-pbright">
-            {value ? <span className="ufc-vbadge">+VALUE</span> : null}
-            {b.edgePct != null ? <span className={"ufc-edge" + (b.edgePct < 0 ? " neg" : "")}>{b.edgePct > 0 ? "+" : ""}{b.edgePct}% edge</span> : null}
+            {resChip ? <span className={"ufc-res " + resChip[0]}>{resChip[1]}</span> : (
+              <>
+                {value ? <span className="ufc-vbadge">+VALUE</span> : null}
+                {b.edgePct != null ? <span className={"ufc-edge" + (b.edgePct < 0 ? " neg" : "")}>{b.edgePct > 0 ? "+" : ""}{b.edgePct}% edge</span> : null}
+              </>
+            )}
           </div>
         </div>
       ) : (
         <div className="ufc-pb pending"><span className="pnd">ODDS PENDING &mdash; no line posted yet</span></div>
       )}
 
-      {b.methodLean && b.methodLean.lean && b.methodLean.lean !== "EVEN" ? (
+      {b.methodLean && b.methodLean.lean && b.methodLean.lean !== "EVEN" && !isFinal ? (
         <div className="ufc-lean">
           <span className="tag">READ</span>
           <span className="txt">{b.methodLean.label}</span>
