@@ -741,29 +741,18 @@ function BoardRow({d,i,open,onToggle,navigate,sport}){ const lg=(SPORTS[sport]||
           <div className="pbar"><i className="bf" style={{width:mktW+"%"}}/><i className="of" style={{left:mktW+"%",width:ohW+"%"}}/></div>
           <div className="pble"><span>MARKET {d.mkt!=null?d.mkt+"%":"\u2014"}</span><span className="g">MODEL {d.model!=null?d.model+"%":"\u2014"} {hitWord}</span></div>
           {d.edge!=null&&<div className="pedgex">That {Math.abs(d.edge).toFixed(1)}% gap between our model and the market is our <b>edge</b> — the price is better than it should be.</div>}
-          <div className="pfoot">
-            <div className="pconv"><span className="pmeter"><i className={convN>=1?"on":""}/><i className={convN>=2?"on":""}/><i className={convN>=3?"on":""}/></span><span className="pcl">{conv?conv.toUpperCase():""} CONVICTION</span></div>
-            <div className="pmoney">{d.mv&&<SparkM dir={d.mv[2]} seed={i}/>}<span className={"pmt "+money[0]}>{money[1]}</span></div>
-          </div>
       </div>
-      <div className="dxmore" onClick={(ev)=>{ev.stopPropagation();onToggle&&onToggle();}}>Hide breakdown <span className="dxc up">{"\u203a"}</span></div>
-      <div className="dxwrap on">
-      <div className="dwrap">
-        <div className="dhead">{av}<div><div className="nm">{d.g}</div><div className="mu">{d.p}</div></div>{d.starts&&<div className="st">{d.starts}</div>}</div>
-        {d.model!=null&&<div className="mvm"><div className="lbls"><span className="ml">model {d.model}%</span><span className="mk2">market {d.mkt}%</span></div><div className="bar"><i style={{width:d.model+"%"}}/></div></div>}
-        <div className="dchips">
-          {d.odds&&<span className="dchip"><b>Odds</b>{d.odds}</span>}
-          {d.mv&&<span className="dchip"><b>Move</b>{d.mv[0]}{"\u2192"}{d.mv[1]}</span>}
-          {d.conv&&<span className={"dchip "+(d.conv==="high"?"g":d.conv==="med"?"gold":"")}><b>Conv</b>{d.conv.toUpperCase()}</span>}
-          {d.park&&d.park.map((p,k)=><span key={k} className="dchip"><b>Park</b>{p}</span>)}
-          {d.wx&&<span className="dchip">{d.wx}</span>}
-        </div>
-        {d.flags&&<div className="flags">{d.flags.map((x,k)=><span key={k} className={x[0]}>{x[1]}</span>)}</div>}
-        {d.read&&<div className="rdbox"><div className="rl">MARKET READ {"\u2014"} BOOKS LEAN</div>{leg("Win",d.read.win)}{leg("Cover",d.read.cover)}{leg("Total",d.read.total)}</div>}
-        {d.why&&<div className="why"><b>Why&nbsp;&nbsp;</b>{d.why}</div>}
-        <span className="dlink" onClick={(ev)=>{ev.stopPropagation();d.gameId&&navigate(`/game/${sport}/${d.gameId}`);}}>Full matchup breakdown {"\u203a"}</span>
-      </div>
-      </div>
+        {(d.mv||(d.park&&d.park.length)||d.wx||conv)&&<div className="psig">
+          <div className="pslbl">SIGNALS</div>
+          {d.mv&&<div className="psr"><span className="psk">LINE MOVE</span><span className="psv">{d.mv[0]} {"\u2192"} {d.mv[1]}{d.delta?<span className={"psm "+money[0]}> {"\u00b7"} {money[1]}</span>:null}</span></div>}
+          {d.park&&d.park.length>0&&<div className="psr"><span className="psk">PARK</span><span className="psv">{d.park.join("  \u00b7  ")}</span></div>}
+          {d.wx&&<div className="psr"><span className="psk">WEATHER</span><span className="psv">{d.wx}</span></div>}
+          {conv&&<div className="psr"><span className="psk">CONVICTION</span><span className="psv"><span className={"pscv "+conv}>{conv.toUpperCase()}</span></span></div>}
+        </div>}
+        {d.read&&(d.read.win||d.read.cover||d.read.total)&&<div className="rdbox"><div className="rl">BOOKS LEAN {"\u2014"} WHERE THE MONEY IS</div>{leg("Win",d.read.win)}{leg("Cover",d.read.cover)}{leg("Total",d.read.total)}</div>}
+        {d.flags&&d.flags.length>0&&<div className="pflags">{d.flags.map((x,k)=><span key={k} className={x[0]}>{x[1]}</span>)}</div>}
+        {(d.readB||d.readA||d.why)&&<div className="pread"><div className="pslbl">READ</div><div className="prtx">{d.readB||d.readA||d.why}</div></div>}
+        <div className="pmore"><span className="dlink" onClick={(ev)=>{ev.stopPropagation();d.gameId&&navigate(`/game/${sport}/${d.gameId}`);}}>Full matchup breakdown {"\u203a"}</span></div>
       </div>
     </div>
   );
@@ -1363,6 +1352,22 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .rdrow .pk{flex:1;color:#cfd7e2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .rdrow .ag{flex:0 0 auto}.ag.y{color:var(--green)}.ag.n{color:var(--mut)}
 .dlink{font-family:var(--disp);font-weight:800;font-size:13px;color:var(--gold)}
+/* WZ-CARD-CLEAN-2026-07-12 :: decluttered expanded card — signals readout + single read */
+.psig{padding:11px 15px;border-top:1px solid var(--line2)}
+.pslbl{font-family:var(--mono);font-size:8.5px;font-weight:600;letter-spacing:.14em;color:var(--mut2);margin-bottom:8px}
+.psr{display:grid;grid-template-columns:88px 1fr;gap:10px;padding:6px 0;border-top:1px solid rgba(255,255,255,.045)}
+.psr:first-of-type{border-top:0}
+.psr .psk{font-family:var(--mono);font-size:9px;font-weight:600;letter-spacing:.06em;color:var(--mut2);padding-top:1px}
+.psr .psv{font-family:var(--disp);font-weight:600;font-size:13px;color:#cfd7e2;line-height:1.4}
+.psr .psv .psm{font-family:var(--mono);font-size:11px;font-weight:500}
+.psr .psv .psm.up{color:var(--green)}.psr .psv .psm.dn{color:var(--red)}
+.psr .psv .pscv{font-family:var(--mono);font-size:11px;font-weight:600}
+.psr .psv .pscv.high{color:var(--green)}.psr .psv .pscv.med{color:var(--gold)}.psr .psv .pscv.low{color:var(--mut)}
+.gr .gbody>.rdbox{margin:11px 15px}
+.pflags{display:flex;flex-wrap:wrap;gap:6px;padding:0 15px 4px}
+.pread{padding:11px 15px;border-top:1px solid var(--line2)}
+.pread .prtx{font-family:var(--disp);font-weight:500;font-size:14px;line-height:1.55;color:#c8d0d8}
+.pmore{padding:12px 15px;border-top:1px solid var(--line)}
 .sum{display:flex;align-items:center;gap:12px;margin:0 14px;padding:11px 14px;font-family:var(--mono);font-size:11px;color:var(--mut);border-top:1px solid var(--line2)}.sum .l{color:#cfd7e2;font-weight:600}.sum .p{color:var(--green)}.sum .sp{flex:1}
 
 /* live edge cards */
