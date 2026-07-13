@@ -141,8 +141,7 @@ export default function HomePage(){
   const [sport,setSport]=useSport(); // WIZEPICKS-SPORTNAV-2026-06-25 (was useState("mlb"))
   const [board,setBoard]=useState("ml");
   const [propTab,setPropTab]=useState("hr");
-  const [wpRecord,setWpRecord]=useState(null);
-  const [wpRows,setWpRows]=useState([]); // WZ-WIZEPLAYS-LIST-2026-07-08 :: keep picks for the list
+  const [wpRows,setWpRows]=useState([]); // WZ-WIZEPLAYS-LIST-2026-07-08 :: keep picks for the list (all sports; scoped per-sport in render)
   const [perf,setPerf]=useState(null);
   const [live,setLive]=useState(null);
   const [oddsHist,setOddsHist]=useState(null);
@@ -176,8 +175,8 @@ export default function HomePage(){
   useEffect(()=>{(async()=>{ try{
     const { data }=await supabase.from("expert_picks").select("*").order("date",{ascending:false});
     const rows=(data||[]).map(r=>{ let picks=[]; try{picks=r.picks?JSON.parse(r.picks):[];}catch(_){picks=[];} return {date:r.date,picks}; });
-    setWpRecord(computeRecord(rows)); setWpRows(rows);
-  }catch(_){ setWpRecord(null); } })();},[]);
+    setWpRows(rows);
+  }catch(_){ setWpRows([]); } })();},[]);
   const load=useCallback(async()=>{ try{ const d=await (sport==="nfl"?SPORTS.nfl.feed(nflPhase):SPORTS[sport].feed());
     if(sport==="nfl"&&d&&d.phase){ setPhaseAvail(d.phase.available||[]); if(nflPhase==null&&d.phase.selected) setNflPhase(d.phase.selected); }
     const f={}; [...(d.moneylineEdges||[]),...(d.totalsEdges||[]),...(d.runLineEdges||[]),...(d.spreadEdges||[])].forEach(e=>{ const k=e.gameId+e.side; if(prev.current[k]!=null&&prev.current[k]!==e.odds)f[k]=e.odds>prev.current[k]?"up":"dn"; prev.current[k]=e.odds; });
@@ -300,7 +299,16 @@ export default function HomePage(){
   const wpTodayStr=new Date().toLocaleDateString("en-CA");
   // WZ-SLATE-STATE-2026-07-08 :: only show plays still pending -- finished/graded ones clear out
   // WZ-WIZEPLAYS-SHOWALL-2026-07-11 :: board shows EVERY pick for the day (pending + settled, each with its WON/LOST/PUSH outcome); the list clears only once every game has finished.
-  const wpToday=(()=>{ const row=(wpRows||[]).find(r=>String(r.date)>=wpTodayStr); if(!row||!Array.isArray(row.picks))return []; const picks=row.picks; const isDone=(pk)=>{const rr=String((pk&&pk.result)||"").toLowerCase();return rr==="win"||rr==="loss"||rr==="push"||rr==="won"||rr==="lost";}; const allDone=picks.length>0&&picks.every(isDone); return allDone?[]:picks; })();
+  // WZ-WIZEPLAYS-PERSPORT-2026-07-13 :: WizePlays are scoped to the active sport, so an MLB pick only
+  // shows on the MLB page, an NFL pick only on NFL, etc. Straight picks carry `sport`; a parlay matches
+  // a sport if ANY leg is that sport. Map the board's sport id to the id stored on picks (the board calls
+  // college football "cfb"; picks tag it "ncaafb"). Record and list use the SAME scoped rows, so each
+  // sport's WizePlays record reflects only that sport (unmapped sports like UFC scope to nothing here).
+  const WP_SPORT={ mlb:"mlb", nba:"nba", nfl:"nfl", nhl:"nhl", cfb:"ncaafb" };
+  const wpPickInSport=(pk,sp)=>{ const want=WP_SPORT[sp]; if(!want||!pk) return false; if(pk.type==="parlay") return Array.isArray(pk.legs)&&pk.legs.some(l=>String((l&&l.sport)||"").toLowerCase()===want); return String(pk.sport||"").toLowerCase()===want; };
+  const wpRowsSport=(wpRows||[]).map(r=>({ date:r.date, picks:(r.picks||[]).filter(pk=>wpPickInSport(pk,sport)) }));
+  const wpRecord=computeRecord(wpRowsSport);
+  const wpToday=(()=>{ const row=wpRowsSport.find(r=>String(r.date)>=wpTodayStr); if(!row||!Array.isArray(row.picks))return []; const picks=row.picks; const isDone=(pk)=>{const rr=String((pk&&pk.result)||"").toLowerCase();return rr==="win"||rr==="loss"||rr==="push"||rr==="won"||rr==="lost";}; const allDone=picks.length>0&&picks.every(isDone); return allDone?[]:picks; })();
   const liveGames=(live||[]).filter(g=>[g.awayEdge,g.homeEdge,g.overEdge,g.underEdge].some(x=>x!=null));
 
   const lineSeries={};
