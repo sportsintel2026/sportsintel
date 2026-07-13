@@ -1498,9 +1498,9 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .pkc .bs{display:flex;gap:10px;margin-top:9px}.pkc .b .kk{font-family:var(--mono);font-size:8px;color:var(--mut);font-weight:600}.pkc .b .vv{font-family:var(--disp);font-weight:800;font-size:20px;color:var(--green)}.pkc .b .vv.dn{color:var(--neg)}
 .pkc .wx{font-family:var(--mono);font-size:10px;color:#aeb9c8;margin-top:9px;padding-top:8px;border-top:1px solid var(--line)}
 
-.guide{display:flex;align-items:center;gap:12px;margin:8px 4px 0;padding:12px 14px;border-radius:12px;border:none;background:rgba(63,203,145,.05);cursor:pointer}
-.guide .gi{width:40px;height:40px;border-radius:11px;background:rgba(51,233,145,.12);border:1px solid rgba(51,233,145,.25);flex:0 0 auto}
-.guide .gt{flex:1}.guide .gh{font-weight:800;font-size:13.5px;color:#fff}.guide .gs{font-size:11px;color:#9aa6b2;margin-top:3px;line-height:1.4}.guide .ga{color:var(--green);font-weight:800;font-size:17px}
+.guide{display:flex;align-items:center;gap:12px;margin:8px 4px 0;padding:12px 14px;border-radius:12px;border:none;background:rgba(201,168,106,.05);cursor:pointer} /* WZ-GUIDE-GOLD-2026-07-13 :: was green tint, now on-brand gold */
+.guide .gi{width:40px;height:40px;border-radius:11px;background:rgba(201,168,106,.12);border:1px solid rgba(201,168,106,.28);flex:0 0 auto}
+.guide .gt{flex:1}.guide .gh{font-weight:800;font-size:13.5px;color:#fff}.guide .gs{font-size:11px;color:#9aa6b2;margin-top:3px;line-height:1.4}.guide .ga{color:var(--gold);font-weight:800;font-size:17px}
 .upcrow{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding:6px 12px 0}.upcrow::-webkit-scrollbar{display:none}
 .gm{flex:0 0 auto;width:128px;border:1px solid var(--line);border-radius:11px;background:var(--panel);padding:9px 11px}.gm .mt{display:flex;align-items:center;gap:5px;font-family:var(--disp);font-weight:800;font-size:14px}.gm .x{color:var(--mut)}.gm .tm{font-family:var(--mono);font-size:9px;color:var(--mut);margin-top:6px}
 
