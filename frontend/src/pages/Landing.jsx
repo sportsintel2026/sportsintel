@@ -119,7 +119,7 @@ export default function LandingPage(){
       </div></div>
 
 
-      {/* ===== INTRO — What is WizePicks (WZ-LANDING-INTROCUT-2026-07-13) ===== */}
+      {/* ===== INTRO — What is WizePicks (WZ-LANDING-ICLOSE-FIX-2026-07-13) ===== */}
       <div className="wpintro"><div className="wrap">
         <span className="eyebrow">What is WizePicks</span>
         <h1 className="wpih1">Anybody can sell you a pick.<br/>We make you the <span className="g">sharp one.</span></h1>
@@ -147,6 +147,11 @@ export default function LandingPage(){
         <div className="vs">
           <div className="col old"><h4>The old way</h4><ul><li>$100+ a month for "expert" picks</li><li>Buy a pick, trust it blindly</li><li>Never learn why you won or lost</li><li>Still no guarantee — still losing</li></ul></div>
           <div className="col wize"><h4>The Wize way</h4><ul><li>One membership — model, plays, and tools</li><li>Three reads on every game, side by side</li><li>Always know exactly why you're betting</li><li>Decide for yourself, with real conviction</li></ul></div>
+        </div>
+
+        <div className="iclose">
+          <div className="big">We were never here to sell you a miracle.<br/>We're here to make you the <span className="g">sharpest bettor in the room.</span></div>
+          <div className="goal">That's the whole goal: better information, honest odds, and the confidence to make the call yourself — every single night.</div>
         </div>
       </div></div>
 
@@ -731,7 +736,7 @@ const CSS = `
 }
 
 /* ============================================================
-   WZ-LANDING-INTROCUT-2026-07-13 :: intro + losses statement + finale
+   WZ-LANDING-ICLOSE-FIX-2026-07-13 :: intro + losses statement + finale
    Mobile = approved mock (3-across intro, framed finale).
    Desktop = same design, fills the screen (wrap widens to 92vw).
    ============================================================ */
