@@ -62,6 +62,8 @@ export default function MarketPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [plan, setPlan] = useState({ tier:"free", isAdmin:false });
+  const [planLoaded, setPlanLoaded] = useState(false);
+  const hasFull = plan.isAdmin === true || plan.tier === "pro" || plan.tier === "elite"; // WZ-ODDS-LOCK-2026-07-13
   const [sport, setSport] = useSport();
   const [odds, setOdds] = useState(null);
   const [edges, setEdges] = useState(null);
@@ -71,7 +73,7 @@ export default function MarketPage() {
   const [view, setView] = useState("odds");
   const [sel, setSel] = useState(null);
 
-  useEffect(() => { subscriptionApi.getMyPlan().then(setPlan).catch(()=>{}); }, []);
+  useEffect(() => { subscriptionApi.getMyPlan().then(setPlan).catch(()=>{}).finally(()=>setPlanLoaded(true)); }, []);
   useEffect(() => {
     let c = false;
     const load = async () => {
@@ -167,6 +169,20 @@ export default function MarketPage() {
   const oddsList = isFb ? fbOddsGames : oddsGames;
 
   const VIEWS = [["odds","Odds"],["movers","Movers"],["consensus","Consensus"]];
+
+  // WZ-ODDS-LOCK-2026-07-13 :: free tier gated (keeps nav shell)
+  if (planLoaded && !hasFull) return (
+    <TerminalShell active="/odds" plan={plan} navigate={navigate}>
+      <div style={{padding:"44px 18px",minHeight:"58vh",display:"flex",alignItems:"center",justifyContent:"center"}}>
+        <div style={{maxWidth:340,width:"100%",border:"1px solid rgba(201,168,106,.3)",borderRadius:14,background:"linear-gradient(180deg,#14110a,#06090b)",padding:"28px 22px",textAlign:"center"}}>
+          <div style={{width:40,height:40,borderRadius:"50%",border:"1px solid rgba(201,168,106,.4)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 13px",color:"#C9A86A",fontSize:18}}>{"\uD83D\uDD12"}</div>
+          <div style={{fontWeight:800,color:"#fff",fontSize:17,marginBottom:8}}>Market Price is All-Access</div>
+          <div style={{fontSize:12.5,color:"#99A2AA",lineHeight:1.55,maxWidth:280,margin:"0 auto 16px"}}>The best number on every game, across every book {"\u2014"} small gaps that compound all season. <b style={{color:"#C9A86A"}}>From $7/wk</b></div>
+          <div onClick={()=>navigate("/pricing")} style={{display:"inline-block",background:"#1D9E75",color:"#04130d",fontWeight:800,fontSize:13,padding:"11px 20px",borderRadius:10,cursor:"pointer"}}>Unlock All-Access {"\u203a"}</div>
+        </div>
+      </div>
+    </TerminalShell>
+  );
 
   return (
     <TerminalShell active="/odds" plan={plan} navigate={navigate}>
