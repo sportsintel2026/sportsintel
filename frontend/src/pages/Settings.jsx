@@ -24,8 +24,11 @@ export default function SettingsPage() {
   const { user, signOut } = useAuth();
   const [plan, setPlan] = useState({ tier:"free", isAdmin:false });
   const [portalLoading, setPortalLoading] = useState(false);
+  const [subs, setSubs] = useState(null); // WZ-SUBSTATS-2026-07-13 :: owner subscriber counts (null until loaded)
 
   useEffect(() => { subscriptionApi.getMyPlan().then(setPlan).catch(()=>{}); }, []);
+  // Owner-only subscriber counts. Endpoint is admin-gated server-side; non-admins get 403 -> stays null -> block hidden.
+  useEffect(() => { subscriptionApi.getAdminStats().then(setSubs).catch(()=>setSubs(null)); }, []);
 
   const isAdmin = plan.isAdmin === true || user?.email === OWNER_EMAIL;
   const isPro = plan.tier === "pro" || plan.tier === "elite";
@@ -74,6 +77,21 @@ export default function SettingsPage() {
             <div className="lrow" onClick={()=>navigate("/admin")}><div className="li">{"\u270e"}</div><div className="lt">Manage WizePlays</div><div className="lc">{"\u203a"}</div></div>
             <div className="lrow" onClick={()=>navigate("/expert-picks")}><div className="li">{"\u25c8"}</div><div className="lt">View posted picks</div><div className="lc">{"\u203a"}</div></div>
             <div className="lrow" onClick={()=>navigate("/performance")}><div className="li">{"\u25b2"}</div><div className="lt">Model Performance</div><div className="lc">{"\u203a"}</div></div>{/* WZ-ADMIN-PERF-LINK-2026-07-10 :: admin-only Performance entry (legacy bottom navs are display:none on mobile) */}
+          </div>
+        )}
+
+        {/* WZ-SUBSTATS-2026-07-13 :: SUBSCRIBERS, relocated here from Manage WizePlays and wired to live Stripe counts. */}
+        {isAdmin && (
+          <div className="blk"><div className="bl">SUBSCRIBERS <span className="subbx">{subs ? (subs.stripeOk ? "live \u00b7 Stripe" : "Stripe unavailable") : "loading\u2026"}</span></div>
+            <div className="subs">
+              <div className="m"><div className="k">PAYING</div><div className={"v"+(subs&&subs.paying>0?" g":"")}>{subs ? subs.paying : "\u2014"}</div></div>
+              <div className="m"><div className="k">MRR</div><div className="v">{subs ? ("$"+subs.mrr) : "\u2014"}</div></div>
+              <div className="m"><div className="k">NEW / WK</div><div className="v">{subs ? subs.newThisWeek : "\u2014"}</div></div>
+            </div>
+            <div className="submeta">{subs
+              ? `${subs.paying} paying \u00b7 ${subs.trialing} trialing \u00b7 ${subs.comped} comped \u00b7 ${subs.freeUsers} free \u00b7 ${subs.totalUsers} total`
+              : "Fetching live counts\u2026 comped accounts count separately from paying."}</div>
+            {subs && !subs.stripeOk && <div className="submeta">Stripe did not respond, so paying and MRR are unavailable; comped and total are from Supabase. Check STRIPE_SECRET_KEY.</div>}
           </div>
         )}
 
@@ -197,6 +215,13 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .signout{margin:14px 14px 0;text-align:center;font-family:var(--disp);font-weight:800;font-size:14px;color:#dbe4e2;border:1px solid var(--line2);border-radius:12px;padding:13px;cursor:pointer}
 .del{text-align:center;font-family:var(--mono);font-size:10px;color:var(--neg);margin:13px 0 0;cursor:pointer}
 .ver{text-align:center;font-family:var(--mono);font-size:9px;color:var(--mut2);margin:16px 0 0}
+/* WZ-SUBSTATS-2026-07-13 :: subscriber counts */
+.subbx{font-family:var(--mono);font-size:9px;color:var(--mut2);letter-spacing:0;font-weight:500;margin-left:7px}
+.subs{display:flex;gap:9px}
+.subs .m{flex:1;border:1px solid var(--line);border-radius:11px;background:#0d141b;padding:11px;text-align:center}
+.subs .m .k{font-family:var(--mono);font-size:8px;color:var(--mut2);font-weight:600}
+.subs .m .v{font-family:var(--disp);font-weight:800;font-size:21px;color:#fff;margin-top:3px}.subs .m .v.g{color:var(--green)}
+.submeta{font-family:var(--mono);font-size:9.5px;color:var(--mut2);text-align:center;margin-top:9px;line-height:1.5}
 .nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:460px;display:flex;justify-content:space-around;padding:7px 4px;background:rgba(0,0,0,.96);backdrop-filter:blur(12px);border-top:1px solid var(--line);z-index:20}
 .nav a{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;font-family:var(--disp);font-weight:700;font-size:10px;letter-spacing:.3px;color:var(--mut2);text-decoration:none}
 .nav a.on{color:var(--gold)}.nav a .i{font-size:15px;line-height:1}.nav a .dbars rect{fill:var(--mut2)}
