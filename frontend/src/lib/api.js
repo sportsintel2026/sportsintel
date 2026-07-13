@@ -79,4 +79,5 @@ export const subscriptionApi = {
     body: JSON.stringify({ priceKey }),
   }),
   portal: () => apiFetch("/api/subscriptions/portal", { method: "POST" }),
+  getAdminStats: () => apiFetch("/api/subscriptions/admin-stats"), // WZ-SUBSTATS-2026-07-13 :: owner-only subscriber counts
 };
