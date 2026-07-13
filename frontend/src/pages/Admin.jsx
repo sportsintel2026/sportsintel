@@ -249,10 +249,8 @@ export default function AdminPage() {
         {settled.length ? settled.slice(0,8).map(o=><Play key={o.i} p={o.p} i={o.i}/>) : <div className="placeholder">Nothing settled yet today.</div>}
       </div>
 
-      <div className="blk"><div className="bl">SUBSCRIBERS <span className="bx">Stripe stats not wired yet</span></div>
-        <div className="mini"><div className="m"><div className="k">ACTIVE</div><div className="v">—</div></div><div className="m"><div className="k">MRR</div><div className="v">—</div></div><div className="m"><div className="k">NEW / WK</div><div className="v">—</div></div></div>
-        <div className="placeholder">Subscriber &amp; revenue figures need a Stripe admin-stats endpoint — not wired yet. Manage subscribers directly in the Stripe dashboard for now.</div>
-      </div>
+      {/* WZ-SUBSTATS-2026-07-13 :: SUBSCRIBERS moved to the Account page (Settings) and wired to live Stripe counts. */}
+
 
       <div className="blk"><div className="bl">SYSTEM <span className="bx">admin only</span></div>
         <div className="lrow" onClick={runGrading}><div className="li">{"\u25f7"}</div><div className="lt">Run grading now<div className="ls">settle pending straight bets</div></div><div className="lc">{"\u203a"}</div></div>
