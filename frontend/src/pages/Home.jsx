@@ -831,15 +831,21 @@ function BoardCardCompact({d,i,sport,onClick}){
   const accent=isTot?"#3FCB91":"#C9A86A";
   const showEdge=!(sport==="mlb"&&d.cat==="ml");
   const isVal=showEdge&&Number(d.edge)>=1.0;
+  // WZ-CARD-METERS-2026-07-13 :: ring replaced by two labeled meters on the right (win=green, edge=gold).
+  // Win fills 0-100 (honest — handles value-dog ML picks under 50%); edge fills 0-40%; exact numbers stay on the right.
+  const winW=wpv!=null?Math.max(0,Math.min(100,wpv)):0;
+  const edgeW=Math.max(0,Math.min(100,(Number(d.edge)||0)/40*100));
   return (
     <div className={"ufcard"+(isTot?" tot":"")} onClick={onClick}>
-      {wpv!=null&&<div className="ufring"><svg viewBox="0 0 48 48"><circle cx="24" cy="24" r="20" fill="none" stroke="rgba(255,255,255,.08)" strokeWidth="4.5"/><circle cx="24" cy="24" r="20" fill="none" stroke={accent} strokeWidth="4.5" strokeLinecap="round" strokeDasharray={dash.toFixed(1)+" "+C} transform="rotate(-90 24 24)"/></svg><div className="ufpc" style={{color:accent}}>{Math.round(wpv)}<i>WIN</i></div></div>}
       <div className="ufmid">
         <div className="l1"><span className="ufmatch">{d.a[0]} @ {d.h[0]}</span>{d.starts&&<span className="uftime">{d.starts}</span>}</div>
         <div className="l2"><span className="ufp" style={{color:accent}}>{d.p}</span>{d.mk&&<span className="ufmk">{d.mk}</span>}{d.odds&&<span className="ufod">{d.odds}</span>}</div>
       </div>
       <div className="ufrt">
-        {showEdge&&<span className={"ufedge "+(isVal?"v":"n")}>{d.edge>=0?"+":""}{Number(d.edge).toFixed(1)}%</span>}
+        <div className="ufgauge">
+          {wpv!=null&&<div className="ufg"><span className="ufgl">WIN</span><span className="ufgt"><i className="w" style={{width:winW+"%"}}/></span><span className="ufgv w">{Math.round(wpv)}%</span></div>}
+          {showEdge&&<div className="ufg"><span className="ufgl">EDGE</span><span className="ufgt"><i className="e" style={{width:edgeW+"%"}}/></span><span className="ufgv e">{d.edge>=0?"+":""}{Number(d.edge).toFixed(1)}%</span></div>}
+        </div>
         <span className="ufchev">{"\u203A"}</span>
       </div>
     </div>
@@ -1257,10 +1263,17 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .ufcard .ufmid .ufp{font-family:var(--disp);font-weight:800;font-size:16px;line-height:1;white-space:nowrap}
 .ufcard .ufmid .ufmk{font-family:var(--mono);font-size:8.5px;font-weight:600;color:var(--mut);border:1px solid var(--line);border-radius:4px;padding:2px 5px;flex:none}
 .ufcard .ufmid .ufod{font-family:var(--mono);font-size:12px;color:var(--mut);flex:none}
-.ufcard .ufrt{display:flex;align-items:center;gap:9px;flex:none}
-.ufcard .ufrt .ufedge{font-family:var(--mono);font-size:14px;font-weight:600;line-height:1;text-align:right}
-.ufcard .ufrt .ufedge.v{color:var(--green)}
-.ufcard .ufrt .ufedge.n{color:var(--gold)}
+.ufcard .ufrt{display:flex;align-items:center;gap:8px;flex:none}
+.ufcard .ufrt .ufgauge{display:flex;flex-direction:column;gap:5px}
+.ufcard .ufrt .ufg{display:flex;align-items:center;gap:6px}
+.ufcard .ufrt .ufg .ufgl{font-family:var(--mono);font-size:7.5px;font-weight:600;letter-spacing:.05em;color:var(--mut2);width:25px;flex:none}
+.ufcard .ufrt .ufg .ufgt{width:42px;height:5px;border-radius:3px;background:rgba(255,255,255,.08);overflow:hidden;flex:none}
+.ufcard .ufrt .ufg .ufgt i{display:block;height:100%;border-radius:3px}
+.ufcard .ufrt .ufg .ufgt i.w{background:var(--green)}
+.ufcard .ufrt .ufg .ufgt i.e{background:var(--gold)}
+.ufcard .ufrt .ufg .ufgv{font-family:var(--mono);font-size:12px;font-weight:600;line-height:1;width:46px;text-align:right;flex:none}
+.ufcard .ufrt .ufg .ufgv.w{color:var(--green)}
+.ufcard .ufrt .ufg .ufgv.e{color:var(--gold)}
 .ufcard .ufrt .ufchev{font-family:var(--mono);font-size:15px;color:var(--mut2);line-height:1}
 /* WZ-TOPPROPS-2026-07-08 :: tight edge-to-edge 3x2 prop grid + headshot cards */
 .propgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin:12px 4px 0;background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
