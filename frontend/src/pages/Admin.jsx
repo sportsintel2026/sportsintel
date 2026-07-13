@@ -10,6 +10,20 @@ const fmtOdds = (o) => { const n = Number(o); if(!n||isNaN(n)) return String(o||
 const unitProfit = (o) => { const n = Number(o); if(!n||isNaN(n)) return 1; return n>0 ? n/100 : 100/Math.abs(n); };
 const resState = (r) => { const s = String(r==null?"":r).trim().toLowerCase(); if(s===""||s==="pending") return "pending"; if(s==="won"||s==="win") return "won"; if(s==="lost"||s==="loss") return "lost"; return "push"; };
 
+// WZ-ADMIN-ALLSPORTS-2026-07-13 :: WizePlays can be posted for any sport. The KEY here is the tag
+// STORED on the pick, so CFB stores "ncaafb" to match the WizePlays display filter (Home.jsx WP_SPORT)
+// and the ExpertPicks tags. Board picks pull the live games feed to auto-fill odds + auto-grade by
+// gameId; off-season sports (NFL/CFB/NHL in summer) have no games, so Manual entry lets you post +
+// hand-grade any sport year-round. NHL has no edges endpoint yet, so it is manual-only for now.
+const SPORT_CFG = {
+  mlb:    { label: "MLB", feed: () => edgesApi.getMLB(), markets: [["moneyline","Moneyline"],["total","Total"],["run_line","Run Line"]] },
+  nba:    { label: "NBA", feed: () => edgesApi.getNBA(), markets: [["moneyline","Moneyline"],["spread","Spread"],["total","Total"]] },
+  nfl:    { label: "NFL", feed: () => edgesApi.getNFL(),  markets: [["moneyline","Moneyline"],["spread","Spread"],["total","Total"]] },
+  ncaafb: { label: "CFB", feed: () => edgesApi.getCFB(),  markets: [["moneyline","Moneyline"],["spread","Spread"],["total","Total"]] },
+  nhl:    { label: "NHL", feed: () => Promise.resolve({ games: [] }), markets: [["moneyline","Moneyline"],["puck_line","Puck Line"],["total","Total"]] },
+};
+const SPORT_KEYS = ["mlb","nba","nfl","ncaafb","nhl"];
+
 export default function AdminPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -33,6 +47,10 @@ export default function AdminPage() {
   const [units, setUnits] = useState("");
   const [conv, setConv] = useState("Strong");
   const [write, setWrite] = useState("");
+  // WZ-ADMIN-ALLSPORTS-2026-07-13 :: "board" links a game (auto-grades); "manual" is typed for any sport.
+  const [entryMode, setEntryMode] = useState("board");
+  const [mMatchup, setMMatchup] = useState(""); // manual matchup, e.g. "KC @ BUF"
+  const [mPick, setMPick] = useState("");       // manual pick text, e.g. "KC ML"
 
   useEffect(() => { if (!isAdmin) navigate("/dashboard"); }, [isAdmin]);
 
@@ -65,7 +83,7 @@ export default function AdminPage() {
   // total / run-line). Selecting a game + market + selection then auto-fills the price.
   useEffect(() => {
     let cancelled = false;
-    const p = sport==="nba" ? edgesApi.getNBA() : edgesApi.getMLB();
+    const p = (SPORT_CFG[sport] || SPORT_CFG.mlb).feed();
     p.then(d => {
       if (cancelled) return;
       const arr = Array.isArray(d) ? d : (d?.games || []);
@@ -138,18 +156,33 @@ export default function AdminPage() {
   };
 
   const publish = async () => {
-    const g = games[gameIdx] || {};
-    if (!selection) { alert("Pick a selection (side / over-under)."); return; }
-    if ((market==="total"||market==="run_line"||market==="spread") && line==="") { alert("Enter the line."); return; }
-    const pick = {
-      type: "straight", sport, gameId: g.gameId || "", game: g.label || "", awayAbbr: g.awayAbbr || "", homeAbbr: g.homeAbbr || "",
-      market, selection, line: line===""?null:Number(line),
-      pick: buildPickText(g), odds: odds || "-110", units: Number(units)||1,
-      conviction: conv, write: write.trim(), result: "",
-    };
+    let pick;
+    if (entryMode === "manual") {
+      // Manual: works for any sport, in or out of season. No gameId, so it grades by hand.
+      if (!mPick.trim()) { alert("Enter the pick text (e.g. \"KC ML\", \"Over 45.5\", \"BUF -3.5\")."); return; }
+      if (needsLine && line==="") { alert("Enter the line."); return; }
+      const parts = String(mMatchup).split(/@|vs/i).map(s=>s.trim()).filter(Boolean);
+      pick = {
+        type: "straight", sport, gameId: "", game: mMatchup.trim(),
+        awayAbbr: (parts[0]||"").slice(0,4).toUpperCase(), homeAbbr: (parts[1]||"").slice(0,4).toUpperCase(),
+        market, selection: "", line: line===""?null:Number(line),
+        pick: mPick.trim(), odds: odds || "-110", units: Number(units)||1,
+        conviction: conv, write: write.trim(), result: "",
+      };
+    } else {
+      const g = games[gameIdx] || {};
+      if (!selection) { alert("Pick a selection (side / over-under)."); return; }
+      if (needsLine && line==="") { alert("Enter the line."); return; }
+      pick = {
+        type: "straight", sport, gameId: g.gameId || "", game: g.label || "", awayAbbr: g.awayAbbr || "", homeAbbr: g.homeAbbr || "",
+        market, selection, line: line===""?null:Number(line),
+        pick: buildPickText(g), odds: odds || "-110", units: Number(units)||1,
+        conviction: conv, write: write.trim(), result: "",
+      };
+    }
     await save([pick, ...picks]);
     setSheetOpen(false);
-    setSelection(""); setLine(""); setOdds(""); setUnits(""); setWrite(""); setGameIdx(-1);
+    setSelection(""); setLine(""); setOdds(""); setUnits(""); setWrite(""); setGameIdx(-1); setMMatchup(""); setMPick("");
   };
 
   const gradePick = async (idx, result) => {
@@ -163,7 +196,7 @@ export default function AdminPage() {
   const winPct = (rec.w+rec.l)>0 ? (rec.w/(rec.w+rec.l)*100).toFixed(1) : "0.0";
 
   const marketSels = market==="total" ? [["over","Over"],["under","Under"]] : [["away","Away"],["home","Home"]];
-  const needsLine = market==="total" || market==="run_line" || market==="spread";
+  const needsLine = market==="total" || market==="run_line" || market==="spread" || market==="puck_line";
 
   const runGrading = async () => {
     try { const r = await fetch(`${API_BASE}/api/expert-grade?write=1`); const j = await r.json(); alert("Grading run.\n" + JSON.stringify(j).slice(0,300)); loadToday(); loadRecord(); }
@@ -232,21 +265,32 @@ export default function AdminPage() {
         <div className="sheet open" style={{zIndex:61}}>
           <div className="shead"><div className="x" onClick={()=>setSheetOpen(false)}>{"\u2039"}</div><div className="t">New WizePlay</div></div>
           <div className="sbody">
-            <div className="fld"><label>SPORT</label><div className="segf">{[["mlb","MLB"],["nba","NBA"]].map(([k,l])=><b key={k} className={sport===k?"on":""} onClick={()=>setSport(k)}>{l}</b>)}</div></div>
-            <div className="fld"><label>GAME (auto-grades when linked)</label>
-              <select value={gameIdx} onChange={e=>{setGameIdx(Number(e.target.value)); setSelection("");}}>
-                <option value={-1}>{games.length ? "Select a game…" : "No games loaded"}</option>
-                {games.map((g,i)=><option key={i} value={i}>{g.label}</option>)}
-              </select>
-            </div>
+            <div className="fld"><label>SPORT</label><div className="segf">{SPORT_KEYS.map((k)=><b key={k} className={sport===k?"on":""} onClick={()=>{ setSport(k); setMarket(SPORT_CFG[k].markets[0][0]); setSelection(""); setLine(""); setGameIdx(-1); }}>{SPORT_CFG[k].label}</b>)}</div></div>
+            <div className="fld"><label>ENTRY</label><div className="segf">
+              <b className={entryMode==="board"?"on":""} onClick={()=>setEntryMode("board")}>From board</b>
+              <b className={entryMode==="manual"?"on":""} onClick={()=>setEntryMode("manual")}>Manual</b>
+            </div></div>
+            {entryMode==="board"
+              ? <div className="fld"><label>GAME (auto-grades when linked)</label>
+                  <select value={gameIdx} onChange={e=>{setGameIdx(Number(e.target.value)); setSelection("");}}>
+                    <option value={-1}>{games.length ? "Select a game…" : "No games loaded — switch to Manual"}</option>
+                    {games.map((g,i)=><option key={i} value={i}>{g.label}</option>)}
+                  </select>
+                </div>
+              : <>
+                  <div className="fld"><label>MATCHUP</label><input value={mMatchup} onChange={e=>setMMatchup(e.target.value)} placeholder="KC @ BUF"/></div>
+                  <div className="fld"><label>PICK (shown to subscribers)</label><input value={mPick} onChange={e=>setMPick(e.target.value)} placeholder="KC ML  /  Over 45.5  /  BUF -3.5"/></div>
+                </>}
             <div className="row2">
               <div className="fld"><label>MARKET</label><select value={market} onChange={e=>{setMarket(e.target.value); setSelection(""); setLine("");}}>
-                <option value="moneyline">Moneyline</option><option value="total">Total</option><option value="run_line">Run Line</option><option value="spread">Spread</option>
+                {(SPORT_CFG[sport]||SPORT_CFG.mlb).markets.map(([v,l])=><option key={v} value={v}>{l}</option>)}
               </select></div>
-              <div className="fld"><label>SELECTION</label><select value={selection} onChange={e=>setSelection(e.target.value)}>
-                <option value="">—</option>
-                {marketSels.map(([v,lbl])=><option key={v} value={v}>{v==="away"?(games[gameIdx]?.awayAbbr||"Away"):v==="home"?(games[gameIdx]?.homeAbbr||"Home"):lbl}</option>)}
-              </select></div>
+              {entryMode==="board"
+                ? <div className="fld"><label>SELECTION</label><select value={selection} onChange={e=>setSelection(e.target.value)}>
+                    <option value="">—</option>
+                    {marketSels.map(([v,lbl])=><option key={v} value={v}>{v==="away"?(games[gameIdx]?.awayAbbr||"Away"):v==="home"?(games[gameIdx]?.homeAbbr||"Home"):lbl}</option>)}
+                  </select></div>
+                : <div className="fld"><label>SELECTION</label><input value="" placeholder="typed in PICK above" disabled/></div>}
             </div>
             <div className="row2">
               {needsLine ? <div className="fld"><label>LINE</label><input value={line} onChange={e=>setLine(e.target.value)} placeholder="8.5 / -1.5" inputMode="decimal"/></div>
