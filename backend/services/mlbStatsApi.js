@@ -74,6 +74,7 @@ function parseGame(g, date) {
   const status = mapStatus(g.status?.abstractGameState, g.status?.detailedState);
   return {
     id: String(g.gamePk), league: "mlb", date,
+    gameType: g.gameType || null, // WZ-ASG-SKIP-2026-07-12 :: R=regular, A=All-Star, S=spring, E=exhibition
     away: away?.team?.name || "Away", home: home?.team?.name || "Home",
     awayAbbr: away?.team?.abbreviation || "", homeAbbr: home?.team?.abbreviation || "",
     awayId: away?.team?.id, homeId: home?.team?.id,
