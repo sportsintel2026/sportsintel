@@ -590,7 +590,15 @@ export default function HomePage(){
                 ? <div className="rec"><div className="r">{wpRecord.wins}-{wpRecord.losses}{wpRecord.pushes?"-"+wpRecord.pushes:""}</div><div className="u">{wpRecord.units>=0?"+":""}{wpRecord.units.toFixed(1)}u</div></div>
                 : <div className="rec"><div className="r" style={{fontSize:13,color:"#f3b94f"}}>View {"\u203a"}</div></div>}
             </div>
-            {wpToday.length>0
+            {/* WZ-WIZEPLAYS-MOBILELOCK-2026-07-13 */}
+            {planLoaded && !hasFull
+              ? (<div style={{padding:"18px 15px 16px",textAlign:"center"}}>
+                  <div style={{width:34,height:34,borderRadius:"50%",border:"1px solid rgba(201,168,106,.4)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 10px",color:"#C9A86A"}}>{"\uD83D\uDD12"}</div>
+                  <div style={{fontWeight:800,color:"#fff",fontSize:14,marginBottom:6}}>WizePlays picks are All-Access</div>
+                  <div style={{fontSize:11.5,color:"#99A2AA",lineHeight:1.5,maxWidth:250,margin:"0 auto 12px"}}>Every curated play, every day {"\u2014"} losses included. <b style={{color:"#C9A86A"}}>From $7/wk</b></div>
+                  <div onClick={()=>navigate("/pricing")} style={{display:"inline-block",background:"#1D9E75",color:"#04130d",fontWeight:800,fontSize:12.5,padding:"10px 18px",borderRadius:10,cursor:"pointer"}}>Unlock All-Access {"\u203a"}</div>
+                </div>)
+              : wpToday.length>0
               ? wpToday.map((pk,i)=>{
                   const rr=String((pk&&pk.result)||"").toLowerCase();
                   const res=rr==="won"?"win":rr==="lost"?"loss":rr;
