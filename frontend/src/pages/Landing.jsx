@@ -25,7 +25,7 @@ const PROPS_EX = [
    (browsers block unmuted autoplay), loops, with a tap-for-sound
    button that unmutes. Uses the YouTube IFrame API.
    ============================================================ */
-/* ---- WZ-PROPS-REDESIGN-2026-07-13 :: trading-card wall data + component ---- */
+/* ---- WZ-FOOTER-REDESIGN-2026-07-13 :: trading-card wall data + component ---- */
 const TC_A = [
   {sp:"\u26be MLB",img:MLB_HEAD(592450),acc:"#1a3a6b",glow:"rgba(93,169,232,.30)",nm:"Aaron Judge",mu:"NYY vs BOS",tag:"HOME RUNS",tc:"#F5A524",tb:"rgba(245,165,36,.1)",td:"rgba(245,165,36,.32)",prop:"O 0.5 HR",odds:"+265",edge:"+6.2%"},
   {sp:"\ud83c\udfc0 NBA",img:ESPN_HEAD("nba",3112335),acc:"#0E2240",glow:"rgba(93,130,232,.30)",nm:"Nikola Joki\u0107",mu:"DEN vs MIN",tag:"POINTS",tc:"#9b7bff",tb:"rgba(155,123,255,.1)",td:"rgba(155,123,255,.32)",prop:"O 25.5",odds:"-115",edge:"+4.8%"},
@@ -148,7 +148,7 @@ export default function LandingPage(){
       </div></div>
 
 
-      {/* ===== INTRO — What is WizePicks (WZ-PROPS-REDESIGN-2026-07-13) ===== */}
+      {/* ===== INTRO — What is WizePicks (WZ-FOOTER-REDESIGN-2026-07-13) ===== */}
       <div className="wpintro"><div className="wrap">
         <span className="eyebrow">What is WizePicks</span>
         <h1 className="wpih1">Anybody can sell you a pick.<br/>We make you the <span className="g">sharp one.</span></h1>
@@ -437,31 +437,23 @@ export default function LandingPage(){
         </div>
       </div></div>
 
-      {/* FOOTER */}
+      {/* FOOTER — brand sign-off (WZ-FOOTER-REDESIGN-2026-07-13) */}
       <footer><div className="wrap">
-        <div className="fcols">
-          <div>
-            <div className="flogo">Wize<span>Picks</span></div>
-            <p className="ftag">Sharp betting analytics for everyone. Not a sportsbook — we don't take bets.</p>
-          </div>
-          <div><h5>Product</h5>
-            <a href="#edge">Edge Board</a>
-            <Link to="/props">Player Props</Link>
-            <Link to="/odds">Market Price</Link>
-            <Link to="/performance">Performance</Link>
-          </div>
-          <div><h5>Learn</h5>
-            <a href="#how">How it works</a>
-            <Link to="/guide">What is an edge?</Link>
-            <Link to="/guide">Line shopping 101</Link>
-            <Link to="/guide">The Guide</Link>
-          </div>
-          <div><h5>Company</h5>
-            <Link to="/pricing">Pricing</Link>
-            <Link to="/login">Log in</Link>
-            <a href="mailto:wizepickshelp@gmail.com">Contact</a>
-          </div>
+        <div className="fghost">WizePicks</div>
+        <div className="fwm">Wize<span>Picks</span></div>
+        <p className="ftag2"><b>Sharp betting analytics for everyone.</b><br/>Not a sportsbook — we don't take bets.</p>
+        <div className="ftrust">
+          <span className="tpill"><i/>Every pick graded</span>
+          <span className="tpill g"><i/>Not a sportsbook</span>
+          <span className="tpill g"><i/>21+ only</span>
         </div>
+        <div className="flinks">
+          <Link to="/pricing">Pricing</Link><span className="fdot">·</span>
+          <Link to="/login">Log in</Link><span className="fdot">·</span>
+          <a href="mailto:wizepickshelp@gmail.com">Contact</a>
+        </div>
+        <div className="fdiv2"></div>
+        <div className="frg">Play responsibly · 1-800-GAMBLER</div>
         <div className="fdisc">For informational purposes only. WizePicks does not accept wagers. 21+. If you or someone you know has a gambling problem, call 1-800-GAMBLER. © 2026 WizePicks.</div>
       </div></footer>
     </div>
@@ -756,7 +748,7 @@ const CSS = `
 }
 
 /* ============================================================
-   WZ-PROPS-REDESIGN-2026-07-13 :: intro + losses statement + finale
+   WZ-FOOTER-REDESIGN-2026-07-13 :: intro + losses statement + finale
    Mobile = approved mock (3-across intro, framed finale).
    Desktop = same design, fills the screen (wrap widens to 92vw).
    ============================================================ */
@@ -863,7 +855,7 @@ const CSS = `
 }
 
 
-/* ---- WZ-PROPS-REDESIGN-2026-07-13 :: trading-card wall + slim coverage ---- */
+/* ---- WZ-FOOTER-REDESIGN-2026-07-13 :: trading-card wall + slim coverage ---- */
 .lpwrap .propsband .pwall{display:flex;flex-direction:column;gap:12px;margin:6px 0 4px}
 .lpwrap .propsband .pmarq{position:relative;overflow:hidden;-webkit-mask:linear-gradient(90deg,transparent,#000 7%,#000 93%,transparent);mask:linear-gradient(90deg,transparent,#000 7%,#000 93%,transparent)}
 .lpwrap .propsband .ptrack{display:flex;gap:12px;width:max-content;padding:0 6px}
@@ -904,5 +896,27 @@ const CSS = `
   .lpwrap .propsband .tc{flex:0 0 224px}
   .lpwrap .propsband .pcov{max-width:680px}
 }
+
+
+/* ---- WZ-FOOTER-REDESIGN-2026-07-13 :: brand sign-off footer ---- */
+.lpwrap footer{position:relative;overflow:hidden;text-align:center}
+.lpwrap footer::before{content:"";position:absolute;inset:0;pointer-events:none;opacity:.03;z-index:0;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+.lpwrap footer .wrap{position:relative;z-index:1}
+.lpwrap .fghost{position:absolute;left:50%;top:16px;transform:translateX(-50%);font-family:var(--disp);font-weight:700;font-size:clamp(80px,22vw,150px);letter-spacing:-.03em;color:#fff;opacity:.02;white-space:nowrap;pointer-events:none;z-index:0}
+.lpwrap .fwm{position:relative;z-index:1;font-family:var(--disp);font-weight:700;font-size:clamp(38px,12vw,58px);letter-spacing:-.02em;line-height:1}
+.lpwrap .fwm span{background:linear-gradient(180deg,#E8CE93,#C9A86A 58%,#9A7B3E);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.lpwrap .ftag2{position:relative;z-index:1;font-size:14.5px;line-height:1.6;color:#9AA4AD;max-width:340px;margin:16px auto 0}
+.lpwrap .ftag2 b{color:#cdd5da;font-weight:600}
+.lpwrap .ftrust{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;margin-top:20px}
+.lpwrap .tpill{font-family:var(--mono);font-size:10px;letter-spacing:.06em;color:#9AA4AD;border:1px solid var(--line);border-radius:999px;padding:6px 12px;display:inline-flex;align-items:center;gap:6px}
+.lpwrap .tpill i{width:5px;height:5px;border-radius:50%;background:var(--green);display:inline-block}
+.lpwrap .tpill.g i{background:var(--gold)}
+.lpwrap .flinks{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;margin-top:24px;font-family:var(--mono);font-size:12px;letter-spacing:.04em}
+.lpwrap .flinks a{color:#9AA4AD;padding:4px 2px}
+.lpwrap .flinks a:hover{color:var(--gold)}
+.lpwrap .fdot{color:#33393f}
+.lpwrap .fdiv2{height:1px;max-width:520px;margin:30px auto 0;background:linear-gradient(90deg,transparent,rgba(201,168,106,.4),transparent)}
+.lpwrap .frg{margin-top:22px;font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--gold)}
+.lpwrap footer .fdisc{font-family:var(--mono);font-size:11px;color:#5C6770;margin-top:12px;line-height:1.7;max-width:560px;margin-left:auto;margin-right:auto;border-top:0;padding-top:0}
 
 `;
