@@ -25,7 +25,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 const SECTIONS = [
   { key: "edges", lb: "Edges",       to: "/home",        match: ["/home", "/dashboard"] },
   { key: "props", lb: "Props",       to: "/props",       match: ["/props"] },
-  { key: "games", lb: "Games",       to: "/games",       match: ["/games", "/nfl-games", "/cfb-games", "/nba-games", "/nhl-games"] },
+  { key: "games", lb: "Matchups",       to: "/games",       match: ["/games", "/nfl-games", "/cfb-games", "/nba-games", "/nhl-games"] },
   { key: "mkt",   lb: "Market",      to: "/odds",        match: ["/odds", "/consensus", "/market-read"] },
   { key: "news",  lb: "News",        to: "/news",        match: ["/news"] },
 ];
