@@ -65,4 +65,33 @@ async function requireElite(req, res, next) {
   });
 }
 
-module.exports = { requireAuth, requirePro, requireElite, supabase };
+// WZ-REQUIREPAID-2026-07-13 :: admin-aware "All-Access" gate for paid DATA endpoints.
+// Mirrors the frontend (isAdmin || tier pro/elite) and the /subscriptions/me queries
+// exactly, so admins/owner are NEVER locked out (requirePro above does NOT admin-bypass).
+// Fails CLOSED on lookup error (denies) — flip the catch to next() if you would rather
+// not risk locking a paying user during a transient Supabase error.
+async function requirePaid(req, res, next) {
+  await requireAuth(req, res, async () => {
+    try {
+      const [subResult, profileResult] = await Promise.all([
+        supabase.from("subscriptions").select("tier, status").eq("user_id", req.user.id).single(),
+        supabase.from("profiles").select("is_admin").eq("id", req.user.id).single(),
+      ]);
+      const isAdmin = profileResult.data?.is_admin === true;
+      let tier = subResult.data?.tier;
+      if (typeof tier === "string") tier = tier.trim().toLowerCase();
+      const active = subResult.data?.status === "active";
+      const isPaid = isAdmin || (active && (tier === "pro" || tier === "elite"));
+      if (!isPaid) {
+        return res.status(403).json({ error: "All-Access required", upgrade_url: "/pricing" });
+      }
+      req.subscription = subResult.data || null;
+      req.isAdmin = isAdmin;
+      next();
+    } catch (err) {
+      return res.status(403).json({ error: "All-Access required", upgrade_url: "/pricing" });
+    }
+  });
+}
+
+module.exports = { requireAuth, requirePro, requireElite, requirePaid, supabase };
