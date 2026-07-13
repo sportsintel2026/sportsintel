@@ -25,6 +25,35 @@ const PROPS_EX = [
    (browsers block unmuted autoplay), loops, with a tap-for-sound
    button that unmutes. Uses the YouTube IFrame API.
    ============================================================ */
+/* ---- WZ-PROPS-REDESIGN-2026-07-13 :: trading-card wall data + component ---- */
+const TC_A = [
+  {sp:"\u26be MLB",img:MLB_HEAD(592450),acc:"#1a3a6b",glow:"rgba(93,169,232,.30)",nm:"Aaron Judge",mu:"NYY vs BOS",tag:"HOME RUNS",tc:"#F5A524",tb:"rgba(245,165,36,.1)",td:"rgba(245,165,36,.32)",prop:"O 0.5 HR",odds:"+265",edge:"+6.2%"},
+  {sp:"\ud83c\udfc0 NBA",img:ESPN_HEAD("nba",3112335),acc:"#0E2240",glow:"rgba(93,130,232,.30)",nm:"Nikola Joki\u0107",mu:"DEN vs MIN",tag:"POINTS",tc:"#9b7bff",tb:"rgba(155,123,255,.1)",td:"rgba(155,123,255,.32)",prop:"O 25.5",odds:"-115",edge:"+4.8%"},
+  {sp:"\ud83c\udfc8 NFL",img:ESPN_HEAD("nfl",3139477),acc:"#8a0f22",glow:"rgba(232,93,93,.30)",nm:"P. Mahomes",mu:"KC vs BUF",tag:"PASS YDS",tc:"#F5A524",tb:"rgba(245,165,36,.1)",td:"rgba(245,165,36,.32)",prop:"O 274.5",odds:"-112",edge:"+4.2%",soon:true},
+  {sp:"\u26be MLB",img:MLB_HEAD(660271),acc:"#0e3b6b",glow:"rgba(93,169,232,.30)",nm:"Shohei Ohtani",mu:"LAD vs SD",tag:"HITS",tc:"#38E1A0",tb:"rgba(56,225,160,.1)",td:"rgba(56,225,160,.32)",prop:"O 1.5 Hits",odds:"+135",edge:"+5.5%"},
+  {sp:"\ud83c\udfc0 NBA",img:ESPN_HEAD("nba",3975),acc:"#123a6b",glow:"rgba(93,169,232,.30)",nm:"Stephen Curry",mu:"GSW vs LAL",tag:"THREES",tc:"#38E1A0",tb:"rgba(56,225,160,.1)",td:"rgba(56,225,160,.32)",prop:"O 4.5 3PM",odds:"+105",edge:"+5.1%"},
+];
+const TC_B = [
+  {sp:"\ud83c\udfc8 NFL",img:ESPN_HEAD("nfl",3117251),acc:"#7a0d10",glow:"rgba(232,93,93,.30)",nm:"C. McCaffrey",mu:"SF vs SEA",tag:"RUSH YDS",tc:"#ff9e6b",tb:"rgba(255,140,80,.1)",td:"rgba(255,140,80,.32)",prop:"O 89.5",odds:"-115",edge:"+3.7%",soon:true},
+  {sp:"\u26be MLB",img:MLB_HEAD(669373),acc:"#8a2410",glow:"rgba(250,120,70,.30)",nm:"Tarik Skubal",mu:"DET vs CLE",tag:"STRIKEOUTS",tc:"#7fd0ff",tb:"rgba(120,200,255,.1)",td:"rgba(120,200,255,.32)",prop:"O 7.5 K",odds:"-120",edge:"+4.4%"},
+  {sp:"\ud83c\udfc0 NBA",img:ESPN_HEAD("nba",3945274),acc:"#00366b",glow:"rgba(93,169,232,.30)",nm:"Luka Don\u010di\u0107",mu:"DAL vs PHX",tag:"ASSISTS",tc:"#9b7bff",tb:"rgba(155,123,255,.1)",td:"rgba(155,123,255,.32)",prop:"O 8.5 Ast",odds:"-110",edge:"+3.9%"},
+  {sp:"\ud83c\udfc8 NFL",img:ESPN_HEAD("nfl",3116406),acc:"#00565b",glow:"rgba(56,225,160,.30)",nm:"Tyreek Hill",mu:"MIA vs NYJ",tag:"ANYTIME TD",tc:"#38E1A0",tb:"rgba(56,225,160,.1)",td:"rgba(56,225,160,.32)",prop:"Anytime TD",odds:"+135",edge:"+4.6%",soon:true},
+  {sp:"\u26be MLB",img:MLB_HEAD(592450),acc:"#1a3a6b",glow:"rgba(93,169,232,.30)",nm:"Aaron Judge",mu:"NYY vs BOS",tag:"HOME RUNS",tc:"#F5A524",tb:"rgba(245,165,36,.1)",td:"rgba(245,165,36,.32)",prop:"O 0.5 HR",odds:"+265",edge:"+6.2%"},
+];
+function TradingCard({p}){
+  return (
+    <div className="tc" style={{"--acc":p.acc,"--accglow":p.glow,"--tc2":p.tc,"--tcb":p.tb,"--tcd":p.td}}>
+      <div className="tbanner">
+        <span className="tsport">{p.sp}</span>
+        {p.soon && <span className="tsoon">soon</span>}
+        <div className="tav">{p.img && <img src={p.img} alt="" loading="lazy" onError={(e)=>{e.currentTarget.style.display="none";}}/>}</div>
+      </div>
+      <div className="tinfo"><div className="tnm">{p.nm}</div><div className="tmu">{p.mu}</div><span className="ttag">{p.tag}</span></div>
+      <div className="tbet"><div><div className="tprop">{p.prop}</div><div className="todds">{p.odds}</div></div><div className="tedge">{p.edge}</div></div>
+    </div>
+  );
+}
+
 const YT_ID = "Ifw4gKoUgsI";
 
 function CommercialVideo(){
@@ -119,7 +148,7 @@ export default function LandingPage(){
       </div></div>
 
 
-      {/* ===== INTRO — What is WizePicks (WZ-LANDING-ICLOSE-FIX-2026-07-13) ===== */}
+      {/* ===== INTRO — What is WizePicks (WZ-PROPS-REDESIGN-2026-07-13) ===== */}
       <div className="wpintro"><div className="wrap">
         <span className="eyebrow">What is WizePicks</span>
         <h1 className="wpih1">Anybody can sell you a pick.<br/>We make you the <span className="g">sharp one.</span></h1>
@@ -345,31 +374,22 @@ export default function LandingPage(){
           <div className="pb-eyebrow">Player Props</div>
           <div className="pb-h">The props the books <span>misprice.</span></div>
           <div className="pb-sub">Every player, every market, graded against our projection — so you see the edge before you bet.</div>
-          <div className="cov">
-            <div className="cov-row"><span className="cov-lab">⚾ MLB</span><span className="chip">Home Runs</span><span className="chip">Hits</span><span className="chip">Strikeouts</span><span className="chip">Total Bases</span><span className="chip">Doubles</span><span className="chip">Triples</span></div>
-            <div className="cov-row"><span className="cov-lab">🏀 NBA</span><span className="chip">Points</span><span className="chip">Rebounds</span><span className="chip">Assists</span><span className="chip">Threes</span></div>
-            <div className="cov-row"><span className="cov-lab">🏈 NFL</span><span className="chip">Passing Yds</span><span className="chip">Rushing Yds</span><span className="chip">Receiving Yds</span><span className="chip">Receptions</span><span className="chip">Pass TDs</span><span className="chip">Rushing TD</span><span className="chip">Anytime TD</span><span className="soon">coming soon</span></div>
+          <div className="pwall">
+            <div className="pmarq"><div className="ptrack left">{[...TC_A, ...TC_A].map((p,i)=>(<TradingCard p={p} key={"a"+i}/>))}</div></div>
+            <div className="pmarq"><div className="ptrack right">{[...TC_B, ...TC_B].map((p,i)=>(<TradingCard p={p} key={"b"+i}/>))}</div></div>
           </div>
-          <div className="marquee">
-            <div className="track">
-              {[...PROPS_EX, ...PROPS_EX].map((p,i)=>(
-                <div className="pcard" key={i}>
-                  {p.soon && <span className="pc-soon">soon</span>}
-                  <div className="pc-top">
-                    <div className="pc-av" style={{boxShadow:`0 0 0 2px ${p.ring}`}}>
-                      {p.ini}
-                      {p.img && <img src={p.img} alt="" loading="lazy" onError={(e)=>{e.currentTarget.style.display="none";}}/>}
-                    </div>
-                    <div><div className="pc-sport">{p.sp}</div><div className="pc-nm">{p.nm}</div><div className="pc-mu">{p.mu}</div></div>
-                  </div>
-                  <span className="pc-tag" style={{color:p.tc,background:p.tb,border:`1px solid ${p.td}`}}>{p.tag}</span>
-                  <div className="pc-bet"><div><div className="pc-prop">{p.prop}</div><div className="pc-odds">{p.odds}</div></div><div className="pc-edge">{p.edge}</div></div>
-                </div>
-              ))}
+
+          <div className="pcov">
+            <div className="pcov-lead">— What we cover —</div>
+            <div className="pcov-grid">
+              <div className="pcov-col"><div className="pic">⚾</div><div className="psp">MLB</div><div className="pn">6 markets</div><div className="pmk">HR · Hits · K<br/>TB · 2B · 3B</div></div>
+              <div className="pcov-col"><div className="pic">🏀</div><div className="psp">NBA</div><div className="pn">4 markets</div><div className="pmk">Pts · Reb<br/>Ast · 3PM</div></div>
+              <div className="pcov-col"><span className="psoon">soon</span><div className="pic">🏈</div><div className="psp">NFL</div><div className="pn">7 markets</div><div className="pmk">Pass · Rush · Rec<br/>TDs · more</div></div>
             </div>
+            <div className="pcov-note">17 market types across three sports · NFL <b>coming soon</b></div>
           </div>
+
           <div className="pb-foot">
-            <Link className="pb-btn" to="/props">See all props →</Link>
             <span className="pb-ex">Illustrative examples — not live picks</span>
           </div>
         </section>
@@ -736,7 +756,7 @@ const CSS = `
 }
 
 /* ============================================================
-   WZ-LANDING-ICLOSE-FIX-2026-07-13 :: intro + losses statement + finale
+   WZ-PROPS-REDESIGN-2026-07-13 :: intro + losses statement + finale
    Mobile = approved mock (3-across intro, framed finale).
    Desktop = same design, fills the screen (wrap widens to 92vw).
    ============================================================ */
@@ -840,6 +860,49 @@ const CSS = `
   .lpwrap .wpfin{padding:40px 20px 36px;border-radius:20px}
   .lpwrap .wpfin-btns{flex-direction:column;gap:11px}
   .lpwrap .wpfin-btn{width:100%;padding:15px 0}
+}
+
+
+/* ---- WZ-PROPS-REDESIGN-2026-07-13 :: trading-card wall + slim coverage ---- */
+.lpwrap .propsband .pwall{display:flex;flex-direction:column;gap:12px;margin:6px 0 4px}
+.lpwrap .propsband .pmarq{position:relative;overflow:hidden;-webkit-mask:linear-gradient(90deg,transparent,#000 7%,#000 93%,transparent);mask:linear-gradient(90deg,transparent,#000 7%,#000 93%,transparent)}
+.lpwrap .propsband .ptrack{display:flex;gap:12px;width:max-content;padding:0 6px}
+.lpwrap .propsband .ptrack.left{animation:pmL 46s linear infinite}
+.lpwrap .propsband .ptrack.right{animation:pmR 46s linear infinite}
+.lpwrap .propsband .pmarq:hover .ptrack{animation-play-state:paused}
+@keyframes pmL{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+@keyframes pmR{from{transform:translateX(-50%)}to{transform:translateX(0)}}
+@media(prefers-reduced-motion:reduce){.lpwrap .propsband .ptrack{animation:none}}
+.lpwrap .propsband .tc{position:relative;flex:0 0 202px;background:#0F1216;border:1px solid var(--line2);border-radius:16px;overflow:hidden;text-align:left}
+.lpwrap .propsband .tbanner{position:relative;height:82px;background:linear-gradient(160deg,var(--acc),#0F1216 80%);display:flex;align-items:flex-end;padding:0 14px}
+.lpwrap .propsband .tbanner::after{content:"";position:absolute;inset:0;background:radial-gradient(120% 90% at 82% 0%,var(--accglow),transparent 60%)}
+.lpwrap .propsband .tsport{position:absolute;top:11px;left:14px;font-family:var(--mono);font-size:8.5px;font-weight:700;letter-spacing:.1em;color:#0a0b0d;background:rgba(255,255,255,.85);padding:3px 7px;border-radius:6px;text-transform:uppercase}
+.lpwrap .propsband .tsoon{position:absolute;top:11px;right:12px;z-index:2;font-family:var(--mono);font-size:8px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#F5A524;background:rgba(245,165,36,.16);border:1px solid rgba(245,165,36,.35);border-radius:5px;padding:2px 6px}
+.lpwrap .propsband .tav{position:relative;z-index:1;width:58px;height:58px;border-radius:50%;overflow:hidden;background:var(--panel2);border:3px solid #0F1216;box-shadow:0 8px 18px -6px #000;transform:translateY(20px)}
+.lpwrap .propsband .tav img{width:100%;height:100%;object-fit:cover}
+.lpwrap .propsband .tinfo{padding:26px 14px 0}
+.lpwrap .propsband .tnm{font-family:var(--disp);font-weight:700;font-size:15px;line-height:1.05;color:#fff}
+.lpwrap .propsband .tmu{font-family:var(--mono);font-size:9px;color:#5C6770;margin-top:3px}
+.lpwrap .propsband .ttag{display:inline-block;margin-top:10px;font-family:var(--mono);font-size:8.5px;font-weight:700;letter-spacing:.08em;padding:3px 8px;border-radius:5px;color:var(--tc2);background:var(--tcb);border:1px solid var(--tcd)}
+.lpwrap .propsband .tbet{display:flex;align-items:center;justify-content:space-between;margin:11px 14px 0;padding:11px 0 14px;border-top:1px solid var(--line)}
+.lpwrap .propsband .tprop{font-family:var(--disp);font-weight:700;font-size:15px;color:#fff}
+.lpwrap .propsband .todds{font-family:var(--mono);font-size:10px;color:#5C6770;margin-top:1px}
+.lpwrap .propsband .tedge{font-family:var(--disp);font-weight:700;font-size:15px;color:var(--green);display:flex;align-items:center;gap:4px}
+.lpwrap .propsband .tedge::before{content:"\u25b2";font-size:8px}
+.lpwrap .propsband .pcov{max-width:640px;margin:20px auto 0;padding:16px 18px 4px}
+.lpwrap .propsband .pcov-lead{font-family:var(--mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:#5C6770;margin-bottom:14px}
+.lpwrap .propsband .pcov-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.lpwrap .propsband .pcov-col{position:relative;background:#111418;border:1px solid var(--line);border-radius:12px;padding:13px 11px;text-align:center}
+.lpwrap .propsband .pic{font-size:18px}
+.lpwrap .propsband .psp{font-family:var(--disp);font-weight:700;font-size:13px;margin-top:5px;color:#fff}
+.lpwrap .propsband .pn{font-family:var(--mono);font-size:9.5px;color:var(--gold);margin-top:3px;letter-spacing:.04em}
+.lpwrap .propsband .pmk{font-family:var(--mono);font-size:9px;color:#5C6770;margin-top:6px;line-height:1.5}
+.lpwrap .propsband .psoon{position:absolute;top:8px;right:8px;font-family:var(--mono);font-size:7.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#F5A524;background:rgba(245,165,36,.14);border:1px solid rgba(245,165,36,.32);border-radius:4px;padding:1px 5px}
+.lpwrap .propsband .pcov-note{font-family:var(--mono);font-size:9.5px;color:#5C6770;margin-top:14px;letter-spacing:.02em}
+.lpwrap .propsband .pcov-note b{color:#F5A524}
+@media(min-width:860px){
+  .lpwrap .propsband .tc{flex:0 0 224px}
+  .lpwrap .propsband .pcov{max-width:680px}
 }
 
 `;
