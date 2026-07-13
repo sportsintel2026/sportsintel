@@ -87,16 +87,26 @@ export default function AdminPage() {
     p.then(d => {
       if (cancelled) return;
       const arr = Array.isArray(d) ? d : (d?.games || []);
-      const list = arr.map(g => ({
-        gameId: g.id || g.gameId || g.gamePk,
-        awayAbbr: g.awayAbbr || g.away || "?",
-        homeAbbr: g.homeAbbr || g.home || "?",
-        label: `${g.awayAbbr||g.away||"?"} @ ${g.homeAbbr||g.home||"?"}${g.time?" · "+g.time:""}`,
-        moneyline: g.moneyline || null,
-        totals: g.totals || null,
-        runLine: g.runLine || null,
-        spread: g.spread || null,
-      }));
+      // WZ-ADMIN-BOARDTEAMS-2026-07-13 :: MLB/NBA carry away/awayAbbr; football carries awayTeam/homeTeam
+      // (plus a "matchup" string). Read every variant, and DROP any game we can't name so an off-season
+      // feed (empty NFL/CFB/NHL rows) no longer shows a list of "? @ ?" -- it falls through to Manual.
+      const parseMU = (mu, i) => { const parts = String(mu||"").split(/@|vs/i).map(s=>s.trim()).filter(Boolean); return parts[i] || ""; };
+      const nameOf = (abbr, full, team, mu, i) => { for (const v of [abbr, full, team]) { const s = String(v==null?"":v).trim(); if (s && s !== "?") return s; } return parseMU(mu, i); };
+      const whenOf = (g) => g.time || (g.commenceTime ? new Date(g.commenceTime).toLocaleString([], { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" }) : "");
+      const list = arr.map(g => {
+        const away = nameOf(g.awayAbbr, g.away, g.awayTeam, g.matchup, 0);
+        const home = nameOf(g.homeAbbr, g.home, g.homeTeam, g.matchup, 1);
+        const t = whenOf(g);
+        return {
+          gameId: g.id || g.gameId || g.gamePk || g.eventId || "",
+          awayAbbr: away, homeAbbr: home,
+          label: `${away} @ ${home}${t ? " \u00b7 " + t : ""}`,
+          moneyline: g.moneyline || null,
+          totals: g.totals || null,
+          runLine: g.runLine || null,
+          spread: g.spread || null,
+        };
+      }).filter(g => g.awayAbbr && g.homeAbbr);
       setGames(list); setGameIdx(-1); setSelection("");
     }).catch(()=>setGames([]));
     return () => { cancelled = true; };
