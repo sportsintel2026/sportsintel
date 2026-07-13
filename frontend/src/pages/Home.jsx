@@ -643,7 +643,7 @@ export default function HomePage(){
         </div>
 
         <div className="seclbl">HOW TO USE WIZEPICKS</div>
-        <div className="guide" onClick={()=>navigate("/guide")}><div className="gi"/><div className="gt"><div className="gh">New here? Start with the basics</div><div className="gs">Edges, props, line shopping &amp; the full board {"\u2014"} a quick walkthrough.</div></div><div className="ga">{"\u203a"}</div></div>
+        <div className="guide" onClick={()=>navigate("/guide")}><span className="gic"><svg width="22" height="22" viewBox="0 0 24 24"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11v15H5.5A1.5 1.5 0 0 0 4 20.5z"/><path d="M20 5.5A1.5 1.5 0 0 0 18.5 4H13v15h5.5a1.5 1.5 0 0 1 1.5 1.5z"/></svg></span><span className="gtx"><b>New here?</b> Start with the basics {"\u2014"} a quick walkthrough</span><span className="gchev">{"\u203a"}</span></div>
 
         {/* WZ-HOME-DECLUTTER-2026-07-08 :: Player Props + Park Factors removed from Home -- props live in
             the Props tab; park factors are now attached to each game card in the Games tab. */}
@@ -1498,9 +1498,13 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .pkc .bs{display:flex;gap:10px;margin-top:9px}.pkc .b .kk{font-family:var(--mono);font-size:8px;color:var(--mut);font-weight:600}.pkc .b .vv{font-family:var(--disp);font-weight:800;font-size:20px;color:var(--green)}.pkc .b .vv.dn{color:var(--neg)}
 .pkc .wx{font-family:var(--mono);font-size:10px;color:#aeb9c8;margin-top:9px;padding-top:8px;border-top:1px solid var(--line)}
 
-.guide{display:flex;align-items:center;gap:12px;margin:8px 4px 0;padding:12px 14px;border-radius:12px;border:none;background:rgba(201,168,106,.05);cursor:pointer} /* WZ-GUIDE-GOLD-2026-07-13 :: was green tint, now on-brand gold */
-.guide .gi{width:40px;height:40px;border-radius:11px;background:rgba(201,168,106,.12);border:1px solid rgba(201,168,106,.28);flex:0 0 auto}
-.guide .gt{flex:1}.guide .gh{font-weight:800;font-size:13.5px;color:#fff}.guide .gs{font-size:11px;color:#9aa6b2;margin-top:3px;line-height:1.4}.guide .ga{color:var(--gold);font-weight:800;font-size:17px}
+/* WZ-GUIDE-MINIMAL-2026-07-13 :: receding link (Option 3) — no fill/box, quiet gold-iconed line */
+.guide{display:flex;align-items:center;gap:11px;margin:8px 4px 0;padding:11px 2px;background:none;border:none;cursor:pointer}
+.guide .gic{width:30px;height:30px;flex:0 0 auto;display:flex;align-items:center;justify-content:center}
+.guide .gic svg{stroke:var(--gold);fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.guide .gtx{flex:1;font-family:var(--disp);font-weight:700;font-size:14px;color:var(--mut);letter-spacing:.02em;line-height:1.3}
+.guide .gtx b{color:#cdd4da;font-weight:800}
+.guide .gchev{color:var(--mut2);font-size:16px;flex:0 0 auto}
 .upcrow{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding:6px 12px 0}.upcrow::-webkit-scrollbar{display:none}
 .gm{flex:0 0 auto;width:128px;border:1px solid var(--line);border-radius:11px;background:var(--panel);padding:9px 11px}.gm .mt{display:flex;align-items:center;gap:5px;font-family:var(--disp);font-weight:800;font-size:14px}.gm .x{color:var(--mut)}.gm .tm{font-family:var(--mono);font-size:9px;color:var(--mut);margin-top:6px}
 
