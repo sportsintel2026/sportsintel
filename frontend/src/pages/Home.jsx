@@ -835,11 +835,15 @@ function BoardCardCompact({d,i,sport,onClick}){
   // Win fills 0-100 (honest — handles value-dog ML picks under 50%); edge fills 0-40%; exact numbers stay on the right.
   const winW=wpv!=null?Math.max(0,Math.min(100,wpv)):0;
   const edgeW=Math.max(0,Math.min(100,(Number(d.edge)||0)/40*100));
+  // WZ-CARD-METERS-2026-07-13 :: split "Team +Line" so a long team name ellipsis-truncates while the
+  // line / chip / odds stay pinned — long CFB picks can't bleed into the meters anymore.
+  const _pk=String(d.p||""); const _sp=_pk.lastIndexOf(" ");
+  const pkHead=_sp>0?_pk.slice(0,_sp):_pk; const pkTail=_sp>0?_pk.slice(_sp+1):"";
   return (
     <div className={"ufcard"+(isTot?" tot":"")} onClick={onClick}>
       <div className="ufmid">
         <div className="l1"><span className="ufmatch">{d.a[0]} @ {d.h[0]}</span>{d.starts&&<span className="uftime">{d.starts}</span>}</div>
-        <div className="l2"><span className="ufp" style={{color:accent}}>{d.p}</span>{d.mk&&<span className="ufmk">{d.mk}</span>}{d.odds&&<span className="ufod">{d.odds}</span>}</div>
+        <div className="l2"><span className="ufp" style={{color:accent}}>{pkHead}</span>{pkTail&&<span className="ufpl" style={{color:accent}}>{pkTail}</span>}{d.mk&&<span className="ufmk">{d.mk}</span>}{d.odds&&<span className="ufod">{d.odds}</span>}</div>
       </div>
       <div className="ufrt">
         <div className="ufgauge">
@@ -1259,14 +1263,15 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .ufcard .ufmid .l1{display:flex;align-items:center;gap:7px;margin-bottom:3px}
 .ufcard .ufmid .ufmatch{font-family:var(--disp);font-weight:700;font-size:13px;color:var(--mut);letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ufcard .ufmid .uftime{font-family:var(--mono);font-size:9px;color:var(--mut2);flex:none;letter-spacing:.03em}
-.ufcard .ufmid .l2{display:flex;align-items:center;gap:7px;min-width:0}
-.ufcard .ufmid .ufp{font-family:var(--disp);font-weight:800;font-size:16px;line-height:1;white-space:nowrap}
+.ufcard .ufmid .l2{display:flex;align-items:center;gap:7px;min-width:0;overflow:hidden}
+.ufcard .ufmid .ufp{font-family:var(--disp);font-weight:800;font-size:16px;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:0 1 auto}
+.ufcard .ufmid .ufpl{font-family:var(--disp);font-weight:800;font-size:16px;line-height:1;white-space:nowrap;flex:none}
 .ufcard .ufmid .ufmk{font-family:var(--mono);font-size:8.5px;font-weight:600;color:var(--mut);border:1px solid var(--line);border-radius:4px;padding:2px 5px;flex:none}
 .ufcard .ufmid .ufod{font-family:var(--mono);font-size:12px;color:var(--mut);flex:none}
 .ufcard .ufrt{display:flex;align-items:center;gap:8px;flex:none}
 .ufcard .ufrt .ufgauge{display:flex;flex-direction:column;gap:5px}
 .ufcard .ufrt .ufg{display:flex;align-items:center;gap:6px}
-.ufcard .ufrt .ufg .ufgl{font-family:var(--mono);font-size:7.5px;font-weight:600;letter-spacing:.05em;color:var(--mut2);width:25px;flex:none}
+.ufcard .ufrt .ufg .ufgl{font-family:var(--mono);font-size:7.5px;font-weight:600;letter-spacing:.05em;color:var(--mut);width:25px;flex:none}
 .ufcard .ufrt .ufg .ufgt{width:42px;height:5px;border-radius:3px;background:rgba(255,255,255,.08);overflow:hidden;flex:none}
 .ufcard .ufrt .ufg .ufgt i{display:block;height:100%;border-radius:3px}
 .ufcard .ufrt .ufg .ufgt i.w{background:var(--green)}
