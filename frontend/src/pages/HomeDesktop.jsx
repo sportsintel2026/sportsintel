@@ -160,7 +160,7 @@ export default function HomeDesktop(props) {
     ["", "WizePlays", "/expert-picks"],
     ["", "Wize Spin", "/daily-card"],
     ["SCORES", null],
-    ["", "Games & Scores", "/games"],
+    ["", "Matchups & Scores", "/games"],
   ];
 
   return (
@@ -200,7 +200,7 @@ export default function HomeDesktop(props) {
           </div>
 
           {sport === "nhl" ? (
-            <div className="provbar">NHL board opens at the season &mdash; the model posts edges here from day one. Live scores are under Games &amp; Scores.</div>
+            <div className="provbar">NHL board opens at the season &mdash; the model posts edges here from day one. Live scores are under Matchups &amp; Scores.</div>
           ) : null}
 
           {(sport === "nfl" || sport === "cfb") ? (
