@@ -1182,7 +1182,7 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .liverow .livesub{font-family:var(--mono);font-size:9.5px;color:var(--mut);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.liverow .livesub b{color:#cdd6da}
 .liverow .liveedge{margin-left:auto;font-family:var(--disp);font-weight:800;font-size:16px;white-space:nowrap}
 .liverow .liveedge.pos{color:var(--green)}.liverow .liveedge.neg{color:var(--red)}
-.seclbl::before{content:"";width:3px;height:13px;border-radius:2px;background:var(--red)}
+.seclbl::before{content:"";width:3px;height:13px;border-radius:2px;background:var(--gold)} /* WZ-SECLBL-TICK-2026-07-13 :: was --red (off-palette eyesore); gold matches the brand */
 
 /* hero */
 .herocar{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;margin-top:24px}.herocar::-webkit-scrollbar{display:none}
