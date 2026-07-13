@@ -138,37 +138,52 @@ function getPacificDate(offsetDays = 0) {
   return d.toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
 }
 
+// WZ-ASG-SKIP-2026-07-12 :: a game only counts as a real slate to build a board on if it's not
+// postponed/cancelled AND it's a bettable game type. The MLB Stats API lists the All-Star Game
+// (gameType "A") as a game, so without this the forward-roll stopped on ASG day (Jul 14) and never
+// reached the real second-half opener. Skip All-Star "A", spring "S", exhibition "E"; keep regular
+// "R" and postseason. Games with no gameType (other leagues) are kept.
+const SKIP_GAME_TYPES = new Set(["A", "S", "E"]);
+const isRealSlateGame = (g) =>
+  g && g.status !== "postponed" && g.status !== "cancelled" && !SKIP_GAME_TYPES.has(g.gameType);
+
+// WZ-SLATE-FWDROLL-2026-07-12 :: next calendar date (>= fromOffset days out) that actually has
+// playable games, skipping empty days (off-days, the All-Star break). Capped so a genuine schedule
+// gap can't loop forever. Returns null if nothing is scheduled in the window.
+async function nextGameDate(fromOffset = 1, maxAhead = 12) {
+  for (let off = fromOffset; off <= maxAhead; off++) {
+    const d = getPacificDate(off);
+    let g = [];
+    try { g = await getScheduleForDate(d); } catch (_) { g = []; }
+    const p = g.filter(isRealSlateGame);
+    if (p.length > 0) return d;
+  }
+  return null;
+}
+
 async function resolveSlateDate() {
   const today = getPacificDate(0);
   let todayGames = [];
   try { todayGames = await getScheduleForDate(today); } catch (e) { todayGames = []; }
 
-  // Postponed/cancelled aren't part of the live slate, so they never block the roll.
-  const playable = todayGames.filter(g => g.status !== "postponed" && g.status !== "cancelled");
+  // Postponed/cancelled and non-bettable game types (All-Star/spring/exhibition) never form a slate.
+  const playable = todayGames.filter(isRealSlateGame);
 
   // Stay on today's board until the WHOLE West Coast slate is FINAL. While any of today's games is
   // still scheduled or live, this is TODAY'S board -- tomorrow's games never show early.
   const allFinal = playable.length > 0 && playable.every(g => g.status === "final");
   // "underway" = today's slate has started (any game live or final). Used to decide when to
-  // surface tomorrow's preview beneath today's board.
+  // surface the next slate's preview beneath today's board.
   const underway = playable.some(g => g.status === "live" || g.status === "final");
 
   if (playable.length > 0 && !allFinal) {
     return { date: today, rolled: false, underway };
   }
-  // WZ-SLATE-FWDROLL-2026-07-12 :: today is over (or empty) -> roll FORWARD to the next date that
-  // actually has games, skipping empty days (off-days, the All-Star break). The old code hopped a
-  // hardcoded +1 day and stopped even if that day was dark, so during the break it landed on an
-  // empty date and the board never reached the next real slate. Capped look-ahead so a genuine
-  // schedule gap can't loop; falls back to +1 (empty board / placeholder) if nothing's scheduled.
-  for (let off = 1; off <= 10; off++) {
-    const d = getPacificDate(off);
-    let g = [];
-    try { g = await getScheduleForDate(d); } catch (_) { g = []; }
-    const p = g.filter(x => x.status !== "postponed" && x.status !== "cancelled");
-    if (p.length > 0) return { date: d, rolled: true, underway: false };
-  }
-  return { date: getPacificDate(1), rolled: true, underway: false };
+  // Today is over (or empty) -> roll FORWARD to the next date that actually has games (skips the
+  // break). Old code hopped a hardcoded +1 and stopped even on a dark day. Falls back to +1 if the
+  // look-ahead window is empty (empty board / placeholder).
+  const nd = await nextGameDate(1);
+  return { date: nd || getPacificDate(1), rolled: true, underway: false };
 }
 
 // ── Main endpoint ─────────────────────────────────────────────────────────────
@@ -415,7 +430,10 @@ router.get("/mlb", async (req, res) => {
     const isPreview = !!dateOverride;
     const { date: resolvedDate, rolled, underway } = await resolveSlateDate();
     const slateDate = dateOverride || resolvedDate;
-    const previewDate = (!isPreview && underway && !rolled) ? getPacificDate(1) : null;
+    // WZ-SLATE-FWDROLL-2026-07-12 :: preview the NEXT slate that has games (skips off-days / the
+    // break) instead of a blind +1. In-season this is still tomorrow; during a gap it reaches the
+    // next real slate (e.g. the post-break opener) so the board previews it the moment its lines post.
+    const previewDate = (!isPreview && underway && !rolled) ? await nextGameDate(1) : null;
 
     // Cache is valid only if it's fresh AND for the same date we now want to serve.
     if (isPreview) {
