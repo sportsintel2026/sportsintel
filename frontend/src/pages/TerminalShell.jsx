@@ -27,7 +27,7 @@ const NAV = [
   ["◫", "Consensus", "/consensus"],
   ["◷", "CLV", "/clv"],
   ["SCORES", null],
-  ["▦", "Games & Scores", "/games"],
+  ["▦", "Matchups & Scores", "/games"],
 ];
 
 export default function TerminalShell({ active, plan = {}, navigate, children }) {
