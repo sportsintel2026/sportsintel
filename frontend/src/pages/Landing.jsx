@@ -118,6 +118,44 @@ export default function LandingPage(){
         </div>
       </div></div>
 
+
+      {/* ===== INTRO — What is WizePicks (WZ-LANDING-BUILD-2026-07-13) ===== */}
+      <div className="wpintro"><div className="wrap">
+        <span className="eyebrow">What is WizePicks</span>
+        <h1 className="wpih1">Anybody can sell you a pick.<br/>We make you the <span className="g">sharp one.</span></h1>
+        <p className="lead">Over <b>20 years</b> in the sports-betting business taught us the one thing the touts will never admit: <b>no pick is ever guaranteed.</b> Not the hundred-dollar-a-month "locks," not ours, not anyone's. So instead of selling you certainty that doesn't exist, WizePicks gives you something that does — <span className="g">the model, the plays, and the tools</span> to know exactly why you're betting what you're betting.</p>
+        <span className="cred"><span className="d"/>20+ years in the game · built by bettors, for bettors</span>
+
+        <div className="sechd">
+          <span className="eyebrow">What you get</span>
+          <div className="sub">Three reads on every game. One confident decision.</div>
+          <div className="subm">The model's number, our handpicked play, and the raw tools to check us — side by side, so the call is always yours.</div>
+        </div>
+
+        <div className="reads">
+          <div className="card"><div className="no">01</div><div className="ttl">The <span className="a">Model</span></div><div className="bd">Our algorithm reads every game like a quant would — <b>win probability, edge, and value</b>, built from the same Statcast-grade data the books use. Not a hunch. A number.</div></div>
+          <div className="card"><div className="no">02</div><div className="ttl">Wize<span className="a">Plays</span></div><div className="bd">The games we've done the homework on and would put <b>our own money</b> behind. Hand-picked, conviction-rated, no filler to pad a card.</div></div>
+          <div className="card"><div className="no">03</div><div className="ttl">Your <span className="a">Edge</span></div><div className="bd">Matchups, splits, park factors, weather, line movement, injuries — the <b>full pro toolkit</b> in your hands. Do your own due diligence and compare.</div></div>
+        </div>
+
+        <div className="sechd">
+          <span className="eyebrow">Why it works</span>
+          <div className="sub">Confidence, not blind faith.</div>
+          <div className="subm">When the model, the WizePlay, and your own research all point the same way — that's not a guess, that's conviction. And when your read disagrees? Trust it. You'll be the most informed person betting that game.</div>
+        </div>
+
+        <div className="vs">
+          <div className="col old"><h4>The old way</h4><ul><li>$100+ a month for "expert" picks</li><li>Buy a pick, trust it blindly</li><li>Never learn why you won or lost</li><li>Still no guarantee — still losing</li></ul></div>
+          <div className="col wize"><h4>The Wize way</h4><ul><li>One membership — model, plays, and tools</li><li>Three reads on every game, side by side</li><li>Always know exactly why you're betting</li><li>Decide for yourself, with real conviction</li></ul></div>
+        </div>
+
+        <div className="iclose">
+          <div className="big">We were never here to sell you a miracle.<br/>We're here to make you the <span className="g">sharpest bettor in the room.</span></div>
+          <div className="goal">That's the whole goal: better information, honest odds, and the confidence to make the call yourself — every single night.</div>
+          <div className="fine">21+ · No guarantees — just the sharpest information in the game</div>
+        </div>
+      </div></div>
+
       {/* VIDEO SECTION (now on top) */}
       <section className="vidsec">
         <div className="wrap">
@@ -356,13 +394,10 @@ export default function LandingPage(){
 
       {/* PROOF */}
       <div className="proof"><div className="wrap">
-        <small>WHY BETTORS TRUST IT</small>
-        <div className="big">We don't hide the <span>losses.</span></div>
-        <small>Every number tracked live and published — illustrative example shown</small>
-        <div className="stats3">
-          <div className="stat"><div className="n">60.2%</div><div className="l">totals win rate (tracked)</div></div>
-          <div className="stat"><div className="n">62.4%</div><div className="u">+24.3 units</div><div className="l">WizePlays win rate<br/>handpicked by our own analytics</div></div>
-          <div className="stat"><div className="n">$7</div><div className="l">per week to start — no upsells</div></div>
+        <div className="wpcloser">
+          <div className="wpc-eye">Why bettors trust it</div>
+          <h2 className="wpc-h">We don't hide the <span>losses.</span></h2>
+          <p className="wpc-sub wpc-sub-wide">Every pick, graded against the result and left up for good — the wins and the losses, side by side. Nothing buried, nothing cherry-picked. A record that only shows its winners isn't a record at all.</p>
         </div>
       </div></div>
 
@@ -371,9 +406,16 @@ export default function LandingPage(){
 
       {/* CTA BAND */}
       <div className="ctaband"><div className="wrap">
-        <h2>Stop guessing. Start with the edge.</h2>
-        <p>Free to start. See today's edges before you pay a cent.</p>
-        <Link className="btn btn-pri" to="/signup">Start free →</Link>
+        <div className="wpfin">
+          <div className="wpfin-eye">Your edge starts tonight</div>
+          <h2 className="wpfin-h">Stop renting picks.<br/>Start making <span>wise ones.</span></h2>
+          <p className="wpfin-sub">One membership unlocks the model, the WizePlays, and every tool. No upsells. Cancel anytime.</p>
+          <div className="wpfin-btns">
+            <Link className="wpfin-btn wpfin-pri" to="/signup">Start free →</Link>
+            <Link className="wpfin-btn wpfin-ghost" to="/home">See live edges</Link>
+          </div>
+          <div className="wpfin-fine">21+ · Bet responsibly · No guarantees — just the sharpest information in the game</div>
+        </div>
       </div></div>
 
       {/* FOOTER */}
@@ -409,6 +451,7 @@ export default function LandingPage(){
 
 const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap');
 .lpwrap{--teal:#3FCB91;--mint:#46E0A9;--red:#C9A86A;--blue:#1B2025;--bluelt:#9AA4AD;--gold:#C9A86A;--panel:#14171B;--panel2:#1B2025;--line:#21262C;--line2:#2A3138;
   --disp:'Space Grotesk',sans-serif;--body:'Inter',sans-serif;--mono:'JetBrains Mono',monospace;
   background:#0A0B0D;color:#E8ECEF;font-family:var(--body);-webkit-font-smoothing:antialiased;min-height:100vh;overflow-x:hidden}
@@ -692,4 +735,112 @@ const CSS = `
 .lpwrap .vidframe{width:min(1080px,92vw);max-width:1080px;left:auto;right:auto;margin-left:auto;margin-right:auto;border-radius:18px;border:1px solid rgba(255,255,255,.09);box-shadow:0 24px 70px rgba(0,0,0,.45)}
 .lpwrap .vidframe video,.lpwrap .vidframe iframe{width:111.2%;height:100%}
 }
+
+/* ============================================================
+   WZ-LANDING-BUILD-2026-07-13 :: intro + losses statement + finale
+   Mobile = approved mock (3-across intro, framed finale).
+   Desktop = same design, fills the screen (wrap widens to 92vw).
+   ============================================================ */
+
+/* ---- desktop: fill the screen (no skinny centered column) ---- */
+@media(min-width:1024px){ .lpwrap .wrap{max-width:min(1360px,92vw)} }
+
+/* ---- INTRO (What is WizePicks) ---- */
+.lpwrap .wpintro{position:relative;overflow:hidden;padding:40px 0 30px;
+  background:radial-gradient(1100px 560px at 50% -6%, rgba(201,168,106,.06), transparent 60%),radial-gradient(900px 700px at 50% 30%, #0e1013, #0A0B0D 78%)}
+.lpwrap .wpintro::before{content:"";position:absolute;inset:0;pointer-events:none;opacity:.03;z-index:0;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+.lpwrap .wpintro .wrap{position:relative;z-index:1}
+.lpwrap .wpintro .eyebrow{display:inline-flex;align-items:center;gap:10px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12px;letter-spacing:.24em;text-transform:uppercase;color:var(--gold);margin-bottom:0}
+.lpwrap .wpintro .eyebrow::before{content:"";width:26px;height:1px;background:linear-gradient(90deg,var(--gold),transparent)}
+.lpwrap .wpintro .wpih1{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:clamp(38px,10vw,60px);line-height:1.02;letter-spacing:.4px;margin:20px 0 0;color:#ECEFF2}
+.lpwrap .wpintro .wpih1 .g{background:linear-gradient(180deg,#E8CE93,#C9A86A 55%,#9A7B3E);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.lpwrap .wpintro .lead{font-size:15px;line-height:1.7;color:#99A2AA;max-width:620px;margin:20px 0 0}
+.lpwrap .wpintro .lead b{color:#cdd5da;font-weight:600}
+.lpwrap .wpintro .lead .g{color:#3FCB91;font-weight:600}
+.lpwrap .wpintro .cred{display:inline-flex;align-items:center;gap:9px;margin-top:22px;font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.06em;color:#E8CE93;border:1px solid rgba(201,168,106,.28);border-radius:999px;padding:7px 13px;background:linear-gradient(180deg,rgba(201,168,106,.1),rgba(201,168,106,.02))}
+.lpwrap .wpintro .cred .d{width:5px;height:5px;border-radius:50%;background:#C9A86A;flex:0 0 auto}
+.lpwrap .wpintro .sechd{margin-top:48px}
+.lpwrap .wpintro .sechd .sub{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:clamp(22px,6vw,30px);letter-spacing:.4px;color:#ECEFF2;margin-top:12px}
+.lpwrap .wpintro .sechd .subm{font-size:14px;color:#99A2AA;margin-top:8px;max-width:560px;line-height:1.6}
+.lpwrap .wpintro .reads{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:22px}
+.lpwrap .wpintro .card{position:relative;border-radius:13px;padding:14px 11px;background:linear-gradient(180deg,#181C21,#111418);border:1px solid rgba(255,255,255,.06);box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 16px 40px -28px rgba(0,0,0,.9);overflow:hidden}
+.lpwrap .wpintro .card::before{content:"";position:absolute;left:0;top:0;right:0;height:2px;background:linear-gradient(90deg,#C9A86A,transparent 70%)}
+.lpwrap .wpintro .card .no{font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.2em;color:#5B646C}
+.lpwrap .wpintro .card .ttl{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:16px;letter-spacing:.3px;margin-top:8px;color:#ECEFF2;line-height:1.05}
+.lpwrap .wpintro .card .ttl .a{color:#C9A86A}
+.lpwrap .wpintro .card .bd{font-size:10.5px;line-height:1.5;color:#99A2AA;margin-top:8px}
+.lpwrap .wpintro .card .bd b{color:#cdd5da;font-weight:600}
+.lpwrap .wpintro .vs{display:grid;grid-template-columns:1fr;gap:12px;margin-top:26px}
+.lpwrap .wpintro .col{border-radius:14px;padding:20px;border:1px solid rgba(255,255,255,.06)}
+.lpwrap .wpintro .col.old{background:rgba(226,101,92,.04);border-color:rgba(226,101,92,.16)}
+.lpwrap .wpintro .col.wize{background:rgba(63,203,145,.05);border-color:rgba(63,203,145,.22)}
+.lpwrap .wpintro .col h4{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12px;letter-spacing:.18em;text-transform:uppercase}
+.lpwrap .wpintro .col.old h4{color:#E2655C}
+.lpwrap .wpintro .col.wize h4{color:#3FCB91}
+.lpwrap .wpintro .col ul{list-style:none;margin:14px 0 0;padding:0}
+.lpwrap .wpintro .col li{font-family:'IBM Plex Mono',monospace;font-size:12px;line-height:1.5;color:#99A2AA;padding:7px 0 7px 22px;position:relative}
+.lpwrap .wpintro .col li + li{border-top:1px solid rgba(255,255,255,.06)}
+.lpwrap .wpintro .col.old li::before{content:"✕";position:absolute;left:0;color:#E2655C;font-size:11px;top:8px}
+.lpwrap .wpintro .col.wize li::before{content:"✓";position:absolute;left:0;color:#3FCB91;font-size:11px;top:8px}
+.lpwrap .wpintro .col.wize li{color:#cdd5da}
+.lpwrap .wpintro .iclose{margin-top:52px;text-align:center;padding:0 6px}
+.lpwrap .wpintro .iclose .big{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:clamp(26px,7vw,38px);line-height:1.1;letter-spacing:.4px;color:#ECEFF2}
+.lpwrap .wpintro .iclose .big .g{background:linear-gradient(180deg,#E8CE93,#C9A86A 60%,#9A7B3E);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.lpwrap .wpintro .iclose .goal{font-size:15px;color:#99A2AA;margin-top:18px;max-width:560px;margin-left:auto;margin-right:auto;line-height:1.7}
+.lpwrap .wpintro .iclose .fine{margin-top:20px;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;color:#5B646C;text-transform:uppercase}
+@media(min-width:860px){
+  .lpwrap .wpintro{padding:64px 0 44px}
+  .lpwrap .wpintro .wpih1{font-size:clamp(46px,6vw,72px)}
+  .lpwrap .wpintro .lead{font-size:17px;max-width:680px;margin-top:24px}
+  .lpwrap .wpintro .sechd{margin-top:60px}
+  .lpwrap .wpintro .sechd .sub{font-size:clamp(26px,3.2vw,34px)}
+  .lpwrap .wpintro .sechd .subm{font-size:15px;max-width:660px}
+  .lpwrap .wpintro .reads{gap:16px;margin-top:28px}
+  .lpwrap .wpintro .card{padding:26px 24px;border-radius:16px}
+  .lpwrap .wpintro .card .no{font-size:11px}
+  .lpwrap .wpintro .card .ttl{font-size:26px;margin-top:12px}
+  .lpwrap .wpintro .card .bd{font-size:14.5px;line-height:1.6;margin-top:11px}
+  .lpwrap .wpintro .vs{grid-template-columns:1fr 1fr;gap:18px;margin-top:30px}
+  .lpwrap .wpintro .col{padding:26px}
+  .lpwrap .wpintro .col li{font-size:13px}
+  .lpwrap .wpintro .iclose{margin-top:64px}
+  .lpwrap .wpintro .iclose .big{font-size:clamp(34px,4vw,50px)}
+  .lpwrap .wpintro .iclose .goal{font-size:16px;max-width:640px}
+}
+
+/* ---- Losses statement (sibling of the finale) ---- */
+.lpwrap .wpcloser{text-align:center;max-width:640px;margin:0 auto}
+.lpwrap .wpc-eye{display:inline-flex;align-items:center;gap:11px;font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:.28em;text-transform:uppercase;color:#C9A86A;margin-bottom:20px}
+.lpwrap .wpc-eye::before{content:"◆";font-size:9px;color:#C9A86A}
+.lpwrap .wpc-h{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:clamp(34px,9vw,54px);line-height:1.0;letter-spacing:.4px;color:#fff}
+.lpwrap .wpc-h span{background:linear-gradient(180deg,#E8CE93,#C9A86A 60%,#9A7B3E);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.lpwrap .wpc-sub{font-family:'Inter',sans-serif;font-size:16px;line-height:1.6;color:#9AA4AD;max-width:460px;margin:18px auto 0}
+.lpwrap .wpc-sub-wide{max-width:560px}
+
+/* ---- FINALE closer — framed, glowing, dominant ---- */
+.lpwrap .ctaband{background:radial-gradient(75% 110% at 50% 100%, rgba(201,168,106,.08), #0A0B0D 62%) !important;padding:44px 0 76px !important}
+.lpwrap .wpfin{position:relative;max-width:720px;margin:0 auto;text-align:center;overflow:hidden;padding:54px 30px 48px;border-radius:24px;border:1px solid rgba(201,168,106,.30);
+  background:radial-gradient(90% 130% at 50% -10%, rgba(201,168,106,.16), transparent 58%),linear-gradient(180deg,#16171B,#0B0C0F);
+  box-shadow:0 60px 130px -55px rgba(201,168,106,.42), 0 30px 80px -50px rgba(0,0,0,.9), inset 0 1px 0 rgba(255,255,255,.07)}
+.lpwrap .wpfin::before{content:"";position:absolute;inset:0;pointer-events:none;opacity:.04;z-index:0;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+.lpwrap .wpfin::after{content:"";position:absolute;top:0;left:18%;right:18%;height:1px;background:linear-gradient(90deg,transparent,#C9A86A,transparent);opacity:.75}
+.lpwrap .wpfin>*{position:relative;z-index:1}
+.lpwrap .wpfin-eye{display:inline-flex;align-items:center;gap:11px;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;letter-spacing:.3em;text-transform:uppercase;color:#C9A86A;margin-bottom:22px}
+.lpwrap .wpfin-eye::before,.lpwrap .wpfin-eye::after{content:"";width:24px;height:1px;background:#C9A86A;opacity:.55}
+.lpwrap .wpfin-h{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:clamp(44px,13vw,74px);line-height:.96;letter-spacing:.4px;color:#fff}
+.lpwrap .wpfin-h span{background:linear-gradient(180deg,#E8CE93,#C9A86A 55%,#9A7B3E);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.lpwrap .wpfin-sub{font-family:'Inter',sans-serif;font-size:16.5px;line-height:1.6;color:#AEB6BD;max-width:450px;margin:20px auto 0}
+.lpwrap .wpfin-btns{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;margin-top:32px}
+.lpwrap .wpfin-btn{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:18px;letter-spacing:.03em;padding:16px 42px;border-radius:12px;display:inline-block;transition:.16s}
+.lpwrap .wpfin-pri{background:linear-gradient(180deg,#F0DAA2,#C9A86A);color:#1a1408;box-shadow:0 18px 44px -12px rgba(201,168,106,.75)}
+.lpwrap .wpfin-pri:hover{transform:translateY(-2px);box-shadow:0 24px 56px -12px rgba(201,168,106,.9)}
+.lpwrap .wpfin-ghost{background:rgba(255,255,255,.03);border:1px solid #333b43;color:#EDF1F4}
+.lpwrap .wpfin-ghost:hover{border-color:#4a545d}
+.lpwrap .wpfin-fine{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#5C6770;margin-top:28px}
+@media(max-width:560px){
+  .lpwrap .wpfin{padding:40px 20px 36px;border-radius:20px}
+  .lpwrap .wpfin-btns{flex-direction:column;gap:11px}
+  .lpwrap .wpfin-btn{width:100%;padding:15px 0}
+}
+
 `;
