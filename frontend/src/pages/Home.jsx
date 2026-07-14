@@ -146,6 +146,7 @@ export default function HomePage(){
   const [live,setLive]=useState(null);
   const [oddsHist,setOddsHist]=useState(null);
   const [marketRead,setMarketRead]=useState(null);
+  const [sharpEdge,setSharpEdge]=useState(null); // WZ-SHARPEDGE-2026-07-13 :: model-vs-Pinnacle rows from /api/pinnacle-probe
   const [newsFeed,setNewsFeed]=useState([]); // WZ-LIVEWIRE-2026-06-27 :: MLB live wire (news + injuries)
   const prev=useRef({}); const [flash,setFlash]=useState({});
   const hasFull=plan.isAdmin===true||plan.tier==="pro"||plan.tier==="elite"||user?.email==="r7002g@gmail.com";
@@ -189,6 +190,15 @@ export default function HomePage(){
   useEffect(()=>{ if(!SPORTS[sport].hasLive){ setLive([]); return; } let t; const pull=async()=>{ try{ const d=await liveApi.getMLB(); setLive(d?.games||[]); }catch(_){ setLive([]); } t=setTimeout(pull,60000); }; pull(); return ()=>clearTimeout(t); },[sport]);
   useEffect(()=>{ if(!SPORTS[sport].hasHist){ setOddsHist([]); return; } let t; const pull=async()=>{ try{ const d=await edgesApi.getOddsHistory(); setOddsHist(d?.games||[]); }catch(_){ setOddsHist([]); } t=setTimeout(pull,300000); }; pull(); return ()=>clearTimeout(t); },[sport]);
   useEffect(()=>{ if(sport!=="mlb"){ setMarketRead([]); return; } let t; const pull=async()=>{ try{ const d=await edgesApi.getMarketRead(); setMarketRead(d?.games||[]); }catch(_){ setMarketRead([]); } t=setTimeout(pull,120000); }; pull(); return ()=>clearTimeout(t); },[sport]);
+  useEffect(()=>{ if(sport!=="mlb"){ setSharpEdge([]); return; } let dead=false; /* WZ-SHARPEDGE-2026-07-13 :: read model-vs-Pinnacle from the probe; gated to MLB, no polling, fail-safe */
+    (async()=>{ try{
+      const r=await fetch(`${PERF_API_BASE}/api/pinnacle-probe`);
+      const d=await r.json();
+      const rows=(d&&Array.isArray(d.rows))?d.rows:[];
+      if(!dead) setSharpEdge(rows);
+    }catch(_){ if(!dead) setSharpEdge([]); } })();
+    return ()=>{dead=true;};
+  },[sport]);
   // WZ-LIVEWIRE-2026-06-27 :: live wire — pull news feed (headlines + injury wire) for the ticker.
   // WZ-EDGETICKER-NEWS-2026-07-05 :: extended MLB-only -> also NFL/CFB, so the Edges-board ticker carries league news, not just scores.
   useEffect(()=>{ if(sport!=="mlb"&&sport!=="nfl"&&sport!=="cfb"){ setNewsFeed([]); return; } let t,dead=false; const pull=async()=>{ try{ const d=await newsApi.getFeed(sport); if(!dead) setNewsFeed(Array.isArray(d?.items)?d.items:[]); }catch(_){ if(!dead) setNewsFeed([]); } t=setTimeout(pull,300000); }; pull(); return ()=>{dead=true;clearTimeout(t);}; },[sport]);
@@ -346,6 +356,14 @@ export default function HomePage(){
     const split=(marketRead||[]).find(g=>g.win&&g.win.tier==="Split");
     if(split) out.push({dot:"#ff5d4d",label:"CONSENSUS SPLIT",head:`Books can't agree on the ${split.win.favTeam}`,sub:`${split.awayAbbr} @ ${split.homeAbbr} · only ${split.win.favProb}% consensus to win.`});
     return out; })();
+  // WZ-SHARPEDGE-2026-07-13 :: top model-vs-Pinnacle disagreements -- keep games with both a Pinnacle
+  // line and a model anchor, drop small gaps (<1.5pp) and the meaningless All-Star exhibition, sort by
+  // gap size, cap 3. deltaAwayPP>0 => model leans HOME vs Pinnacle; <0 => model leans AWAY.
+  const sharpRows=(sharpEdge||[])
+    .filter(r=>r&&r.pinnacle&&r.modelAnchor&&r.deltaAwayPP!=null&&Math.abs(r.deltaAwayPP)>=1.5)
+    .filter(r=>!/american league|national league/i.test(r.game||""))
+    .sort((a,b)=>Math.abs(b.deltaAwayPP)-Math.abs(a.deltaAwayPP))
+    .slice(0,3);
   // Live scores tape — real game state always; scores only if the feed carries them
   const scoreOf=(g,side)=>{ const c=side==="a"?[g.awayScore,g.awayRuns,g.away_runs,g.aScore,g.runsAway]:[g.homeScore,g.homeRuns,g.home_runs,g.hScore,g.runsHome]; const v=c.find(x=>x!=null); return v!=null?v:null; };
   const tapeLive=(live||[]).map(g=>({ id:g.gameId, a:g.awayAbbr||shortTeam(g.away||""), h:g.homeAbbr||shortTeam(g.home||""), as:scoreOf(g,"a"), hs:scoreOf(g,"h"), state:`${g.half==="bottom"?"Bot":"Top"} ${g.inning||""}`.trim(), live:true }));
@@ -624,9 +642,10 @@ export default function HomePage(){
           so in-training football/CFB no longer shows an empty or garbage pulse. */}
       {hasFull && (pulseAlerts.length>0 || moverItems.length>0 || sport==="mlb") && <>
         <div className="inteldiv"><span className="iln"/><span className="ilbl">MARKET {"\u0026"} INTEL</span><span className="iln r"/></div>
+        {sharpRows.length>0 && <SharpEdge rows={sharpRows}/>}
         {pulseAlerts.length>0 && <MarketPulse alerts={pulseAlerts} rolled={e.rolledToNextDay}/>}
         {moverItems.length>0 && <MarketMovers movers={moverItems} navigate={navigate}/>}
-        {pulseAlerts.length===0 && moverItems.length===0 && (
+        {pulseAlerts.length===0 && moverItems.length===0 && sharpRows.length===0 && (
           <div className="intelempty">
             <div className="iet">{sport==="mlb" && inAllStarBreak() ? "Market quiet \u2014 All-Star break" : "No market activity yet"}</div>
             <div className="ies">{sport==="mlb" && inAllStarBreak() ? "Line movement and pulse return when the second half opens." : "Line movement and pulse post once tonight's lines are up."}</div>
@@ -1016,6 +1035,38 @@ function MarketPulse({alerts,movers,rolled}){ const [idx,setIdx]=useState(0);con
     <div className="arow" onClick={()=>setPaused(p=>!p)}><div className="aline"><span className="adot" style={{background:a.dot,boxShadow:`0 0 6px ${a.dot}`}}/><span className="alab">{a.label}</span><span className="aval">{a.head}</span></div><div className="awhy">{a.sub}</div></div>
     {alerts.length>1&&<div className="dd">{alerts.map((_,i)=><i key={i} className={i===cur?"on":""} onClick={(ev)=>{ev.stopPropagation();setIdx(i);setPaused(true);}}/>)}</div>}
   </div>);
+}
+
+// WZ-SHARPEDGE-2026-07-13 :: Sharp Edge card -- where our model most disagrees with Pinnacle (the
+// sharpest book). Reuses the MARKET PULSE (.alerts) styling so it sits in the section as a sibling
+// card. deltaAwayPP>0 => model rates HOME higher than Pinnacle; <0 => model rates AWAY higher. We
+// surface the side the model favors MORE than the sharps, and by how much. Read-only; not bet advice.
+function SharpEdge({rows}){
+  if(!rows||!rows.length) return null;
+  const parseTeams=(g)=>{ const p=String(g||"").split(" @ "); return { away:(p[0]||"").trim(), home:(p[1]||"").trim() }; };
+  return (
+    <div className="alerts">
+      <div className="ahead">SHARP EDGE {"\u00b7"} MODEL vs PINNACLE <span className="ago">the sharpest book</span></div>
+      {rows.map((r,i)=>{
+        const t=parseTeams(r.game);
+        const modelHigh=(r.deltaAwayPP||0)>0;
+        const team=modelHigh?t.home:t.away;
+        const modelPct=modelHigh?(r.modelAnchor&&r.modelAnchor.fairHomePct):(r.modelAnchor&&r.modelAnchor.fairAwayPct);
+        const pinPct=modelHigh?(r.pinnacle&&r.pinnacle.fairHomePct):(r.pinnacle&&r.pinnacle.fairAwayPct);
+        const gap=Math.abs(r.deltaAwayPP||0);
+        return (
+          <div className="arow" key={i}>
+            <div className="aline">
+              <span className="adot" style={{background:"#3FCB91",boxShadow:"0 0 8px rgba(63,203,145,.55)"}}/>
+              <span className="alab">{team}</span>
+              <span className="aval">Model {modelPct!=null?modelPct+"%":"\u2014"} {"\u00b7"} Pinnacle {pinPct!=null?pinPct+"%":"\u2014"} {"\u00b7"} <span className="up">+{gap.toFixed(1)}</span></span>
+            </div>
+            <div className="awhy">Our model rates the <b style={{color:"#cfd7e2"}}>{team}</b> {gap.toFixed(1)} pts more likely to win than Pinnacle{"\u2019"}s line implies.</div>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 // Market Movers — its own collapsible section (dropdown). Collapsed by default.
