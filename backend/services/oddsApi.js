@@ -1591,9 +1591,74 @@ async function getNFLMainOdds(opts = {})  { return getFballMainOdds("americanfoo
 async function getCFBMainOdds(opts = {})  { return getFballMainOdds("americanfootball_ncaaf", opts); }
 
 
+// WZ-FBALL-PINN-2026-07-14 :: Pinnacle (sharp book, eu region) close for football. Mirrors
+// getMLBPinnacleClose but with FOOTBALL-correct guards: (1) ML band is wide -- heavy NFL/CFB
+// favorites reach -800/-5000, which the MLB +/-600 plausibleMlOdds guard would silently drop;
+// (2) totals band is 20-90, NOT MLB's 5.5-13.5; (3) football spreads are arbitrary point values
+// (e.g. -3.5, -7, +6.5), NOT the +/-1.5 run line, so we take each team's MAIN spread outcome.
+// Returns the SAME shape as getMLBPinnacleClose so the tick-capture consumes it identically.
+// Fail-safe: returns [] on any error; cache-respecting so it costs ~2 eu credits per fresh pull.
+const fballMlOk = (p) => p != null && Math.abs(p) >= 100 && Math.abs(p) <= 100000;
+const fballTotLineOk = (l) => typeof l === "number" && l >= 20 && l <= 90;
+async function getFballPinnacleClose(sportKey, cacheKey) {
+  const cached = cache.get(cacheKey);
+  if (isCacheValid(cached)) return cached.data;
+  try {
+    const data = await oddsGet(`/sports/${sportKey}/odds`, {
+      regions: "eu", markets: "h2h,totals,spreads", oddsFormat: "american", dateFormat: "iso",
+    });
+    const events = [];
+    for (const g of (data || [])) {
+      const away = g.away_team, home = g.home_team;
+      if (!away || !home) continue;
+      const pin = (g.bookmakers || []).find((b) => b.key === "pinnacle");
+      if (!pin) continue; // no Pinnacle line for this game
+      const h2hM = (pin.markets || []).find((m) => m.key === "h2h");
+      const totM = (pin.markets || []).find((m) => m.key === "totals");
+      const sprM = (pin.markets || []).find((m) => m.key === "spreads");
+      const h2h = { away: null, home: null };
+      if (h2hM) {
+        const ao = (h2hM.outcomes || []).find((x) => x.name === away);
+        const ho = (h2hM.outcomes || []).find((x) => x.name === home);
+        if (ao && fballMlOk(ao.price)) h2h.away = ao.price;
+        if (ho && fballMlOk(ho.price)) h2h.home = ho.price;
+      }
+      const totals = { line: null, over: null, under: null };
+      if (totM) {
+        const ov = (totM.outcomes || []).find((x) => x.name === "Over");
+        const un = (totM.outcomes || []).find((x) => x.name === "Under");
+        const line = ov?.point ?? un?.point ?? null;
+        if (fballTotLineOk(line)) {
+          totals.line = line;
+          if (ov && plausibleTotalOdds(ov.price)) totals.over = ov.price;
+          if (un && plausibleTotalOdds(un.price)) totals.under = un.price;
+        }
+      }
+      // Football spreads: arbitrary points, one main outcome per team (NOT the +/-1.5 run line).
+      const spreads = { away: null, home: null, awayLine: null, homeLine: null };
+      if (sprM) {
+        const ao = (sprM.outcomes || []).find((x) => x.name === away);
+        const ho = (sprM.outcomes || []).find((x) => x.name === home);
+        if (ao && plausibleTotalOdds(ao.price)) { spreads.away = ao.price; spreads.awayLine = ao.point ?? null; }
+        if (ho && plausibleTotalOdds(ho.price)) { spreads.home = ho.price; spreads.homeLine = ho.point ?? null; }
+      }
+      events.push({ awayTeam: away, homeTeam: home, commenceTime: g.commence_time, h2h, totals, spreads });
+    }
+    cache.set(cacheKey, { data: events, fetchedAt: Date.now() });
+    return events;
+  } catch (e) {
+    console.error(`[OddsAPI] ${sportKey} Pinnacle close fetch error:`, e.message);
+    return [];
+  }
+}
+async function getNFLPinnacleClose() { return getFballPinnacleClose("americanfootball_nfl", "nfl_pinnacle_close"); }
+async function getCFBPinnacleClose() { return getFballPinnacleClose("americanfootball_ncaaf", "cfb_pinnacle_close"); }
+
 module.exports = {
   getMLBMainOdds,
   getMLBPinnacleClose,
+  getNFLPinnacleClose,
+  getCFBPinnacleClose,
   getNFLMainOdds,
   getCFBMainOdds,
   getFballMainOdds,
