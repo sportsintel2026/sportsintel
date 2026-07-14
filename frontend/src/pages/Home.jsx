@@ -84,7 +84,12 @@ const SPORTS={
 };
 // Edge display differs by sport: MLB edge is a fraction (×100 → %); NBA ML edge is
 // already a % figure, and NBA spread/totals edges are POINT projections.
-function fmtEdgeFor(e,sport){ const v=e.edge??0; const s=v>=0?"+":""; if(sport!=="nba") return pct1(v); if(isTotal(e)||e.line!=null) return `${s}${v.toFixed(1)}`; return `${s}${v.toFixed(1)}%`; }
+// WZ-EDGE-UNIT-2026-07-14 :: ONE source of truth for edge units. MLB stores edge as a fraction
+// (0.075); NBA/NFL/CFB store it as a percent already (37.5). edgePct is the only place that knows
+// this, so the card (edgeNum) and the MARKET PULSE (fmtEdgeFor) can never disagree again. The old
+// fmtEdgeFor re-derived units through pct1 (x100) and double-scaled non-MLB percents into +3750%.
+const edgePct=(e,sport)=> sport==="mlb" ? (e.edge??0)*100 : (e.edge??0);
+function fmtEdgeFor(e,sport){ const v=edgePct(e,sport); const s=v>=0?"+":""; if(sport==="nba"&&(isTotal(e)||e.line!=null)) return `${s}${v.toFixed(1)}`; return `${s}${v.toFixed(1)}%`; }
 function teams(m){ if(!m)return ["",""]; const p=String(m).split(/@|vs|·/i).map(s=>s.trim()).filter(Boolean); return [p[0]||"",p[1]||""]; }
 function shortTeam(t){ const m=String(t).match(/[A-Z]{2,3}/); return m?m[0]:String(t).slice(0,3).toUpperCase(); }
 // WZ-LIVEWIRE-2026-06-27 :: concise injury text for the ticker (action after the colon, trimmed)
@@ -352,7 +357,7 @@ export default function HomePage(){
     if(sharp) out.push({dot:"#33e991",label:"SHARP MONEY",head:`${edgeLabel(sharp)}  ${formatOdds(sharp._open)} ${String.fromCharCode(8594)} ${formatOdds(sharp._now)}`,sub:"Money coming in on this side since open — market confirming the lean."});
     const totMove=byAbs.find(m=>isTotal(m)&&m._delta!=null);
     if(totMove){ const mg=abbrById[totMove.gameId]; out.push({dot:"#5da9e8",label:"BIGGEST TOTAL MOVE",head:`${edgeLabel(totMove)}  ${formatOdds(totMove._open)} ${String.fromCharCode(8594)} ${formatOdds(totMove._now)}`,sub:`${mg?mg.a+" @ "+mg.h+" · ":""}${Math.abs(totMove._delta)}¢ shift since the open.`}); }
-    if((boardEdges||[]).length && !sp.provisional){ const be=boardEdges[0]; out.push({dot:"#f3b94f",label:"LARGEST EDGE",head:`${edgeLabel(be)} · ${fmtEdgeFor(be,sport)} edge`,sub:`${be.matchup||""}${be.modelProb!=null?" · model "+Math.round(be.modelProb*100)+"%":""}`}); }
+    if((boardEdges||[]).length && !sp.provisional){ /* WZ-PULSE-NOPROVISIONAL-2026-07-13 :: LARGEST EDGE pulse suppressed on provisional/in-training sports; marker folded in per HANDOFF-27 */ const be=boardEdges[0]; out.push({dot:"#f3b94f",label:"LARGEST EDGE",head:`${edgeLabel(be)} · ${fmtEdgeFor(be,sport)} edge`,sub:`${be.matchup||""}${be.modelProb!=null?" · model "+Math.round(be.modelProb*100)+"%":""}`}); }
     const split=(marketRead||[]).find(g=>g.win&&g.win.tier==="Split");
     if(split) out.push({dot:"#ff5d4d",label:"CONSENSUS SPLIT",head:`Books can't agree on the ${split.win.favTeam}`,sub:`${split.awayAbbr} @ ${split.homeAbbr} · only ${split.win.favProb}% consensus to win.`});
     return out; })();
@@ -374,7 +379,7 @@ export default function HomePage(){
   if(isDesktop) return <HomeDesktop edges={edges} games={games} movers={movers} live={live||[]} abbrById={abbrById} topProps={topProps} propList={propList} propsByType={propsByType} hero={hero} hasFull={hasFull} planLoaded={planLoaded} lineSeries={lineSeries} moveByPick={moveByPick} wpRecord={wpRecord} wpToday={wpToday} navigate={navigate} plan={plan} sport={sport} setSport={(k)=>{setSport(k);setBoard("ml");}} marketsLive={marketsLive} anyLive={anyLive} marketRead={marketRead} perf={perf} />;
 
   // ============ ADAPTERS: real data -> v11 mock shapes ============
-  const edgeNum=(x)=> sport==="mlb" ? (x.edge??0)*100 : (x.edge??0);
+  const edgeNum=(x)=> edgePct(x,sport); // WZ-EDGE-UNIT-2026-07-14 :: delegate to the single edge-unit normalizer
   const convOf=(x)=>{const c=String(x._convAdj||x.conviction||"").toLowerCase();return c.indexOf("high")===0?"high":c.indexOf("med")===0?"med":"low";};
   const mkOf=(x)=> isTotal(x)?"TOT":(x.line!=null?(sport==="mlb"?"RL":"SPR"):"ML");
   const catOf=(x)=> isTotal(x)?"tot":(x.line!=null?"spr":"ml");
