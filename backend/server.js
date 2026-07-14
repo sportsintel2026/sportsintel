@@ -155,7 +155,21 @@ app.use("/api/ai-read", aiReadRoutes); // WZ-AI-READ-2026-07-12 :: on-demand AI 
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
-
+// WZ-PINNACLE-PROBE-2026-07-13 :: read-only diagnostic — model-vs-Pinnacle anchor gap.
+// Writes nothing, re-anchors nothing. ~2 Odds API credits per hit (us+eu, h2h only).
+// Empty during the MLB break (no slate to compare); real deltas once games return.
+// TEMP: remove once the Sharp Edge card reads this through the normal edges pipeline.
+app.get("/api/pinnacle-probe", async (req, res) => {
+  try {
+    const { getPinnacleAnchorComparison } = require("./services/oddsApi");
+    const sport = req.query.sport || "baseball_mlb";
+    const regions = req.query.regions || "us,eu";
+    const out = await getPinnacleAnchorComparison({ sport, regions });
+    res.json(out);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
 // ── Scheduled Jobs ────────────────────────────────────────────────────────────
 // Refresh game data every 5 minutes during peak hours (noon–midnight ET)
 cron.schedule("*/5 12-23 * * *", async () => {
