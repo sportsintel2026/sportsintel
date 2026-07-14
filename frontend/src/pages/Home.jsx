@@ -342,7 +342,7 @@ export default function HomePage(){
     if(sharp) out.push({dot:"#33e991",label:"SHARP MONEY",head:`${edgeLabel(sharp)}  ${formatOdds(sharp._open)} ${String.fromCharCode(8594)} ${formatOdds(sharp._now)}`,sub:"Money coming in on this side since open — market confirming the lean."});
     const totMove=byAbs.find(m=>isTotal(m)&&m._delta!=null);
     if(totMove){ const mg=abbrById[totMove.gameId]; out.push({dot:"#5da9e8",label:"BIGGEST TOTAL MOVE",head:`${edgeLabel(totMove)}  ${formatOdds(totMove._open)} ${String.fromCharCode(8594)} ${formatOdds(totMove._now)}`,sub:`${mg?mg.a+" @ "+mg.h+" · ":""}${Math.abs(totMove._delta)}¢ shift since the open.`}); }
-    if((boardEdges||[]).length){ const be=boardEdges[0]; out.push({dot:"#f3b94f",label:"LARGEST EDGE",head:`${edgeLabel(be)} · ${fmtEdgeFor(be,sport)} edge`,sub:`${be.matchup||""}${be.modelProb!=null?" · model "+Math.round(be.modelProb*100)+"%":""}`}); }
+    if((boardEdges||[]).length && !sp.provisional){ const be=boardEdges[0]; out.push({dot:"#f3b94f",label:"LARGEST EDGE",head:`${edgeLabel(be)} · ${fmtEdgeFor(be,sport)} edge`,sub:`${be.matchup||""}${be.modelProb!=null?" · model "+Math.round(be.modelProb*100)+"%":""}`}); }
     const split=(marketRead||[]).find(g=>g.win&&g.win.tier==="Split");
     if(split) out.push({dot:"#ff5d4d",label:"CONSENSUS SPLIT",head:`Books can't agree on the ${split.win.favTeam}`,sub:`${split.awayAbbr} @ ${split.homeAbbr} · only ${split.win.favProb}% consensus to win.`});
     return out; })();
@@ -618,13 +618,21 @@ export default function HomePage(){
           </div>
         </div>
 
-      {/* WZ-INTEL-WPLOGO-2026-07-08 :: MARKET & INTEL divider groups Pulse + Movers (shows only when there's intel) */}
-      {hasFull && (pulseAlerts.length>0 || moverItems.length>0) && <div className="inteldiv"><span className="iln"/><span className="ilbl">MARKET {"\u0026"} INTEL</span><span className="iln r"/></div>}
-
-      {hasFull && pulseAlerts.length>0 && <MarketPulse alerts={pulseAlerts} rolled={e.rolledToNextDay}/>}
-
-      {hasFull && moverItems.length>0 && <MarketMovers movers={moverItems} navigate={navigate}/>}
-
+     {/* WZ-INTEL-PERSIST-2026-07-13 :: MARKET & INTEL no longer vanishes on MLB when the slate is empty
+          (All-Star break / before tonight's lines post). The header + a quiet state stay put so the block --
+          and the Sharp Edge card that will live here -- has a stable home. Other sports stay content-gated,
+          so in-training football/CFB no longer shows an empty or garbage pulse. */}
+      {hasFull && (pulseAlerts.length>0 || moverItems.length>0 || sport==="mlb") && <>
+        <div className="inteldiv"><span className="iln"/><span className="ilbl">MARKET {"\u0026"} INTEL</span><span className="iln r"/></div>
+        {pulseAlerts.length>0 && <MarketPulse alerts={pulseAlerts} rolled={e.rolledToNextDay}/>}
+        {moverItems.length>0 && <MarketMovers movers={moverItems} navigate={navigate}/>}
+        {pulseAlerts.length===0 && moverItems.length===0 && (
+          <div className="intelempty">
+            <div className="iet">{sport==="mlb" && inAllStarBreak() ? "Market quiet \u2014 All-Star break" : "No market activity yet"}</div>
+            <div className="ies">{sport==="mlb" && inAllStarBreak() ? "Line movement and pulse return when the second half opens." : "Line movement and pulse post once tonight's lines are up."}</div>
+          </div>
+        )}
+      </>}
         {/* WZ-TOPPROPS-2026-07-08 :: Top Prop Plays -- last content block before the onboarding cards.
             Balanced top-6 (Hits/K/HR) as a tight edge-to-edge 3x2 grid; tap a card -> Props tab. */}
         {hasFull && topPropCards.length>0 && <>
@@ -1318,7 +1326,10 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .inteldiv{display:flex;align-items:center;gap:12px;margin:26px 10px 14px} /* WZ-INTEL-WPLOGO-2026-07-08 */
 .inteldiv .iln{flex:1;height:1px;background:linear-gradient(90deg,transparent,rgba(201,168,106,.55))}
 .inteldiv .iln.r{background:linear-gradient(90deg,rgba(201,168,106,.55),transparent)}
-.inteldiv .ilbl{font-family:var(--mono);font-weight:600;font-size:11px;letter-spacing:5px;color:var(--gold);white-space:nowrap}
+.inteldiv .ilbl{font-family:var(--mono);font-weight:600;font-size:11px;letter-spacing:5px;color:var(--gold);white-space:nowrap}.
+.intelempty{margin:0 4px;border:1px dashed var(--line2);border-radius:12px;padding:16px 15px;text-align:center} /* WZ-INTEL-PERSIST-2026-07-13 */
+.intelempty .iet{font-family:var(--disp);font-weight:800;font-size:14px;color:#cdd6da}
+.intelempty .ies{font-family:var(--mono);font-size:9.5px;color:var(--mut2);margin-top:5px;line-height:1.5}
 .tmrwnote{font-family:var(--mono);font-size:9px;color:var(--mut2);text-align:center;margin:0 14px 2px}
 .gr{position:relative;margin-bottom:0;background:transparent;border-radius:0;overflow:hidden}.gr+.gr{border-top:1px solid var(--line)}
 .gr::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--mut2);z-index:2}
