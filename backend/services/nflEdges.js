@@ -18,7 +18,7 @@
  * as provisional. No fabricated confidence ships.
  */
 
-const { getNFLMainOdds } = require("./oddsApi");
+const { getNFLMainOdds, getNFLPinnacleClose } = require("./oddsApi");
 const { buildTeamRatings } = require("./nflDataSource");
 const { predictGame } = require("./nflModel");
 
@@ -311,6 +311,24 @@ async function captureNFLOddsTicks() {
     if (ev.spreads?.away != null) rows.push({ ...base, market: "spread", side: "away",  line: ev.spreads.awayLine ?? null, odds: ev.spreads.away });
     if (ev.spreads?.home != null) rows.push({ ...base, market: "spread", side: "home",  line: ev.spreads.homeLine ?? null, odds: ev.spreads.home });
   }
+  // WZ-NFL-PINN-TICKS-2026-07-14 :: also snapshot Pinnacle (sharp book, eu) into nfl_odds_ticks,
+  // tagged side "...@Pinnacle", so sharp-side / reverse-line-movement detection can compare the
+  // sharp line against the soft-book consensus. Fail-safe: a Pinnacle failure never blocks the US capture.
+  try {
+    const pinEvents = await getNFLPinnacleClose();
+    for (const ev of (pinEvents || [])) {
+      const pa = ev.awayTeam, ph = ev.homeTeam;
+      if (!pa || !ph) continue;
+      if (ev.commenceTime && new Date(ev.commenceTime).getTime() <= Date.now()) continue;
+      const pbase = { captured_at: now, away_team: pa, home_team: ph };
+      if (ev.h2h?.away != null)     rows.push({ ...pbase, market: "ml",     side: "away@Pinnacle",  line: null, odds: ev.h2h.away });
+      if (ev.h2h?.home != null)     rows.push({ ...pbase, market: "ml",     side: "home@Pinnacle",  line: null, odds: ev.h2h.home });
+      if (ev.totals?.over != null)  rows.push({ ...pbase, market: "total",  side: "over@Pinnacle",  line: ev.totals.line ?? null, odds: ev.totals.over });
+      if (ev.totals?.under != null) rows.push({ ...pbase, market: "total",  side: "under@Pinnacle", line: ev.totals.line ?? null, odds: ev.totals.under });
+      if (ev.spreads?.away != null) rows.push({ ...pbase, market: "spread", side: "away@Pinnacle",  line: ev.spreads.awayLine ?? null, odds: ev.spreads.away });
+      if (ev.spreads?.home != null) rows.push({ ...pbase, market: "spread", side: "home@Pinnacle",  line: ev.spreads.homeLine ?? null, odds: ev.spreads.home });
+    }
+  } catch (e) { console.error("[NFL Ticks] Pinnacle snapshot failed:", e.message); }
   if (!rows.length) return 0;
   const { error } = await supabase.from("nfl_odds_ticks").insert(rows);
   if (error) { console.error("[NFL Ticks] insert failed:", error.message); return 0; }
