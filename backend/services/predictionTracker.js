@@ -1607,6 +1607,24 @@ async function captureOddsTicks() {
       }
     }
   }
+  // WZ-PINN-TICKS-2026-07-13 :: also snapshot Pinnacle (the sharp book) into the SAME odds_ticks
+  // table as market="mlbook", side="away@Pinnacle"/"home@Pinnacle", so intraday sharp-book movement
+  // accrues alongside the soft books -> enables reverse-line-movement / sharp-side detection later.
+  // Cache-respecting (shares the CLV pinnacle-close cache) -> ~no extra API credits. Pre-game only,
+  // same team-name keying and in-play skip as the soft-book snapshots above. Fail-safe: a Pinnacle
+  // hiccup never blocks the soft-book ticks from saving.
+  try {
+    const pinEvents = await getMLBPinnacleClose();
+    for (const ev of (pinEvents || [])) {
+      const pa = ev.awayTeam, ph = ev.homeTeam;
+      if (!pa || !ph) continue;
+      if (ev.commenceTime && new Date(ev.commenceTime).getTime() <= Date.now()) continue;
+      const pbase = { captured_at: now, away_team: pa, home_team: ph };
+      if (ev.h2h && ev.h2h.away != null) rows.push({ ...pbase, market: "mlbook", side: "away@Pinnacle", line: null, odds: ev.h2h.away });
+      if (ev.h2h && ev.h2h.home != null) rows.push({ ...pbase, market: "mlbook", side: "home@Pinnacle", line: null, odds: ev.h2h.home });
+    }
+  } catch (e) { console.error("[Ticks] pinnacle snapshot skipped:", e.message); }
+
   if (!rows.length) return 0;
   const { error } = await supabase.from("odds_ticks").insert(rows);
   if (error) { console.error("[Ticks] insert failed:", error.message); return 0; }
