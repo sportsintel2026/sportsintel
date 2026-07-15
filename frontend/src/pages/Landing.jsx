@@ -205,7 +205,7 @@ export default function LandingPage(){
             <p className="sub">WizePicks grades every market against a vig-free fair price and hands you only the bets with a real edge. No spreadsheets. No guesswork.</p>
             <div className="cta-row">
               <Link className="btn btn-pri" to="/signup">Start free →</Link>
-              <Link className="btn btn-ghost" to="/home">See live edges</Link>
+              <Link className="btn btn-ghost" to="/signup">See live edges</Link>
             </div>
             <div className="price-note">From $7/week · all sports · cancel anytime</div>
           </div>
@@ -233,7 +233,7 @@ export default function LandingPage(){
             <div className="eyebrow">The Edge Board</div>
             <h3>Only the bets worth making</h3>
             <p>Every game, every market, priced against a vig-free fair line. We surface the handful with a real edge and skip the noise.</p>
-            <Link className="lk" to="/home">See today's board →</Link>
+            <Link className="lk" to="/signup">See today's board →</Link>
           </div>
           <div className="panel">
             <div className="pbar"><span>MLB · today</span><span>15 games</span></div>
@@ -248,7 +248,7 @@ export default function LandingPage(){
             <div className="eyebrow">Market Price</div>
             <h3>Same bet. Better number.</h3>
             <p>The same wager pays differently across books. We show you the best price every time — small gaps that compound into real money over a season.</p>
-            <Link className="lk" to="/guide">How line shopping works →</Link>
+            <Link className="lk" to="/signup">How line shopping works →</Link>
           </div>
           <div className="panel">
             <div className="pbar"><span>Yankees ML</span><span>best price ✓</span></div>
@@ -263,7 +263,7 @@ export default function LandingPage(){
             <div className="eyebrow">Performance</div>
             <h3>Every pick, graded in public</h3>
             <p>No cherry-picked screenshots. We publish every pick and grade it against the result — wins and losses — so you judge the model on the full record.</p>
-            <Link className="lk" to="/performance">See the full track record →</Link>
+            <Link className="lk" to="/signup">See the full track record →</Link>
           </div>
           <div className="panel">
             <div className="pbar"><span>Totals · last 60 days</span><span>tracked</span></div>
@@ -280,7 +280,7 @@ export default function LandingPage(){
             <div className="eyebrow">Market Read · new</div>
             <h3>What every book is saying</h3>
             <p>We read the whole market — where the books agree, where they split, and which way they're moving — then tell you who they're leaning on. A read on the room, not a guarantee.</p>
-            <Link className="lk" to="/market-read">See the market read →</Link>
+            <Link className="lk" to="/signup">See the market read →</Link>
           </div>
           <div className="panel">
             <div className="pbar"><span>Market Read · today</span><span>consensus</span></div>
@@ -303,7 +303,7 @@ export default function LandingPage(){
             <div className="eyebrow">Player Profiles</div>
             <h3>Every hitter, fully scouted.</h3>
             <p>No more blind longshots. Tap any home-run pick and the player's full batting card opens — the same scouting the model runs, in plain sight.</p>
-            <Link className="lk" to="/props">Open the board →</Link>
+            <Link className="lk" to="/signup">Open the board →</Link>
           </div>
           <div className="panel pppanel">
             <div className="ppprow">
@@ -431,7 +431,7 @@ export default function LandingPage(){
           <p className="wpfin-sub">One membership unlocks the model, the WizePlays, and every tool. No upsells. Cancel anytime.</p>
           <div className="wpfin-btns">
             <Link className="wpfin-btn wpfin-pri" to="/signup">Start free →</Link>
-            <Link className="wpfin-btn wpfin-ghost" to="/home">See live edges</Link>
+            <Link className="wpfin-btn wpfin-ghost" to="/signup">See live edges</Link>
           </div>
           <div className="wpfin-fine">21+ · Bet responsibly · No guarantees — just the sharpest information in the game</div>
         </div>
