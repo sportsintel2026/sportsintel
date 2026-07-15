@@ -9,6 +9,8 @@ function AuthLayout({ title, subtitle, children }) {
     <div className="wzau">
       <style>{CSS}</style>
       <div className="card-wrap">
+        {/* WZ-AUTH-BACK-2026-07-14 :: explicit back-to-landing control (shared by signup + login) */}
+        <Link to="/" className="backlink"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7" /></svg>Back</Link>
         <div className="head">
           <Link to="/" className="logo"><span className="dot" />Wize<b>Picks</b></Link>
           <h1>{title}</h1>
@@ -201,6 +203,9 @@ const CSS = `
   display:flex;align-items:center;justify-content:center;padding:24px;-webkit-font-smoothing:antialiased}
 .wzau *{box-sizing:border-box;margin:0;padding:0}
 .wzau .card-wrap{width:100%;max-width:400px;animation:wzau-in .45s ease both}
+.wzau .backlink{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:var(--mut);text-decoration:none;margin-bottom:16px;transition:color .15s}
+.wzau .backlink:hover{color:var(--ink)}
+.wzau .backlink svg{opacity:.85}
 @keyframes wzau-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 .wzau .head{text-align:center;margin-bottom:30px}
 .wzau .logo{font-family:var(--disp);font-weight:700;font-size:20px;letter-spacing:-.01em;display:inline-flex;align-items:center;gap:8px;text-decoration:none;color:var(--ink)}
