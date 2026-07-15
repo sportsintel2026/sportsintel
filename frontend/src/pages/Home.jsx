@@ -151,7 +151,7 @@ export default function HomePage(){
   const [live,setLive]=useState(null);
   const [oddsHist,setOddsHist]=useState(null);
   const [marketRead,setMarketRead]=useState(null);
-  const [sharpEdge,setSharpEdge]=useState(null); // WZ-SHARPEDGE-2026-07-13 :: model-vs-Pinnacle rows from /api/pinnacle-probe
+  const [sharpEdge,setSharpEdge]=useState(null); // WZ-SHARPEDGE-2026-07-13 :: model-vs-Pinnacle rows from /api/sharp-edge (cached snapshot)
   const [newsFeed,setNewsFeed]=useState([]); // WZ-LIVEWIRE-2026-06-27 :: MLB live wire (news + injuries)
   const prev=useRef({}); const [flash,setFlash]=useState({});
   const hasFull=plan.isAdmin===true||plan.tier==="pro"||plan.tier==="elite"||user?.email==="r7002g@gmail.com";
@@ -195,9 +195,9 @@ export default function HomePage(){
   useEffect(()=>{ if(!SPORTS[sport].hasLive){ setLive([]); return; } let t; const pull=async()=>{ try{ const d=await liveApi.getMLB(); setLive(d?.games||[]); }catch(_){ setLive([]); } t=setTimeout(pull,60000); }; pull(); return ()=>clearTimeout(t); },[sport]);
   useEffect(()=>{ if(!SPORTS[sport].hasHist){ setOddsHist([]); return; } let t; const pull=async()=>{ try{ const d=await edgesApi.getOddsHistory(); setOddsHist(d?.games||[]); }catch(_){ setOddsHist([]); } t=setTimeout(pull,300000); }; pull(); return ()=>clearTimeout(t); },[sport]);
   useEffect(()=>{ if(sport!=="mlb"){ setMarketRead([]); return; } let t; const pull=async()=>{ try{ const d=await edgesApi.getMarketRead(); setMarketRead(d?.games||[]); }catch(_){ setMarketRead([]); } t=setTimeout(pull,120000); }; pull(); return ()=>clearTimeout(t); },[sport]);
-  useEffect(()=>{ if(sport!=="mlb"){ setSharpEdge([]); return; } let dead=false; /* WZ-SHARPEDGE-2026-07-13 :: read model-vs-Pinnacle from the probe; gated to MLB, no polling, fail-safe */
+  useEffect(()=>{ if(sport!=="mlb"){ setSharpEdge([]); return; } let dead=false; /* WZ-SHARPEDGE-2026-07-13 :: read model-vs-Pinnacle from the cached snapshot; gated to MLB, no polling, fail-safe */
     (async()=>{ try{
-      const r=await fetch(`${PERF_API_BASE}/api/pinnacle-probe`);
+      const r=await fetch(`${PERF_API_BASE}/api/sharp-edge`); // WZ-SHARP-EDGE-2026-07-14 :: cached snapshot, was /api/pinnacle-probe
       const d=await r.json();
       const rows=(d&&Array.isArray(d.rows))?d.rows:[];
       if(!dead) setSharpEdge(rows);
