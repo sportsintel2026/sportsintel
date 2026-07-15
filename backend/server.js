@@ -50,6 +50,7 @@ const { backfillUmpireGames } = require("./services/umpireStore");
 const { getEasternDate } = require("./services/mlbStatsApi");
 const { gradeExpertPicks } = require("./services/expertPicksGrader");
 const { gradeDailyCard } = require("./services/dailyCard");
+const { captureSharpEdgeSnapshot, getLatestSharpEdge } = require("./services/sharpEdge"); // WZ-SHARP-EDGE-2026-07-14
 
 // ── Crash guards ────────────────────────────────────────────────────────────────
 // A single unhandled error must NOT take the whole backend down. Log loudly so it's
@@ -155,19 +156,16 @@ app.use("/api/ai-read", aiReadRoutes); // WZ-AI-READ-2026-07-12 :: on-demand AI 
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
-// WZ-PINNACLE-PROBE-2026-07-13 :: read-only diagnostic — model-vs-Pinnacle anchor gap.
-// Writes nothing, re-anchors nothing. ~2 Odds API credits per hit (us+eu, h2h only).
-// Empty during the MLB break (no slate to compare); real deltas once games return.
-// TEMP: remove once the Sharp Edge card reads this through the normal edges pipeline.
-app.get("/api/pinnacle-probe", async (req, res) => {
+// WZ-SHARP-EDGE-2026-07-14 :: serve the LATEST cached model-vs-Pinnacle snapshot from
+// sharp_edge_snapshots (replaces the temp per-user live /api/pinnacle-probe hit). ~0 Odds API
+// credits per load - the cron refreshes the snapshot. Read-only; returns { ok, rows, capturedAt }.
+app.get("/api/sharp-edge", async (req, res) => {
   try {
-    const { getPinnacleAnchorComparison } = require("./services/oddsApi");
     const sport = req.query.sport || "baseball_mlb";
-    const regions = req.query.regions || "us,eu";
-    const out = await getPinnacleAnchorComparison({ sport, regions });
+    const out = await getLatestSharpEdge(sport);
     res.json(out);
   } catch (e) {
-    res.status(500).json({ ok: false, error: e.message });
+    res.status(500).json({ ok: false, error: e.message, rows: [] });
   }
 });
 // ── Scheduled Jobs ────────────────────────────────────────────────────────────
@@ -229,6 +227,17 @@ cron.schedule("*/15 11-23,0-2 * * *", async () => {
 // less often than MLB (twice an hour is plenty for weekly games) and on its own
 // table (nfl_odds_ticks) so it never touches the MLB pipeline. Cheap: shares the
 // 30-min odds cache. Sparse in the offseason; comes alive as the season nears.
+// WZ-SHARP-EDGE-2026-07-14 :: refresh the model-vs-Pinnacle snapshot every 30 min (MLB) into
+// sharp_edge_snapshots, decoupled from user traffic. ~2 Odds API credits/run. Staggered to :10/:40
+// to avoid the odds-tick captures. Fail-safe; graceful no-op if the table is missing.
+cron.schedule("10,40 11-23,0-2 * * *", async () => {
+  try {
+    await captureSharpEdgeSnapshot("baseball_mlb");
+  } catch (err) {
+    console.error("[CRON] SharpEdge snapshot failed:", err.message);
+  }
+}, { timezone: "America/New_York" });
+
 cron.schedule("5,35 11-23,0-2 * * *", async () => {
   try {
     await captureNFLOddsTicks();
