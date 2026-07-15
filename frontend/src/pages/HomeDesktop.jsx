@@ -53,7 +53,7 @@ export default function HomeDesktop(props) {
   // WZ-WINNERS-REMOVED-2026-07-05 :: Winners lens removed — Edge Board is the sole board.
 
   const { edges, games = [], movers = [], live = [], abbrById = {}, topProps = [], propList = [], propsByType = {}, hero, hasFull, planLoaded = true, lineSeries = {}, moveByPick = {},
-    wpRecord, navigate, plan = {}, sport = "mlb", setSport, marketsLive, anyLive, marketRead = [], perf = null, wpToday = [] } = props;
+    wpRecord, navigate, plan = {}, sport = "mlb", setSport, marketsLive, anyLive, marketRead = [], perf = null, wpToday = [], sharpRows = [] } = props;
   const lg = sport === "mlb" ? "mlb" : sport; // WZ-DESKTOP-FBALL-2026-07-11 :: NFL/CFB render in-board
   // Real tracked-record stats for the index cards (high-conviction ROI, honest beat-close CLV).
   const perfStats = (() => { const d = perf; if (!d) return null;
@@ -327,6 +327,41 @@ export default function HomeDesktop(props) {
                     </tbody>
                   </table>
                 )}
+            </div>
+          )}
+
+          {/* WZ-SHARP-EDGE-DESKTOP-2026-07-14 :: model-vs-Pinnacle disagreements as a Vault table, sibling to Market Read. MLB-gated; reads the same sharpRows the mobile card derives. */}
+          {sport === "mlb" && Array.isArray(sharpRows) && sharpRows.length > 0 && (
+            <div className="panel">
+              <div className="phead">
+                <div className="t"><span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--teal)", boxShadow: "0 0 8px rgba(63,203,145,.6)" }} />Sharp Edge</div>
+                <div className="right">model vs Pinnacle · the sharpest book</div>
+              </div>
+              <table className="tbl">
+                <thead><tr><th>Matchup</th><th>Model favors</th><th className="c">Model %</th><th className="c">Pinnacle %</th><th className="r">Edge (pp)</th></tr></thead>
+                <tbody>
+                  {sharpRows.map((r, i) => {
+                    const nick = (t) => { const w = String(t || "").trim().split(/\s+/); return w[w.length - 1] || String(t || ""); };
+                    const parts = String(r.game || "").split(" @ ");
+                    const away = (parts[0] || "").trim(), home = (parts[1] || "").trim();
+                    const modelHigh = (r.deltaAwayPP || 0) > 0; // >0 => model rates HOME higher than Pinnacle
+                    const favTeam = modelHigh ? home : away;
+                    const modelPct = modelHigh ? (r.modelAnchor && r.modelAnchor.fairHomePct) : (r.modelAnchor && r.modelAnchor.fairAwayPct);
+                    const pinPct = modelHigh ? (r.pinnacle && r.pinnacle.fairHomePct) : (r.pinnacle && r.pinnacle.fairAwayPct);
+                    const gap = Math.abs(r.deltaAwayPP || 0);
+                    return (
+                      <tr key={i}>
+                        <td className="mua">{nick(away)} <span className="at">@</span> {nick(home)}</td>
+                        <td><b style={{ color: "var(--tx)" }}>{nick(favTeam)}</b> <span style={{ color: "var(--mut)", fontSize: 11 }}>ML</span></td>
+                        <td className="c num" style={{ color: "var(--model)", fontWeight: 600 }}>{modelPct != null ? modelPct + "%" : "-"}</td>
+                        <td className="c num" style={{ color: "var(--goldsoft)", fontWeight: 600 }}>{pinPct != null ? pinPct + "%" : "-"}</td>
+                        <td className="r num" style={{ color: "var(--up)", fontWeight: 600 }}>+{gap.toFixed(1)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              <div style={{ fontSize: 11, color: "var(--mut2)", padding: "9px 15px", borderTop: "1px solid var(--line)", fontStyle: "italic" }}>Where our model most disagrees with Pinnacle's de-vigged line. Read-only, not bet advice.</div>
             </div>
           )}
 
