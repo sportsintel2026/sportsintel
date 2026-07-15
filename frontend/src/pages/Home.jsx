@@ -784,7 +784,7 @@ function BoardRow({d,i,open,onToggle,navigate,sport}){ const lg=(SPORTS[sport]||
     let dead=false;
     (async()=>{ try{
       const r=await fetch(`${PERF_API_BASE}/api/ai-read`,{method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({sig,pick:d.p,market:d.mk,matchup:d.g,odds:d.odds,model:d.model,market_pct:d.mkt,edge:d.edge,
+        body:JSON.stringify({sig,sport,pick:d.p,market:d.mk,matchup:d.g,odds:d.odds,model:d.model,market_pct:d.mkt,edge:d.edge,
           lineMove:d.mv,moneyDir:d.delta>0?1:d.delta<0?-1:0,park:d.park,weather:d.wx,conviction:d.conv,booksLean:d.read,baseRead:d.why})});
       const j=await r.json();
       if(!dead&&j&&j.read){ AI_READ_CACHE.set(sig,j.read); setAiRead(j.read); }
