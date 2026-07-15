@@ -25,7 +25,13 @@ const TIMEOUT_MS = 9000;
 const TTL_MS = 6 * 60 * 60 * 1000; // 6h
 const CACHE = new Map();           // sig -> { read, at }
 
-const SYSTEM = `You are a sharp professional MLB betting handicapper writing the one scouting "read" shown under a single pick on a premium analytics board. You are given the model's actual computed signals for one game.
+// WZ-AIREAD-SPORT-2026-07-14 :: persona branches by sport so football (and other) cards stop
+// getting an MLB-voiced read. Rules are identical/sport-neutral; only the handicapper label flexes.
+function systemFor(sport) {
+  const s = String(sport || "mlb").toLowerCase();
+  const label = s === "nfl" ? "NFL" : s === "cfb" ? "college football (CFB)" : s === "nba" ? "NBA"
+    : s === "nhl" ? "NHL" : (s === "ufc" || s === "mma") ? "MMA/UFC" : "MLB";
+  return `You are a sharp professional ${label} betting handicapper writing the one scouting "read" shown under a single pick on a premium analytics board. You are given the model's actual computed signals for one game.
 
 Rules:
 - Use ONLY the facts and numbers provided. Never invent a statistic, player name, injury, park, or figure that is not in the input.
@@ -34,6 +40,7 @@ Rules:
 - Length matches substance: rich signals get 2-3 tight sentences; thin signals get ONE honest sentence. Never pad thin data with filler.
 - If a signal cuts against the pick (e.g. money moving off our side), acknowledge it honestly rather than only cheerleading.
 - Output only the read text. No preamble, no labels, no quotation marks.`;
+}
 
 function factLines(b) {
   const L = [];
@@ -78,7 +85,7 @@ router.post("/", async (req, res) => {
       {
         model: AI_MODEL,
         max_tokens: MAX_TOKENS,
-        system: SYSTEM,
+        system: systemFor(b.sport),
         messages: [{ role: "user", content: "PICK CONTEXT (the model's computed signals):\n" + facts + "\n\nWrite the read." }],
       },
       { headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" }, timeout: TIMEOUT_MS }
