@@ -678,18 +678,19 @@ export default function HomePage(){
           (All-Star break / before tonight's lines post). The header + a quiet state stay put so the block --
           and the Sharp Edge card that will live here -- has a stable home. Other sports stay content-gated,
           so in-training football/CFB no longer shows an empty or garbage pulse. */}
-      {hasFull && (pulseAlerts.length>0 || moverItems.length>0 || sport==="mlb") && <>
+      {hasFull && (pulseAlerts.length>0 || moverItems.length>0 || ["mlb","nfl","cfb","nba","nhl"].includes(sport)) && <>
         <div className="inteldiv"><span className="iln"/><span className="ilbl">MARKET {"\u0026"} INTEL</span><span className="iln r"/></div>
         {sharpRows.length>0 && <SharpEdge rows={sharpRows}/>}
-        {(sport==="mlb"||sport==="nfl"||sport==="cfb") && <WizeWire groups={intelGroups}/>}
+        {(sport==="mlb" || ((sport==="nfl"||sport==="cfb") && intelGroups.length>0)) && <WizeWire groups={intelGroups}/>}
         {pulseAlerts.length>0 && <MarketPulse alerts={pulseAlerts} rolled={e.rolledToNextDay}/>}
         {moverItems.length>0 && <MarketMovers movers={moverItems} navigate={navigate}/>}
-        {pulseAlerts.length===0 && moverItems.length===0 && sharpRows.length===0 && (
-          <div className="intelempty">
-            <div className="iet">{sport==="mlb" && inAllStarBreak() ? "Market quiet \u2014 All-Star break" : "No market activity yet"}</div>
-            <div className="ies">{sport==="mlb" && inAllStarBreak() ? "Line movement and pulse return when the second half opens." : "Line movement and pulse post once tonight's lines are up."}</div>
-          </div>
-        )}
+        {pulseAlerts.length===0 && moverItems.length===0 && sharpRows.length===0 && (()=>{
+          /* WZ-INTEL-ALLSPORTS-2026-07-15 :: section now shows for every board sport; empty-state wording is per-sport-state */
+          const prov=sport==="nfl"||sport==="cfb"; const dormant=sport==="nba"||sport==="nhl";
+          const t=dormant?"Board opens at the season":prov?"Model preview \u2014 market signals coming":(sport==="mlb"&&inAllStarBreak())?"Market quiet \u2014 All-Star break":"No market activity yet";
+          const sub=dormant?"Market intel arrives here from day one when games return.":prov?"Sharp money, line moves, and market reads fill in as the season opens.":(sport==="mlb"&&inAllStarBreak())?"Line movement and pulse return when the second half opens.":"Line movement and pulse post once tonight's lines are up.";
+          return (<div className="intelempty"><div className="iet">{t}</div><div className="ies">{sub}</div></div>);
+        })()}
       </>}
         {/* WZ-TOPPROPS-2026-07-08 :: Top Prop Plays -- last content block before the onboarding cards.
             Balanced top-6 (Hits/K/HR) as a tight edge-to-edge 3x2 grid; tap a card -> Props tab. */}
