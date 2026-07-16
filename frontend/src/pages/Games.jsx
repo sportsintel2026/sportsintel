@@ -177,6 +177,11 @@ export default function GamesPage() {
         </div>
       </div>
 
+      <div className="dsports">{/* WZ-NAV-UNIFY-2026-07-16 :: desktop sport pills (the .hd pills are hidden >=1024) */}
+        {[["MLB","mlb"],["NBA","nba"],["NFL","nfl"],["NHL","nhl"],["CFB","cfb"]].map(([lb,key])=>(
+          <b key={key} className={key==="mlb"?"on":""} onClick={()=>{ if(key==="nba")navigate("/nba"); else if(key!=="mlb")navigate(`/${key}-games`); }}><span className="dot"/>{lb}</b>
+        ))}
+      </div>
       <div className="chips">{FILTS.map(f=><b key={f} className={f===filter?"on":""} onClick={()=>setFilter(f)}>{f}</b>)}</div>
 
       <div id="wrap">
@@ -271,6 +276,7 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .sp{flex:1}
 .ibtn{width:30px;height:30px;border-radius:9px;border:1px solid var(--line2);display:flex;align-items:center;justify-content:center;color:var(--mut)}
 .sports{display:flex;gap:6px;padding:0 0 11px;overflow-x:auto;scrollbar-width:none}.sports::-webkit-scrollbar{display:none}
+.dsports{display:none}
 .sports b{flex:0 0 auto;font-family:var(--disp);font-weight:700;font-size:13px;letter-spacing:.4px;color:var(--mut);border:1px solid var(--line2);border-radius:999px;padding:6px 13px;display:inline-flex;align-items:center;gap:6px;cursor:pointer}
 .sports b.on{color:var(--tx);border-color:rgba(63,203,145,.4);background:rgba(63,203,145,.12)}
 .sports b .dot{width:6px;height:6px;border-radius:50%;background:#2a3640}.sports b.on .dot{background:var(--green)}
@@ -404,6 +410,10 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 @media (min-width:1024px){
   .app{background:transparent;padding:0;max-width:none;margin:0;width:100%} /* WZ-DESKTOP-SHELLFIT-2026-07-11 :: fill the shell content area, drop the 460px mobile column */
   .app .hd{display:none}
+  .dsports{display:flex;gap:6px;padding:14px 15px 2px}
+  .dsports b{flex:0 0 auto;font-family:var(--disp);font-weight:700;font-size:13px;letter-spacing:.4px;color:var(--mut);border:1px solid var(--line2);border-radius:999px;padding:6px 13px;display:inline-flex;align-items:center;gap:6px;cursor:pointer}
+  .dsports b.on{color:var(--tx);border-color:rgba(63,203,145,.4);background:rgba(63,203,145,.12)}
+  .dsports b .dot{width:6px;height:6px;border-radius:50%;background:#2a3640}.dsports b.on .dot{background:var(--green)}
   .app .nav{display:none}
   .app .sports,.app .chips{padding-left:26px;padding-right:26px}
   .app #wrap{max-width:none;padding:16px 26px 40px}
