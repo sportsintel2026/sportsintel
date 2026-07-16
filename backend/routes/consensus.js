@@ -28,6 +28,7 @@
 
 const express = require("express");
 const router = express.Router();
+const { gateModelData } = require("../middleware/accessGate"); // WZ-LOCK-ROUND2-2026-07-15
 const axios = require("axios");
 const { createClient } = require("@supabase/supabase-js");
 
@@ -157,7 +158,7 @@ function reason(bb, modelPicks) {
   return "no-match-unknown";
 }
 
-router.get("/mlb", async (req, res) => {
+router.get("/mlb", gateModelData, async (req, res) => {
   try {
     // 1) Model edges — read the cached board over localhost (no recompute).
     const port = process.env.PORT || 4000;
