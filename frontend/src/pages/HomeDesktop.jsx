@@ -219,7 +219,9 @@ export default function HomeDesktop(props) {
           {/* WZ-DESKTOP-TOPPLAY-2026-07-15 :: featured Top Play at the top of the board column, per-sport
               aware, SAME 2% floor + pick'em logic as mobile. Calibrated (mlb): >=2% = TOP PLAY, <2% = PICK'EM.
               Provisional (nfl/cfb): MODEL PREVIEW, directional (uncalibrated). NHL/off-season or no edge yet:
-              coming-soon. Gated to All-Access like the rest of the picks. Vault-styled (no mobile glow). */}
+              coming-soon. Gated to All-Access. Vault-styled. WZ-TOPPLAY-FEAT-FIX-2026-07-15 :: fall back to the
+              top board edge when hero (the strict HIGH/MEDIUM-conviction pool) is empty -- football edges carry
+              no conviction score so hero is null for nfl/cfb even with a full board; this matches mobile. */}
           {(() => {
             if (!hasFull) return (
               <div className="panel topplay tp-muted">
@@ -227,19 +229,20 @@ export default function HomeDesktop(props) {
               </div>
             );
             const prov = sport === "nfl" || sport === "cfb";
-            if (!hero) return (
+            const feat = hero || [...(allPos || [])].sort((a, b) => (b.edge ?? 0) - (a.edge ?? 0))[0] || null;
+            if (!feat) return (
               <div className="panel topplay tp-muted">
                 <div className="phead"><div className="t"><span className="tp-dot" />TOP PLAY</div></div>
                 <div className="tp-empty">{sport === "nhl" ? "NHL board opens at the season \u2014 the model posts its top play here from day one." : sport === "nba" ? "NBA board goes live at tip-off." : "No play yet \u2014 the top edge posts as tonight\u2019s lines drop."}</div>
               </div>
             );
-            const prv = edgePct(hero, sport);
+            const prv = edgePct(feat, sport);
             const noEdge = !prov && !(prv >= 2);
-            const ser = lineSeries[hero.gameId + hero.side];
+            const ser = lineSeries[feat.gameId + feat.side];
             let lm = null; if (ser && ser.length >= 2) { const a0 = amCents(ser[0]), a1 = amCents(ser[ser.length - 1]); if (a0 != null && a1 != null) lm = Math.round(a1 - a0); }
-            const model = hero.modelProb != null ? Math.round(hero.modelProb * 100) : null;
-            const conv = String(hero._convAdj || hero.conviction || "").toUpperCase();
-            const heroGame = abbrById[hero.gameId] ? `${abbrById[hero.gameId].a} @ ${abbrById[hero.gameId].h}` : (hero.matchup || "");
+            const model = feat.modelProb != null ? Math.round(feat.modelProb * 100) : null;
+            const conv = String(feat._convAdj || feat.conviction || "").toUpperCase();
+            const heroGame = abbrById[feat.gameId] ? `${abbrById[feat.gameId].a} @ ${abbrById[feat.gameId].h}` : (feat.matchup || "");
             const play = !prov && !noEdge;
             const eyebrow = prov ? "MODEL PREVIEW \u00b7 DIRECTIONAL" : noEdge ? "PICK\u2019EM \u00b7 NO EDGE" : "TOP PLAY";
             const rightNote = prov ? "uncalibrated \u00b7 directional" : noEdge ? "coin flip \u00b7 not a play" : "highest edge on the board";
@@ -247,16 +250,16 @@ export default function HomeDesktop(props) {
               <div className={"panel topplay " + (play ? "tp-play" : "tp-muted")}>
                 <div className="phead"><div className="t"><span className="tp-dot" />{eyebrow}</div><div className="right">{rightNote}</div></div>
                 <div className="tp-body">
-                  <div><div className="tp-pick">{edgeLabel(hero)}</div><div className="tp-match">{heroGame}</div></div>
+                  <div><div className="tp-pick">{edgeLabel(feat)}</div><div className="tp-match">{heroGame}</div></div>
                   <div className="tp-win"><div className="tp-pct">{model != null ? model + "%" : "\u2014"}</div><div className="tp-k">MODEL TO WIN</div></div>
                 </div>
                 <div className="tp-stats">
-                  <div className="tp-cell"><div className="v">{noEdge ? "NO EDGE" : fmtEdge(hero, sport)}</div><div className="k">{prov ? "MODEL LEAN" : "VALUE"}</div></div>
-                  <div className="tp-cell"><div className="v">{hero.odds != null ? formatOdds(hero.odds) : "\u2014"}</div><div className="k">ODDS</div></div>
+                  <div className="tp-cell"><div className="v">{noEdge ? "NO EDGE" : fmtEdge(feat, sport)}</div><div className="k">{prov ? "MODEL LEAN" : "VALUE"}</div></div>
+                  <div className="tp-cell"><div className="v">{feat.odds != null ? formatOdds(feat.odds) : "\u2014"}</div><div className="k">ODDS</div></div>
                   <div className="tp-cell"><div className="v">{noEdge ? "COIN FLIP" : (conv || "\u2014")}</div><div className="k">{noEdge ? "MODEL READ" : "CONVICTION"}</div></div>
                   <div className="tp-cell"><div className={"v " + (lm == null ? "" : lm > 0 ? "up" : "dn")}>{lm == null ? "flat" : (lm > 0 ? "\u25B2 " : "\u25BC ") + Math.abs(lm) + "\u00A2"}</div><div className="k">LINE MOVE</div></div>
                 </div>
-                {sport === "mlb" && hero.gameId ? <div className="tp-foot" onClick={() => navigate(`/game/mlb/${hero.gameId}`)}>Full matchup breakdown &rarr;</div> : null}
+                {sport === "mlb" && feat.gameId ? <div className="tp-foot" onClick={() => navigate(`/game/mlb/${feat.gameId}`)}>Full matchup breakdown &rarr;</div> : null}
               </div>
             );
           })()}
