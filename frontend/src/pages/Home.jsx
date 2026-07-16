@@ -681,6 +681,7 @@ export default function HomePage(){
       {hasFull && (pulseAlerts.length>0 || moverItems.length>0 || sport==="mlb") && <>
         <div className="inteldiv"><span className="iln"/><span className="ilbl">MARKET {"\u0026"} INTEL</span><span className="iln r"/></div>
         {sharpRows.length>0 && <SharpEdge rows={sharpRows}/>}
+        {(sport==="mlb"||sport==="nfl"||sport==="cfb") && <WizeWire groups={intelGroups}/>}
         {pulseAlerts.length>0 && <MarketPulse alerts={pulseAlerts} rolled={e.rolledToNextDay}/>}
         {moverItems.length>0 && <MarketMovers movers={moverItems} navigate={navigate}/>}
         {pulseAlerts.length===0 && moverItems.length===0 && sharpRows.length===0 && (
@@ -689,7 +690,6 @@ export default function HomePage(){
             <div className="ies">{sport==="mlb" && inAllStarBreak() ? "Line movement and pulse return when the second half opens." : "Line movement and pulse post once tonight's lines are up."}</div>
           </div>
         )}
-        {(sport==="mlb"||sport==="nfl"||sport==="cfb") && <WizeWire groups={intelGroups}/>}
       </>}
         {/* WZ-TOPPROPS-2026-07-08 :: Top Prop Plays -- last content block before the onboarding cards.
             Balanced top-6 (Hits/K/HR) as a tight edge-to-edge 3x2 grid; tap a card -> Props tab. */}
@@ -1138,15 +1138,14 @@ function MarketMovers({movers,navigate}){
   const mv=(movers||[]).filter(d=>d.delta!=null&&d.delta!==0);
   const [showKey,setShowKey]=useState(false);/* WZ-MVNOTE-COLLAPSE-2026-07-01 */
   if(!mv.length)return null;
-  return (<div className="mvsec">
-    <div className="mvhd">
-      <span className="mvpulse"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12h4l2 6 4-14 2 8h6"/></svg></span>
-      <span className="mvtl">MARKET MOVERS</span>
+  return (<div className="alerts mvsec">
+    <div className="ahead mvahead">
+      <span className="mvhtitle"><span className="mvpulse"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12h4l2 6 4-14 2 8h6"/></svg></span><span className="mvtl">MARKET MOVERS</span></span>
       <span className="mvall" onClick={()=>navigate("/odds")}>View all {"\u203a"}</span>
     </div>
     {/* WZ-MOVERS-LIST-2026-07-08 :: vertical list w/ team logos + open->now line move (was horizontal scroll) */}
     {/* WZ-MOVERS-SCROLL-2026-07-08 :: fixed-height scroll list -> see every mover (was capped at 6) */}
-    <div className="mvwrap">
+    <div className="mvwrap mvwrap-in">
       <div className="mvlist">{mv.map((d,i)=>{const up=d.delta>0;return (
         <div className="mvrow" key={i}>
           {d.logo&&<LogoM ab={d.logo} col="#3a4653"/>}
@@ -1238,11 +1237,16 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .sttrack .ar{font-weight:700;font-size:8px}.sttrack .ar.up{color:var(--green)}.sttrack .ar.dn{color:var(--neg)}
 .sttrack .ar.up::before{content:"\u25B2"}.sttrack .ar.dn::before{content:"\u25BC"}
 /* Market Pulse alert strip */
-.alerts{margin:24px 4px 0;border:1px solid var(--line);border-radius:16px;background:var(--panel);overflow:hidden}
+.alerts{margin:12px 4px 0;border:1px solid var(--line);border-radius:16px;background:var(--panel);overflow:hidden}
 .ahead{display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:13px 15px 10px;font-family:var(--disp);font-weight:800;font-size:11.5px;letter-spacing:.7px;color:var(--mut);cursor:pointer}
 .ahead .ago{font-family:var(--mono);font-size:9px;color:var(--mut2);font-weight:500;letter-spacing:0;white-space:nowrap;flex:0 0 auto}
 .arow{padding:0 15px 14px;cursor:pointer}
-.mvsec{margin:24px 4px 0}
+.mvsec{margin:12px 4px 0}
+.mvahead{align-items:center;padding:13px 15px 11px;margin:0;cursor:default}
+.mvahead .mvhtitle{display:flex;align-items:center;gap:7px;min-width:0}
+.mvahead .mvtl{font-family:var(--disp);font-weight:800;font-size:11.5px;letter-spacing:.7px;color:var(--mut)}
+.mvwrap.mvwrap-in{border:none;border-radius:0;border-top:1px solid var(--line2)}
+.mvsec .mvnote{margin-top:0;padding:9px 14px 11px;border-top:1px solid var(--line2)}
 .mvhd{display:flex;align-items:center;gap:7px;margin-bottom:9px}
 .mvpulse{color:var(--green);display:inline-flex}
 .mvhd .mvtl{font-family:var(--disp);font-weight:700;font-size:14px;letter-spacing:.8px;color:var(--tx)}
@@ -1445,7 +1449,7 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .tmrwdiv .tln.r{background:linear-gradient(90deg,rgba(201,168,106,.5),transparent)}
 .tmrwdiv .tlbl{font-family:var(--disp);font-weight:800;font-size:15px;letter-spacing:2px;color:var(--gold);white-space:nowrap;text-align:center;line-height:1.05}
 .tmrwdiv .tlbl small{display:block;font-family:var(--mono);font-size:8px;letter-spacing:.5px;color:var(--mut2);font-weight:400;margin-top:1px}
-.inteldiv{display:flex;align-items:center;gap:12px;margin:26px 10px 14px} /* WZ-INTEL-WPLOGO-2026-07-08 */
+.inteldiv{display:flex;align-items:center;gap:12px;margin:16px 10px 11px} /* WZ-INTEL-WPLOGO-2026-07-08 */
 .inteldiv .iln{flex:1;height:1px;background:linear-gradient(90deg,transparent,rgba(201,168,106,.55))}
 .inteldiv .iln.r{background:linear-gradient(90deg,rgba(201,168,106,.55),transparent)}
 .inteldiv .ilbl{font-family:var(--mono);font-weight:600;font-size:11px;letter-spacing:5px;color:var(--gold);white-space:nowrap}.
