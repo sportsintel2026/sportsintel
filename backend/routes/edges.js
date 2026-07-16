@@ -9,6 +9,7 @@
 //   Caches results in memory for 15 minutes (keyed by the date actually served).
 const express = require("express");
 const router = express.Router();
+const { gateModelData } = require("../middleware/accessGate"); // WZ-LOCK-ROUND2-2026-07-15
 // ── WZ-LOCK-PICKS-2026-07-15 :: server-side access gate for the model's picks ─────────────────
 // The board's pick data must reach ONLY full-access users (paid, comped, admin, owner). The
 // frontend already shows a paywall <Gate> to everyone else, but the raw JSON was still shipped to
@@ -1175,7 +1176,7 @@ function mrMoveFromSeries(series) {
   return now - open;
 }
 
-router.get("/market-read/mlb", async (req, res) => {
+router.get("/market-read/mlb", gateModelData, async (req, res) => {
   try {
     const { date: slateDate, rolled } = await resolveSlateDate();
     const allGames = await getScheduleForDate(slateDate);
