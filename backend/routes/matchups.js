@@ -7,6 +7,7 @@
 
 const express = require("express");
 const router = express.Router();
+const { gateModelData } = require("../middleware/accessGate"); // WZ-LOCK-ROUND2-2026-07-15
 const axios = require("axios");
 
 const {
@@ -191,7 +192,7 @@ async function warmMatchupIntel() {
 
 // GET /api/matchups/mlb/intel -- cached slate BvP angles ("our read"). MUST be declared before the
 // /mlb/:gameId route so "intel" isn't captured as a gameId. Read-only, fail-safe, ~0 cost per hit.
-router.get("/mlb/intel", async (req, res) => {
+router.get("/mlb/intel", gateModelData, async (req, res) => {
   try {
     const today = getEasternDate(0);
     if (_intelCache.date !== today && !_intelCache.building) warmMatchupIntel().catch(() => {});
@@ -203,7 +204,7 @@ router.get("/mlb/intel", async (req, res) => {
 });
 
 // GET /api/matchups/mlb/:gameId
-router.get("/mlb/:gameId", async (req, res) => {
+router.get("/mlb/:gameId", gateModelData, async (req, res) => {
   const { gameId } = req.params;
 
   // Cache check
@@ -276,7 +277,7 @@ const H2H_TTL_MS = 6 * 60 * 60 * 1000; // 6h
 // GET /api/matchups/mlb/:gameId/h2h
 //   Season head-to-head between the two teams in this game: each side's series
 //   wins + the recent meetings with scores. Read-only, cached 6h.
-router.get("/mlb/:gameId/h2h", async (req, res) => {
+router.get("/mlb/:gameId/h2h", gateModelData, async (req, res) => {
   const { gameId } = req.params;
 
   const cached = h2hCache.get(gameId);
