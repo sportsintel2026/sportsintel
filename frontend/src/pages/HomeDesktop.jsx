@@ -53,7 +53,7 @@ export default function HomeDesktop(props) {
   // WZ-WINNERS-REMOVED-2026-07-05 :: Winners lens removed — Edge Board is the sole board.
 
   const { edges, games = [], movers = [], live = [], abbrById = {}, topProps = [], propList = [], propsByType = {}, hero, hasFull, planLoaded = true, lineSeries = {}, moveByPick = {},
-    wpRecord, navigate, plan = {}, sport = "mlb", setSport, marketsLive, anyLive, marketRead = [], perf = null, wpToday = [], sharpRows = [] } = props;
+    wpRecord, navigate, plan = {}, sport = "mlb", setSport, marketsLive, anyLive, marketRead = [], perf = null, wpToday = [], sharpRows = [], intelGroups = [] } = props;
   const lg = sport === "mlb" ? "mlb" : sport; // WZ-DESKTOP-FBALL-2026-07-11 :: NFL/CFB render in-board
   // Real tracked-record stats for the index cards (high-conviction ROI, honest beat-close CLV).
   const perfStats = (() => { const d = perf; if (!d) return null;
@@ -362,6 +362,35 @@ export default function HomeDesktop(props) {
                 </tbody>
               </table>
               <div style={{ fontSize: 11, color: "var(--mut2)", padding: "9px 15px", borderTop: "1px solid var(--line)", fontStyle: "italic" }}>Where our model most disagrees with Pinnacle's de-vigged line. Read-only, not bet advice.</div>
+            </div>
+          )}
+
+          {/* WZ-GAMEINTEL-DESKTOP-2026-07-15 :: GAME INTEL as a Vault panel, sibling to Sharp Edge.
+              Same per-game clusters + OUR READ angles as mobile, computed once in Home.jsx and passed
+              down as intelGroups. MLB/NFL/CFB, scoped to the active sport; UFC keeps its own. */}
+          {(sport === "mlb" || sport === "nfl" || sport === "cfb") && Array.isArray(intelGroups) && intelGroups.length > 0 && (
+            <div className="panel">
+              <div className="phead">
+                <div className="t"><span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--amber)", boxShadow: "0 0 8px rgba(201,168,106,.55)" }} />Game Intel</div>
+                <div className="right">what changes the bet</div>
+              </div>
+              <div style={{ padding: "6px 0 8px" }}>
+                {intelGroups.map((grp, gi) => (
+                  <div key={gi} style={{ padding: "12px 15px 2px", borderTop: gi ? "1px solid var(--line)" : "none" }}>
+                    <div style={{ fontFamily: "var(--mono)", fontSize: 10, letterSpacing: ".6px", color: "var(--mut2)", textTransform: "uppercase", marginBottom: 8 }}>{grp.gl}</div>
+                    {grp.items.map((it, i) => (
+                      <div key={i} style={{ padding: "0 0 11px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+                          <span style={{ width: 8, height: 8, borderRadius: "50%", background: it.c, boxShadow: `0 0 8px ${it.c}66`, flex: "0 0 auto" }} />
+                          <span style={{ fontFamily: "var(--disp)", fontWeight: 800, fontSize: 10.5, letterSpacing: ".5px", color: "var(--amber)", textTransform: "uppercase", flex: "0 0 auto" }}>{it.tag}</span>
+                          <span style={{ fontFamily: "var(--mono)", fontSize: 13, color: "var(--tx)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.tx}</span>
+                        </div>
+                        <div style={{ fontSize: 11.5, color: "var(--mut)", marginTop: 5, paddingLeft: 17, lineHeight: 1.4 }}>{it.rd}</div>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
