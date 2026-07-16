@@ -238,6 +238,16 @@ cron.schedule("10,40 11-23,0-2 * * *", async () => {
   }
 }, { timezone: "America/New_York" });
 
+// WZ-MATCHUP-INTEL-2026-07-15 :: warm the slate BvP "our read" intel cache a few times a day (career
+// BvP stats are static for the day; only the day's probable pitchers change). In-memory in
+// matchups.js, refreshed off user traffic. Fail-safe no-op.
+cron.schedule("15 8,12,16 * * *", async () => {
+  try { if (matchupsRoutes.warmMatchupIntel) await matchupsRoutes.warmMatchupIntel(); }
+  catch (err) { console.error("[CRON] Matchup intel warm failed:", err.message); }
+}, { timezone: "America/New_York" });
+// Warm once on boot (non-blocking) so the card isn't empty until the first scheduled run.
+setTimeout(() => { try { if (matchupsRoutes.warmMatchupIntel) matchupsRoutes.warmMatchupIntel().catch(() => {}); } catch (_) {} }, 9000);
+
 cron.schedule("5,35 11-23,0-2 * * *", async () => {
   try {
     await captureNFLOddsTicks();
