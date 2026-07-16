@@ -4,7 +4,7 @@
 // modelProb, conviction from /api/edges; weather/pitchers ride along on games.
 // HOMEDESKTOP-PREMIUM-DARK-RESKIN-2026-06-23
 // FIX-CLV-DESKTOP-OBJECT-2026-06-24
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, Fragment } from "react";
 import { scoresApi } from "../lib/api"; // WZ-NBA-RECORDS-2026-07-11 :: real ESPN standings for the NBA board
 
 // ---- self-contained helpers (kept local so this file stands alone) ----
@@ -19,6 +19,9 @@ const amCents = (o) => { if (o == null || isNaN(o)) return null; const n = Numbe
 const edgeLabel = (e) => isTotal(e) ? `${e.side === "over" ? "Over" : "Under"} ${e.line}` : (e.line != null ? `${e.teamAbbr || shortTeam(e.matchup)} ${e.line > 0 ? "+" : ""}${e.line}` : `${e.teamAbbr || shortTeam(e.matchup)} ML`);
 const sideOf = (e) => e.side === "over" ? "ov" : e.side === "under" ? "un" : "ml";
 const sideTag = (e) => { const s = sideOf(e); return `<span class="side ${s}">${s === "ov" ? "OVER" : s === "un" ? "UNDER" : "PICK"}</span>`; };
+const _API_BASE = import.meta.env.VITE_API_URL || "https://sportsintel-production.up.railway.app"; // WZ-DESKTOP-EXPAND-2026-07-15
+const impliedFromAmerican = (o) => { if (o == null || isNaN(+o)) return null; o = +o; return o > 0 ? 100 / (o + 100) : (-o) / (-o + 100); };
+const fairAmerican = (p) => { if (p == null || p <= 0 || p >= 1) return null; return p >= 0.5 ? Math.round(-100 * p / (1 - p)) : Math.round(100 * (1 - p) / p); };
 function oneSidePerGame(arr) { const g = new Map(); for (const e of arr || []) { const p = g.get(e.gameId); if (!p || (e.edge ?? -Infinity) > (p.edge ?? -Infinity)) g.set(e.gameId, e); } return [...g.values()]; }
 const convClass = (c) => c === "HIGH" ? "high" : c === "MEDIUM" ? "med" : "low";
 const DTIERS = ["NEUTRAL", "LOW", "MEDIUM", "HIGH"];
@@ -45,6 +48,69 @@ function Lock({ title, sub, navigate }) {
         <div className="ls">{sub}</div>
         <button onClick={() => navigate("/pricing")}>Unlock All-Access →</button>
       </div>
+    </div>
+  );
+}
+
+// WZ-DESKTOP-EXPAND-2026-07-15 :: inline row breakdown matching the mobile expanded card -- market-vs-
+// model, SIGNALS, BOOKS LEAN, and the fetched B-read. Rebuilt from the desktop's own row + games +
+// marketRead + lineSeries (the mobile toBoard fields aren't on desktop rows). Fail-safe on the B-read.
+function DesktopDetail({ x, sport, games, marketRead, lineSeries, abbrById }) {
+  const [aiRead, setAiRead] = useState(null);
+  const gm = (games || []).find((g) => g.id === x.gameId) || {};
+  const ab = abbrById[x.gameId] || {};
+  const matchup = `${ab.a || x._a || ""} @ ${ab.h || x._h || ""}`;
+  const model = x.modelProb != null ? Math.round(x.modelProb * 100) : null;
+  const mkt = x.odds != null ? Math.round((impliedFromAmerican(x.odds) || 0) * 100) : null;
+  const ev = edgePct(x, sport);
+  const fair = x.modelProb != null ? fairAmerican(x.modelProb) : null;
+  const pick = edgeLabel(x);
+  const isTot = x.side === "over" || x.side === "under";
+  const hitWord = isTot ? "to hit" : (x.side === "away" || x.side === "home") ? "to win" : "to cover";
+  const ser = lineSeries[x.gameId + x.side];
+  let lm = null;
+  if (ser && ser.length >= 2) { const a0 = amCents(ser[0]), a1 = amCents(ser[ser.length - 1]); if (a0 != null && a1 != null) lm = { open: ser[0], now: ser[ser.length - 1], d: Math.round(a1 - a0) }; }
+  const park = (sport === "mlb" && gm.parkRunFactor != null) ? `${gm.parkRunFactor > 1 ? "+" : ""}${Math.round((gm.parkRunFactor - 1) * 100)}%` : null;
+  const wx = (sport === "mlb" && gm.weather) ? gm.weather.summary : null;
+  const conv = String(x._convAdj || x.conviction || "").toUpperCase();
+  const mr = (marketRead || []).find((g) => g.gameId === x.gameId) || null;
+  const mktW = Math.min(100, Math.max(0, mkt || 0));
+  const ohW = (model != null && mkt != null) ? Math.min(Math.max(0, 100 - mktW), Math.max(0, model - mkt)) : 0;
+  useEffect(() => {
+    let dead = false;
+    (async () => {
+      try {
+        const r = await fetch(`${_API_BASE}/api/ai-read`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sig: x.gameId + "|" + x.side, sport, pick, market: isTot ? "TOT" : (x.line != null ? "SPREAD" : "ML"), matchup, odds: formatOdds(x.odds), model, market_pct: mkt, edge: ev, moneyDir: lm ? (lm.d < 0 ? 1 : lm.d > 0 ? -1 : 0) : 0, park, weather: wx, conviction: conv }) });
+        const j = await r.json();
+        if (!dead && j && j.read) setAiRead(j.read);
+      } catch (_) {}
+    })();
+    return () => { dead = true; };
+  }, [x.gameId, x.side]);
+  const money = lm ? (lm.d < 0 ? ["up", "money in on us"] : lm.d > 0 ? ["dn", "money off us"] : ["", "holding"]) : null;
+  const leg = (name, L) => L ? (
+    <div className="dt-lrow"><span className="dt-lname">{name}</span><span className={"dt-tier " + String(L.tier || "").toLowerCase()}>{L.tier || "\u2014"}</span><span className="dt-lteam">{L.favTeam || L.favSide || "\u2014"}{L.favProb != null ? " \u00b7 " + L.favProb + "%" : ""}</span><span className={"dt-ag " + (L.model && L.model.agrees ? "y" : "n")}>{L.model && L.model.agrees ? "\u2713 agrees" : "differs"}</span></div>
+  ) : null;
+  return (
+    <div className="dt">
+      <div className="dt-sub">Take the <b>{pick}</b> {"\u2014"} at <em>{formatOdds(x.odds)}</em> {"\u00b7"} {matchup} {hitWord}</div>
+      <div className="dt-grid">
+        <div className="dt-val">
+          <div className="dt-vrow"><div className="dt-vc"><div className="dt-vl">YOU GET</div><div className="dt-vn">{formatOdds(x.odds)}</div></div><span className="dt-var">{"\u2192"}</span><div className="dt-vc r"><div className="dt-vl g">FAIR PRICE</div><div className="dt-vn g">{fair != null ? formatOdds(fair) : "\u2014"}</div></div></div>
+          <div className="dt-bar"><i className="bf" style={{ width: mktW + "%" }} /><i className="of" style={{ left: mktW + "%", width: ohW + "%" }} /></div>
+          <div className="dt-ble"><span>MARKET {mkt != null ? mkt + "%" : "\u2014"}</span><span className="g">MODEL {model != null ? model + "%" : "\u2014"} {hitWord}</span></div>
+          {ev != null && <div className="dt-edx">That {Math.abs(ev).toFixed(1)}% gap between our model and the market is our <b>edge</b> {"\u2014"} the price is better than it should be.</div>}
+        </div>
+        <div className="dt-sig">
+          <div className="dt-slbl">SIGNALS</div>
+          {lm && <div className="dt-sr"><span className="dt-sk">LINE MOVE</span><span className="dt-sv">{formatOdds(lm.open)} {"\u2192"} {formatOdds(lm.now)}{money ? <span className={"dt-sm " + money[0]}> {"\u00b7"} {money[1]}</span> : null}</span></div>}
+          {park && <div className="dt-sr"><span className="dt-sk">PARK</span><span className="dt-sv">{park}</span></div>}
+          {wx && <div className="dt-sr"><span className="dt-sk">WEATHER</span><span className="dt-sv">{wx}</span></div>}
+          {conv && <div className="dt-sr"><span className="dt-sk">CONVICTION</span><span className={"dt-sv dt-cv " + conv.toLowerCase()}>{conv}</span></div>}
+        </div>
+      </div>
+      {mr && (mr.win || mr.cover || mr.total) && <div className="dt-books"><div className="dt-slbl">BOOKS LEAN {"\u2014"} WHERE THE MONEY IS</div>{leg("Win", mr.win)}{leg("Cover", mr.cover)}{leg("Total", mr.total)}</div>}
+      <div className="dt-read"><div className="dt-slbl">READ</div><div className={"dt-rtx" + (aiRead ? "" : " dt-loading")}>{aiRead || "Generating the model\u2019s read\u2026"}</div></div>
     </div>
   );
 }
@@ -87,6 +153,7 @@ export default function HomeDesktop(props) {
   const [propSort, setPropSort] = useState({ key: "edge", dir: -1 });
   const [sortKey, setSortKey] = useState("edge");
   const [sortDir, setSortDir] = useState(-1);
+  const [openRow, setOpenRow] = useState(null); // WZ-DESKTOP-EXPAND-2026-07-15
   const [si, setSi] = useState(0);
   const [clock, setClock] = useState("");
 
@@ -329,9 +396,9 @@ export default function HomeDesktop(props) {
                     <tbody>
                       {rows.map((x, i) => {
                         const ab = abbrById[x.gameId] || {}; const a = x._a || ab.a || x.teamAbbr || shortTeam(x.matchup); const h = x._h || ab.h || "";
-                        const ep = edgePct(x, sport); const pos = ep >= 0; const hasE = x.edge != null;
-                        return (
-                          <tr key={x.gameId + x.side + i} className={(lg === "mlb" || lg === "nba") ? "click" : ""} onClick={() => { /* WZ-GAMEDETAIL-GUARD-2026-07-15 :: only mlb/nba have a game-detail route; others fell through to the catch-all -> landing */ if (lg === "mlb" || lg === "nba") navigate(`/game/${lg}/${x.gameId}`); }}>
+                        const ep = edgePct(x, sport); const pos = ep >= 0; const hasE = x.edge != null; const rowKey = x.gameId + x.side + i; const isOpen = openRow === rowKey;
+                        return (<Fragment key={rowKey}>
+                          <tr className={"click" + (isOpen ? " openrow" : "")} onClick={() => setOpenRow((k) => k === rowKey ? null : rowKey)}>
                             <td><div className="matchup"><span className="logos"><TLogo ab={a} lg={lg} />{h && <TLogo ab={h} lg={lg} />}</span>
                               <span className="mu"><span className="mua">{a}{h ? <span className="at"> @ </span> : ""}{h}</span></span></div></td>
                             <td><div className="pick" dangerouslySetInnerHTML={{ __html: sideTag(x) + edgeLabel(x) }} /></td>
@@ -341,6 +408,8 @@ export default function HomeDesktop(props) {
                             <td className="edge-cell">{hasE ? <><div className={"edge-v " + (pos ? "up" : "dn")}>{fmtEdge(x, sport)}</div><div className="edge-bar"><i style={{ width: Math.min(100, Math.abs(ep) * 12 + 8) + "%" }} /></div></> : <span className="nomove">no edge</span>}</td>
                             <td className="c"><span className={"conv " + convClass(x._convAdj || x.conviction)}>{(x._convAdj || x.conviction || "—")}{x._moveDir > 0 ? " ↑" : x._moveDir < 0 ? " ↓" : ""}</span>{x._moveFlag === "against" && <div className="dmove against"> moving against</div>}{x._moveFlag === "toward" && <div className="dmove toward">↘ money in</div>}</td>
                           </tr>
+                          {isOpen && <tr className="detailrow"><td colSpan={7}><DesktopDetail x={x} sport={sport} games={games} marketRead={marketRead} lineSeries={lineSeries} abbrById={abbrById} /></td></tr>}
+                        </Fragment>
                         );
                       })}
                     </tbody>
@@ -664,6 +733,29 @@ const TCSS = `
 .wpterm .tp-cell .k{font-family:var(--mono);font-size:9px;letter-spacing:.8px;color:var(--mut2);margin-top:4px}
 .wpterm .tp-foot{padding:10px 18px;border-top:1px solid var(--line);font-family:var(--mono);font-size:11px;color:var(--amber);cursor:pointer;text-align:right}
 .wpterm .tp-empty{padding:22px 18px;font-family:var(--mono);font-size:12.5px;color:var(--mut);text-align:center;line-height:1.5}
+.wpterm tr.detailrow > td{padding:0;background:#0d0f13;border-bottom:1px solid var(--line)}
+.wpterm tr.openrow{background:var(--goldbg)}
+.wpterm .dt{padding:16px 20px 20px}
+.wpterm .dt-sub{font-size:13px;color:var(--mut);margin-bottom:14px}.wpterm .dt-sub b{color:var(--tx)}.wpterm .dt-sub em{color:var(--goldsoft);font-style:normal;font-family:var(--mono)}
+.wpterm .dt-grid{display:grid;grid-template-columns:1.25fr 1fr;gap:26px;align-items:start}
+.wpterm .dt-vrow{display:flex;align-items:center;gap:14px}
+.wpterm .dt-vc .dt-vl{font-family:var(--mono);font-size:9px;letter-spacing:.8px;color:var(--mut2)}.wpterm .dt-vc.r{text-align:right;margin-left:auto}.wpterm .dt-vl.g{color:var(--teal)}
+.wpterm .dt-vn{font-family:var(--disp);font-weight:800;font-size:22px;color:var(--tx);line-height:1.1}.wpterm .dt-vn.g{color:var(--teal)}
+.wpterm .dt-var{color:var(--teal);font-size:15px}
+.wpterm .dt-bar{position:relative;height:6px;border-radius:3px;background:#1b1f27;margin:12px 0 6px;overflow:hidden}
+.wpterm .dt-bar .bf{position:absolute;left:0;top:0;height:100%;background:#3a4250}.wpterm .dt-bar .of{position:absolute;top:0;height:100%;background:var(--teal)}
+.wpterm .dt-ble{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10px;color:var(--mut)}.wpterm .dt-ble .g{color:var(--teal)}
+.wpterm .dt-edx{font-size:11.5px;color:var(--mut);margin-top:10px;line-height:1.5}.wpterm .dt-edx b{color:var(--teal)}
+.wpterm .dt-slbl{font-family:var(--mono);font-size:9px;letter-spacing:1px;color:var(--mut2);margin-bottom:9px}
+.wpterm .dt-sr{display:flex;gap:12px;padding:5px 0}.wpterm .dt-sk{font-family:var(--mono);font-size:9px;letter-spacing:.6px;color:var(--mut2);width:82px;flex:0 0 auto;padding-top:1px}
+.wpterm .dt-sv{font-family:var(--mono);font-size:12px;color:var(--tx)}.wpterm .dt-sm.up{color:var(--up)}.wpterm .dt-sm.dn{color:var(--dn)}
+.wpterm .dt-cv.high{color:var(--up)}.wpterm .dt-cv.medium,.wpterm .dt-cv.med{color:var(--goldsoft)}.wpterm .dt-cv.low{color:var(--mut)}
+.wpterm .dt-books{margin-top:16px;border:1px solid var(--line);border-radius:10px;padding:10px 14px}
+.wpterm .dt-lrow{display:flex;align-items:center;gap:12px;padding:6px 0;border-top:1px solid var(--line2)}.wpterm .dt-lrow:first-of-type{border-top:none}
+.wpterm .dt-lname{font-family:var(--mono);font-size:10px;color:var(--mut);width:46px;flex:0 0 auto}
+.wpterm .dt-tier{font-family:var(--mono);font-size:10px;padding:2px 8px;border:1px solid var(--line);border-radius:5px;flex:0 0 auto}.wpterm .dt-tier.strong{color:var(--up)}.wpterm .dt-tier.soft{color:var(--goldsoft)}.wpterm .dt-tier.split{color:var(--dn)}
+.wpterm .dt-lteam{color:var(--tx);flex:1;font-size:12.5px}.wpterm .dt-ag{font-family:var(--mono);font-size:11px;flex:0 0 auto}.wpterm .dt-ag.y{color:var(--up)}.wpterm .dt-ag.n{color:var(--mut2)}
+.wpterm .dt-read{margin-top:16px}.wpterm .dt-rtx{font-size:13px;line-height:1.6;color:#d6dae0;max-width:900px}.wpterm .dt-loading{color:var(--mut2);font-style:italic}
 .wpterm .phead{display:flex;align-items:center;gap:12px;padding:11px 15px;border-bottom:1px solid var(--line)}
 .wpterm .phead .t{font-family:var(--disp);font-weight:800;font-size:clamp(13px,1vw,15.5px);letter-spacing:.4px;display:flex;align-items:center;gap:8px}
 .wpterm .phead .seg{display:flex;gap:2px;background:#080b12;border:1px solid var(--line);border-radius:9px;padding:3px;margin-left:6px}
