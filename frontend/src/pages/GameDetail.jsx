@@ -656,6 +656,15 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .shead .x{width:32px;height:32px;border-radius:9px;border:1px solid var(--line2);display:flex;align-items:center;justify-content:center;color:#cdd7e1;font-size:19px;cursor:pointer;flex:0 0 auto}
 .shead .t{font-family:var(--disp);font-weight:800;font-size:19px;color:#fff;line-height:1}.shead .ts{font-family:var(--mono);font-size:10px;color:var(--mut);margin-top:2px}
 .sbody{padding:13px 14px 80px}
+/* WZ-GAMEDETAIL-DESKTOP-2026-07-16 :: proper desktop layout -- hide the mobile bottom nav, widen+center the sheet, clear back button */
+@media(min-width:1024px){
+  .app{max-width:660px;padding-bottom:24px}
+  .nav{display:none}
+  .sbody{padding:22px 26px 48px}
+  .shead{padding:16px 24px}
+  .shead .x{width:auto;height:36px;padding:0 15px;gap:7px;font-size:16px;color:var(--gold);border-color:rgba(201,168,106,.35)}
+  .shead .x::after{content:"Back to games";font-family:var(--ui);font-size:13px;font-weight:600;letter-spacing:.2px}
+}
 .dblk{border:1px solid var(--line);border-radius:13px;background:var(--panel);padding:13px;margin-top:11px}
 .dblk .bl{font-family:var(--disp);font-weight:800;font-size:12px;letter-spacing:.7px;color:var(--mut);margin-bottom:11px;display:flex;align-items:center;justify-content:space-between}
 .dblk .bl .bx{font-family:var(--mono);font-size:9px;color:var(--mut2);letter-spacing:0;font-weight:500}
