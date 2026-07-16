@@ -23,6 +23,7 @@ import UFCPage from "./pages/UFC"; // WZ-UFC-PAGE-2026-07-09 :: additive UFC/MMA
 import UFCRecordPage from "./pages/UFCRecord"; // WZ-UFC-RECORD-2026-07-09 :: UFC Record tab
 import NBADetailPage from "./pages/NBADetail";
 import LiveScoresPage from "./pages/LiveScores";
+import FbGameDetail from "./pages/FbGameDetail"; // WZ-FB-GAMEDETAIL-2026-07-16
 import GuidePage from "./pages/Guide";
 import DailyCardPage from "./pages/DailyCard";
 import MarketReadPage from "./pages/MarketRead";
@@ -278,6 +279,8 @@ export default function App() {
               <GameDetailPage />
             </PrivateRoute>
           } />
+          <Route path="/game/nfl/:gameId" element={<PrivateRoute><FbGameDetail league="nfl" /></PrivateRoute>} />
+          <Route path="/game/cfb/:gameId" element={<PrivateRoute><FbGameDetail league="cfb" /></PrivateRoute>} />
           <Route path="/settings" element={
             <PrivateRoute>
               <SettingsPage />
