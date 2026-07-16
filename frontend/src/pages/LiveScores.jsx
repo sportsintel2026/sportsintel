@@ -828,7 +828,7 @@ function GameCard({ g, league, meta, odds }) {
   const rawId = g.detailId || g.id;
   // Detail pages exist for MLB/NBA; other leagues' detail arrives with the model
   // step, so don't route a card to a page that isn't wired yet.
-  const HAS_DETAIL = { mlb: true, nba: true };
+  const HAS_DETAIL = { mlb: true, nba: true, nfl: true, cfb: true }; // WZ-FB-GAMEDETAIL-2026-07-16
   const target = rawId && HAS_DETAIL[league] ? `/game/${league}/${rawId}` : null;
 
   // Top strip mirrors the MLB Games card: live state, kickoff/first-pitch time,
