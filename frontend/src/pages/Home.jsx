@@ -436,6 +436,29 @@ export default function HomePage(){
   const evItems = oneSidePerGame(allAdj).filter(x=>(x.edge??0)>0).sort((a,b)=>(b.edge||0)-(a.edge||0)).map(toBoard).filter(h=>!wvKeys.has(h.k));
   const heroItems = [...wvItems, ...evItems].slice(0,4);
   const moverItems = movers.map((m)=>{return {p:edgeLabel(m),logo:edgeTeam(m)||(abbrById[m.gameId]?abbrById[m.gameId].h:""),g:(abbrById[m.gameId]?abbrById[m.gameId].a+" @ "+abbrById[m.gameId].h:m.matchup),mv:(m._open!=null&&m._now!=null&&m._delta!=null)?[formatOdds(m._open),formatOdds(m._now),(m._delta>0?"up":m._delta<0?"dn":"")]:null,odds:formatOdds(m.odds),model:m.modelProb!=null?Math.round(m.modelProb*100):null,delta:m._delta};});
+  // WZ-GAMEINTEL-2026-07-15 :: GAME INTEL -- per-GAME clustered live list at the bottom of MARKET &
+  // INTEL. Only game-changing events, each filed under its game so the list stays short (per game,
+  // NOT per team). Scoped to the active sport tab (MLB now; NFL/CFB share the news+movers path); UFC
+  // excluded (its own intel); sports without data stay empty. No cross-sport overlap. Static list,
+  // not a ticker. News items arrive with game:null, so scratches/injuries are matched to a slate game
+  // by player name off the lineups/pitchers on the page; unmatched (not tonight's slate) are dropped.
+  const intelGroups = !(sport==="mlb"||sport==="nfl"||sport==="cfb") ? [] : (()=>{
+    const norm=(s)=>String(s||"").toLowerCase().replace(/[^a-z ]/g," ").replace(/\s+/g," ").trim();
+    const nameGame={}, glById={};
+    (games||[]).forEach(g=>{ const ab=abbrById[g.id]; const label=ab?(ab.a+" @ "+ab.h):((g.away||"")+" @ "+(g.home||"")); glById[g.id]=label;
+      const put=(nm)=>{ const k=norm(nm); if(k) nameGame[k]={id:g.id,label}; };
+      const lu=g.lineups||{}; ["away","home"].forEach(sd=>{ ((lu[sd]&&lu[sd].order)||[]).forEach(b=>put(b.name)); });
+      const pt=g.pitchers||{}; ["away","home"].forEach(sd=>{ if(pt[sd]&&pt[sd].name) put(pt[sd].name); });
+      if(g.awayProbable&&g.awayProbable.name) put(g.awayProbable.name); if(g.homeProbable&&g.homeProbable.name) put(g.homeProbable.name);
+    });
+    const items=[]; const nf=newsFeed||[];
+    if(sport==="mlb") nf.filter(n=>n.scratch).forEach(n=>{ const g=nameGame[norm(n.playerName)]; if(!g) return; items.push({sev:0,c:"#ff5d4d",tag:"SCRATCH",tx:capWire(n.playerName||"Late scratch",44),rd:"Out of tonight\u2019s lineup \u2014 offense and the total tick down.",gid:g.id,gl:g.label}); });
+    nf.filter(n=>!n.scratch&&(n.status==="injury"||n.type==="injury")).forEach(n=>{ const g=nameGame[norm(n.playerName)]; if(!g) return; items.push({sev:1,c:"#E89B4F",tag:"INJURY",tx:capWire(n.playerName?(n.playerName+" \u2014 "+wireBlurb(n)):(n.headline||"Injury"),50),rd:"Status change \u2014 check that number before you bet it.",gid:g.id,gl:g.label}); });
+    (movers||[]).filter(m=>m._delta!=null&&Math.abs(m._delta)>=10).forEach(m=>{ const gl=glById[m.gameId]; if(!gl) return; const inbound=(m._delta||0)<0; items.push({sev:2,c:inbound?"#3FCB91":"#5da9e8",tag:"LINE MOVE",tx:edgeLabel(m)+"  "+formatOdds(m._open)+" \u2192 "+formatOdds(m._now),rd:inbound?"Money coming in \u2014 the market is backing this side.":"Number drifting \u2014 the market is fading this side.",gid:m.gameId,gl}); });
+    if(sport==="mlb") (games||[]).forEach(g=>{ const w=g.weather||{}; if(w.indoor) return; const gl=glById[g.id]; const wOut=w.windEffect==="out"&&(w.windMph||0)>=12; const wIn=w.windEffect==="in"&&(w.windMph||0)>=12; const hot=(w.tempF||0)>=92; const cold=w.tempF!=null&&w.tempF<=46; const wx=w.summary||([w.tempF!=null?Math.round(w.tempF)+"\u00b0F":null,w.windMph?("wind "+w.windMph+"mph"):null].filter(Boolean).join(" \u00b7 ")); if(wOut||hot) items.push({sev:3,c:"#f3b94f",tag:"WEATHER",tx:capWire(wx||"Warm air",50),rd:"Air is carrying \u2014 slight lean to the over.",gid:g.id,gl}); else if(wIn||cold) items.push({sev:3,c:"#5da9e8",tag:"WEATHER",tx:capWire(wx||"Cool air",50),rd:"Air knocking it down \u2014 slight lean to the under.",gid:g.id,gl}); else if(w.isRaining) items.push({sev:3,c:"#5da9e8",tag:"WEATHER",tx:"Rain risk",rd:"Delay/postpone watch \u2014 totals get volatile.",gid:g.id,gl}); });
+    const by={}; items.forEach(it=>{ (by[it.gid]=by[it.gid]||{gl:it.gl,items:[]}).items.push(it); });
+    return Object.keys(by).map(k=>{ const grp=by[k]; grp.items.sort((a,b)=>a.sev-b.sev); grp.minSev=grp.items[0].sev; grp.items=grp.items.slice(0,3); return grp; }).sort((a,b)=>(a.minSev-b.minSev)||(b.items.length-a.items.length)).slice(0,5);
+  })();
   // WZ-LIVETICKER-2026-06-27 :: ticker = live scores (the backbone) with injury + late-scratch
   // alerts woven in. MLB pulls injuries/scratches from the RotoWire wire; other sports show
   // plain scores. A late scratch (player pulled from tonight's lineup) is the more urgent
@@ -656,6 +679,7 @@ export default function HomePage(){
             <div className="ies">{sport==="mlb" && inAllStarBreak() ? "Line movement and pulse return when the second half opens." : "Line movement and pulse post once tonight's lines are up."}</div>
           </div>
         )}
+        {(sport==="mlb"||sport==="nfl"||sport==="cfb") && <WizeWire groups={intelGroups}/>}
       </>}
         {/* WZ-TOPPROPS-2026-07-08 :: Top Prop Plays -- last content block before the onboarding cards.
             Balanced top-6 (Hits/K/HR) as a tight edge-to-edge 3x2 grid; tap a card -> Props tab. */}
@@ -1030,6 +1054,31 @@ function Swiper({cls,dotcls,children}){ const ref=useRef(null);const [act,setAct
   const onScroll=()=>{const el=ref.current;if(!el)return;const f=el.firstElementChild;const w=f?f.offsetWidth+9:200;setAct(Math.max(0,Math.round(el.scrollLeft/w)));};
   return (<><div className={cls} ref={ref} onScroll={onScroll}>{children}</div>{items.length>1&&<div className={dotcls}>{items.map((_,i)=><i key={i} className={i===act?"on":""}/>)}</div>}</>);
 }
+// WZ-GAMEINTEL-2026-07-15 :: GAME INTEL -- per-game clustered live list at the bottom of MARKET &
+// INTEL. Static list (NOT a ticker): each game gets a header, then its game-changing lines with the
+// model's read. Scoped to the active sport; UFC keeps its own. Reuses .alerts styling.
+function WizeWire({groups}){
+  const gs=groups||[];
+  return (
+    <div className="alerts wire">
+      <div className="ahead">GAME INTEL {"\u00b7"} WHAT CHANGES THE BET <span className="ago">{gs.length?("live \u00b7 "+gs.length+(gs.length>1?" games":" game")):"watching the slate"}</span></div>
+      {gs.length===0
+        ? <div className="wirequiet">All quiet {"\u2014"} we{"\u2019"}ll flag the moment a scratch, injury, weather swing, or line move changes a game.</div>
+        : gs.map((grp,gi)=>(
+          <div className="wiregame" key={gi}>
+            <div className="wgh">{grp.gl}</div>
+            {grp.items.map((it,i)=>(
+              <div className="wirerow" key={i}>
+                <div className="aline"><span className="adot" style={{background:it.c,boxShadow:`0 0 8px ${it.c}66`}}/><span className="alab">{it.tag}</span><span className="aval">{it.tx}</span></div>
+                <div className="awhy">{it.rd}</div>
+              </div>
+            ))}
+          </div>
+        ))}
+    </div>
+  );
+}
+
 function MarketPulse({alerts,movers,rolled}){ const [idx,setIdx]=useState(0);const [paused,setPaused]=useState(false);
   useEffect(()=>{if(paused||!alerts||alerts.length<2)return;const id=setInterval(()=>setIdx(i=>(i+1)%alerts.length),3600);return ()=>clearInterval(id);},[paused,alerts]);
   const hasAlerts=alerts&&alerts.length>0;
@@ -1228,6 +1277,13 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .aline .alab{font-family:var(--disp);font-weight:800;font-size:10px;letter-spacing:.5px;color:var(--gold);flex:0 0 auto;text-transform:uppercase}
 .aline .aval{font-family:var(--mono);font-size:14px;color:#fff;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.aline .aval .a{color:var(--mut2)}.aline .aval .up{color:var(--green)}.aline .aval .dn{color:var(--neg)}
 .awhy{font-family:var(--ui);font-size:11px;color:var(--mut);margin-top:6px;padding-left:17px;line-height:1.4}
+.wire .ahead{cursor:default}
+.wiregame{padding-top:2px}
+.wiregame+.wiregame{border-top:1px solid rgba(255,255,255,.06);margin-top:4px;padding-top:12px}
+.wgh{font-family:var(--mono);font-size:9.5px;letter-spacing:.6px;color:var(--mut2);text-transform:uppercase;padding:2px 15px 7px}
+.wire .wirerow{padding:0 15px 12px}
+.wire .wirerow .aline{gap:8px}
+.wirequiet{padding:2px 15px 15px;font-family:var(--ui);font-size:11.5px;line-height:1.5;color:var(--mut)}
 @keyframes afade{from{opacity:.15;transform:translateY(3px)}to{opacity:1;transform:none}}
 .alerts .dd{display:flex;gap:5px;justify-content:center;padding:0 0 9px}.alerts .dd i{width:5px;height:5px;border-radius:50%;background:#222c33;transition:.2s;cursor:pointer}.alerts .dd i.on{background:var(--gold);width:13px;border-radius:3px}
 
