@@ -399,6 +399,8 @@ function ScoresTerminal({ activeLeague, meta, goSport, navigate, filter, setFilt
     ["TRACK", null],
     ["", "WizePlays", "/expert-picks"],
     ["", "Wize Spin", "/daily-card"],
+    ["", "Consensus", "/consensus"], // WZ-NAV-UNIFY-2026-07-16 :: match shared TerminalShell sidebar
+    ["", "CLV", "/clv"],
     ["SCORES", null],
     ["", "Matchups & Scores", activeLeague === "mlb" ? "/games" : `/${activeLeague}-games`, true],
   ];
