@@ -390,18 +390,17 @@ function ScoresTerminal({ activeLeague, meta, goSport, navigate, filter, setFilt
   (news||[]).slice(0,8).forEach(n=>{ const [lb]=NEWS_CHIP(n); bits.push(`<span class="tk"><span class="v ${n.scratch?"dn":"up"}">${lb}</span><span class="s">${esc(n.headline).slice(0,80)}</span></span><span class="tdot"></span>`); });
   const tapeHtml=bits.join("");
 
-  const NAV = [
+  const NAV = [ // WZ-SCORES-NAVUNIFY-2026-07-16 :: mirror the main board sidebar exactly (no more shell mismatch)
     ["BOARD", null],
-    ["", "Dashboard", "/home"],
+    ["", "Edges", `/home?sport=${activeLeague}`],
     ["", "Market Price", "/odds"],
     ["", "Market Read", "/market-read"],
     ["", "Props", "/props"],
     ["TRACK", null],
-    ["", "Performance", "/performance"],
     ["", "WizePlays", "/expert-picks"],
     ["", "Wize Spin", "/daily-card"],
     ["SCORES", null],
-    ["", "Games & Scores", "/games", true],
+    ["", "Matchups & Scores", activeLeague === "mlb" ? "/games" : `/${activeLeague}-games`, true],
   ];
 
   // WZ-SCORES-ODDS-2026-07-02 :: match parsed odds events to scoreboard games by the
@@ -450,13 +449,13 @@ function ScoresTerminal({ activeLeague, meta, goSport, navigate, filter, setFilt
             <div><h1>{meta.title}</h1><div className="sub">{total} games · {activeLeague.toUpperCase()} · live scores {refreshedAt?`\u00b7 updated ${refreshedAt.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"})}`:""}</div></div>
             <div className="sportbar">
               {[["MLB","mlb"],["NBA","nba"],["NFL","nfl"],["NHL","nhl"],["CFB","cfb"]].map(([lb,k])=>(
-                <div key={k} className={"sp"+(activeLeague===k?" on":"")} onClick={()=>(k==="mlb"||k==="nba")?navigate(`/home?sport=${k}`):goSport(k)}><span className="d"/>{lb}</div>
+                <div key={k} className={"sp"+(activeLeague===k?" on":"")} onClick={()=>goSport(k)} /* WZ-SCORES-NAVUNIFY-2026-07-16 :: all pills -> that sport's games, not the board */><span className="d"/>{lb}</div>
               ))}
             </div>
           </div>
 
           <div className="sectabs">{/* WZ-SPORT-TERMINAL-2026-07-02 */}
-            {[["edges","EDGES"],["games","GAMES"],["odds","ODDS"],["news","NEWS"],["performance","PERFORMANCE"]].map(([k,lb])=>(
+            {[["games","GAMES"],["odds","ODDS"],["news","NEWS"]].map(([k,lb])=>( /* WZ-SCORES-NAVUNIFY-2026-07-16 */
               <b key={k} className={tab===k?"on":""} onClick={()=>setTab(k)}>{lb}</b>
             ))}
           </div>
