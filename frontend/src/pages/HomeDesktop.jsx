@@ -227,7 +227,7 @@ export default function HomeDesktop(props) {
     ["", "WizePlays", "/expert-picks"],
     ["", "Wize Spin", "/daily-card"],
     ["SCORES", null],
-    ["", "Matchups & Scores", "/games"],
+    ["", "Matchups & Scores", sport === "mlb" ? "/games" : `/${sport}-games`], // WZ-DESKTOP-SCORESNAV-2026-07-16
   ];
 
   return (
