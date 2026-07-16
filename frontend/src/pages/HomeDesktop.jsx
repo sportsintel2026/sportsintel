@@ -216,6 +216,51 @@ export default function HomeDesktop(props) {
             <div className="idx purple"><div className="k">Edges Live</div><div className="v num">{edgeCount}</div><div className="chg">{market.toUpperCase()} board · {rows.length} shown</div></div>
           </div>
 
+          {/* WZ-DESKTOP-TOPPLAY-2026-07-15 :: featured Top Play at the top of the board column, per-sport
+              aware, SAME 2% floor + pick'em logic as mobile. Calibrated (mlb): >=2% = TOP PLAY, <2% = PICK'EM.
+              Provisional (nfl/cfb): MODEL PREVIEW, directional (uncalibrated). NHL/off-season or no edge yet:
+              coming-soon. Gated to All-Access like the rest of the picks. Vault-styled (no mobile glow). */}
+          {(() => {
+            if (!hasFull) return (
+              <div className="panel topplay tp-muted">
+                <Lock title={"Today\u2019s top play is All-Access"} sub={<>The model{"\u2019"}s #1 edge, every day. <b>From $7/wk</b></>} navigate={navigate} />
+              </div>
+            );
+            const prov = sport === "nfl" || sport === "cfb";
+            if (!hero) return (
+              <div className="panel topplay tp-muted">
+                <div className="phead"><div className="t"><span className="tp-dot" />TOP PLAY</div></div>
+                <div className="tp-empty">{sport === "nhl" ? "NHL board opens at the season \u2014 the model posts its top play here from day one." : sport === "nba" ? "NBA board goes live at tip-off." : "No play yet \u2014 the top edge posts as tonight\u2019s lines drop."}</div>
+              </div>
+            );
+            const prv = edgePct(hero, sport);
+            const noEdge = !prov && !(prv >= 2);
+            const ser = lineSeries[hero.gameId + hero.side];
+            let lm = null; if (ser && ser.length >= 2) { const a0 = amCents(ser[0]), a1 = amCents(ser[ser.length - 1]); if (a0 != null && a1 != null) lm = Math.round(a1 - a0); }
+            const model = hero.modelProb != null ? Math.round(hero.modelProb * 100) : null;
+            const conv = String(hero._convAdj || hero.conviction || "").toUpperCase();
+            const heroGame = abbrById[hero.gameId] ? `${abbrById[hero.gameId].a} @ ${abbrById[hero.gameId].h}` : (hero.matchup || "");
+            const play = !prov && !noEdge;
+            const eyebrow = prov ? "MODEL PREVIEW \u00b7 DIRECTIONAL" : noEdge ? "PICK\u2019EM \u00b7 NO EDGE" : "TOP PLAY";
+            const rightNote = prov ? "uncalibrated \u00b7 directional" : noEdge ? "coin flip \u00b7 not a play" : "highest edge on the board";
+            return (
+              <div className={"panel topplay " + (play ? "tp-play" : "tp-muted")}>
+                <div className="phead"><div className="t"><span className="tp-dot" />{eyebrow}</div><div className="right">{rightNote}</div></div>
+                <div className="tp-body">
+                  <div><div className="tp-pick">{edgeLabel(hero)}</div><div className="tp-match">{heroGame}</div></div>
+                  <div className="tp-win"><div className="tp-pct">{model != null ? model + "%" : "\u2014"}</div><div className="tp-k">MODEL TO WIN</div></div>
+                </div>
+                <div className="tp-stats">
+                  <div className="tp-cell"><div className="v">{noEdge ? "NO EDGE" : fmtEdge(hero, sport)}</div><div className="k">{prov ? "MODEL LEAN" : "VALUE"}</div></div>
+                  <div className="tp-cell"><div className="v">{hero.odds != null ? formatOdds(hero.odds) : "\u2014"}</div><div className="k">ODDS</div></div>
+                  <div className="tp-cell"><div className="v">{noEdge ? "COIN FLIP" : (conv || "\u2014")}</div><div className="k">{noEdge ? "MODEL READ" : "CONVICTION"}</div></div>
+                  <div className="tp-cell"><div className={"v " + (lm == null ? "" : lm > 0 ? "up" : "dn")}>{lm == null ? "flat" : (lm > 0 ? "\u25B2 " : "\u25BC ") + Math.abs(lm) + "\u00A2"}</div><div className="k">LINE MOVE</div></div>
+                </div>
+                {sport === "mlb" && hero.gameId ? <div className="tp-foot" onClick={() => navigate(`/game/mlb/${hero.gameId}`)}>Full matchup breakdown &rarr;</div> : null}
+              </div>
+            );
+          })()}
+
           {/* WZ-DESKTOP-WIZEPLAYS-PANEL-2026-07-11 :: record always visible; today's curated picks gated to All-Access (matches mobile). Reads wpToday (added prop) + wpRecord. */}
           <div className="panel wpsec">
             <div className="phead"><div className="t">WizePlays</div><span className="wpbadge">CURATED</span><span className="wplock">PICKS · ALL-ACCESS</span><div className="right" onClick={() => navigate("/expert-picks")} style={{ cursor: "pointer" }}>record always visible · picks unlock with All-Access &rarr;</div></div>
@@ -597,6 +642,25 @@ const TCSS = `
 .wpterm .idx .chg{font-family:var(--mono);font-size:11px;font-weight:600;margin-top:3px;color:var(--mut)}
 .wpterm .idx.teal .v{color:var(--up)}.wpterm .idx.green .v{color:var(--tx)}.wpterm .idx.amber .v{color:var(--amber)}.wpterm .idx.purple .v{color:var(--tx)}
 .wpterm .panel{border:1px solid var(--line);border-radius:14px;background:var(--panel);overflow:hidden}
+.wpterm .topplay{margin-top:14px}
+.wpterm .topplay.tp-play{border-color:var(--goldln);background:linear-gradient(180deg,var(--goldbg),var(--panel))}
+.wpterm .topplay .phead .t .tp-dot{width:7px;height:7px;border-radius:50%;background:var(--amber);box-shadow:0 0 8px rgba(201,168,106,.55);display:inline-block}
+.wpterm .topplay.tp-muted .phead .t{color:var(--mut)}
+.wpterm .topplay.tp-muted .phead .t .tp-dot{background:var(--mut2);box-shadow:none}
+.wpterm .tp-body{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;padding:16px 18px 8px}
+.wpterm .tp-pick{font-family:var(--disp);font-weight:800;font-size:clamp(20px,2vw,30px);color:var(--tx);line-height:1.05}
+.wpterm .tp-match{font-family:var(--mono);font-size:12px;color:var(--mut);margin-top:6px;letter-spacing:.3px}
+.wpterm .tp-win{text-align:right;flex:0 0 auto}
+.wpterm .tp-pct{font-family:var(--disp);font-weight:800;font-size:clamp(26px,2.6vw,40px);color:var(--amber);line-height:1}
+.wpterm .topplay.tp-muted .tp-pct{color:var(--mut)}
+.wpterm .tp-win .tp-k{font-family:var(--mono);font-size:9px;letter-spacing:1px;color:var(--mut2);margin-top:3px}
+.wpterm .tp-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);border-top:1px solid var(--line);margin-top:10px}
+.wpterm .tp-cell{background:var(--panel);padding:11px 14px;text-align:center}
+.wpterm .tp-cell .v{font-family:var(--mono);font-size:14px;font-weight:600;color:var(--tx)}
+.wpterm .tp-cell .v.up{color:var(--up)}.wpterm .tp-cell .v.dn{color:var(--dn)}
+.wpterm .tp-cell .k{font-family:var(--mono);font-size:9px;letter-spacing:.8px;color:var(--mut2);margin-top:4px}
+.wpterm .tp-foot{padding:10px 18px;border-top:1px solid var(--line);font-family:var(--mono);font-size:11px;color:var(--amber);cursor:pointer;text-align:right}
+.wpterm .tp-empty{padding:22px 18px;font-family:var(--mono);font-size:12.5px;color:var(--mut);text-align:center;line-height:1.5}
 .wpterm .phead{display:flex;align-items:center;gap:12px;padding:11px 15px;border-bottom:1px solid var(--line)}
 .wpterm .phead .t{font-family:var(--disp);font-weight:800;font-size:clamp(13px,1vw,15.5px);letter-spacing:.4px;display:flex;align-items:center;gap:8px}
 .wpterm .phead .seg{display:flex;gap:2px;background:#080b12;border:1px solid var(--line);border-radius:9px;padding:3px;margin-left:6px}
