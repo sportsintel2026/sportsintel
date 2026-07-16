@@ -37,6 +37,7 @@ export const edgesApi = {
   getNBAProps: () => apiFetch("/api/edges/nba/props"),
   getOddsHistory: () => apiFetch("/api/edges/odds-history/mlb"),
   getMarketRead: () => apiFetch("/api/edges/market-read/mlb"),
+  aiRead: (body) => apiFetch("/api/ai-read", { method: "POST", body: JSON.stringify(body) }), // WZ-FB-DETAIL-RICH-2026-07-16
   clearCache: () => apiFetch("/api/edges/cache", { method: "DELETE" }),
 };
 // NEW — player batting card (expand-on-tap under a prop player), read-only
