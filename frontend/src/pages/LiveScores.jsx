@@ -369,8 +369,8 @@ function ScoresTerminal({ activeLeague, meta, goSport, navigate, filter, setFilt
   loading, error, retry, refreshedAt, plan, news, fbOdds, fbBoard }) {
 
   // WZ-SPORT-TERMINAL-2026-07-02 :: sport-first sections, mirroring the mobile nav.
-  const [tab,setTab]=useState("edges");
-  useEffect(()=>{ setTab("edges"); },[activeLeague]); // WZ-DASH-PARITY-2026-07-02
+  const [tab,setTab]=useState("games"); // WZ-SCORES-GAMESTAB-2026-07-16 :: land on games, not the redundant edges board
+  useEffect(()=>{ setTab("games"); },[activeLeague]); // WZ-SCORES-GAMESTAB-2026-07-16
   const [ebMkt,setEbMkt]=useState("ml"); // WZ-WINNERS-V2-2026-07-04 :: Edge Board leads
   useEffect(()=>{ setEbMkt("ml"); },[activeLeague]);
   // WZ-ODDS-BOARD-2026-07-02 :: football odds are grouped into betting weeks
@@ -530,6 +530,15 @@ function ScoresTerminal({ activeLeague, meta, goSport, navigate, filter, setFilt
               </>}
             </div>
             </>); })()}
+
+          {tab==="games" && (()=>{ /* WZ-SCORES-GAMESTAB-2026-07-16 :: the GAMES tab had NO render block -> blank. cards go here (clickable via GameCard). */
+            return (<div className="gamestab">
+              {showLive && <Sec title="LIVE" color="var(--neg)" dot items={live}/>}
+              {showPre && <Sec title="UPCOMING" color="var(--gold)" items={upcoming}/>}
+              {showFin && <Sec title="FINAL" color="var(--mut)" items={fin}/>}
+              {nothing && <div className="empty">No games on the slate right now.</div>}
+            </div>);
+          })()}
 
           {tab==="odds" && (()=>{ /* WZ-ODDS-BOARD-2026-07-02 :: real odds board */
             const fmtDay=(iso)=>{ const d=new Date(iso); return d.toLocaleDateString("en-US",{weekday:"short",month:"numeric",day:"numeric",timeZone:"America/New_York"}); };
