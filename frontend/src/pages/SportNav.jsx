@@ -114,6 +114,22 @@ function useShell() {
 const sectionOn = (s, pathname) =>
   s.match.some((p) => pathname === p || pathname.startsWith(p + "/"));
 
+// resolveSport :: WZ-SPORTNAV-GAMEROUTE-2026-07-16
+// ONE source of truth for "which sport is active", shared by the bottom sport
+// bar AND the top section tabs. Reads ?sport= first, then falls back to the
+// pathname so routes that carry no query string - the /game/<sport>/:id detail
+// pages - still light up their real sport instead of defaulting to MLB.
+function resolveSport(pathname, params) {
+  let s = (params.get("sport") || "mlb").toLowerCase();
+  if (pathname.startsWith("/nhl-games") || pathname.startsWith("/game/nhl")) s = "nhl";
+  else if (pathname.startsWith("/nfl-games") || pathname.startsWith("/game/nfl")) s = "nfl";
+  else if (pathname.startsWith("/cfb-games") || pathname.startsWith("/game/cfb")) s = "cfb";
+  else if (pathname.startsWith("/nba") || pathname.startsWith("/game/nba")) s = "nba";
+  else if (pathname.startsWith("/ufc")) s = "ufc"; // WZ-UFC-NAV-2026-07-09
+  else if (pathname.startsWith("/game/mlb")) s = "mlb";
+  return s;
+}
+
 // ---- top header: brand row (clone of .hd) + section tabs ----
 export function SportTabsHeader() {
   const navigate = useNavigate();
@@ -126,7 +142,7 @@ export function SportTabsHeader() {
   const sectionsToShow = isUFC ? UFC_SECTIONS : SECTIONS;
   const goSection = (s) => {
     if (sectionOn(s, pathname)) return;
-    const sport = (params.get("sport") || "mlb").toLowerCase();
+    const sport = resolveSport(pathname, params); // WZ-SPORTNAV-GAMEROUTE-2026-07-16
     const to = routeFor(s, sport);
     navigate(to + (sport !== "mlb" ? `?sport=${sport}` : ""));
   };
@@ -172,12 +188,7 @@ export default function SportBar() {
   if (!visible) return null;
 
   const params = new URLSearchParams(search);
-  let curSport = (params.get("sport") || "mlb").toLowerCase();
-  if (pathname.startsWith("/nhl-games")) curSport = "nhl";
-  else if (pathname.startsWith("/nba")) curSport = "nba";
-  else if (pathname.startsWith("/nfl-games")) curSport = "nfl";
-  else if (pathname.startsWith("/cfb-games")) curSport = "cfb";
-  else if (pathname.startsWith("/ufc")) curSport = "ufc"; // WZ-UFC-NAV-2026-07-09
+  const curSport = resolveSport(pathname, params); // WZ-SPORTNAV-GAMEROUTE-2026-07-16
 
   const pickSport = (key) => {
     if (key === curSport) return;
