@@ -152,6 +152,7 @@ export default function HomePage(){
   const [oddsHist,setOddsHist]=useState(null);
   const [marketRead,setMarketRead]=useState(null);
   const [sharpEdge,setSharpEdge]=useState(null); // WZ-SHARPEDGE-2026-07-13 :: model-vs-Pinnacle rows from /api/sharp-edge (cached snapshot)
+  const [matchupIntel,setMatchupIntel]=useState([]); // WZ-MATCHUP-INTEL-2026-07-15 :: model's own BvP news (cached /api/matchups/mlb/intel)
   const [newsFeed,setNewsFeed]=useState([]); // WZ-LIVEWIRE-2026-06-27 :: MLB live wire (news + injuries)
   const prev=useRef({}); const [flash,setFlash]=useState({});
   const hasFull=plan.isAdmin===true||plan.tier==="pro"||plan.tier==="elite"||user?.email==="r7002g@gmail.com";
@@ -206,6 +207,12 @@ export default function HomePage(){
   },[sport]);
   // WZ-LIVEWIRE-2026-06-27 :: live wire — pull news feed (headlines + injury wire) for the ticker.
   // WZ-EDGETICKER-NEWS-2026-07-05 :: extended MLB-only -> also NFL/CFB, so the Edges-board ticker carries league news, not just scores.
+  // WZ-MATCHUP-INTEL-2026-07-15 :: the model's own news -- one standout batter-vs-pitcher angle per
+  // game, from the cached /api/matchups/mlb/intel snapshot. MLB-gated, no polling, fail-safe.
+  useEffect(()=>{ if(sport!=="mlb"){ setMatchupIntel([]); return; } let dead=false;
+    (async()=>{ try{ const r=await fetch(`${PERF_API_BASE}/api/matchups/mlb/intel`); const d=await r.json(); if(!dead) setMatchupIntel(Array.isArray(d?.items)?d.items:[]); }catch(_){ if(!dead) setMatchupIntel([]); } })();
+    return ()=>{dead=true;};
+  },[sport]);
   useEffect(()=>{ if(sport!=="mlb"&&sport!=="nfl"&&sport!=="cfb"){ setNewsFeed([]); return; } let t,dead=false; const pull=async()=>{ try{ const d=await newsApi.getFeed(sport); if(!dead) setNewsFeed(Array.isArray(d?.items)?d.items:[]); }catch(_){ if(!dead) setNewsFeed([]); } t=setTimeout(pull,300000); }; pull(); return ()=>{dead=true;clearTimeout(t);}; },[sport]);
   // Tracked record (ROI / win rate / CLV) for the stats row, per current sport.
   // Honest: only real graded numbers; falls back to em-dashes if a league has none yet.
@@ -456,6 +463,7 @@ export default function HomePage(){
     nf.filter(n=>!n.scratch&&(n.status==="injury"||n.type==="injury")).forEach(n=>{ const g=nameGame[norm(n.playerName)]; if(!g) return; items.push({sev:1,c:"#E89B4F",tag:"INJURY",tx:capWire(n.playerName?(n.playerName+" \u2014 "+wireBlurb(n)):(n.headline||"Injury"),50),rd:"Status change \u2014 check that number before you bet it.",gid:g.id,gl:g.label}); });
     (movers||[]).filter(m=>m._delta!=null&&Math.abs(m._delta)>=10).forEach(m=>{ const gl=glById[m.gameId]; if(!gl) return; const inbound=(m._delta||0)<0; items.push({sev:2,c:inbound?"#3FCB91":"#5da9e8",tag:"LINE MOVE",tx:edgeLabel(m)+"  "+formatOdds(m._open)+" \u2192 "+formatOdds(m._now),rd:inbound?"Money coming in \u2014 the market is backing this side.":"Number drifting \u2014 the market is fading this side.",gid:m.gameId,gl}); });
     if(sport==="mlb") (games||[]).forEach(g=>{ const w=g.weather||{}; if(w.indoor) return; const gl=glById[g.id]; const wOut=w.windEffect==="out"&&(w.windMph||0)>=12; const wIn=w.windEffect==="in"&&(w.windMph||0)>=12; const hot=(w.tempF||0)>=92; const cold=w.tempF!=null&&w.tempF<=46; const wx=w.summary||([w.tempF!=null?Math.round(w.tempF)+"\u00b0F":null,w.windMph?("wind "+w.windMph+"mph"):null].filter(Boolean).join(" \u00b7 ")); if(wOut||hot) items.push({sev:3,c:"#f3b94f",tag:"WEATHER",tx:capWire(wx||"Warm air",50),rd:"Air is carrying \u2014 slight lean to the over.",gid:g.id,gl}); else if(wIn||cold) items.push({sev:3,c:"#5da9e8",tag:"WEATHER",tx:capWire(wx||"Cool air",50),rd:"Air knocking it down \u2014 slight lean to the under.",gid:g.id,gl}); else if(w.isRaining) items.push({sev:3,c:"#5da9e8",tag:"WEATHER",tx:"Rain risk",rd:"Delay/postpone watch \u2014 totals get volatile.",gid:g.id,gl}); });
+    if(sport==="mlb") (matchupIntel||[]).forEach(mi=>{ const gl=glById[mi.gameId]||mi.game; items.push({sev:1.5,c:"#b98bd9",tag:"OUR READ",tx:capWire(mi.line,74),rd:mi.hook,gid:String(mi.gameId),gl}); });
     const by={}; items.forEach(it=>{ (by[it.gid]=by[it.gid]||{gl:it.gl,items:[]}).items.push(it); });
     return Object.keys(by).map(k=>{ const grp=by[k]; grp.items.sort((a,b)=>a.sev-b.sev); grp.minSev=grp.items[0].sev; grp.items=grp.items.slice(0,3); return grp; }).sort((a,b)=>(a.minSev-b.minSev)||(b.items.length-a.items.length)).slice(0,5);
   })();
