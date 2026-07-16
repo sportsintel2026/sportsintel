@@ -383,7 +383,32 @@ export default function HomePage(){
   const tapeUpcoming=games.filter(g=>g.status!=="final"&&g.time).slice(0,10).map(g=>({ id:g.id, a:g.awayAbbr||shortTeam(g.away||""), h:g.homeAbbr||shortTeam(g.home||""), as:null, hs:null, state:fmtTime(g.time), live:false }));
   const scoreTape=(tapeLive.length||tapeFinal.length)?[...tapeLive,...tapeFinal]:tapeUpcoming;
 
-  if(isDesktop) return <HomeDesktop edges={edges} games={games} movers={movers} live={live||[]} abbrById={abbrById} topProps={topProps} propList={propList} propsByType={propsByType} hero={hero} hasFull={hasFull} planLoaded={planLoaded} lineSeries={lineSeries} moveByPick={moveByPick} wpRecord={wpRecord} wpToday={wpToday} navigate={navigate} plan={plan} sport={sport} setSport={(k)=>{setSport(k);setBoard("ml");}} marketsLive={marketsLive} anyLive={anyLive} marketRead={marketRead} perf={perf} sharpRows={sharpRows} />;
+  // WZ-GAMEINTEL-2026-07-15 :: GAME INTEL -- per-GAME clustered live list at the bottom of MARKET &
+  // INTEL. Only game-changing events, each filed under its game so the list stays short (per game,
+  // NOT per team). Scoped to the active sport tab (MLB now; NFL/CFB share the news+movers path); UFC
+  // excluded (its own intel); sports without data stay empty. No cross-sport overlap. Static list,
+  // not a ticker. News items arrive with game:null, so scratches/injuries are matched to a slate game
+  // by player name off the lineups/pitchers on the page; unmatched (not tonight's slate) are dropped.
+  const intelGroups = !(sport==="mlb"||sport==="nfl"||sport==="cfb") ? [] : (()=>{
+    const norm=(s)=>String(s||"").toLowerCase().replace(/[^a-z ]/g," ").replace(/\s+/g," ").trim();
+    const nameGame={}, glById={};
+    (games||[]).forEach(g=>{ const ab=abbrById[g.id]; const label=ab?(ab.a+" @ "+ab.h):((g.away||"")+" @ "+(g.home||"")); glById[g.id]=label;
+      const put=(nm)=>{ const k=norm(nm); if(k) nameGame[k]={id:g.id,label}; };
+      const lu=g.lineups||{}; ["away","home"].forEach(sd=>{ ((lu[sd]&&lu[sd].order)||[]).forEach(b=>put(b.name)); });
+      const pt=g.pitchers||{}; ["away","home"].forEach(sd=>{ if(pt[sd]&&pt[sd].name) put(pt[sd].name); });
+      if(g.awayProbable&&g.awayProbable.name) put(g.awayProbable.name); if(g.homeProbable&&g.homeProbable.name) put(g.homeProbable.name);
+    });
+    const items=[]; const nf=newsFeed||[];
+    if(sport==="mlb") nf.filter(n=>n.scratch).forEach(n=>{ const g=nameGame[norm(n.playerName)]; if(!g) return; items.push({sev:0,c:"#ff5d4d",tag:"SCRATCH",tx:capWire(n.playerName||"Late scratch",44),rd:"Out of tonight\u2019s lineup \u2014 offense and the total tick down.",gid:g.id,gl:g.label}); });
+    nf.filter(n=>!n.scratch&&(n.status==="injury"||n.type==="injury")).forEach(n=>{ const g=nameGame[norm(n.playerName)]; if(!g) return; items.push({sev:1,c:"#E89B4F",tag:"INJURY",tx:capWire(n.playerName?(n.playerName+" \u2014 "+wireBlurb(n)):(n.headline||"Injury"),50),rd:"Status change \u2014 check that number before you bet it.",gid:g.id,gl:g.label}); });
+    (movers||[]).filter(m=>m._delta!=null&&Math.abs(m._delta)>=10).forEach(m=>{ const gl=glById[m.gameId]; if(!gl) return; const inbound=(m._delta||0)<0; items.push({sev:2,c:inbound?"#3FCB91":"#5da9e8",tag:"LINE MOVE",tx:edgeLabel(m)+"  "+formatOdds(m._open)+" \u2192 "+formatOdds(m._now),rd:inbound?"Money coming in \u2014 the market is backing this side.":"Number drifting \u2014 the market is fading this side.",gid:m.gameId,gl}); });
+    if(sport==="mlb") (games||[]).forEach(g=>{ const w=g.weather||{}; if(w.indoor) return; const gl=glById[g.id]; const wOut=w.windEffect==="out"&&(w.windMph||0)>=12; const wIn=w.windEffect==="in"&&(w.windMph||0)>=12; const hot=(w.tempF||0)>=92; const cold=w.tempF!=null&&w.tempF<=46; const wx=w.summary||([w.tempF!=null?Math.round(w.tempF)+"\u00b0F":null,w.windMph?("wind "+w.windMph+"mph"):null].filter(Boolean).join(" \u00b7 ")); if(wOut||hot) items.push({sev:3,c:"#f3b94f",tag:"WEATHER",tx:capWire(wx||"Warm air",50),rd:"Air is carrying \u2014 slight lean to the over.",gid:g.id,gl}); else if(wIn||cold) items.push({sev:3,c:"#5da9e8",tag:"WEATHER",tx:capWire(wx||"Cool air",50),rd:"Air knocking it down \u2014 slight lean to the under.",gid:g.id,gl}); else if(w.isRaining) items.push({sev:3,c:"#5da9e8",tag:"WEATHER",tx:"Rain risk",rd:"Delay/postpone watch \u2014 totals get volatile.",gid:g.id,gl}); });
+    if(sport==="mlb") (matchupIntel||[]).forEach(mi=>{ const gl=glById[mi.gameId]||mi.game; items.push({sev:1.5,c:"#b98bd9",tag:"OUR READ",tx:capWire(mi.line,74),rd:mi.hook,gid:String(mi.gameId),gl}); });
+    const by={}; items.forEach(it=>{ (by[it.gid]=by[it.gid]||{gl:it.gl,items:[]}).items.push(it); });
+    return Object.keys(by).map(k=>{ const grp=by[k]; grp.items.sort((a,b)=>a.sev-b.sev); grp.minSev=grp.items[0].sev; grp.items=grp.items.slice(0,3); return grp; }).sort((a,b)=>(a.minSev-b.minSev)||(b.items.length-a.items.length)).slice(0,5);
+  })();
+
+  if(isDesktop) return <HomeDesktop edges={edges} games={games} movers={movers} live={live||[]} abbrById={abbrById} topProps={topProps} propList={propList} propsByType={propsByType} hero={hero} hasFull={hasFull} planLoaded={planLoaded} lineSeries={lineSeries} moveByPick={moveByPick} wpRecord={wpRecord} wpToday={wpToday} navigate={navigate} plan={plan} sport={sport} setSport={(k)=>{setSport(k);setBoard("ml");}} marketsLive={marketsLive} anyLive={anyLive} marketRead={marketRead} perf={perf} sharpRows={sharpRows} intelGroups={intelGroups} />;
 
   // ============ ADAPTERS: real data -> v11 mock shapes ============
   const edgeNum=(x)=> edgePct(x,sport); // WZ-EDGE-UNIT-2026-07-14 :: delegate to the single edge-unit normalizer
@@ -443,30 +468,7 @@ export default function HomePage(){
   const evItems = oneSidePerGame(allAdj).filter(x=>(x.edge??0)>0).sort((a,b)=>(b.edge||0)-(a.edge||0)).map(toBoard).filter(h=>!wvKeys.has(h.k));
   const heroItems = [...wvItems, ...evItems].slice(0,4);
   const moverItems = movers.map((m)=>{return {p:edgeLabel(m),logo:edgeTeam(m)||(abbrById[m.gameId]?abbrById[m.gameId].h:""),g:(abbrById[m.gameId]?abbrById[m.gameId].a+" @ "+abbrById[m.gameId].h:m.matchup),mv:(m._open!=null&&m._now!=null&&m._delta!=null)?[formatOdds(m._open),formatOdds(m._now),(m._delta>0?"up":m._delta<0?"dn":"")]:null,odds:formatOdds(m.odds),model:m.modelProb!=null?Math.round(m.modelProb*100):null,delta:m._delta};});
-  // WZ-GAMEINTEL-2026-07-15 :: GAME INTEL -- per-GAME clustered live list at the bottom of MARKET &
-  // INTEL. Only game-changing events, each filed under its game so the list stays short (per game,
-  // NOT per team). Scoped to the active sport tab (MLB now; NFL/CFB share the news+movers path); UFC
-  // excluded (its own intel); sports without data stay empty. No cross-sport overlap. Static list,
-  // not a ticker. News items arrive with game:null, so scratches/injuries are matched to a slate game
-  // by player name off the lineups/pitchers on the page; unmatched (not tonight's slate) are dropped.
-  const intelGroups = !(sport==="mlb"||sport==="nfl"||sport==="cfb") ? [] : (()=>{
-    const norm=(s)=>String(s||"").toLowerCase().replace(/[^a-z ]/g," ").replace(/\s+/g," ").trim();
-    const nameGame={}, glById={};
-    (games||[]).forEach(g=>{ const ab=abbrById[g.id]; const label=ab?(ab.a+" @ "+ab.h):((g.away||"")+" @ "+(g.home||"")); glById[g.id]=label;
-      const put=(nm)=>{ const k=norm(nm); if(k) nameGame[k]={id:g.id,label}; };
-      const lu=g.lineups||{}; ["away","home"].forEach(sd=>{ ((lu[sd]&&lu[sd].order)||[]).forEach(b=>put(b.name)); });
-      const pt=g.pitchers||{}; ["away","home"].forEach(sd=>{ if(pt[sd]&&pt[sd].name) put(pt[sd].name); });
-      if(g.awayProbable&&g.awayProbable.name) put(g.awayProbable.name); if(g.homeProbable&&g.homeProbable.name) put(g.homeProbable.name);
-    });
-    const items=[]; const nf=newsFeed||[];
-    if(sport==="mlb") nf.filter(n=>n.scratch).forEach(n=>{ const g=nameGame[norm(n.playerName)]; if(!g) return; items.push({sev:0,c:"#ff5d4d",tag:"SCRATCH",tx:capWire(n.playerName||"Late scratch",44),rd:"Out of tonight\u2019s lineup \u2014 offense and the total tick down.",gid:g.id,gl:g.label}); });
-    nf.filter(n=>!n.scratch&&(n.status==="injury"||n.type==="injury")).forEach(n=>{ const g=nameGame[norm(n.playerName)]; if(!g) return; items.push({sev:1,c:"#E89B4F",tag:"INJURY",tx:capWire(n.playerName?(n.playerName+" \u2014 "+wireBlurb(n)):(n.headline||"Injury"),50),rd:"Status change \u2014 check that number before you bet it.",gid:g.id,gl:g.label}); });
-    (movers||[]).filter(m=>m._delta!=null&&Math.abs(m._delta)>=10).forEach(m=>{ const gl=glById[m.gameId]; if(!gl) return; const inbound=(m._delta||0)<0; items.push({sev:2,c:inbound?"#3FCB91":"#5da9e8",tag:"LINE MOVE",tx:edgeLabel(m)+"  "+formatOdds(m._open)+" \u2192 "+formatOdds(m._now),rd:inbound?"Money coming in \u2014 the market is backing this side.":"Number drifting \u2014 the market is fading this side.",gid:m.gameId,gl}); });
-    if(sport==="mlb") (games||[]).forEach(g=>{ const w=g.weather||{}; if(w.indoor) return; const gl=glById[g.id]; const wOut=w.windEffect==="out"&&(w.windMph||0)>=12; const wIn=w.windEffect==="in"&&(w.windMph||0)>=12; const hot=(w.tempF||0)>=92; const cold=w.tempF!=null&&w.tempF<=46; const wx=w.summary||([w.tempF!=null?Math.round(w.tempF)+"\u00b0F":null,w.windMph?("wind "+w.windMph+"mph"):null].filter(Boolean).join(" \u00b7 ")); if(wOut||hot) items.push({sev:3,c:"#f3b94f",tag:"WEATHER",tx:capWire(wx||"Warm air",50),rd:"Air is carrying \u2014 slight lean to the over.",gid:g.id,gl}); else if(wIn||cold) items.push({sev:3,c:"#5da9e8",tag:"WEATHER",tx:capWire(wx||"Cool air",50),rd:"Air knocking it down \u2014 slight lean to the under.",gid:g.id,gl}); else if(w.isRaining) items.push({sev:3,c:"#5da9e8",tag:"WEATHER",tx:"Rain risk",rd:"Delay/postpone watch \u2014 totals get volatile.",gid:g.id,gl}); });
-    if(sport==="mlb") (matchupIntel||[]).forEach(mi=>{ const gl=glById[mi.gameId]||mi.game; items.push({sev:1.5,c:"#b98bd9",tag:"OUR READ",tx:capWire(mi.line,74),rd:mi.hook,gid:String(mi.gameId),gl}); });
-    const by={}; items.forEach(it=>{ (by[it.gid]=by[it.gid]||{gl:it.gl,items:[]}).items.push(it); });
-    return Object.keys(by).map(k=>{ const grp=by[k]; grp.items.sort((a,b)=>a.sev-b.sev); grp.minSev=grp.items[0].sev; grp.items=grp.items.slice(0,3); return grp; }).sort((a,b)=>(a.minSev-b.minSev)||(b.items.length-a.items.length)).slice(0,5);
-  })();
+
   // WZ-LIVETICKER-2026-06-27 :: ticker = live scores (the backbone) with injury + late-scratch
   // alerts woven in. MLB pulls injuries/scratches from the RotoWire wire; other sports show
   // plain scores. A late scratch (player pulled from tonight's lineup) is the more urgent
