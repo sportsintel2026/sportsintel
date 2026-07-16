@@ -331,7 +331,7 @@ export default function HomeDesktop(props) {
                         const ab = abbrById[x.gameId] || {}; const a = x._a || ab.a || x.teamAbbr || shortTeam(x.matchup); const h = x._h || ab.h || "";
                         const ep = edgePct(x, sport); const pos = ep >= 0; const hasE = x.edge != null;
                         return (
-                          <tr key={x.gameId + x.side + i} className="click" onClick={() => navigate(`/game/${lg}/${x.gameId}`)}>
+                          <tr key={x.gameId + x.side + i} className={(lg === "mlb" || lg === "nba") ? "click" : ""} onClick={() => { /* WZ-GAMEDETAIL-GUARD-2026-07-15 :: only mlb/nba have a game-detail route; others fell through to the catch-all -> landing */ if (lg === "mlb" || lg === "nba") navigate(`/game/${lg}/${x.gameId}`); }}>
                             <td><div className="matchup"><span className="logos"><TLogo ab={a} lg={lg} />{h && <TLogo ab={h} lg={lg} />}</span>
                               <span className="mu"><span className="mua">{a}{h ? <span className="at"> @ </span> : ""}{h}</span></span></div></td>
                             <td><div className="pick" dangerouslySetInnerHTML={{ __html: sideTag(x) + edgeLabel(x) }} /></td>
