@@ -119,6 +119,89 @@ async function rosterVsPitcher(teamId, pitcherId) {
   return results;
 }
 
+// ---- WZ-MATCHUP-INTEL-2026-07-15 :: slate-wide "model's own news" (batter-vs-pitcher angles) ----
+// For tonight's MLB slate, find the ONE standout BvP angle per game (the one that swings it) and
+// phrase it as a short line. Cached IN-MEMORY (career BvP stats are static for the day; only the
+// day's probable pitchers change), warmed by a cron in server.js. Reuses rosterVsPitcher above.
+// Own concern, fail-safe: any error just leaves the intel empty and the card falls back cleanly.
+let _intelCache = { date: null, items: [], computedAt: null, building: false };
+
+function _pickAngle(batters, pitcherName) {
+  let best = null, bestScore = -1;
+  for (const b of (batters || [])) {
+    const ab = b.atBats || 0, hr = b.homeRuns || 0, avg = b.avg || 0, ops = b.ops || 0, pa = b.plateAppearances || 0;
+    if (ab < 6) continue;                                   // need a real sample, not a 1-for-2
+    const notable = hr >= 2 || (avg >= 0.400 && ab >= 6) || (ops >= 1.100 && ab >= 8);
+    if (!notable) continue;
+    const score = hr * 3 + ops * 1.5 + avg * 2 + Math.min(pa, 40) * 0.02;
+    if (score > bestScore) { bestScore = score; best = { ...b, pitcherName, _score: score }; }
+  }
+  return best;
+}
+
+function _angleText(a) {
+  const ab = a.atBats, h = a.hits, hr = a.homeRuns;
+  const avg = (a.avg || 0).toFixed(3).replace(/^0/, "");
+  const line = `${a.batterName} is ${h}-for-${ab}${hr ? ` with ${hr} HR` : ""} off ${a.pitcherName} lifetime (${avg})`;
+  let hook;
+  if (hr >= 3) hook = "Owns this arm \u2014 a real threat to go deep again tonight.";
+  else if (hr >= 2) hook = "Has taken this pitcher deep before \u2014 power angle to watch.";
+  else if ((a.avg || 0) >= 0.400) hook = "Squares this pitcher up every time \u2014 big edge in the box tonight.";
+  else hook = "History says this is a favorable matchup in this spot.";
+  return { line, hook };
+}
+
+async function computeSlateBvpIntel() {
+  const today = getEasternDate(0);
+  let games;
+  try { games = await getScheduleForDate(today); } catch (e) { return { date: today, items: [] }; }
+  const items = [];
+  for (const game of (games || [])) {
+    try {
+      const awayP = game.awayProbable, homeP = game.homeProbable;
+      if (!awayP && !homeP) continue;
+      const [awayVsHome, homeVsAway] = await Promise.all([
+        homeP ? rosterVsPitcher(game.awayId, homeP.id) : Promise.resolve([]),
+        awayP ? rosterVsPitcher(game.homeId, awayP.id) : Promise.resolve([]),
+      ]);
+      const candA = homeP ? _pickAngle(awayVsHome, homeP.name) : null;   // away hitter vs home starter
+      const candB = awayP ? _pickAngle(homeVsAway, awayP.name) : null;   // home hitter vs away starter
+      const best = ((candA && candA._score) || -1) >= ((candB && candB._score) || -1) ? candA : candB;
+      if (!best) continue;
+      const { line, hook } = _angleText(best);
+      items.push({ gameId: String(game.id), game: `${game.awayAbbr} @ ${game.homeAbbr}`, batter: best.batterName, line, hook });
+    } catch (e) { /* skip this game, fail-safe */ }
+  }
+  return { date: today, items };
+}
+
+async function warmMatchupIntel() {
+  if (_intelCache.building) return _intelCache;
+  _intelCache.building = true;
+  try {
+    const out = await computeSlateBvpIntel();
+    _intelCache = { date: out.date, items: out.items, computedAt: new Date().toISOString(), building: false };
+    console.log(`[MatchupIntel] warmed ${out.items.length} angles for ${out.date}`);
+  } catch (e) {
+    _intelCache.building = false;
+    console.error("[MatchupIntel] warm failed:", e.message);
+  }
+  return _intelCache;
+}
+
+// GET /api/matchups/mlb/intel -- cached slate BvP angles ("our read"). MUST be declared before the
+// /mlb/:gameId route so "intel" isn't captured as a gameId. Read-only, fail-safe, ~0 cost per hit.
+router.get("/mlb/intel", async (req, res) => {
+  try {
+    const today = getEasternDate(0);
+    if (_intelCache.date !== today && !_intelCache.building) warmMatchupIntel().catch(() => {});
+    const fresh = _intelCache.date === today;
+    res.json({ ok: true, date: _intelCache.date, items: fresh ? _intelCache.items : [], computedAt: _intelCache.computedAt, warming: !fresh });
+  } catch (e) {
+    res.json({ ok: false, items: [] });
+  }
+});
+
 // GET /api/matchups/mlb/:gameId
 router.get("/mlb/:gameId", async (req, res) => {
   const { gameId } = req.params;
@@ -267,4 +350,5 @@ router.get("/mlb/:gameId/h2h", async (req, res) => {
   }
 });
 
+router.warmMatchupIntel = warmMatchupIntel;
 module.exports = router;
