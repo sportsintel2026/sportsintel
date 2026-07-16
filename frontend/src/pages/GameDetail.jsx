@@ -658,7 +658,7 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .sbody{padding:13px 14px 80px}
 /* WZ-GAMEDETAIL-DESKTOP-2026-07-16 :: proper desktop layout -- hide the mobile bottom nav, widen+center the sheet, clear back button */
 @media(min-width:1024px){
-  .app{max-width:660px;padding-bottom:24px}
+  .app{max-width:900px;padding-bottom:24px}
   .nav{display:none}
   .sbody{padding:22px 26px 48px}
   .shead{padding:16px 24px}
