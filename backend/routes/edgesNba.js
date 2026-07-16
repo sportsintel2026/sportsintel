@@ -11,6 +11,7 @@
 // Mounted at /api/edges/nba (before the /api/edges MLB router) in server.js.
 const express = require("express");
 const router = express.Router();
+const { gateModelData } = require("../middleware/accessGate"); // WZ-LOCK-ROUND2-2026-07-15
 const { generateNbaPredictions } = require("../services/nbaService");
 const { getNbaPropProjections } = require("../services/nbaProjectionService");
 
@@ -168,7 +169,7 @@ function buildNbaEdgesPayload(predictions) {
 }
 
 // GET /api/edges/nba  (?date=YYYY-MM-DD optional)
-router.get("/", async (req, res) => {
+router.get("/", gateModelData, async (req, res) => {
   try {
     const opts = req.query.date ? { date: req.query.date } : {};
     const predictions = await generateNbaPredictions(opts);
@@ -186,7 +187,7 @@ router.get("/", async (req, res) => {
 let _propsCache = { t: 0, data: null };
 const PROPS_TTL = 3 * 60 * 1000;
 const MKTS = ["points", "rebounds", "assists", "threes"];
-router.get("/props", async (req, res) => {
+router.get("/props", gateModelData, async (req, res) => {
   try {
     if (!req.query.fresh && _propsCache.data && Date.now() - _propsCache.t < PROPS_TTL) {
       return res.json(_propsCache.data);
