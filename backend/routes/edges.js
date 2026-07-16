@@ -9,6 +9,76 @@
 //   Caches results in memory for 15 minutes (keyed by the date actually served).
 const express = require("express");
 const router = express.Router();
+// ── WZ-LOCK-PICKS-2026-07-15 :: server-side access gate for the model's picks ─────────────────
+// The board's pick data must reach ONLY full-access users (paid, comped, admin, owner). The
+// frontend already shows a paywall <Gate> to everyone else, but the raw JSON was still shipped to
+// any browser. This gate redacts the model's picks/edges from the response for non-full requests,
+// server-side, so nothing changes for real users and the data stops leaking.
+//
+// SAFETY -- never lock out a paying/comped member:
+//  * Full-access test MIRRORS the frontend hasFull EXACTLY (isAdmin || tier pro/elite || owner
+//    email) against the same Supabase tables, so anyone who sees picks in the UI passes here too.
+//  * The internal recompute cron self-calls over loopback (127.0.0.1) with no token -> full, so
+//    cache warming never breaks. (The cache is also filled with the FULL result before res.json,
+//    so redaction is per-request and can never poison the cache.)
+//  * A transient Supabase error on an AUTHENTICATED request fails OPEN (full) -- a blip can never
+//    downgrade a real payer. No/invalid token -> teaser (redacted).
+//  * If the Supabase client is unavailable, the gate disables itself (everyone full) rather than
+//    risk locking anyone out.
+const { createClient: _wzCreateClient } = require("@supabase/supabase-js");
+const _wzGateSb = (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY)
+  ? _wzCreateClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY) : null;
+const WZ_OWNER_EMAIL = "r7002g@gmail.com";
+function _wzIsLoopback(req) {
+  const ra = (req.socket && req.socket.remoteAddress) || "";
+  return ra === "127.0.0.1" || ra === "::1" || ra === "::ffff:127.0.0.1";
+}
+async function wzResolveFullAccess(req) {
+  if (!_wzGateSb) return true;                 // gate can't function -> fail OPEN (never lock out)
+  if (_wzIsLoopback(req)) return true;         // internal recompute cron
+  const h = req.headers.authorization || "";
+  if (!h.startsWith("Bearer ")) return false;  // anonymous -> teaser
+  let user;
+  try {
+    const r = await _wzGateSb.auth.getUser(h.slice(7));
+    user = r.data && r.data.user;
+    if (r.error || !user) return false;        // invalid/expired token -> teaser
+  } catch (e) { return false; }
+  if (user.email === WZ_OWNER_EMAIL) return true;
+  try {
+    const [subR, profR] = await Promise.all([
+      _wzGateSb.from("subscriptions").select("tier").eq("user_id", user.id).single(),
+      _wzGateSb.from("profiles").select("is_admin").eq("id", user.id).single(),
+    ]);
+    if (profR.data && profR.data.is_admin === true) return true;
+    let tier = subR.data && subR.data.tier;
+    if (typeof tier === "string") tier = tier.trim().toLowerCase();
+    return tier === "pro" || tier === "elite";   // mirrors frontend hasFull exactly (no status check)
+  } catch (e) {
+    return true;                                // authenticated but lookup blipped -> fail OPEN
+  }
+}
+// Redact the model's picks/edges from a board payload, leaving the public game shell intact so the
+// page never breaks (scores/ticker still work) and the paywall <Gate> shows as it already does.
+function wzTeaserizeBoard(body) {
+  if (!body || typeof body !== "object") return body;
+  const EDGE_ARRAYS = ["moneylineEdges","totalsEdges","runLineEdges","spreadEdges","hrPropEdges","kPropEdges","hitsPropEdges","tbPropEdges","doublesPropEdges","triplesPropEdges"];
+  const out = { ...body, teaser: true };
+  for (const k of EDGE_ARRAYS) if (Array.isArray(out[k])) out[k] = [];
+  if (Array.isArray(out.games)) {
+    out.games = out.games.map((g) => (g && typeof g === "object") ? { ...g, moneyline: null, totals: null, runLine: null } : g);
+  }
+  return out;
+}
+// Middleware: full-access -> untouched; else wrap res.json so EVERY exit path (cache/empty/main)
+// returns the redacted teaser. Applied to the pick endpoints below.
+function gatePicks(req, res, next) {
+  wzResolveFullAccess(req).then((full) => {
+    if (!full) { const _oj = res.json.bind(res); res.json = (b) => _oj(wzTeaserizeBoard(b)); }
+    next();
+  }).catch(() => next());
+}
+
 const {
   getEasternDate,
   getScheduleForDate,
@@ -419,7 +489,7 @@ function buildTightLine(gameEdges, slateDate, opts) {
   };
 }
 
-router.get("/mlb", async (req, res) => {
+router.get("/mlb", gatePicks, async (req, res) => {
   let weBuild = false;
   try {
     // WZ-TOMORROW-PREVIEW-2026-07-07 :: an explicit ?date=YYYY-MM-DD makes this a DISPLAY-ONLY
@@ -1599,7 +1669,7 @@ router.get("/nflratings", async (req, res) => {
 // meaningful edge. This is the data the NFL dashboard will render (F4b), behind a
 // clear "preseason / uncalibrated" label. Read-only.
 //   /api/edges/nfl[?season=2025]
-router.get("/nfl", async (req, res) => {
+router.get("/nfl", gatePicks, async (req, res) => {
   try {
     // No ?season= -> null, so runNFLSlate uses the rolling 2025->2026 blend. An
     // explicit ?season=YYYY still forces a single pure season (for probes/backfill).
@@ -1744,7 +1814,7 @@ router.get("/nfl", async (req, res) => {
 // "IN TRAINING" banner. teamMatch coverage is EXPECTED below 100% (FBS-vs-FCS games
 // keep the FCS side market-only). Read-only.
 //   /api/edges/cfb[?season=2025][&weeks=1]
-router.get("/cfb", async (req, res) => {
+router.get("/cfb", gatePicks, async (req, res) => {
   try {
     // No ?season= -> null, so runCFBSlate uses the rolling 2025->2026 blend. An
     // explicit ?season=YYYY still forces a single pure season (for probes/backfill).
