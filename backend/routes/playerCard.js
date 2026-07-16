@@ -9,6 +9,7 @@
 // card never reaches into the model's internals, so it can't drift or destabilize it.
 const express = require("express");
 const router = express.Router();
+const { gateModelData } = require("../middleware/accessGate"); // WZ-LOCK-ROUND2-2026-07-15
 const axios = require("axios");
 const { createClient } = require("@supabase/supabase-js");
 
@@ -138,7 +139,7 @@ async function resolveMatchup(game, teamAbbr) {
 }
 
 // GET /api/player-card/mlb/:playerId?gameId=&team=&name=
-router.get("/mlb/:playerId", async (req, res) => {
+router.get("/mlb/:playerId", gateModelData, async (req, res) => {
   const playerId = String(req.params.playerId || "").trim();
   if (!/^\d+$/.test(playerId)) {
     return res.status(400).json({ ok: false, error: "playerId must be a numeric MLBAM id" });
