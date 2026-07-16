@@ -226,6 +226,8 @@ export default function HomeDesktop(props) {
     ["TRACK", null],
     ["", "WizePlays", "/expert-picks"],
     ["", "Wize Spin", "/daily-card"],
+    ["", "Consensus", "/consensus"], // WZ-NAV-UNIFY-2026-07-16 :: match shared TerminalShell sidebar
+    ["", "CLV", "/clv"],
     ["SCORES", null],
     ["", "Matchups & Scores", sport === "mlb" ? "/games" : `/${sport}-games`], // WZ-DESKTOP-SCORESNAV-2026-07-16
   ];
