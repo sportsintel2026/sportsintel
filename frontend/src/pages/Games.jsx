@@ -177,6 +177,8 @@ export default function GamesPage() {
         </div>
       </div>
 
+      <div className="deskgrid">{/* WZ-GAMES-RAIL-2026-07-16 :: 2-col desktop (main | right rail), matches football */}
+      <div className="deskmain">
       <div className="maintop">{/* WZ-GAMES-MAINTOP-2026-07-16 :: match football header (title + pills top-right) */}
         <div><h1>MLB Games</h1><div className="msub">{live.length+pre.length+fin.length} games {"\u00b7"} MLB {"\u00b7"} live scores</div></div>
         <div className="sportbar">
@@ -202,6 +204,24 @@ export default function GamesPage() {
           <div className="glist">{fin.map(g=><GameCard key={g.id} g={g} navigate={navigate}/>)}</div>
         </>}
         {nothing && <div className="estate"><div className="et">Nothing here yet</div><div className="es">No {filter.toLowerCase()} games right now.</div></div>}
+      </div>
+      </div>
+      <div className="rail">
+        <div className="panel">
+          <div className="phead"><div className="t">Live</div><div className="right">{live.length>0?<><span className="ldot"/>{live.length} now</>:"today"}</div></div>
+          {live.length===0 && pre.length===0 && <div className="empty">No MLB games today.</div>}
+          {[...live.slice(0,4),...pre.slice(0,Math.max(0,6-live.length))].map((c,i)=>(
+            <div key={i} className="lvrow"><span className="lvtm">{c.a.ab} @ {c.h.ab}</span>{c.st==="live"?<span className="lvsc dn">{c.a.s}\u2013{c.h.s} \u00b7 {c.state||"LIVE"}</span>:<span className="lvsc">{c.st==="final"?"Final":c.time}</span>}</div>
+          ))}
+        </div>
+        <div className="panel" style={{marginTop:12}}>
+          <div className="phead"><div className="t">Market Price</div><div className="right">best ML</div></div>
+          {pre.filter(c=>c.aml).length===0 ? <div className="empty">Lines post as books release them.</div>
+            : pre.filter(c=>c.aml).slice(0,7).map((c,i)=>(
+              <div key={i} className="lvrow"><span className="lvtm">{c.a.ab} @ {c.h.ab}</span><span className="lvsc">{c.aml} / {c.hml}</span></div>
+            ))}
+        </div>
+      </div>
       </div>
 
       <nav className="nav">
@@ -281,6 +301,7 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .sports{display:flex;gap:6px;padding:0 0 11px;overflow-x:auto;scrollbar-width:none}.sports::-webkit-scrollbar{display:none}
 .dsports{display:none}
 .maintop{display:none}
+.rail{display:none}
 .sports b{flex:0 0 auto;font-family:var(--disp);font-weight:700;font-size:13px;letter-spacing:.4px;color:var(--mut);border:1px solid var(--line2);border-radius:999px;padding:6px 13px;display:inline-flex;align-items:center;gap:6px;cursor:pointer}
 .sports b.on{color:var(--tx);border-color:rgba(63,203,145,.4);background:rgba(63,203,145,.12)}
 .sports b .dot{width:6px;height:6px;border-radius:50%;background:#2a3640}.sports b.on .dot{background:var(--green)}
@@ -425,6 +446,18 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
   .maintop .sportbar .sp{display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;color:var(--mut);padding:7px 12px;border:1px solid var(--line);border-radius:9px;background:var(--panel);cursor:pointer}
   .maintop .sportbar .sp.on{color:#fff;border-color:var(--line2);background:#111726}.maintop .sportbar .sp.on .d{background:var(--green)}
   .maintop .sportbar .sp .d{width:6px;height:6px;border-radius:50%;background:var(--mut2)}
+  .app .deskgrid{display:grid;grid-template-columns:minmax(0,1fr) clamp(268px,20vw,336px);align-items:start;gap:0}
+  .app .rail{display:block;padding:16px 18px 40px 6px;position:sticky;top:0;align-self:start;max-height:100vh;overflow:auto}
+  .app .rail .panel{border:1px solid var(--line);border-radius:14px;background:var(--panel);overflow:hidden}
+  .app .rail .phead{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;border-bottom:1px solid var(--line)}
+  .app .rail .phead .t{font-family:var(--disp);font-weight:800;font-size:14px;color:var(--tx)}
+  .app .rail .phead .right{font-family:var(--mono);font-size:10px;color:var(--mut);display:flex;align-items:center;gap:5px}
+  .app .rail .ldot{width:6px;height:6px;border-radius:50%;background:var(--green)}
+  .app .rail .lvrow{display:flex;align-items:center;justify-content:space-between;padding:9px 14px;border-top:1px solid var(--line)}
+  .app .rail .lvrow:first-of-type{border-top:none}
+  .app .rail .lvtm{font-family:var(--disp);font-weight:700;font-size:13px;color:var(--tx)}
+  .app .rail .lvsc{font-family:var(--mono);font-size:11px;color:var(--mut)}.app .rail .lvsc.dn{color:#E2655C}
+  .app .rail .empty{padding:14px;font-family:var(--mono);font-size:11px;color:var(--mut);line-height:1.5}
   .app .nav{display:none}
   .app .sports,.app .chips{padding-left:26px;padding-right:26px}
   .app #wrap{max-width:none;padding:16px 26px 40px}
