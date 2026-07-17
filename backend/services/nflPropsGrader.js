@@ -22,6 +22,7 @@
 const { createClient } = require("@supabase/supabase-js");
 const { extractBoxscoreActuals, fetchFinals, fetchSummary } = require("./nflPropsActuals");
 const { normalizeName } = require("./nflPropsShadow");
+const { teamKey } = require("./teamKey"); // WZ-TEAMKEY-SSOT-2026-07-17
 
 const SHADOW_TO_BASE = {
   player_pass_yds_shadow: "pass_yds",
@@ -53,6 +54,18 @@ function matchGame(matchup, games) {
   const parts = String(matchup).split(" @ ");
   if (parts.length !== 2) return null;
   const away = normalizeName(parts[0]), home = normalizeName(parts[1]);
+  // WZ-TEAMKEY-SSOT-2026-07-17 :: canonical, collision-safe pass FIRST, scanned across ALL games.
+  // Both teams must resolve to a canonical NFL key AND agree, so an abbreviated matchup ("SF @ SEA")
+  // resolves reliably where the normalizeName substring pass is inconsistent ("sea" hits "seattle"
+  // but "sf" misses "sanfrancisco"). This is a grading path, so precision matters; the normalizeName
+  // exact/contains pass below is kept UNCHANGED as a fallback (reached only when canonical finds
+  // nothing), so anything that matched before still matches.
+  const aK = teamKey(parts[0], "nfl"), hK = teamKey(parts[1], "nfl");
+  if (aK && hK) {
+    for (const g of games || []) {
+      if (teamKey(g.away, "nfl") === aK && teamKey(g.home, "nfl") === hK) return g;
+    }
+  }
   for (const g of games || []) {
     const gh = normalizeName(g.home), ga = normalizeName(g.away);
     if (!gh || !ga) continue;
