@@ -12,6 +12,7 @@
 const express = require("express");
 const router = express.Router();
 const { createClient } = require("@supabase/supabase-js");
+const calibrationGuard = require("../services/calibrationGuard"); // WZ-CALIB-GUARD-2026-07-17
 
 // --- per-sport market config -------------------------------------------------
 // core  = team markets that count toward the overall record + CLV
@@ -290,6 +291,9 @@ router.get("/calibprobe", async (req, res) => {
   }
 });
 // -- end WZ-CALIB-PROBE-2026-07-10 ---------------------------------------------
+
+// WZ-CALIB-GUARD-2026-07-17 :: live calibration-guard status (what is benched, the gap, and why)
+router.get("/guard", (req, res) => { res.json(calibrationGuard.getStatus()); });
 
 router.get("/:league", async (req, res) => {
   const league = String(req.params.league || "").toLowerCase();
