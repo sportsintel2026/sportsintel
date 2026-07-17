@@ -84,6 +84,7 @@ const {
   getEasternDate,
   getScheduleForDate,
 } = require("../services/mlbStatsApi");
+const { canonAbbr } = require("../services/teamKey"); // WZ-TEAMKEY-SSOT-2026-07-17
 const {
   getMLBMainOdds,
   getMLBHRPropsForAllEvents,
@@ -168,7 +169,24 @@ function matchOddsToGame(game, oddsEvents) {
   const awayN = normalizeTeam(game.away);
   const homeN = normalizeTeam(game.home);
 
-  // Pass 1: exact normalized match on both teams, same ET day.
+  // WZ-TEAMKEY-SSOT-2026-07-17 :: Pass 1a — canonical, collision-safe match FIRST. canonAbbr
+  // subsumes the hardcoded city-strip AND resolves abbreviation/relocation/variant names the
+  // list can miss (e.g. "Athletics" vs "Oakland Athletics", odds-feed abbrevs). The original
+  // normalized-exact (Pass 1b) and loose (Pass 2) passes remain UNTOUCHED below as fallbacks,
+  // so this can only ADD a correct match — it can never remove one. Same ET day required;
+  // doubleheaders split by closest start (identical to the passes below).
+  const aK = canonAbbr(game.away, "mlb"), hK = canonAbbr(game.home, "mlb");
+  if (aK && hK) {
+    const canon = oddsEvents.filter(ev =>
+      canonAbbr(ev.awayTeam, "mlb") === aK &&
+      canonAbbr(ev.homeTeam, "mlb") === hK &&
+      sameEtDay(ev, game)
+    );
+    if (canon.length === 1) return canon[0];
+    if (canon.length > 1) return closestByStart(canon, game); // doubleheader
+  }
+
+  // Pass 1b: exact normalized match on both teams, same ET day.
   const exact = oddsEvents.filter(ev =>
     normalizeTeam(ev.awayTeam) === awayN &&
     normalizeTeam(ev.homeTeam) === homeN &&
