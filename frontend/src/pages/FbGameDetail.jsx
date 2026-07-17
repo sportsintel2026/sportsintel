@@ -346,9 +346,19 @@ const CSS = `
 .fbss{font-size:12px;color:var(--mut2);margin-top:6px}
 .fbmini{padding:16px}
 @media(min-width:1024px){
-  .fbapp{max-width:940px}
-  .fbbody{padding:22px 26px 40px;display:grid;grid-template-columns:1fr 1fr;gap:14px 18px;align-items:start}
-  .fbmatch{grid-column:1 / -1;margin-bottom:0}
+  /* WZ-FB-DESKTOP-HERO-2026-07-16 :: fill the matchup hero on wide screens (teams to the edges, bigger logos, centered win-prob) so the top no longer floats sparse */
+  .fbapp{max-width:1040px}
+  .fbbody{padding:24px 30px 44px;display:grid;grid-template-columns:1fr 1fr;gap:16px 20px;align-items:start}
+  .fbmatch{grid-column:1 / -1;margin-bottom:0;padding:30px 44px 24px}
+  .fbmatch .fbteams{justify-content:space-between;gap:0;padding:0 24px}
+  .fbmatch .fblogo{width:78px;height:78px;font-size:22px}
+  .fbmatch .fblogo img{width:62px;height:62px}
+  .fbmatch .fbnm{font-size:30px;margin-top:12px}
+  .fbmatch .fbrec{font-size:13px;margin-top:4px}
+  .fbmatch .fbat{font-size:18px;color:var(--mut)}
+  .fbmatch .fbwp{max-width:640px;margin-left:auto;margin-right:auto;height:40px;margin-top:20px}
+  .fbmatch .fbwl{font-size:14px;margin-top:12px}
+  .fbmatch .fbfin{font-size:44px}
   .fbai{grid-column:1 / -1;margin-bottom:0}
   .fbwide{grid-column:1 / -1}
   .fbcard{margin-bottom:0}
