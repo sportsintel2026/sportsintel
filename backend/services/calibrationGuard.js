@@ -22,6 +22,17 @@ const RESETS = { moneyline: "2026-07-08", total: "2026-07-02", run_line: "2026-0
 // on n=94 while the board claimed 58-63%. Off until the run-line model rebuild lands.
 const MANUAL_BENCH = new Set(["run_line"]);
 
+// WZ-RL-SHADOW-WATCH-2026-07-17 :: for MANUAL benches, watch the REBUILT model's *_shadow rows and
+// auto-RELEASE the market once the rebuilt model proves calibrated on a real sample. `since` = the
+// rebuild go-live date (only shadow rows on/after it carry the rebuilt model's numbers). minN +
+// gapUnbench = the release gate. Once released, the published guard above governs it normally
+// (re-benches it if it later drifts). This gives the shadow TEETH: it triggers the un-bench itself
+// instead of sitting parked until a human happens to check.
+const SHADOW_WATCH = {
+  run_line: { market: "run_line_shadow", since: "2026-07-17", minN: 80, gapUnbench: 4 },
+};
+const SHADOW_MARKETS = Object.values(SHADOW_WATCH).map((c) => c.market);
+
 // Thresholds. Confident band = model_prob >= 0.55 (the featured/shown side).
 const MIN_N = 40;       // require a real settled sample before auto-benching
 const GAP_BENCH = 8;    // auto-bench when claimed - actual >= 8 pts
@@ -30,6 +41,8 @@ const GAP_UNBENCH = 4;  // hysteresis: only auto-unbench once the gap recovers b
 let _status = {};       // { market: { benched, gapPts, n, claimedPct, actualPct, updatedAt } }
 let _lastError = null;
 let _lastRun = null;
+let _shadowStatus = {};      // { market: { n, claimedPct, actualPct, gapPts, needN, needGapUnder, released } }
+const _released = new Set(); // manual markets released by shadow-watch (self-heals on reboot from live shadow data)
 
 function db() {
   const url = process.env.SUPABASE_URL;
@@ -49,7 +62,7 @@ async function refreshGuard() {
         .from("model_predictions")
         .select("market, model_prob, result, game_date")
         .eq("league", "mlb")
-        .in("market", CORE)
+        .in("market", [...CORE, ...SHADOW_MARKETS])
         .order("id", { ascending: true })
         .range(from, from + PAGE - 1);
       if (error) throw new Error(error.message);
@@ -97,9 +110,43 @@ async function refreshGuard() {
     _lastError = null;
     _lastRun = new Date().toISOString();
 
+    // WZ-RL-SHADOW-WATCH-2026-07-17 :: measure the rebuilt model on its shadow rows (manual markets),
+    // confident side (>=0.55), since the rebuild date, and release once well-sampled AND calibrated.
+    const shadowNext = {};
+    for (const m of Object.keys(SHADOW_WATCH)) {
+      const cfg = SHADOW_WATCH[m];
+      let n = 0, hit = 0, claimSum = 0;
+      for (const r of rows) {
+        if (r.market !== cfg.market) continue;
+        if (r.result !== "win" && r.result !== "loss") continue;
+        if (r.model_prob == null) continue;
+        if (cfg.since && r.game_date && String(r.game_date).slice(0, 10) < cfg.since) continue; // rebuilt model only
+        const mp = Number(r.model_prob);
+        const confP = Math.max(mp, 1 - mp);              // featured side's cover prob (shadow logs the home side)
+        if (confP < 0.55) continue;                      // confident/featured band only
+        const covered = mp >= 0.5 ? (r.result === "win") : (r.result === "loss");
+        n++; claimSum += confP; if (covered) hit++;
+      }
+      const claimed = n ? (claimSum / n) * 100 : null;
+      const actual = n ? (hit / n) * 100 : null;
+      const gap = (claimed != null && actual != null) ? Math.round((claimed - actual) * 10) / 10 : null;
+      const cleared = n >= cfg.minN && gap != null && gap < cfg.gapUnbench;
+      if (cleared && !_released.has(m)) {
+        _released.add(m);
+        console.warn(`[CALIB-GUARD] ${m} RELEASED from manual bench by shadow-watch (n=${n}, gap ${gap}pts, claimed ${claimed.toFixed(1)}% vs actual ${actual.toFixed(1)}%) -- now governed by the live published guard.`);
+      }
+      shadowNext[m] = {
+        shadowMarket: cfg.market, sinceRebuild: cfg.since, n,
+        claimedPct: claimed != null ? Math.round(claimed * 10) / 10 : null,
+        actualPct: actual != null ? Math.round(actual * 10) / 10 : null,
+        gapPts: gap, needN: cfg.minN, needGapUnder: cfg.gapUnbench, released: _released.has(m),
+      };
+    }
+    _shadowStatus = shadowNext;
+
     for (const m of CORE) {
       const s = _status[m];
-      if (s.benched && !MANUAL_BENCH.has(m)) {
+      if (s.benched && (!MANUAL_BENCH.has(m) || _released.has(m))) {
         console.warn(`[CALIB-GUARD] ${m} AUTO-BENCHED (gap ${s.gapPts}pts, n=${s.n}, claimed ${s.claimedPct}% vs actual ${s.actualPct}%)`);
       }
     }
@@ -113,7 +160,7 @@ async function refreshGuard() {
 
 // The single source of truth for whether a market is benched (manual OR auto).
 function isBenched(market) {
-  if (MANUAL_BENCH.has(market)) return true;
+  if (MANUAL_BENCH.has(market) && !_released.has(market)) return true; // WZ-RL-SHADOW-WATCH: released markets fall through to the live guard
   const s = _status[market];
   return !!(s && s.benched);
 }
@@ -124,7 +171,7 @@ function getStatus() {
     const s = _status[m] || {};
     out[m] = {
       benched: isBenched(m),
-      manual: MANUAL_BENCH.has(m),
+      manual: MANUAL_BENCH.has(m) && !_released.has(m),
       gapPts: s.gapPts ?? null,
       n: s.n ?? 0,
       claimedPct: s.claimedPct ?? null,
@@ -135,6 +182,7 @@ function getStatus() {
     token: "WZ-CALIB-GUARD-2026-07-17",
     markets: out,
     thresholds: { confidentBand: ">=0.55", MIN_N, GAP_BENCH, GAP_UNBENCH },
+    shadowWatch: _shadowStatus, // WZ-RL-SHADOW-WATCH-2026-07-17 :: rebuilt-model progress toward auto-release
     lastRun: _lastRun,
     lastError: _lastError,
   };
