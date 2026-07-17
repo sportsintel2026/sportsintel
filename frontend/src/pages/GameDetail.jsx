@@ -199,7 +199,7 @@ export default function GameDetailPage() {
       <div className="sbody">
         {loading && <div className="estate"><div className="et">Loading matchup…</div></div>}
         {!loading && !game && <div className="estate"><div className="et">Game not found</div><div className="es">It may have rolled off today's slate.</div></div>}
-        {!loading && game && st==="pre"   && <SheetPre   game={game} aAb={aAb} hAb={hAb} gEdges={gEdges} mlPick={mlPick} totPick={totPick} rlPick={rlPick} bestEdge={bestEdge} mr={mr} detail={detail} bvpData={bvpData} lineups={lineups} hasFull={hasFull} navigate={navigate} injA={injA} injH={injH} gameNews={gameNews}/>}
+        {!loading && game && st==="pre"   && <SheetPre   game={game} aAb={aAb} hAb={hAb} gEdges={gEdges} mlPick={mlPick} totPick={totPick} rlPick={rlPick} bestEdge={bestEdge} mr={mr} detail={detail} bvpData={bvpData} lineups={lineups} hasFull={hasFull} navigate={navigate} injA={injA} injH={injH} gameNews={(detail?.teamNews && detail.teamNews.length) ? detail.teamNews : gameNews}/>}
         {!loading && game && st==="live"  && <SheetLive  game={game} gameId={gameId} scoresGame={scoresGame} aAb={aAb} hAb={hAb} gEdges={gEdges} detail={detail}/>}
         {!loading && game && st==="final" && <SheetFinal game={game} scoresGame={scoresGame} aAb={aAb} hAb={hAb} bestEdge={bestEdge} detail={detail} venue={venue}/>}
       </div>
