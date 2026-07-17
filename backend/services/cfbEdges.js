@@ -29,36 +29,11 @@ const { getCFBMainOdds, getCFBPinnacleClose } = require("./oddsApi");
 const { buildTeamRatings } = require("./cfbDataSource");
 const { predictGame } = require("./cfbModel");
 
-// Normalize a team name for matching: FOLD diacritics → ASCII, lowercase, turn
-// punctuation/parens into spaces (keeps token boundaries), collapse whitespace.
-function normName(s) {
-  return String(s || "")
-    .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // José→Jose, Hawai'i→Hawai'i (accents only)
-    .toLowerCase()
-    .replace(/['\u2019\u2018`]/g, "")                  // DELETE apostrophes: Hawai'i→Hawaii
-    .replace(/&/g, " and ")
-    .replace(/[^a-z0-9 ]/g, " ")                       // other punctuation/parens → space
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-// School portion = normalized name minus the last token (the mascot). Schools are
-// far more unique than mascots, so this is the safe fuzzy fallback.
-function schoolKey(normalized) {
-  const parts = normalized.split(" ");
-  return parts.length > 1 ? parts.slice(0, -1).join(" ") : normalized;
-}
-
-// Known odds-name → ESPN-name aliases (both normalized). Intentionally small — the
-// resolver's diacritic folding + school fallback handle most cases; this is for the
-// genuine abbreviation mismatches surfaced by the live unmatched list. Extend as
-// real misses appear (do not guess blind).
-const ALIASES = {
-  // "normalized odds name": "normalized espn name"
-  // Verified against the live /cfbratings dump (2026-06-22), not guessed:
-  "umass minutemen": "massachusetts minutemen",     // Odds "UMass" → ESPN "Massachusetts"
-  "sam houston state bearkats": "sam houston bearkats", // ESPN dropped "State" on the 2023 FBS move
-};
+// WZ-TEAMKEY-SSOT-2026-07-17 :: the CFB name-matching primitives (diacritic-folding normalize,
+// schoolKey mascot-strip, and the verified odds→ESPN alias map) now live ONCE in ./teamKey. This
+// file was their original home; they were lifted VERBATIM, so behavior is identical. Imported under
+// the original local names so buildResolver / resolveTeam / the _internal export are all unchanged.
+const { cfbNorm: normName, schoolKey, CFB_ALIASES: ALIASES } = require("./teamKey");
 
 // Build lookup maps from the ratings map. bySchool marks collisions as null so an
 // ambiguous school name (rare) resolves to nothing rather than the wrong team.
