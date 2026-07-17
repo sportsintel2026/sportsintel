@@ -18,6 +18,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { subscriptionApi, scoresApi, newsApi, edgesApi } from "../lib/api";
+import { gameDetailPath } from "../lib/gameDetail"; // WZ-DETAIL-SSOT-2026-07-17
 
 const LEAGUE_META = {
   mlb: { icon: "", title: "MLB Games", periodLabel: "Inn" },
@@ -836,10 +837,8 @@ function GameCard({ g, league, meta, odds }) {
   const isLive = g.bucket === "live";
   const isFinal = g.bucket === "final";
   const rawId = g.detailId || g.id;
-  // Detail pages exist for MLB/NBA; other leagues' detail arrives with the model
-  // step, so don't route a card to a page that isn't wired yet.
-  const HAS_DETAIL = { mlb: true, nba: true, nfl: true, cfb: true }; // WZ-FB-GAMEDETAIL-2026-07-16
-  const target = rawId && HAS_DETAIL[league] ? `/game/${league}/${rawId}` : null;
+  // WZ-DETAIL-SSOT-2026-07-17 :: detail-route gate centralized in ../lib/gameDetail.
+  const target = gameDetailPath(league, rawId);
 
   // Top strip mirrors the MLB Games card: live state, kickoff/first-pitch time,
   // or FINAL on the left; a short context note (series / venue) on the right.
