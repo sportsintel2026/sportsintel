@@ -42,6 +42,7 @@ const nflPropsProbeRoutes = require("./routes/nflPropsProbe"); // WZ-NFLPROPS-MO
 const ufcRoutes = require("./routes/ufc"); // WZ-UFC-CARD-2026-07-09 :: UFC/MMA card endpoint (read-only)
 const aiReadRoutes = require("./routes/aiRead"); // WZ-AI-READ-2026-07-12 :: on-demand AI read (B), fail-safe
 const adminGuard = require("./middleware/adminGuard"); // WZ-ADMIN-GUARD-2026-07-17 :: locks diagnostic/trigger endpoints
+const calibrationGuard = require("./services/calibrationGuard"); // WZ-CALIB-GUARD-2026-07-17 :: auto-benches drifting markets
 
 const { refreshDailyGames } = require("./services/sportsData");
 const { gradeFinishedGames, captureClosingLines, captureNbaClosingLines, captureOddsTicks, voidUnmatchedProps } = require("./services/predictionTracker");
@@ -248,6 +249,15 @@ cron.schedule("15 8,12,16 * * *", async () => {
 }, { timezone: "America/New_York" });
 // Warm once on boot (non-blocking) so the card isn't empty until the first scheduled run.
 setTimeout(() => { try { if (matchupsRoutes.warmMatchupIntel) matchupsRoutes.warmMatchupIntel().catch(() => {}); } catch (_) {} }, 9000);
+
+// WZ-CALIB-GUARD-2026-07-17 :: standing calibration guard. Recompute claimed-vs-actual per market
+// and auto-bench any that drifts past the gap threshold, so an overconfident market can't sit
+// parked and silently bleed. Runs 4x/day (after grading has settled results) + once on boot.
+cron.schedule("30 5,11,17,23 * * *", async () => {
+  try { await calibrationGuard.refreshGuard(); }
+  catch (err) { console.error("[CRON] Calibration guard refresh failed:", err.message); }
+}, { timezone: "America/New_York" });
+setTimeout(() => { calibrationGuard.refreshGuard().catch(() => {}); }, 12000);
 
 cron.schedule("5,35 11-23,0-2 * * *", async () => {
   try {
