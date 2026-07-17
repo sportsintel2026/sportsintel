@@ -562,6 +562,7 @@ async function recordPredictions(result) {
         description: `SHADOW Over ${g.totals.line} (full slate)`,
         model_prob: g.totals.overProb, odds: g.totals.overOdds,
         edge: g.totals.overEdge ?? null, confidence: g.totals.overConfidence ?? "NEUTRAL", line: g.totals.line,
+        projected: g.totals.projected ?? null, // WZ-TOTALSPROJ-2026-07-17 :: store the model projection so /totalsbias can measure over-lean = mean(projected - actual_value)
       });
       shadowPushed++;
     }
