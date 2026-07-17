@@ -641,9 +641,32 @@ async function getFinalScoreByMatchup(league, dateStr, awayName, homeName) {
   let games;
   try { games = await fetchScoreboardRaw(league, ymd); } catch (_) { return null; }
 
+  const wantAkey = teamKey(awayName, league), wantHkey = teamKey(homeName, league); // WZ-TEAMKEY-SSOT-2026-07-17
   const wantAabbr = canonAbbr(awayName), wantHabbr = canonAbbr(homeName);
   const wantAnick = nick(awayName), wantHnick = nick(homeName);
 
+  // WZ-TEAMKEY-SSOT-2026-07-17 :: This is the GRADING path — a wrong team match mis-grades a real
+  // pick. PASS 1: canonical, per-league, collision-safe match scanned across ALL finals FIRST. Both
+  // teams must resolve to a canonical key AND agree (by abbrev or name), so it can only pick the
+  // CORRECT matchup — even when a nickname collision (e.g. Red Sox / White Sox both -> "sox", or
+  // two "..." games) would otherwise let the wrong final win by appearing first. It runs across the
+  // whole slate before any legacy pass, so a nickname-colliding wrong game can't be returned ahead
+  // of the right one. Doubleheaders (MLB) resolve to the first matching final, exactly as before.
+  if (wantAkey && wantHkey) {
+    for (const g of games) {
+      if (g.bucket !== "final") continue;
+      const a = g.away || {}, h = g.home || {};
+      if ((teamKey(a.abbrev, league) === wantAkey && teamKey(h.abbrev, league) === wantHkey) ||
+          (teamKey(a.name,   league) === wantAkey && teamKey(h.name,   league) === wantHkey)) {
+        if (a.score == null || h.score == null) return null; // final but no score yet — skip
+        return { away: Number(a.score), home: Number(h.score) };
+      }
+    }
+  }
+
+  // PASS 2: legacy abbr/nick fallback — ONLY reached when the canonical pass found nothing (e.g. an
+  // untabled league or a name teamKey can't resolve). Unchanged from before, so anything that graded
+  // previously still grades; this pass never overrides a canonical hit.
   for (const g of games) {
     if (g.bucket !== "final") continue;
     const a = g.away || {}, h = g.home || {};
