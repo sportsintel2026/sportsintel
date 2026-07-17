@@ -359,8 +359,8 @@ const CSS = `
   .fbmatch .fbwp{max-width:640px;margin-left:auto;margin-right:auto;height:40px;margin-top:20px}
   .fbmatch .fbwl{font-size:14px;margin-top:12px}
   .fbmatch .fbfin{font-size:44px}
-  .fbai{grid-column:1 / -1;margin-bottom:0}
-  .fbwide{grid-column:1 / -1}
+  .fbai{grid-column:1 / -1;margin-bottom:0;order:3}   /* WZ-FB-DESKTOP-FILL-2026-07-16 :: reflow so THE PRICES fills the empty right cell, no dead column */
+  .fbwide{grid-column:1 / -1;order:4}
   .fbcard{margin-bottom:0}
   .fbstate,.fbmini{grid-column:1 / -1}
 }
