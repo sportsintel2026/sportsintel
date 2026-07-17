@@ -791,6 +791,45 @@ function kNegBinomCdf(k, mu, phi) {
   return Math.min(1, s);
 }
 
+// WZ-RL-MARGIN-2026-07-17 :: run-line margin model. Each team's runs ~ NegBin(mu, RUN_PHI); the game
+// margin (home - away) is the difference of the two count distributions, computed by convolution.
+// This replaces the old fixed-SD Normal transform of the win prob: it captures the run margin's real
+// variance AND the large probability mass at +/-1 run (one-run games, where a -1.5 favorite loses),
+// which a Normal smears over and which drove the old overconfident -1.5 covers. Backtest-tunable.
+const RUN_PHI = 1.35;   // team-runs overdispersion (variance/mean); Poisson=1.
+const RL_MAXR = 24;     // truncate each team's run count (P beyond ~0)
+function _runPmf(mu) {
+  const a = []; let s = 0;
+  for (let k = 0; k <= RL_MAXR; k++) { a[k] = negBinomPmf(k, mu, RUN_PHI); s += a[k]; }
+  if (s > 0) for (let k = 0; k <= RL_MAXR; k++) a[k] /= s;
+  return a;
+}
+function _marginPmf(muHome, muAway) {
+  const ph = _runPmf(muHome), pa = _runPmf(muAway), pm = {};
+  for (let h = 0; h <= RL_MAXR; h++) {
+    const phh = ph[h]; if (phh < 1e-9) continue;
+    for (let a = 0; a <= RL_MAXR; a++) { const p = phh * pa[a]; if (p < 1e-12) continue; const m = h - a; pm[m] = (pm[m] || 0) + p; }
+  }
+  return pm;
+}
+// P(home wins): margin >= 1, plus a tie (margin 0 -> extra innings) split ~50/50.
+function _pHomeWin(pm) { let s = 0; for (const m in pm) { const mm = +m; if (mm >= 1) s += pm[m]; else if (mm === 0) s += 0.5 * pm[m]; } return s; }
+// P(home covers homeRLLine): home covers iff final margin > -homeRLLine (e.g. -1.5 -> margin >= 2).
+function _pHomeCover(pm, homeRLLine) { const thr = -homeRLLine; let s = 0; for (const m in pm) if (+m > thr) s += pm[m]; return s; }
+// Solve d (half the expected margin): muHome=T/2+d, muAway=T/2-d reproduces the target home win prob
+// under the NegBin model. Monotone in d -> bisection.
+function _solveRunSplit(total, pWinHome) {
+  const T = Math.max(3, Math.min(16, total || 8.5));
+  const cap = Math.min(T / 2 - 0.15, 4.5);
+  let lo = -cap, hi = cap;
+  for (let it = 0; it < 26; it++) {
+    const d = (lo + hi) / 2;
+    if (_pHomeWin(_marginPmf(T / 2 + d, T / 2 - d)) < pWinHome) lo = d; else hi = d;
+  }
+  const d = (lo + hi) / 2;
+  return { muHome: T / 2 + d, muAway: T / 2 - d };
+}
+
 // v2.1 (2026-06-09): the strikeout RATE now comes from Savant k_percent (true K per
 // batter faced) when available — a cleaner rate than K/9, which is contaminated by
 // baserunners/innings. λ = kRate × expected batters faced × opponent factor, where
@@ -1622,44 +1661,44 @@ async function calculateGameEdges(game, oddsForGame) {
     underProb = round3(1 - overProb);
   }
 
-  // Run line (±1.5). Derive an expected run margin from the win prob, then the
-  // probability each side covers. This is the moneyline opinion expressed at a
-  // spread price (same lean, more variance) — blended toward the market like ML.
-  const MARGIN_SD = 3.0; // approx SD of an MLB game's run margin
+  // Run line (+/-1.5) -- WZ-RL-MARGIN-2026-07-17 (rebuilt). OLD: muHome = MARGIN_SD(3.0, fixed) *
+  // invNorm(win%); cover = Normal CDF. That fixed-SD bell curve ignored the run environment AND the
+  // one-run-game mass (where a -1.5 favorite loses), so its confident -1.5 covers claimed 58-63% and
+  // hit 50%. NEW: solve each team's expected runs from the projected TOTAL + the (market-blended) win
+  // prob, model runs as NegBin counts, and read the -1.5 cover straight off the true margin
+  // distribution -- right variance, the +/-1 mass included, no fixed-SD guess.
   const homeRLLine = odds.spreads?.homeLine ?? null;
   const awayRLLine = odds.spreads?.awayLine ?? null;
   const homeRLOdds = odds.spreads?.home ?? null;
   const awayRLOdds = odds.spreads?.away ?? null;
   let homeCoverProb = null, awayCoverProb = null, homeRLEdge = null, awayRLEdge = null;
-  // A valid run line is a matched pair: one side -1.5, the other +1.5. If the two
-  // lines aren't exact opposites (e.g. corrupt odds quoting BOTH teams at -1.5), the
-  // data is incoherent — skip the run line rather than price a phantom edge.
+  // A valid run line is a matched pair: one side -1.5, the other +1.5. Corrupt odds (e.g. BOTH at
+  // -1.5) are incoherent -- skip rather than price a phantom.
   const validRunLine = homeRLLine != null && awayRLLine != null
     && homeRLOdds != null && awayRLOdds != null
     && homeRLLine === -awayRLLine;
   if (validRunLine) {
-    // Derive the margin from the market-BLENDED win prob — the same humility the
-    // moneyline edge gets. Using the raw win prob lets an overconfident model
-    // inflate the run line into implausible cover %s and edges.
+    // Market-blended home win prob (same 55/45 humility ML/totals use) sets the run lean.
     const fairHomeWin = devigTwoWay(homeML, awayML);
     const blendedHomeWin = (MARKET_BLEND_ENABLED && fairHomeWin != null)
       ? (W_MODEL * ml.homeWinProb + (1 - W_MODEL) * fairHomeWin)
       : ml.homeWinProb;
-    const muHome = MARGIN_SD * invNorm(blendedHomeWin); // expected home run margin
-    // WZ-CAL-LIVE-2026-07-02 :: run-line cover calibration. Measured on n=461 graded
-    // picks: actual cover flatlines ~0.62 above ~0.65 claimed (70%+ bucket claimed
-    // 0.714, cashed 0.620). Apply the fitted monotone curve to the LIKELIER side and
-    // set the other side to its complement so the pair stays coherent (sums to 1).
-    // Identity below 0.57, so near-coin-flip lines are untouched.
-    const hCoverRaw = normalCDF((muHome + homeRLLine) / MARGIN_SD);
-    const hCover = hCoverRaw >= 0.5
-      ? calibrateCoverProb(hCoverRaw)
-      : 1 - calibrateCoverProb(1 - hCoverRaw);
-    const aCover = 1 - hCover;
-    homeCoverProb = round3(hCover);
-    awayCoverProb = round3(aCover);
-    homeRLEdge = sanitizeEdge(blendedEdge(hCover, homeRLOdds, awayRLOdds));
-    awayRLEdge = sanitizeEdge(blendedEdge(aCover, awayRLOdds, homeRLOdds));
+    // Solve the per-team expected runs (sum = projected total) that reproduce that win prob under
+    // the NegBin model, then read the cover directly off the resulting margin distribution.
+    const rlSplit = _solveRunSplit(totals.projectedTotal, blendedHomeWin);
+    const marginPmf = _marginPmf(rlSplit.muHome, rlSplit.muAway);
+    const hCoverModel = Math.max(0.02, Math.min(0.98, _pHomeCover(marginPmf, homeRLLine))); // raw model cover
+    const aCoverModel = Math.max(0.02, Math.min(0.98, 1 - hCoverModel));
+    // Blend the DISPLAYED cover toward the de-vigged run-line market (55/45), like totals; take the
+    // edge off the RAW model cover so the market correction is applied once, not twice.
+    const fairHomeCover = devigTwoWay(homeRLOdds, awayRLOdds);
+    const hCover = (MARKET_BLEND_ENABLED && fairHomeCover != null)
+      ? round3(W_MODEL * hCoverModel + (1 - W_MODEL) * fairHomeCover)
+      : round3(hCoverModel);
+    homeCoverProb = hCover;
+    awayCoverProb = round3(1 - hCover);
+    homeRLEdge = sanitizeEdge(blendedEdge(hCoverModel, homeRLOdds, awayRLOdds));
+    awayRLEdge = sanitizeEdge(blendedEdge(aCoverModel, awayRLOdds, homeRLOdds));
   }
 
   // ── Conviction (v0.6): trust in the projection, ORTHOGONAL to edge size. ──────
