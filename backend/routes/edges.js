@@ -108,6 +108,7 @@ const {
   debugHitsProps,
 } = require("../services/edgesModel");
 const { recordPredictions, recordTotalBasesShadow, recordStrikeoutShadow, recordHitsShadow } = require("../services/predictionTracker"); // WZ-HITSSHADOW-WIRE-2026-07-02
+const { isBenched } = require("../services/calibrationGuard"); // WZ-CALIB-GUARD-2026-07-17 :: auto-bench drifting markets
 const { probeTeamFielding } = require("../services/savantApi"); // WZ-FIELDPROBE-2026-07-10 :: team-defense endpoint discovery (read-only)
 // In-memory cache
 let edgesCache = null;
@@ -755,14 +756,12 @@ router.get("/mlb", gatePicks, async (req, res) => {
       if ((pick.edge ?? 0) > 0) runLineEdges.push(pick);
     }
     runLineEdges.sort((a, b) => (b.modelProb ?? -1) - (a.modelProb ?? -1));
-    // WZ-RUNLINE-BENCH-2026-07-17 :: RUN-LINE BENCHED. Calibration audit 2026-07-17: across n=94
-    // settled picks the model's confident run-line range (cover prob 0.55+) claimed 58-63% and hit
-    // EXACTLY 50% (0.55-0.60 n=34 -> 50%, 0.60+ n=60 -> 50%). No sub-band survives, so there is
-    // nothing honest to show. Bleed-stopper, NOT a claim the market is fixed -- the real fix is
-    // rebuilding the run-line model. Emptying it here removes run-line from BOTH the shown board
-    // AND the graded record (result.runLineEdges feeds recordPredictions), so board==record stays
-    // true. Reversible: set RUNLINE_BENCH_ENABLED=false to restore.
-    const RUNLINE_BENCH_ENABLED = true;
+    // WZ-CALIB-GUARD-2026-07-17 :: market benching is now owned by the calibration guard (imported
+    // as isBenched, applied per market in the result below). run_line is the guard's first MANUAL
+    // bench -- calibration audit 2026-07-17: its confident 0.55+ range hit exactly 50% on n=94 while
+    // the board claimed 58-63% -- and stays off until the run-line model is rebuilt. moneyline/total
+    // auto-bench only if they drift past the guard's gap threshold. Emptying a benched market in the
+    // result removes it from BOTH the board and the graded record (board == record).
     let hrPropEdges = [];
     let kPropEdges = [];
     let hitsPropEdges = [];
@@ -874,9 +873,9 @@ router.get("/mlb", gatePicks, async (req, res) => {
           homeScore: sourceGame?.homeScore,
         };
       }),
-      moneylineEdges: moneylineBoard,
-      totalsEdges: totalsEdgesShown.slice(0, 10),
-      runLineEdges: RUNLINE_BENCH_ENABLED ? [] : runLineEdges.slice(0, 10), // WZ-RUNLINE-BENCH-2026-07-17
+      moneylineEdges: isBenched("moneyline") ? [] : moneylineBoard,          // WZ-CALIB-GUARD-2026-07-17
+      totalsEdges: isBenched("total") ? [] : totalsEdgesShown.slice(0, 10),  // WZ-CALIB-GUARD-2026-07-17
+      runLineEdges: isBenched("run_line") ? [] : runLineEdges.slice(0, 10),  // WZ-CALIB-GUARD-2026-07-17
       hrPropEdges: hrPropEdges.slice(0, MLB_PROP_DISPLAY_CAP),
       kPropEdges: kPropEdges.slice(0, MLB_PROP_DISPLAY_CAP),
       hitsPropEdges: hitsPropEdges.slice(0, MLB_PROP_DISPLAY_CAP),
