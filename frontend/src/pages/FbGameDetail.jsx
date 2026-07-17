@@ -95,6 +95,8 @@ export default function FbGameDetail({ league = "nfl" }) {
   const leanAb = awayProb != null ? (awayProb >= homeProb ? aAb : hAb) : null;
   const brief = detail?.brief || null;   // WZ-FB-BRIEF-2026-07-16
   const briefTeams = brief ? [[aAb, brief.away || {}], [hAb, brief.home || {}]] : [];
+  // WZ-TEAMNEWS-2026-07-16 :: prefer real per-team ESPN news; fall back to the league-filtered feed
+  const finalNews = (detail?.teamNews && detail.teamNews.length) ? detail.teamNews : gameNews;
 
   // injuries filtered to this game's two teams
   const forTeam = (ab, full) => (inj || []).filter((it) =>
@@ -257,9 +259,9 @@ export default function FbGameDetail({ league = "nfl" }) {
           </div>}
 
           {/* Game news */}
-          {gameNews.length > 0 && <div className="fbcard">
+          {finalNews.length > 0 && <div className="fbcard">
             <div className="fbeb"><span className="d">{"\u25C6"}</span>GAME NEWS<span className="rgt">this matchup</span></div>
-            {gameNews.map((it, i) => {
+            {finalNews.map((it, i) => {
               const isInj = it.type === "injury" || it.status === "injury";
               const blurb = String(it.summary || "").trim();
               return (
@@ -300,7 +302,7 @@ export default function FbGameDetail({ league = "nfl" }) {
             </div>}
           </div>}
 
-          {!hasModel && !oRow && !hasInj && gameNews.length === 0 && <div className="fbstate fbmini">Lines, injuries, and the model preview fill in as books post this game.</div>}
+          {!hasModel && !oRow && !hasInj && finalNews.length === 0 && <div className="fbstate fbmini">Lines, injuries, and the model preview fill in as books post this game.</div>}
         </>}
       </div>
     </div>
