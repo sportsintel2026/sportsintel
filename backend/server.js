@@ -41,6 +41,7 @@ const newsRoutes = require("./routes/news"); // WZ-NEWS-MOUNT-2026-06-26
 const nflPropsProbeRoutes = require("./routes/nflPropsProbe"); // WZ-NFLPROPS-MOUNT-2026-07-05
 const ufcRoutes = require("./routes/ufc"); // WZ-UFC-CARD-2026-07-09 :: UFC/MMA card endpoint (read-only)
 const aiReadRoutes = require("./routes/aiRead"); // WZ-AI-READ-2026-07-12 :: on-demand AI read (B), fail-safe
+const adminGuard = require("./middleware/adminGuard"); // WZ-ADMIN-GUARD-2026-07-17 :: locks diagnostic/trigger endpoints
 
 const { refreshDailyGames } = require("./services/sportsData");
 const { gradeFinishedGames, captureClosingLines, captureNbaClosingLines, captureOddsTicks, voidUnmatchedProps } = require("./services/predictionTracker");
@@ -140,15 +141,15 @@ app.use("/api/scores", scoresRoutes);
 app.use("/api/live", liveRoutes);
 app.use("/api/expert-grade", expertGradeRoutes);
 app.use("/api/daily-card", dailyCardRoutes);
-app.use("/api/grade-now", gradeNowRoutes);
+app.use("/api/grade-now", adminGuard, gradeNowRoutes); // WZ-ADMIN-GUARD-2026-07-17
 app.use("/api/consensus", consensusRoutes);
 app.use("/api/odds", oddsRoutes);
 app.use("/api/player-card", playerCardRoutes);
 app.use("/api/umpires", umpiresRoutes);
-app.use("/api/live-probe", liveProbeRoutes);
+app.use("/api/live-probe", adminGuard, liveProbeRoutes); // WZ-ADMIN-GUARD-2026-07-17
 app.use("/api/live-winprob", liveWinProbRoutes);
 app.use("/api/news", newsRoutes); // WZ-NEWS-MOUNT-2026-06-26 :: blended ESPN+RotoWire feed
-app.use("/api/nfl-props-probe", nflPropsProbeRoutes); // WZ-NFLPROPS-MOUNT-2026-07-05 :: Phase 3 recon (read-only, temp)
+app.use("/api/nfl-props-probe", adminGuard, nflPropsProbeRoutes); // WZ-NFLPROPS-MOUNT-2026-07-05 + WZ-ADMIN-GUARD-2026-07-17
 app.use("/api/ufc", ufcRoutes); // WZ-UFC-CARD-2026-07-09 :: UFC/MMA card (read-only, additive)
 app.use("/api/ai-read", aiReadRoutes); // WZ-AI-READ-2026-07-12 :: on-demand AI read (B), env-gated + fail-safe
 
