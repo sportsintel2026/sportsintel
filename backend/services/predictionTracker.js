@@ -9,6 +9,7 @@ const { getEasternDate, getScheduleForDate, getGameHRHitters, getGamePitcherStri
 const { fetchGamelog } = require("./nbaGamelog");
 const { fetchScoreboard } = require("./nbaDataSource");
 const { fetchScoreboard: fetchNflScoreboard } = require("./nflDataSource");
+const { fetchScoreboard: fetchCfbScoreboard } = require("./cfbDataSource"); // WZ-FBALL-CFB-SHADOW-2026-07-17
 const { getMLBMainOdds, getMLBPinnacleClose } = require("./oddsApi");
 const { teamKey } = require("./teamKey"); // WZ-TEAMKEY-SSOT-2026-07-17
 // WZ-CAL-MIRROR-2026-07-02 :: winProbCalibration import removed — calibration now applies
@@ -971,7 +972,10 @@ async function recordNbaTeamPredictions(predictions) {
 // calibration read groups by edge bucket. Grading matches by team-name+date (the
 // Odds-API event id ≠ ESPN scoreboard id), so the matchup string is load-bearing.
 const NFL_IMMINENT_DAYS = 7;
-async function recordNFLPredictions(slate) {
+// WZ-FBALL-CFB-SHADOW-2026-07-17 :: generalized over league ("nfl"|"cfb") — NFL and CFB record
+// identically (same predictGame output shape), so one implementation serves both; thin per-league
+// wrappers below preserve the existing call sites. Consumes runNFLSlate()/runCFBSlate() output.
+async function recordFootballPredictions(slate, league = "nfl") {
   if (!slate || !Array.isArray(slate.games) || slate.games.length === 0) return;
   const supabase = db();
   const now = Date.now();
@@ -989,7 +993,7 @@ async function recordNFLPredictions(slate) {
     if (ml && ml.value === true && (ml.pick === "home" || ml.pick === "away") && ml.book) {
       const home = ml.pick === "home";
       rows.push({
-        game_id: String(g.eventId), game_date: gameDate, league: "nfl", matchup,
+        game_id: String(g.eventId), game_date: gameDate, league, matchup,
         market: "moneyline", selection: ml.pick,
         description: `${ml.pickTeam || (home ? g.homeTeam : g.awayTeam)} ML`,
         model_prob: round3((home ? ml.homeWinProb : ml.awayWinProb) / 100),
@@ -1005,7 +1009,7 @@ async function recordNFLPredictions(slate) {
       const home = sp.pick === "home";
       const line = home ? sp.line : -sp.line;
       rows.push({
-        game_id: String(g.eventId), game_date: gameDate, league: "nfl", matchup,
+        game_id: String(g.eventId), game_date: gameDate, league, matchup,
         market: "spread", selection: sp.pick,
         description: `${sp.pickTeam || (home ? g.homeTeam : g.awayTeam)} ${line > 0 ? "+" : ""}${line}`,
         model_prob: round3((home ? sp.homeCoverProb : (100 - sp.homeCoverProb)) / 100),
@@ -1022,7 +1026,7 @@ async function recordNFLPredictions(slate) {
     if (tot && tot.value === true && (tot.pick === "over" || tot.pick === "under") && tot.book && tot.line != null) {
       const over = tot.pick === "over";
       rows.push({
-        game_id: String(g.eventId), game_date: gameDate, league: "nfl", matchup,
+        game_id: String(g.eventId), game_date: gameDate, league, matchup,
         market: "total", selection: tot.pick,
         description: `${over ? "Over" : "Under"} ${tot.line}`,
         model_prob: round3((over ? tot.overProb : (100 - tot.overProb)) / 100),
@@ -1055,7 +1059,7 @@ async function recordNFLPredictions(slate) {
     const margin = (ml && ml.modelMargin != null) ? ml.modelMargin : null; // model's projected home margin
     if (ml && ml.homeWinProb != null && ml.book && ml.book.home != null) {
       rows.push({
-        game_id: String(g.eventId), game_date: gameDate, league: "nfl", matchup,
+        game_id: String(g.eventId), game_date: gameDate, league, matchup,
         market: "moneyline_shadow", selection: "home",
         description: `SHADOW ${g.homeTeam || "home"} ML (full slate)`,
         model_prob: round3(ml.homeWinProb / 100), odds: ml.book.home,
@@ -1066,7 +1070,7 @@ async function recordNFLPredictions(slate) {
     }
     if (sp && sp.homeCoverProb != null && sp.line != null && sp.book && sp.book.home != null) {
       rows.push({
-        game_id: String(g.eventId), game_date: gameDate, league: "nfl", matchup,
+        game_id: String(g.eventId), game_date: gameDate, league, matchup,
         market: "spread_shadow", selection: "home",
         description: `SHADOW ${g.homeTeam || "home"} ${sp.line > 0 ? "+" : ""}${sp.line} (full slate)`,
         model_prob: round3(sp.homeCoverProb / 100), odds: sp.book.home,
@@ -1076,7 +1080,7 @@ async function recordNFLPredictions(slate) {
     }
     if (tot && tot.overProb != null && tot.line != null && tot.book && tot.book.over != null) {
       rows.push({
-        game_id: String(g.eventId), game_date: gameDate, league: "nfl", matchup,
+        game_id: String(g.eventId), game_date: gameDate, league, matchup,
         market: "total_shadow", selection: "over",
         description: `SHADOW Over ${tot.line} (full slate)`,
         model_prob: round3(tot.overProb / 100), odds: tot.book.over,
@@ -1091,12 +1095,15 @@ async function recordNFLPredictions(slate) {
     const { error } = await supabase
       .from("model_predictions")
       .upsert(rows, { onConflict: "game_id,market,selection,game_date", ignoreDuplicates: true });
-    if (error) console.error("[Tracker] nfl record error:", error.message);
-    else console.log(`[Tracker] Snapshotted ${rows.length} NFL model picks for ${[...new Set(rows.map(r => r.game_date))].join(", ")} (dups ignored)`);
+    if (error) console.error(`[Tracker] ${league} record error:`, error.message);
+    else console.log(`[Tracker] Snapshotted ${rows.length} ${league.toUpperCase()} model picks for ${[...new Set(rows.map(r => r.game_date))].join(", ")} (dups ignored)`);
   } catch (e) {
-    console.error("[Tracker] nfl record exception:", e.message);
+    console.error(`[Tracker] ${league} record exception:`, e.message);
   }
 }
+// WZ-FBALL-CFB-SHADOW-2026-07-17 :: per-league wrappers. NFL preserves the existing call site exactly.
+async function recordNFLPredictions(slate) { return recordFootballPredictions(slate, "nfl"); }
+async function recordCFBPredictions(slate) { return recordFootballPredictions(slate, "cfb"); }
 
 // ── GRADE ─────────────────────────────────────────────────────────────────────
 // Finds pending predictions for finished games and marks them. MLB is graded
@@ -1114,7 +1121,8 @@ async function gradeFinishedGames() {
 
   const nbaPending = pendingRows.filter(p => p.league === "nba");
   const nflPending = pendingRows.filter(p => p.league === "nfl");
-  const mlbPending = pendingRows.filter(p => p.league !== "nba" && p.league !== "nfl");
+  const cfbPending = pendingRows.filter(p => p.league === "cfb"); // WZ-FBALL-CFB-SHADOW-2026-07-17
+  const mlbPending = pendingRows.filter(p => p.league !== "nba" && p.league !== "nfl" && p.league !== "cfb");
 
   // Backfill: HR props were previously stamped "push" (no-action) because grading
   // couldn't read per-player HRs. Now that it can, re-grade recent ones. They flip
@@ -1136,6 +1144,7 @@ async function gradeFinishedGames() {
   graded += await gradeMlb(supabase, mlbPending);
   graded += await gradeNba(supabase, nbaPending);
   graded += await gradeNFL(supabase, nflPending);
+  graded += await gradeCFB(supabase, cfbPending); // WZ-FBALL-CFB-SHADOW-2026-07-17
 
   // WZ-CLOSINGLINE-RESULTS-2026-07-06 :: stamp final score + winner into the league-wide
   // closing_lines ledger so base-rate backtests (does a -175 fav actually win? do juiced overs
@@ -1519,7 +1528,9 @@ async function gradeNba(supabase, pending) {
 // Unlike NBA, the stored game_id is the Odds-API event id, which does NOT match the
 // ESPN scoreboard id, so we match by TEAM NAME + DATE (±1 for UTC/ET bucketing).
 // Reuses the pure gradeNbaTeam outcome logic (market-agnostic team grading).
-async function gradeNFL(supabase, pending) {
+// WZ-FBALL-CFB-SHADOW-2026-07-17 :: generalized over the scoreboard source. NFL and CFB grade
+// identically (same board shape: home/away.displayName, state, score); only the fetcher differs.
+async function gradeFootball(supabase, pending, fetchBoard) {
   if (!pending.length) return 0;
   let graded = 0;
   const TEAM = new Set(["moneyline", "spread", "total"]);
@@ -1527,7 +1538,7 @@ async function gradeNFL(supabase, pending) {
   const sbCache = {};
   const boardFor = async (date) => {
     if (sbCache[date] !== undefined) return sbCache[date];
-    try { sbCache[date] = await fetchNflScoreboard(date); }
+    try { sbCache[date] = await fetchBoard(date); }
     catch (e) { sbCache[date] = null; } // transient → retry next run
     return sbCache[date];
   };
@@ -1558,6 +1569,9 @@ async function gradeNFL(supabase, pending) {
   }
   return graded;
 }
+// WZ-FBALL-CFB-SHADOW-2026-07-17 :: per-league grader wrappers (each strips _shadow via gradeFootball).
+async function gradeNFL(supabase, pending) { return gradeFootball(supabase, pending, fetchNflScoreboard); }
+async function gradeCFB(supabase, pending) { return gradeFootball(supabase, pending, fetchCfbScoreboard); }
 
 function gradeNbaTeam(p, homeScore, awayScore) {
   const margin = homeScore - awayScore; // + = home won
@@ -1779,4 +1793,4 @@ async function voidUnmatchedProps() {
   return { finalPropsChecked: finalChecked, voided, details };
 }
 
-module.exports = { recordPredictions, recordTotalBasesShadow, recordStrikeoutShadow, recordHitsShadow, recordNbaPropPredictions, recordNbaTeamPredictions, recordNFLPredictions, gradeFinishedGames, gradeNbaProp, captureClosingLines, captureNbaClosingLines, captureOddsTicks, voidUnmatchedProps };
+module.exports = { recordPredictions, recordTotalBasesShadow, recordStrikeoutShadow, recordHitsShadow, recordNbaPropPredictions, recordNbaTeamPredictions, recordNFLPredictions, recordCFBPredictions, gradeFinishedGames, gradeNbaProp, captureClosingLines, captureNbaClosingLines, captureOddsTicks, voidUnmatchedProps };
