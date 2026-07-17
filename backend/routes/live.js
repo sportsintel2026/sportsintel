@@ -23,6 +23,7 @@ const {
 const { getMLBLiveOdds, americanToImpliedProb } = require("../services/oddsApi");
 const { devigTwoWay } = require("../services/edgesModel");
 const { computeLiveWinProb } = require("../services/liveModel");
+const { teamKey } = require("../services/teamKey"); // WZ-TEAMKEY-SSOT-2026-07-17
 
 let liveCache = null;
 let liveCacheAt = 0;
@@ -35,6 +36,15 @@ function normalizeTeam(name) {
     .trim();
 }
 function matchOdds(game, oddsEvents) {
+  // WZ-TEAMKEY-SSOT-2026-07-17 :: canonical, collision-safe pass first (both teams must agree),
+  // across all events; subsumes the city-strip + adds abbr/relocation names. Legacy exact/contains
+  // stays below as a fallback, so this only ADDS correct matches.
+  const aK = teamKey(game.away, "mlb"), hK = teamKey(game.home, "mlb");
+  if (aK && hK) {
+    for (const ev of oddsEvents) {
+      if (teamKey(ev.awayTeam, "mlb") === aK && teamKey(ev.homeTeam, "mlb") === hK) return ev;
+    }
+  }
   const awayN = normalizeTeam(game.away), homeN = normalizeTeam(game.home);
   for (const ev of oddsEvents) {
     const a = normalizeTeam(ev.awayTeam), h = normalizeTeam(ev.homeTeam);
