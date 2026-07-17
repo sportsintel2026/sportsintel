@@ -16,6 +16,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { useSport } from "../hooks/useSport"; // WIZEPICKS-SPORTNAV-2026-06-25
 import { edgesApi, subscriptionApi, liveApi, newsApi, supabase } from "../lib/api";
+import { hasGameDetail } from "../lib/gameDetail"; // WZ-DETAIL-SSOT-2026-07-17
 import Sidebar from "./Sidebar";
 import HomeDesktop from "./HomeDesktop";
 
@@ -23,16 +24,10 @@ import HomeDesktop from "./HomeDesktop";
 const PERF_API_BASE = import.meta.env.VITE_API_URL || "https://sportsintel-production.up.railway.app";
 // WZ-AI-READ-2026-07-12 :: session cache for AI reads so an opened card fetches at most once
 const AI_READ_CACHE = new Map();
-// WZ-GAMEDETAIL-GUARD-2026-07-12 :: only these sports have a /game/<sport>/:id detail route. Others
-// have none, so navigating there falls through the catch-all to "/" (the landing page) and looks
-// like a logout. Gate every breakdown link/tap on this.
-// WZ-GAMEDETAIL-SPORTS-2026-07-17 :: sports that HAVE a /game/<sport>/:id route in App.jsx.
-// NFL + CFB gained FbGameDetail on 2026-07-16 (/game/nfl/:id, /game/cfb/:id) and their edges
-// feed shares the SAME ESPN game id the detail page resolves by — but this gate was never
-// flipped, so Home-board taps on football games silently did nothing. Keep this Set in sync
-// with the /game/* routes in App.jsx so a new detail route can't drift out of this gate again.
-const DETAIL_SPORTS = new Set(["mlb", "nba", "nfl", "cfb"]);
-const hasGameDetail = (sport) => DETAIL_SPORTS.has(sport);
+// WZ-DETAIL-SSOT-2026-07-17 :: which sports have a /game/<sport>/:id route is now defined
+// ONCE in ../lib/gameDetail (hasGameDetail, imported above). Home, LiveScores and HomeDesktop
+// all read that single set, so this gate can't drift per-surface again — the drift that made
+// NFL/CFB taps dead after their routes shipped 2026-07-16.
 // WZ-BOARD-ASBREAK-2026-07-12 :: All-Star break placeholder window. 2026 break is dark Jul 13-15;
 // second half opens Jul 16. Self-clearing: once games return the board isn't empty, so this never
 // shows on a live day. (Could be made schedule-driven off a backend next-game date later.)
