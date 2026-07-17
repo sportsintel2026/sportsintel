@@ -217,7 +217,7 @@ const ACE_SUPPRESS_MAX = 0.6;    // hard cap on extra suppression per starter (r
 // the live projection (calculateTotalProjection) is not yet stored, so exact bias is unmeasured.
 // Refine from the by-side ROI split after ~2 weeks. Applied to the LIVE projection ONLY — the
 // shadow projection (calculateTotalProjectionShadow) is grading-only and is intentionally untouched.
-const TOTAL_MEAN_ADJ = 0.20;     // runs added to the live total projection (tunable / reversible)
+const TOTAL_MEAN_ADJ = 0.0;      // WZ-TOTMEANADJ-0-2026-07-17 :: was 0.20 (a speculative upward nudge that per its own note was to be refined from the by-side ROI split and never was). The split came in overs -9.7% ROI vs unders +1% = the model leans OVER, and +0.20 fed exactly that losing side. Removed to 0 (neutral) as an evidence-based bleed reducer -- NOT a new guess; going negative waits for the projected-total logging + real bias measurement (Move 2). Reversible.
 // Expected starter innings, anchored on the pitcher's REAL avg innings/start when
 // the sample is real (else ERA-derived). EXCEPTION (Roland's rule): a bad starter
 // — high ERA AND high WHIP — facing a strong-hitting lineup gets pulled EARLIER
