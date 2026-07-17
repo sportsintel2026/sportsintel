@@ -1032,6 +1032,60 @@ async function recordNFLPredictions(slate) {
       });
     }
   }
+
+  // WZ-FBALL-SLATE-SHADOW-2026-07-17 :: FULL-SLATE shadow recorder — the calibration rig. The filtered
+  // block above only logs value===true picks, which is ~nothing while the model mirrors the market, so
+  // it can never accumulate a gradeable sample (the exact MLB trap that cost months). This logs ONE
+  // fixed-side row per game per market for EVERY game with a posted price — regardless of edge, value,
+  // or dataQuality — into DISTINCT *_shadow markets (moneyline_shadow home / spread_shadow home /
+  // total_shadow over). It stores the model internals the playbook wants (projected_margin, raw_win_prob,
+  // projected total) so calibration can measure claimed-vs-actual the moment ratings land, and captures
+  // the market baseline + preseason sample now. Fixed sides remove selection bias (the other side is
+  // 1 - p). Rows grade via gradeNFL (which strips the _shadow suffix) and are STRUCTURALLY excluded from
+  // the published record (performance counts only exact core market names). Dup-safe via the same
+  // (game_id, market, selection, game_date) upsert — first pre-game snapshot wins. Every row REQUIRES a
+  // posted price so a single null can't reject the whole batch (same hardening as the MLB slate shadow).
+  for (const g of slate.games) {
+    if (!g.commenceTime) continue;
+    const daysOut = (new Date(g.commenceTime).getTime() - now) / 864e5;
+    if (daysOut > NFL_IMMINENT_DAYS || daysOut < 0) continue; // pre-game snapshots only
+    const gameDate = etDate(g.commenceTime) || getEasternDate(0);
+    const matchup = g.matchup;
+    const ml = g.moneyline, sp = g.spread, tot = g.total;
+    const margin = (ml && ml.modelMargin != null) ? ml.modelMargin : null; // model's projected home margin
+    if (ml && ml.homeWinProb != null && ml.book && ml.book.home != null) {
+      rows.push({
+        game_id: String(g.eventId), game_date: gameDate, league: "nfl", matchup,
+        market: "moneyline_shadow", selection: "home",
+        description: `SHADOW ${g.homeTeam || "home"} ML (full slate)`,
+        model_prob: round3(ml.homeWinProb / 100), odds: ml.book.home,
+        edge: round3((ml.edge || 0) / 100), confidence: null, conviction: null, conviction_score: null, line: null,
+        raw_win_prob: (ml.modelHomeWinProb != null) ? round3(ml.modelHomeWinProb / 100) : null,
+        projected_margin: margin,
+      });
+    }
+    if (sp && sp.homeCoverProb != null && sp.line != null && sp.book && sp.book.home != null) {
+      rows.push({
+        game_id: String(g.eventId), game_date: gameDate, league: "nfl", matchup,
+        market: "spread_shadow", selection: "home",
+        description: `SHADOW ${g.homeTeam || "home"} ${sp.line > 0 ? "+" : ""}${sp.line} (full slate)`,
+        model_prob: round3(sp.homeCoverProb / 100), odds: sp.book.home,
+        edge: round3((sp.edge || 0) / 100), confidence: null, conviction: null, conviction_score: null, line: sp.line,
+        projected_margin: margin,
+      });
+    }
+    if (tot && tot.overProb != null && tot.line != null && tot.book && tot.book.over != null) {
+      rows.push({
+        game_id: String(g.eventId), game_date: gameDate, league: "nfl", matchup,
+        market: "total_shadow", selection: "over",
+        description: `SHADOW Over ${tot.line} (full slate)`,
+        model_prob: round3(tot.overProb / 100), odds: tot.book.over,
+        edge: round3((tot.edge || 0) / 100), confidence: null, conviction: null, conviction_score: null, line: tot.line,
+        projected: (tot.projTotal != null) ? tot.projTotal : null,
+      });
+    }
+  }
+
   if (rows.length === 0) return;
   try {
     const { error } = await supabase
@@ -1478,7 +1532,8 @@ async function gradeNFL(supabase, pending) {
     return sbCache[date];
   };
   for (const p of pending) {
-    if (!TEAM.has(p.market)) continue;
+    const baseMarket = String(p.market || "").replace(/_shadow$/, ""); // WZ-FBALL-SLATE-SHADOW-2026-07-17 :: grade the full-slate *_shadow rows too
+    if (!TEAM.has(baseMarket)) continue;
     const parts = String(p.matchup || "").split(" @ ");
     if (parts.length !== 2) continue;            // need "Away @ Home" to match by name
     const awayN = normTeam(parts[0]), homeN = normTeam(parts[1]);
@@ -1493,7 +1548,7 @@ async function gradeNFL(supabase, pending) {
     if (!g || g.state !== "post") continue;       // not found / not final → stay pending
     const hs = g.home?.score, as = g.away?.score;
     if (hs == null || as == null) continue;
-    const outcome = gradeNbaTeam(p, hs, as);      // pure team-market grader, reused
+    const outcome = gradeNbaTeam({ ...p, market: baseMarket }, hs, as); // pure team-market grader, reused (base market so *_shadow settles)
     if (!outcome) continue;
     const { error: upErr } = await supabase
       .from("model_predictions")
