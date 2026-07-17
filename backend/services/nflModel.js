@@ -28,9 +28,14 @@
  */
 
 // ── Football constants ────────────────────────────────────────────────────────
+const { spreadCover } = require("./footballMargin"); // WZ-FBALL-KEYNUM-2026-07-17
 // Margin SD for an NFL game outcome vs the spread. Empirically ~13.0–13.9; 13.5
 // is the standard value used to convert a point spread to a cover/win probability.
 const NFL_SIGMA = 13.5;
+// WZ-FBALL-KEYNUM-2026-07-17 :: strength of the 3/7 key-number weighting in the spread cover
+// model. 1.0 = full physical mass (push-calibrated to real NFL push rates); 0 = plain Normal.
+// A reversible dial — drop toward 0 if a backtest ever says the market keys differently than 2003-24.
+const NFL_KEY_STRENGTH = 1.0;
 // Total SD — game totals swing more than margins; ~10 is a common working value.
 const NFL_TOTAL_SIGMA = 10.0;
 // Home-field advantage in points. League-wide long-run ~2.5 (post-2020 it has
@@ -209,12 +214,16 @@ function predictGame(ev, ctx = {}) {
   // ── SPREAD ─────────────────────────────────────────────────────────────────
   const sLine = ev.spreads?.homeLine; // home's signed spread (e.g. -3.5)
   if (sLine != null && ev.spreads?.home != null && ev.spreads?.away != null) {
-    // home covers if (actual home margin + homeLine) > 0. Cover prob from model margin.
-    const homeCoverProb = normalCDF((modelMargin + sLine) / NFL_SIGMA);
+    // home covers if (actual home margin + homeLine) > 0. Cover prob from the key-number-aware
+    // margin distribution (WZ-FBALL-KEYNUM-2026-07-17): real 3/7 mass + push handling, so it doesn't
+    // manufacture phantom edges on/near the key numbers the way a plain Normal did. homeCoverProb is
+    // the two-way (push-excluded) cover prob — directly comparable to the de-vigged book price below.
+    const { homeCoverProb, push: homePushProb } = spreadCover(modelMargin, NFL_SIGMA, sLine, "nfl", NFL_KEY_STRENGTH);
     const fairHomeCover = devigPair(ev.spreads.home, ev.spreads.away);
     out.spread = {
       line: sLine,
       homeCoverProb: r(homeCoverProb * 100),
+      pushProb: r(homePushProb * 100), // WZ-FBALL-KEYNUM-2026-07-17 :: real push mass at the line
       pick: null, pickTeam: null, edge: null, value: false,
       fair: fairHomeCover != null ? { home: r(fairHomeCover * 100), away: r((1 - fairHomeCover) * 100) } : null,
       book: { home: ev.spreads.home, away: ev.spreads.away, homeLine: sLine, awayLine: ev.spreads.awayLine },
