@@ -13,6 +13,7 @@ const express = require("express");
 const router = express.Router();
 const { createClient } = require("@supabase/supabase-js");
 const calibrationGuard = require("../services/calibrationGuard"); // WZ-CALIB-GUARD-2026-07-17
+const { runLineCoverModel } = require("../services/edgesModel"); // WZ-RL-BACKTEST-2026-07-17 :: real run-line model for replay
 
 // --- per-sport market config -------------------------------------------------
 // core  = team markets that count toward the overall record + CLV
@@ -294,6 +295,90 @@ router.get("/calibprobe", async (req, res) => {
 
 // WZ-CALIB-GUARD-2026-07-17 :: live calibration-guard status (what is benched, the gap, and why)
 router.get("/guard", (req, res) => { res.json(calibrationGuard.getStatus()); });
+
+// WZ-RL-BACKTEST-2026-07-17 :: read-only run-line REPLAY backtest. Re-runs the REBUILT margin model
+// (runLineCoverModel) over graded shadow games and reports claimed-vs-actual cover calibration -- the
+// evidence check ahead of un-benching run-line. Directional read (two documented input proxies), NOT
+// the final gate; the clean gate is the forward shadow sample (new model logging since 2026-07-17)
+// maturing. GET /api/performance/rlbacktest  [?since=YYYY-MM-DD]
+router.get("/rlbacktest", async (req, res) => {
+  try {
+    const supabase = db();
+    const SHADOW = ["moneyline_shadow", "total_shadow", "run_line_shadow"];
+    const since = req.query.since || null;
+
+    const PAGE = 1000; let from = 0; const rows = [];
+    for (let i = 0; i < 40; i++) {
+      let q = supabase.from("model_predictions")
+        .select("game_id, matchup, market, selection, model_prob, line, odds, result, game_date")
+        .eq("league", "mlb").in("market", SHADOW)
+        .order("game_date", { ascending: true }).range(from, from + PAGE - 1);
+      if (since) q = q.gte("game_date", since);
+      const { data, error } = await q;
+      if (error) throw error;
+      if (!data || !data.length) break;
+      rows.push(...data);
+      if (data.length < PAGE) break;
+      from += PAGE;
+    }
+
+    // Join the three shadow markets per game (game_id when present, else matchup+date).
+    const games = new Map();
+    for (const r of rows) {
+      const key = (r.game_id != null ? String(r.game_id) : (r.matchup || "?")) + "|" + (r.game_date || "?");
+      let g = games.get(key); if (!g) { g = {}; games.set(key, g); }
+      if (r.market === "moneyline_shadow") g.homeWin = r.model_prob != null ? Number(r.model_prob) : null;
+      else if (r.market === "total_shadow") g.total = r.line != null ? Number(r.line) : null;
+      else if (r.market === "run_line_shadow") { g.rlLine = r.line != null ? Number(r.line) : null; g.rlResult = r.result; }
+    }
+
+    const band = (p) => p < 0.50 ? "<0.50" : p < 0.55 ? "0.50-0.55" : p < 0.60 ? "0.55-0.60" : "0.60+";
+    const conf = {}, full = {};
+    let n = 0, skipped = 0;
+    for (const g of games.values()) {
+      if (g.homeWin == null || g.total == null || g.rlLine == null || (g.rlResult !== "win" && g.rlResult !== "loss")) { skipped++; continue; }
+      const predHomeCover = runLineCoverModel(g.total, g.homeWin, g.rlLine);
+      const homeCovered = g.rlResult === "win"; // shadow selection is always home vs its own homeLine
+      n++;
+
+      const fk = band(predHomeCover);
+      (full[fk] ||= { n: 0, claimSum: 0, hit: 0 });
+      full[fk].n++; full[fk].claimSum += predHomeCover; if (homeCovered) full[fk].hit++;
+
+      const confP = Math.max(predHomeCover, 1 - predHomeCover);
+      const confCovered = predHomeCover >= 0.5 ? homeCovered : !homeCovered;
+      const ck = band(confP);
+      (conf[ck] ||= { n: 0, claimSum: 0, hit: 0 });
+      conf[ck].n++; conf[ck].claimSum += confP; if (confCovered) conf[ck].hit++;
+    }
+
+    const fin = (m) => Object.fromEntries(Object.entries(m).map(([k, v]) => [k, {
+      n: v.n,
+      claimedPct: v.n ? Math.round((v.claimSum / v.n) * 1000) / 10 : null,
+      actualPct: v.n ? Math.round((v.hit / v.n) * 1000) / 10 : null,
+      gapPts: v.n ? Math.round(((v.claimSum / v.n) - (v.hit / v.n)) * 1000) / 10 : null,
+    }]));
+
+    res.json({
+      token: "WZ-RL-BACKTEST-2026-07-17",
+      whatThisIs: "Replay of the REBUILT run-line margin model over graded shadow games. Confident-side bands are the audit's lens -- OLD run-line there: 0.55-0.60 claimed 58.5 -> actual 50.0; 0.60+ claimed 62.5 -> actual 50.0 (n=94). Small gaps here = the rebuild fixed it.",
+      gamesScored: n,
+      gamesSkipped: skipped,
+      confidentSideBands: fin(conf),
+      homeCoverCalibration: fin(full),
+      tuningKnob: "edgesModel RUN_PHI (currently 1.35). If confident bands still run hot (claimed >> actual), raise RUN_PHI and re-run.",
+      caveats: [
+        "Proxy 1: market TOTAL line used as projected total (model uses its own projectedTotal; usually within ~0.3-0.5 runs).",
+        "Proxy 2: raw home win prob used, not the live 55/45 market-blended one.",
+        "Directional sanity read, NOT the un-bench gate. Clean gate = the forward shadow sample maturing ~2 weeks, then re-check these bands.",
+        "Un-bench run-line ONLY if the confident bands calibrate (gap small) AND a real edge exists; else tune RUN_PHI and re-run.",
+      ],
+    });
+  } catch (err) {
+    console.error("[rlbacktest] error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 router.get("/:league", async (req, res) => {
   const league = String(req.params.league || "").toLowerCase();
