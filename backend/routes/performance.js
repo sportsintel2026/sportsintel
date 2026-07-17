@@ -383,6 +383,76 @@ router.get("/rlbacktest", async (req, res) => {
   }
 });
 
+// WZ-TOTALSBIAS-2026-07-17 :: read-only totals over-lean meter. For graded full-slate total_shadow rows
+// that carry a stored projected total, measures mean(projected - actual_value) = the projection's bias in
+// runs (+ = projects HIGH = over-lean), recommends the TOTAL_MEAN_ADJ that centers it, and dials candidate
+// adjustments against real over/under outcomes. Populates once the projected-logging deploy is live and
+// games settle. GET /api/performance/totalsbias [?since=YYYY-MM-DD]
+router.get("/totalsbias", async (req, res) => {
+  try {
+    const supabase = db();
+    const since = req.query.since || null;
+    const PAGE = 1000; let from = 0; const rows = [];
+    for (let i = 0; i < 40; i++) {
+      let q = supabase.from("model_predictions")
+        .select("projected, actual_value, line, result, game_date")
+        .eq("league", "mlb").eq("market", "total_shadow")
+        .in("result", ["win", "loss"])
+        .order("game_date", { ascending: true }).range(from, from + PAGE - 1);
+      if (since) q = q.gte("game_date", since);
+      const { data, error } = await q;
+      if (error) throw error;
+      if (!data || !data.length) break;
+      rows.push(...data);
+      if (data.length < PAGE) break;
+    }
+    const usable = rows.filter(r => r.projected != null && r.actual_value != null && r.line != null);
+    const n = usable.length;
+    if (!n) {
+      return res.json({
+        token: "WZ-TOTALSBIAS-2026-07-17", n: 0,
+        note: "No graded total_shadow rows carry a stored projected total yet. This populates going forward, once the projected-logging deploy is live and games settle. Re-check after ~1-2 weeks of slates.",
+      });
+    }
+    let sumBias = 0, projOverLine = 0, wentOver = 0;
+    const deltas = [-0.6, -0.4, -0.2, 0, 0.2];
+    const dial = {}; for (const d of deltas) dial[d] = { overPicks: 0, overWins: 0, underPicks: 0, underWins: 0 };
+    for (const r of usable) {
+      const proj = Number(r.projected), act = Number(r.actual_value), line = Number(r.line);
+      sumBias += (proj - act);
+      if (proj > line) projOverLine++;
+      const actualOver = act > line;
+      if (actualOver) wentOver++;
+      for (const d of deltas) {
+        const c = dial[d];
+        if ((proj + d) > line) { c.overPicks++; if (actualOver) c.overWins++; }
+        else { c.underPicks++; if (!actualOver) c.underWins++; }
+      }
+    }
+    const meanBias = Math.round((sumBias / n) * 100) / 100;
+    const dialOut = {};
+    for (const d of deltas) {
+      const c = dial[d];
+      const oW = c.overPicks ? Math.round((c.overWins / c.overPicks) * 1000) / 10 : null;
+      const uW = c.underPicks ? Math.round((c.underWins / c.underPicks) * 1000) / 10 : null;
+      dialOut["adj_" + d] = { overPicks: c.overPicks, overWinPct: oW, underPicks: c.underPicks, underWinPct: uW,
+        spreadPts: (oW != null && uW != null) ? Math.round((oW - uW) * 10) / 10 : null };
+    }
+    res.json({
+      token: "WZ-TOTALSBIAS-2026-07-17", n,
+      meanProjMinusActual: meanBias,
+      recommendedTotalMeanAdj: Math.round((-meanBias) * 100) / 100,
+      modelOverRate: Math.round((projOverLine / n) * 1000) / 10,
+      actualOverRate: Math.round((wentOver / n) * 1000) / 10,
+      dial: dialOut,
+      reading: "meanProjMinusActual > 0 => model projects HIGH (over-lean); recommendedTotalMeanAdj is the runs to add (negative = subtract) to center projections on reality. Dial: pick the adj where overWinPct and underWinPct are both above ~52.4% (break-even at -110) and spreadPts is near 0 (no lean).",
+    });
+  } catch (err) {
+    console.error("[totalsbias] error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get("/:league", async (req, res) => {
   const league = String(req.params.league || "").toLowerCase();
   const cfg = LEAGUE_CONFIG[league];
