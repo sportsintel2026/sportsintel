@@ -796,7 +796,7 @@ function kNegBinomCdf(k, mu, phi) {
 // This replaces the old fixed-SD Normal transform of the win prob: it captures the run margin's real
 // variance AND the large probability mass at +/-1 run (one-run games, where a -1.5 favorite loses),
 // which a Normal smears over and which drove the old overconfident -1.5 covers. Backtest-tunable.
-const RUN_PHI = 1.35;   // team-runs overdispersion (variance/mean); Poisson=1.
+const RUN_PHI = 1.8;    // WZ-RUNPHI-1P8-2026-07-17 :: team-runs overdispersion (variance/mean). Raised 1.35->1.8 after the phi-dial backtest: the confident 0.60+ band gap fell from +5.2 (claimed 65.2/actual 60.0) toward ~+1 as phi rose, with the low-cover band staying calibrated; 1.8 also matches real MLB team-run overdispersion, so it is a physical correction, not a curve-fit. Forward guard/shadow confirms before un-bench.
 const RL_MAXR = 24;     // truncate each team's run count (P beyond ~0)
 function _runPmf(mu, phi) {
   const _phi = phi != null ? phi : RUN_PHI;   // WZ-RL-PHIDIAL-2026-07-17 :: optional override for the tuning dial
