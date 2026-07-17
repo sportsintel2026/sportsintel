@@ -302,6 +302,23 @@ cron.schedule("20 9 * * *", async () => {
   }
 }, { timezone: "America/New_York" });
 
+// WZ-FBALL-CFB-SHADOW-2026-07-17 :: CFB slate + full-slate shadow recorder, mirroring the NFL cron
+// above. runCFBSlate -> recordCFBPredictions logs one fixed-side shadow row per game per market for
+// every CFB game with a posted line. Self-gating (recordCFBPredictions only logs games within ~7
+// days), so it's a no-op all offseason and comes alive the week before Saturday slates. Grading is
+// already covered: gradeFinishedGames (fast lane below) now routes cfb rows to gradeCFB. Staggered
+// 5 min after NFL; daily is plenty for a weekly sport; idempotent (dups ignored).
+cron.schedule("25 9 * * *", async () => {
+  try {
+    const { runCFBSlate } = require("./services/cfbEdges");
+    const { recordCFBPredictions } = require("./services/predictionTracker");
+    const slate = await runCFBSlate({ weeks: 1 });
+    await recordCFBPredictions(slate);
+  } catch (err) {
+    console.error("[CRON] CFB model-pick record failed:", err.message);
+  }
+}, { timezone: "America/New_York" });
+
 // WZ-FASTGRADE-2026-07-09 :: grade finished MLB games every 15 min (was hourly) so results
 // post within ~15 min of the final out instead of up to ~59 min. gradeFinishedGames only flips
 // pending->win/loss and is idempotent, so frequent runs are cheap (a no-op query when nothing
