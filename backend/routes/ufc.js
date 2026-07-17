@@ -12,6 +12,7 @@ const express = require("express");
 const router = express.Router();
 const axios = require("axios");
 const { fetchMMASchedule } = require("../services/sportsData");
+const adminGuard = require("../middleware/adminGuard"); // WZ-ADMIN-GUARD-2026-07-17 :: gate the 3 UFC debug routes (card/record stay public)
 const { getNextPPVEvent, getEventBouts, getFighter, getFighterFights, getUpcomingEvents } = require("../services/citoApi"); // WZ-UFC-FORM-2026-07-09 / WZ-UFC-HOLDEVENT-2026-07-11
 const { scoreBout, methodLean } = require("../services/mmaModel"); // WZ-UFC-MODEL-2026-07-09 / WZ-UFC-METHOD-2026-07-09
 const { createClient } = require("@supabase/supabase-js"); // WZ-UFC-REC-2026-07-09
@@ -398,7 +399,7 @@ router.get("/card", async (_req, res) => {
 //   PENDING nothing yet (fight not done, or a name-match MISS)
 // When a fight is finished on ESPN but does NOT settle, `miss` shows the normalized candidate
 // name-sets from both sides + the matched ESPN fight, so a nickname miss is visible at a glance.
-router.get("/diag", async (_req, res) => {
+router.get("/diag", adminGuard, async (_req, res) => {
   try {
     const event = await pickCardEvent();
     if (!event || !event.slug) return res.json({ ok: false, reason: "no-event" });
@@ -501,7 +502,7 @@ router.get("/diag", async (_req, res) => {
 // first, then the ESPN fallback matcher), settles win/loss/push, busts the card cache so the next
 // /card rebuild rolls forward, and returns a per-fight report (including any DB update error) so a
 // single hit is fully self-diagnosing. Idempotent + fail-safe. Temporary; delete with /diag.
-router.get("/grade-now", async (_req, res) => {
+router.get("/grade-now", adminGuard, async (_req, res) => {
   const report = { ok: true, ran: true };
   try {
     const c = sb();
@@ -645,7 +646,7 @@ router.get("/record", async (_req, res) => {
 // WZ-UFC-PROBE-2026-07-10 :: read-only Cito diagnostic. Additive; touches no existing logic.
 // Never echoes the key -- returns only keyPresent (boolean), HTTP status, and shape/counts so we
 // can see exactly why buildCitoCard() went empty. GET /api/ufc/probe . Remove after we diagnose.
-router.get("/probe", async (_req, res) => {
+router.get("/probe", adminGuard, async (_req, res) => {
   const out = { token: "WZ-UFC-PROBE-2026-07-10", ts: new Date().toISOString(), keyPresent: !!process.env.CITO_API_KEY };
   const KEY = process.env.CITO_API_KEY || "";
   const BASE = "https://api.citoapi.com/api/v1";
