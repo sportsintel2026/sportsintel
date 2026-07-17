@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 const PERF_API_BASE = import.meta.env.VITE_API_URL || "https://sportsintel-production.up.railway.app";
 import { useAuth } from "../hooks/useAuth";
-import { edgesApi, subscriptionApi, scoresApi, matchupsApi, liveApi } from "../lib/api";
+import { edgesApi, subscriptionApi, scoresApi, matchupsApi, liveApi, newsApi } from "../lib/api";
 
 const TEAMCOL = {
   ARI:"#A71930",ATL:"#CE1141",BAL:"#DF4601",BOS:"#BD3039",CHC:"#0E3386",CWS:"#27251F",CHW:"#27251F",
@@ -17,6 +17,9 @@ const TEAMCOL = {
 const SLUGM = { CWS:"chw", CHW:"chw", ATH:"oak" };
 const colFor = (ab) => TEAMCOL[(ab||"").toUpperCase()] || "#2A6F97";
 const nick = (s) => String(s||"").trim().split(/\s+/).pop().toLowerCase();
+// WZ-GD-INJNEWS-2026-07-16 :: name-match helpers for injury/news team filtering
+const norm = (s) => String(s||"").toLowerCase().replace(/[^a-z]/g,"");
+const nameHit = (a,b) => { a=norm(a); b=norm(b); if(!a||!b) return false; return a===b||a.includes(b)||b.includes(a); };
 const fmtOdds = (o) => o==null||o===""||isNaN(+o) ? "—" : (+o>0 ? "+"+(+o) : ""+(+o));
 const shortTeam = (s) => (s||"").trim().split(/\s+/).slice(-1)[0].slice(0,3).toUpperCase();
 const fmtTime = (t) => { if(!t) return ""; if(typeof t==="string"){ if(/invalid/i.test(t)) return ""; if(!/^\d{4}-\d{2}-\d{2}T/.test(t)) return t; }
@@ -35,6 +38,8 @@ export default function GameDetailPage() {
   const [bvpData, setBvpData] = useState(null);    // matchups: batter-vs-pitcher
   const [lineups, setLineups] = useState(null);    // matchups: projected batting orders
   const [marketRead, setMarketRead] = useState(null);
+  const [inj, setInj] = useState([]);   // WZ-GD-INJNEWS-2026-07-16
+  const [news, setNews] = useState([]);
   const [loading, setLoading] = useState(true);
   const [plan, setPlan] = useState({ tier:"free", isAdmin:false });
   const hasFull = plan.isAdmin === true || plan.tier === "pro" || plan.tier === "elite";
@@ -44,14 +49,17 @@ export default function GameDetailPage() {
   useEffect(() => {
     let cancelled = false; setLoading(true);
     (async () => {
-      const [edges, scores, mr, liveFeed] = await Promise.all([
+      const [edges, scores, mr, liveFeed, injRes, newsRes] = await Promise.all([
         edgesApi.getMLB().catch(()=>null),
         scoresApi.getScores("mlb").catch(()=>null),
         edgesApi.getMarketRead ? edgesApi.getMarketRead("mlb").catch(()=>null) : Promise.resolve(null),
         liveApi.getMLB().catch(()=>null),
+        newsApi.getInjuries("mlb").catch(()=>null),   // WZ-GD-INJNEWS-2026-07-16
+        newsApi.getFeed("mlb").catch(()=>null),
       ]);
       if (cancelled) return;
       setAllEdges(edges); setMarketRead(mr);
+      setInj(Array.isArray(injRes?.items)?injRes.items:[]); setNews(Array.isArray(newsRes?.items)?newsRes.items:[]);
       // The dashboard Live Edges cards navigate with the live feed's gameId (= StatsAPI
       // gamePk). Match it directly here so a live game always resolves, even after the
       // edges board has rolled to tomorrow (when nickname/detailId bridges all miss).
@@ -145,6 +153,13 @@ export default function GameDetailPage() {
 
   const aAb = game?.awayAbbr || shortTeam(scoresGame?.away?.name || game?.away || "");
   const hAb = game?.homeAbbr || shortTeam(scoresGame?.home?.name || game?.home || "");
+  // WZ-GD-INJNEWS-2026-07-16 :: filter the injury/news feeds down to this game's two teams
+  const _an2 = scoresGame?.away?.name || game?.away || "";
+  const _hn2 = scoresGame?.home?.name || game?.home || "";
+  const injA = (inj||[]).filter(it => norm(it.teamAbbr)===norm(aAb) || nameHit(it.team,_an2) || nameHit(it.team,aAb));
+  const injH = (inj||[]).filter(it => norm(it.teamAbbr)===norm(hAb) || nameHit(it.team,_hn2) || nameHit(it.team,hAb));
+  const _gtoks = [aAb,hAb,nick(_an2),nick(_hn2)].map(norm).filter(t=>t.length>=2);
+  const gameNews = (news||[]).filter(it => { if(it.type==="video") return false; const hay=norm(`${it.team||""} ${it.teamAbbr||""} ${it.headline||""} ${it.summary||""} ${it.playerName||""}`); return _gtoks.some(t=>hay.includes(t)); }).slice(0,4);
   const st = (game?.status==="live"||scoresGame?.status==="live") ? "live"
            : (game?.status==="final"||scoresGame?.status==="final") ? "final" : "pre";
 
@@ -174,7 +189,7 @@ export default function GameDetailPage() {
       <div className="sbody">
         {loading && <div className="estate"><div className="et">Loading matchup…</div></div>}
         {!loading && !game && <div className="estate"><div className="et">Game not found</div><div className="es">It may have rolled off today's slate.</div></div>}
-        {!loading && game && st==="pre"   && <SheetPre   game={game} aAb={aAb} hAb={hAb} gEdges={gEdges} mlPick={mlPick} totPick={totPick} rlPick={rlPick} bestEdge={bestEdge} mr={mr} detail={detail} bvpData={bvpData} lineups={lineups} hasFull={hasFull} navigate={navigate}/>}
+        {!loading && game && st==="pre"   && <SheetPre   game={game} aAb={aAb} hAb={hAb} gEdges={gEdges} mlPick={mlPick} totPick={totPick} rlPick={rlPick} bestEdge={bestEdge} mr={mr} detail={detail} bvpData={bvpData} lineups={lineups} hasFull={hasFull} navigate={navigate} injA={injA} injH={injH} gameNews={gameNews}/>}
         {!loading && game && st==="live"  && <SheetLive  game={game} gameId={gameId} scoresGame={scoresGame} aAb={aAb} hAb={hAb} gEdges={gEdges} detail={detail}/>}
         {!loading && game && st==="final" && <SheetFinal game={game} scoresGame={scoresGame} aAb={aAb} hAb={hAb} bestEdge={bestEdge} detail={detail} venue={venue}/>}
       </div>
@@ -199,6 +214,18 @@ const Agree = ({ ok }) => ok==null ? null : <span className={"ma "+(ok?"ag":"df"
 const Block = ({ label, bx, children, style }) => (
   <div className="dblk" style={style}><div className="bl">{label}{bx && <span className="bx">{bx}</span>}</div>{children}</div>
 );
+// WZ-GD-INJNEWS-2026-07-16 :: injury pill row (mirrors the football detail InjRow)
+function InjRowGD({ it }) {
+  const st = String(it.status || "").toUpperCase();
+  const cls = /IL|IR|OUT|DOUBT|SUSP/.test(st) ? "out" : /DAY|GTD|QUES|LIMIT/.test(st) ? "q" : "ok";
+  const short = st.includes("IL") ? "IL" : st.includes("DAY-TO-DAY") ? "DTD" : st.replace(/QUESTIONABLE/,"QUES").replace(/PROBABLE/,"PROB").replace(/DOUBTFUL/,"DOUBT").slice(0,7);
+  return (
+    <div className="gdinji">
+      <span className="gdinjn">{it.playerName}{it.position ? <small> {it.position}</small> : null}</span>
+      <span className={"gdistat " + cls}>{short || "\u2014"}</span>
+    </div>
+  );
+}
 // Collapsible section — tap the header to expand. Collapsed by default to keep the
 // detail card clean. Reuses the .cv chevron used elsewhere.
 const Collapse = ({ label, bx, sub, open: defOpen = false, children }) => {
@@ -326,7 +353,7 @@ function PitchingDuel({ aAb, hAb, aCol, hCol, pa, ph }) {
   </Block>;
 }
 
-function SheetPre({ game, aAb, hAb, gEdges, mlPick, totPick, rlPick, bestEdge, mr, detail, bvpData, lineups, hasFull, navigate }) {
+function SheetPre({ game, aAb, hAb, gEdges, mlPick, totPick, rlPick, bestEdge, mr, detail, bvpData, lineups, hasFull, navigate, injA=[], injH=[], gameNews=[] }) {
   const aCol=colFor(aAb), hCol=colFor(hAb);
   const ml = game.moneyline || {};
   const wlA = pct(ml.awayWinProb), wlH = pct(ml.homeWinProb);
@@ -411,6 +438,20 @@ function SheetPre({ game, aAb, hAb, gEdges, mlPick, totPick, rlPick, bestEdge, m
     {(formA||formH) && <Block label="RECENT FORM" bx="last 5 · runs/game"><div className="formgrid">
       <FormCol ab={aAb} f={formA}/><FormCol ab={hAb} f={formH}/>
     </div></Block>}
+
+    {/* WZ-GD-INJNEWS-2026-07-16 :: injury report + game news, ported from the football detail */}
+    {(injA.length + injH.length > 0) && <Block label="INJURY REPORT" bx="ESPN + RotoWire">
+      <div className="gdinjg">
+        <div><div className="gdinjt">{aAb}</div>{injA.length ? injA.slice(0,5).map((it,i)=><InjRowGD key={"a"+i} it={it}/>) : <div className="gdinjnone">No reported injuries</div>}</div>
+        <div><div className="gdinjt">{hAb}</div>{injH.length ? injH.slice(0,5).map((it,i)=><InjRowGD key={"h"+i} it={it}/>) : <div className="gdinjnone">No reported injuries</div>}</div>
+      </div>
+    </Block>}
+
+    {gameNews.length > 0 && <Block label="GAME NEWS" bx="this matchup">
+      {gameNews.map((it,i)=>{ const isInj=it.type==="injury"||it.status==="injury"; const blurb=String(it.summary||"").trim(); return (
+        <div className="gdnews" key={i}><span className={"gdntag "+(isInj?"i":"n")}>{isInj?"INJ":"NEWS"}</span><div><div className="gdnh">{it.playerName?<b>{it.playerName} {"\u2014"} </b>:null}{it.headline}</div>{blurb&&<div className="gdnb">{blurb.slice(0,120)}</div>}</div></div>
+      );})}
+    </Block>}
 
     <UmpBlock detail={detail}/>
 
@@ -668,6 +709,24 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .dblk{border:1px solid var(--line);border-radius:13px;background:var(--panel);padding:13px;margin-top:11px}
 .dblk .bl{font-family:var(--disp);font-weight:800;font-size:12px;letter-spacing:.7px;color:var(--mut);margin-bottom:11px;display:flex;align-items:center;justify-content:space-between}
 .dblk .bl .bx{font-family:var(--mono);font-size:9px;color:var(--mut2);letter-spacing:0;font-weight:500}
+/* WZ-GD-INJNEWS-2026-07-16 :: injury report + game news cards */
+.gdinjg{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.gdinjt{font-family:var(--disp);font-weight:800;font-size:14px;letter-spacing:.4px;margin-bottom:8px}
+.gdinji{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border-top:1px solid var(--line)}
+.gdinji:first-of-type{border-top:none}
+.gdinjn{font-size:12px}.gdinjn small{color:var(--mut2);font-family:var(--mono);font-size:9.5px}
+.gdinjnone{font-size:11px;color:var(--mut2);padding:6px 0}
+.gdistat{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.5px;padding:1px 6px;border-radius:5px;flex:0 0 auto}
+.gdistat.out{color:var(--red);border:1px solid rgba(226,101,92,.45)}
+.gdistat.q{color:#E6B450;border:1px solid rgba(230,180,80,.45)}
+.gdistat.ok{color:var(--green);border:1px solid rgba(63,203,145,.4)}
+.gdnews{display:flex;gap:10px;padding:9px 0;border-top:1px solid var(--line)}
+.gdnews:first-of-type{border-top:none;padding-top:2px}
+.gdntag{font-family:var(--mono);font-size:8px;font-weight:700;letter-spacing:.5px;padding:3px 5px;border-radius:5px;height:fit-content;flex:0 0 auto}
+.gdntag.n{color:#8fb4e8;border:1px solid rgba(143,180,232,.4)}
+.gdntag.i{color:var(--red);border:1px solid rgba(226,101,92,.4)}
+.gdnh{font-size:12.5px;font-weight:600;line-height:1.4}.gdnh b{font-weight:700}
+.gdnb{font-size:11px;color:var(--mut);margin-top:2px;line-height:1.45}
 .mst{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .mst .tm{display:flex;flex-direction:column;align-items:center;gap:6px;flex:1}
 .mst .tm .lgb{width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#1B2025;border:1px solid var(--line2)}.mst .tm .lgb img{width:38px;height:38px;object-fit:contain}
