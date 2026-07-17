@@ -755,6 +755,14 @@ router.get("/mlb", gatePicks, async (req, res) => {
       if ((pick.edge ?? 0) > 0) runLineEdges.push(pick);
     }
     runLineEdges.sort((a, b) => (b.modelProb ?? -1) - (a.modelProb ?? -1));
+    // WZ-RUNLINE-BENCH-2026-07-17 :: RUN-LINE BENCHED. Calibration audit 2026-07-17: across n=94
+    // settled picks the model's confident run-line range (cover prob 0.55+) claimed 58-63% and hit
+    // EXACTLY 50% (0.55-0.60 n=34 -> 50%, 0.60+ n=60 -> 50%). No sub-band survives, so there is
+    // nothing honest to show. Bleed-stopper, NOT a claim the market is fixed -- the real fix is
+    // rebuilding the run-line model. Emptying it here removes run-line from BOTH the shown board
+    // AND the graded record (result.runLineEdges feeds recordPredictions), so board==record stays
+    // true. Reversible: set RUNLINE_BENCH_ENABLED=false to restore.
+    const RUNLINE_BENCH_ENABLED = true;
     let hrPropEdges = [];
     let kPropEdges = [];
     let hitsPropEdges = [];
@@ -868,7 +876,7 @@ router.get("/mlb", gatePicks, async (req, res) => {
       }),
       moneylineEdges: moneylineBoard,
       totalsEdges: totalsEdgesShown.slice(0, 10),
-      runLineEdges: runLineEdges.slice(0, 10),
+      runLineEdges: RUNLINE_BENCH_ENABLED ? [] : runLineEdges.slice(0, 10), // WZ-RUNLINE-BENCH-2026-07-17
       hrPropEdges: hrPropEdges.slice(0, MLB_PROP_DISPLAY_CAP),
       kPropEdges: kPropEdges.slice(0, MLB_PROP_DISPLAY_CAP),
       hitsPropEdges: hitsPropEdges.slice(0, MLB_PROP_DISPLAY_CAP),
