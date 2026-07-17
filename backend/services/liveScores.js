@@ -399,6 +399,40 @@ function parseFbBrief(summary) {
   return (has(brief.home) || has(brief.away)) ? brief : null;
 }
 
+// WZ-TEAMNEWS-2026-07-16 :: pull ONE team's ESPN news feed and keep only items genuinely about
+// that team (ESPN's own team-tag category, or the team nickname as a whole word) so it can never
+// surface generic league news. Fail-safe: returns [] on any error.
+async function fetchTeamNews(league, teamId, names) {
+  if (!PATHS[league] || !teamId) return [];
+  try {
+    const url = `https://site.api.espn.com/apis/site/v2/sports/${PATHS[league]}/news?limit=40&team=${teamId}`;
+    const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
+    if (!res.ok) return [];
+    const data = await res.json();
+    const arts = Array.isArray(data && data.articles) ? data.articles : [];
+    const dec = (x) => String(x || "").replace(/&amp;/g, "&").replace(/&#39;/g, "'").replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/&nbsp;/g, " ");
+    const tid = String(teamId);
+    const nicks = (names || []).map((n) => String(n || "").toLowerCase().split(/\s+/).pop()).filter((n) => n.length >= 4);
+    const pad = (x) => " " + String(x || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim() + " ";
+    // distinct TEAM tags on the article: 1-2 = a team-specific piece; 8-32 = a league-wide
+    // "by team" listicle (trade tiers / rankings / owners) that we must NOT surface.
+    const teamIdsOf = (a) => { const set = new Set(); for (const c of (a.categories || [])) { if (c && c.type === "team") { const id = String(c.teamId || (c.team || {}).id || ""); if (id) set.add(id); } } return set; };
+    const mentions = (a) => { const t = pad(`${a.headline || ""} ${a.description || ""}`); return nicks.some((n) => t.includes(" " + n + " ")); };
+    return arts
+      // include videos (player interviews / camp clips are the most team-specific content);
+      // keep only pieces about THIS team AND scoped to a few teams (drops all-32 listicles).
+      .filter((a) => { const ids = teamIdsOf(a); return (ids.has(tid) || mentions(a)) && ids.size <= 5; })
+      .map((a) => ({
+        headline: dec(a.headline || ""),
+        summary: dec(a.description || ""),
+        link: (a.links && a.links.web && a.links.web.href) || "",
+        published: a.published || a.lastModified || null,
+        type: (a.type || "").toLowerCase() === "recap" ? "recap" : "headline",
+      }))
+      .filter((x) => x.headline);
+  } catch (_) { return []; }
+}
+
 async function getGameDetail(league, gameId) {
   if (!PATHS[league]) throw new Error("unknown league");
   const ck = `detail:${league}:${gameId}`;
@@ -452,6 +486,28 @@ async function getGameDetail(league, gameId) {
     }
   }
 
+  // team news for both sides (WZ-TEAMNEWS-2026-07-16) - genuinely team-tagged/mentioning items only,
+  // merged / deduped / newest-first; fail-safe so it never blocks the detail response.
+  let teamNews = [];
+  if (league === "nfl" || league === "cfb" || league === "mlb") {
+    try {
+      const _c0 = ((summary.header && summary.header.competitions) || [])[0] || {};
+      const _cs = _c0.competitors || [];
+      const _teamOf = (ha) => ((_cs.find((c) => c.homeAway === ha) || {}).team) || {};
+      const _nm = (t) => [t.displayName, t.name, t.shortDisplayName].filter(Boolean);
+      const _aT = _teamOf("away"), _hT = _teamOf("home");
+      const [_an, _hn] = await Promise.all([
+        fetchTeamNews(league, String(_aT.id || ""), _nm(_aT)),
+        fetchTeamNews(league, String(_hT.id || ""), _nm(_hT)),
+      ]);
+      const _seen = new Set();
+      teamNews = [..._an, ..._hn]
+        .filter((x) => { const k = x.headline.toLowerCase(); if (_seen.has(k)) return false; _seen.add(k); return true; })
+        .sort((a, b) => new Date(b.published || 0) - new Date(a.published || 0))
+        .slice(0, 6);
+    } catch (_) { teamNews = []; }
+  }
+
   const out = {
     league,
     gameId: String(gameId),
@@ -463,6 +519,7 @@ async function getGameDetail(league, gameId) {
     lineScore: parseLineScore(summary),
     players: parsePlayers(summary),
     brief: (league === "nfl" || league === "cfb") ? parseFbBrief(summary) : null,   // WZ-FB-BRIEF-2026-07-16
+    teamNews,   // WZ-TEAMNEWS-2026-07-16
     generatedAt: new Date().toISOString(),
   };
   cacheSet(ck, out);
