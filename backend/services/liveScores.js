@@ -104,6 +104,10 @@ function parseEvent(ev) {
 const EDGES_MLB = (process.env.SELF_API_BASE || "https://sportsintel-production.up.railway.app") + "/api/edges/mlb";
 
 const nick = (s) => String(s || "").trim().split(/\s+/).pop().toLowerCase();
+// WZ-TEAMKEY-SSOT-2026-07-17 :: canonical, collision-safe team identity (Red Sox != White Sox,
+// cross-feed abbr splits reconciled). Used for the detailId reconciliation keys below; the local
+// nick() above stays for the news/standings matchers until those adopt teamKey too.
+const { teamKey } = require("./teamKey");
 
 // Fetch the model's MLB edges feed once. Returns the parsed object
 // ({ date: "YYYY-MM-DD", games: [...] }) or null. Used for two things:
@@ -130,7 +134,7 @@ async function fetchEdgesMLB() {
 function buildIdMap(edges) {
   const map = {};
   for (const g of (edges && edges.games) || []) {
-    const k = `${nick(g.away)}|${nick(g.home)}`;
+    const k = `${teamKey(g.away)}|${teamKey(g.home)}`;
     (map[k] || (map[k] = [])).push({ id: String(g.id), start: g.startTimeUTC || g.gameDate || g.time || null });
   }
   return map;
@@ -171,7 +175,7 @@ async function fetchScoreboardRaw(league, dateStr) {
 // model id map (by team nicknames); other leagues use ESPN's own id.
 function attachDetailIds(league, games, idMap) {
   if (league === "mlb") {
-    for (const g of games) g.detailId = resolveEdgeId(idMap && idMap[`${nick(g.away.name)}|${nick(g.home.name)}`], g.startTime);
+    for (const g of games) g.detailId = resolveEdgeId(idMap && idMap[`${teamKey(g.away.name)}|${teamKey(g.home.name)}`], g.startTime);
   } else {
     for (const g of games) g.detailId = g.id;
   }
