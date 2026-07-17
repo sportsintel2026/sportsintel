@@ -10,6 +10,7 @@ const { fetchGamelog } = require("./nbaGamelog");
 const { fetchScoreboard } = require("./nbaDataSource");
 const { fetchScoreboard: fetchNflScoreboard } = require("./nflDataSource");
 const { getMLBMainOdds, getMLBPinnacleClose } = require("./oddsApi");
+const { teamKey } = require("./teamKey"); // WZ-TEAMKEY-SSOT-2026-07-17
 // WZ-CAL-MIRROR-2026-07-02 :: winProbCalibration import removed — calibration now applies
 // LIVE in edgesModel; this file just records the already-calibrated values it receives.
 
@@ -414,6 +415,18 @@ function normalizeTeamName(name) {
 }
 function matchPickToOddsEvent(names, oddsEvents) {
   if (!names) return null;
+  // WZ-TEAMKEY-SSOT-2026-07-17 :: This feeds CLV / prediction tracking, so a wrong odds↔game match
+  // corrupts a tracked pick's closing line. Canonical, collision-safe pass FIRST, across ALL events:
+  // both teams must resolve to a canonical MLB key AND agree. This subsumes the city-strip and adds
+  // abbreviation/relocation names the list misses (e.g. "Athletics" vs "Oakland Athletics"). The
+  // original normalize + exact/contains logic stays below as a fallback, reached only when canonical
+  // finds nothing, so anything that matched before still matches — this only ADDS correct matches.
+  const aK = teamKey(names.away, "mlb"), hK = teamKey(names.home, "mlb");
+  if (aK && hK) {
+    for (const ev of oddsEvents) {
+      if (teamKey(ev.awayTeam, "mlb") === aK && teamKey(ev.homeTeam, "mlb") === hK) return ev;
+    }
+  }
   const awayN = normalizeTeamName(names.away);
   const homeN = normalizeTeamName(names.home);
   for (const ev of oddsEvents) {
