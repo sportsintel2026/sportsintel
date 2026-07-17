@@ -21,6 +21,7 @@
 const { getNFLMainOdds, getNFLPinnacleClose } = require("./oddsApi");
 const { buildTeamRatings } = require("./nflDataSource");
 const { predictGame } = require("./nflModel");
+const { teamKey } = require("./teamKey"); // WZ-TEAMKEY-SSOT-2026-07-17
 
 // Normalize a team name for matching: lowercase, strip punctuation/extra spaces.
 function normName(s) {
@@ -33,6 +34,7 @@ function buildResolver(ratingsTeams) {
   const byName = new Map();
   const byNick = new Map();
   const byAbbr = new Map();
+  const byKey = new Map(); // WZ-TEAMKEY-SSOT-2026-07-17 :: canonical, collision-safe (null on clash)
   for (const id of Object.keys(ratingsTeams || {})) {
     const t = ratingsTeams[id];
     if (!t) continue;
@@ -43,19 +45,27 @@ function buildResolver(ratingsTeams) {
       const parts = normName(t.name).split(" ");
       if (parts.length) byNick.set(parts[parts.length - 1], t);
     }
+    // canonical key from the shared team table — resolves name/nick/abbr variants uniformly.
+    const k = teamKey(t.name || t.abbr, "nfl");
+    if (k) { if (byKey.has(k)) { if (byKey.get(k) !== t) byKey.set(k, null); } else byKey.set(k, t); }
   }
-  return { byName, byNick, byAbbr };
+  return { byName, byNick, byAbbr, byKey };
 }
 
 // Resolve one odds team name to a rating team (exact name → nickname → abbr).
 // Returns the rating team object or null (null = no rating → model stays market-only).
 function resolveTeam(resolver, oddsTeamName) {
   const n = normName(oddsTeamName);
-  if (resolver.byName.has(n)) return resolver.byName.get(n);
+  if (resolver.byName.has(n)) return resolver.byName.get(n);        // exact full name (unchanged, first)
+  // WZ-TEAMKEY-SSOT-2026-07-17 :: canonical pass — collision-safe, handles name/nick/abbr variants.
+  // Runs BEFORE the last-word nick fallback (which it strictly improves on) and AFTER exact name,
+  // so it can only ADD a correct match. A null byKey entry = ambiguous -> fall through, never guess.
+  const k = teamKey(oddsTeamName, "nfl");
+  if (k && resolver.byKey && resolver.byKey.has(k)) { const t = resolver.byKey.get(k); if (t) return t; }
   const parts = n.split(" ");
   const nick = parts[parts.length - 1];
-  if (resolver.byNick.has(nick)) return resolver.byNick.get(nick);
-  if (resolver.byAbbr.has(n)) return resolver.byAbbr.get(n);
+  if (resolver.byNick.has(nick)) return resolver.byNick.get(nick);  // legacy fallback
+  if (resolver.byAbbr.has(n)) return resolver.byAbbr.get(n);        // legacy fallback
   return null;
 }
 
