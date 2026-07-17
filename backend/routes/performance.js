@@ -453,6 +453,74 @@ router.get("/totalsbias", async (req, res) => {
   }
 });
 
+// WZ-FBALL-CALIB-2026-07-17 :: football (NFL/CFB) shadow-calibration + bias meter. Mirrors the MLB
+// /calibprobe shadowFullSlate and totalsbias, reading the full-slate *_shadow rows the football
+// recorder writes (moneyline_shadow / spread_shadow / total_shadow, per league). Read-only — these
+// rows never touch the published record. Uses WIDE POOLED probability bands (playbook: don't slice
+// thin on a weekly sport, so a read is meaningful in 2-3 weeks not half a season). Bias section is
+// the football analogue of totalsbias: mean(projected - actual) for margin (spread) and total.
+// ?league=nfl|cfb (default nfl). Registered BEFORE "/:league" so Express doesn't read "fbcalib" as a league.
+router.get("/fbcalib", async (req, res) => {
+  try {
+    const league = String(req.query.league || "nfl").toLowerCase() === "cfb" ? "cfb" : "nfl";
+    const supabase = db();
+    const PAGE = 1000;
+    const MARKETS = ["moneyline_shadow", "spread_shadow", "total_shadow"];
+    const settled = (r) => r.result === "win" || r.result === "loss"; // pushes excluded from win-rate
+    const pct1 = (x) => Math.round(x * 1000) / 10;
+    const BANDS = [{ key: "<45%", lo: 0, hi: 0.45 }, { key: "45-55%", lo: 0.45, hi: 0.55 }, { key: ">55%", lo: 0.55, hi: 1.01 }];
+    const bandKey = (p) => { for (const b of BANDS) if (p >= b.lo && p < b.hi) return b.key; return null; };
+
+    const rows = [];
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await supabase
+        .from("model_predictions")
+        .select("market, model_prob, result, game_date, projected_margin, projected, actual_value")
+        .eq("league", league)
+        .in("market", MARKETS)
+        .order("id", { ascending: true })
+        .range(from, from + PAGE - 1);
+      if (error) throw new Error(error.message);
+      const batch = data || [];
+      rows.push(...batch);
+      if (batch.length < PAGE) break;
+    }
+
+    const markets = {};
+    for (const m of MARKETS) markets[m] = { pending: 0, settled: 0, pushes: 0, firstDate: null, lastDate: null, bands: {} };
+    let sDiffSum = 0, sN = 0, tDiffSum = 0, tN = 0; // bias accumulators
+    for (const r of rows) {
+      const s = markets[r.market];
+      if (!s) continue;
+      if (r.game_date) {
+        if (!s.firstDate || r.game_date < s.firstDate) s.firstDate = r.game_date;
+        if (!s.lastDate || r.game_date > s.lastDate) s.lastDate = r.game_date;
+      }
+      if (r.result === "push") { s.pushes++; continue; }
+      if (!settled(r)) { s.pending++; continue; }
+      s.settled++;
+      if (r.model_prob != null) {
+        const k = bandKey(Number(r.model_prob));
+        if (k) { const b = (s.bands[k] ||= { n: 0, wins: 0, probSum: 0 }); b.n++; if (r.result === "win") b.wins++; b.probSum += Number(r.model_prob); }
+      }
+      // bias: spread stores actual home margin in actual_value (vs projected_margin); total stores actual total (vs projected)
+      if (r.market === "spread_shadow" && r.projected_margin != null && r.actual_value != null) { sDiffSum += Number(r.projected_margin) - Number(r.actual_value); sN++; }
+      if (r.market === "total_shadow" && r.projected != null && r.actual_value != null) { tDiffSum += Number(r.projected) - Number(r.actual_value); tN++; }
+    }
+    for (const m of MARKETS) for (const k of Object.keys(markets[m].bands)) {
+      const b = markets[m].bands[k];
+      markets[m].bands[k] = { n: b.n, wins: b.wins, claimedPct: pct1(b.probSum / b.n), actualPct: pct1(b.wins / b.n), gapPts: Math.round(((b.probSum / b.n) - (b.wins / b.n)) * 1000) / 10 };
+    }
+    const bias = {
+      spreadMargin: sN ? { n: sN, meanProjMinusActual: Math.round((sDiffSum / sN) * 100) / 100, note: "mean(projected home margin - actual home margin). Persistent >0 = model over-favors home; subtract it as a margin bias." } : { n: 0, note: "no settled spread shadows yet" },
+      total: tN ? { n: tN, meanProjMinusActual: Math.round((tDiffSum / tN) * 100) / 100, note: "mean(projected total - actual total). Once n is meaningful, set the football TOTAL_MEAN_ADJ to the NEGATIVE of this (same recipe as MLB totalsbias)." } : { n: 0, note: "no settled total shadows yet" },
+    };
+    res.json({ token: "WZ-FBALL-CALIB-2026-07-17", league, generatedAt: new Date().toISOString(), rowsScanned: rows.length, markets, bias });
+  } catch (err) {
+    res.status(500).json({ token: "WZ-FBALL-CALIB-2026-07-17", error: String(err && err.message || err) });
+  }
+});
+
 router.get("/:league", async (req, res) => {
   const league = String(req.params.league || "").toLowerCase();
   const cfg = LEAGUE_CONFIG[league];
