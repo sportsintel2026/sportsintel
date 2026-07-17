@@ -17,6 +17,7 @@
  * -------------------------------------------------------------------------- */
 
 const { getNbaMatchup } = require('./nbaMatchup');
+const { teamKey } = require('./teamKey'); // WZ-TEAMKEY-SSOT-2026-07-17
 
 const SPORT = 'basketball_nba';
 const BASE = `https://api.the-odds-api.com/v4/sports/${SPORT}`;
@@ -72,6 +73,16 @@ function matchEvent(events, homeName, awayName) {
   // exact
   let ev = events.find((e) => norm(e.home_team) === h && norm(e.away_team) === a);
   if (ev) return ev;
+  // WZ-TEAMKEY-SSOT-2026-07-17 :: canonical, collision-safe match — runs AFTER exact and BEFORE
+  // the loose contains/nickname passes below. Both teams must resolve to a canonical NBA abbr and
+  // both must agree, so it can only ADD a precise match (never a sloppy substring one). Empty/
+  // ambiguous keys fall through to the legacy passes; nothing that matched before stops matching.
+  const hK = teamKey(homeName, 'nba');
+  const aK = teamKey(awayName, 'nba');
+  if (hK && aK) {
+    ev = events.find((e) => teamKey(e.home_team, 'nba') === hK && teamKey(e.away_team, 'nba') === aK);
+    if (ev) return ev;
+  }
   // either-contains
   ev = events.find((e) => {
     const eh = norm(e.home_team);
