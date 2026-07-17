@@ -6,6 +6,7 @@
 // FIX-CLV-DESKTOP-OBJECT-2026-06-24
 import { useState, useEffect, useRef, Fragment } from "react";
 import { scoresApi } from "../lib/api"; // WZ-NBA-RECORDS-2026-07-11 :: real ESPN standings for the NBA board
+import { gameDetailPath } from "../lib/gameDetail"; // WZ-DETAIL-SSOT-2026-07-17
 
 // ---- self-contained helpers (kept local so this file stands alone) ----
 const ESPN_ALIAS = { az: "ari" };
@@ -328,7 +329,7 @@ export default function HomeDesktop(props) {
                   <div className="tp-cell"><div className="v">{noEdge ? "COIN FLIP" : (conv || "\u2014")}</div><div className="k">{noEdge ? "MODEL READ" : "CONVICTION"}</div></div>
                   <div className="tp-cell"><div className={"v " + (lm == null ? "" : lm > 0 ? "up" : "dn")}>{lm == null ? "flat" : (lm > 0 ? "\u25B2 " : "\u25BC ") + Math.abs(lm) + "\u00A2"}</div><div className="k">LINE MOVE</div></div>
                 </div>
-                {sport === "mlb" && feat.gameId ? <div className="tp-foot" onClick={() => navigate(`/game/mlb/${feat.gameId}`)}>Full matchup breakdown &rarr;</div> : null}
+                {gameDetailPath(sport, feat.gameId) ? <div className="tp-foot" onClick={() => navigate(gameDetailPath(sport, feat.gameId))}>Full matchup breakdown &rarr;</div> : null}{/* WZ-DETAIL-SSOT-2026-07-17 :: was MLB-only; now opens detail for any sport with a route (NFL/CFB/NBA), inert otherwise */}
               </div>
             );
           })()}
