@@ -262,4 +262,4 @@ function matchupKey(away, home, startTime, league = "mlb") {
   return isNaN(t) ? base : `${base}|${new Date(t).toISOString().slice(0, 13)}`;
 }
 
-module.exports = { teamKey, canonAbbr, nick, matchupKey, cfbSchoolKey };
+module.exports = { teamKey, canonAbbr, nick, matchupKey, cfbSchoolKey, cfbNorm, schoolKey, CFB_ALIASES };
