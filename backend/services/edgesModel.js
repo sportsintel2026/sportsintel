@@ -798,14 +798,15 @@ function kNegBinomCdf(k, mu, phi) {
 // which a Normal smears over and which drove the old overconfident -1.5 covers. Backtest-tunable.
 const RUN_PHI = 1.35;   // team-runs overdispersion (variance/mean); Poisson=1.
 const RL_MAXR = 24;     // truncate each team's run count (P beyond ~0)
-function _runPmf(mu) {
+function _runPmf(mu, phi) {
+  const _phi = phi != null ? phi : RUN_PHI;   // WZ-RL-PHIDIAL-2026-07-17 :: optional override for the tuning dial
   const a = []; let s = 0;
-  for (let k = 0; k <= RL_MAXR; k++) { a[k] = negBinomPmf(k, mu, RUN_PHI); s += a[k]; }
+  for (let k = 0; k <= RL_MAXR; k++) { a[k] = negBinomPmf(k, mu, _phi); s += a[k]; }
   if (s > 0) for (let k = 0; k <= RL_MAXR; k++) a[k] /= s;
   return a;
 }
-function _marginPmf(muHome, muAway) {
-  const ph = _runPmf(muHome), pa = _runPmf(muAway), pm = {};
+function _marginPmf(muHome, muAway, phi) {
+  const ph = _runPmf(muHome, phi), pa = _runPmf(muAway, phi), pm = {};
   for (let h = 0; h <= RL_MAXR; h++) {
     const phh = ph[h]; if (phh < 1e-9) continue;
     for (let a = 0; a <= RL_MAXR; a++) { const p = phh * pa[a]; if (p < 1e-12) continue; const m = h - a; pm[m] = (pm[m] || 0) + p; }
@@ -818,13 +819,13 @@ function _pHomeWin(pm) { let s = 0; for (const m in pm) { const mm = +m; if (mm 
 function _pHomeCover(pm, homeRLLine) { const thr = -homeRLLine; let s = 0; for (const m in pm) if (+m > thr) s += pm[m]; return s; }
 // Solve d (half the expected margin): muHome=T/2+d, muAway=T/2-d reproduces the target home win prob
 // under the NegBin model. Monotone in d -> bisection.
-function _solveRunSplit(total, pWinHome) {
+function _solveRunSplit(total, pWinHome, phi) {
   const T = Math.max(3, Math.min(16, total || 8.5));
   const cap = Math.min(T / 2 - 0.15, 4.5);
   let lo = -cap, hi = cap;
   for (let it = 0; it < 26; it++) {
     const d = (lo + hi) / 2;
-    if (_pHomeWin(_marginPmf(T / 2 + d, T / 2 - d)) < pWinHome) lo = d; else hi = d;
+    if (_pHomeWin(_marginPmf(T / 2 + d, T / 2 - d, phi)) < pWinHome) lo = d; else hi = d;
   }
   const d = (lo + hi) / 2;
   return { muHome: T / 2 + d, muAway: T / 2 - d };
@@ -834,9 +835,9 @@ function _solveRunSplit(total, pWinHome) {
 // (the same _solveRunSplit -> _marginPmf -> _pHomeCover path calculateGameEdges uses) so the backtest
 // probe scores real graded games through the real model, never a copy. In: projected total, home win
 // prob, home run-line. Out: raw P(home covers homeRLLine), clamped like the live derivation.
-function runLineCoverModel(projectedTotal, homeWinProb, homeRLLine) {
-  const s = _solveRunSplit(projectedTotal, homeWinProb);
-  const pm = _marginPmf(s.muHome, s.muAway);
+function runLineCoverModel(projectedTotal, homeWinProb, homeRLLine, phi) {
+  const s = _solveRunSplit(projectedTotal, homeWinProb, phi);   // WZ-RL-PHIDIAL-2026-07-17 :: phi override (default RUN_PHI)
+  const pm = _marginPmf(s.muHome, s.muAway, phi);
   return Math.max(0.02, Math.min(0.98, _pHomeCover(pm, homeRLLine)));
 }
 
