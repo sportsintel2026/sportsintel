@@ -95,8 +95,6 @@ export default function FbGameDetail({ league = "nfl" }) {
   const leanAb = awayProb != null ? (awayProb >= homeProb ? aAb : hAb) : null;
   const brief = detail?.brief || null;   // WZ-FB-BRIEF-2026-07-16
   const briefTeams = brief ? [[aAb, brief.away || {}], [hAb, brief.home || {}]] : [];
-  // WZ-TEAMNEWS-2026-07-16 :: prefer real per-team ESPN news; fall back to the league-filtered feed
-  const finalNews = (detail?.teamNews && detail.teamNews.length) ? detail.teamNews : gameNews;
 
   // injuries filtered to this game's two teams
   const forTeam = (ab, full) => (inj || []).filter((it) =>
@@ -119,6 +117,13 @@ export default function FbGameDetail({ league = "nfl" }) {
     const text = _nwPad(`${it.headline || ""} ${it.summary || ""} ${it.playerName || ""}`);
     return _nwNick.some((n) => text.includes(" " + n + " "));
   }).slice(0, 4);
+
+  // WZ-TEAMNEWS-2026-07-16 :: prefer real per-team ESPN news; fall back to the league-filtered feed.
+  // WZ-FB-TDZ-FIX-2026-07-17 :: MUST be declared AFTER gameNews. Referencing it above was a temporal
+  // dead-zone ReferenceError ("Cannot access 'gameNews' before initialization") that threw on EVERY
+  // render and blanked the entire NFL/CFB matchup page. node --check / esbuild don't catch TDZ — it's
+  // valid syntax that fails at runtime — which is why it slipped through.
+  const finalNews = (detail?.teamNews && detail.teamNews.length) ? detail.teamNews : gameNews;
 
   // AI matchup read (football-voiced) - fires once we have a directional lean
   useEffect(() => {
