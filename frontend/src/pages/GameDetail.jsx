@@ -158,8 +158,18 @@ export default function GameDetailPage() {
   const _hn2 = scoresGame?.home?.name || game?.home || "";
   const injA = (inj||[]).filter(it => norm(it.teamAbbr)===norm(aAb) || nameHit(it.team,_an2) || nameHit(it.team,aAb));
   const injH = (inj||[]).filter(it => norm(it.teamAbbr)===norm(hAb) || nameHit(it.team,_hn2) || nameHit(it.team,hAb));
-  const _gtoks = [aAb,hAb,nick(_an2),nick(_hn2)].map(norm).filter(t=>t.length>=2);
-  const gameNews = (news||[]).filter(it => { if(it.type==="video") return false; const hay=norm(`${it.team||""} ${it.teamAbbr||""} ${it.headline||""} ${it.summary||""} ${it.playerName||""}`); return _gtoks.some(t=>hay.includes(t)); }).slice(0,4);
+  // WZ-NEWS-MATCH-2026-07-16 :: only surface news genuinely about one of the two teams (exact team tag or whole-word nickname); the old substring match let short abbrevs hit unrelated league news
+  const _nwPad = (s) => " " + String(s||"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim() + " ";
+  const _nwAbbr = [aAb,hAb].map(x=>String(x||"").toUpperCase()).filter(Boolean);
+  const _nwNames = [_an2,_hn2].filter(Boolean);
+  const _nwNick = [nick(_an2),nick(_hn2)].map(x=>String(x||"").toLowerCase()).filter(x=>x.length>=4);
+  const gameNews = (news||[]).filter(it => {
+    if(it.type==="video") return false;
+    if(it.teamAbbr && _nwAbbr.includes(String(it.teamAbbr).toUpperCase())) return true;
+    if(it.team && _nwNames.some(n=>nameHit(it.team,n))) return true;
+    const text=_nwPad(`${it.headline||""} ${it.summary||""} ${it.playerName||""}`);
+    return _nwNick.some(n=>text.includes(" "+n+" "));
+  }).slice(0,4);
   const st = (game?.status==="live"||scoresGame?.status==="live") ? "live"
            : (game?.status==="final"||scoresGame?.status==="final") ? "final" : "pre";
 
