@@ -103,11 +103,19 @@ export default function FbGameDetail({ league = "nfl" }) {
   const hasInj = injA.length + injH.length > 0;
 
   // game news best-effort matched to either team
-  const toks = [aAb, hAb, nick(an, aAb), nick(hn, hAb)].map(norm).filter((t) => t.length >= 2);
+  // WZ-NEWS-MATCH-2026-07-16 :: only surface news genuinely about one of the two teams
+  // (exact team tag, or the team nickname as a WHOLE WORD). The old substring match let
+  // short abbrevs like "NE" match unrelated league news.
+  const _nwPad = (s) => " " + String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim() + " ";
+  const _nwAbbr = [aAb, hAb].map((x) => String(x || "").toUpperCase()).filter(Boolean);
+  const _nwNames = [an, hn].filter(Boolean);
+  const _nwNick = [nick(an, aAb), nick(hn, hAb)].map((x) => String(x || "").toLowerCase()).filter((x) => x.length >= 4);
   const gameNews = (news || []).filter((it) => {
     if (it.type === "video") return false;
-    const hay = norm(`${it.team || ""} ${it.teamAbbr || ""} ${it.headline || ""} ${it.summary || ""} ${it.playerName || ""}`);
-    return toks.some((t) => hay.includes(t));
+    if (it.teamAbbr && _nwAbbr.includes(String(it.teamAbbr).toUpperCase())) return true;
+    if (it.team && _nwNames.some((n) => nameHit(it.team, n))) return true;
+    const text = _nwPad(`${it.headline || ""} ${it.summary || ""} ${it.playerName || ""}`);
+    return _nwNick.some((n) => text.includes(" " + n + " "));
   }).slice(0, 4);
 
   // AI matchup read (football-voiced) - fires once we have a directional lean
