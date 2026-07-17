@@ -331,6 +331,74 @@ function parsePlayers(summary) {
   return out;
 }
 
+// WZ-FB-BRIEF-2026-07-16 :: football team brief from the ESPN summary - 2025 record /
+// scoring / division rank + recent form + (in-season) statistical leaders. Every field is
+// read defensively; returns null when the summary has no usable team data (e.g. MLB feeds).
+function ord(n) { const s = ["th","st","nd","rd"], v = n % 100; return n + (s[(v-20)%10] || s[v] || s[0]); }
+function parseFbBrief(summary) {
+  const comp = (((summary.header || {}).competitions) || [])[0] || {};
+  const cs = comp.competitors || [];
+  const homeId = String((((cs.find(c => c.homeAway === "home") || {}).team) || {}).id || "");
+  const awayId = String((((cs.find(c => c.homeAway === "away") || {}).team) || {}).id || "");
+  if (!homeId || !awayId) return null;
+
+  const st = summary.standings || {};
+  const season = String(st.header || "").replace(/\s*Standings\s*$/i, "").trim() || null;
+  const statOf = (stats, name) => { const x = (stats || []).find(v => v.name === name); return x ? x.value : null; };
+  const recOf = (stats) => { const o = (stats || []).find(v => v.name === "overall" || v.type === "total"); return o ? (o.summary || o.displayValue || null) : null; };
+
+  const standing = (teamId) => {
+    for (const g of st.groups || []) {
+      const entries = ((g.standings || {}).entries) || [];
+      const idx = entries.findIndex(e => String(e.id) === teamId);
+      if (idx < 0) continue;
+      const e = entries[idx];
+      const w = statOf(e.stats, "wins"), l = statOf(e.stats, "losses"), t = statOf(e.stats, "ties");
+      const pf = statOf(e.stats, "pointsFor"), pa = statOf(e.stats, "pointsAgainst");
+      const gp = (w || 0) + (l || 0) + (t || 0);
+      return {
+        record: recOf(e.stats),
+        ppf: gp ? Math.round((pf / gp) * 10) / 10 : null,
+        ppa: gp ? Math.round((pa / gp) * 10) / 10 : null,
+        winPct: statOf(e.stats, "winPercent"),
+        rank: ord(idx + 1),
+        div: g.divisionHeader || null,
+      };
+    }
+    return {};
+  };
+  const form = (teamId) => {
+    const blk = (summary.lastFiveGames || []).find(x => String((x.team || {}).id) === teamId);
+    return blk ? (blk.events || []).slice(-5).map(ev => ({
+      r: ev.gameResult || "", score: ev.score || "",
+      opp: ((ev.opponent || {}).abbreviation) || "", at: ev.atVs || "",
+    })) : [];
+  };
+  const leaders = (teamId) => {
+    const blk = (summary.leaders || []).find(x => String((x.team || {}).id) === teamId);
+    if (!blk) return [];
+    const out = [];
+    for (const cat of blk.leaders || []) {
+      const top = (cat.leaders || [])[0];
+      if (!top || !top.athlete) continue;              // empty pre-season -> skipped
+      if (!/passing|rushing|receiving/i.test(cat.name || "")) continue;
+      out.push({
+        cat: cat.displayName || cat.name || "",
+        player: top.athlete.shortName || top.athlete.displayName || "",
+        pos: ((top.athlete.position || {}).abbreviation) || "",
+        value: top.displayValue || String(top.value != null ? top.value : ""),
+      });
+    }
+    return out.slice(0, 3);
+  };
+
+  const brief = { season, home: {}, away: {} };
+  brief.home = { ...standing(homeId), form: form(homeId), leaders: leaders(homeId) };
+  brief.away = { ...standing(awayId), form: form(awayId), leaders: leaders(awayId) };
+  const has = b => b.record || (b.form || []).length || (b.leaders || []).length;
+  return (has(brief.home) || has(brief.away)) ? brief : null;
+}
+
 async function getGameDetail(league, gameId) {
   if (!PATHS[league]) throw new Error("unknown league");
   const ck = `detail:${league}:${gameId}`;
@@ -394,6 +462,7 @@ async function getGameDetail(league, gameId) {
     umpire: umpireOut,
     lineScore: parseLineScore(summary),
     players: parsePlayers(summary),
+    brief: (league === "nfl" || league === "cfb") ? parseFbBrief(summary) : null,   // WZ-FB-BRIEF-2026-07-16
     generatedAt: new Date().toISOString(),
   };
   cacheSet(ck, out);
