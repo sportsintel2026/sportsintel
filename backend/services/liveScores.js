@@ -121,12 +121,38 @@ async function fetchEdgesMLB() {
 }
 
 // Build a "away|home" nickname -> backend game id map from the edges feed.
+// WZ-DETAILID-DH-2026-07-17 :: A DOUBLEHEADER plays the SAME matchup twice in one day.
+// The old map kept ONE slot per matchup, so game 2's gamePk overwrote game 1's — every
+// ESPN game for that matchup then resolved to the SAME detailId (game 2's), which broke
+// both dedup (the double live card) AND the detail deep-link (game 1's card opened game 2).
+// Fix: key the matchup to a LIST of { id, start }; the resolver below picks the right one
+// by start time (the same start-time discriminator getScores' own keyOf already trusts).
 function buildIdMap(edges) {
   const map = {};
   for (const g of (edges && edges.games) || []) {
-    map[`${nick(g.away)}|${nick(g.home)}`] = String(g.id);
+    const k = `${nick(g.away)}|${nick(g.home)}`;
+    (map[k] || (map[k] = [])).push({ id: String(g.id), start: g.startTimeUTC || g.gameDate || g.time || null });
   }
   return map;
+}
+
+// Resolve the ONE edges game id for a given ESPN game. Single candidate -> use it (the
+// common case, behaves exactly as before). Multiple (doubleheader) -> the candidate whose
+// scheduled start is closest to this ESPN game's start, so game 1 and game 2 each resolve
+// to their OWN id. Missing/unparseable times fall back to the first candidate — never worse
+// than the old single-slot behavior.
+function resolveEdgeId(list, espnStart) {
+  if (!list || !list.length) return null;
+  if (list.length === 1) return list[0].id;
+  const t = espnStart ? Date.parse(espnStart) : NaN;
+  if (isNaN(t)) return list[0].id;
+  let best = list[0], bestGap = Infinity;
+  for (const c of list) {
+    const ct = c.start ? Date.parse(c.start) : NaN;
+    const gap = isNaN(ct) ? Infinity : Math.abs(ct - t);
+    if (gap < bestGap) { bestGap = gap; best = c; }
+  }
+  return best.id;
 }
 
 // Fetch + parse one scoreboard day (optionally a specific YYYYMMDD). No detailId.
@@ -145,7 +171,7 @@ async function fetchScoreboardRaw(league, dateStr) {
 // model id map (by team nicknames); other leagues use ESPN's own id.
 function attachDetailIds(league, games, idMap) {
   if (league === "mlb") {
-    for (const g of games) g.detailId = (idMap && idMap[`${nick(g.away.name)}|${nick(g.home.name)}`]) || null;
+    for (const g of games) g.detailId = resolveEdgeId(idMap && idMap[`${nick(g.away.name)}|${nick(g.home.name)}`], g.startTime);
   } else {
     for (const g of games) g.detailId = g.id;
   }
