@@ -119,17 +119,25 @@ export default function GamesPage() {
     };
   };
   const cards = games.map(toCard);
-  // The edges board rolls to the next slate once today's games are no longer
-  // "scheduled", which drops today's LIVE and FINAL games from it (e.g. late at night
-  // the board shows tomorrow's upcoming, so Live/Final go empty). The scores feed keeps
-  // them, so supplement any live/final games the edges cards are missing — deduped by id
-  // (scores games carry detailId = the edges gamePk when the two slates align).
-  // Dedup the scores supplement only against edges games that are THEMSELVES live/final
-  // — never against upcoming ones. detailId is keyed by matchup (team nicknames), so a
-  // game that's live today and the SAME matchup scheduled again tomorrow share a detailId.
-  // Past midnight ET the edges board rolls to tomorrow's slate, so deduping against its
-  // upcoming games would wrongly drop today's live/final games (the bug this fixes).
-  const haveIds = new Set(cards.filter(c => c.st==="live" || c.st==="final").map(c => String(c.id)));
+  // WZ-DEDUP-DH-2026-07-17 :: The edges board rolls to the next slate once today's games are no
+  // longer "scheduled", dropping today's LIVE/FINAL from it (late night the board shows tomorrow's
+  // upcoming, so Live/Final go empty). The scores feed keeps them, so we supplement any live/final
+  // games the edges cards are missing. THE DEDUP BUG (double live card): a DOUBLEHEADER plays the
+  // SAME matchup twice in one day. The old scores->edges link (a per-matchup nickname map) has ONE
+  // slot per matchup, so game 2's id overwrites game 1's; game 1's scores row then resolves to game
+  // 2's id, which is UPCOMING (not in the live/final id set) -> the dedup misses -> game 1 shows
+  // twice (once from edges, once from scores). ROOT FIX: also dedup on the canonical team-abbrev
+  // matchup key, not the collision-prone id alone. Safe for doubleheaders because only ONE game of
+  // a matchup is ever live at a time; the scores supplement is only NEEDED when the edges board has
+  // nothing for that matchup — so if an edges live/final card already carries the matchup, the
+  // scores copy IS the duplicate and is correctly dropped. abbrevs also beat nicknames (no
+  // "Red Sox"/"White Sox" -> "sox" collision).
+  const AB_CANON = { CHW:"CWS", WAS:"WSH", ATH:"OAK", AZ:"ARI" }; // reconcile ESPN vs MLB abbr splits
+  const canonAb = (x) => { const u = String(x||"").toUpperCase(); return AB_CANON[u] || u; };
+  const mKey = (a,h) => `${canonAb(a)}|${canonAb(h)}`;
+  const liveFinalEdges = cards.filter(c => c.st==="live" || c.st==="final");
+  const haveIds = new Set(liveFinalEdges.map(c => String(c.id)));
+  const haveMatch = new Set(liveFinalEdges.map(c => mKey(c.a.ab, c.h.ab)));
   const scoreCard = (sg) => {
     const st = sg.bucket === "live" ? "live" : "final";
     const aAb = sg.away?.abbrev || "TBD", hAb = sg.home?.abbrev || "TBD";
@@ -146,7 +154,7 @@ export default function GamesPage() {
     };
   };
   const extra = [...(scores?.live||[]), ...(scores?.final||[])]
-    .filter(sg => !haveIds.has(String(sg.detailId || sg.id)))
+    .filter(sg => !haveIds.has(String(sg.detailId || sg.id)) && !haveMatch.has(mKey(sg.away?.abbrev, sg.home?.abbrev)))
     .map(scoreCard);
   const live = [...cards.filter(c=>c.st==="live"), ...extra.filter(c=>c.st==="live")];
   const pre = cards.filter(c=>c.st==="pre");
