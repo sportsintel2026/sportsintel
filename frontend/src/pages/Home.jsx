@@ -26,7 +26,13 @@ const AI_READ_CACHE = new Map();
 // WZ-GAMEDETAIL-GUARD-2026-07-12 :: only these sports have a /game/<sport>/:id detail route. Others
 // have none, so navigating there falls through the catch-all to "/" (the landing page) and looks
 // like a logout. Gate every breakdown link/tap on this.
-const hasGameDetail = (sport) => sport === "mlb" || sport === "nba";
+// WZ-GAMEDETAIL-SPORTS-2026-07-17 :: sports that HAVE a /game/<sport>/:id route in App.jsx.
+// NFL + CFB gained FbGameDetail on 2026-07-16 (/game/nfl/:id, /game/cfb/:id) and their edges
+// feed shares the SAME ESPN game id the detail page resolves by — but this gate was never
+// flipped, so Home-board taps on football games silently did nothing. Keep this Set in sync
+// with the /game/* routes in App.jsx so a new detail route can't drift out of this gate again.
+const DETAIL_SPORTS = new Set(["mlb", "nba", "nfl", "cfb"]);
+const hasGameDetail = (sport) => DETAIL_SPORTS.has(sport);
 // WZ-BOARD-ASBREAK-2026-07-12 :: All-Star break placeholder window. 2026 break is dark Jul 13-15;
 // second half opens Jul 16. Self-clearing: once games return the board isn't empty, so this never
 // shows on a live day. (Could be made schedule-driven off a backend next-game date later.)
