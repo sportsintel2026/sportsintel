@@ -20,9 +20,15 @@
  */
 
 // ── College football constants ────────────────────────────────────────────────
+const { spreadCover } = require("./footballMargin"); // WZ-FBALL-KEYNUM-2026-07-17
 // Margin SD vs the spread. CFB game margins are far noisier than the NFL's ~13.5;
 // ~16 is a standard working value for converting a spread to a cover/win prob.
 const CFB_SIGMA = 16.0;
+// WZ-FBALL-KEYNUM-2026-07-17 :: key-number weighting strength for CFB spread cover. CFB's 3/7
+// spikes are milder than the NFL's (more blowouts / 2-pt conversions), so its comb is flatter.
+// 1.0 = full physical mass; 0 = plain Normal. Reversible dial. Per the playbook this shared
+// transform calibrates on CFB's faster-filling Saturday sample and carries to the NFL.
+const CFB_KEY_STRENGTH = 1.0;
 // Total SD — college totals swing more than the NFL's ~10.
 const CFB_TOTAL_SIGMA = 13.0;
 // Home-field advantage in points. College HFA runs higher than the pros (~3).
@@ -167,11 +173,13 @@ function predictGame(ev, ctx = {}) {
   // ── SPREAD ─────────────────────────────────────────────────────────────────
   const sLine = ev.spreads?.homeLine;
   if (sLine != null && ev.spreads?.home != null && ev.spreads?.away != null) {
-    const homeCoverProb = normalCDF((modelMargin + sLine) / CFB_SIGMA);
+    // WZ-FBALL-KEYNUM-2026-07-17 :: key-number-aware cover (3/7 mass + push), not a plain Normal.
+    const { homeCoverProb, push: homePushProb } = spreadCover(modelMargin, CFB_SIGMA, sLine, "cfb", CFB_KEY_STRENGTH);
     const fairHomeCover = devigPair(ev.spreads.home, ev.spreads.away);
     out.spread = {
       line: sLine,
       homeCoverProb: r(homeCoverProb * 100),
+      pushProb: r(homePushProb * 100), // WZ-FBALL-KEYNUM-2026-07-17 :: real push mass at the line
       pick: null, pickTeam: null, edge: null, value: false,
       fair: fairHomeCover != null ? { home: r(fairHomeCover * 100), away: r((1 - fairHomeCover) * 100) } : null,
       book: { home: ev.spreads.home, away: ev.spreads.away, homeLine: sLine, awayLine: ev.spreads.awayLine },
