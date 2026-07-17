@@ -47,12 +47,11 @@ export default function FbGameDetail({ league = "nfl" }) {
 
   // box detail only once we know the game is live or final
   const bucket = game?.bucket;
-  useEffect(() => {
-    if (bucket !== "live" && bucket !== "final") { setDetail(null); return; }
+  useEffect(() => {   // WZ-FB-BRIEF-2026-07-16 :: fetch detail for ALL states so pre-game gets the team brief (record/form/leaders); box score still gates on live/final
     let dead = false;
     scoresApi.getGameDetail(league, gameId).then((d) => { if (!dead) setDetail(d || null); }).catch(() => { if (!dead) setDetail(null); });
     return () => { dead = true; };
-  }, [bucket, league, gameId]);
+  }, [league, gameId]);
 
   const a = game?.away, h = game?.home;
   const an = a?.name || a?.abbrev || "", hn = h?.name || h?.abbrev || "";
@@ -94,6 +93,8 @@ export default function FbGameDetail({ league = "nfl" }) {
   const topKey = topEdge ? (markets.find((m) => m.e === topEdge) || {}).k : null;
   const hasModel = awayProb != null || markets.length > 0;
   const leanAb = awayProb != null ? (awayProb >= homeProb ? aAb : hAb) : null;
+  const brief = detail?.brief || null;   // WZ-FB-BRIEF-2026-07-16
+  const briefTeams = brief ? [[aAb, brief.away || {}], [hAb, brief.home || {}]] : [];
 
   // injuries filtered to this game's two teams
   const forTeam = (ab, full) => (inj || []).filter((it) =>
@@ -189,6 +190,47 @@ export default function FbGameDetail({ league = "nfl" }) {
               );
             })}
             <div className="fbfoot">Uncalibrated 2025-seed model {"\u2014"} directional lean, not a graded play.</div>
+          </div>}
+
+          {/* Team snapshot + recent form + season leaders (ESPN summary) - WZ-FB-BRIEF-2026-07-16 */}
+          {brief && (brief.home?.record || brief.away?.record) && <div className="fbcard">
+            <div className="fbeb"><span className="d">{"\u25C6"}</span>TEAM SNAPSHOT<span className="rgt">{brief.season || ""} season</span></div>
+            <div className="fbsnap">
+              {briefTeams.map(([ab, b]) => (
+                <div className="fbsnc" key={ab}>
+                  <div className="fbsnt">{ab}{b.rank ? <span className="fbrank">{b.rank}{b.div ? " " + b.div : ""}</span> : null}</div>
+                  <div className="fbsnrec">{b.record || "\u2014"}<small>record</small></div>
+                  <div className="fbsng">
+                    <div><span className="fbsnv up">{b.ppf != null ? b.ppf : "\u2014"}</span><span className="fbsnk">PPG</span></div>
+                    <div><span className="fbsnv dn">{b.ppa != null ? b.ppa : "\u2014"}</span><span className="fbsnk">allowed</span></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>}
+
+          {brief && ((brief.home?.form || []).length > 0 || (brief.away?.form || []).length > 0) && <div className="fbcard">
+            <div className="fbeb"><span className="d">{"\u25C6"}</span>RECENT FORM<span className="rgt">last 5</span></div>
+            <div className="fbforms">
+              {briefTeams.map(([ab, b]) => (
+                <div className="fbformc" key={ab}>
+                  <div className="fbfab">{ab}</div>
+                  <div className="fbfrow">{(b.form || []).map((f, j) => <span key={j} className={"fbfchip " + (f.r === "W" ? "w" : f.r === "L" ? "l" : "t")} title={[f.at, f.opp, f.score].filter(Boolean).join(" ")}>{f.r || "-"}</span>)}</div>
+                </div>
+              ))}
+            </div>
+          </div>}
+
+          {brief && ((brief.home?.leaders || []).length > 0 || (brief.away?.leaders || []).length > 0) && <div className="fbcard">
+            <div className="fbeb"><span className="d">{"\u25C6"}</span>SEASON LEADERS<span className="rgt">{brief.season || ""}</span></div>
+            <div className="fbsnap">
+              {briefTeams.map(([ab, b]) => (
+                <div className="fbldc" key={ab}>
+                  <div className="fbsnt">{ab}</div>
+                  {(b.leaders || []).map((L, j) => <div className="fbldr" key={j}><span className="fbldk">{String(L.cat).replace(/ Yards/i, "")}</span><span className="fbldv"><b>{L.player}</b>{L.pos ? " " + L.pos : ""} {"\u00b7"} {L.value}</span></div>)}
+                </div>
+              ))}
+            </div>
           </div>}
 
           {/* Injuries */}
@@ -307,6 +349,25 @@ const CSS = `
 .fbchip.up{color:var(--up);background:rgba(63,203,145,.12)}
 .fbchip.flat{color:var(--mut);background:rgba(255,255,255,.05)}
 .fbfoot{font-size:10.5px;color:var(--mut2);margin-top:10px;line-height:1.5}
+/* WZ-FB-BRIEF-2026-07-16 :: team snapshot + recent form + season leaders */
+.fbsnap{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.fbsnc,.fbldc{border:1px solid var(--line);border-radius:10px;padding:11px 12px;background:var(--panel2)}
+.fbsnt{font-family:var(--disp);font-weight:800;font-size:15px;letter-spacing:.4px;display:flex;align-items:baseline;justify-content:space-between;gap:6px;margin-bottom:8px}
+.fbrank{font-family:var(--mono);font-size:8.5px;font-weight:600;color:var(--gold);letter-spacing:.3px;text-align:right}
+.fbsnrec{font-family:var(--disp);font-weight:800;font-size:22px}.fbsnrec small{font-family:var(--mono);font-size:9px;font-weight:400;color:var(--mut2);letter-spacing:.5px;margin-left:6px}
+.fbsng{display:flex;gap:18px;margin-top:9px}
+.fbsnv{font-family:var(--mono);font-size:15px;font-weight:700}.fbsnv.up{color:var(--up)}.fbsnv.dn{color:var(--dn)}
+.fbsnk{font-family:var(--mono);font-size:8.5px;color:var(--mut2);letter-spacing:.5px;margin-left:5px}
+.fbforms{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.fbfab{font-family:var(--disp);font-weight:800;font-size:14px;letter-spacing:.4px;margin-bottom:7px}
+.fbfrow{display:flex;gap:5px;flex-wrap:wrap}
+.fbfchip{width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:11px;font-weight:700}
+.fbfchip.w{color:var(--up);background:rgba(63,203,145,.14);border:1px solid rgba(63,203,145,.4)}
+.fbfchip.l{color:var(--dn);background:rgba(226,101,92,.12);border:1px solid rgba(226,101,92,.4)}
+.fbfchip.t{color:var(--mut);background:rgba(255,255,255,.05);border:1px solid var(--line2)}
+.fbldr{display:flex;flex-direction:column;padding:6px 0;border-top:1px solid var(--line)}.fbldr:first-of-type{border-top:none}
+.fbldk{font-family:var(--mono);font-size:8.5px;color:var(--mut2);letter-spacing:.6px}
+.fbldv{font-size:12px}.fbldv b{font-weight:700}
 .fbmini2{font-size:11.5px;color:var(--mut);padding:4px 0}
 .fbinjg{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 .fbinjt{font-family:var(--disp);font-weight:800;font-size:15px;margin-bottom:8px;letter-spacing:.4px}
