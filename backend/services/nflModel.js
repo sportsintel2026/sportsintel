@@ -31,13 +31,18 @@
 const { spreadCover } = require("./footballMargin"); // WZ-FBALL-KEYNUM-2026-07-17
 // Margin SD for an NFL game outcome vs the spread. Empirically ~13.0–13.9; 13.5
 // is the standard value used to convert a point spread to a cover/win probability.
-const NFL_SIGMA = 13.5;
+// Margin SD for an NFL game outcome vs the spread. WZ-FBALL-BACKTEST-2026-07-17 :: the real
+// margin-vs-closing-spread residual SD over nflverse 2010-2025 is ~13.0 (recent years ~12.5), so
+// 13.0 replaces the textbook 13.5. The key-number comb in footballMargin is fit at this same sigma.
+const NFL_SIGMA = 13.0;
 // WZ-FBALL-KEYNUM-2026-07-17 :: strength of the 3/7 key-number weighting in the spread cover
 // model. 1.0 = full physical mass (push-calibrated to real NFL push rates); 0 = plain Normal.
 // A reversible dial — drop toward 0 if a backtest ever says the market keys differently than 2003-24.
 const NFL_KEY_STRENGTH = 1.0;
-// Total SD — game totals swing more than margins; ~10 is a common working value.
-const NFL_TOTAL_SIGMA = 10.0;
+// Total SD. WZ-FBALL-BACKTEST-2026-07-17 :: the real total-vs-closing-line residual SD (nflverse
+// 2010-2025) is ~13.2 — the old 10.0 was far too tight and would have priced totals overconfidently
+// once a points model lands. No effect while the model mirrors the line (projTotal == line → 50%).
+const NFL_TOTAL_SIGMA = 13.2;
 // Home-field advantage in points. League-wide long-run ~2.5 (post-2020 it has
 // drifted toward ~2.0; 2.5 is a defensible baseline, tunable once we grade games).
 const NFL_HFA_POINTS = 2.5;
