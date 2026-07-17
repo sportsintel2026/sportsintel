@@ -830,6 +830,16 @@ function _solveRunSplit(total, pWinHome) {
   return { muHome: T / 2 + d, muAway: T / 2 - d };
 }
 
+// WZ-RL-BACKTEST-2026-07-17 :: read-only replay hook. Exposes the EXACT live run-line margin model
+// (the same _solveRunSplit -> _marginPmf -> _pHomeCover path calculateGameEdges uses) so the backtest
+// probe scores real graded games through the real model, never a copy. In: projected total, home win
+// prob, home run-line. Out: raw P(home covers homeRLLine), clamped like the live derivation.
+function runLineCoverModel(projectedTotal, homeWinProb, homeRLLine) {
+  const s = _solveRunSplit(projectedTotal, homeWinProb);
+  const pm = _marginPmf(s.muHome, s.muAway);
+  return Math.max(0.02, Math.min(0.98, _pHomeCover(pm, homeRLLine)));
+}
+
 // v2.1 (2026-06-09): the strikeout RATE now comes from Savant k_percent (true K per
 // batter faced) when available — a cleaner rate than K/9, which is contaminated by
 // baserunners/innings. λ = kRate × expected batters faced × opponent factor, where
@@ -2705,6 +2715,7 @@ async function calculateTriplesBoard(games, oddsByEvent) { return calculateRareH
 
 module.exports = {
   calculateGameEdges,
+  runLineCoverModel, // WZ-RL-BACKTEST-2026-07-17 :: real run-line margin model, for the replay probe
   calculateHRPropEdges,
   calculateStrikeoutPropEdges,
   calculateStrikeoutShadow,
