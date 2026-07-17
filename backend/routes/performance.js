@@ -306,6 +306,7 @@ router.get("/rlbacktest", async (req, res) => {
     const supabase = db();
     const SHADOW = ["moneyline_shadow", "total_shadow", "run_line_shadow"];
     const since = req.query.since || null;
+    const phiOverride = req.query.phi != null ? Number(req.query.phi) : null; // WZ-RL-PHIDIAL-2026-07-17 :: tuning dial
 
     const PAGE = 1000; let from = 0; const rows = [];
     for (let i = 0; i < 40; i++) {
@@ -337,7 +338,7 @@ router.get("/rlbacktest", async (req, res) => {
     let n = 0, skipped = 0;
     for (const g of games.values()) {
       if (g.homeWin == null || g.total == null || g.rlLine == null || (g.rlResult !== "win" && g.rlResult !== "loss")) { skipped++; continue; }
-      const predHomeCover = runLineCoverModel(g.total, g.homeWin, g.rlLine);
+      const predHomeCover = runLineCoverModel(g.total, g.homeWin, g.rlLine, phiOverride); // WZ-RL-PHIDIAL: phi from ?phi=
       const homeCovered = g.rlResult === "win"; // shadow selection is always home vs its own homeLine
       n++;
 
@@ -361,6 +362,8 @@ router.get("/rlbacktest", async (req, res) => {
 
     res.json({
       token: "WZ-RL-BACKTEST-2026-07-17",
+      phiUsed: phiOverride != null ? phiOverride : 1.35,
+      dialUsage: "Add ?phi=1.5 (etc.) to re-score every game at that overdispersion. Find the phi that drops confidentSideBands 0.60+ gapPts under 4. Default phi=1.35.",
       whatThisIs: "Replay of the REBUILT run-line margin model over graded shadow games. Confident-side bands are the audit's lens -- OLD run-line there: 0.55-0.60 claimed 58.5 -> actual 50.0; 0.60+ claimed 62.5 -> actual 50.0 (n=94). Small gaps here = the rebuild fixed it.",
       gamesScored: n,
       gamesSkipped: skipped,
