@@ -462,6 +462,39 @@ async function recordPredictions(result) {
   const gameDate = result.date || getEasternDate(0);
   const rows = [];
 
+  // WZ-ONE-SIDE-PER-GAME-2026-07-18 :: ONE recorded pick per game per core market per day.
+  // The unique key is (game_id, market, selection, game_date) -- and "over"/"under" are DIFFERENT
+  // selections, so BOTH sides of the same game could persist. Nobody ever chose both: the recorder
+  // re-runs all day, and when the line moves, the morning snapshot books the over while the
+  // afternoon books the under. The pair is then locked to a guaranteed win+loss -- a structural
+  // -4.5% (the vig) every time it happens, with zero model skill involved. Observed 2026-07-17:
+  // Over/Under 12 CIN@COL, Over/Under 8.5 CWS@TOR, Over/Under 8.5 TB@BOS -- 3 pairs in one slate.
+  // (Best-of-books pricing makes it worse: the best over at book A and the best under at book B
+  // can BOTH show a positive edge that exists at no single book -- a pricing artifact, not value.)
+  // Fix: first pick per game+market wins for the day; any later opposite side is skipped. Applies
+  // to core markets only -- the *_shadow recorders deliberately log a FIXED side every game and
+  // are untouched, so calibration measurement keeps its full sample.
+  const CORE_ONE_SIDE = ["moneyline", "total", "run_line"];
+  const takenGameMarket = new Set();
+  try {
+    const { data: existingCore } = await supabase
+      .from("model_predictions")
+      .select("game_id, market")
+      .eq("league", "mlb")
+      .eq("game_date", gameDate)
+      .in("market", CORE_ONE_SIDE);
+    for (const r of existingCore || []) takenGameMarket.add(`${String(r.game_id)}|${r.market}`);
+  } catch (e) {
+    console.error("[Tracker] one-side pre-check failed (recording continues):", e.message);
+  }
+  // Returns true (and claims the slot) if this game+market has NOT been recorded yet today.
+  const claimSide = (gameId, market) => {
+    const k = `${String(gameId)}|${market}`;
+    if (takenGameMarket.has(k)) return false;
+    takenGameMarket.add(k);
+    return true;
+  };
+
   // Build a quick lookup of game status by id (skip finals)
   const statusById = {};
   const fatigueById = {};
@@ -499,6 +532,7 @@ async function recordPredictions(result) {
   for (const e of result.moneylineEdges || []) {
     if (statusById[e.gameId] === "final") continue;
     if (e.edge == null || e.edge <= 0) continue;
+    if (!claimSide(e.gameId, "moneyline")) continue; // WZ-ONE-SIDE-PER-GAME-2026-07-18
     rows.push({
       game_id: e.gameId, game_date: gameDate, league: "mlb",
       matchup: e.matchup, market: "moneyline", selection: e.side,
@@ -519,6 +553,7 @@ async function recordPredictions(result) {
   for (const e of result.totalsEdges || []) {
     if (statusById[e.gameId] === "final") continue;
     if (e.edge == null || e.edge <= 0) continue;
+    if (!claimSide(e.gameId, "total")) continue; // WZ-ONE-SIDE-PER-GAME-2026-07-18
     rows.push({
       game_id: e.gameId, game_date: gameDate, league: "mlb",
       matchup: e.matchup, market: "total", selection: e.side,
@@ -536,6 +571,7 @@ async function recordPredictions(result) {
   for (const e of result.runLineEdges || []) {
     if (statusById[e.gameId] === "final") continue;
     if (e.edge == null || e.edge <= 0) continue;
+    if (!claimSide(e.gameId, "run_line")) continue; // WZ-ONE-SIDE-PER-GAME-2026-07-18
     rows.push({
       game_id: e.gameId, game_date: gameDate, league: "mlb",
       matchup: e.matchup, market: "run_line", selection: e.side,
