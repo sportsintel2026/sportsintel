@@ -47,10 +47,19 @@ const NFL_TOTAL_SIGMA = 13.2;
 // drifted toward ~2.0; 2.5 is a defensible baseline, tunable once we grade games).
 const NFL_HFA_POINTS = 2.5;
 
-// Market blend: weight on the MODEL vs the de-vig market. Matches the NBA 55/45.
-// With no rating layer yet the model margin == market-implied margin, so the
-// blend is a no-op today; it becomes meaningful the moment ratings are real.
-const NFL_W_MODEL = 0.55;
+// ── THE LAUNCH DIAL ───────────────────────────────────────────────────────────
+// WZ-FBALL-BLEND-2026-07-17 :: NFL_W_MODEL is the one knob that sets how much the model's OWN
+// opinion counts vs the sharp de-vig market (Pinnacle), across ALL three markets (moneyline prob,
+// spread margin, total). It runs 0..1:
+//   0.00 = 100% market (pure Pinnacle, zero model influence, zero edge)
+//   0.30 = 30% model / 70% market  ← LAUNCH VALUE. A young, uncalibrated model can't post a wild
+//                                     number — every price hugs the sharp line. This is the
+//                                     playbook's heavy-market-blend launch setting.
+//   0.55 = 55% model / 45% market  ← the "proven" value (matches MLB/NBA); slide here as the
+//                                     shadow sample shows football is calibrated.
+//   1.00 = 100% model (ignore the market — only once truly trusted)
+// To let football earn more influence over the season, RAISE this number (0.30 → 0.40 → 0.55).
+const NFL_W_MODEL = 0.30;
 const NFL_BLEND_ENABLED = true;
 
 // Edge thresholds (probability points) before a pick is published. Conservative —
@@ -223,7 +232,12 @@ function predictGame(ev, ctx = {}) {
     // margin distribution (WZ-FBALL-KEYNUM-2026-07-17): real 3/7 mass + push handling, so it doesn't
     // manufacture phantom edges on/near the key numbers the way a plain Normal did. homeCoverProb is
     // the two-way (push-excluded) cover prob — directly comparable to the de-vigged book price below.
-    const { homeCoverProb, push: homePushProb } = spreadCover(modelMargin, NFL_SIGMA, sLine, "nfl", NFL_KEY_STRENGTH);
+    // WZ-FBALL-BLEND-2026-07-17 :: anchor the margin toward the market before pricing the cover. The
+    // spread line's implied margin is -sLine; the launch dial NFL_W_MODEL sets how far the model's own
+    // margin is trusted vs that sharp number, so a young model can't post a wild spread. At 0.30 the
+    // cover sits ~70% on the market. The key-number push handling still applies to the blended margin.
+    const sprMargin = NFL_BLEND_ENABLED ? (NFL_W_MODEL * modelMargin + (1 - NFL_W_MODEL) * (-sLine)) : modelMargin;
+    const { homeCoverProb, push: homePushProb } = spreadCover(sprMargin, NFL_SIGMA, sLine, "nfl", NFL_KEY_STRENGTH);
     const fairHomeCover = devigPair(ev.spreads.home, ev.spreads.away);
     out.spread = {
       line: sLine,
@@ -256,7 +270,10 @@ function predictGame(ev, ctx = {}) {
     // referee over/under lean (deferred) nudges projTotal once ctx.referees exists.
     const refAdj = (ctx?.referees?.totalAdj != null)
       ? Math.max(-3, Math.min(3, ctx.referees.totalAdj)) : 0;
-    const overProb = normalCDF(((projTotal + refAdj) - tLine) / NFL_TOTAL_SIGMA);
+    // WZ-FBALL-BLEND-2026-07-17 :: anchor the projected total toward the market line via the same
+    // launch dial, so an uncalibrated total opinion can't stray far from the sharp number.
+    const blendedTotal = NFL_BLEND_ENABLED ? (NFL_W_MODEL * (projTotal + refAdj) + (1 - NFL_W_MODEL) * tLine) : (projTotal + refAdj);
+    const overProb = normalCDF((blendedTotal - tLine) / NFL_TOTAL_SIGMA);
     const fairOver = devigPair(ev.totals.over, ev.totals.under);
     const hasTotalOpinion = (ctx?.home?.projPoints != null && ctx?.away?.projPoints != null) || refAdj !== 0;
     out.total = {
