@@ -21,16 +21,18 @@
 
 // ── College football constants ────────────────────────────────────────────────
 const { spreadCover } = require("./footballMargin"); // WZ-FBALL-KEYNUM-2026-07-17
-// Margin SD vs the spread. CFB game margins are far noisier than the NFL's ~13.5;
-// ~16 is a standard working value for converting a spread to a cover/win prob.
-const CFB_SIGMA = 16.0;
+// Margin SD vs the spread. WZ-CFB-BACKTEST-2026-07-17 :: the real margin-vs-closing-spread residual
+// SD over CollegeFootballData 2020-2024 FBS (3,475 games) is ~15.5 — close to the old 16.0 estimate.
+// The key-number comb in footballMargin is fit at this same sigma.
+const CFB_SIGMA = 15.5;
 // WZ-FBALL-KEYNUM-2026-07-17 :: key-number weighting strength for CFB spread cover. CFB's 3/7
 // spikes are milder than the NFL's (more blowouts / 2-pt conversions), so its comb is flatter.
 // 1.0 = full physical mass; 0 = plain Normal. Reversible dial. Per the playbook this shared
 // transform calibrates on CFB's faster-filling Saturday sample and carries to the NFL.
 const CFB_KEY_STRENGTH = 1.0;
-// Total SD — college totals swing more than the NFL's ~10.
-const CFB_TOTAL_SIGMA = 13.0;
+// Total SD. WZ-CFB-BACKTEST-2026-07-17 :: the real total-vs-closing-line residual SD (CFBD 2020-24
+// FBS) is ~16 — the old 13.0 was too tight. College totals swing hard (high-scoring, up-tempo).
+const CFB_TOTAL_SIGMA = 16.0;
 // Home-field advantage in points. College HFA runs higher than the pros (~3).
 const CFB_HFA_POINTS = 3.0;
 
