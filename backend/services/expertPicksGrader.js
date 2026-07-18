@@ -89,6 +89,22 @@ function isGradeable(pick) {
   );
 }
 
+// WZ-WIZEPLAYS-GRADE-DIAG-2026-07-17 :: for a STILL-PENDING pick that the auto-grader skips, say why
+// (so "not grading" stops being a silent mystery). Returns null if the pick is already graded or is
+// fully gradeable. Only the reasons a human can act on.
+function skipReason(pick) {
+  if (!pick || typeof pick !== "object") return "malformed pick entry";
+  if (!isPending(pick.result)) return null;                 // already graded — nothing to explain
+  if (isGradeable(pick)) return null;                        // will be handled by the normal path
+  if (pick.type !== "straight") return `type is "${pick.type || "(none)"}" — only straight bets auto-grade (parlays/props aren't settled here)`;
+  const sport = String(pick.sport || "").toLowerCase();
+  if (!GRADEABLE_LEAGUES.has(sport)) return `sport "${pick.sport || "(none)"}" is not in the auto-grade set (${[...GRADEABLE_LEAGUES].join(", ")})`;
+  if (!pick.gameId) return "missing gameId (pick wasn't entered with the structured game link)";
+  if (!pick.market) return "missing market";
+  if (!pick.selection) return "missing selection";
+  return "not gradeable (unknown reason)";
+}
+
 // Main entry. { dryRun: true } (default) reads + reports but writes NOTHING.
 // { dryRun: false } writes settled results back into expert_picks.
 async function gradeExpertPicks({ dryRun = true, days = 14 } = {}) {
@@ -113,7 +129,12 @@ async function gradeExpertPicks({ dryRun = true, days = 14 } = {}) {
     let changed = false;
 
     for (const pick of picks) {
-      if (!isGradeable(pick)) continue;
+      if (!isGradeable(pick)) {
+        // WZ-WIZEPLAYS-GRADE-DIAG-2026-07-17 :: surface WHY a pending pick is being skipped.
+        const why = skipReason(pick);
+        if (why) decisions.push({ date: row.date, pick: pick && pick.pick, game: pick && pick.game, sport: pick && pick.sport, status: "skipped", reason: why });
+        continue;
+      }
       checked++;
 
       // The stored gameId is the Odds-API edges id, which ESPN's id-keyed lookup
