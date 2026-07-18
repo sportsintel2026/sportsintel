@@ -92,7 +92,12 @@ const SPORTS={
 const edgePct=(e,sport)=> sport==="mlb" ? (e.edge??0)*100 : (e.edge??0);
 function fmtEdgeFor(e,sport){ const v=edgePct(e,sport); const s=v>=0?"+":""; if(sport==="nba"&&(isTotal(e)||e.line!=null)) return `${s}${v.toFixed(1)}`; return `${s}${v.toFixed(1)}%`; }
 function teams(m){ if(!m)return ["",""]; const p=String(m).split(/@|vs|·/i).map(s=>s.trim()).filter(Boolean); return [p[0]||"",p[1]||""]; }
-function shortTeam(t){ const m=String(t).match(/[A-Z]{2,3}/); return m?m[0]:String(t).slice(0,3).toUpperCase(); }
+// WZ-NFL-ABBR-2026-07-17 :: real NFL abbreviations, keyed by FULL team name (unique across every
+// sport, so this is safe to consult unconditionally). Fixes shortTeam's naive first-3-letters slice,
+// which collapsed New Orleans / New England / NY Giants+Jets all to "NEW", both LA teams to "LOS",
+// Green Bay to "GRE", Kansas City to "KAN" — colliding, unreadable team codes on the board.
+const NFL_ABBR={"arizona cardinals":"ARI","atlanta falcons":"ATL","baltimore ravens":"BAL","buffalo bills":"BUF","carolina panthers":"CAR","chicago bears":"CHI","cincinnati bengals":"CIN","cleveland browns":"CLE","dallas cowboys":"DAL","denver broncos":"DEN","detroit lions":"DET","green bay packers":"GB","houston texans":"HOU","indianapolis colts":"IND","jacksonville jaguars":"JAX","kansas city chiefs":"KC","las vegas raiders":"LV","los angeles chargers":"LAC","los angeles rams":"LAR","miami dolphins":"MIA","minnesota vikings":"MIN","new england patriots":"NE","new orleans saints":"NO","new york giants":"NYG","new york jets":"NYJ","philadelphia eagles":"PHI","pittsburgh steelers":"PIT","san francisco 49ers":"SF","seattle seahawks":"SEA","tampa bay buccaneers":"TB","tennessee titans":"TEN","washington commanders":"WAS"};
+function shortTeam(t){ const s=String(t||"").toLowerCase(); for(const k in NFL_ABBR){ if(s.includes(k)) return NFL_ABBR[k]; } const m=String(t).match(/[A-Z]{2,3}/); return m?m[0]:String(t).slice(0,3).toUpperCase(); }
 // WZ-LIVEWIRE-2026-06-27 :: concise injury text for the ticker (action after the colon, trimmed)
 function capWire(s, max){ s=(s||"").trim(); return s.length>max?s.slice(0,max-1).trimEnd()+"\u2026":s; } // WZ-LIVEWIRE-FIX-2026-06-27
 function wireBlurb(n){ const h=n.headline||""; const after=h.includes(":")?h.split(":").slice(1).join(":").trim():h; return capWire(after||n.summary||"", 52); }
