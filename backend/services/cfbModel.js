@@ -34,8 +34,11 @@ const CFB_TOTAL_SIGMA = 13.0;
 // Home-field advantage in points. College HFA runs higher than the pros (~3).
 const CFB_HFA_POINTS = 3.0;
 
-// Market blend: weight on the MODEL vs the de-vig market (matches NFL/NBA 55/45).
-const CFB_W_MODEL = 0.55;
+// ── THE LAUNCH DIAL ───────────────────────────────────────────────────────────
+// WZ-FBALL-BLEND-2026-07-17 :: how much the model's own opinion counts vs the sharp market, across
+// all three markets. 0.30 = 30% model / 70% market = LAUNCH value (young model hugs the sharp line);
+// raise toward 0.55 as CFB proves calibrated. Same knob and meaning as NFL_W_MODEL.
+const CFB_W_MODEL = 0.30;
 const CFB_BLEND_ENABLED = true;
 
 // Edge thresholds (probability points) before a pick is published. Conservative.
@@ -174,7 +177,9 @@ function predictGame(ev, ctx = {}) {
   const sLine = ev.spreads?.homeLine;
   if (sLine != null && ev.spreads?.home != null && ev.spreads?.away != null) {
     // WZ-FBALL-KEYNUM-2026-07-17 :: key-number-aware cover (3/7 mass + push), not a plain Normal.
-    const { homeCoverProb, push: homePushProb } = spreadCover(modelMargin, CFB_SIGMA, sLine, "cfb", CFB_KEY_STRENGTH);
+    // WZ-FBALL-BLEND-2026-07-17 :: anchor the margin toward the market (-sLine) via the launch dial.
+    const sprMargin = CFB_BLEND_ENABLED ? (CFB_W_MODEL * modelMargin + (1 - CFB_W_MODEL) * (-sLine)) : modelMargin;
+    const { homeCoverProb, push: homePushProb } = spreadCover(sprMargin, CFB_SIGMA, sLine, "cfb", CFB_KEY_STRENGTH);
     const fairHomeCover = devigPair(ev.spreads.home, ev.spreads.away);
     out.spread = {
       line: sLine,
@@ -206,7 +211,9 @@ function predictGame(ev, ctx = {}) {
       : tLine;
     const refAdj = (ctx?.referees?.totalAdj != null)
       ? Math.max(-3, Math.min(3, ctx.referees.totalAdj)) : 0;
-    const overProb = normalCDF(((projTotal + refAdj) - tLine) / CFB_TOTAL_SIGMA);
+    // WZ-FBALL-BLEND-2026-07-17 :: anchor the projected total toward the market line via the same dial.
+    const blendedTotal = CFB_BLEND_ENABLED ? (CFB_W_MODEL * (projTotal + refAdj) + (1 - CFB_W_MODEL) * tLine) : (projTotal + refAdj);
+    const overProb = normalCDF((blendedTotal - tLine) / CFB_TOTAL_SIGMA);
     const fairOver = devigPair(ev.totals.over, ev.totals.under);
     const hasTotalOpinion = (ctx?.home?.projPoints != null && ctx?.away?.projPoints != null) || refAdj !== 0;
     out.total = {
