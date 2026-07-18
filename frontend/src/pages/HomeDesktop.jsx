@@ -13,7 +13,11 @@ const ESPN_ALIAS = { az: "ari" };
 const ESPN = (ab, lg = "mlb") => { const a = String(ab || "").toLowerCase(); const slug = lg === "mlb" ? (ESPN_ALIAS[a] || a) : a; return `https://a.espncdn.com/i/teamlogos/${lg}/500/${slug}.png`; };
 const formatOdds = (a) => { if (a == null || isNaN(a)) return "—"; const n = Math.round(Number(a)); return n > 0 ? `+${n}` : `${n}`; };
 const isTotal = (e) => e.side === "over" || e.side === "under";
-const shortTeam = (t) => { const m = String(t).match(/[A-Z]{2,3}/); return m ? m[0] : String(t).slice(0, 3).toUpperCase(); };
+// WZ-NFL-ABBR-2026-07-17 :: real NFL abbreviations keyed by FULL team name (unique across every
+// sport). Fixes shortTeam's first-3-letters slice, which collided New Orleans/New England/NY teams
+// to "NEW", both LA teams to "LOS", Green Bay to "GRE", Kansas City to "KAN".
+const NFL_ABBR = {"arizona cardinals":"ARI","atlanta falcons":"ATL","baltimore ravens":"BAL","buffalo bills":"BUF","carolina panthers":"CAR","chicago bears":"CHI","cincinnati bengals":"CIN","cleveland browns":"CLE","dallas cowboys":"DAL","denver broncos":"DEN","detroit lions":"DET","green bay packers":"GB","houston texans":"HOU","indianapolis colts":"IND","jacksonville jaguars":"JAX","kansas city chiefs":"KC","las vegas raiders":"LV","los angeles chargers":"LAC","los angeles rams":"LAR","miami dolphins":"MIA","minnesota vikings":"MIN","new england patriots":"NE","new orleans saints":"NO","new york giants":"NYG","new york jets":"NYJ","philadelphia eagles":"PHI","pittsburgh steelers":"PIT","san francisco 49ers":"SF","seattle seahawks":"SEA","tampa bay buccaneers":"TB","tennessee titans":"TEN","washington commanders":"WAS"};
+const shortTeam = (t) => { const s = String(t || "").toLowerCase(); for (const k in NFL_ABBR) { if (s.includes(k)) return NFL_ABBR[k]; } const m = String(t).match(/[A-Z]{2,3}/); return m ? m[0] : String(t).slice(0, 3).toUpperCase(); };
 const wpAbbr = (pk) => { const f = String((pk && pk.pick) || "").trim().split(/\s+/)[0]; if (/^[A-Za-z]{2,4}$/.test(f)) return f.toUpperCase(); const g = String((pk && pk.game) || "").trim().split(/\s+/)[0]; return /^[A-Za-z]{2,4}$/.test(g) ? g.toUpperCase() : ""; };
 // WZ-DESKTOP-VAULT-FIX2-2026-07-11 :: line-move uses amCents (matches movers rail); props above weather; props lead with HR.
 const amCents = (o) => { if (o == null || isNaN(o)) return null; const n = Number(o); return n >= 100 ? n - 100 : n <= -100 ? n + 100 : 0; };
