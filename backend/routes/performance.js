@@ -28,10 +28,24 @@ const LEAGUE_CONFIG = {
 };
 
 // --- selection rule (tune here) ---------------------------------------------
-const QUALIFYING_TIERS = ["HIGH", "MEDIUM"];
+// WZ-COUNT-ALL-TIERS-2026-07-18 :: every core pick counts, win or lose.
+// Previously only HIGH+MEDIUM reached the headline, which silently dropped the LOW and
+// NEUTRAL tiers from the published record even though those picks WERE shown on the board
+// and WERE graded. That hid the single best-performing slice: NEUTRAL (the smallest claimed
+// edge) ran 37-26 / +8.1% ROI while HIGH ran 16-17 / -7.4%. A record that omits winning
+// picks is not a record. All four tiers now count; the frontend already renders all four.
+// Reversible: put ["HIGH","MEDIUM"] back to restore the old headline.
+const QUALIFYING_TIERS = ["HIGH", "MEDIUM", "LOW", "NEUTRAL"];
 function isQualified(r) {
   const conf = (r.confidence || "NEUTRAL").toUpperCase();
   return QUALIFYING_TIERS.includes(conf);
+}
+// WZ-BENCH-NOT-COUNTED-2026-07-18 :: a pick made while its market was benched off the board
+// is RECORDED (so the market can prove itself and earn release) but is NOT counted in the
+// published headline -- subscribers never saw it, so it cannot flatter or damage the number
+// they were actually shown. Those rows still appear in fullSample for internal analysis.
+function wasShownToSubscribers(r) {
+  return r.benched_at_pick !== true;
 }
 // ----------------------------------------------------------------------------
 
@@ -539,7 +553,7 @@ router.get("/:league", async (req, res) => {
     for (let from = 0; ; from += PAGE) {
       const { data, error } = await supabase
         .from("model_predictions")
-        .select("market, confidence, result, odds, edge, game_date, clv, beat_close, closing_odds")
+        .select("market, confidence, result, odds, edge, game_date, clv, beat_close, closing_odds, benched_at_pick")
         .eq("league", league)
         .in("result", ["win", "loss"]) // graded, decisive only (skip pending/push)
         .order("id", { ascending: true })
@@ -555,7 +569,7 @@ router.get("/:league", async (req, res) => {
     const propRows = rows.filter(r => cfg.props.includes(r.market) && afterReset(r));
 
     // Qualified set drives the headline; full set kept for transparency.
-    const qualifiedRows = coreRows.filter(isQualified);
+    const qualifiedRows = coreRows.filter(r => isQualified(r) && wasShownToSubscribers(r)); // WZ-BENCH-NOT-COUNTED-2026-07-18
 
     const build = (set) => {
       const buckets = { overall: blank(), byMarket: {}, byConfidence: {} };
