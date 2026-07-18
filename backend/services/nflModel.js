@@ -6,23 +6,33 @@
  * ({ h2h, totals, spreads, marketRead }) and returns predictions + edges for
  * moneyline, spread, and total.
  *
- * ── HONESTY MODEL (read this before "why are there no edges yet") ──────────────
- * An edge only exists where the model's OWN probability disagrees with the de-vig
- * market. The model's own opinion needs team strength data. It is the offseason:
- * there is no 2026 NFL performance data, and the historical-seed fetch is not
- * built yet. So RIGHT NOW the model's independent margin contribution is zero —
- * its "opinion" is the market's fair line adjusted only by home-field advantage,
- * which means it (correctly) agrees with the market and surfaces ~no edges. This
- * is the truthful state, not a bug: we ship zero fabricated picks until a real
- * rating layer is seeded and validated in shadow mode during the season.
+ * ── HONESTY MODEL (read this before reasoning about football edges) ────────────
+ * An edge exists only where the model's OWN probability disagrees with the de-vig
+ * market. That opinion comes from the rating layer, which IS built and wired (this
+ * header used to say it wasn't — that was stale):
+ *   - buildTeamRatings() (nflDataSource) computes power ratings from each team's
+ *     season points-differential per game, centered and regressed;
+ *   - buildBlendedTeamRatings() blends the prior season (a complete 2025 seed in
+ *     the offseason) with the current one by games played;
+ *   - nflEdges feeds them in as ctx.home/away.rating, and ratingMargin() turns the
+ *     rating gap into a projected margin.
+ * So when ratings resolve for both teams the model HAS an independent opinion
+ * (dataQuality:"rated") — it is NOT a market passthrough.
  *
- * Everything is wired so each real factor drops in WITHOUT restructuring:
- *   - teamRating (power ratings, seeded from 2025 finals)         → ratingMargin()
+ * What it is NOT yet is CALIBRATED: no 2026 games have graded, so we don't know how
+ * good that opinion is. That's handled in the open, not by hiding it:
+ *   - the launch dial NFL_W_MODEL (0.30) anchors EVERY market ~70% to the sharp
+ *     line, so a young opinion can't post a wild price;
+ *   - every game is shadow-recorded and graded in-season (predictionTracker), read
+ *     at /api/performance/fbcalib;
+ *   - the calibration guard shows football by default and benches a market only if
+ *     it actually drifts.
+ * As the shadow sample proves the model out, raise NFL_W_MODEL toward 0.55.
+ *
+ * Deferred factors still drop in WITHOUT restructuring (each returns 0 until fed):
  *   - strengthOfSchedule / conferenceStrength                     → ratingMargin()
  *   - headToHeadHistory                                           → historyAdj()
- *   - coaching / crowd / referees (deferred; need data sources)   → factorAdj()
- * Until a factor's data exists, its function returns 0 and the model leans fully
- * on market + HFA. Flip each on by feeding it real data — no shape change needed.
+ *   - coaching / crowd / referees (need data sources)             → factorAdj()
  *
  * CommonJS.
  */
