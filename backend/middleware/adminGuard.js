@@ -11,20 +11,59 @@
 // pre-existing ADMIN_TOKEN. Nothing new to configure, and rotating that one value now rotates
 // admin access everywhere at once.
 //
+// WZ-ADMIN-TRIM-2026-07-18 :: trim BOTH sides before comparing.
+// Pasting a secret into a hosting dashboard very often carries an invisible trailing newline or
+// space, and a browser URL can pick one up too. An invisible character is indistinguishable from
+// a wrong token at the call site - it just 404s forever with nothing to debug. Trimming removes
+// that entire failure class permanently. It costs no real security: whitespace-only padding is
+// not entropy, and a token that differs by anything other than surrounding whitespace still fails.
+//
 // Accepted credentials (any one of these, all compared against ADMIN_TOKEN):
 //   ?key=<token>              - query param, matches the /api/umpires/backfill convention
 //   x-admin-token: <token>    - header, matches the DELETE /api/cache convention
 //   x-admin-key: <token>      - header, kept so anything already sending it keeps working
 //
+// WZ-ADMIN-DIAG-2026-07-18 :: `?diag=1` returns WHY a request was denied, as booleans only.
+// It never returns the token, any part of it, or its length - only: is ADMIN_TOKEN configured on
+// the server, did the caller supply anything, and would it have matched if whitespace were the
+// only difference. An attacker learns nothing they couldn't already infer from allow-vs-deny, but
+// the owner instantly sees whether the problem is an unset env var, a missing param, or a stray
+// space. Remove this block once it has served its purpose if you'd rather carry no diag surface.
+//
 // Fails CLOSED: if ADMIN_TOKEN is unset, or nothing is supplied, or it doesn't match, the request
 // is denied. Returns 404 rather than 403 so the endpoints aren't advertised to a prober.
 module.exports = function adminGuard(req, res, next) {
-  const token = process.env.ADMIN_TOKEN;
-  const supplied =
+  const rawToken = process.env.ADMIN_TOKEN;
+  const rawSupplied =
     (req.query && req.query.key) ||
     req.get("x-admin-token") ||
     req.get("x-admin-key") ||
     "";
-  if (token && supplied && String(supplied) === String(token)) return next();
+
+  const token = String(rawToken == null ? "" : rawToken).trim();
+  const supplied = String(rawSupplied).trim();
+
+  if (token && supplied && supplied === token) return next();
+
+  if (req.query && (req.query.diag === "1" || req.query.diag === "true")) {
+    return res.status(404).json({
+      error: "Not found",
+      diag: {
+        tokenConfigured: Boolean(token),
+        tokenHadSurroundingWhitespace:
+          Boolean(rawToken) && String(rawToken) !== token,
+        suppliedSomething: Boolean(supplied),
+        suppliedHadSurroundingWhitespace:
+          Boolean(rawSupplied) && String(rawSupplied) !== supplied,
+        matches: Boolean(token) && supplied === token,
+        hint: !token
+          ? "ADMIN_TOKEN is not set (or is empty) in this running service."
+          : !supplied
+          ? "No credential arrived. Check ?key= is present and not stripped."
+          : "A credential arrived but did not match ADMIN_TOKEN.",
+      },
+    });
+  }
+
   return res.status(404).json({ error: "Not found" });
 };
