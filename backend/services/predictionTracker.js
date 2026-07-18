@@ -450,6 +450,12 @@ function beatFlag(v) { return v == null ? null : (v > 0 ? true : (v < 0 ? false 
 // ── RECORD (MLB) ────────────────────────────────────────────────────────────────
 // Snapshots every edge the model surfaced today. Only records games that are
 // NOT yet final (we want pre-game predictions, not post-hoc).
+// WZ-BENCH-STAMP-2026-07-18 :: lazy require so a load error here can never break recording.
+function benchedNow(market) {
+  try { return require("./calibrationGuard").isBenched(market, "mlb") === true; }
+  catch (e) { return false; }
+}
+
 async function recordPredictions(result) {
   if (!result || !Array.isArray(result.games)) return;
   const supabase = db();
@@ -505,6 +511,7 @@ async function recordPredictions(result) {
       model_prob_cal: e.modelProb ?? null,
       cal_edge: e.edge ?? null,
       confidence: e.confidence, conviction: e.conviction ?? null, conviction_score: e.convictionScore ?? null, line: null,
+      benched_at_pick: benchedNow("moneyline"), // WZ-BENCH-STAMP-2026-07-18
     });
   }
 
@@ -518,6 +525,7 @@ async function recordPredictions(result) {
       description: `${e.side === "over" ? "Over" : "Under"} ${e.line}`,
       model_prob: e.modelProb, odds: e.odds, edge: e.edge,
       confidence: e.confidence, conviction: e.conviction ?? null, conviction_score: e.convictionScore ?? null, line: e.line,
+      benched_at_pick: benchedNow("total"), // WZ-BENCH-STAMP-2026-07-18
       bullpen_fatigue: fatigueById[e.gameId] || null,
       shadow_total: shadowById[e.gameId] ?? null,
       ...(breakdownById[e.gameId] || {}),
@@ -534,6 +542,7 @@ async function recordPredictions(result) {
       description: `${e.teamAbbr} ${e.line > 0 ? "+" : ""}${e.line}`,
       model_prob: e.modelProb, odds: e.odds, edge: e.edge,
       confidence: e.confidence, conviction: e.conviction ?? null, conviction_score: e.convictionScore ?? null, line: e.line,
+      benched_at_pick: benchedNow("run_line"), // WZ-BENCH-STAMP-2026-07-18
     });
   }
 
