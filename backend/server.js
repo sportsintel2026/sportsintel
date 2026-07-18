@@ -347,10 +347,13 @@ cron.schedule("*/30 * * * *", async () => {
   }
 }, { timezone: "America/New_York" });
 
-// Hourly sweep: NFL prop shadows / expert picks / daily card / DNP void.
-// (MLB finished-game grading moved to the every-15-min fast lane above.)
-cron.schedule("0 * * * *", async () => {
-  console.log("[CRON] Hourly grading sweep...");
+// WZ-WIZEPLAYS-GRADE-CADENCE-2026-07-17 :: every-15-min sweep: NFL prop shadows / expert picks
+// (WizePlays) / daily card / DNP void. Was hourly, which left an already-settled WizePlay pending for
+// up to ~60 min after the final — long enough to look like it "wasn't grading." Now matches the
+// 15-min finished-game fast lane above, so WizePlays settle within ~15 min of the last out. Every
+// step here is cheap and idempotent, so the faster cadence is free.
+cron.schedule("*/15 * * * *", async () => {
+  console.log("[CRON] 15-min grading sweep...");
   try {
     // WZ-NFLPROPSGRADER-CRON-2026-07-05 :: grade NFL player-prop shadow rows from box
     // scores (own resolver: matchup+date). No-op until shadow rows exist in-season.
