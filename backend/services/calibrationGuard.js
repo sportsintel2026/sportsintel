@@ -44,6 +44,20 @@ let _lastRun = null;
 let _shadowStatus = {};      // { market: { n, claimedPct, actualPct, gapPts, needN, needGapUnder, released } }
 const _released = new Set(); // manual markets released by shadow-watch (self-heals on reboot from live shadow data)
 
+// WZ-FBALL-BENCH-2026-07-17 :: football (NFL/CFB) is SHOWN BY DEFAULT and market-anchored (see the
+// launch dial in nflModel/cfbModel — picks hug the sharp line while the model is young). This section
+// is a DRIFT CATCHER, not a blackout: it watches each league×market's full-slate *_shadow rows and
+// auto-benches ONLY a market that actually goes bad (well-sampled AND claimed-vs-actual gap past the
+// threshold), then un-benches on recovery (hysteresis) — exactly how the MLB core markets behave.
+const FOOTBALL_LEAGUES = ["nfl", "cfb"];
+const FOOTBALL_MARKETS = ["moneyline", "spread", "total"];
+const FB_SHADOW = { moneyline: "moneyline_shadow", spread: "spread_shadow", total: "total_shadow" };
+const fbKey = (league, market) => `${league}:${market}`;
+const FB_MIN_N = 40;        // need a real settled confident-side sample before benching a market
+const FB_GAP_BENCH = 8;     // auto-bench when claimed - actual >= 8 pts (drift)
+const FB_GAP_UNBENCH = 4;   // hysteresis: un-bench once the gap recovers below 4 pts
+let _fbStatus = {};         // { "nfl:spread": { benched, gapPts, n, claimedPct, actualPct } }
+
 function db() {
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_KEY;
@@ -144,6 +158,57 @@ async function refreshGuard() {
     }
     _shadowStatus = shadowNext;
 
+    // WZ-FBALL-BENCH-2026-07-17 :: football drift catcher. Separate query (nfl/cfb, own *_shadow
+    // markets) so it never touches the MLB aggregation. Each league×market is SHOWN unless it's
+    // well-sampled AND drifting; then it auto-benches until it recovers. Confident side only.
+    try {
+      const fbRows = [];
+      for (let from = 0; ; from += PAGE) {
+        const { data, error } = await supabase
+          .from("model_predictions")
+          .select("league, market, model_prob, result")
+          .in("league", FOOTBALL_LEAGUES)
+          .in("market", Object.values(FB_SHADOW))
+          .order("id", { ascending: true })
+          .range(from, from + PAGE - 1);
+        if (error) throw new Error(error.message);
+        const b = data || [];
+        fbRows.push(...b);
+        if (b.length < PAGE) break;
+      }
+      const fbAgg = {};
+      for (const l of FOOTBALL_LEAGUES) for (const m of FOOTBALL_MARKETS) fbAgg[fbKey(l, m)] = { n: 0, hit: 0, claimSum: 0 };
+      for (const r of fbRows) {
+        if (r.result !== "win" && r.result !== "loss") continue;
+        if (r.model_prob == null) continue;
+        const base = String(r.market).replace(/_shadow$/, "");
+        const a = fbAgg[fbKey(r.league, base)];
+        if (!a) continue;
+        const mp = Number(r.model_prob), confP = Math.max(mp, 1 - mp);
+        if (confP < 0.55) continue;                     // confident/featured band only
+        const covered = mp >= 0.5 ? (r.result === "win") : (r.result === "loss");
+        a.n++; a.claimSum += confP; if (covered) a.hit++;
+      }
+      const fbNext = {};
+      for (const k of Object.keys(fbAgg)) {
+        const a = fbAgg[k];
+        const claimed = a.n ? (a.claimSum / a.n) * 100 : null;
+        const actual = a.n ? (a.hit / a.n) * 100 : null;
+        const gap = (claimed != null && actual != null) ? Math.round((claimed - actual) * 10) / 10 : null;
+        const wasBenched = _fbStatus[k] ? _fbStatus[k].benched === true : false; // default SHOWN
+        let benched = wasBenched;
+        if (a.n >= FB_MIN_N && gap != null) {
+          if (gap >= FB_GAP_BENCH) benched = true;
+          else if (gap < FB_GAP_UNBENCH) benched = false;
+        }
+        if (benched && !wasBenched) console.warn(`[CALIB-GUARD] football ${k} AUTO-BENCHED (gap ${gap}pts, n=${a.n}, claimed ${claimed.toFixed(1)}% vs actual ${actual.toFixed(1)}%) — drifting, held off the board until it recovers.`);
+        fbNext[k] = { benched, gapPts: gap, n: a.n, claimedPct: claimed != null ? Math.round(claimed * 10) / 10 : null, actualPct: actual != null ? Math.round(actual * 10) / 10 : null };
+      }
+      _fbStatus = fbNext;
+    } catch (e) {
+      console.error("[CALIB-GUARD] football refresh failed:", e.message); // keep previous football status on error
+    }
+
     for (const m of CORE) {
       const s = _status[m];
       if (s.benched && (!MANUAL_BENCH.has(m) || _released.has(m))) {
@@ -159,7 +224,13 @@ async function refreshGuard() {
 }
 
 // The single source of truth for whether a market is benched (manual OR auto).
-function isBenched(market) {
+function isBenched(market, league) {
+  // WZ-FBALL-BENCH-2026-07-17 :: football is namespaced league:market and SHOWN by default — benched
+  // only if the drift catcher flagged it. The MLB path (no league arg) is unchanged.
+  if (league && FOOTBALL_LEAGUES.includes(league)) {
+    const s = _fbStatus[fbKey(league, market)];
+    return !!(s && s.benched);
+  }
   if (MANUAL_BENCH.has(market) && !_released.has(market)) return true; // WZ-RL-SHADOW-WATCH: released markets fall through to the live guard
   const s = _status[market];
   return !!(s && s.benched);
@@ -183,6 +254,7 @@ function getStatus() {
     markets: out,
     thresholds: { confidentBand: ">=0.55", MIN_N, GAP_BENCH, GAP_UNBENCH },
     shadowWatch: _shadowStatus, // WZ-RL-SHADOW-WATCH-2026-07-17 :: rebuilt-model progress toward auto-release
+    football: _fbStatus,        // WZ-FBALL-BENCH-2026-07-17 :: per league:market drift status (benched only if drifting)
     lastRun: _lastRun,
     lastError: _lastError,
   };
