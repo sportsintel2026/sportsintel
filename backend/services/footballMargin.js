@@ -27,12 +27,16 @@ const KEY = {
   // spread: 3=9.0%, 7=6.3%, 10=9.5% (10 is a major key — two-score margin), 6=3.6%, 4=1.6% (a dead
   // number), etc. Replaced the earlier published-estimate comb, which underweighted 10 badly.
   nfl: { 1: -0.38, 2: -0.07, 3: 2.99, 4: -0.29, 5: -0.52, 6: 0.57, 7: 1.73, 10: 3.02 },
-  cfb: { 3: 1.58, 4: 0.31, 6: 0.21, 7: 0.95, 10: 0.6, 11: -0.09, 14: 0.43, 17: 0.14, 21: -0.06, 24: -0.2, 28: -0.38, 31: -0.47 },
+  // CFB comb CALIBRATED to real closing-line-vs-result data (CollegeFootballData, 2020-2024 FBS,
+  // 3,475 games, WZ-CFB-BACKTEST-2026-07-17). Fit so push@k matches ACTUAL push rates: 7=7.5%,
+  // 3=5.8%, 10/14=4.8%. Note the college quirk — 7 pushes MORE than 3 (more games decided by exactly
+  // a TD), the reverse of the NFL; the old estimate-based comb had that backwards.
+  cfb: { 3: 2.12, 4: 0.34, 6: -0.9, 7: 2.99, 10: 1.51, 14: 1.44, 17: 1.23, 21: 1.06 },
 };
 
 // Default margin SDs (physical priors from the playbook). Callers pass sigma explicitly; these are
 // the fallbacks and the values the selftest calibrates against.
-const SIGMA = { nfl: 13.0, cfb: 16.0 }; // nfl 13.0 = real 2010-25 margin-vs-spread residual SD (WZ-FBALL-BACKTEST-2026-07-17)
+const SIGMA = { nfl: 13.0, cfb: 15.5 }; // real margin-vs-spread residual SDs (WZ-FBALL-BACKTEST / WZ-CFB-BACKTEST-2026-07-17)
 
 // Discrete PMF over integer home margins (home − away), centered on `mu`, spread `sigma`, with the
 // league's key-number comb scaled by `strength`. Returns a Map<integerMargin, probability>.
