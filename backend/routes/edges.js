@@ -1717,7 +1717,7 @@ router.get("/nfl", gatePicks, async (req, res) => {
     for (const g of allGames) {
       for (const mkt of ["moneyline", "spread", "total"]) {
         const m = g[mkt];
-        if (m && m.value && m.edge != null) {
+        if (m && m.value && m.edge != null && !isBenched(mkt, "nfl")) { // WZ-FBALL-BENCH-2026-07-17 :: shown by default; hidden only if the guard flags this market as drifting
           edges.push({
             matchup: g.matchup, market: mkt, edge: m.edge,
             pick: m.pickTeam || m.pick, dataQuality: g.dataQuality,
@@ -1819,6 +1819,7 @@ router.get("/nfl", gatePicks, async (req, res) => {
       teamMatch: slate.match,     // coverage of odds-team → rating resolution
       edgeCount: edges.length,
       edges,
+      benched: { moneyline: isBenched("moneyline", "nfl"), spread: isBenched("spread", "nfl"), total: isBenched("total", "nfl") }, // WZ-FBALL-BENCH-2026-07-17 :: {} normally; a market flips true only if it drifts (see /api/performance/guard football)
       // dashboard board contract:
       games: allGames,
       moneylineEdges, spreadEdges, totalsEdges,
@@ -1857,7 +1858,7 @@ router.get("/cfb", gatePicks, async (req, res) => {
     for (const g of allGames) {
       for (const mkt of ["moneyline", "spread", "total"]) {
         const m = g[mkt];
-        if (m && m.value && m.edge != null) {
+        if (m && m.value && m.edge != null && !isBenched(mkt, "cfb")) { // WZ-FBALL-BENCH-2026-07-17 :: shown by default; hidden only if the guard flags this market as drifting
           edges.push({
             matchup: g.matchup, market: mkt, edge: m.edge,
             pick: m.pickTeam || m.pick, dataQuality: g.dataQuality,
@@ -1944,6 +1945,7 @@ router.get("/cfb", gatePicks, async (req, res) => {
       teamMatch: slate.match,
       edgeCount: edges.length,
       edges,
+      benched: { moneyline: isBenched("moneyline", "cfb"), spread: isBenched("spread", "cfb"), total: isBenched("total", "cfb") }, // WZ-FBALL-BENCH-2026-07-17 :: {} normally; a market flips true only if it drifts (see /api/performance/guard football)
       games: allGames,
       moneylineEdges, spreadEdges, totalsEdges,
       runLineEdges: [], hrPropEdges: [], kPropEdges: [], hitsPropEdges: [],
