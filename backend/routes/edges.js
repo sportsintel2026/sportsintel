@@ -914,7 +914,20 @@ router.get("/mlb", gatePicks, async (req, res) => {
     if (!isPreview) {
     // Snapshot predictions for performance tracking (fire-and-forget; deduped by
     // unique constraint so repeated computes during the day are no-ops).
-    recordPredictions(result).catch(e => console.error("[Edges] recordPredictions failed:", e.message));
+    // WZ-RECORD-THROUGH-BENCH-2026-07-18 :: the recorder gets the UNFILTERED core lists.
+    // `result` above empties a benched market to [] so the BOARD goes dark -- correct. But the
+    // same object was feeding recordPredictions, so a benched market stopped being written down
+    // at all: no wins, no losses, no record, and no way for it to prove itself and earn release.
+    // (run_line was benched 2026-07-17 and has recorded nothing since.) Benching is a DISPLAY
+    // decision; measurement must never stop. Each row is stamped `benched_at_pick` in
+    // predictionTracker, so the published headline still counts only picks subscribers saw.
+    // The board keeps its own filters (isBenched + the 10-row display caps) untouched.
+    recordPredictions({
+      ...result,
+      moneylineEdges: moneylineBoard,
+      totalsEdges: totalsEdgesShown,
+      runLineEdges: runLineEdges,
+    }).catch(e => console.error("[Edges] recordPredictions failed:", e.message));
 
     // Total Bases SHADOW (log-only): auto-compute + persist once per fresh slate
     // so projections accumulate for grading without manually hitting ?tb_shadow=1.
