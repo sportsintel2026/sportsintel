@@ -38,6 +38,32 @@ const MIN_N = 40;       // require a real settled sample before auto-benching
 const GAP_BENCH = 8;    // auto-bench when claimed - actual >= 8 pts
 const GAP_UNBENCH = 4;  // hysteresis: only auto-unbench once the gap recovers below 4 pts
 
+// WZ-GUARD-HALFLIFE-2026-07-19 :: THE GUARD USED TO NEVER FORGET.
+// Every core market was measured cumulatively from its RESETS date with no recency weighting, so a
+// market that starts well and then decays is graded against its own better past and benches late.
+// Measured on totals 2026-07-19: cumulative since 07-02 read n=70, claimed 58.8, actual 52.9, gap
+// +5.9 -- comfortably clear of the bench line. Splitting that same sample by date:
+//     07-02 -> 07-07 : n=33, claimed 58.5, actual 54.5, gap +4.0
+//     07-08 -> now   : n=37, claimed 59.1, actual 51.4, gap +7.8   <-- at the bench line
+// The published 5.9 was the average of a decent first week and a bad second week. The safety net was
+// reporting healthy while the live half of the sample sat on the trigger.
+//
+// A hard rolling window does NOT fix this: cutting to the recent 11 days drops n to 37, under MIN_N,
+// so the market would fall out of the gate entirely and never bench. Instead each row is weighted by
+// an exponential half-life, so the guard forgets GRADUALLY. Old rows still contribute (sample is
+// preserved) but stop outvoting the present.
+//
+// This is strictly MORE protective than before, never less: a market benches if EITHER the cumulative
+// or the decayed read crosses GAP_BENCH, and un-benches only when BOTH have recovered.
+const HALF_LIFE_DAYS = 10;   // a 10-day-old pick counts half as much as today's; 20-day, a quarter.
+const DAY_MS = 86400000;
+// HONEST LIMIT: on the totals sample as it stands 2026-07-19 this makes the decay read land modestly
+// ABOVE the cumulative 5.9 -- clearer, but still under GAP_BENCH 8. It does not bench totals today and
+// was deliberately NOT tuned until it did; picking a half-life to force a desired verdict is
+// curve-fitting the safety net. What it does is stop the past outvoting the present, so continued
+// decay trips the bench days earlier instead of after the cumulative average finally sags.
+// To take a market off the board NOW regardless of the meters, add it to MANUAL_BENCH below.
+
 let _status = {};       // { market: { benched, gapPts, n, claimedPct, actualPct, updatedAt } }
 let _lastError = null;
 let _lastRun = null;
@@ -86,7 +112,8 @@ async function refreshGuard() {
     }
 
     const agg = {};
-    for (const m of CORE) agg[m] = { n: 0, wins: 0, probSum: 0 };
+    for (const m of CORE) agg[m] = { n: 0, wins: 0, probSum: 0, wSum: 0, wSq: 0, wWins: 0, wProb: 0 };
+    const nowMs = Date.now();
     for (const r of rows) {
       if (r.result !== "win" && r.result !== "loss") continue;                 // settled only
       if (r.model_prob == null || Number(r.model_prob) < 0.55) continue;       // confident/featured band
@@ -97,6 +124,16 @@ async function refreshGuard() {
       a.n++;
       if (r.result === "win") a.wins++;
       a.probSum += Number(r.model_prob);
+      // WZ-GUARD-HALFLIFE-2026-07-19 :: decayed twin of the three counters above. A row with no usable
+      // game_date gets weight 0 -- it still counts in the cumulative read, it just cannot vote on the
+      // recency read, because we do not know how old it is and guessing would corrupt the meter.
+      const t = r.game_date ? Date.parse(String(r.game_date).slice(0, 10) + "T00:00:00Z") : NaN;
+      if (!Number.isFinite(t)) continue;
+      const ageDays = Math.max(0, (nowMs - t) / DAY_MS);
+      const w = Math.pow(0.5, ageDays / HALF_LIFE_DAYS);
+      a.wSum += w; a.wSq += w * w;
+      a.wProb += w * Number(r.model_prob);
+      if (r.result === "win") a.wWins += w;
     }
 
     const next = {};
@@ -105,11 +142,29 @@ async function refreshGuard() {
       const claimed = a.n ? (a.probSum / a.n) * 100 : null;
       const actual = a.n ? (a.wins / a.n) * 100 : null;
       const gap = (claimed != null && actual != null) ? Math.round((claimed - actual) * 10) / 10 : null;
+
+      // WZ-GUARD-HALFLIFE-2026-07-19 :: the decayed read. Kish effective sample size ((sum w)^2 / sum w^2)
+      // is the honest n for a weighted mean -- it is what the MIN_N gate must see, NOT the raw row count,
+      // or a handful of heavily-weighted recent rows could bench a market on almost no real evidence.
+      const effN = a.wSq > 0 ? (a.wSum * a.wSum) / a.wSq : 0;
+      const rClaimed = a.wSum > 0 ? (a.wProb / a.wSum) * 100 : null;
+      const rActual = a.wSum > 0 ? (a.wWins / a.wSum) * 100 : null;
+      const rGap = (rClaimed != null && rActual != null) ? Math.round((rClaimed - rActual) * 10) / 10 : null;
+
       const wasBenched = _status[m] ? _status[m].benched === true : false;
       let benched = wasBenched;
-      if (a.n >= MIN_N && gap != null) {
-        if (gap >= GAP_BENCH) benched = true;
-        else if (gap < GAP_UNBENCH) benched = false;   // hysteresis: recover only when clearly fixed
+      const cumReady = a.n >= MIN_N && gap != null;
+      const recReady = effN >= MIN_N && rGap != null;
+      if (cumReady || recReady) {
+        // Fail-safe: EITHER read can bench. Both must recover to un-bench.
+        const anyBench = (cumReady && gap >= GAP_BENCH) || (recReady && rGap >= GAP_BENCH);
+        const allClear = (!cumReady || gap < GAP_UNBENCH) && (!recReady || rGap < GAP_UNBENCH);
+        if (anyBench) benched = true;
+        else if (allClear) benched = false;   // hysteresis: recover only when clearly fixed
+      }
+      if (benched && !wasBenched) {
+        const why = (recReady && rGap >= GAP_BENCH && !(cumReady && gap >= GAP_BENCH)) ? "RECENCY read" : "cumulative read";
+        console.warn(`[CALIB-GUARD] ${m} AUTO-BENCHED by the ${why} -- cumulative n=${a.n} gap ${gap}pts | decayed effN=${effN.toFixed(1)} gap ${rGap}pts (half-life ${HALF_LIFE_DAYS}d).`);
       }
       next[m] = {
         benched,
@@ -117,6 +172,15 @@ async function refreshGuard() {
         n: a.n,
         claimedPct: claimed != null ? Math.round(claimed * 10) / 10 : null,
         actualPct: actual != null ? Math.round(actual * 10) / 10 : null,
+        recent: {
+          halfLifeDays: HALF_LIFE_DAYS,
+          effectiveN: Math.round(effN * 10) / 10,
+          claimedPct: rClaimed != null ? Math.round(rClaimed * 10) / 10 : null,
+          actualPct: rActual != null ? Math.round(rActual * 10) / 10 : null,
+          gapPts: rGap,
+          gatePassed: recReady,
+          note: "Half-life weighted read of the SAME confident-band rows. If this gap is materially worse than the cumulative gapPts above, the market is decaying and the cumulative number is averaging it against its own better past.",
+        },
         updatedAt: new Date().toISOString(),
       };
     }
