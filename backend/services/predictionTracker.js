@@ -526,12 +526,35 @@ async function recordPredictions(result) {
     }
   }
 
-  // Moneyline — record ONLY the side the model likes (positive edge). The two
-  // sides are mirror images, so recording the negative side logs a pick we'd
-  // never make and dilutes the record toward 50% / -vig.
+  // Moneyline — record EVERY side the board published. The recorder is a ledger of what
+  // subscribers were actually shown; it does not get its own selection rule.
+  //
+  // WZ-ML-RECORD-MATCHES-BOARD-2026-07-19 :: THIS LOOP USED TO DROP ~91% OF THE BOARD.
+  // It carried `if (e.edge == null || e.edge <= 0) continue;` — a positive-edge gate left over
+  // from the pre-WZ-WINNERS regime, when moneyline picks were chosen BY edge. WZ-WINNERS-2026-07-07
+  // changed the board to "MONEYLINE = WINNERS": the side with the higher win probability, kept when
+  // it clears WINNER_MIN 0.55 in routes/edges.js, ranked by win%, with NO edge gate and no dog cap
+  // (a winner that is also underpriced merely carries the isValue "+VALUE" flag). The board moved.
+  // This recorder did not. Measured 2026-07-19 on 2026-07-08..now: 22 games had a side clearing the
+  // floor; core `moneyline` holds 7 rows, and only 2 of them matched a qualifying game. Everything
+  // else was a published pick that was never written down.
+  //
+  // Two harms, and the second is worse than the missing volume:
+  //   1. The ledger disagreed with the board. Subscribers saw 22 picks; the record booked 2.
+  //   2. `edge > 0` means model_prob exceeded the market-implied price, so the surviving sample was
+  //      systematically the model's MOST OPTIMISTIC rows -- precisely the population most prone to
+  //      overclaiming. calibrationGuard was grading moneyline on that biased 9% and calling it the
+  //      market. At ~0.6 rows/day it also could never reach MIN_N 40, so the one core market still
+  //      live on the board was the one the guard could not govern. This restores ~2 rows/day.
+  //
+  // The gate's ORIGINAL purpose is already covered twice over and does not need this line:
+  // moneyline probabilities sum to 1, so both sides can never clear a 0.55 floor, and claimSide
+  // below enforces one row per game+market per day. Mirror-side dilution is structurally impossible
+  // here. (Totals and run_line keep their edge gates -- those boards genuinely ARE edge-selected,
+  // so their recorders already mirror them. This change is moneyline-only.)
+  // REVERT: restore `if (e.edge == null || e.edge <= 0) continue;` as the second line of this loop.
   for (const e of result.moneylineEdges || []) {
     if (statusById[e.gameId] === "final") continue;
-    if (e.edge == null || e.edge <= 0) continue;
     if (!claimSide(e.gameId, "moneyline")) continue; // WZ-ONE-SIDE-PER-GAME-2026-07-18
     rows.push({
       game_id: e.gameId, game_date: gameDate, league: "mlb",
