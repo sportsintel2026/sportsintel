@@ -409,7 +409,7 @@ router.get("/totalsbias", async (req, res) => {
     const PAGE = 1000; let from = 0; const rows = [];
     for (let i = 0; i < 40; i++) {
       let q = supabase.from("model_predictions")
-        .select("projected, actual_value, line, result, game_date")
+        .select("projected, actual_value, line, result, game_date, model_prob, edge, confidence")
         .eq("league", "mlb").eq("market", "total_shadow")
         .in("result", ["win", "loss"])
         .order("game_date", { ascending: true }).range(from, from + PAGE - 1);
@@ -419,6 +419,12 @@ router.get("/totalsbias", async (req, res) => {
       if (!data || !data.length) break;
       rows.push(...data);
       if (data.length < PAGE) break;
+      from += PAGE; // WZ-TOTALSBIAS-PAGEFIX-2026-07-19 :: the cursor was declared and never advanced.
+      // Dormant only while the graded total_shadow count stays under one page: `data.length < PAGE`
+      // breaks on the first pass, so nobody saw it. Past 1000 rows the loop would have re-fetched page
+      // ONE up to 40 times and pushed it 40 times -- n inflated ~40x, every mean and percentile in this
+      // endpoint silently wrong, and no error anywhere. Same class as the gradeFinishedGames cap, but it
+      // duplicates instead of dropping. At ~15 graded shadow rows/day that lands in ~9 weeks.
     }
     const usable = rows.filter(r => r.projected != null && r.actual_value != null && r.line != null);
     const n = usable.length;
@@ -552,6 +558,137 @@ router.get("/totalsbias", async (req, res) => {
       shrinkDial["k_" + k] = { meanClaimedPct: r1(claimed), actualPct: r1(actual), gapPts: r1(claimed - actual) };
     }
 
+    // WZ-CONF-SOURCE-2026-07-19 :: where does the published confidence actually COME FROM?
+    // The board shows a blended probability: blended = W_MODEL*rawModel + (1-W_MODEL)*fairMarket.
+    // Two sources are mixed and published as one number, and nobody has ever measured the mix. If the
+    // confident band (>= 0.55) is mostly the MARKET term, we are reading the book's own lean back to the
+    // subscriber as our edge -- which would explain an over-claim the projection is too small to produce.
+    //
+    // No new data is needed. In edgesModel.js `blendedEdge` returns (blended - fair) and `overProb` IS
+    // that same `blended`, so the stored columns satisfy an exact identity:
+    //        fairMarket = model_prob - edge
+    // And independently, since rawModel = sigmoid((projected - line)/TOTAL_SD):
+    //        fairMarket = (model_prob - W_MODEL*rawModel) / (1 - W_MODEL)
+    // Two independent recoveries of the same quantity. They MUST agree. `crossCheck` below measures the
+    // disagreement -- if it is not ~0, this decomposition's model of the pipeline is wrong and every
+    // number in this block should be discarded rather than believed.
+    const W_MODEL_MIRROR = 0.55;   // must mirror W_MODEL in edgesModel.js (~line 1225)
+    const CONF_BAND = 0.55;        // must mirror calibrationGuard confidentBand
+    const mean = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
+    const sd = (a) => {
+      if (a.length < 2) return 0;
+      const m = mean(a);
+      return Math.sqrt(a.reduce((x, y) => x + (y - m) * (y - m), 0) / (a.length - 1));
+    };
+    const pctOf = (arr, p) => {
+      if (!arr.length) return null;
+      const s2 = arr.slice().sort((x, y) => x - y);
+      const i = Math.min(s2.length - 1, Math.max(0, Math.round(p * (s2.length - 1))));
+      return Math.round(s2[i] * 1000) / 1000;
+    };
+    const r3 = (x) => (Number.isFinite(x) ? Math.round(x * 1000) / 1000 : null);
+
+    function decompose(recs) {
+      // recs: { claimed, fair, raw|null, won }
+      if (!recs.length) return { n: 0 };
+      const claimed = recs.map(r => r.claimed);
+      const fair = recs.map(r => r.fair);
+      const excess = [], modelShare = [];
+      for (const r of recs) {
+        const tot = r.claimed - 0.5;
+        if (Math.abs(tot) < 0.01) continue;                 // no meaningful confidence to attribute
+        const mTerm = r.raw != null ? W_MODEL_MIRROR * (r.raw - 0.5) : null;
+        const kTerm = (1 - W_MODEL_MIRROR) * (r.fair - 0.5);
+        excess.push(tot);
+        // share of stated confidence-above-a-coinflip contributed by OUR model
+        if (mTerm != null) modelShare.push(mTerm / tot);
+        else modelShare.push(1 - kTerm / tot);
+      }
+      const wins = recs.filter(r => r.won).length;
+      return {
+        n: recs.length,
+        meanClaimedPct: r1(mean(claimed) * 100),
+        meanFairMarketPct: r1(mean(fair) * 100),
+        fairMarket: { mean: r3(mean(fair)), sd: r3(sd(fair)), p10: pctOf(fair, 0.10), p50: pctOf(fair, 0.50), p90: pctOf(fair, 0.90) },
+        modelSharePct: modelShare.length ? r1(mean(modelShare) * 100) : null,
+        marketSharePct: modelShare.length ? r1((1 - mean(modelShare)) * 100) : null,
+        lopsidedMarketRows: recs.filter(r => r.fair >= 0.54).length,
+        actualWinPct: recs.length ? r1((wins / recs.length) * 100) : null,
+        gapPts: recs.length ? r1(mean(claimed) * 100 - (wins / recs.length) * 100) : null,
+      };
+    }
+
+    // ---- A. total_shadow rows (this endpoint's population; carries `projected`, so BOTH recoveries work)
+    const shadowRecs = [], xcheck = [];
+    let blendInactive = 0;
+    for (const r of usable) {
+      const mp = r.model_prob == null ? null : Number(r.model_prob);
+      const ed = r.edge == null ? null : Number(r.edge);
+      if (mp == null || ed == null) continue;
+      const raw = SIG((Number(r.projected) - Number(r.line)) / LIVE_DIVISOR);
+      const fairFromEdge = mp - ed;                                       // exact identity
+      const fairFromProb = (mp - W_MODEL_MIRROR * raw) / (1 - W_MODEL_MIRROR);
+      // When no clean two-way market exists the code falls back to the RAW prob (no blend). Those rows
+      // cannot be decomposed and must not be averaged in as if they could.
+      if (Math.abs(mp - raw) < 0.0015) { blendInactive++; continue; }
+      xcheck.push(Math.abs(fairFromEdge - fairFromProb));
+      shadowRecs.push({
+        claimed: mp, fair: fairFromEdge, raw,
+        won: (Number(r.actual_value) > Number(r.line)),                   // shadow always books the OVER
+      });
+    }
+    const confidentShadow = shadowRecs.filter(r => r.claimed >= CONF_BAND);
+
+    // ---- B. core `total` rows -- the population the guard's 58.8% actually reports on.
+    // No `projected` needed here: fair = model_prob - edge is exact on its own.
+    let coreOut = { n: 0, note: "no graded core total rows with both model_prob and edge" };
+    try {
+      const coreRows = [];
+      let cfrom = 0;
+      for (let i = 0; i < 40; i++) {
+        let cq = supabase.from("model_predictions")
+          .select("model_prob, edge, selection, result, game_date")
+          .eq("league", "mlb").eq("market", "total")
+          .in("result", ["win", "loss"])
+          .order("game_date", { ascending: true }).range(cfrom, cfrom + PAGE - 1);
+        if (since) cq = cq.gte("game_date", since);
+        const { data, error } = await cq;
+        if (error) throw error;
+        if (!data || !data.length) break;
+        coreRows.push(...data);
+        if (data.length < PAGE) break;
+        cfrom += PAGE;
+      }
+      const cUsable = coreRows
+        .filter(r => r.model_prob != null && r.edge != null)
+        .map(r => ({ claimed: Number(r.model_prob), fair: Number(r.model_prob) - Number(r.edge), raw: null, won: r.result === "win" }));
+      const cConf = cUsable.filter(r => r.claimed >= CONF_BAND);
+      coreOut = {
+        allGraded: decompose(cUsable),
+        confidentBand: decompose(cConf),
+        note: `Core \`total\` rows -- the same population the guard reports as claimed/actual. fairMarket recovered exactly as model_prob - edge. marketSharePct is the fraction of stated confidence-above-50% that came from the BOOK's de-vigged price rather than from our projection. If that is large in confidentBand, the confident band is selecting lopsided two-way markets and publishing the market's lean as our edge.`,
+      };
+    } catch (e) {
+      coreOut = { n: 0, error: e.message };
+    }
+
+    const confidenceSource = {
+      token: "WZ-CONF-SOURCE-2026-07-19",
+      wModelMirror: W_MODEL_MIRROR,
+      confidentBand: CONF_BAND,
+      crossCheck: {
+        rowsChecked: xcheck.length,
+        meanAbsDiff: xcheck.length ? Math.round(mean(xcheck) * 100000) / 100000 : null,
+        maxAbsDiff: xcheck.length ? Math.round(Math.max(...xcheck) * 100000) / 100000 : null,
+        note: "Two independent recoveries of fairMarket. Rounding alone should keep this under ~0.003. If it is larger, this block's model of the pricing pipeline is WRONG -- discard the numbers below, do not act on them.",
+      },
+      blendInactiveRows: blendInactive,
+      shadowAllGraded: decompose(shadowRecs),
+      shadowConfidentBand: decompose(confidentShadow),
+      core: coreOut,
+      reading: "modelSharePct + marketSharePct = 100. modelSharePct is how much of the published confidence we EARNED; marketSharePct is how much we borrowed from the book's price. A high marketSharePct in the confident band means the band is selecting games where the two-way total is lopsided -- that is the market saying the true number sits between two half-run increments, not an edge we found. Publishing it as our confidence is what an over-claim with a small projection deviation looks like.",
+    };
+
     res.json({
       token: "WZ-TOTALSBIAS-2026-07-17",
       dispersionToken: "WZ-TOTALS-DISPERSION-2026-07-19",
@@ -573,6 +710,7 @@ router.get("/totalsbias", async (req, res) => {
       byDeviation,
       empiricalScale: empirical,
       shrinkDial,
+      confidenceSource,
       reading: "meanProjMinusActual > 0 => model projects HIGH (over-lean); recommendedTotalMeanAdj is the runs to add (negative = subtract) to center projections on reality. Dial: pick the adj where overWinPct and underWinPct are both above ~52.4% (break-even at -110) and spreadPts is near 0 (no lean). WZ-TOTALS-DISPERSION-2026-07-19: `dial` and recommendedTotalMeanAdj only move the MEAN. If modelOverRate is far from 50% while meanProjMinusActual is near 0, the mean is not the problem and no TOTAL_MEAN_ADJ will fix it -- read projMinusLine.sd and byDeviation instead.",
     });
   } catch (err) {
