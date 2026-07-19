@@ -20,7 +20,29 @@ const RESETS = { moneyline: "2026-07-08", total: "2026-07-02", run_line: "2026-0
 // MANUAL benches: markets we KNOW are broken and hold off regardless of the live gap, until they
 // are rebuilt. run_line: calibration audit 2026-07-17 -- the confident 0.55+ range hit exactly 50%
 // on n=94 while the board claimed 58-63%. Off until the run-line model rebuild lands.
-const MANUAL_BENCH = new Set(["run_line"]);
+//
+// WZ-BENCH-TOTALS-2026-07-19 :: totals benched. Measured tonight, not assumed:
+//   - Since 2026-07-08, ALL graded core `total` rows went 43.5% actual against 54.1% claimed
+//     (n=115). Break-even at -110 is 52.4%. That is the whole totals board losing, not a slice.
+//   - The confident 0.55+ band splits by date: 07-02..07-07 gap +4.0 (n=33), 07-08..now gap +7.8
+//     (n=37). The published cumulative +5.9 was averaging a decent first week against a bad second.
+//   - The overclaim is OURS, not borrowed: confidenceSource on 741 graded rows puts 82% of published
+//     confidence in the model term, only 18% in the de-vigged market price. Two competing
+//     explanations (lopsided books, phantom best-of-books edges) were tested and killed.
+// Precedent: run_line was manual-benched at 50% on n=94. Totals is 43.5% on n=115.
+//
+// This is a BLEED-STOPPER, not the fix. The fix is the totals projection-to-probability conversion
+// (TOTAL_SD_DIVISOR in edgesModel.js), which needs the fitted number from
+// /api/performance/totalsbias -> empiricalScale, unlocking at n>=100 graded shadow rows (~2026-07-25).
+// Shipping a guessed divisor tonight also silently re-tunes the 3-6% band cut and the conviction
+// tiers, which are written in absolute edge units -- three dials moving on one estimate. Not while
+// the market is live.
+//
+// Totals keeps RECORDING while benched (WZ-RECORD-THROUGH-BENCH-2026-07-18), so the sample that
+// earns its release keeps building. SHADOW_WATCH below gives it the same automatic release path
+// run_line has -- it is not parked until a human remembers.
+// REVERT: remove "total" from this Set.
+const MANUAL_BENCH = new Set(["run_line", "total"]);
 
 // WZ-RL-SHADOW-WATCH-2026-07-17 :: for MANUAL benches, watch the REBUILT model's *_shadow rows and
 // auto-RELEASE the market once the rebuilt model proves calibrated on a real sample. `since` = the
@@ -30,6 +52,10 @@ const MANUAL_BENCH = new Set(["run_line"]);
 // instead of sitting parked until a human happens to check.
 const SHADOW_WATCH = {
   run_line: { market: "run_line_shadow", since: "2026-07-17", minN: 80, gapUnbench: 4 },
+  // WZ-BENCH-TOTALS-2026-07-19 :: totals watches its own full-slate shadow ledger so the bench can
+  // lift itself. `since` is the projected-total logging go-live -- earlier shadow rows carry
+  // projected: null and cannot be read against the current pipeline. minN 80 matches run_line.
+  total: { market: "total_shadow", since: "2026-07-18", minN: 80, gapUnbench: 4 },
 };
 const SHADOW_MARKETS = Object.values(SHADOW_WATCH).map((c) => c.market);
 
