@@ -110,6 +110,31 @@ const FB_GAP_BENCH = 8;     // auto-bench when claimed - actual >= 8 pts (drift)
 const FB_GAP_UNBENCH = 4;   // hysteresis: un-bench once the gap recovers below 4 pts
 let _fbStatus = {};         // { "nfl:spread": { benched, gapPts, n, claimedPct, actualPct } }
 
+// WZ-UFC-GUARD-2026-07-20 :: UFC HAD NO GUARD AT ALL. ufc_picks is a separate table with its own
+// grader and NOTHING watching claimed-vs-actual, so those picks published with no brake while every
+// MLB market had one. That gap mattered more than usual: measured 2026-07-20, the overall record was
+// 8-3 / +0.52u / +4.7% ROI on n=11, but the VALUE subset (edge_pct >= 4, the badge that tells a
+// customer this is the strong one) was 2-1 / -0.26u / -8.8% on n=3 -- the same signature that bled
+// totals for months, pointing the wrong way in the one place we have already been burned.
+//
+// THIS IS AN ALARM, NOT A BENCH -- deliberately, and it should stay that way until there is real
+// evidence to act on. It computes the gap, logs loudly when it opens, and publishes to
+// /api/performance/guard. It does NOT touch isBenched() and REMOVES NOTHING FROM THE BOARD. A guard
+// that silently pulled UFC picks on a thin sample would be the failure mode this product cannot
+// afford; the point is to KNOW, early, not to hide the sport at the first bad card.
+//
+// TWO DIFFERENCES FROM THE MLB/FOOTBALL BLOCKS, both deliberate:
+//  1. NO 0.55 CONFIDENT-BAND FILTER. The other guards measure >=0.55 because that is the band the
+//     board features. The UFC card publishes a pick on EVERY bout, so the honest denominator is
+//     every settled pick -- filtering to 0.55 would measure something the product does not do.
+//  2. win_pct is stored 0-100 (recordUFCPicks does Math.round(prob*100)), NOT 0-1 like model_prob.
+//     Do not divide it again.
+// Recency uses graded_at (ufc_picks has no game_date); a fight grades within hours of happening, so
+// settle time is a faithful proxy for pick age.
+const UFC_MIN_N = 40;       // ~4 events at ~11 bouts each -- roughly a month of cards
+const UFC_GAP_ALARM = 8;    // same overclaim threshold the other markets bench at
+let _ufcStatus = {};
+
 function db() {
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_KEY;
@@ -299,6 +324,81 @@ async function refreshGuard() {
       console.error("[CALIB-GUARD] football refresh failed:", e.message); // keep previous football status on error
     }
 
+    // WZ-UFC-GUARD-2026-07-20 :: UFC claimed-vs-actual watch. Own table, own try/catch so a ufc_picks
+    // failure can never disturb the MLB or football status. Alarm only -- nothing here benches.
+    try {
+      const uRows = [];
+      for (let from = 0; ; from += PAGE) {
+        const { data, error } = await supabase
+          .from("ufc_picks")
+          .select("win_pct, market_win_pct, edge_pct, is_value, result, graded_at")
+          .order("bout_id", { ascending: true })
+          .range(from, from + PAGE - 1);
+        if (error) throw new Error(error.message);
+        const b = data || [];
+        uRows.push(...b);
+        if (b.length < PAGE) break;
+      }
+      const mk = () => ({ n: 0, wins: 0, claimSum: 0, mktSum: 0, wSum: 0, wSq: 0, wWins: 0, wClaim: 0 });
+      const overall = mk(), value = mk();
+      const nowMs2 = Date.now();
+      for (const r of uRows) {
+        if (r.result !== "win" && r.result !== "loss") continue;   // settled only; push/pending excluded
+        if (r.win_pct == null) continue;
+        const claimed = Number(r.win_pct);                          // ALREADY 0-100
+        if (!Number.isFinite(claimed)) continue;
+        const won = r.result === "win";
+        const buckets = r.is_value ? [overall, value] : [overall];
+        const t = r.graded_at ? Date.parse(r.graded_at) : NaN;
+        const w = Number.isFinite(t)
+          ? Math.pow(0.5, Math.max(0, (nowMs2 - t) / DAY_MS) / HALF_LIFE_DAYS)
+          : null;
+        for (const a of buckets) {
+          a.n++; a.claimSum += claimed; if (won) a.wins++;
+          if (r.market_win_pct != null && Number.isFinite(Number(r.market_win_pct))) a.mktSum += Number(r.market_win_pct);
+          if (w == null) continue;  // undated row still counts cumulatively, just cannot vote on recency
+          a.wSum += w; a.wSq += w * w; a.wClaim += w * claimed; if (won) a.wWins += w;
+        }
+      }
+      const read = (a) => {
+        const claimed = a.n ? a.claimSum / a.n : null;
+        const actual = a.n ? (a.wins / a.n) * 100 : null;
+        const gap = (claimed != null && actual != null) ? Math.round((claimed - actual) * 10) / 10 : null;
+        const effN = a.wSq > 0 ? (a.wSum * a.wSum) / a.wSq : 0;
+        const rClaimed = a.wSum > 0 ? a.wClaim / a.wSum : null;
+        const rActual = a.wSum > 0 ? (a.wWins / a.wSum) * 100 : null;
+        const rGap = (rClaimed != null && rActual != null) ? Math.round((rClaimed - rActual) * 10) / 10 : null;
+        const ready = a.n >= UFC_MIN_N && gap != null;
+        const recReady = effN >= UFC_MIN_N && rGap != null;
+        return {
+          n: a.n,
+          claimedPct: claimed != null ? Math.round(claimed * 10) / 10 : null,
+          actualPct: actual != null ? Math.round(actual * 10) / 10 : null,
+          marketClaimedPct: a.n ? Math.round((a.mktSum / a.n) * 10) / 10 : null,
+          gapPts: gap,
+          alarm: (ready && gap >= UFC_GAP_ALARM) || (recReady && rGap >= UFC_GAP_ALARM),
+          gatePassed: ready || recReady,
+          needN: UFC_MIN_N,
+          recent: { halfLifeDays: HALF_LIFE_DAYS, effectiveN: Math.round(effN * 10) / 10, claimedPct: rClaimed != null ? Math.round(rClaimed * 10) / 10 : null, actualPct: rActual != null ? Math.round(rActual * 10) / 10 : null, gapPts: rGap, gatePassed: recReady },
+        };
+      };
+      const uOverall = read(overall), uValue = read(value);
+      for (const [label, r] of [["overall", uOverall], ["VALUE subset", uValue]]) {
+        const wasAlarm = _ufcStatus[label === "overall" ? "overall" : "value"]?.alarm === true;
+        if (r.alarm && !wasAlarm) {
+          console.warn(`[CALIB-GUARD] UFC ${label} OVERCLAIM ALARM -- claimed ${r.claimedPct}% vs actual ${r.actualPct}% (gap ${r.gapPts}pts, n=${r.n}). Nothing benched; this is a warning to look.`);
+        }
+      }
+      _ufcStatus = {
+        overall: uOverall,
+        value: uValue,
+        benches: false,
+        note: "ALARM ONLY -- this watch never benches and never removes a pick from the UFC card. `value` is the edge_pct>=4 subset the card badges as VALUE; it is tracked separately because that is where the measured loss sits (2-1, -8.8% ROI on n=3 as of 2026-07-20). Denominator is EVERY settled pick, not a 0.55 band, because the card publishes a pick on every bout. Alarm needs n>=40 (~4 events).",
+      };
+    } catch (e) {
+      console.error("[CALIB-GUARD] UFC refresh failed:", e.message); // keep previous UFC status on error
+    }
+
     for (const m of CORE) {
       const s = _status[m];
       if (s.benched && (!MANUAL_BENCH.has(m) || _released.has(m))) {
@@ -355,11 +455,12 @@ function getStatus() {
     // WZ-GUARD-EXPOSE-RECENT-2026-07-19 :: token bumped. It was pinned at 07-17 and never moved when
     // the half-life read shipped, so the endpoint reported a stale version of itself and looked like
     // a deploy that had not landed. Bump this whenever the payload SHAPE changes.
-    token: "WZ-CALIB-GUARD-2026-07-19",
+    token: "WZ-UFC-GUARD-2026-07-20",
     markets: out,
     thresholds: { confidentBand: ">=0.55", MIN_N, GAP_BENCH, GAP_UNBENCH },
     shadowWatch: _shadowStatus, // WZ-RL-SHADOW-WATCH-2026-07-17 :: rebuilt-model progress toward auto-release
     football: _fbStatus,        // WZ-FBALL-BENCH-2026-07-17 :: per league:market drift status (benched only if drifting)
+    ufc: _ufcStatus,            // WZ-UFC-GUARD-2026-07-20 :: claimed-vs-actual watch on ufc_picks. ALARM ONLY -- never benches.
     lastRun: _lastRun,
     lastError: _lastError,
   };
