@@ -1173,51 +1173,60 @@ async function recordFootballPredictions(slate, league = "nfl") {
 async function recordNFLPredictions(slate) { return recordFootballPredictions(slate, "nfl"); }
 async function recordCFBPredictions(slate) { return recordFootballPredictions(slate, "cfb"); }
 
+// WZ-VOID-PAGINATE-2026-07-20 :: `fetchAllPaged` USED TO LIVE INSIDE gradeFinishedGames.
+// voidUnmatchedProps runs the same unbounded `result='pending'` read against the same table, but
+// being a sibling function it could not reach a helper scoped inside another one -- so it was left
+// on the raw capped read while grading got paged. Pasting a second copy into the sweep would mean
+// two paging rules that drift the moment either is tuned, so the helper is hoisted to module scope
+// and BOTH callers share it. gradeFinishedGames is behaviourally untouched: same PAGE, same
+// MAX_PAGES, same ordering, same null-on-error contract. Nothing in the helper closed over the
+// enclosing function, so the hoist is mechanical.
+//
+// WZ-GRADE-PAGINATE-2026-07-19 :: THE PENDING FETCH WAS CAPPED AT 1,000 ROWS.
+// This was `.select("*").eq("result","pending")` with no .range(), so Supabase returned at most
+// its default 1,000 rows. Every row past that cap was invisible to this function -- and because
+// an unordered PostgREST read tends to come back in a stable internal order, it was the SAME rows
+// that stayed invisible on every single run. That is a starvation bug, not a slow queue: a row
+// beyond the cap is never graded, no matter how many times the cron fires. It is the leading
+// explanation for the >7-day pending row (queue item 5) and it is the same failure family as the
+// /totalsbias cursor that never advanced.
+//
+// .range() is only correct with a deterministic ORDER BY -- without one, rows can shift between
+// pages and get skipped or double-read. Ordering by the table's own composite unique key
+// (game_date, game_id, market, selection -- the onConflict target used by every upsert in this
+// file) makes paging total and stable. game_date ascending also means the OLDEST pending rows are
+// read first, so anything that has been starved gets seen before anything fresh.
+//
+// MAX_PAGES is a runaway guard only. Hitting it means something is badly wrong upstream (grading
+// is failing to flip rows out of pending, so the backlog grows without bound); it is loud on
+// purpose rather than silently truncating the way the old code did.
+const PAGE = 1000;
+const MAX_PAGES = 50;
+async function fetchAllPaged(build, label) {
+  const out = [];
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const { data, error } = await build()
+      .order("game_date", { ascending: true })
+      .order("game_id", { ascending: true })
+      .order("market", { ascending: true })
+      .order("selection", { ascending: true })
+      .range(page * PAGE, page * PAGE + PAGE - 1);
+    if (error) { console.error(`[Tracker] ${label} fetch error:`, error.message); return null; }
+    const batch = data || [];
+    out.push(...batch);
+    if (batch.length < PAGE) return out;
+    if (page === MAX_PAGES - 1) {
+      console.error(`[Tracker] ${label} fetch hit MAX_PAGES (${MAX_PAGES * PAGE} rows) -- backlog is not draining, rows are being left ungraded.`);
+    }
+  }
+  return out;
+}
+
 // ── GRADE ─────────────────────────────────────────────────────────────────────
 // Finds pending predictions for finished games and marks them. MLB is graded
 // from team scores via the schedule; NBA props from each player's gamelog.
 async function gradeFinishedGames() {
   const supabase = db();
-
-  // WZ-GRADE-PAGINATE-2026-07-19 :: THE PENDING FETCH WAS CAPPED AT 1,000 ROWS.
-  // This was `.select("*").eq("result","pending")` with no .range(), so Supabase returned at most
-  // its default 1,000 rows. Every row past that cap was invisible to this function -- and because
-  // an unordered PostgREST read tends to come back in a stable internal order, it was the SAME rows
-  // that stayed invisible on every single run. That is a starvation bug, not a slow queue: a row
-  // beyond the cap is never graded, no matter how many times the cron fires. It is the leading
-  // explanation for the >7-day pending row (queue item 5) and it is the same failure family as the
-  // /totalsbias cursor that never advanced.
-  //
-  // .range() is only correct with a deterministic ORDER BY -- without one, rows can shift between
-  // pages and get skipped or double-read. Ordering by the table's own composite unique key
-  // (game_date, game_id, market, selection -- the onConflict target used by every upsert in this
-  // file) makes paging total and stable. game_date ascending also means the OLDEST pending rows are
-  // read first, so anything that has been starved gets seen before anything fresh.
-  //
-  // MAX_PAGES is a runaway guard only. Hitting it means something is badly wrong upstream (grading
-  // is failing to flip rows out of pending, so the backlog grows without bound); it is loud on
-  // purpose rather than silently truncating the way the old code did.
-  const PAGE = 1000;
-  const MAX_PAGES = 50;
-  async function fetchAllPaged(build, label) {
-    const out = [];
-    for (let page = 0; page < MAX_PAGES; page++) {
-      const { data, error } = await build()
-        .order("game_date", { ascending: true })
-        .order("game_id", { ascending: true })
-        .order("market", { ascending: true })
-        .order("selection", { ascending: true })
-        .range(page * PAGE, page * PAGE + PAGE - 1);
-      if (error) { console.error(`[Tracker] ${label} fetch error:`, error.message); return null; }
-      const batch = data || [];
-      out.push(...batch);
-      if (batch.length < PAGE) return out;
-      if (page === MAX_PAGES - 1) {
-        console.error(`[Tracker] ${label} fetch hit MAX_PAGES (${MAX_PAGES * PAGE} rows) -- backlog is not draining, rows are being left ungraded.`);
-      }
-    }
-    return out;
-  }
 
   const pendingRows = await fetchAllPaged(
     () => supabase.from("model_predictions").select("*").eq("result", "pending"),
@@ -1847,11 +1856,22 @@ const VOID_PROP_MARKETS = new Set(["hr_prop", "player_strikeouts", "player_strik
 async function voidUnmatchedProps() {
   const supabase = db();
 
-  const { data: pendingAll, error } = await supabase
-    .from("model_predictions")
-    .select("id,league,market,selection,game_id,game_date,result")
-    .eq("result", "pending");
-  if (error) { console.error("[VoidSweep] fetch failed:", error.message); return { finalPropsChecked: 0, voided: 0, details: [] }; }
+  // WZ-VOID-PAGINATE-2026-07-20 :: this fetch was `.select(...).eq("result","pending")` with no
+  // .range() -- the identical 1,000-row Supabase cap that WZ-GRADE-PAGINATE-2026-07-19 removed from
+  // gradeFinishedGames, still sitting in the sibling function in the same file. Same failure mode:
+  // an unordered PostgREST read comes back in a stable internal order, so the SAME rows beyond the
+  // cap stay invisible on every run and can never be voided -- starvation, not a slow queue. It is
+  // not biting today (total pending measured 115 on 2026-07-20), so this is PREVENTIVE. It matters
+  // here more than anywhere: this is the function whose entire job is retiring rows that no other
+  // path will ever settle, so a row it cannot see is a row that stays pending forever.
+  const pendingAll = await fetchAllPaged(
+    () => supabase
+      .from("model_predictions")
+      .select("id,league,market,selection,game_id,game_date,result")
+      .eq("result", "pending"),
+    "void sweep"
+  );
+  if (pendingAll == null) return { finalPropsChecked: 0, voided: 0, details: [] };
 
   const props = (pendingAll || []).filter(p => p.league !== "nba" && VOID_PROP_MARKETS.has(p.market));
   if (!props.length) return { finalPropsChecked: 0, voided: 0, details: [] };
