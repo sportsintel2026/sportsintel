@@ -1179,13 +1179,51 @@ async function recordCFBPredictions(slate) { return recordFootballPredictions(sl
 async function gradeFinishedGames() {
   const supabase = db();
 
-  const { data: pending, error } = await supabase
-    .from("model_predictions")
-    .select("*")
-    .eq("result", "pending");
+  // WZ-GRADE-PAGINATE-2026-07-19 :: THE PENDING FETCH WAS CAPPED AT 1,000 ROWS.
+  // This was `.select("*").eq("result","pending")` with no .range(), so Supabase returned at most
+  // its default 1,000 rows. Every row past that cap was invisible to this function -- and because
+  // an unordered PostgREST read tends to come back in a stable internal order, it was the SAME rows
+  // that stayed invisible on every single run. That is a starvation bug, not a slow queue: a row
+  // beyond the cap is never graded, no matter how many times the cron fires. It is the leading
+  // explanation for the >7-day pending row (queue item 5) and it is the same failure family as the
+  // /totalsbias cursor that never advanced.
+  //
+  // .range() is only correct with a deterministic ORDER BY -- without one, rows can shift between
+  // pages and get skipped or double-read. Ordering by the table's own composite unique key
+  // (game_date, game_id, market, selection -- the onConflict target used by every upsert in this
+  // file) makes paging total and stable. game_date ascending also means the OLDEST pending rows are
+  // read first, so anything that has been starved gets seen before anything fresh.
+  //
+  // MAX_PAGES is a runaway guard only. Hitting it means something is badly wrong upstream (grading
+  // is failing to flip rows out of pending, so the backlog grows without bound); it is loud on
+  // purpose rather than silently truncating the way the old code did.
+  const PAGE = 1000;
+  const MAX_PAGES = 50;
+  async function fetchAllPaged(build, label) {
+    const out = [];
+    for (let page = 0; page < MAX_PAGES; page++) {
+      const { data, error } = await build()
+        .order("game_date", { ascending: true })
+        .order("game_id", { ascending: true })
+        .order("market", { ascending: true })
+        .order("selection", { ascending: true })
+        .range(page * PAGE, page * PAGE + PAGE - 1);
+      if (error) { console.error(`[Tracker] ${label} fetch error:`, error.message); return null; }
+      const batch = data || [];
+      out.push(...batch);
+      if (batch.length < PAGE) return out;
+      if (page === MAX_PAGES - 1) {
+        console.error(`[Tracker] ${label} fetch hit MAX_PAGES (${MAX_PAGES * PAGE} rows) -- backlog is not draining, rows are being left ungraded.`);
+      }
+    }
+    return out;
+  }
 
-  if (error) { console.error("[Tracker] grade fetch error:", error.message); return; }
-  const pendingRows = pending || [];
+  const pendingRows = await fetchAllPaged(
+    () => supabase.from("model_predictions").select("*").eq("result", "pending"),
+    "grade"
+  );
+  if (pendingRows == null) return; // fetch failed; preserve the original early-return behaviour
 
   const nbaPending = pendingRows.filter(p => p.league === "nba");
   const nflPending = pendingRows.filter(p => p.league === "nfl");
@@ -1196,13 +1234,19 @@ async function gradeFinishedGames() {
   // couldn't read per-player HRs. Now that it can, re-grade recent ones. They flip
   // to win/loss and leave this set, so after the first pass it self-empties.
   const backfillCutoff = new Date(Date.now() - 30 * 864e5).toISOString().slice(0, 10);
-  const { data: hrPush } = await supabase
-    .from("model_predictions")
-    .select("*")
-    .eq("league", "mlb")
-    .eq("market", "hr_prop")
-    .eq("result", "push")
-    .gte("game_date", backfillCutoff);
+  // WZ-GRADE-PAGINATE-2026-07-19 :: same 1,000-row cap applied here. This one is bounded to 30 days
+  // so it is far less likely to overflow, but it is the identical defect in the identical function
+  // and leaving it would be a bandage.
+  const hrPush = await fetchAllPaged(
+    () => supabase
+      .from("model_predictions")
+      .select("*")
+      .eq("league", "mlb")
+      .eq("market", "hr_prop")
+      .eq("result", "push")
+      .gte("game_date", backfillCutoff),
+    "HR backfill"
+  );
   if (hrPush && hrPush.length) {
     mlbPending.push(...hrPush);
     console.log(`[Tracker] Re-grading ${hrPush.length} previously no-actioned HR props`);
@@ -1836,7 +1880,24 @@ async function voidUnmatchedProps() {
       if (boxCache.has(key)) box = boxCache.get(key);
       else {
         try {
-          if (p.market === "player_strikeouts") box = await getGamePitcherStrikeouts(p.game_id);
+          // WZ-VOID-KSHADOW-2026-07-19 :: player_strikeouts_shadow had NO branch here and fell
+          // through to getGameHRHitters() -- the home-run box. This did not fail loudly; it failed
+          // by SUCCEEDING WRONGLY, which is why it survived. getGameHRHitters() adds an entry for
+          // any player carrying a `stats.batting` object, and MLB boxscores hand pitchers one too
+          // (usually empty), so a pitcher lands in the HR map with a value of 0. resolvePlayerStat()
+          // reports found=true on mere PRESENCE in the map, whatever the value. So the sweep looked
+          // up a K-shadow pitcher, "found" him among the home-run hitters, hit `if (found) continue`
+          // -- read as "this will grade normally, don't void it" -- and walked away. Meanwhile the
+          // real grading path (line ~1461, which has always handled `player_strikeouts` and
+          // `player_strikeouts_shadow` together) looked in the pitcher-K box, where a scratched or
+          // never-used starter has no line at all, and left the row pending. Deadlock: the sweep
+          // deferred to grading, grading could not act, and nothing ever moved the row.
+          // Observed 2026-07-19: one row stuck 15 days -- Kumar Rocker OVER, DET @ TEX 2026-07-04,
+          // game 822882 confirmed Final in the schedule with doubleHeader "N", so every other gate
+          // in this sweep passed. The hits and total-bases shadows each got a branch when they were
+          // added; this one did not. Routing it to the pitcher-K box means a pitcher who never threw
+          // is genuinely absent -> found=false -> voided as a no-action push, via the correct path.
+          if (p.market === "player_strikeouts" || p.market === "player_strikeouts_shadow") box = await getGamePitcherStrikeouts(p.game_id);
           else if (p.market === "player_hits" || p.market === "player_hits_shadow") box = await getGameBatterHits(p.game_id);
           else if (p.market === "player_total_bases_shadow") box = await getGameBatterTotalBases(p.game_id);
           else box = await getGameHRHitters(p.game_id);
