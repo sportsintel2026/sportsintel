@@ -1691,10 +1691,15 @@ async function getCFBPinnacleClose() { return getFballPinnacleClose("americanfoo
 // so the football-only filter came off. This now reports EVERY active key on the account against the
 // keys the codebase actually requests.
 //
-// REQUESTED_KEYS is the complete set, grepped from the services layer 2026-07-20 -- there are only four.
+// REQUESTED_KEYS is the complete set of sport keys this codebase asks the provider for.
 // NBA and NHL are NOT sourced from this provider at all (they run off ESPN feeds), so their absence
 // here is expected, not a gap. KEEP THIS LIST HONEST: if a new sport key is ever requested in code and
-// not added here, `unrequestedActive` will report it as missing and send someone chasing a ghost.
+// not added here, `unrequestedActive` reports it as missing and sends someone chasing a ghost.
+// THAT ALREADY HAPPENED ONCE, on the very first run: I built the list by grepping QUOTED string
+// literals under services/, which missed `mma_mixed_martial_arts` because routes/ufc.js builds it
+// inline as `${ODDS_BASE}/sports/mma_mixed_martial_arts/odds`. The probe duly reported our own UFC
+// feed as an unused product. When adding a key here, grep the WHOLE backend for `/sports/`, not just
+// for quoted keys under services/.
 //
 // GET /v4/sports?all=true returns every key the account can see with `active` and `has_outrights`.
 // COSTS ZERO QUOTA -- the provider does not bill the catalogue endpoint -- so call it freely whenever
@@ -1705,6 +1710,7 @@ const REQUESTED_KEYS = [
   "americanfootball_nfl_preseason",
   "americanfootball_ncaaf",
   "baseball_mlb",
+  "mma_mixed_martial_arts", // routes/ufc.js getOddsMap() -- built inline, not a quoted literal
 ];
 async function getSportsCatalogue(groupFilter) {
   const all = await oddsGet("/sports", { all: "true" });
