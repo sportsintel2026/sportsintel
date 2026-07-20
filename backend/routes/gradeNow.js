@@ -31,7 +31,7 @@ router.get("/", async (req, res) => {
     if (req.query.debug === "1" || req.query.debug === "true") return res.json(await debugReport());
     if (req.query.probe === "1" || req.query.probe === "true") return res.json(await probeReport());
     if (req.query.void_unmatched === "1" || req.query.void_unmatched === "true") return res.json({ ok: true, ...(await voidUnmatchedProps()) });
-    if (req.query.counts === "1" || req.query.counts === "true") return res.json(await countsReport());
+    if (req.query.counts === "1" || req.query.counts === "true") return res.json(await countsReport(req.query.league));
     if (req.query.prop_results === "1" || req.query.prop_results === "true") return res.json(await propResults());
     if (req.query.tb_grade != null) {
       const v = String(req.query.tb_grade);
@@ -172,9 +172,48 @@ async function probeReport() {
 // READ-ONLY. Real graded vs pending counts so nothing is taken on faith:
 // overall, per market, and per recent date. "graded" = result is not pending
 // (win/loss/push). Uses head:true count queries (no rows fetched).
-async function countsReport() {
+// WZ-COUNTS-LEAGUE-2026-07-20 :: countsReport WAS HARDCODED TO MLB and to MLB's seven markets.
+// This is the ledger census -- pending/graded/win/loss/push, overall and per market -- i.e. the one
+// tool that answers "is the recorder writing rows, and is grading settling them." For football it
+// answered NOTHING, and worse, it answered nothing SILENTLY: every football row is league nfl/cfb, so
+// the mlb filter matched zero rows and the report returned a wall of clean zeroes that is
+// indistinguishable from "recorded fine, graded fine, nothing pending." That is the same
+// looks-fine-while-broken failure that hid the K-shadow row for 15 days, and preseason is ~2 weeks out.
+//
+// Now `?league=` selects the league and the market list FOLLOWS it. Three deliberate choices:
+//  1. Default stays "mlb" with MLB's exact original market list, so the existing ?counts=1 call is
+//     byte-for-byte unchanged.
+//  2. An unrecognised league is a LOUD 400 listing what is valid -- never a silent zero-filled report.
+//     Returning zeroes for a typo'd league is precisely the failure this endpoint exists to catch.
+//  3. tbShadowByDate is renamed focusByDate and its market comes from the league. It was a
+//     hardcoded 7-day trace of player_total_bases_shadow; the football equivalent is total_shadow.
+//     Same purpose (watch one market's daily settle rate), no longer welded to one MLB market.
+const COUNTS_LEAGUES = {
+  mlb: {
+    markets: ["moneyline", "total", "run_line", "hr_prop", "player_strikeouts", "player_hits", "player_total_bases_shadow"],
+    focus: "player_total_bases_shadow",
+  },
+  nfl: {
+    markets: ["moneyline", "spread", "total", "moneyline_shadow", "spread_shadow", "total_shadow"],
+    focus: "total_shadow",
+  },
+  cfb: {
+    markets: ["moneyline", "spread", "total", "moneyline_shadow", "spread_shadow", "total_shadow"],
+    focus: "total_shadow",
+  },
+  nba: {
+    markets: ["moneyline", "spread", "total", "player_points", "player_rebounds", "player_assists"],
+    focus: "total",
+  },
+};
+
+async function countsReport(leagueParam) {
   const supabase = db();
-  const LEAGUE = "mlb";
+  const LEAGUE = String(leagueParam || "mlb").toLowerCase();
+  const cfg = COUNTS_LEAGUES[LEAGUE];
+  if (!cfg) {
+    return { ok: false, error: `unknown league '${LEAGUE}'`, valid: Object.keys(COUNTS_LEAGUES) };
+  }
 
   async function n(filter) {
     let q = supabase.from("model_predictions").select("*", { count: "exact", head: true }).eq("league", LEAGUE);
@@ -194,7 +233,7 @@ async function countsReport() {
     push: await n([["result", "eq", "push"]]),
   };
 
-  const markets = ["moneyline", "total", "run_line", "hr_prop", "player_strikeouts", "player_hits", "player_total_bases_shadow"];
+  const markets = cfg.markets;
   const byMarket = {};
   for (const m of markets) {
     byMarket[m] = {
@@ -215,16 +254,16 @@ async function countsReport() {
     };
   }
 
-  const tbShadowByDate = {};
+  const focusByDate = {};
   for (let i = 0; i <= 6; i++) {
     const d = getEasternDate(-i);
-    tbShadowByDate[d] = {
-      graded: await n([["market", "eq", "player_total_bases_shadow"], ["game_date", "eq", d], ["result", "neq", "pending"]]),
-      pending: await n([["market", "eq", "player_total_bases_shadow"], ["game_date", "eq", d], ["result", "eq", "pending"]]),
+    focusByDate[d] = {
+      graded: await n([["market", "eq", cfg.focus], ["game_date", "eq", d], ["result", "neq", "pending"]]),
+      pending: await n([["market", "eq", cfg.focus], ["game_date", "eq", d], ["result", "eq", "pending"]]),
     };
   }
 
-  return { ok: true, overall, byMarket, byDate, tbShadowByDate };
+  return { ok: true, league: LEAGUE, focusMarket: cfg.focus, overall, byMarket, byDate, focusByDate };
 }
 
 // READ-ONLY. Every graded K / hits pick with projection vs actual, plus per-side
