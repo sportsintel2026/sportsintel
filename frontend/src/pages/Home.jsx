@@ -150,7 +150,12 @@ export default function HomePage(){
   const [plan,setPlan]=useState({tier:"free",isAdmin:false});
   const [planLoaded,setPlanLoaded]=useState(false);
   const [sport,setSport]=useSport(); // WIZEPICKS-SPORTNAV-2026-06-25 (was useState("mlb"))
-  const [board,setBoard]=useState("ml");
+  // WZ-ONEBOARD-2026-07-20 :: THE MARKET TAB ROW (All / Moneyline / Spread / Totals) IS GONE.
+  // It advertised markets that are benched -- tapping Totals or Spread landed on an empty view, which
+  // reads as broken rather than as disciplined. With the row removed there is exactly one board, so the
+  // `board` state could only ever hold "all" and every `board===...` ternary below became dead code.
+  // Removed the state rather than pinning it to a constant: a dead selector left in place is the drift
+  // that puts a second, divergent code path back in the file six weeks from now.
   const [propTab,setPropTab]=useState("hr");
   const [wpRows,setWpRows]=useState([]); // WZ-WIZEPLAYS-LIST-2026-07-08 :: keep picks for the list (all sports; scoped per-sport in render)
   const [perf,setPerf]=useState(null);
@@ -168,7 +173,6 @@ export default function HomePage(){
   const [heroIdx,setHeroIdx]=useState(0);
   const [openId,setOpenId]=useState(null);
   useEffect(()=>{ const on=()=>setIsDesktop(window.innerWidth>=1024); window.addEventListener("resize",on); return ()=>window.removeEventListener("resize",on); },[]);
-  useEffect(()=>{ setBoard("all"); },[]);
 
   useEffect(()=>{ subscriptionApi.getMyPlan().then(setPlan).catch(()=>{}).finally(()=>setPlanLoaded(true)); },[]);
   // Auto-resume checkout after signup: if a logged-out visitor picked a plan on
@@ -276,7 +280,11 @@ export default function HomePage(){
   pool.sort((a,b)=>(tierRank(b._convAdj)-tierRank(a._convAdj))||(b.convictionScore-a.convictionScore)||((b.edge??0)-(a.edge??0)));
   const hero=pool[0]||null;
   const topHeroes=pool.slice(0,5);
-  const boardArr=board==="ml"?mlAdj:board==="spread"?spAdj:totAdj;
+  // WZ-ONEBOARD-2026-07-20 :: this resolved to totAdj whenever the board was "all", which it always was
+  // after mount -- so this is the EXISTING behaviour preserved exactly, not a new choice. It feeds
+  // kpiList and the LARGEST EDGE pulse only, never the board itself. That those two read totals is a
+  // pre-existing question worth its own look; deliberately NOT changed here so this deploy is only the UI.
+  const boardArr=totAdj;
   // WZ-BOARD-WINFIRST-2026-07-06 :: winner-first board order -- win/cover probability (modelProb)
   // leads; conviction tier, conviction score, then edge break ties. Applies to every board tab
   // (All, ML, Spread, Totals). Display order ONLY -- the graded record reads the backend board and
@@ -285,7 +293,7 @@ export default function HomePage(){
   // WZ-WINNERS-2026-07-07 :: the Moneyline board is now the WINNERS board -- the backend sends every
   // 55%+ winner (one side per game), so NO edge gate here (a fairly-priced winner still shows). Run
   // Line / Totals keep the value (edge) gate. Sorted by win% either way.
-  const boardEdges=oneSidePerGame(boardArr||[]).filter(x=>(board==="ml"&&sport==="mlb")?true:(sport==="mlb"?(x.edge??0)>0:(x.edge??0)>=1)).sort(byWinProb);
+  const boardEdges=oneSidePerGame(boardArr||[]).filter(x=>sport==="mlb"?(x.edge??0)>0:(x.edge??0)>=1).sort(byWinProb);
   const _todayEdgeN=(e.moneylineEdges||[]).length+(e.totalsEdges||[]).length+(e.runLineEdges||[]).length+(e.spreadEdges||[]).length; const _mb=(_todayEdgeN===0&&preview&&!preview.rolledToNextDay)?preview:e; /* WZ-BOARD-NEVER-EMPTY-2026-07-08 :: movers follow tomorrow when today is empty */
   const moverPool=[...(_mb.moneylineEdges||[]),...(_mb.totalsEdges||[]),...(_mb.runLineEdges||[]),...(_mb.spreadEdges||[])].map(x=>{ const ser=seriesFor(x); const open=(ser&&ser.length)?ser[0].o:null; const now=(ser&&ser.length)?ser[ser.length-1].o:x.odds; const delta=(open!=null&&ser&&ser.length>1)?(amCents(now)-amCents(open)):null; return {...x,_open:open,_now:now,_delta:delta}; });
   const movers=moverPool.filter(m=>m._delta!=null).sort((a,b)=>{ const ad=Math.abs(a._delta); const bd=Math.abs(b._delta); return (bd-ad)||((b.edge??0)-(a.edge??0)); }).slice(0,30);
@@ -414,7 +422,7 @@ export default function HomePage(){
     return Object.keys(by).map(k=>{ const grp=by[k]; grp.items.sort((a,b)=>a.sev-b.sev); grp.minSev=grp.items[0].sev; grp.items=grp.items.slice(0,3); return grp; }).sort((a,b)=>(a.minSev-b.minSev)||(b.items.length-a.items.length)).slice(0,5);
   })();
 
-  if(isDesktop) return <HomeDesktop edges={edges} games={games} movers={movers} live={live||[]} abbrById={abbrById} topProps={topProps} propList={propList} propsByType={propsByType} hero={hero} hasFull={hasFull} planLoaded={planLoaded} lineSeries={lineSeries} moveByPick={moveByPick} wpRecord={wpRecord} wpToday={wpToday} navigate={navigate} plan={plan} sport={sport} setSport={(k)=>{setSport(k);setBoard("ml");}} marketsLive={marketsLive} anyLive={anyLive} marketRead={marketRead} perf={perf} sharpRows={sharpRows} intelGroups={intelGroups} />;
+  if(isDesktop) return <HomeDesktop edges={edges} games={games} movers={movers} live={live||[]} abbrById={abbrById} topProps={topProps} propList={propList} propsByType={propsByType} hero={hero} hasFull={hasFull} planLoaded={planLoaded} lineSeries={lineSeries} moveByPick={moveByPick} wpRecord={wpRecord} wpToday={wpToday} navigate={navigate} plan={plan} sport={sport} setSport={(k)=>{setSport(k);}} marketsLive={marketsLive} anyLive={anyLive} marketRead={marketRead} perf={perf} sharpRows={sharpRows} intelGroups={intelGroups} />;
 
   // ============ ADAPTERS: real data -> v11 mock shapes ============
   const edgeNum=(x)=> edgePct(x,sport); // WZ-EDGE-UNIT-2026-07-14 :: delegate to the single edge-unit normalizer
@@ -453,7 +461,7 @@ export default function HomePage(){
   // board surface. (Dropped: it was moneyline betting already covered by the Edge Board,
   // and it headlined uncalibrated raw win% — off the storefront until the model earns it.)
 
-  const boardSrc = board==="all" ? allAdj.filter(x=>sport==="mlb"?(x.edge??0)>0:(x.edge??0)>=1).sort(sortBoard) : boardEdges;
+  const boardSrc = allAdj.filter(x=>sport==="mlb"?(x.edge??0)>0:(x.edge??0)>=1).sort(sortBoard); // WZ-ONEBOARD-2026-07-20 :: the "all" branch, unchanged -- it was the only branch reachable
   // WZ-BOARD-UFC-CARD-2026-07-11 :: one card per game — keep each game's single best (highest) edge, winner-first order.
   const bestPerGame=(arr)=>{ const m=new Map(); for(const d of arr){ const g=d.gameId; const p=m.get(g); if(!p||(d.edge??-99)>(p.edge??-99)) m.set(g,d); } return [...m.values()].sort((a,b)=>((b.model??-1)-(a.model??-1))||((b.edge??0)-(a.edge??0))); };
   const boardItems = bestPerGame(boardSrc.map(toBoard));
@@ -461,10 +469,7 @@ export default function HomePage(){
   // pipeline (moveAdjust -> oneSidePerGame -> win-first sort -> toBoard) so it matches today exactly.
   const pv = (sport==="mlb"&&preview&&!preview.rolledToNextDay) ? preview : null;
   const pvMlAdj=(pv?.moneylineEdges||[]).map(moveAdjust), pvTotAdj=(pv?.totalsEdges||[]).map(moveAdjust), pvSpAdj=[...(pv?.runLineEdges||[]),...(pv?.spreadEdges||[])].map(moveAdjust);
-  const previewItems = bestPerGame(pv ? (board==="all"
-        ? [...pvMlAdj,...pvTotAdj,...pvSpAdj].filter(x=>(x.edge??0)>0).sort(byWinProb).map(toBoard)
-        : oneSidePerGame((board==="ml"?pvMlAdj:board==="spread"?pvSpAdj:pvTotAdj)||[]).filter(x=>(x.edge??0)>0).sort(byWinProb).map(toBoard)
-      ) : []);
+  const previewItems = bestPerGame(pv ? [...pvMlAdj,...pvTotAdj,...pvSpAdj].filter(x=>(x.edge??0)>0).sort(byWinProb).map(toBoard) : []);
   const previewLabel = pv&&pv.date ? fmtSlate(pv.date).toUpperCase() : "";
   const boardDate = fmtSlateFull(e.date || todayISO());
   // WZ-WINNERS-V2-2026-07-04 :: Best Plays carousel = winner+value plays first (our
@@ -528,7 +533,6 @@ export default function HomePage(){
     const clvNum=(rng&&typeof rng.clv==="number")?rng.clv:(typeof d.clv==="number"?d.clv:null);
     return { roi, roiLbl, winRate, graded, clv:clvNum };
   })();
-  const BF=[["All","all"],["Moneyline","ml"],["Spread","spread"],["Totals","totals"]]; // WZ-WINNERS-BADGES-2026-07-07
 
   return (
     <div className="app"><style>{CSS}</style>
@@ -541,7 +545,7 @@ export default function HomePage(){
         </div>
         <div className="sports">
           {[["MLB","mlb",true],["NBA","nba",true],["NHL","nhl",false],["NFL","nfl",true],["CFB","cfb",true]].map(([lb,key,ins])=>(
-            <b key={key} className={(ins?"l2 ":"")+(sport===key?"on":"")} onClick={()=>{ if(key==="mlb"||key==="nba"||key==="nfl"||key==="cfb"){ if(key!==sport){setSport(key);setBoard("all");} } else navigate(`/${key}-games`); }}><span className="o"/>{lb}</b>
+            <b key={key} className={(ins?"l2 ":"")+(sport===key?"on":"")} onClick={()=>{ if(key==="mlb"||key==="nba"||key==="nfl"||key==="cfb"){ if(key!==sport){setSport(key);} } else navigate(`/${key}-games`); }}><span className="o"/>{lb}</b>
           ))}
         </div>
       </div>
@@ -602,7 +606,26 @@ export default function HomePage(){
         </div>
         {hasFull
           ? (breakPreview ? <AllStarBreak/> : <>
-              <div className="bseg">{BF.map(([lb,key])=><span key={key} className={"bseg-b "+(board===key?"on":"")} onClick={()=>setBoard(key)}>{lb}</span>)}</div>
+              {/* WZ-ONEBOARD-2026-07-20 :: WizePlays are rows IN this board now, pinned above the model
+                  winners, instead of a second card lower down the page. Same card geometry as a board card,
+                  gold-bordered with a WIZEPLAY chip so the tier is readable at a glance. The standalone
+                  WizePlays card is suppressed below when these render, so the record and the picks are
+                  never on screen twice. Locked (non All-Access) users are untouched: the board is Gated
+                  above and the original WizePlays card still carries its upsell. */}
+              {wpToday.length>0 && <div className="ufboard wpin">{wpToday.map((pk,i)=>{
+                const rr=String((pk&&pk.result)||"").toLowerCase();
+                const res=rr==="won"?"win":rr==="lost"?"loss":rr;
+                const isDone=res==="win"||res==="loss"||res==="push";
+                return (
+                  <div className={"ufcard wpcd"+(isDone?" "+res:"")} key={"wp"+i} onClick={()=>navigate("/expert-picks")}>
+                    <div className="ufmid">
+                      <div className="l1"><span className="ufmatch">{pk.game||""}</span></div>
+                      <div className="l2"><span className="ufp" style={{color:"#C9A86A"}}>{pk.pick}</span><span className="ufmk wpmk">WIZEPLAY</span>{pk.odds!=null&&<span className="ufod">{formatOdds(pk.odds)}</span>}</div>
+                    </div>
+                    {isDone
+                      ? <span className={"wpres "+res}>{res==="win"?"WON":res==="loss"?"LOST":"PUSH"}</span>
+                      : <span className="wpcue">{"\u203a"}</span>}
+                  </div>);})}</div>}
               {/* WZ-BOARD-NEVER-EMPTY-2026-07-08 :: today's board when it has games (tomorrow preview below); when today is empty, tomorrow IS the board -- never blank */}
               {boardItems.length>0
                 ? <>
@@ -643,7 +666,10 @@ export default function HomePage(){
 
         {/* WZ-WIZEPLAYS-LIST-2026-07-08 :: record bar + today's plays as a vertical list (empty state when none) */}
         {/* WZ-WIZEPLAYS-UNIFY-2026-07-08 :: record + plays in ONE card (was two separate blocks) */}
-        <div className="wpsec">
+        {/* WZ-ONEBOARD-2026-07-20 :: only rendered when its rows are NOT already in the board above --
+            i.e. when there are no plays today (empty state still has a home) or the user is locked out
+            (the upsell must survive). Prevents the same picks and record appearing twice on one screen. */}
+        {(!hasFull || wpToday.length===0) && <div className="wpsec">
           <div className="wpcard">
             <div className="wpbar" onClick={()=>navigate("/expert-picks")}>
               <div className="ic">W</div>
@@ -678,7 +704,7 @@ export default function HomePage(){
                   <div className="es">Curated plays post before first pitch. The full WizeBoard is live above.</div>
                 </div>}
           </div>
-        </div>
+        </div>}
 
      {/* WZ-INTEL-PERSIST-2026-07-13 :: MARKET & INTEL no longer vanishes on MLB when the slate is empty
           (All-Star break / before tonight's lines post). The header + a quiet state stay put so the block --
@@ -1357,6 +1383,13 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .hf{display:flex;align-items:center;justify-content:space-between;border-top:1px solid rgba(243,185,79,.16);margin-top:2px;padding:12px 0;color:var(--gold);font-size:11px;font-weight:600}
 .hdots{display:flex;gap:6px;justify-content:center;margin-top:9px}.hdots i{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.2)}.hdots i.on{background:var(--gold);width:16px;border-radius:3px}
 
+.ufboard.wpin{margin-bottom:0}
+.ufcard.wpcd{border-color:rgba(201,168,106,.42);background:linear-gradient(180deg,rgba(201,168,106,.07),rgba(201,168,106,.02))}
+.ufcard.wpcd .ufmk.wpmk{color:#C9A86A;border-color:rgba(201,168,106,.45)}
+.ufcard.wpcd .wpcue{color:#5A5A63;font-size:16px;padding-left:6px}
+.ufcard.wpcd.win{border-color:rgba(63,203,145,.45)}
+.ufcard.wpcd.loss{opacity:.72}
+
 /* WizePlays (alone) */
 .wpsec{margin:24px 4px 0} /* WZ-WIZEPLAYS-UNIFY-2026-07-08 :: record + plays in ONE card */
 .wpcard{border:1px solid rgba(201,168,106,.4);border-radius:13px;background:var(--panel);overflow:hidden}
@@ -1394,9 +1427,6 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .chips{display:flex;align-items:center;gap:7px;padding:14px 4px 0;overflow-x:auto;scrollbar-width:none}.chips::-webkit-scrollbar{display:none}
 .chipf{font-family:var(--mono);font-size:10px;color:var(--mut);border:1px solid var(--line2);border-radius:999px;padding:4px 10px;white-space:nowrap;cursor:pointer}.chipf.on{color:var(--gold);background:transparent;border-color:rgba(201,168,106,.55);font-weight:600}
 /* WZ-FILTER-SEG-2026-07-05 :: board market filter as a clean, readable segmented control (bigger text, solid gold active state). Stays in flow (not sticky) per owner. */
-.bseg{display:flex;gap:3px;background:#101317;border:1px solid var(--line);border-radius:13px;padding:4px;margin:14px 12px 6px}
-.bseg-b{flex:1;text-align:center;font-family:var(--mono);font-size:13px;font-weight:600;letter-spacing:.5px;color:#D2D7DD;padding:9px 4px;border-radius:9px;cursor:pointer;transition:background .16s ease,color .16s ease;-webkit-tap-highlight-color:transparent}
-.bseg-b.on{background:var(--gold);color:#0A0B0D;font-weight:700}
 
 .grid{margin:12px 4px 0;background:var(--panel);border-radius:14px;overflow:hidden}
 /* WZ-BOARD-UFC-CARD-2026-07-11 :: one-card-per-game UFC-style board card */
