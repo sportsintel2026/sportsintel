@@ -347,6 +347,20 @@ cron.schedule("*/30 * * * *", async () => {
   }
 }, { timezone: "America/New_York" });
 
+// WZ-UFC-RECORD-CRON-2026-07-20 :: bank UFC picks on a schedule instead of only when someone opens
+// the UFC tab. recordUFCPicks previously ran solely as a side effect of GET /api/ufc/card, so an event
+// nobody browsed before the bell was never written down and the grader had nothing to grade -- which is
+// exactly what happened to the Fight Night the week of 07-13. Every 2 hours: Cito's upcoming-events and
+// per-event bouts reads are cached (3h / 24h TTLs) so this is budget-safe on the free tier, and the
+// upsert is on bout_id so repeated runs just refresh odds and picks right up until the fight starts.
+cron.schedule("17 */2 * * *", async () => {
+  try {
+    if (ufcRoutes.recordUpcomingUFC) await ufcRoutes.recordUpcomingUFC();
+  } catch (err) {
+    console.error("[CRON] UFC record failed:", err.message);
+  }
+}, { timezone: "America/New_York" });
+
 // WZ-WIZEPLAYS-GRADE-CADENCE-2026-07-17 :: every-15-min sweep: NFL prop shadows / expert picks
 // (WizePlays) / daily card / DNP void. Was hourly, which left an already-settled WizePlay pending for
 // up to ~60 min after the final — long enough to look like it "wasn't grading." Now matches the
