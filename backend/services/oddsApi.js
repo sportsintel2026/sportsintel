@@ -1587,7 +1587,36 @@ async function getFballMainOdds(sportKey, { forceFresh = false } = {}) {
   });
 }
 
-async function getNFLMainOdds(opts = {})  { return getFballMainOdds("americanfootball_nfl", opts); }
+// WZ-NFL-PRESEASON-KEY-2026-07-20 :: NFL PRESEASON IS A SEPARATE PRODUCT AND WE NEVER ASKED FOR IT.
+// The board carried Week 1 (2026-09-10..15) with `phase.available:["regular"]` and zero preseason
+// games. The phase machinery in runNFLSlate was fine -- it tags every game preseason/regular by date
+// and auto-selects the earliest phase that still has games. It had nothing to select, because the
+// provider files preseason under `americanfootball_nfl_preseason`, a DIFFERENT sport key from the
+// `americanfootball_nfl` we request. Confirmed against their catalogue 2026-07-20 (WZ-ODDS-CATALOGUE):
+//   {"key":"americanfootball_nfl_preseason","title":"NFL Preseason","active":true}
+// So this was never "the books have not posted yet" -- the lines existed and we were not asking.
+// Waiting would have produced nothing, all preseason, every year.
+//
+// Both keys are fetched and merged. Each caches independently under its own cacheKey, so this costs
+// one extra provider call per cache miss and nothing when warm. Out of season the preseason feed
+// returns [] and the merge is a no-op. Deduped by eventId defensively -- the two feeds should never
+// carry the same game, but a duplicate would double-count in every downstream consumer.
+// Once the games are present the EXISTING phase logic does the rest: they tag as preseason,
+// `availablePhases` gains "preseason", and the board selects it automatically with no UI change.
+async function getNFLMainOdds(opts = {}) {
+  const [regular, preseason] = await Promise.all([
+    getFballMainOdds("americanfootball_nfl", opts),
+    getFballMainOdds("americanfootball_nfl_preseason", opts),
+  ]);
+  const out = [];
+  const seen = new Set();
+  for (const g of [...(preseason || []), ...(regular || [])]) {
+    const id = g && g.eventId != null ? String(g.eventId) : null;
+    if (id) { if (seen.has(id)) continue; seen.add(id); }
+    out.push(g);
+  }
+  return out;
+}
 async function getCFBMainOdds(opts = {})  { return getFballMainOdds("americanfootball_ncaaf", opts); }
 
 
