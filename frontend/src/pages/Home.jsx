@@ -534,6 +534,50 @@ export default function HomePage(){
     return { roi, roiLbl, winRate, graded, clv:clvNum };
   })();
 
+  // WZ-ONEBOARD-CONNECT-2026-07-20 :: ONE CARD, NOT TWO STACKED CARDS.
+  // The previous pass left WizePlays in its own bordered card below the board, so on a day with no
+  // curated plays (the common case) the screen showed a bordered board, a gap, then a second bordered
+  // card saying it was empty -- which reads as two disconnected things no matter what is inside them.
+  // This strip now renders INSIDE the board's own .ufboard card, under the picks, exactly the way
+  // SHARP EDGE sits inside the MARKET & INTEL card. Same bar, same rows, same empty state, same
+  // /expert-picks tap -- only its container changed. The standalone .wpsec card is gone entirely,
+  // so there is one WizePlays surface in the file rather than two that can drift.
+  const wpStrip = (
+    <div className="wpin">
+      <div className="wpbar" onClick={()=>navigate("/expert-picks")}>
+        <div className="ic">W</div>
+        <div className="tx"><div className="h">WIZEPLAYS <span className="new">CURATED</span></div><div className="s">{hasFull?"Hand-picked after extra review":"See every pick"}</div></div>
+        {wpRecord&&(wpRecord.wins+wpRecord.losses+wpRecord.pushes)>0
+          ? <div className="rec"><div className="r">{wpRecord.wins}-{wpRecord.losses}{wpRecord.pushes?"-"+wpRecord.pushes:""}</div><div className="u">{wpRecord.units>=0?"+":""}{wpRecord.units.toFixed(1)}u</div></div>
+          : <div className="rec"><div className="r" style={{fontSize:13,color:"#f3b94f"}}>View {"\u203a"}</div></div>}
+      </div>
+      {planLoaded && !hasFull
+        ? (<div style={{padding:"18px 15px 16px",textAlign:"center",borderTop:"1px solid rgba(255,255,255,.06)"}}>
+            <div style={{width:34,height:34,borderRadius:"50%",border:"1px solid rgba(201,168,106,.4)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 10px",color:"#C9A86A"}}>{"\uD83D\uDD12"}</div>
+            <div style={{fontWeight:800,color:"#fff",fontSize:14,marginBottom:6}}>WizePlays picks are All-Access</div>
+            <div style={{fontSize:11.5,color:"#99A2AA",lineHeight:1.5,maxWidth:250,margin:"0 auto 12px"}}>Every curated play, every day {"\u2014"} losses included. <b style={{color:"#C9A86A"}}>From $7/wk</b></div>
+            <div onClick={()=>navigate("/pricing")} style={{display:"inline-block",background:"#1D9E75",color:"#04130d",fontWeight:800,fontSize:12.5,padding:"10px 18px",borderRadius:10,cursor:"pointer"}}>Unlock All-Access {"\u203a"}</div>
+          </div>)
+        : wpToday.length>0
+        ? wpToday.map((pk,i)=>{
+            const rr=String((pk&&pk.result)||"").toLowerCase();
+            const res=rr==="won"?"win":rr==="lost"?"loss":rr;
+            const isDone=res==="win"||res==="loss"||res==="push";
+            return (
+            <div className={"wprow"+(isDone?" "+res:"")} key={i} onClick={()=>navigate("/expert-picks")}>
+              <LogoM ab={wpAbbr(pk)} col="#3a4653"/>
+              <div className="wpmid"><div className="wpp">{pk.pick}</div>{pk.game&&<div className="wpg">{pk.game}</div>}</div>
+              {isDone
+                ? <span className={"wpres "+res}>{res==="win"?"WON":res==="loss"?"LOST":"PUSH"}</span>
+                : (pk.odds!=null&&<div className="wpo">{formatOdds(pk.odds)}</div>)}
+            </div>);})
+        : <div className="wpempty">
+            <div className="et">No active WizePlays right now</div>
+            <div className="es">Curated plays post before first pitch.</div>
+          </div>}
+    </div>
+  );
+
   return (
     <div className="app"><style>{CSS}</style>
       <div className="hd">
@@ -606,31 +650,12 @@ export default function HomePage(){
         </div>
         {hasFull
           ? (breakPreview ? <AllStarBreak/> : <>
-              {/* WZ-ONEBOARD-2026-07-20 :: WizePlays are rows IN this board now, pinned above the model
-                  winners, instead of a second card lower down the page. Same card geometry as a board card,
-                  gold-bordered with a WIZEPLAY chip so the tier is readable at a glance. The standalone
-                  WizePlays card is suppressed below when these render, so the record and the picks are
-                  never on screen twice. Locked (non All-Access) users are untouched: the board is Gated
-                  above and the original WizePlays card still carries its upsell. */}
-              {wpToday.length>0 && <div className="ufboard wpin">{wpToday.map((pk,i)=>{
-                const rr=String((pk&&pk.result)||"").toLowerCase();
-                const res=rr==="won"?"win":rr==="lost"?"loss":rr;
-                const isDone=res==="win"||res==="loss"||res==="push";
-                return (
-                  <div className={"ufcard wpcd"+(isDone?" "+res:"")} key={"wp"+i} onClick={()=>navigate("/expert-picks")}>
-                    <div className="ufmid">
-                      <div className="l1"><span className="ufmatch">{pk.game||""}</span></div>
-                      <div className="l2"><span className="ufp" style={{color:"#C9A86A"}}>{pk.pick}</span><span className="ufmk wpmk">WIZEPLAY</span>{pk.odds!=null&&<span className="ufod">{formatOdds(pk.odds)}</span>}</div>
-                    </div>
-                    {isDone
-                      ? <span className={"wpres "+res}>{res==="win"?"WON":res==="loss"?"LOST":"PUSH"}</span>
-                      : <span className="wpcue">{"\u203a"}</span>}
-                  </div>);})}</div>}
               {/* WZ-BOARD-NEVER-EMPTY-2026-07-08 :: today's board when it has games (tomorrow preview below); when today is empty, tomorrow IS the board -- never blank */}
               {boardItems.length>0
                 ? <>
-                    <div className="ufboard">{boardItems.map((d,i)=>{const id=d.gameId+d.cat+i;return openId===id?<BoardRow key={id} d={d} i={i} open={true} onToggle={()=>setOpenId(null)} navigate={navigate} sport={sport}/>:<BoardCardCompact key={id} d={d} i={i} sport={sport} onClick={()=>setOpenId(id)}/>;})}</div>
-                    <div className="sum"><span className="l">{boardItems.length} game edges</span><span className="sp"/><span>avg <span className="p">+{kpiHas?kAvg:"0.0"}%</span></span></div>
+                    <div className="ufboard">{boardItems.map((d,i)=>{const id=d.gameId+d.cat+i;return openId===id?<BoardRow key={id} d={d} i={i} open={true} onToggle={()=>setOpenId(null)} navigate={navigate} sport={sport}/>:<BoardCardCompact key={id} d={d} i={i} sport={sport} onClick={()=>setOpenId(id)}/>;})}
+                      <div className="sum"><span className="l">{boardItems.length} game edges</span><span className="sp"/><span>avg <span className="p">+{kpiHas?kAvg:"0.0"}%</span></span></div>
+                      {wpStrip}</div>
                     {previewItems.length>0 && <>
                       <div className="tmrwdiv"><span className="tln"/><span className="tlbl">TOMORROW{previewLabel&&<small>{previewLabel}</small>}</span><span className="tln r"/></div>
                       <div className="tmrwnote">Today{"\u2019"}s slate is underway {"\u00b7"} an early look at tomorrow</div>
@@ -639,12 +664,13 @@ export default function HomePage(){
                   </>
                 : previewItems.length>0
                   ? <>
-                      <div className="ufboard">{previewItems.map((d,i)=>{const id="pv"+d.gameId+d.cat+i;return openId===id?<BoardRow key={id} d={d} i={i} open={true} onToggle={()=>setOpenId(null)} navigate={navigate} sport={sport}/>:<BoardCardCompact key={id} d={d} i={i} sport={sport} onClick={()=>setOpenId(id)}/>;})}</div>
-                      <div className="sum"><span className="l">{previewItems.length} game winners</span><span className="sp"/><span className="p">Tomorrow</span></div>
+                      <div className="ufboard">{previewItems.map((d,i)=>{const id="pv"+d.gameId+d.cat+i;return openId===id?<BoardRow key={id} d={d} i={i} open={true} onToggle={()=>setOpenId(null)} navigate={navigate} sport={sport}/>:<BoardCardCompact key={id} d={d} i={i} sport={sport} onClick={()=>setOpenId(id)}/>;})}
+                        <div className="sum"><span className="l">{previewItems.length} game winners</span><span className="sp"/><span className="p">Tomorrow</span></div>
+                        {wpStrip}</div>
                     </>
                   : (sport==="mlb" && inAllStarBreak())
                     ? <AllStarBreak/>
-                    : <div className="estate"><div className="et">No winners on the board yet</div><div className="es">Winners post as books release tonight{"\u2019"}s lines.</div></div>}
+                    : <div className="ufboard"><div className="estate"><div className="et">No winners on the board yet</div><div className="es">Winners post as books release tonight{"\u2019"}s lines.</div></div>{wpStrip}</div>}
             </>)
           : <Gate title="Edges are an All-Access feature" navigate={navigate}/>}
         </>}
@@ -666,46 +692,6 @@ export default function HomePage(){
 
         {/* WZ-WIZEPLAYS-LIST-2026-07-08 :: record bar + today's plays as a vertical list (empty state when none) */}
         {/* WZ-WIZEPLAYS-UNIFY-2026-07-08 :: record + plays in ONE card (was two separate blocks) */}
-        {/* WZ-ONEBOARD-2026-07-20 :: only rendered when its rows are NOT already in the board above --
-            i.e. when there are no plays today (empty state still has a home) or the user is locked out
-            (the upsell must survive). Prevents the same picks and record appearing twice on one screen. */}
-        {(!hasFull || wpToday.length===0) && <div className="wpsec">
-          <div className="wpcard">
-            <div className="wpbar" onClick={()=>navigate("/expert-picks")}>
-              <div className="ic">W</div>
-              <div className="tx"><div className="h">WIZEPLAYS <span className="new">CURATED</span></div><div className="s">{hasFull?"Hand-picked after extra review":"See every pick"}</div></div>
-              {wpRecord&&(wpRecord.wins+wpRecord.losses+wpRecord.pushes)>0
-                ? <div className="rec"><div className="r">{wpRecord.wins}-{wpRecord.losses}{wpRecord.pushes?"-"+wpRecord.pushes:""}</div><div className="u">{wpRecord.units>=0?"+":""}{wpRecord.units.toFixed(1)}u</div></div>
-                : <div className="rec"><div className="r" style={{fontSize:13,color:"#f3b94f"}}>View {"\u203a"}</div></div>}
-            </div>
-            {/* WZ-WIZEPLAYS-MOBILELOCK-2026-07-13 */}
-            {planLoaded && !hasFull
-              ? (<div style={{padding:"18px 15px 16px",textAlign:"center"}}>
-                  <div style={{width:34,height:34,borderRadius:"50%",border:"1px solid rgba(201,168,106,.4)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 10px",color:"#C9A86A"}}>{"\uD83D\uDD12"}</div>
-                  <div style={{fontWeight:800,color:"#fff",fontSize:14,marginBottom:6}}>WizePlays picks are All-Access</div>
-                  <div style={{fontSize:11.5,color:"#99A2AA",lineHeight:1.5,maxWidth:250,margin:"0 auto 12px"}}>Every curated play, every day {"\u2014"} losses included. <b style={{color:"#C9A86A"}}>From $7/wk</b></div>
-                  <div onClick={()=>navigate("/pricing")} style={{display:"inline-block",background:"#1D9E75",color:"#04130d",fontWeight:800,fontSize:12.5,padding:"10px 18px",borderRadius:10,cursor:"pointer"}}>Unlock All-Access {"\u203a"}</div>
-                </div>)
-              : wpToday.length>0
-              ? wpToday.map((pk,i)=>{
-                  const rr=String((pk&&pk.result)||"").toLowerCase();
-                  const res=rr==="won"?"win":rr==="lost"?"loss":rr;
-                  const isDone=res==="win"||res==="loss"||res==="push";
-                  return (
-                  <div className={"wprow"+(isDone?" "+res:"")} key={i} onClick={()=>navigate("/expert-picks")}>
-                    <LogoM ab={wpAbbr(pk)} col="#3a4653"/>
-                    <div className="wpmid"><div className="wpp">{pk.pick}</div>{pk.game&&<div className="wpg">{pk.game}</div>}</div>
-                    {isDone
-                      ? <span className={"wpres "+res}>{res==="win"?"WON":res==="loss"?"LOST":"PUSH"}</span>
-                      : (pk.odds!=null&&<div className="wpo">{formatOdds(pk.odds)}</div>)}
-                  </div>);})
-              : <div className="wpempty">
-                  <div className="et">No active WizePlays right now</div>
-                  <div className="es">Curated plays post before first pitch. The full WizeBoard is live above.</div>
-                </div>}
-          </div>
-        </div>}
-
      {/* WZ-INTEL-PERSIST-2026-07-13 :: MARKET & INTEL no longer vanishes on MLB when the slate is empty
           (All-Star break / before tonight's lines post). The header + a quiet state stay put so the block --
           and the Sharp Edge card that will live here -- has a stable home. Other sports stay content-gated,
@@ -1383,17 +1369,13 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .hf{display:flex;align-items:center;justify-content:space-between;border-top:1px solid rgba(243,185,79,.16);margin-top:2px;padding:12px 0;color:var(--gold);font-size:11px;font-weight:600}
 .hdots{display:flex;gap:6px;justify-content:center;margin-top:9px}.hdots i{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.2)}.hdots i.on{background:var(--gold);width:16px;border-radius:3px}
 
-.ufboard.wpin{margin-bottom:0}
-.ufcard.wpcd{border-color:rgba(201,168,106,.42);background:linear-gradient(180deg,rgba(201,168,106,.07),rgba(201,168,106,.02))}
-.ufcard.wpcd .ufmk.wpmk{color:#C9A86A;border-color:rgba(201,168,106,.45)}
-.ufcard.wpcd .wpcue{color:#5A5A63;font-size:16px;padding-left:6px}
-.ufcard.wpcd.win{border-color:rgba(63,203,145,.45)}
-.ufcard.wpcd.loss{opacity:.72}
+.ufboard .wpin{border-top:1px solid rgba(201,168,106,.28);background:rgba(201,168,106,.035)}
+.ufboard .sum{margin:0;border-top:1px solid var(--line2)}
+.ufboard .wpin .wpbar{padding:12px 13px}
+.ufboard .wpin .wpbar .ic{width:40px;height:40px;border-radius:11px;font-size:21px}
+.ufboard .wpin .wpempty{padding:15px 14px}
 
 /* WizePlays (alone) */
-.wpsec{margin:24px 4px 0} /* WZ-WIZEPLAYS-UNIFY-2026-07-08 :: record + plays in ONE card */
-.wpcard{border:1px solid rgba(201,168,106,.4);border-radius:13px;background:var(--panel);overflow:hidden}
-.wpcard .wpbar{margin:0;border:none;border-radius:0;background:transparent}
 .wpbar{display:flex;align-items:center;gap:11px;padding:13px;cursor:pointer}
 .wprow{display:flex;align-items:center;gap:10px;padding:11px 13px;border-top:1px solid rgba(255,255,255,.06);cursor:pointer}
 .wprow .wpmid{flex:1;min-width:0}
