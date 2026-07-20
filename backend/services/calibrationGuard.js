@@ -1,4 +1,4 @@
-// services/calibrationGuard.js -- WZ-CALIB-GUARD-2026-07-17
+// services/calibrationGuard.js -- WZ-CALIB-GUARD-2026-07-19
 // Standing calibration guard. It reads the SAME graded model_predictions the calibprobe reads,
 // measures claimed-vs-actual win% in each MLB market's CONFIDENT bands (model_prob >= 0.55 -- the
 // side the board actually features), and AUTO-BENCHES any market that is both well-sampled and
@@ -337,10 +337,25 @@ function getStatus() {
       n: s.n ?? 0,
       claimedPct: s.claimedPct ?? null,
       actualPct: s.actualPct ?? null,
+      // WZ-GUARD-EXPOSE-RECENT-2026-07-19 :: refreshGuard() has been computing a half-life weighted
+      // read (WZ-GUARD-HALFLIFE-2026-07-19) and writing it onto _status[m].recent, and that read IS
+      // live and protective -- `anyBench` benches on EITHER the cumulative or the decayed gap, and
+      // the console warning already names which one fired. But this function rebuilds each market
+      // object field by field and never copied `recent` (or `updatedAt`) across, so none of it
+      // reached /api/performance/guard. The safety net was working and invisible: from the outside
+      // you could not tell whether a market was decaying, what its effective n was, or whether the
+      // recency gate had even opened. Same failure shape as the moneyline recorder -- two pieces of
+      // logic that must agree, one of which does not know the other exists.
+      // Passing through as-is; nothing is recomputed here.
+      recent: s.recent ?? null,
+      updatedAt: s.updatedAt ?? null,
     };
   }
   return {
-    token: "WZ-CALIB-GUARD-2026-07-17",
+    // WZ-GUARD-EXPOSE-RECENT-2026-07-19 :: token bumped. It was pinned at 07-17 and never moved when
+    // the half-life read shipped, so the endpoint reported a stale version of itself and looked like
+    // a deploy that had not landed. Bump this whenever the payload SHAPE changes.
+    token: "WZ-CALIB-GUARD-2026-07-19",
     markets: out,
     thresholds: { confidentBand: ">=0.55", MIN_N, GAP_BENCH, GAP_UNBENCH },
     shadowWatch: _shadowStatus, // WZ-RL-SHADOW-WATCH-2026-07-17 :: rebuilt-model progress toward auto-release
