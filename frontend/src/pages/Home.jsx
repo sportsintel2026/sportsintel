@@ -518,9 +518,8 @@ export default function HomePage(){
   // WZ-BOARD-ASBREAK-2026-07-12 :: add ?break=1 to the URL to preview the All-Star break state on a
   // live day (it's normally date-gated to Jul 13-15 and only shows when the board is empty).
   const breakPreview = typeof window!=="undefined" && /[?&]break=1/.test(window.location.search);
-  const kpiHas=boardItems.length>0;
-  const kAvg=kpiHas?(boardItems.reduce((a,x)=>a+x.edge,0)/boardItems.length).toFixed(1):null;
-  const kBest=kpiHas?Math.max(...boardItems.map(x=>x.edge)).toFixed(1):null;
+  // WZ-BOARDSUM-CUT-2026-07-20 :: kpiHas / kAvg / kBest removed with the .sum strip they fed.
+  // kBest was already dead. Nothing else in the file reads them.
   // Real tracked-record stats: high-conviction ROI when present, honest beat-close CLV.
   const perfStats=(()=>{ const d=perf; if(!d) return null;
     const hi=d.byConfidence&&d.byConfidence.HIGH?d.byConfidence.HIGH:null;
@@ -654,7 +653,6 @@ export default function HomePage(){
               {boardItems.length>0
                 ? <>
                     <div className="ufboard top">{boardItems.map((d,i)=>{const id=d.gameId+d.cat+i;return openId===id?<BoardRow key={id} d={d} i={i} open={true} onToggle={()=>setOpenId(null)} navigate={navigate} sport={sport}/>:<BoardCardCompact key={id} d={d} i={i} sport={sport} onClick={()=>setOpenId(id)}/>;})}
-                      <div className="sum"><span className="l">{boardItems.length} game edges</span><span className="sp"/><span>avg <span className="p">+{kpiHas?kAvg:"0.0"}%</span></span></div>
                       {wpStrip}</div>
                     {previewItems.length>0 && <>
                       <div className="tmrwdiv"><span className="tln"/><span className="tlbl">TOMORROW{previewLabel&&<small>{previewLabel}</small>}</span><span className="tln r"/></div>
@@ -665,7 +663,6 @@ export default function HomePage(){
                 : previewItems.length>0
                   ? <>
                       <div className="ufboard top">{previewItems.map((d,i)=>{const id="pv"+d.gameId+d.cat+i;return openId===id?<BoardRow key={id} d={d} i={i} open={true} onToggle={()=>setOpenId(null)} navigate={navigate} sport={sport}/>:<BoardCardCompact key={id} d={d} i={i} sport={sport} onClick={()=>setOpenId(id)}/>;})}
-                        <div className="sum"><span className="l">{previewItems.length} game winners</span><span className="sp"/><span className="p">Tomorrow</span></div>
                         {wpStrip}</div>
                     </>
                   : (sport==="mlb" && inAllStarBreak())
@@ -1378,7 +1375,6 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .hdots{display:flex;gap:6px;justify-content:center;margin-top:9px}.hdots i{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.2)}.hdots i.on{background:var(--gold);width:16px;border-radius:3px}
 
 .ufboard .wpin{border-top:1px solid rgba(201,168,106,.28);background:rgba(201,168,106,.035)}
-.ufboard .sum{margin:0;border-top:1px solid var(--line2)}
 .ufboard .wpin .wpbar{padding:12px 13px}
 .ufboard .wpin .wpbar .ic{width:40px;height:40px;border-radius:11px;font-size:21px}
 .ufboard .wpin .wpempty{padding:15px 14px}
@@ -1612,7 +1608,6 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .pread{padding:11px 15px;border-top:1px solid var(--line2)}
 .pread .prtx{font-family:var(--disp);font-weight:500;font-size:14px;line-height:1.55;color:#c8d0d8}
 .pmore{padding:12px 15px;border-top:1px solid var(--line)}
-.sum{display:flex;align-items:center;gap:12px;margin:0 14px;padding:11px 14px;font-family:var(--mono);font-size:11px;color:var(--mut);border-top:1px solid var(--line2)}.sum .l{color:#cfd7e2;font-weight:600}.sum .p{color:var(--green)}.sum .sp{flex:1}
 
 /* live edge cards */
 .lec{width:230px;border:1px solid rgba(255,90,90,.28);border-radius:13px;background:linear-gradient(180deg,#160d0e,#090d12);padding:11px 12px}
