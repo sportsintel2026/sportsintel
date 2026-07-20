@@ -19,7 +19,7 @@ const {
   getScheduleForDate, getGameHRHitters, getGamePitcherStrikeouts,
   getGameBatterHits, getGameBatterTotalBases, normPlayerName, getEasternDate, getLinescore,
 } = require("../services/mlbStatsApi");
-const { getRawTotalsDebug, probeOddsCoverage, getPinnacleAnchorComparison } = require("../services/oddsApi");
+const { getRawTotalsDebug, probeOddsCoverage, getPinnacleAnchorComparison, getSportsCatalogue } = require("../services/oddsApi"); // WZ-ODDS-CATALOGUE-2026-07-20
 const { probeExpectedStats, probeBarrels, probePitcherWhiff, probePitcherWhiffData } = require("../services/savantApi");
 
 function db() {
@@ -32,6 +32,13 @@ router.get("/", async (req, res) => {
     if (req.query.probe === "1" || req.query.probe === "true") return res.json(await probeReport());
     if (req.query.void_unmatched === "1" || req.query.void_unmatched === "true") return res.json({ ok: true, ...(await voidUnmatchedProps()) });
     if (req.query.counts === "1" || req.query.counts === "true") return res.json(await countsReport(req.query.league));
+    // WZ-ODDS-CATALOGUE-2026-07-20 :: READ-ONLY. Lists every football sport key the odds provider
+    // offers, to settle whether a missing slate (e.g. NFL preseason) is "books have not posted yet"
+    // or "filed under a key we never request". Costs no quota. adminGuard already covers this route.
+    if (req.query.sports === "1" || req.query.sports === "true") {
+      try { return res.json(await getSportsCatalogue()); }
+      catch (e) { return res.json({ ok: false, error: String((e.response && e.response.status) || e.message) }); }
+    }
     if (req.query.prop_results === "1" || req.query.prop_results === "true") return res.json(await propResults());
     if (req.query.tb_grade != null) {
       const v = String(req.query.tb_grade);
