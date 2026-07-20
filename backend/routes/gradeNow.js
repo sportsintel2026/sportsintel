@@ -36,7 +36,7 @@ router.get("/", async (req, res) => {
     // offers, to settle whether a missing slate (e.g. NFL preseason) is "books have not posted yet"
     // or "filed under a key we never request". Costs no quota. adminGuard already covers this route.
     if (req.query.sports === "1" || req.query.sports === "true") {
-      try { return res.json(await getSportsCatalogue()); }
+      try { return res.json(await getSportsCatalogue(req.query.group)); }
       catch (e) { return res.json({ ok: false, error: String((e.response && e.response.status) || e.message) }); }
     }
     if (req.query.prop_results === "1" || req.query.prop_results === "true") return res.json(await propResults());
