@@ -653,7 +653,7 @@ export default function HomePage(){
               {/* WZ-BOARD-NEVER-EMPTY-2026-07-08 :: today's board when it has games (tomorrow preview below); when today is empty, tomorrow IS the board -- never blank */}
               {boardItems.length>0
                 ? <>
-                    <div className="ufboard">{boardItems.map((d,i)=>{const id=d.gameId+d.cat+i;return openId===id?<BoardRow key={id} d={d} i={i} open={true} onToggle={()=>setOpenId(null)} navigate={navigate} sport={sport}/>:<BoardCardCompact key={id} d={d} i={i} sport={sport} onClick={()=>setOpenId(id)}/>;})}
+                    <div className="ufboard top">{boardItems.map((d,i)=>{const id=d.gameId+d.cat+i;return openId===id?<BoardRow key={id} d={d} i={i} open={true} onToggle={()=>setOpenId(null)} navigate={navigate} sport={sport}/>:<BoardCardCompact key={id} d={d} i={i} sport={sport} onClick={()=>setOpenId(id)}/>;})}
                       <div className="sum"><span className="l">{boardItems.length} game edges</span><span className="sp"/><span>avg <span className="p">+{kpiHas?kAvg:"0.0"}%</span></span></div>
                       {wpStrip}</div>
                     {previewItems.length>0 && <>
@@ -664,13 +664,13 @@ export default function HomePage(){
                   </>
                 : previewItems.length>0
                   ? <>
-                      <div className="ufboard">{previewItems.map((d,i)=>{const id="pv"+d.gameId+d.cat+i;return openId===id?<BoardRow key={id} d={d} i={i} open={true} onToggle={()=>setOpenId(null)} navigate={navigate} sport={sport}/>:<BoardCardCompact key={id} d={d} i={i} sport={sport} onClick={()=>setOpenId(id)}/>;})}
+                      <div className="ufboard top">{previewItems.map((d,i)=>{const id="pv"+d.gameId+d.cat+i;return openId===id?<BoardRow key={id} d={d} i={i} open={true} onToggle={()=>setOpenId(null)} navigate={navigate} sport={sport}/>:<BoardCardCompact key={id} d={d} i={i} sport={sport} onClick={()=>setOpenId(id)}/>;})}
                         <div className="sum"><span className="l">{previewItems.length} game winners</span><span className="sp"/><span className="p">Tomorrow</span></div>
                         {wpStrip}</div>
                     </>
                   : (sport==="mlb" && inAllStarBreak())
                     ? <AllStarBreak/>
-                    : <div className="ufboard"><div className="estate"><div className="et">No winners on the board yet</div><div className="es">Winners post as books release tonight{"\u2019"}s lines.</div></div>{wpStrip}</div>}
+                    : <div className="ufboard top"><div className="estate"><div className="et">No winners on the board yet</div><div className="es">Winners post as books release tonight{"\u2019"}s lines.</div></div>{wpStrip}</div>}
             </>)
           : <Gate title="Edges are an All-Access feature" navigate={navigate}/>}
         </>}
@@ -1325,7 +1325,15 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .seclbl .ct{font-family:var(--mono);font-size:10px;color:var(--mut2);font-weight:500}
 .seclbl .rollpill{margin-left:auto;font-family:var(--mono);font-size:9px;font-weight:600;letter-spacing:.3px;color:var(--gold);background:rgba(201,168,106,.12);border:1px solid rgba(201,168,106,.3);border-radius:20px;padding:3px 9px;white-space:nowrap}
 /* WZ-WIZEBOARD-BAND-2026-07-08 :: full-width thin serif band + glow + subline */
-.boardhd{margin:16px 0 0;background:var(--panel);border-top:1px solid rgba(201,168,106,.4);border-bottom:1px solid var(--line);padding:9px 14px 10px;text-align:center}
+/* WZ-BOARDJOIN-2026-07-20 :: the WizeBoard band was full-bleed (margin 0) while the board card is
+   inset 6px and rounded -- so however tight the gap got, the two never lined up and read as one
+   object. The band is now the CARD'S OWN HEADER: same 6px inset, same border colour, rounded on top
+   only, no bottom border, and the card below it drops its top border and top radius (.ufboard.top)
+   and its top margin. One continuous bordered object from the WizeBoard title down through the
+   WizePlays strip. .ufboard on its own is unchanged, so the TOMORROW board lower down -- which
+   follows a divider, not the band -- keeps its full border and rounded top. */
+.boardhd{margin:16px 6px 0;background:var(--panel);border:1px solid var(--line);border-top-color:rgba(201,168,106,.4);border-bottom:none;border-radius:14px 14px 0 0;padding:9px 14px 10px;text-align:center}
+.ufboard.top{margin-top:0;border-top:none;border-top-left-radius:0;border-top-right-radius:0}
 .bht{font-family:var(--serif);font-weight:700;font-size:40px;letter-spacing:2.5px;line-height:1;color:var(--gold)}
 .bht .bhwize{color:#ECEFF2}
 .bhglow{width:150px;height:1.5px;background:linear-gradient(90deg,transparent,var(--gold),transparent);border-radius:2px;margin:6px auto 0;box-shadow:0 0 12px rgba(201,168,106,.55)}
