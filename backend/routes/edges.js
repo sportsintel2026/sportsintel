@@ -621,6 +621,35 @@ router.get("/mlb", gatePicks, async (req, res) => {
       const pickHome = (ml.homeWinProb ?? 0) >= (ml.awayWinProb ?? 0);
       const prob = pickHome ? ml.homeWinProb : ml.awayWinProb;
       if (prob < WINNER_MIN) continue; // coin-flip or worse -> not a winner, leave it off the board
+      // WZ-ML-INFLATION-GATE-2026-07-19 :: DO NOT PUBLISH A WINNER WE ARE ALREADY FLAGGING AS INFLATED.
+      // overreactionNote() in edgesModel already computes, for every side, whether the market's
+      // de-vigged fair probability sits >= INFLATION_THRESHOLD (0.08) ABOVE our raw fundamentals --
+      // the classic public/streak-inflated favorite. Until now that flag was DISPLAY ONLY (it rides
+      // along as `inflation` on the card below), so a single card could say "market may be
+      // over-betting this side" while the board called it our pick. Two contradictory statements,
+      // same screen. This makes the board obey the judgement the product already publishes.
+      //
+      // Measured 2026-07-19 on moneyline_shadow, 2026-07-08..now: of 18 published winners, 16 carried
+      // a NEGATIVE edge, 5 worse than -3%, 3 worse than -6%, worst -0.077. Note edge is only 55% of
+      // the real disagreement -- blendedEdge returns W_MODEL*(raw - fair) -- so -0.077 edge means our
+      // fundamentals rate that team ~14 points BELOW the sharp de-vigged price, and the 55/45 blend
+      // dragged it back over the 0.55 floor anyway. Those are favorites bought at a premium, not value.
+      //
+      // Deliberately NOT a value filter. `edge > 0` would cut this board 18 -> 2 and select purely on
+      // maximum model-vs-market disagreement -- the exact mechanism that overclaimed totals into a
+      // bench on 2026-07-19. WZ-WINNERS-2026-07-07 stands: win% picks and ranks, price never chooses.
+      // This gate only REMOVES the indefensible tail. It introduces no new dial (0.08 was already
+      // written and already in use), it is strictly subtractive, and it cannot flip a pick to the
+      // other side -- unlike the totals divisor change, where ~12% of sides flip.
+      //
+      // ESTIMATE, stated as one: gap >= 0.08 maps to edge <= -0.044, which landed between the -3%
+      // count (5) and the -6% count (3) on an 11-day n=18 sample -- call it ~4 of 18 removed. The real
+      // number becomes measurable once WZ-ML-RECORD-MATCHES-BOARD-2026-07-19 has a week of properly
+      // recorded rows carrying edge, odds and result. Re-check it then; do not treat ~4 as fact.
+      // Moneyline only -- totals/run_line boards are genuinely edge-selected and are not touched.
+      // REVERT: delete the two lines below (the `inflation` const and its `continue`).
+      const inflation = pickHome ? ml.homeInflation : ml.awayInflation;
+      if (inflation?.inflated) continue;
       const edge = pickHome ? ml.homeEdge : ml.awayEdge;
       moneylineBoard.push({
         gameId: ge.game.id,
