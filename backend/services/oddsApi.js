@@ -1654,7 +1654,34 @@ async function getFballPinnacleClose(sportKey, cacheKey) {
 async function getNFLPinnacleClose() { return getFballPinnacleClose("americanfootball_nfl", "nfl_pinnacle_close"); }
 async function getCFBPinnacleClose() { return getFballPinnacleClose("americanfootball_ncaaf", "cfb_pinnacle_close"); }
 
+// WZ-ODDS-CATALOGUE-2026-07-20 :: READ-ONLY probe of the provider's sport catalogue.
+// The NFL board carries Week 1 (2026-09-10..15) but `phase.available` is ["regular"] only -- zero
+// preseason games, 2.5 weeks before preseason opens. Two possible causes with OPPOSITE conclusions:
+// either the books simply have not posted preseason lines yet (it fixes itself in August), or the
+// provider files NFL preseason under a SEPARATE sport key that we never request -- in which case
+// preseason NEVER appears, no matter how long we wait, and we are missing three weeks of board.
+// Guessing between those is how you end up waiting on something that was never coming. This asks.
+//
+// GET /v4/sports returns every key the account can see, each with `active` and `has_outrights`.
+// Filtered to football so the payload is readable. Costs ZERO quota -- the provider does not bill
+// the catalogue endpoint -- so this is safe to call whenever a sport looks absent.
+async function getSportsCatalogue() {
+  const all = await oddsGet("/sports", { all: "true" });
+  const rows = Array.isArray(all) ? all : [];
+  const football = rows
+    .filter((s) => /americanfootball/i.test(String(s && s.key)))
+    .map((s) => ({ key: s.key, title: s.title, group: s.group, active: s.active, outrights: s.has_outrights }));
+  return {
+    ok: true,
+    totalKeys: rows.length,
+    football,
+    requestedByUs: ["americanfootball_nfl", "americanfootball_ncaaf"],
+    note: "If a preseason-specific key appears here and is active, the NFL board is missing it because we never request it.",
+  };
+}
+
 module.exports = {
+  getSportsCatalogue,
   getMLBMainOdds,
   getMLBPinnacleClose,
   getNFLPinnacleClose,
