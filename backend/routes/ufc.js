@@ -170,8 +170,30 @@ async function parseBout(bout, oddsMap) {
 // LONGER on the upcoming list (i.e. it has started / just finished), keep showing THAT event
 // until its picks all settle, then roll forward. Fully fail-safe: any error / no match returns
 // the normal next event, so worst case is exactly today's behavior.
+// WZ-UFC-CHRONO-2026-07-20 :: THE CARD ONLY EVER SHOWED THE NEXT PPV, so Fight Nights were invisible.
+// getNextPPVEvent() takes the earliest PPV with bouts available, falls back to any PPV, and only
+// reaches "earliest event of any kind" when NO PPV exists at all. isPPV() is /^ufc-\d+\b/, which a
+// Fight Night slug never matches -- and a PPV is always on the schedule months out. So a Fight Night
+// happening THIS Saturday lost to a PPV three weeks away and never became the card. A customer opening
+// the app on fight night saw picks for an event nobody could bet yet, and the fights they COULD bet
+// were absent. Relevance is imminence: a card is only useful before the bell.
+// Now: the next event chronologically that has bouts available, PPV or not. Bouts-available is
+// required because an event with no bouts filed yet produces no picks; among those we take the
+// soonest. isPPV stays in citoApi for other callers -- it just no longer governs the card.
+async function getNextEventChrono() {
+  const events = await getUpcomingEvents().catch(() => []);
+  const list = Array.isArray(events) ? events : [];
+  if (!list.length) return null;
+  const byDate = (a, b) => new Date(a.startsAt || 0) - new Date(b.startsAt || 0);
+  const withBouts = list
+    .filter((e) => e && e.slug && e.dataAvailability && e.dataAvailability.bouts === "available")
+    .sort(byDate);
+  if (withBouts.length) return withBouts[0];
+  return list.filter((e) => e && e.slug).sort(byDate)[0] || null;
+}
+
 async function pickCardEvent() {
-  const next = await getNextPPVEvent();
+  const next = await getNextEventChrono();
   try {
     const c = sb();
     if (!c) return next;
@@ -197,7 +219,7 @@ async function buildCitoCard() {
   let rawBouts = await getEventBouts(event.slug);
   // if the held live event returns no bouts, fall back to the normal next event (never go empty)
   if ((!Array.isArray(rawBouts) || !rawBouts.length) && event._live) {
-    event = await getNextPPVEvent();
+    event = await getNextEventChrono(); // WZ-UFC-CHRONO-2026-07-20 :: was getNextPPVEvent()
     if (!event || !event.slug) return null;
     rawBouts = await getEventBouts(event.slug);
   }
@@ -309,17 +331,21 @@ function sb() {
   _sbClient = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
   return _sbClient;
 }
-async function recordUFCPicks(card) {
+// WZ-UFC-RECORD-CRON-2026-07-20 :: signature changed from (card) to (bouts, event). It used to take a
+// whole card object and bail on `card.source !== "cito"` -- a SILENT return that banked nothing whenever
+// Cito was down and loadCard fell back to the odds feed. Taking the bouts directly means the cron and
+// the page load share ONE banking function instead of two that can drift, and "nothing bankable" is
+// now logged rather than swallowed.
+async function recordUFCPicks(bouts, event) {
   try {
     const c = sb();
-    if (!c || !card || card.source !== "cito") return;
-    const bouts = [...(card.mainCard || []), ...(card.prelims || [])];
+    if (!c || !Array.isArray(bouts) || !bouts.length) return 0;
     const rows = bouts
       .filter((b) => b.pick && b.winPct != null && b.id != null)
       .map((b) => ({
         bout_id: String(b.id),
-        event_slug: card.eventSlug || null,
-        event_name: card.event ? card.event.name : null,
+        event_slug: (event && event.slug) || null,
+        event_name: (event && event.name) || null,
         card_section: b.cardSection || null,
         weight_class: b.weightClass || null,
         red_name: b.red ? b.red.name : null,
@@ -332,11 +358,58 @@ async function recordUFCPicks(card) {
         is_value: !!b.value,
         odds: b.odds != null ? b.odds : null,
       }));
-    if (!rows.length) return;
-    await c.from("ufc_picks").upsert(rows, { onConflict: "bout_id" });
+    if (!rows.length) {
+      console.warn(`[UFC] recordUFCPicks: ${bouts.length} bout(s) for ${(event && event.slug) || "unknown event"} produced no bankable pick (no odds yet, or all fights already started).`);
+      return 0;
+    }
+    const { error } = await c.from("ufc_picks").upsert(rows, { onConflict: "bout_id" });
+    if (error) { console.error("[UFC] recordUFCPicks upsert failed:", error.message); return 0; }
+    return rows.length;
   } catch (e) {
     console.error("[UFC] recordUFCPicks failed:", e.message);
+    return 0;
   }
+}
+
+// WZ-UFC-RECORD-CRON-2026-07-20 :: RECORDING USED TO BE A SIDE EFFECT OF DISPLAY.
+// recordUFCPicks had exactly one caller -- inside loadCard(), which runs only when someone hits
+// GET /api/ufc/card. There was no recording cron (server.js scheduled a UFC *grade* pass and nothing
+// that banks picks), so if nobody opened the UFC tab before the fights started, nothing was ever
+// written down and the grader had nothing to grade. Combined with the PPV-only card selection above,
+// a Fight Night could not be recorded even in principle.
+// This walks EVERY upcoming event with bouts available inside the window and banks each one, on a
+// schedule, whether or not a human opens the page. Display selection and recording are now separate
+// concerns: the card headlines one event, the recorder captures them all.
+const RECORD_WINDOW_DAYS = 14;
+async function recordUpcomingUFC() {
+  const out = { events: 0, banked: 0, skipped: 0 };
+  try {
+    const events = await getUpcomingEvents().catch(() => []);
+    const list = Array.isArray(events) ? events : [];
+    const now = Date.now();
+    const inWindow = list.filter((e) => {
+      if (!e || !e.slug) return false;
+      if (!e.dataAvailability || e.dataAvailability.bouts !== "available") return false;
+      const t = Date.parse(e.startsAt || "");
+      if (isNaN(t)) return true;                        // undated but bouts filed -> still bank it
+      return t >= now - 864e5 && t <= now + RECORD_WINDOW_DAYS * 864e5;
+    });
+    const oddsMap = await getOddsMap();
+    for (const ev of inWindow) {
+      const rawBouts = await getEventBouts(ev.slug);
+      if (!Array.isArray(rawBouts) || !rawBouts.length) { out.skipped++; continue; }
+      const parsed = (await Promise.all(rawBouts.map((b) => parseBout(b, oddsMap)))).filter(Boolean);
+      if (!parsed.length) { out.skipped++; continue; }
+      out.events++;
+      out.banked += await recordUFCPicks(parsed, { slug: ev.slug, name: ev.title || ev.shortTitle || "UFC" });
+    }
+    if (out.events || out.skipped) {
+      console.log(`[UFC] recordUpcomingUFC: banked ${out.banked} pick(s) across ${out.events} event(s), ${out.skipped} skipped.`);
+    }
+  } catch (e) {
+    console.error("[UFC] recordUpcomingUFC failed:", e.message);
+  }
+  return out;
 }
 
 async function loadCard() {
@@ -346,7 +419,13 @@ async function loadCard() {
   cardInflight = (async () => {
     try {
       const cito = await buildCitoCard();
-      if (cito) { cardCache = { at: Date.now(), data: cito }; recordUFCPicks(cito).catch(() => {}); return cito; }
+      if (cito) {
+        cardCache = { at: Date.now(), data: cito };
+        // WZ-UFC-RECORD-CRON-2026-07-20 :: same banking function the cron uses, called with this card's bouts.
+        recordUFCPicks([...(cito.mainCard || []), ...(cito.prelims || [])],
+          { slug: cito.eventSlug, name: cito.event ? cito.event.name : null }).catch(() => {});
+        return cito;
+      }
       let fights = await fetchOddsFallbackCard();
       if (!fights.length) {
         const sched = await fetchMMASchedule().catch(() => []);
@@ -674,7 +753,13 @@ router.get("/probe", adminGuard, async (_req, res) => {
     out.eventsError = String((e.response && e.response.status) || e.code || e.message);
   }
   // 2) what the real card-builder resolves + a fresh bouts read on that event
+  // WZ-UFC-CHRONO-2026-07-20 :: the card no longer resolves via getNextPPVEvent, so this probe reported
+  // an event the builder would not choose. Now reports BOTH: nextEvent* is what the card actually uses
+  // (chronological), nextPPV* is kept alongside it so the two can be compared at a glance.
   try {
+    const chrono = await getNextEventChrono();
+    out.nextEventSlug = chrono ? (chrono.slug || null) : null;
+    out.nextEventName = chrono ? (chrono.title || chrono.shortTitle || null) : null;
     const ev = await getNextPPVEvent();
     out.nextPPVSlug = ev ? (ev.slug || null) : null;
     out.nextPPVName = ev ? (ev.title || ev.shortTitle || null) : null;
@@ -691,3 +776,7 @@ router.get("/probe", adminGuard, async (_req, res) => {
 });
 
 module.exports = router;
+// WZ-UFC-RECORD-CRON-2026-07-20 :: exposed for server.js's scheduled recorder, mirroring how
+// matchupsRoutes exports warmMatchupIntel. Attached to the router export so the route module stays
+// the single owner of card-building; server.js only schedules it.
+module.exports.recordUpcomingUFC = recordUpcomingUFC;
