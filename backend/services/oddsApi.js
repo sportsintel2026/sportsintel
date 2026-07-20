@@ -1683,29 +1683,73 @@ async function getFballPinnacleClose(sportKey, cacheKey) {
 async function getNFLPinnacleClose() { return getFballPinnacleClose("americanfootball_nfl", "nfl_pinnacle_close"); }
 async function getCFBPinnacleClose() { return getFballPinnacleClose("americanfootball_ncaaf", "cfb_pinnacle_close"); }
 
-// WZ-ODDS-CATALOGUE-2026-07-20 :: READ-ONLY probe of the provider's sport catalogue.
-// The NFL board carries Week 1 (2026-09-10..15) but `phase.available` is ["regular"] only -- zero
-// preseason games, 2.5 weeks before preseason opens. Two possible causes with OPPOSITE conclusions:
-// either the books simply have not posted preseason lines yet (it fixes itself in August), or the
-// provider files NFL preseason under a SEPARATE sport key that we never request -- in which case
-// preseason NEVER appears, no matter how long we wait, and we are missing three weeks of board.
-// Guessing between those is how you end up waiting on something that was never coming. This asks.
+// WZ-ODDS-CATALOGUE-2026-07-20 / WIDENED WZ-ODDS-CATALOGUE-ALL-2026-07-20 :: READ-ONLY probe of the
+// provider's sport catalogue. Built to answer "is this slate missing because the books have not posted,
+// or because we never asked for it" -- and the first run answered it: NFL preseason was ACTIVE under
+// `americanfootball_nfl_preseason`, a key we had never requested, so it was never going to appear no
+// matter how long we waited. That is a whole class of invisible gap, and it is not football-specific,
+// so the football-only filter came off. This now reports EVERY active key on the account against the
+// keys the codebase actually requests.
 //
-// GET /v4/sports returns every key the account can see, each with `active` and `has_outrights`.
-// Filtered to football so the payload is readable. Costs ZERO quota -- the provider does not bill
-// the catalogue endpoint -- so this is safe to call whenever a sport looks absent.
-async function getSportsCatalogue() {
+// REQUESTED_KEYS is the complete set, grepped from the services layer 2026-07-20 -- there are only four.
+// NBA and NHL are NOT sourced from this provider at all (they run off ESPN feeds), so their absence
+// here is expected, not a gap. KEEP THIS LIST HONEST: if a new sport key is ever requested in code and
+// not added here, `unrequestedActive` will report it as missing and send someone chasing a ghost.
+//
+// GET /v4/sports?all=true returns every key the account can see with `active` and `has_outrights`.
+// COSTS ZERO QUOTA -- the provider does not bill the catalogue endpoint -- so call it freely whenever
+// a sport or slate looks absent. Pass ?group=<substring> to narrow (e.g. group=Basketball); soccer
+// alone is dozens of keys, so the unfiltered payload is long by nature.
+const REQUESTED_KEYS = [
+  "americanfootball_nfl",
+  "americanfootball_nfl_preseason",
+  "americanfootball_ncaaf",
+  "baseball_mlb",
+];
+async function getSportsCatalogue(groupFilter) {
   const all = await oddsGet("/sports", { all: "true" });
   const rows = Array.isArray(all) ? all : [];
-  const football = rows
-    .filter((s) => /americanfootball/i.test(String(s && s.key)))
-    .map((s) => ({ key: s.key, title: s.title, group: s.group, active: s.active, outrights: s.has_outrights }));
+  const want = groupFilter ? String(groupFilter).toLowerCase() : null;
+  const inScope = rows.filter((s) => {
+    if (!s || !s.key) return false;
+    if (!want) return true;
+    return String(s.group || "").toLowerCase().includes(want)
+        || String(s.key || "").toLowerCase().includes(want);
+  });
+
+  // Per-group tally first -- 170+ keys is unreadable as a flat list, and the counts alone often
+  // answer "does this provider even carry that sport".
+  const byGroup = {};
+  for (const s of inScope) {
+    const g = s.group || "(ungrouped)";
+    if (!byGroup[g]) byGroup[g] = { active: 0, inactive: 0 };
+    if (s.active) byGroup[g].active++; else byGroup[g].inactive++;
+  }
+
+  // The actionable part: ACTIVE keys we do not request. Outright/futures markets are reported
+  // separately because they are a different product (season winners, not game lines) and would
+  // otherwise pad the list with things this board could not use anyway.
+  const requested = new Set(REQUESTED_KEYS);
+  const unrequestedActive = [];
+  const unrequestedOutrights = [];
+  for (const s of inScope) {
+    if (!s.active || requested.has(s.key)) continue;
+    const row = { key: s.key, title: s.title, group: s.group };
+    if (s.has_outrights) unrequestedOutrights.push(row); else unrequestedActive.push(row);
+  }
+
   return {
     ok: true,
     totalKeys: rows.length,
-    football,
-    requestedByUs: ["americanfootball_nfl", "americanfootball_ncaaf"],
-    note: "If a preseason-specific key appears here and is active, the NFL board is missing it because we never request it.",
+    scanned: inScope.length,
+    groupFilter: groupFilter || null,
+    requestedByUs: REQUESTED_KEYS,
+    requestedMissingFromCatalogue: REQUESTED_KEYS.filter((k) => !rows.some((s) => s.key === k)),
+    byGroup,
+    unrequestedActiveCount: unrequestedActive.length,
+    unrequestedActive,
+    unrequestedOutrightsCount: unrequestedOutrights.length,
+    note: "unrequestedActive = live game-line products on this account that the codebase never asks for. NBA/NHL absent by design (ESPN-sourced). Outrights are futures markets, counted separately.",
   };
 }
 
