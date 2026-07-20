@@ -615,11 +615,17 @@ export default function HomePage(){
           ⚠ CFB MODEL IN TRAINING — preseason preview. FBS power ratings are seeded from 2025 results with <b>no strength-of-schedule layer</b> yet, and are not yet calibrated against 2026 games. Edges shown are provisional, for preview only — not betting advice until validated in-season.
         </div>
       )}
+      {/* WZ-PHASESEG-2026-07-20 :: the phase switcher was two free-floating outlined pills in a green
+          that appears nowhere else on this screen -- it read as a debug control and was easy to scroll
+          straight past. Rebuilt as a full-width SEGMENTED CONTROL in the app's own vocabulary: dark
+          inset track, gold active segment with dark text, mono label -- the exact geometry the market
+          tabs used, which is the control language already established here. Same two options, same
+          click behaviour, same gating (only renders when BOTH phases have games). Look only. */}
       {sport==="nfl" && phaseAvail.length>1 && (
-        <div style={{display:"flex",gap:8,margin:"0 4px 10px"}}>
+        <div className="phaseseg">
           {[["preseason","Preseason"],["regular","Regular Season"]].filter(([k])=>phaseAvail.includes(k)).map(([k,lb])=>(
-            <span key={k} onClick={()=>{ if(k!==nflPhase){ setNflPhase(k); setEdges(null); setLoading(true); } }}
-              style={{cursor:"pointer",fontFamily:"var(--mono)",fontSize:11.5,padding:"6px 13px",borderRadius:999,border:"1px solid "+(nflPhase===k?"#1d9e75":"#22303a"),color:nflPhase===k?"#38e1a0":"#7d8a98",background:nflPhase===k?"rgba(29,158,117,0.12)":"transparent"}}>{lb}</span>
+            <span key={k} className={"phaseseg-b "+(nflPhase===k?"on":"")}
+              onClick={()=>{ if(k!==nflPhase){ setNflPhase(k); setEdges(null); setLoading(true); } }}>{lb}</span>
           ))}
         </div>
       )}
@@ -1330,6 +1336,9 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
    WizePlays strip. .ufboard on its own is unchanged, so the TOMORROW board lower down -- which
    follows a divider, not the band -- keeps its full border and rounded top. */
 .boardhd{margin:16px 6px 0;background:var(--panel);border:1px solid var(--line);border-top-color:rgba(201,168,106,.4);border-bottom:none;border-radius:14px 14px 0 0;padding:9px 14px 10px;text-align:center}
+.phaseseg{display:flex;gap:3px;background:#101317;border:1px solid var(--line);border-radius:13px;padding:4px;margin:12px 6px 10px}
+.phaseseg-b{flex:1;text-align:center;font-family:var(--mono);font-size:12.5px;font-weight:600;letter-spacing:.4px;color:#D2D7DD;padding:9px 4px;border-radius:9px;cursor:pointer;transition:background .16s ease,color .16s ease;-webkit-tap-highlight-color:transparent}
+.phaseseg-b.on{background:var(--gold);color:#0A0B0D;font-weight:700}
 .ufboard.top{margin-top:0;border-top:none;border-top-left-radius:0;border-top-right-radius:0}
 .bht{font-family:var(--serif);font-weight:700;font-size:40px;letter-spacing:2.5px;line-height:1;color:var(--gold)}
 .bht .bhwize{color:#ECEFF2}
