@@ -11,7 +11,7 @@ const { fetchScoreboard } = require("./nbaDataSource");
 const { fetchScoreboard: fetchNflScoreboard } = require("./nflDataSource");
 const { fetchScoreboard: fetchCfbScoreboard } = require("./cfbDataSource"); // WZ-FBALL-CFB-SHADOW-2026-07-17
 const { getMLBMainOdds, getMLBPinnacleClose } = require("./oddsApi");
-const { teamKey } = require("./teamKey"); // WZ-TEAMKEY-SSOT-2026-07-17
+const { teamKey, matchupKey, cfbSchoolKey } = require("./teamKey"); // WZ-TEAMKEY-SSOT-2026-07-17 / WZ-FBGRADE-TEAMKEY-2026-07-20
 // WZ-CAL-MIRROR-2026-07-02 :: winProbCalibration import removed — calibration now applies
 // LIVE in edgesModel; this file just records the already-calibrated values it receives.
 
@@ -1651,35 +1651,93 @@ async function gradeNba(supabase, pending) {
 // Reuses the pure gradeNbaTeam outcome logic (market-agnostic team grading).
 // WZ-FBALL-CFB-SHADOW-2026-07-17 :: generalized over the scoreboard source. NFL and CFB grade
 // identically (same board shape: home/away.displayName, state, score); only the fetcher differs.
-async function gradeFootball(supabase, pending, fetchBoard) {
+// WZ-FBGRADE-TEAMKEY-2026-07-20 :: FOOTBALL GRADING MATCHED TEAMS BY RAW STRING EQUALITY.
+// The join was `normTeam(displayName) === normTeam(stored name)`, i.e. lowercase + strip everything
+// that is not a letter or digit, then compare exactly. No alias table, no abbreviation handling, no
+// mascot tolerance. That is only safe if both feeds spell every team identically, and they do not:
+// rows are RECORDED off The Odds API (recordFootballPredictions stores `game_id = String(g.eventId)`
+// where eventId is oddsApi's `ev.id`) and GRADED off ESPN (nflDataSource/cfbDataSource fetchScoreboard).
+// Two different vendors, two different naming conventions -- and two different ID spaces, which is why
+// the stored game_id cannot be the join key here and names are all we have.
+//
+// The failure was SILENT AND PERMANENT, the same shape as the K-shadow deadlock: a name that differs
+// by more than punctuation falls through `continue`, the row stays pending, and no later run can ever
+// fix it because the next run does the identical comparison. Nothing logs. CFB is where it bites --
+// hundreds of schools, and the two feeds disagree constantly ("UMass Minutemen" vs "Massachusetts
+// Minutemen", "Sam Houston State" vs "Sam Houston").
+//
+// teamKey.js already solves exactly this and was already imported in this file for MLB. Now used here:
+//   teamKey(x,"nfl") -> canonical abbreviation via LEAGUE_IDX (handles full name, city+nick, abbr)
+//   teamKey(x,"cfb") -> alias-resolved full normalized name (unambiguous: "miami hurricanes" is not
+//                       "miami redhawks")
+//   matchupKey(a,h,null,league) -> "AWAY|HOME" of those canonical tokens, one comparison per game
+// startTime is deliberately NOT passed to matchupKey: the hour bucket exists to separate MLB
+// doubleheaders, and here the two feeds' start times can disagree by minutes, which would break the
+// key rather than sharpen it. The +/-1 day window already covers filing-date drift.
+//
+// CFB FALLBACK, collision-guarded: after an exact-key miss we retry on cfbSchoolKey (school minus
+// mascot). That token is ambiguous BY DESIGN (both Miamis -> "miami"), so it is built into a map that
+// marks any repeat as null and refuses to resolve it -- the same byName -> school -> collision-null
+// pattern cfbEdges.js buildResolver() uses. Mirrored rather than reinvented so the two cannot drift.
+//
+// Unmatched rows are now COUNTED and logged once per run. Previously every miss was an invisible
+// `continue`; a starved football row would have looked exactly like "no games finished yet".
+async function gradeFootball(supabase, pending, fetchBoard, league) {
   if (!pending.length) return 0;
   let graded = 0;
   const TEAM = new Set(["moneyline", "spread", "total"]);
-  const normTeam = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  const isCfb = String(league || "").toLowerCase() === "cfb";
+  const miss = { noMatchup: 0, noGame: 0, notFinal: 0, noScore: 0, ambiguous: 0 };
+
+  // One canonical index per slate date, built once and reused across every pending row on that date.
   const sbCache = {};
   const boardFor = async (date) => {
     if (sbCache[date] !== undefined) return sbCache[date];
-    try { sbCache[date] = await fetchBoard(date); }
-    catch (e) { sbCache[date] = null; } // transient → retry next run
+    let games = null;
+    try { games = await fetchBoard(date); }
+    catch (e) { sbCache[date] = null; return null; }   // transient -> retry next run
+    const byKey = new Map();
+    const bySchool = new Map();
+    for (const x of games || []) {
+      if (!x || !x.home || !x.away) continue;
+      const k = matchupKey(x.away.displayName, x.home.displayName, null, league);
+      if (k && k !== "|") byKey.set(k, x);
+      if (isCfb) {
+        const sk = `${cfbSchoolKey(x.away.displayName)}|${cfbSchoolKey(x.home.displayName)}`;
+        if (sk !== "|") {
+          if (bySchool.has(sk)) { if (bySchool.get(sk) !== x) bySchool.set(sk, null); } // collision -> ambiguous
+          else bySchool.set(sk, x);
+        }
+      }
+    }
+    sbCache[date] = { byKey, bySchool };
     return sbCache[date];
   };
+
   for (const p of pending) {
     const baseMarket = String(p.market || "").replace(/_shadow$/, ""); // WZ-FBALL-SLATE-SHADOW-2026-07-17 :: grade the full-slate *_shadow rows too
     if (!TEAM.has(baseMarket)) continue;
     const parts = String(p.matchup || "").split(" @ ");
-    if (parts.length !== 2) continue;            // need "Away @ Home" to match by name
-    const awayN = normTeam(parts[0]), homeN = normTeam(parts[1]);
-    if (!awayN || !homeN) continue;
-    let g = null;
+    if (parts.length !== 2) { miss.noMatchup++; continue; }   // need "Away @ Home" to match by name
+    const rowKey = matchupKey(parts[0], parts[1], null, league);
+    const rowSchool = isCfb ? `${cfbSchoolKey(parts[0])}|${cfbSchoolKey(parts[1])}` : null;
+    if (!rowKey || rowKey === "|") { miss.noMatchup++; continue; }
+
+    let g = null, ambiguous = false;
     for (const d of [p.game_date, shiftYmd(p.game_date, -1), shiftYmd(p.game_date, 1)]) {
-      const games = await boardFor(d);
-      g = (games || []).find(x => x.home && x.away &&
-        normTeam(x.home.displayName) === homeN && normTeam(x.away.displayName) === awayN);
+      const idx = await boardFor(d);
+      if (!idx) continue;
+      g = idx.byKey.get(rowKey) || null;
+      if (!g && isCfb && rowSchool && rowSchool !== "|" && idx.bySchool.has(rowSchool)) {
+        const cand = idx.bySchool.get(rowSchool);
+        if (cand) g = cand; else ambiguous = true;             // shared-campus name -> refuse to guess
+      }
       if (g) break;
     }
-    if (!g || g.state !== "post") continue;       // not found / not final → stay pending
+    if (!g) { if (ambiguous) miss.ambiguous++; else miss.noGame++; continue; }
+    if (g.state !== "post") { miss.notFinal++; continue; }     // not final -> stay pending
     const hs = g.home?.score, as = g.away?.score;
-    if (hs == null || as == null) continue;
+    if (hs == null || as == null) { miss.noScore++; continue; }
     const outcome = gradeNbaTeam({ ...p, market: baseMarket }, hs, as); // pure team-market grader, reused (base market so *_shadow settles)
     if (!outcome) continue;
     const { error: upErr } = await supabase
@@ -1688,11 +1746,18 @@ async function gradeFootball(supabase, pending, fetchBoard) {
       .eq("id", p.id);
     if (!upErr) graded++;
   }
+
+  const unmatched = miss.noMatchup + miss.noGame + miss.ambiguous;
+  if (unmatched) {
+    console.warn(`[Tracker] ${String(league || "fb").toUpperCase()} grading: ${unmatched} pending row(s) matched no scoreboard game ` +
+      `(bad matchup string ${miss.noMatchup}, not on board ${miss.noGame}, ambiguous school ${miss.ambiguous}); ` +
+      `${miss.notFinal} not final, ${miss.noScore} final without a score.`);
+  }
   return graded;
 }
 // WZ-FBALL-CFB-SHADOW-2026-07-17 :: per-league grader wrappers (each strips _shadow via gradeFootball).
-async function gradeNFL(supabase, pending) { return gradeFootball(supabase, pending, fetchNflScoreboard); }
-async function gradeCFB(supabase, pending) { return gradeFootball(supabase, pending, fetchCfbScoreboard); }
+async function gradeNFL(supabase, pending) { return gradeFootball(supabase, pending, fetchNflScoreboard, "nfl"); }
+async function gradeCFB(supabase, pending) { return gradeFootball(supabase, pending, fetchCfbScoreboard, "cfb"); }
 
 function gradeNbaTeam(p, homeScore, awayScore) {
   const margin = homeScore - awayScore; // + = home won
