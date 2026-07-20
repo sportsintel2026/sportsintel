@@ -1867,7 +1867,10 @@ router.get("/nfl", gatePicks, async (req, res) => {
       moneylineEdges, spreadEdges, totalsEdges,
       runLineEdges: [], hrPropEdges: [], kPropEdges: [], hitsPropEdges: [],
       computedAt: new Date().toISOString(),
-      disclaimer: "PROVISIONAL: 2025-seeded ratings vs preseason lines. Not calibrated — no graded NFL results yet. For build/validation only; not betting advice until shadow-graded in-season.",
+      // WZ-NFL-PRESEASON-KEY-2026-07-20 :: this string said "vs preseason lines" while the board was
+      // serving regular-season Week 1 -- customer-facing text that was simply untrue. Now follows the
+      // phase actually selected, so it describes what is on screen either way.
+      disclaimer: `PROVISIONAL: 2025-seeded ratings vs ${slate?.phase?.selected === "preseason" ? "preseason" : "regular-season"} lines. Not calibrated — no graded NFL results yet. For build/validation only; not betting advice until shadow-graded in-season.`,
     });
   } catch (e) {
     console.error("[edges/nfl] error:", e.message);
