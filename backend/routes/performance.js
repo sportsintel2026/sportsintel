@@ -1219,6 +1219,419 @@ router.get("/timeline", async (req, res) => {
   }
 });
 
+// WZ-FINGERPRINT-2026-07-20 :: READ-ONLY. Did the PRICING change on a given date, or did results
+// just wander? And on a signed-line market, which SIDE moved?
+//
+// Twice tonight a date was matched to a decline and a story was built on it. The +0.20 story died
+// when tested. The run-line story (WZ-CAL-LIVE-2026-07-02, a cover calibration fitted on n=461 and
+// promoted straight to live pricing) is a tighter correlation -- four clean weeks, then a cliff --
+// but a tighter correlation is still a correlation. This endpoint is built so that lead can FAIL.
+//
+// The claim under test is mechanical, not statistical: if a calibration layer went live on a date,
+// the CLAIMED PROBABILITIES THEMSELVES must change shape on that date. That is a fingerprint, and
+// unlike a win-rate dip it cannot be produced by luck -- the model either started emitting different
+// numbers or it did not.
+//
+// THE CONTROL, and the reason to trust this over the last two probes: `placeboScan` computes the
+// same shift statistic at EVERY candidate day boundary in the range, then reports where the tested
+// date RANKS. A real pricing change should sit at or near the top. If 2026-07-02 lands mid-pack, the
+// shift is ordinary week-to-week variation and the lead is dead -- the same way the +0.20 lead died.
+// Rank is reported whether it flatters the hypothesis or not.
+//
+// sideSplit uses the signed `line` column (run_line: -1.5 = laying, +1.5 = taking; spread likewise),
+// which is the split that actually matters here -- the documented run-line flaw was about one-run
+// games and -1.5 favorites, and the earlier timeline probe could not see it because it split
+// over/under. Falls back to the selection string when `line` is absent.
+//
+// GET /api/performance/fingerprint [?league=mlb][&market=run_line][&date=2026-07-02][&minSide=60]
+router.get("/fingerprint", async (req, res) => {
+  try {
+    const supabase = db();
+    const league = req.query.league || "mlb";
+    const market = req.query.market || "run_line";
+    const TEST_DATE = req.query.date || "2026-07-02";
+    const MIN_SIDE = Math.max(20, parseInt(req.query.minSide || "60", 10));
+    const BAND = 0.55;
+    const BREAK_EVEN = 52.4;
+    const PAGE = 1000;
+
+    const rows = [];
+    let from = 0;
+    for (let i = 0; i < 40; i++) {
+      const { data, error } = await supabase.from("model_predictions")
+        .select("game_id, model_prob, edge, selection, line, result, game_date")
+        .eq("league", league).eq("market", market)
+        .in("result", ["win", "loss"])
+        .order("game_date", { ascending: true }).range(from, from + PAGE - 1);
+      if (error) throw error;
+      if (!data || !data.length) break;
+      rows.push(...data);
+      if (data.length < PAGE) break;
+      from += PAGE;
+    }
+
+    const pop = [];
+    for (const r of rows) {
+      if (!r.game_date || r.model_prob == null) continue;
+      const claimed = Number(r.model_prob);
+      if (!Number.isFinite(claimed)) continue;
+      const ln = r.line == null ? null : Number(r.line);
+      const sel = String(r.selection || "").toLowerCase();
+      let side = "unknown";
+      if (ln != null && Number.isFinite(ln) && ln !== 0) side = ln < 0 ? "laying (-1.5)" : "taking (+1.5)";
+      else if (sel.includes("over")) side = "over";
+      else if (sel.includes("under")) side = "under";
+      pop.push({
+        date: String(r.game_date).slice(0, 10),
+        claimed,
+        edge: r.edge == null ? null : Number(r.edge),
+        line: ln, side,
+        inBand: claimed >= BAND,
+        won: r.result === "win",
+      });
+    }
+    pop.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+    if (pop.length < MIN_SIDE * 2) {
+      return res.json({ token: "WZ-FINGERPRINT-2026-07-20", market, n: pop.length,
+        note: `population too small to scan (need at least ${MIN_SIDE * 2})` });
+    }
+
+    const r1 = (x) => (Number.isFinite(x) ? Math.round(x * 10) / 10 : null);
+    const r3 = (x) => (Number.isFinite(x) ? Math.round(x * 1000) / 1000 : null);
+    const mean = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
+    const sd = (a) => {
+      if (a.length < 2) return null;
+      const m = mean(a);
+      return Math.sqrt(a.reduce((x, y) => x + (y - m) * (y - m), 0) / (a.length - 1));
+    };
+    const pct = (arr, p) => {
+      if (!arr.length) return null;
+      const s = arr.slice().sort((x, y) => x - y);
+      return r3(s[Math.min(s.length - 1, Math.max(0, Math.round(p * (s.length - 1))))]);
+    };
+    function perf(sel) {
+      const n = sel.length;
+      if (!n) return { n: 0 };
+      const w = sel.filter(r => r.won).length;
+      return { n, wins: w, losses: n - w, winPct: r1((w / n) * 100),
+        roiPctFlatAt110: r1(((w * (100 / 110) - (n - w)) / n) * 100),
+        vsBreakEvenPts: r1((w / n) * 100 - BREAK_EVEN) };
+    }
+    // The pricing fingerprint. These describe the NUMBERS THE MODEL EMITTED, not whether they won.
+    function shape(sel) {
+      if (!sel.length) return { n: 0 };
+      const c = sel.map(r => r.claimed);
+      const e = sel.map(r => r.edge).filter(Number.isFinite);
+      return {
+        n: sel.length,
+        meanClaimed: r3(mean(c)), sdClaimed: r3(sd(c)),
+        p10: pct(c, 0.10), p50: pct(c, 0.50), p90: pct(c, 0.90), max: r3(Math.max(...c)),
+        shareAboveBandPct: r1((sel.filter(r => r.inBand).length / sel.length) * 100),
+        meanEdge: e.length ? r3(mean(e)) : null,
+      };
+    }
+
+    // ---- A. side split (signed line), overall and either side of the tested date
+    const sides = [...new Set(pop.map(r => r.side))];
+    const sideSplit = sides.map(s => {
+      const all = pop.filter(r => r.side === s);
+      return {
+        side: s,
+        overall: perf(all), published: perf(all.filter(r => r.inBand)),
+        before: perf(all.filter(r => r.date < TEST_DATE)),
+        after: perf(all.filter(r => r.date >= TEST_DATE)),
+        publishedBefore: perf(all.filter(r => r.inBand && r.date < TEST_DATE)),
+        publishedAfter: perf(all.filter(r => r.inBand && r.date >= TEST_DATE)),
+      };
+    });
+
+    // ---- B. the fingerprint at the tested date
+    const bef = pop.filter(r => r.date < TEST_DATE);
+    const aft = pop.filter(r => r.date >= TEST_DATE);
+    const sBef = shape(bef), sAft = shape(aft);
+    const claimedShift = {
+      testDate: TEST_DATE,
+      before: { ...sBef, performance: perf(bef) },
+      after: { ...sAft, performance: perf(aft) },
+      deltaMeanClaimed: (sBef.meanClaimed != null && sAft.meanClaimed != null) ? r3(sAft.meanClaimed - sBef.meanClaimed) : null,
+      deltaShareAboveBandPts: (sBef.shareAboveBandPct != null && sAft.shareAboveBandPct != null) ? r1(sAft.shareAboveBandPct - sBef.shareAboveBandPct) : null,
+      note: "A calibration promoted to live pricing MUST move meanClaimed / sdClaimed / shareAboveBandPct. If these are flat across the date, no pricing change happened there and the lead is dead regardless of what the win rate did.",
+    };
+
+    // ---- C. PLACEBO SCAN. Same statistic at every boundary. This is the control.
+    const dates = [...new Set(pop.map(r => r.date))].sort();
+    const scan = [];
+    for (const d of dates) {
+      const b = pop.filter(r => r.date < d), a = pop.filter(r => r.date >= d);
+      if (b.length < MIN_SIDE || a.length < MIN_SIDE) continue;
+      const sb = shape(b), sa = shape(a);
+      scan.push({
+        date: d, nBefore: b.length, nAfter: a.length,
+        absDeltaMeanClaimed: r3(Math.abs(sa.meanClaimed - sb.meanClaimed)),
+        absDeltaShareAboveBandPts: r1(Math.abs(sa.shareAboveBandPct - sb.shareAboveBandPct)),
+        absDeltaRoiPts: r1(Math.abs((perf(a).roiPctFlatAt110 ?? 0) - (perf(b).roiPctFlatAt110 ?? 0))),
+      });
+    }
+    const rankOf = (key) => {
+      const sorted = scan.slice().sort((x, y) => (y[key] ?? -1) - (x[key] ?? -1));
+      const i = sorted.findIndex(x => x.date === TEST_DATE);
+      return { rank: i < 0 ? null : i + 1, outOf: sorted.length,
+        top5: sorted.slice(0, 5).map(x => ({ date: x.date, value: x[key] })) };
+    };
+    const placeboScan = {
+      candidateBoundaries: scan.length,
+      minRowsEachSide: MIN_SIDE,
+      priceShift_meanClaimed: rankOf("absDeltaMeanClaimed"),
+      priceShift_shareAboveBand: rankOf("absDeltaShareAboveBandPts"),
+      performanceShift_roi: rankOf("absDeltaRoiPts"),
+      note: "Rank 1 = the biggest shift of any date in the range. The lead survives only if the tested date ranks near the top on a PRICE metric (meanClaimed or shareAboveBand) -- a top rank on ROI alone proves nothing, because ROI moves on luck and every history has a worst week somewhere. Price and performance both topping out on the same date is the finding worth having.",
+    };
+
+    let verdict;
+    const pr = Math.min(placeboScan.priceShift_meanClaimed.rank || 999, placeboScan.priceShift_shareAboveBand.rank || 999);
+    const tot = scan.length || 1;
+    if (!scan.length) verdict = "Not enough data on both sides of any boundary to scan.";
+    else if (pr <= Math.max(3, Math.ceil(tot * 0.05)))
+      verdict = `PRICING DID CHANGE at ${TEST_DATE} -- it ranks ${pr} of ${tot} candidate dates on a price metric. That is a real fingerprint, not a coincidence. Next step is an out-of-sample check on the layer that went live, NOT an immediate revert.`;
+    else
+      verdict = `NO PRICING FINGERPRINT at ${TEST_DATE} -- it ranks only ${pr} of ${tot} candidate dates on price shift. Ordinary variation. The calibration lead is DEAD, exactly as the +0.20 lead was. Whatever moved the run line, this was not it.`;
+
+    res.json({
+      token: "WZ-FINGERPRINT-2026-07-20",
+      league, market, testDate: TEST_DATE,
+      population: { gradedRowsPulled: rows.length, usable: pop.length,
+        dateRange: { first: pop[0].date, last: pop[pop.length - 1].date }, band: BAND, breakEvenPct: BREAK_EVEN },
+      sideSplit,
+      claimedShift,
+      placeboScan,
+      verdict,
+      reading: "Read `verdict` and `placeboScan` together. The whole point of the rank is that it can embarrass the hypothesis -- a mid-pack rank kills the lead and that is a real result, not a wasted probe. `sideSplit` is independent of all of it: on run_line it finally shows whether the laying (-1.5) or taking (+1.5) side carried the damage, which is the split the documented one-run-game flaw predicts.",
+    });
+  } catch (err) {
+    console.error("[fingerprint] error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// WZ-CALPROBE-2026-07-21 :: READ-ONLY. Two questions in one pass:
+//   (1) WHEN did the calibration layer actually go live, measured from the DATA rather than from a
+//       commit date -- and did the published probabilities change shape when it did?
+//   (2) On run line, was it the -1.5 FAVOURITES or the +1.5 DOGS that broke?
+//
+// (1) THE FINGERPRINT. WZ-CAL-MIRROR-2026-07-02 in predictionTracker says that when the calibration
+// was promoted from shadow to live, `model_prob` BECAME the calibrated value and `model_prob_cal`
+// started merely mirroring it. Before promotion the two columns necessarily disagreed: model_prob
+// held the raw number, model_prob_cal held what the shadow calibration would have made it. So the
+// fraction of rows where the two are IDENTICAL should sit near zero before the promotion and jump to
+// ~100% on it. That is a hard switch visible in the rows themselves -- not a date I chose, and not a
+// correlation. `meanHaircutPts` on the pre-promotion side additionally measures how big the cut WOULD
+// have been, i.e. the size of the intervention that was about to be switched on.
+//
+// This matters because the run line published 62-67% for four weeks and then fell to 50% / 43.8% in
+// the week containing 2026-07-02. A date lining up with a decline is exactly the reasoning that
+// produced tonight's WRONG +0.20 conclusion. A distribution changing shape on the same rows is a
+// different and much stronger class of evidence. If the shape does NOT move, this lead dies like the
+// last one, and the honest answer is that the run line's collapse is still unexplained.
+//
+// (2) SIDES. The documented flaw in the old run-line engine was one-run games, which is a -1.5
+// problem specifically: a favourite laying 1.5 wins the game and loses the bet. The previous probe
+// split over/under, which is meaningless outside totals, so that split came back empty. Here the side
+// is derived per market: run_line off the stored `line` sign, moneyline off the `odds` sign, totals
+// off `selection`. Favourite vs dog is the axis that matters in all three.
+//
+// GET /api/performance/calprobe [?league=mlb][&market=run_line][&days=7]
+router.get("/calprobe", async (req, res) => {
+  try {
+    const supabase = db();
+    const league = req.query.league || "mlb";
+    const market = req.query.market || "run_line";
+    const BIN_DAYS = Math.max(1, Math.min(28, parseInt(req.query.days || "7", 10)));
+    const BAND = 0.55;
+    const BREAK_EVEN = 52.4;
+    const MIN_N = 40;
+    const PAGE = 1000;
+
+    const CHANGE_LOG = {
+      run_line: [
+        { date: "2026-06-02", label: "MARGIN_SD = 3.0 -- old fixed-bell-curve engine in" },
+        { date: "2026-07-02", label: "WZ-CAL-LIVE :: run-line cover calibration promoted shadow -> LIVE (fitted on n=461)" },
+        { date: "2026-07-17", label: "engine rebuilt (NegBin margins) + market MANUALLY BENCHED" },
+      ],
+      moneyline: [
+        { date: "2026-07-02", label: "WZ-CAL-LIVE :: ML win-prob calibration promoted shadow -> LIVE" },
+        { date: "2026-07-08", label: "WZ-ML-WINBLEND :: 55/45 market blend applied to the ranking prob" },
+      ],
+      total: [
+        { date: "2026-06-26", label: "TOTAL_MEAN_ADJ = +0.20 runs added to every projection" },
+        { date: "2026-07-12", label: "market blend extended to totals" },
+        { date: "2026-07-17", label: "TOTAL_MEAN_ADJ reverted to 0.0" },
+      ],
+    }[market] || [];
+
+    // model_prob_cal / cal_edge may not exist for every market. Fall back rather than 500 -- a probe
+    // that dies on a missing column costs a paste and teaches nothing.
+    const FULL = "game_id, model_prob, model_prob_cal, cal_edge, line, odds, selection, result, game_date";
+    const LEAN = "game_id, model_prob, line, odds, selection, result, game_date";
+    let cols = FULL, calColsAvailable = true;
+    {
+      const probe = await supabase.from("model_predictions").select(FULL)
+        .eq("league", league).eq("market", market).limit(1);
+      if (probe.error) { cols = LEAN; calColsAvailable = false; }
+    }
+
+    const rows = [];
+    let from = 0;
+    for (let i = 0; i < 40; i++) {
+      const { data, error } = await supabase.from("model_predictions").select(cols)
+        .eq("league", league).eq("market", market)
+        .in("result", ["win", "loss"])
+        .order("game_date", { ascending: true }).range(from, from + PAGE - 1);
+      if (error) throw error;
+      if (!data || !data.length) break;
+      rows.push(...data);
+      if (data.length < PAGE) break;
+      from += PAGE;
+    }
+
+    function sideOf(r) {
+      if (market === "run_line") {
+        const ln = r.line == null ? null : Number(r.line);
+        if (ln == null || !Number.isFinite(ln)) return "unknown";
+        return ln < 0 ? "lay_minus_1.5_FAV" : "take_plus_1.5_DOG";
+      }
+      if (market === "moneyline") {
+        const o = r.odds == null ? null : Number(r.odds);
+        if (o == null || !Number.isFinite(o)) return "unknown";
+        return o < 0 ? "favourite" : "underdog";
+      }
+      const s = String(r.selection || "").toLowerCase();
+      return s.includes("over") ? "over" : s.includes("under") ? "under" : "unknown";
+    }
+
+    const pop = [];
+    for (const r of rows) {
+      if (!r.game_date || r.result == null || r.model_prob == null) continue;
+      const claimed = Number(r.model_prob);
+      if (!Number.isFinite(claimed)) continue;
+      const cal = (calColsAvailable && r.model_prob_cal != null) ? Number(r.model_prob_cal) : null;
+      pop.push({
+        date: String(r.game_date).slice(0, 10),
+        claimed,
+        cal,
+        calIsNull: cal == null,
+        identical: cal != null && Math.abs(claimed - cal) < 1e-9,
+        haircutPts: cal != null ? (claimed - cal) * 100 : null,
+        side: sideOf(r),
+        inBand: claimed >= BAND,
+        won: r.result === "win",
+      });
+    }
+    pop.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+    if (!pop.length) return res.json({ token: "WZ-CALPROBE-2026-07-21", market, note: "no graded rows" });
+
+    const r1 = (x) => (Number.isFinite(x) ? Math.round(x * 10) / 10 : null);
+    const r3 = (x) => (Number.isFinite(x) ? Math.round(x * 1000) / 1000 : null);
+    const mean = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
+    const sd = (a) => { if (a.length < 2) return null; const m = mean(a); return Math.sqrt(a.reduce((x, y) => x + (y - m) ** 2, 0) / (a.length - 1)); };
+    const pct = (a, p) => { if (!a.length) return null; const s = a.slice().sort((x, y) => x - y); return r3(s[Math.min(s.length - 1, Math.max(0, Math.round(p * (s.length - 1))))]); };
+
+    function perf(sel) {
+      const n = sel.length;
+      if (!n) return { n: 0 };
+      const w = sel.filter(r => r.won).length;
+      const wp = (w / n) * 100;
+      return { n, wins: w, losses: n - w, winPct: r1(wp), roiPctFlatAt110: r1(((w * (100 / 110) - (n - w)) / n) * 100), vsBreakEvenPts: r1(wp - BREAK_EVEN), readable: n >= MIN_N };
+    }
+    // The distribution of what we CLAIM. A calibration going live must move this or it did nothing.
+    function shape(sel) {
+      if (!sel.length) return { n: 0 };
+      const c = sel.map(r => r.claimed);
+      return {
+        n: sel.length,
+        meanClaimed: r3(mean(c)), sdClaimed: r3(sd(c)),
+        p10: pct(c, 0.10), p50: pct(c, 0.50), p90: pct(c, 0.90), max: r3(Math.max(...c)),
+        pctAbove55: r1((sel.filter(r => r.claimed >= 0.55).length / sel.length) * 100),
+        pctAbove60: r1((sel.filter(r => r.claimed >= 0.60).length / sel.length) * 100),
+        pctAbove65: r1((sel.filter(r => r.claimed >= 0.65).length / sel.length) * 100),
+      };
+    }
+    function calState(sel) {
+      if (!sel.length) return { n: 0 };
+      const withCal = sel.filter(r => !r.calIsNull);
+      const hair = withCal.filter(r => !r.identical).map(r => r.haircutPts);
+      return {
+        n: sel.length,
+        pctCalColumnNull: r1((sel.filter(r => r.calIsNull).length / sel.length) * 100),
+        pctIdenticalToCal: withCal.length ? r1((withCal.filter(r => r.identical).length / withCal.length) * 100) : null,
+        meanHaircutPtsWhenDiffering: hair.length ? r1(mean(hair)) : null,
+      };
+    }
+
+    const dayMs = 86400000;
+    const toD = (s) => new Date(s + "T00:00:00Z").getTime();
+    const toS = (t) => new Date(t).toISOString().slice(0, 10);
+    const t0 = toD(pop[0].date), tEnd = toD(pop[pop.length - 1].date);
+    const weekly = [];
+    for (let s = t0; s <= tEnd; s += BIN_DAYS * dayMs) {
+      const sStr = toS(s), eStr = toS(s + (BIN_DAYS - 1) * dayMs);
+      const bin = pop.filter(r => r.date >= sStr && r.date <= eStr);
+      if (!bin.length) continue;
+      const sides = {};
+      for (const sd2 of [...new Set(bin.map(r => r.side))]) sides[sd2] = perf(bin.filter(r => r.side === sd2 && r.inBand));
+      weekly.push({
+        weekStart: sStr, weekEnd: eStr,
+        events: CHANGE_LOG.filter(c => c.date >= sStr && c.date <= eStr).map(c => c.label),
+        published: perf(bin.filter(r => r.inBand)),
+        publishedBySide: sides,
+        calibration: calState(bin),
+        claimedShape: shape(bin),
+      });
+    }
+
+    // Promotion detected from the rows: first bin where identical-to-cal crosses 50%.
+    let detected = null;
+    for (const w of weekly) {
+      if (w.calibration.pctIdenticalToCal != null && w.calibration.pctIdenticalToCal >= 50) { detected = w.weekStart; break; }
+    }
+    let aroundPromotion = null;
+    if (detected) {
+      const before = pop.filter(r => r.date < detected);
+      const after = pop.filter(r => r.date >= detected);
+      aroundPromotion = {
+        detectedInBinStarting: detected,
+        before: { shape: shape(before), published: perf(before.filter(r => r.inBand)), cal: calState(before) },
+        after: { shape: shape(after), published: perf(after.filter(r => r.inBand)), cal: calState(after) },
+      };
+    }
+
+    const bySideOverall = {};
+    for (const s of [...new Set(pop.map(r => r.side))]) {
+      const all = pop.filter(r => r.side === s && r.inBand);
+      bySideOverall[s] = {
+        overall: perf(all),
+        beforePromotion: detected ? perf(all.filter(r => r.date < detected)) : null,
+        afterPromotion: detected ? perf(all.filter(r => r.date >= detected)) : null,
+      };
+    }
+
+    res.json({
+      token: "WZ-CALPROBE-2026-07-21",
+      league, market,
+      calColumnsAvailable: calColsAvailable,
+      population: { gradedRowsPulled: rows.length, usable: pop.length, binDays: BIN_DAYS, minReadableN: MIN_N, breakEvenPct: BREAK_EVEN },
+      changeLog: CHANGE_LOG,
+      promotionDetectedFromData: detected,
+      aroundPromotion,
+      bySideOverall,
+      weekly,
+      reading: "TEST 1 -- promotion date. Read calibration.pctIdenticalToCal down the weeks. A jump from near 0 to near 100 is the calibration going live, dated from the rows themselves. If it never jumps, or calColumnsAvailable is false, this test could not run and the July 2 lead is UNTESTED, not confirmed. TEST 2 -- did it change anything? Compare aroundPromotion.before.shape to after.shape. A live calibration must move meanClaimed, p90, max, or pctAbove65. If the shape is unchanged, the calibration is not what broke the run line and the collapse is still unexplained -- say so rather than reaching for the next date. TEST 3 -- which side. bySideOverall splits the -1.5 favourites from the +1.5 dogs. The documented one-run-game flaw is a FAVOURITE problem; if the dogs broke instead, the recorded diagnosis is wrong. Weekly n is small and single-week swings are noise -- only a sustained level shift that coincides with the detected promotion counts.",
+    });
+  } catch (err) {
+    console.error("[calprobe] error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // WZ-FBALL-CALIB-2026-07-17 :: football (NFL/CFB) shadow-calibration + bias meter. Mirrors the MLB
 // /calibprobe shadowFullSlate and totalsbias, reading the full-slate *_shadow rows the football
 // recorder writes (moneyline_shadow / spread_shadow / total_shadow, per league). Read-only — these
