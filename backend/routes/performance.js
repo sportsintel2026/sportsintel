@@ -1413,6 +1413,131 @@ router.get("/fingerprint", async (req, res) => {
   }
 });
 
+// WZ-REALODDS-2026-07-21 :: READ-ONLY. Every ROI figure produced tonight assumed a flat -110 price.
+// That is wrong on any market where the two sides are not priced alike, and run line is the worst
+// case: taking +1.5 costs a premium (break-even well above 52.4%) while laying -1.5 pays a premium
+// (break-even well below it). Comparing those two sides at a shared -110 break-even made the cheap
+// side look like a catastrophe and the expensive side look like a winner. It may be exactly backwards.
+//
+// The odds were never missing -- `model_predictions.odds` carries the real posted price on every core
+// row (run_line stores `odds: e.odds`), and the model itself has always priced off real de-vigged
+// numbers. The -110 assumption existed only in the diagnostics, i.e. in my code, not in the product.
+//
+// KNOWN DATA CAVEAT, reported not assumed: four player-prop SHADOW writers store `odds: -110` as a
+// literal placeholder (player_total_bases_shadow, player_hits_shadow, player_strikeouts_shadow, and
+// the live player_${stat} row). Any ROI on those is meaningless. `oddsLooksPlaceholder` below flags
+// a population where every single row is exactly -110, so that case can never be silently believed.
+//
+// GET /api/performance/realodds [?league=mlb][&market=run_line]
+router.get("/realodds", async (req, res) => {
+  try {
+    const supabase = db();
+    const league = req.query.league || "mlb";
+    const market = req.query.market || "run_line";
+    const BAND = 0.55;
+    const PAGE = 1000;
+
+    const rows = [];
+    let from = 0;
+    for (let i = 0; i < 40; i++) {
+      const { data, error } = await supabase.from("model_predictions")
+        .select("game_id, model_prob, edge, selection, line, odds, result, game_date")
+        .eq("league", league).eq("market", market)
+        .in("result", ["win", "loss"])
+        .order("game_date", { ascending: true }).range(from, from + PAGE - 1);
+      if (error) throw error;
+      if (!data || !data.length) break;
+      rows.push(...data);
+      if (data.length < PAGE) break;
+      from += PAGE;
+    }
+
+    // American odds -> profit on a 1-unit win. -160 pays 0.625; +145 pays 1.45.
+    const profitPerUnit = (american) => {
+      const a = Number(american);
+      if (!Number.isFinite(a) || a === 0) return null;
+      return a > 0 ? a / 100 : 100 / Math.abs(a);
+    };
+
+    let missingOdds = 0;
+    const pop = [];
+    for (const r of rows) {
+      if (r.model_prob == null || !r.game_date) continue;
+      const p = profitPerUnit(r.odds);
+      if (p == null) { missingOdds++; continue; }
+      const claimed = Number(r.model_prob);
+      const ln = r.line == null ? null : Number(r.line);
+      const sel = String(r.selection || "").toLowerCase();
+      let side = "all";
+      if (ln != null && Number.isFinite(ln) && ln !== 0) side = ln < 0 ? "laying (-1.5)" : "taking (+1.5)";
+      else if (sel.includes("over")) side = "over";
+      else if (sel.includes("under")) side = "under";
+      pop.push({ date: String(r.game_date).slice(0, 10), claimed, odds: Number(r.odds),
+        profit: p, side, inBand: claimed >= BAND, won: r.result === "win" });
+    }
+    if (!pop.length) return res.json({ token: "WZ-REALODDS-2026-07-21", market, note: "no usable rows", missingOdds });
+
+    const r1 = (x) => (Number.isFinite(x) ? Math.round(x * 10) / 10 : null);
+    const mean = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
+    const med = (a) => { if (!a.length) return null; const s = a.slice().sort((x, y) => x - y); return s[Math.floor(s.length / 2)]; };
+
+    function score(sel) {
+      const n = sel.length;
+      if (!n) return { n: 0 };
+      const wins = sel.filter(r => r.won);
+      const w = wins.length;
+      const winPct = (w / n) * 100;
+      // REAL: each win pays its own posted price. Each loss costs 1 unit.
+      const realUnits = wins.reduce((s, r) => s + r.profit, 0) - (n - w);
+      // The number I was reporting all night, kept for the correction.
+      const assumedUnits = w * (100 / 110) - (n - w);
+      // Break-even for this population's actual prices: mean of 1/(1+profit).
+      const be = mean(sel.map(r => 1 / (1 + r.profit))) * 100;
+      return {
+        n, wins: w, losses: n - w,
+        winPct: r1(winPct),
+        realRoiPct: r1((realUnits / n) * 100),
+        assumedRoiPctAt110: r1((assumedUnits / n) * 100),
+        correctionPts: r1(((realUnits - assumedUnits) / n) * 100),
+        breakEvenPctAtRealPrices: r1(be),
+        vsRealBreakEvenPts: r1(winPct - be),
+        medianOdds: med(sel.map(r => r.odds)),
+        meanOdds: r1(mean(sel.map(r => r.odds))),
+        verdict: winPct > be ? "PROFITABLE at the prices actually paid" : "LOSING at the prices actually paid",
+      };
+    }
+
+    const sides = [...new Set(pop.map(r => r.side))];
+    const bySide = sides.map(s => {
+      const all = pop.filter(r => r.side === s);
+      return { side: s, allGraded: score(all), published: score(all.filter(r => r.inBand)) };
+    });
+
+    const allOdds = pop.map(r => r.odds);
+    const placeholder = allOdds.every(o => o === -110);
+
+    res.json({
+      token: "WZ-REALODDS-2026-07-21",
+      league, market,
+      population: {
+        gradedRowsPulled: rows.length, usable: pop.length, rowsMissingOdds: missingOdds,
+        dateRange: { first: pop[0].date, last: pop[pop.length - 1].date },
+        distinctPrices: new Set(allOdds).size,
+        oddsLooksPlaceholder: placeholder,
+        placeholderWarning: placeholder
+          ? "EVERY row is exactly -110. This market's odds are a hardcoded placeholder, not real prices -- every ROI below is meaningless. Do not act on it."
+          : null,
+      },
+      overall: { allGraded: score(pop), published: score(pop.filter(r => r.inBand)) },
+      bySide,
+      reading: "realRoiPct is the true return at the prices actually posted. assumedRoiPctAt110 is what I reported all night; correctionPts is how wrong I was, per side. The comparison that matters is winPct against breakEvenPctAtRealPrices -- NOT against 52.4%, which only applies at -110. On run line the two sides have different break-evens by design, so a shared threshold made the cheap side look like a catastrophe and the expensive side look like a winner. If vsRealBreakEvenPts flips sign versus what was claimed earlier, the earlier recommendation was backwards and should be discarded outright, not adjusted.",
+    });
+  } catch (err) {
+    console.error("[realodds] error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // WZ-CALPROBE-2026-07-21 :: READ-ONLY. Two questions in one pass:
 //   (1) WHEN did the calibration layer actually go live, measured from the DATA rather than from a
 //       commit date -- and did the published probabilities change shape when it did?
