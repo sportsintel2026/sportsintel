@@ -755,7 +755,7 @@ router.get("/selectbacktest", async (req, res) => {
     let from = 0;
     for (let i = 0; i < 40; i++) {
       let q = supabase.from("model_predictions")
-        .select("model_prob, edge, selection, result, game_date")
+        .select("game_id, model_prob, edge, selection, result, game_date")
         .eq("league", league).eq("market", market)
         .in("result", ["win", "loss"])
         .order("game_date", { ascending: true }).range(from, from + PAGE - 1);
@@ -782,7 +782,10 @@ router.get("/selectbacktest", async (req, res) => {
         claimed, edge, fair, raw,
         won: r.result === "win",
         lopsided: fair >= LOPSIDED,
-        key: `${r.game_date}|${r.selection}`,
+        // WZ-SELECT-KEYFIX-2026-07-20 :: was `${game_date}|${selection}` -- totals selections are only
+        // "over"/"under", so every row on a given date collided and overlapWithCurrentPct reported ~100%
+        // between selections with different W-L records (impossible). game_id is the real unit.
+        key: `${r.game_id}|${r.selection}|${r.game_date}`,
       });
     }
 
@@ -872,6 +875,165 @@ router.get("/selectbacktest", async (req, res) => {
     });
   } catch (err) {
     console.error("[selectbacktest] error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// WZ-OOS-SPLIT-2026-07-20 :: READ-ONLY. Does a rule survive games it was never shown?
+//
+// /selectbacktest chose the top-50-by-edge cutoff by looking at all 768 graded rows, then judged that
+// cutoff on the same 768 rows. That is marking your own exam with the answer key open: with 8 sizes
+// tried and the best one reported, a 68% "result" is a description of games already read, not evidence.
+// This endpoint fixes the method: form the rule on EARLY rows only, freeze it, then score it on LATE
+// rows that were never inspected while choosing it. Split is by DATE, never shuffled -- the real
+// question is whether a rule built on the past survives the future, and shuffling leaks the future back.
+//
+// The rule is frozen as a FRACTION of the population, not an absolute N. Halves differ in size, so a
+// fraction is the only thing that transfers honestly between them.
+//
+// REGIME WARNING, and it is the first thing to read: the market blend (WZ-TOT-WINBLEND-2026-07-12)
+// went live 2026-07-12. Rows graded BEFORE that date had their published prob set by the RAW sigmoid;
+// rows after had it set by 0.55*raw + 0.45*fairMarket. Those are two different pricing systems. Any
+// number pooled across the boundary is an average of two regimes. `regimeSplit` below reports the
+// count and the incumbent's real return on each side separately, so the pooled figures can be checked
+// rather than trusted. If nearly all rows are pre-blend, then /selectbacktest measured a selection
+// mechanism that barely existed in that data -- and its verdict is weaker than it was stated to be.
+//
+// GET /api/performance/oossplit [?league=mlb][&market=total][&cutoff=YYYY-MM-DD][&blend=YYYY-MM-DD]
+router.get("/oossplit", async (req, res) => {
+  try {
+    const supabase = db();
+    const league = req.query.league || "mlb";
+    const market = req.query.market || "total";
+    const BLEND_DATE = req.query.blend || "2026-07-12";  // WZ-TOT-WINBLEND-2026-07-12 went live
+    const W = 0.55;
+    const BAND = 0.55;
+    const BREAK_EVEN = 52.4;   // -110
+    const MIN_N = 40;          // mirrors the guard's minimum readable sample
+    const PAGE = 1000;
+
+    const rows = [];
+    let from = 0;
+    for (let i = 0; i < 40; i++) {
+      const { data, error } = await supabase.from("model_predictions")
+        .select("game_id, model_prob, edge, selection, result, game_date")
+        .eq("league", league).eq("market", market)
+        .in("result", ["win", "loss"])
+        .order("game_date", { ascending: true }).range(from, from + PAGE - 1);
+      if (error) throw error;
+      if (!data || !data.length) break;
+      rows.push(...data);
+      if (data.length < PAGE) break;
+      from += PAGE;
+    }
+
+    const outOfRangeRows = [];
+    const pop = [];
+    for (const r of rows) {
+      if (r.model_prob == null || r.edge == null || !r.game_date) continue;
+      const claimed = Number(r.model_prob);
+      const edge = Number(r.edge);
+      if (!Number.isFinite(claimed) || !Number.isFinite(edge)) continue;
+      const fair = claimed - edge;
+      const raw = (claimed - (1 - W) * fair) / W;
+      const rec = { date: String(r.game_date).slice(0, 10), claimed, edge, fair, raw, won: r.result === "win" };
+      // Promised in the last handoff: identify the rawOutOfRange rows rather than step around them.
+      if (!(raw > -0.01 && raw < 1.01)) {
+        outOfRangeRows.push({ date: rec.date, game_id: String(r.game_id), selection: r.selection,
+          model_prob: Math.round(claimed * 1000) / 1000, edge: Math.round(edge * 1000) / 1000,
+          impliedFair: Math.round(fair * 1000) / 1000, recoveredRaw: Math.round(raw * 1000) / 1000 });
+      }
+      pop.push(rec);
+    }
+    pop.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+
+    const r1 = (x) => (Number.isFinite(x) ? Math.round(x * 10) / 10 : null);
+    function score(sel) {
+      const n = sel.length;
+      if (!n) return { n: 0 };
+      const wins = sel.filter(r => r.won).length;
+      const winPct = (wins / n) * 100;
+      const roi = ((wins * (100 / 110) - (n - wins)) / n) * 100;
+      return {
+        n, wins, losses: n - wins,
+        actualWinPct: r1(winPct),
+        vsBreakEvenPts: r1(winPct - BREAK_EVEN),
+        roiPctFlatAt110: r1(roi),
+        readable: n >= MIN_N,
+      };
+    }
+    const topFrac = (arr, frac) => {
+      const k = Math.max(1, Math.round(frac * arr.length));
+      return arr.slice().sort((a, b) => b.edge - a.edge).slice(0, k);
+    };
+    const band = (arr) => arr.filter(r => r.claimed >= BAND);
+
+    // ---- 1. REGIME. Read this before anything else.
+    const pre = pop.filter(r => r.date < BLEND_DATE);
+    const post = pop.filter(r => r.date >= BLEND_DATE);
+    const regimeSplit = {
+      blendLiveDate: BLEND_DATE,
+      dateRange: pop.length ? { first: pop[0].date, last: pop[pop.length - 1].date } : null,
+      preBlend: { rowsInPopulation: pre.length, incumbentBand: score(band(pre)) },
+      postBlend: { rowsInPopulation: post.length, incumbentBand: score(band(post)) },
+      pctOfHistoryPreBlend: pop.length ? r1((pre.length / pop.length) * 100) : null,
+      note: "If pctOfHistoryPreBlend is high, the pooled /selectbacktest numbers -- INCLUDING the incumbent's +3.5% -- are mostly a measurement of the pre-blend pricing system, not the one running today. Neither the edge thesis nor its refutation is as settled as it was stated.",
+    };
+
+    // ---- 2. OUT-OF-SAMPLE SPLIT. Form on early, freeze, score on late.
+    const cutIdx = req.query.cutoff
+      ? pop.findIndex(r => r.date >= req.query.cutoff)
+      : Math.floor(pop.length / 2);
+    const splitIdx = cutIdx < 0 ? Math.floor(pop.length / 2) : cutIdx;
+    const inSample = pop.slice(0, splitIdx);
+    const outSample = pop.slice(splitIdx);
+
+    const FRACS = [0.03, 0.05, 0.08, 0.10, 0.15, 0.20, 0.25, 0.35, 0.50];
+    const inSweep = FRACS.map(f => ({ frac: f, ...score(topFrac(inSample, f)) }));
+    // Chosen on IN-SAMPLE ONLY. Best-of-9 in-sample is itself a multiple-comparison problem -- that is
+    // exactly why the out-of-sample column below, not this one, is the verdict.
+    const readableIn = inSweep.filter(s => s.n >= MIN_N);
+    const chosen = (readableIn.length ? readableIn : inSweep)
+      .slice().sort((a, b) => (b.roiPctFlatAt110 ?? -999) - (a.roiPctFlatAt110 ?? -999))[0] || null;
+
+    const frozenFrac = chosen ? chosen.frac : null;
+    const oosEdge = frozenFrac == null ? { n: 0 } : score(topFrac(outSample, frozenFrac));
+    const oosIncumbent = score(band(outSample));
+    const inIncumbent = score(band(inSample));
+
+    const delta = (oosEdge.roiPctFlatAt110 != null && oosIncumbent.roiPctFlatAt110 != null)
+      ? r1(oosEdge.roiPctFlatAt110 - oosIncumbent.roiPctFlatAt110) : null;
+
+    let verdict;
+    if (!pop.length) verdict = "NO DATA.";
+    else if (!oosEdge.readable || !oosIncumbent.readable)
+      verdict = `INCONCLUSIVE -- out-of-sample n is under ${MIN_N} (edge rule n=${oosEdge.n}, incumbent n=${oosIncumbent.n}). This is the expected outcome on a history this short. It is NOT evidence the rule works and NOT evidence it fails. Do not ship on this.`;
+    else if (delta != null && delta > 0)
+      verdict = `SURVIVED out-of-sample by ${delta} ROI points. This earns the right to be shadow-recorded FORWARD on unplayed games. It is not clearance to publish.`;
+    else
+      verdict = `FAILED out-of-sample (${delta} ROI points vs incumbent). Drop the edge selector. The in-sample result was pattern-fitting.`;
+
+    res.json({
+      token: "WZ-OOS-SPLIT-2026-07-20",
+      league, market,
+      population: { gradedRowsPulled: rows.length, usable: pop.length, minReadableN: MIN_N, breakEvenPct: BREAK_EVEN },
+      regimeSplit,
+      split: {
+        cutoffDate: outSample.length ? outSample[0].date : null,
+        inSampleRows: inSample.length,
+        outOfSampleRows: outSample.length,
+      },
+      inSample: { edgeSweep: inSweep, incumbentBand: inIncumbent, chosenFrac: frozenFrac,
+        note: "Formed by looking at these rows only. Best-of-9 here proves nothing on its own." },
+      outOfSample: { frozenFrac, edgeRule: oosEdge, incumbentBand: oosIncumbent, deltaRoiPts: delta,
+        note: "Never inspected while the fraction was chosen. THIS is the test." },
+      verdict,
+      rawOutOfRange: { count: outOfRangeRows.length, rows: outOfRangeRows.slice(0, 20),
+        note: "Rows where claimed/edge cannot be decomposed into the 55/45 blend -- expected on games with no clean two-way price. Listed rather than stepped around." },
+      reading: "Read regimeSplit FIRST. Then read `verdict` -- and if it says INCONCLUSIVE, that is the honest answer and nothing ships. A rule that beats the incumbent out-of-sample has earned forward shadow-recording only; it has not earned a customer.",
+    });
+  } catch (err) {
+    console.error("[oossplit] error:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
