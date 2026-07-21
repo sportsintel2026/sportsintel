@@ -1008,8 +1008,10 @@ router.get("/oossplit", async (req, res) => {
     if (!pop.length) verdict = "NO DATA.";
     else if (!oosEdge.readable || !oosIncumbent.readable)
       verdict = `INCONCLUSIVE -- out-of-sample n is under ${MIN_N} (edge rule n=${oosEdge.n}, incumbent n=${oosIncumbent.n}). This is the expected outcome on a history this short. It is NOT evidence the rule works and NOT evidence it fails. Do not ship on this.`;
+    else if (delta != null && delta > 0 && (oosEdge.roiPctFlatAt110 ?? -999) > 0)
+      verdict = `SURVIVED out-of-sample: beat the incumbent by ${delta} ROI points AND returned a profit (${oosEdge.roiPctFlatAt110}%). Earns forward shadow-recording. Not clearance to publish.`;
     else if (delta != null && delta > 0)
-      verdict = `SURVIVED out-of-sample by ${delta} ROI points. This earns the right to be shadow-recorded FORWARD on unplayed games. It is not clearance to publish.`;
+      verdict = `FAILED -- beat the incumbent by ${delta} ROI points but still LOST money (${oosEdge.roiPctFlatAt110}%). WZ-OOS-VERDICT-FIX-2026-07-20 :: the original threshold was "beats incumbent", which called a losing rule a survivor. Losing slower is not winning.`;
     else
       verdict = `FAILED out-of-sample (${delta} ROI points vs incumbent). Drop the edge selector. The in-sample result was pattern-fitting.`;
 
@@ -1034,6 +1036,185 @@ router.get("/oossplit", async (req, res) => {
     });
   } catch (err) {
     console.error("[oossplit] error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// WZ-TIMELINE-2026-07-20 :: READ-ONLY. What did the board actually DO, week by week, and what had
+// just been changed when it did it?
+//
+// Every probe before this one FIT something -- picked a cutoff, chose a best-of-N, then judged the
+// choice on the same rows that produced it. That is how the top-50-by-edge "68%" happened and it is
+// why it evaporated out-of-sample. This endpoint fits NOTHING. It bins settled rows into fixed 7-day
+// windows, reports what each week returned, and prints the pricing-model change dates alongside.
+// There is no rule to tune and no winner to pick, so there is nothing here to overfit.
+//
+// The change dates below are read off git history of backend/services/edgesModel.js -- verified
+// commits, not recollection:
+//   2026-05-29  TOTAL_SD = 4.0 set (unchanged since -- still the open item)
+//   2026-06-01..05  market blend weight churn 0.70 -> 0.45 -> 0.55 (settled 06-05)
+//   2026-06-26  TOTAL_MEAN_ADJ = +0.20 runs added to EVERY total projection (speculative, per its
+//               own comment "to be refined from the by-side ROI split" -- it never was)
+//   2026-07-12  market blend extended to TOTALS (WZ-TOT-WINBLEND-2026-07-12)
+//   2026-07-17  TOTAL_MEAN_ADJ reverted to 0.0 (overs were -9.7% ROI vs unders +1%)
+//
+// THE TEST: +0.20 runs pushes every projection toward the OVER. If it is the cause, the OVER side
+// specifically should degrade from ~06-26, and recover after ~07-17, while the UNDER side does not
+// move with it. If overs and unders fall together, or if the fall starts well before 06-26, then
+// +0.20 was a passenger and something else is still unaccounted for. bySide is the whole point of
+// this endpoint -- a pooled weekly win% cannot distinguish those two stories.
+//
+// GET /api/performance/timeline [?league=mlb][&market=total][&days=7][&window=14]
+router.get("/timeline", async (req, res) => {
+  try {
+    const supabase = db();
+    const league = req.query.league || "mlb";
+    const market = req.query.market || "total";
+    const BIN_DAYS = Math.max(1, Math.min(28, parseInt(req.query.days || "7", 10)));
+    const WINDOW_DAYS = Math.max(3, Math.min(60, parseInt(req.query.window || "14", 10)));
+    const BAND = 0.55;
+    const BREAK_EVEN = 52.4;
+    const MIN_N = 40;
+    const PAGE = 1000;
+
+    const CHANGE_LOG = [
+      { date: "2026-05-29", label: "TOTAL_SD = 4.0 set", affectsTotals: true },
+      { date: "2026-06-05", label: "blend weight settled at 0.55 (after 0.70/0.45 churn)", affectsTotals: false },
+      { date: "2026-06-26", label: "TOTAL_MEAN_ADJ = +0.20 runs added to every total", affectsTotals: true },
+      { date: "2026-07-12", label: "market blend extended to totals", affectsTotals: true },
+      { date: "2026-07-17", label: "TOTAL_MEAN_ADJ reverted to 0.0", affectsTotals: true },
+    ];
+
+    const rows = [];
+    let from = 0;
+    for (let i = 0; i < 40; i++) {
+      const { data, error } = await supabase.from("model_predictions")
+        .select("game_id, model_prob, edge, selection, result, game_date")
+        .eq("league", league).eq("market", market)
+        .in("result", ["win", "loss"])
+        .order("game_date", { ascending: true }).range(from, from + PAGE - 1);
+      if (error) throw error;
+      if (!data || !data.length) break;
+      rows.push(...data);
+      if (data.length < PAGE) break;
+      from += PAGE;
+    }
+
+    const pop = [];
+    for (const r of rows) {
+      if (!r.game_date || r.result == null) continue;
+      const claimed = r.model_prob == null ? null : Number(r.model_prob);
+      const sel = String(r.selection || "").toLowerCase();
+      pop.push({
+        date: String(r.game_date).slice(0, 10),
+        claimed,
+        inBand: claimed != null && claimed >= BAND,
+        side: sel.includes("over") ? "over" : sel.includes("under") ? "under" : "other",
+        won: r.result === "win",
+      });
+    }
+    pop.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+
+    if (!pop.length) return res.json({ token: "WZ-TIMELINE-2026-07-20", note: "no graded rows" });
+
+    const r1 = (x) => (Number.isFinite(x) ? Math.round(x * 10) / 10 : null);
+    function agg(sel) {
+      const n = sel.length;
+      if (!n) return { n: 0 };
+      const wins = sel.filter(r => r.won).length;
+      const winPct = (wins / n) * 100;
+      return {
+        n, wins, losses: n - wins,
+        winPct: r1(winPct),
+        roiPctFlatAt110: r1(((wins * (100 / 110) - (n - wins)) / n) * 100),
+        vsBreakEvenPts: r1(winPct - BREAK_EVEN),
+      };
+    }
+    const dayMs = 86400000;
+    const toD = (s) => new Date(s + "T00:00:00Z").getTime();
+    const toS = (t) => new Date(t).toISOString().slice(0, 10);
+
+    // ---- fixed-width bins from the first settled game. No boundary is chosen to make anything look good.
+    const t0 = toD(pop[0].date);
+    const tEnd = toD(pop[pop.length - 1].date);
+    const weekly = [];
+    for (let s = t0; s <= tEnd; s += BIN_DAYS * dayMs) {
+      const e = s + (BIN_DAYS - 1) * dayMs;
+      const sStr = toS(s), eStr = toS(e);
+      const inBin = pop.filter(r => r.date >= sStr && r.date <= eStr);
+      if (!inBin.length) continue;
+      const band = inBin.filter(r => r.inBand);
+      weekly.push({
+        weekStart: sStr,
+        weekEnd: eStr,
+        events: CHANGE_LOG.filter(c => c.date >= sStr && c.date <= eStr).map(c => c.label),
+        allGraded: agg(inBin),
+        published: agg(band),
+        bySide: {
+          over: agg(inBin.filter(r => r.side === "over")),
+          under: agg(inBin.filter(r => r.side === "under")),
+        },
+        publishedBySide: {
+          over: agg(band.filter(r => r.side === "over")),
+          under: agg(band.filter(r => r.side === "under")),
+        },
+      });
+    }
+
+    // ---- symmetric windows around each change date. Same width both sides, so the comparison is fair.
+    const aroundChanges = CHANGE_LOG.map(c => {
+      const cd = toD(c.date);
+      const bStart = toS(cd - WINDOW_DAYS * dayMs), bEnd = toS(cd - dayMs);
+      const aStart = c.date, aEnd = toS(cd + (WINDOW_DAYS - 1) * dayMs);
+      const before = pop.filter(r => r.date >= bStart && r.date <= bEnd);
+      const after = pop.filter(r => r.date >= aStart && r.date <= aEnd);
+      const pack = (arr) => ({
+        allGraded: agg(arr),
+        over: agg(arr.filter(r => r.side === "over")),
+        under: agg(arr.filter(r => r.side === "under")),
+      });
+      const bo = agg(before.filter(r => r.side === "over")).roiPctFlatAt110;
+      const ao = agg(after.filter(r => r.side === "over")).roiPctFlatAt110;
+      const bu = agg(before.filter(r => r.side === "under")).roiPctFlatAt110;
+      const au = agg(after.filter(r => r.side === "under")).roiPctFlatAt110;
+      return {
+        date: c.date, label: c.label, affectsTotals: c.affectsTotals, windowDays: WINDOW_DAYS,
+        before: { range: `${bStart}..${bEnd}`, ...pack(before) },
+        after: { range: `${aStart}..${aEnd}`, ...pack(after) },
+        overRoiShiftPts: (bo != null && ao != null) ? r1(ao - bo) : null,
+        underRoiShiftPts: (bu != null && au != null) ? r1(au - bu) : null,
+        readable: before.length >= MIN_N && after.length >= MIN_N,
+      };
+    });
+
+    // ---- the +0.20 era vs the two neutral eras either side of it. This is the direct comparison.
+    const era = (a, b) => pop.filter(r => r.date >= a && (b == null || r.date < b));
+    const eraPack = (arr, label, note) => ({
+      label, note,
+      range: arr.length ? `${arr[0].date}..${arr[arr.length - 1].date}` : null,
+      allGraded: agg(arr),
+      over: agg(arr.filter(r => r.side === "over")),
+      under: agg(arr.filter(r => r.side === "under")),
+      published: agg(arr.filter(r => r.inBand)),
+    });
+    const meanAdjEras = [
+      eraPack(era(pop[0].date, "2026-06-26"), "BEFORE +0.20", "TOTAL_MEAN_ADJ did not exist"),
+      eraPack(era("2026-06-26", "2026-07-17"), "DURING +0.20", "every total projection nudged up 0.20 runs"),
+      eraPack(era("2026-07-17", null), "AFTER revert", "back to neutral -- SHORT, expect n well under readable"),
+    ];
+
+    res.json({
+      token: "WZ-TIMELINE-2026-07-20",
+      league, market,
+      population: { gradedRowsPulled: rows.length, usable: pop.length, binDays: BIN_DAYS, minReadableN: MIN_N, breakEvenPct: BREAK_EVEN },
+      changeLog: CHANGE_LOG,
+      meanAdjEras,
+      aroundChanges,
+      weekly,
+      reading: "Nothing here is fitted -- bins are fixed width from the first settled game and change dates come from git, so no boundary was chosen to flatter a conclusion. Read meanAdjEras FIRST: if +0.20 caused the bleed, the OVER row should fall from BEFORE to DURING and recover AFTER, while UNDER stays roughly flat. If over and under fall together, the cause is not the mean nudge. If the fall begins in weeks BEFORE 2026-06-26, +0.20 was a passenger. Weekly n is small -- single-week roiPctFlatAt110 will swing hard on noise and must not be read as signal on its own; look for a sustained level shift across several consecutive bins that lines up with a date, not one bad week. The AFTER-revert era is only a few days old and will not be readable yet.",
+    });
+  } catch (err) {
+    console.error("[timeline] error:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
