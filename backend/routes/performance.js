@@ -719,6 +719,163 @@ router.get("/totalsbias", async (req, res) => {
   }
 });
 
+// WZ-SELECT-BACKTEST-2026-07-20 :: READ-ONLY. Does the confident band pick the right GAMES?
+// /totalsbias measured how loudly we claim. This measures WHICH ROWS we claim on -- a different
+// defect with a different fix. The board's published totals prob is a blend:
+//        claimed = W_MODEL*raw + (1-W_MODEL)*fairMarket
+// and the confident band selects on `claimed`. So ~45% of the selection variable is the BOOK's
+// de-vigged price. When the two-way total is lopsided (fair >= 0.54, i.e. the true number sits
+// between two half-run increments) that market term alone can lift a row into the band with no
+// contribution from our projection -- and symmetrically, when we strongly DISAGREE with a lopsided
+// book, that same term drags a large real edge back down below the cut and we never publish it.
+//
+// This endpoint does NOT assume the alternative is better. HANDOFF PRIOR (moneyline selector):
+// "never cut on edge" -- cutting on edge selects for maximum MODEL ERROR when the model is
+// miscalibrated, which is a real and well-documented failure mode. That prior is not ignored here,
+// it is TESTED. Four candidate selectors are replayed over the same graded history at the same
+// selection size, and the actual returned win% is read off real settled rows. Nothing ships unless
+// it beats the incumbent on this population.
+//
+// Recoveries (exact, no new data): fair = claimed - edge   (blendedEdge returns claimed - fair)
+//                                  raw  = (claimed - (1-W_MODEL)*fair) / W_MODEL
+// GET /api/performance/selectbacktest [?since=YYYY-MM-DD][&league=mlb][&market=total]
+router.get("/selectbacktest", async (req, res) => {
+  try {
+    const supabase = db();
+    const since = req.query.since || null;
+    const league = req.query.league || "mlb";
+    const market = req.query.market || "total";
+    const W = 0.55;              // must mirror W_MODEL in edgesModel.js
+    const BAND = 0.55;           // must mirror calibrationGuard confidentBand
+    const LOPSIDED = 0.54;       // must mirror lopsidedMarketRows in /totalsbias
+    const BREAK_EVEN = 52.4;     // -110
+    const PAGE = 1000;
+
+    const rows = [];
+    let from = 0;
+    for (let i = 0; i < 40; i++) {
+      let q = supabase.from("model_predictions")
+        .select("model_prob, edge, selection, result, game_date")
+        .eq("league", league).eq("market", market)
+        .in("result", ["win", "loss"])
+        .order("game_date", { ascending: true }).range(from, from + PAGE - 1);
+      if (since) q = q.gte("game_date", since);
+      const { data, error } = await q;
+      if (error) throw error;
+      if (!data || !data.length) break;
+      rows.push(...data);
+      if (data.length < PAGE) break;
+      from += PAGE;
+    }
+
+    let rawOutOfRange = 0;
+    const pop = [];
+    for (const r of rows) {
+      if (r.model_prob == null || r.edge == null) continue;
+      const claimed = Number(r.model_prob);
+      const edge = Number(r.edge);
+      if (!Number.isFinite(claimed) || !Number.isFinite(edge)) continue;
+      const fair = claimed - edge;
+      const raw = (claimed - (1 - W) * fair) / W;
+      if (!(raw > -0.01 && raw < 1.01)) rawOutOfRange++;
+      pop.push({
+        claimed, edge, fair, raw,
+        won: r.result === "win",
+        lopsided: fair >= LOPSIDED,
+        key: `${r.game_date}|${r.selection}`,
+      });
+    }
+
+    const r1 = (x) => (Number.isFinite(x) ? Math.round(x * 10) / 10 : null);
+    const mean = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
+
+    // A selection is judged ONLY on what it actually returned on settled rows.
+    function score(sel, label, note) {
+      const n = sel.length;
+      if (!n) return { label, n: 0, note: note || "empty selection" };
+      const wins = sel.filter(r => r.won).length;
+      const winPct = (wins / n) * 100;
+      // flat-stake return at -110: a win pays 0.909u, a loss costs 1u
+      const roi = ((wins * (100 / 110) - (n - wins)) / n) * 100;
+      return {
+        label,
+        n,
+        wins,
+        losses: n - wins,
+        meanClaimedPct: r1(mean(sel.map(r => r.claimed)) * 100),
+        actualWinPct: r1(winPct),
+        gapPts: r1(mean(sel.map(r => r.claimed)) * 100 - winPct),
+        vsBreakEvenPts: r1(winPct - BREAK_EVEN),
+        roiPctFlatAt110: r1(roi),
+        lopsidedRows: sel.filter(r => r.lopsided).length,
+        meanFairMarketPct: r1(mean(sel.map(r => r.fair)) * 100),
+        note: note || undefined,
+      };
+    }
+
+    const current = pop.filter(r => r.claimed >= BAND);
+    const N = current.length;
+    const topBy = (arr, f, k) => arr.slice().sort((a, b) => f(b) - f(a)).slice(0, k);
+
+    const byEdge = topBy(pop, r => r.edge, N);
+    const byRaw = topBy(pop, r => r.raw, N);
+    const exLopsided = current.filter(r => !r.lopsided);
+
+    const curKeys = new Set(current.map(r => r.key));
+    const overlap = (sel) => (sel.length ? Math.round((sel.filter(r => curKeys.has(r.key)).length / sel.length) * 1000) / 10 : null);
+
+    const rules = {
+      current_claimedBand: {
+        ...score(current, `claimed >= ${BAND} (INCUMBENT -- what ships today)`),
+        overlapWithCurrentPct: 100,
+      },
+      candidate_topNByEdge: {
+        ...score(byEdge, `top ${N} by edge (model minus book)`, "The handoff prior says never cut on edge. This row is the test of that prior, not a recommendation."),
+        overlapWithCurrentPct: overlap(byEdge),
+      },
+      candidate_topNByRawModel: {
+        ...score(byRaw, `top ${N} by raw model prob (market stripped out)`, "Selection on our projection alone, with the book's price removed from the sort key."),
+        overlapWithCurrentPct: overlap(byRaw),
+      },
+      candidate_currentMinusLopsided: {
+        ...score(exLopsided, `claimed >= ${BAND} AND fair < ${LOPSIDED}`, "Incumbent with lopsided-book rows dropped. Subtractive -- smaller board, no new picks."),
+        overlapWithCurrentPct: 100,
+      },
+    };
+
+    // Shape of the edge selector at several sizes, so a single N is not mistaken for a result.
+    const sweepSizes = [25, 50, 100, 150, 200, N, 300, 400].filter((v, i, a) => v > 0 && v <= pop.length && a.indexOf(v) === i).sort((a, b) => a - b);
+    const edgeSweep = sweepSizes.map(k => {
+      const s = score(topBy(pop, r => r.edge, k), `top ${k} by edge`);
+      return { topN: k, n: s.n, actualWinPct: s.actualWinPct, vsBreakEvenPts: s.vsBreakEvenPts, roiPctFlatAt110: s.roiPctFlatAt110, lopsidedRows: s.lopsidedRows };
+    });
+
+    res.json({
+      token: "WZ-SELECT-BACKTEST-2026-07-20",
+      league,
+      market,
+      since: since || "all",
+      population: {
+        gradedRowsPulled: rows.length,
+        usable: pop.length,
+        lopsidedRowsInPopulation: pop.filter(r => r.lopsided).length,
+        rawOutOfRange,
+        wModelMirror: W,
+        confidentBand: BAND,
+        lopsidedThreshold: LOPSIDED,
+        breakEvenPct: BREAK_EVEN,
+      },
+      selectionSize: N,
+      rules,
+      edgeSweep,
+      reading: "Compare actualWinPct and roiPctFlatAt110 across `rules` at the SAME selectionSize -- that is the only apples-to-apples comparison, because a smaller board always looks better on win%. A candidate ships ONLY if it beats current_claimedBand on actual return at equal n AND holds up across edgeSweep rather than at one lucky size. If rawOutOfRange is not 0, the blend identity does not hold on some rows and every number here is suspect. gapPts is over-claim (claimed minus delivered); vsBreakEvenPts under 0 means the selection lost money at -110 regardless of how good the win% looks.",
+    });
+  } catch (err) {
+    console.error("[selectbacktest] error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // WZ-FBALL-CALIB-2026-07-17 :: football (NFL/CFB) shadow-calibration + bias meter. Mirrors the MLB
 // /calibprobe shadowFullSlate and totalsbias, reading the full-slate *_shadow rows the football
 // recorder writes (moneyline_shadow / spread_shadow / total_shadow, per league). Read-only — these
