@@ -111,6 +111,7 @@ const {
 const { recordPredictions, recordTotalBasesShadow, recordStrikeoutShadow, recordHitsShadow } = require("../services/predictionTracker"); // WZ-HITSSHADOW-WIRE-2026-07-02
 const { isBenched } = require("../services/calibrationGuard"); // WZ-CALIB-GUARD-2026-07-17 :: auto-bench drifting markets
 const { probeTeamFielding } = require("../services/savantApi"); // WZ-FIELDPROBE-2026-07-10 :: team-defense endpoint discovery (read-only)
+const reality = require("../services/realityCorrection"); // WZ-REALITY-2026-07-24
 // In-memory cache
 let edgesCache = null;
 let edgesCacheAt = 0;
@@ -620,7 +621,7 @@ router.get("/mlb", gatePicks, async (req, res) => {
       // The pick = the side our model gives the higher win probability (who we think WINS).
       const pickHome = (ml.homeWinProb ?? 0) >= (ml.awayWinProb ?? 0);
       const prob = pickHome ? ml.homeWinProb : ml.awayWinProb;
-      if (prob < WINNER_MIN) continue; // coin-flip or worse -> not a winner, leave it off the board
+      if (!reality.qualifies("moneyline", prob, pickHome ? ml.homeOdds : ml.awayOdds)) continue; // WZ-REALITY-2026-07-24 :: publish on EV at the posted price, not a raw probability floor
       // WZ-ML-INFLATION-GATE-2026-07-19 :: DO NOT PUBLISH A WINNER WE ARE ALREADY FLAGGING AS INFLATED.
       // overreactionNote() in edgesModel already computes, for every side, whether the market's
       // de-vigged fair probability sits >= INFLATION_THRESHOLD (0.08) ABOVE our raw fundamentals --
@@ -658,7 +659,7 @@ router.get("/mlb", gatePicks, async (req, res) => {
         side: pickHome ? "home" : "away",
         team: pickHome ? ge.game.home : ge.game.away,
         teamAbbr: pickHome ? ge.game.homeAbbr : ge.game.awayAbbr,
-        modelProb: prob,
+        modelProb: reality.correct("moneyline", prob), // WZ-REALITY-2026-07-24 :: publish what the claim has historically delivered
         odds: pickHome ? ml.homeOdds : ml.awayOdds,
         edge,
         isValue: (edge ?? 0) > 0, // "+VALUE" tag when the winner is also underpriced -- NEVER the sort key
