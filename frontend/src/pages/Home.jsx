@@ -290,9 +290,13 @@ export default function HomePage(){
   // (All, ML, Spread, Totals). Display order ONLY -- the graded record reads the backend board and
   // is unaffected; no picks, no model math, and no totals math change here.
   const byWinProb=(a,b)=>(((b.modelProb??-1)-(a.modelProb??-1))||(tierRank(b._convAdj)-tierRank(a._convAdj))||((b.convictionScore||0)-(a.convictionScore||0))||((b.edge||0)-(a.edge||0)));
-  // WZ-WINNERS-2026-07-07 :: the Moneyline board is now the WINNERS board -- the backend sends every
-  // 55%+ winner (one side per game), so NO edge gate here (a fairly-priced winner still shows). Run
-  // Line / Totals keep the value (edge) gate. Sorted by win% either way.
+  // WZ-WINNERS-2026-07-07 :: the Moneyline board is the WINNERS board -- the backend sends every
+  // published winner (one side per game); price never chooses the pick, so a fairly-priced or even
+  // negative-edge winner still shows. Run Line / Totals keep the value (edge) gate. Sorted by win%.
+  // WZ-MLGATE-FIX-2026-07-24 :: correcting the old "NO edge gate here" claim -- it was FALSE from
+  // 2026-07-20, when the rendered board (boardSrc, ~L464) silently re-added an `edge > 0` gate for MLB
+  // and mobile dropped every fairly-priced winner. That gate is removed; mobile now matches desktop and
+  // the backend. NOTE: boardEdges just below is KPI/pulse-only, not the rendered board.
   const boardEdges=oneSidePerGame(boardArr||[]).filter(x=>sport==="mlb"?(x.edge??0)>0:(x.edge??0)>=1).sort(byWinProb);
   const _todayEdgeN=(e.moneylineEdges||[]).length+(e.totalsEdges||[]).length+(e.runLineEdges||[]).length+(e.spreadEdges||[]).length; const _mb=(_todayEdgeN===0&&preview&&!preview.rolledToNextDay)?preview:e; /* WZ-BOARD-NEVER-EMPTY-2026-07-08 :: movers follow tomorrow when today is empty */
   const moverPool=[...(_mb.moneylineEdges||[]),...(_mb.totalsEdges||[]),...(_mb.runLineEdges||[]),...(_mb.spreadEdges||[])].map(x=>{ const ser=seriesFor(x); const open=(ser&&ser.length)?ser[0].o:null; const now=(ser&&ser.length)?ser[ser.length-1].o:x.odds; const delta=(open!=null&&ser&&ser.length>1)?(amCents(now)-amCents(open)):null; return {...x,_open:open,_now:now,_delta:delta}; });
@@ -461,7 +465,14 @@ export default function HomePage(){
   // board surface. (Dropped: it was moneyline betting already covered by the Edge Board,
   // and it headlined uncalibrated raw win% — off the storefront until the model earns it.)
 
-  const boardSrc = allAdj.filter(x=>sport==="mlb"?(x.edge??0)>0:(x.edge??0)>=1).sort(sortBoard); // WZ-ONEBOARD-2026-07-20 :: the "all" branch, unchanged -- it was the only branch reachable
+  // WZ-ONEBOARD-2026-07-20 :: the "all" branch, unchanged -- it was the only branch reachable
+  // WZ-MLGATE-FIX-2026-07-24 :: key the gate on MARKET, not sport. ML ungated (winners board); totals/run-line
+  // keep their value (edge) gate. Per-source so it stays correct when a parked market (totals/run_line) un-benches
+  // and its array repopulates -- a sport-wide `true` would then leak ungated totals/RL picks onto the board.
+  const boardSrc = (sport==="mlb"
+    ? [...mlAdj, ...totAdj.filter(x=>(x.edge??0)>0), ...spAdj.filter(x=>(x.edge??0)>0)]
+    : allAdj.filter(x=>(x.edge??0)>=1)
+  ).sort(sortBoard);
   // WZ-BOARD-UFC-CARD-2026-07-11 :: one card per game — keep each game's single best (highest) edge, winner-first order.
   const bestPerGame=(arr)=>{ const m=new Map(); for(const d of arr){ const g=d.gameId; const p=m.get(g); if(!p||(d.edge??-99)>(p.edge??-99)) m.set(g,d); } return [...m.values()].sort((a,b)=>((b.model??-1)-(a.model??-1))||((b.edge??0)-(a.edge??0))); };
   const boardItems = bestPerGame(boardSrc.map(toBoard));
@@ -469,7 +480,13 @@ export default function HomePage(){
   // pipeline (moveAdjust -> oneSidePerGame -> win-first sort -> toBoard) so it matches today exactly.
   const pv = (sport==="mlb"&&preview&&!preview.rolledToNextDay) ? preview : null;
   const pvMlAdj=(pv?.moneylineEdges||[]).map(moveAdjust), pvTotAdj=(pv?.totalsEdges||[]).map(moveAdjust), pvSpAdj=[...(pv?.runLineEdges||[]),...(pv?.spreadEdges||[])].map(moveAdjust);
-  const previewItems = bestPerGame(pv ? [...pvMlAdj,...pvTotAdj,...pvSpAdj].filter(x=>(x.edge??0)>0).sort(byWinProb).map(toBoard) : []);
+  // WZ-MLGATE-FIX-2026-07-24 :: key on MARKET, not sport (this is the board that renders when today is empty,
+  // isTomorrowMain). ML ungated; totals/run-line keep the edge gate so a parked market un-benching can't leak.
+  const previewItems = bestPerGame(pv ? [
+    ...pvMlAdj,
+    ...pvTotAdj.filter(x=>(x.edge??0)>0),
+    ...pvSpAdj.filter(x=>(x.edge??0)>0),
+  ].sort(byWinProb).map(toBoard) : []);
   const previewLabel = pv&&pv.date ? fmtSlate(pv.date).toUpperCase() : "";
   const boardDate = fmtSlateFull(e.date || todayISO());
   // WZ-WINNERS-V2-2026-07-04 :: Best Plays carousel = winner+value plays first (our
