@@ -72,7 +72,7 @@ Read this before touching anything. The canonical path is MLB moneyline; the oth
 4. **Blend.** `winProb = 0.55·raw + 0.45·fair`. This blended number is what the board displays, what it ranks on, and what gets recorded as `model_prob`. The raw model alone was market-blind and lagged badly (~43.7%); anchoring it to the sharp price is what fixed that.
 5. **Edge.** `edge = 0.55·(raw − fair)` — how far the blended opinion sits from the market after respecting it. Agreeing with a sharp price is correctly not an edge.
 6. **Tier.** `rateConfidence(edge)`: LOW ≥ 0.005, MEDIUM ≥ 0.025, HIGH ≥ 0.05.
-7. **Board.** Ranked by `winProb`, floored at ≥ 0.55. What clears the floor is a **published pick** and is what a paying subscriber sees.
+7. **Board.** Ranked by `winProb`, floored at ≥ 0.45 (`WINNER_MIN`; was 0.55 — WZ-FLOOR-2026-07-24). Since the picked (winner) side is ≥ 0.50 by construction, the 0.45 floor removes nothing — it is effectively open. What clears the floor is a **published pick** and is what a paying subscriber sees.
 8. **Record.** `predictionTracker.js` snapshots every surfaced edge pre-game into `model_predictions` — including ones that never publish, which is what makes the counterfactual readable.
 9. **Close + CLV.** `captureClosingLines()` grabs the last pre-game price and computes CLV against the price we took.
 10. **Grade.** Result written back as win/loss. `calibrationGuard.js` then checks whether picks won as often as they claimed.
@@ -81,7 +81,7 @@ Read this before touching anything. The canonical path is MLB moneyline; the oth
 
 - **Win %** — the *blended* probability from step 4, not the raw model. `winProb − edge == fair` exactly, by construction.
 - **Edge** — `model_prob − fair`. Long treated as *the bug* (it "should" be `model_prob − breakEven` vs the posted price), but the board records **best-of-books** prices (`edges.js:662`, `odds:` field), which compress the two-way overround to ~0%, leaving `devigTwoWay` nothing to remove: `fair ≈ breakEven`. The supposed 1.1–2.4-pt gap measured **0.00** on 2026-07-23 — edge was already an EV measure. See THE MONEY PROBLEM below.
-- **Pick** — a row that cleared the 0.55 floor and went on the board.
+- **Pick** — a row that cleared the publish floor (`WINNER_MIN`, now 0.45; was 0.55) and went on the board.
 
 ### What we are actually hunting
 
@@ -154,12 +154,12 @@ The US-book `clv` at line 236 is sound (vigged on both sides, cancels).
 
 ## ORDER OF WORK
 
-1. **Fit γ — BUILT, awaiting a read.** `backend/routes/gammafit.js`, mounted at `/api/gammafit`, read-only, no admin gate. Takes `?league=` and `?market=`. It reconstructs `fair` and `raw` from stored fields, **validates that reconstruction before reporting anything** (`reconstruction.vigTaxPts` should land near 2.2; if it doesn't, the identity failed and every number below it is void), fits γ against both outcomes and the Pinnacle close, runs a 60/40 out-of-sample split priced at real odds, and audits how much of the published board was −EV.
+1. **Fit γ — BUILT, awaiting a read.** `backend/routes/gammafit.js`, mounted at `/api/gammafit`, read-only, no admin gate. Takes `?league=` and `?market=`. It reconstructs `fair` and `raw` from stored fields, **validates that reconstruction before reporting anything** (`reconstruction.vigTaxPts` should land near 2.2; if it doesn't, the identity failed and every number below it is void — **but heed THE MONEY PROBLEM item 1: that 2.2 is the pre-best-of-books expectation. With best-of-books pricing the real vig tax is ~0, so this ruler-check will wrongly declare valid data void. Reconcile the probe's check before trusting its read**), fits γ against both outcomes and the Pinnacle close, runs a 60/40 out-of-sample split priced at real odds, and audits how much of the published board was −EV.
 
    The first read of this endpoint is the gate on everything else. Do not propose a selection rule before it.
 2. **Fix `pinnacle_clv`.** Then re-read every CLV-based conclusion.
 3. **Add `opp_odds` at write time.**
-4. **Only then touch the board** — move the gate from `blendedProb ≥ 0.55` to `EV ≥ margin` at the posted price, validated out-of-sample on CLV.
+4. **Only then touch the board** — move the gate from the raw probability floor (`blendedProb ≥ 0.45`, was 0.55, and effectively open per HOW A PICK step 7) to `EV ≥ margin` at the posted price, validated out-of-sample on CLV.
 
 Steps 1–3 change nothing a customer sees. Nothing reaches a subscriber on a backtest alone.
 
