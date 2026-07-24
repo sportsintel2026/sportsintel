@@ -465,7 +465,14 @@ export default function HomePage(){
   // board surface. (Dropped: it was moneyline betting already covered by the Edge Board,
   // and it headlined uncalibrated raw win% — off the storefront until the model earns it.)
 
-  const boardSrc = allAdj.filter(x=>sport==="mlb"?true:(x.edge??0)>=1).sort(sortBoard); // WZ-ONEBOARD-2026-07-20 :: the "all" branch, unchanged -- it was the only branch reachable // WZ-MLGATE-FIX-2026-07-24 :: MLB edge gate removed -- show every winner, price never chooses the pick
+  // WZ-ONEBOARD-2026-07-20 :: the "all" branch, unchanged -- it was the only branch reachable
+  // WZ-MLGATE-FIX-2026-07-24 :: key the gate on MARKET, not sport. ML ungated (winners board); totals/run-line
+  // keep their value (edge) gate. Per-source so it stays correct when a parked market (totals/run_line) un-benches
+  // and its array repopulates -- a sport-wide `true` would then leak ungated totals/RL picks onto the board.
+  const boardSrc = (sport==="mlb"
+    ? [...mlAdj, ...totAdj.filter(x=>(x.edge??0)>0), ...spAdj.filter(x=>(x.edge??0)>0)]
+    : allAdj.filter(x=>(x.edge??0)>=1)
+  ).sort(sortBoard);
   // WZ-BOARD-UFC-CARD-2026-07-11 :: one card per game — keep each game's single best (highest) edge, winner-first order.
   const bestPerGame=(arr)=>{ const m=new Map(); for(const d of arr){ const g=d.gameId; const p=m.get(g); if(!p||(d.edge??-99)>(p.edge??-99)) m.set(g,d); } return [...m.values()].sort((a,b)=>((b.model??-1)-(a.model??-1))||((b.edge??0)-(a.edge??0))); };
   const boardItems = bestPerGame(boardSrc.map(toBoard));
@@ -473,7 +480,13 @@ export default function HomePage(){
   // pipeline (moveAdjust -> oneSidePerGame -> win-first sort -> toBoard) so it matches today exactly.
   const pv = (sport==="mlb"&&preview&&!preview.rolledToNextDay) ? preview : null;
   const pvMlAdj=(pv?.moneylineEdges||[]).map(moveAdjust), pvTotAdj=(pv?.totalsEdges||[]).map(moveAdjust), pvSpAdj=[...(pv?.runLineEdges||[]),...(pv?.spreadEdges||[])].map(moveAdjust);
-  const previewItems = bestPerGame(pv ? [...pvMlAdj,...pvTotAdj,...pvSpAdj].filter(x=>sport==="mlb"?true:(x.edge??0)>0).sort(byWinProb).map(toBoard) : []); // WZ-MLGATE-FIX-2026-07-24 :: MLB edge gate removed here too — this is the board that renders when today is empty (isTomorrowMain)
+  // WZ-MLGATE-FIX-2026-07-24 :: key on MARKET, not sport (this is the board that renders when today is empty,
+  // isTomorrowMain). ML ungated; totals/run-line keep the edge gate so a parked market un-benching can't leak.
+  const previewItems = bestPerGame(pv ? [
+    ...pvMlAdj,
+    ...pvTotAdj.filter(x=>(x.edge??0)>0),
+    ...pvSpAdj.filter(x=>(x.edge??0)>0),
+  ].sort(byWinProb).map(toBoard) : []);
   const previewLabel = pv&&pv.date ? fmtSlate(pv.date).toUpperCase() : "";
   const boardDate = fmtSlateFull(e.date || todayISO());
   // WZ-WINNERS-V2-2026-07-04 :: Best Plays carousel = winner+value plays first (our
