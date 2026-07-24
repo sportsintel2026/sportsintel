@@ -569,6 +569,9 @@ async function recordPredictions(result) {
       cal_edge: e.edge ?? null,
       confidence: e.confidence, conviction: e.conviction ?? null, conviction_score: e.convictionScore ?? null, line: null,
       benched_at_pick: benchedNow("moneyline"), // WZ-BENCH-STAMP-2026-07-18
+      opp_odds: e.oppOdds ?? null,               // WZ-HANDOFF44-2026-07-24 :: opposing price at write time (unblocks correct de-vig CLV)
+      floor_at_pick: e.floorAtPick ?? null,      // WZ-HANDOFF44-2026-07-24 :: publish floor in force when the pick was stamped
+      inflation_gate_at_pick: e.inflationGateAtPick ?? null, // WZ-HANDOFF44-2026-07-24 :: inflation-gate regime (moneyline-only)
     });
   }
 
@@ -584,6 +587,7 @@ async function recordPredictions(result) {
       model_prob: e.modelProb, odds: e.odds, edge: e.edge,
       confidence: e.confidence, conviction: e.conviction ?? null, conviction_score: e.convictionScore ?? null, line: e.line,
       benched_at_pick: benchedNow("total"), // WZ-BENCH-STAMP-2026-07-18
+      opp_odds: e.oppOdds ?? null,          // WZ-HANDOFF44-2026-07-24 :: opposing price at write time
       bullpen_fatigue: fatigueById[e.gameId] || null,
       shadow_total: shadowById[e.gameId] ?? null,
       ...(breakdownById[e.gameId] || {}),
@@ -602,6 +606,7 @@ async function recordPredictions(result) {
       model_prob: e.modelProb, odds: e.odds, edge: e.edge,
       confidence: e.confidence, conviction: e.conviction ?? null, conviction_score: e.convictionScore ?? null, line: e.line,
       benched_at_pick: benchedNow("run_line"), // WZ-BENCH-STAMP-2026-07-18
+      opp_odds: e.oppOdds ?? null,             // WZ-HANDOFF44-2026-07-24 :: opposing price at write time
     });
   }
 
