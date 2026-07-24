@@ -41,6 +41,7 @@ const newsRoutes = require("./routes/news"); // WZ-NEWS-MOUNT-2026-06-26
 const nflPropsProbeRoutes = require("./routes/nflPropsProbe"); // WZ-NFLPROPS-MOUNT-2026-07-05
 const ufcRoutes = require("./routes/ufc"); // WZ-UFC-CARD-2026-07-09 :: UFC/MMA card endpoint (read-only)
 const aiReadRoutes = require("./routes/aiRead"); // WZ-AI-READ-2026-07-12 :: on-demand AI read (B), fail-safe
+const gammafitRoutes = require("./routes/gammafit"); // WZ-GAMMAFIT-2026-07-23
 const adminGuard = require("./middleware/adminGuard"); // WZ-ADMIN-GUARD-2026-07-17 :: locks diagnostic/trigger endpoints
 const calibrationGuard = require("./services/calibrationGuard"); // WZ-CALIB-GUARD-2026-07-17 :: auto-benches drifting markets
 
@@ -136,6 +137,7 @@ app.use("/api/edges/nba", edgesNbaRoutes);
 app.use("/api/edges", edgesRoutes);
 app.use("/api/matchups", matchupsRoutes);
 app.use("/api/performance", performanceRoutes);
+app.use("/api/gammafit", gammafitRoutes); // WZ-GAMMAFIT-2026-07-23 :: read-only
 app.use("/api/backtest", backtestRoutes);
 app.use("/api/nba", nbaRoutes);
 app.use("/api/scores", scoresRoutes);

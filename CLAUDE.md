@@ -60,6 +60,39 @@ Before any PR: `node --check` every file touched, run the relevant self-test, an
 
 ---
 
+## HOW A PICK ACTUALLY GETS MADE
+
+Read this before touching anything. The canonical path is MLB moneyline; the other markets are variations on it.
+
+1. **Odds in.** `oddsApi.js` pulls two-sided prices from the books. Pinnacle is pulled separately in the final pre-game window as the sharp reference.
+2. **Model out.** `edgesModel.js` produces a **raw win probability** from fundamentals — starting pitcher, bullpen load, team ratings, park, weather, umpire. This number knows nothing about the price.
+3. **De-vig.** `devigTwoWay(mine, theirs)` = `a/(a+b)` strips the book's margin and gives **`fair`** — the market's own opinion of the probability.
+4. **Blend.** `winProb = 0.55·raw + 0.45·fair`. This blended number is what the board displays, what it ranks on, and what gets recorded as `model_prob`. The raw model alone was market-blind and lagged badly (~43.7%); anchoring it to the sharp price is what fixed that.
+5. **Edge.** `edge = 0.55·(raw − fair)` — how far the blended opinion sits from the market after respecting it. Agreeing with a sharp price is correctly not an edge.
+6. **Tier.** `rateConfidence(edge)`: LOW ≥ 0.005, MEDIUM ≥ 0.025, HIGH ≥ 0.05.
+7. **Board.** Ranked by `winProb`, floored at ≥ 0.55. What clears the floor is a **published pick** and is what a paying subscriber sees.
+8. **Record.** `predictionTracker.js` snapshots every surfaced edge pre-game into `model_predictions` — including ones that never publish, which is what makes the counterfactual readable.
+9. **Close + CLV.** `captureClosingLines()` grabs the last pre-game price and computes CLV against the price we took.
+10. **Grade.** Result written back as win/loss. `calibrationGuard.js` then checks whether picks won as often as they claimed.
+
+### The three words, defined precisely
+
+- **Win %** — the *blended* probability from step 4, not the raw model. `winProb − edge == fair` exactly, by construction.
+- **Edge** — currently `model_prob − fair`. **This is the bug.** It should be `model_prob − breakEven`, measured against the posted price. The two differ by 1.1–2.4 points.
+- **Pick** — a row that cleared the 0.55 floor and went on the board.
+
+### What we are actually hunting
+
+**Not "which team wins." "Which price is wrong."**
+
+Those are different targets and the board currently conflates them. Ranking by win probability finds likely winners — which are favorites, which are expensive, which need the highest win rate to profit. A 58% favorite at −154 is a worse bet than a 44% underdog at +150, and the current board cannot see that because nothing in the selection path looks at the price it must beat.
+
+Every fix in this file points at the same thing: **make the board select on how mispriced a game is, not on how likely it is to win.**
+
+---
+
+
+
 ## THE MONEY PROBLEM — the live, open surgery
 
 **At the prices actually paid, the published board loses money.** MLB moneyline is live at roughly −2.1% real ROI on n=96.
@@ -96,6 +129,15 @@ Implemented in **`backend/services/priceMath.js`** (pure, dependency-free, `node
 | Resolve a 2-point ROI difference | ~7,500 |
 | Resolve a half-point CLV difference | ~62 |
 
+**Measured, not theorised** (2026-07-23, synthetic data with a known γ of 0.30, n=96):
+
+| Fit | 95% CI | Readable? |
+|---|---|---|
+| vs outcomes | [−1.03, 1.48] | no — cannot even determine the sign |
+| vs Pinnacle close | [0.292, 0.313] | yes — precise to two decimals |
+
+The CLV fit stayed significant even with closing-price noise pushed to ±0.40 in log-odds (~10 probability points, far worse than reality). The outcome fit was never readable at this n.
+
 Current published moneyline n=96. **Every outcome-based ROI read in this project is under-powered by two orders of magnitude**, including the −2.1% above and the tempting +1.6% on the unpublished population. Treat them as directional, never as verdicts.
 
 **CLV is the only instrument with power at this sample size.** Use it.
@@ -112,7 +154,9 @@ The US-book `clv` at line 236 is sound (vigged on both sides, cancels).
 
 ## ORDER OF WORK
 
-1. **Fit γ against CLV, not outcomes.** Regress stored `pinnacle_fair_prob` on the model's raw prob and the opening fair prob. This is the measurement that tells us whether the model has an edge at all, and it is readable at n=96.
+1. **Fit γ — BUILT, awaiting a read.** `backend/routes/gammafit.js`, mounted at `/api/gammafit`, read-only, no admin gate. Takes `?league=` and `?market=`. It reconstructs `fair` and `raw` from stored fields, **validates that reconstruction before reporting anything** (`reconstruction.vigTaxPts` should land near 2.2; if it doesn't, the identity failed and every number below it is void), fits γ against both outcomes and the Pinnacle close, runs a 60/40 out-of-sample split priced at real odds, and audits how much of the published board was −EV.
+
+   The first read of this endpoint is the gate on everything else. Do not propose a selection rule before it.
 2. **Fix `pinnacle_clv`.** Then re-read every CLV-based conclusion.
 3. **Add `opp_odds` at write time.**
 4. **Only then touch the board** — move the gate from `blendedProb ≥ 0.55` to `EV ≥ margin` at the posted price, validated out-of-sample on CLV.
