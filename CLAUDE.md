@@ -97,13 +97,13 @@ Every fix in this file points at the same thing: **make the board select on how 
 
 ## THE MONEY PROBLEM — the live, open surgery
 
-**At the prices actually paid, the published board loses money.** MLB moneyline is live at roughly −2.1% real ROI on n=96.
+**At the prices actually paid, MLB moneyline reads roughly −2.1% real ROI on n=96.** Do not call this "losing money": at n=96 that figure is under-powered and statistically consistent with zero (see MEASUREMENT — resolving a 2-point ROI difference needs ~7,500 bets). It is a directional read, not a verdict, and it no longer has a named root cause now that the vig finding is superseded (item 1). Don't invent one to explain a number this noisy.
 
 ### Root cause (vig finding SUPERSEDED 2026-07-23 — see item 1)
 
 1. **~~The selection quantity never subtracts the vig.~~ SUPERSEDED 2026-07-23 — measured 0.00.** The prior finding said `edgesModel.js:1169` reports edge as `modelProb − devigTwoWay(...)`, so the vig — `a·(S−1)/S`, ~1.1–2.4 pts, worse on favorites — was never subtracted and every threshold sat on an inflated number. **In practice that gap is ~0.** The board records **best-of-books** prices (`edges.js:662`, `odds:` field): line-shopping keeps the highest price across books, which compresses the two-way overround to **~0%**. With no vig left in the recorded price, `devigTwoWay` has nothing to remove and `fair ≈ breakEven`, so `edge = model_prob − fair` was **already an EV measure** against the price actually paid. The half-vig gap measured **0.00** last night, and there was no favorites-vs-dogs overstatement either. **Price shopping solved it before it was named.**
 
-2. **The 55% floor is a price filter in disguise.** `edgesModel.js:1614-1623` sets the ranking win% to `0.55·raw + 0.45·fair`, so `win% − edge == fair market price`. With edge at 0.005–0.05, the gate is ~90% the market's own price. A pick published at the 55% floor sits at roughly −135, where break-even is 57.5% — **its own printed win probability is below its break-even.**
+2. **The 55% floor is a price filter in disguise.** `edgesModel.js:1614-1623` sets the ranking win% to `0.55·raw + 0.45·fair`, so `win% − edge == fair market price`. With edge at 0.005–0.05, the gate is ~90% the market's own price — the floor selects on the market's own opinion, not on mispricing. (The old punchline — "a pick at the 55% floor sits at −135, break-even 57.5%, its win% below break-even" — assumed the vig and is **dead by the item-1 argument**: with best-of-books pricing `fair ≈ breakEven`, so a floor pick sits *at* its break-even, not below it.) The floor change stands anyway, on the **graded history, not the break-even math**: claimed 43–55% returned **+3.10% on n=494** while 55%+ returned **−3.62% on n=106**, so the 0.55 floor was publishing the only losing slice. `WINNER_MIN` is now 0.45 (WZ-FLOOR-2026-07-24).
 
 ### The correct calculation
 
@@ -114,7 +114,7 @@ p̂  = σ( logit(fair) + γ·(logit(raw) − logit(fair)) )
 EV = p̂·b − (1−p̂)
 ```
 
-Implemented in **`backend/services/priceMath.js`** (pure, dependency-free, `node backend/services/priceMath.js` runs 13 self-tests). Use it. Do not re-derive price math inline anywhere.
+Implemented in **`backend/services/priceMath.js`** (pure, dependency-free, `node backend/services/priceMath.js` runs 13 self-tests). The primitives — `payout`, `breakEven`, `EV` — are **correct and reusable**; use them and do not re-derive price math inline anywhere. Note only that the *motivation* has shifted: this module was written to subtract a vig that best-of-books pricing already removes (item 1), so it is not a fix for a live −EV leak — it is the right way to express EV and to fit γ, nothing more.
 
 **`W_MODEL = 0.55` was chosen, never measured.** γ is the fraction of the model's disagreement with the market that is real. Fit it with `fitShrinkage()` before proposing any selection rule.
 
