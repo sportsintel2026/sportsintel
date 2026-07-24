@@ -54,9 +54,11 @@ The mission is **making money**, not closing calibration gaps. A market can be p
 
 `main` is production and both Railway and Vercel auto-deploy from it.
 
-**Work on a branch and open a PR. Never commit straight to `main`.** Vercel builds a preview URL on the PR; Master G reviews the working site on his phone and merges. He is not proofreading JavaScript — give him something he can look at.
+**Work on a branch and open a PR. Never commit straight to `main`.** Vercel builds a preview URL on the PR — but that preview **cannot load backend data** (see the next rule), so it shows only static layout, never live board behavior. Anything data-driven is reviewed on **production** after merge, or on **localhost** before it. Master G is not proofreading JavaScript — give him something he can look at, on a surface that actually loads.
 
 Before any PR: `node --check` every file touched, run the relevant self-test, and read `git diff --numstat` for unexpected deletions.
+
+**Vercel branch previews CANNOT test any behavior that requires backend data — this is not a maybe.** The backend CORS allowlist (`server.js:97-109`) is **exact-match**: `wizepicks.com`, `www.wizepicks.com`, `sportsintel.vercel.app`, `localhost:5173`, `localhost:3000`. A per-branch preview gets a unique URL (e.g. `sportsintel-git-<branch>-*.vercel.app`) that is **not** on the list, so every `/api/*` call from a preview is CORS-blocked, `edges`/`preview` never load, and the board renders its **empty state** ("Ranked by win %" / "No winners on the board yet") **regardless of the code**. A preview showing an empty board therefore proves *nothing* about a frontend change. **Handoff 43 asserted previews were a valid frontend test — that is wrong.** The only valid surfaces for anything data-driven are: **production** (an allowlisted origin), or **`localhost:5173`** (`npm run dev`) with a working `.env` pointed at the backend. `WZ-PREVIEW-CORS-2026-07-24`
 
 ---
 
@@ -70,7 +72,7 @@ Read this before touching anything. The canonical path is MLB moneyline; the oth
 4. **Blend.** `winProb = 0.55·raw + 0.45·fair`. This blended number is what the board displays, what it ranks on, and what gets recorded as `model_prob`. The raw model alone was market-blind and lagged badly (~43.7%); anchoring it to the sharp price is what fixed that.
 5. **Edge.** `edge = 0.55·(raw − fair)` — how far the blended opinion sits from the market after respecting it. Agreeing with a sharp price is correctly not an edge.
 6. **Tier.** `rateConfidence(edge)`: LOW ≥ 0.005, MEDIUM ≥ 0.025, HIGH ≥ 0.05.
-7. **Board.** Ranked by `winProb`, floored at ≥ 0.55. What clears the floor is a **published pick** and is what a paying subscriber sees.
+7. **Board.** Ranked by `winProb`, floored at ≥ 0.45 (`WINNER_MIN`; was 0.55 — WZ-FLOOR-2026-07-24). Since the picked (winner) side is ≥ 0.50 by construction, the 0.45 floor removes nothing — it is effectively open. What clears the floor is a **published pick** and is what a paying subscriber sees.
 8. **Record.** `predictionTracker.js` snapshots every surfaced edge pre-game into `model_predictions` — including ones that never publish, which is what makes the counterfactual readable.
 9. **Close + CLV.** `captureClosingLines()` grabs the last pre-game price and computes CLV against the price we took.
 10. **Grade.** Result written back as win/loss. `calibrationGuard.js` then checks whether picks won as often as they claimed.
@@ -78,8 +80,8 @@ Read this before touching anything. The canonical path is MLB moneyline; the oth
 ### The three words, defined precisely
 
 - **Win %** — the *blended* probability from step 4, not the raw model. `winProb − edge == fair` exactly, by construction.
-- **Edge** — currently `model_prob − fair`. **This is the bug.** It should be `model_prob − breakEven`, measured against the posted price. The two differ by 1.1–2.4 points.
-- **Pick** — a row that cleared the 0.55 floor and went on the board.
+- **Edge** — `model_prob − fair`. Long treated as *the bug* (it "should" be `model_prob − breakEven` vs the posted price), but the board records **best-of-books** prices (`edges.js:662`, `odds:` field), which compress the two-way overround to ~0%, leaving `devigTwoWay` nothing to remove: `fair ≈ breakEven`. The supposed 1.1–2.4-pt gap measured **0.00** on 2026-07-23 — edge was already an EV measure. See THE MONEY PROBLEM below.
+- **Pick** — a row that cleared the publish floor (`WINNER_MIN`, now 0.45; was 0.55) and went on the board.
 
 ### What we are actually hunting
 
@@ -95,15 +97,13 @@ Every fix in this file points at the same thing: **make the board select on how 
 
 ## THE MONEY PROBLEM — the live, open surgery
 
-**At the prices actually paid, the published board loses money.** MLB moneyline is live at roughly −2.1% real ROI on n=96.
+**At the prices actually paid, MLB moneyline reads roughly −2.1% real ROI on n=96.** Do not call this "losing money": at n=96 that figure is under-powered and statistically consistent with zero (see MEASUREMENT — resolving a 2-point ROI difference needs ~7,500 bets). It is a directional read, not a verdict, and it no longer has a named root cause now that the vig finding is superseded (item 1). Don't invent one to explain a number this noisy.
 
-### Root cause (verified in code, 2026-07-22)
+### Root cause (vig finding SUPERSEDED 2026-07-23 — see item 1)
 
-1. **The selection quantity never subtracts the vig.** `edgesModel.js:1169` defines edge as `modelProb − devigTwoWay(...)`. Customers bet the *posted* price, not the de-vigged one. The gap is `a·(S−1)/S` — **2.25 pts at −130, 2.38 pts at −110, but only ~1.15 pts at +150.** Every threshold in the product (`rateConfidence` 0.005/0.025/0.05, `MIN_PROP_EDGE`, `HITS_MIN_EDGE`) sits on this inflated number. A `LOW` pick is −EV by construction.
+1. **~~The selection quantity never subtracts the vig.~~ SUPERSEDED 2026-07-23 — measured 0.00.** The prior finding said `edgesModel.js:1169` reports edge as `modelProb − devigTwoWay(...)`, so the vig — `a·(S−1)/S`, ~1.1–2.4 pts, worse on favorites — was never subtracted and every threshold sat on an inflated number. **In practice that gap is ~0.** The board records **best-of-books** prices (`edges.js:662`, `odds:` field): line-shopping keeps the highest price across books, which compresses the two-way overround to **~0%**. With no vig left in the recorded price, `devigTwoWay` has nothing to remove and `fair ≈ breakEven`, so `edge = model_prob − fair` was **already an EV measure** against the price actually paid. The half-vig gap measured **0.00** last night, and there was no favorites-vs-dogs overstatement either. **Price shopping solved it before it was named.**
 
-2. **The overstatement is larger on favorites than dogs**, so the metric systematically flatters the expensive side.
-
-3. **The 55% floor is a price filter in disguise.** `edgesModel.js:1614-1623` sets the ranking win% to `0.55·raw + 0.45·fair`, so `win% − edge == fair market price`. With edge at 0.005–0.05, the gate is ~90% the market's own price. A pick published at the 55% floor sits at roughly −135, where break-even is 57.5% — **its own printed win probability is below its break-even.**
+2. **The 55% floor is a price filter in disguise.** `edgesModel.js:1614-1623` sets the ranking win% to `0.55·raw + 0.45·fair`, so `win% − edge == fair market price`. With edge at 0.005–0.05, the gate is ~90% the market's own price — the floor selects on the market's own opinion, not on mispricing. (The old punchline — "a pick at the 55% floor sits at −135, break-even 57.5%, its win% below break-even" — assumed the vig and is **dead by the item-1 argument**: with best-of-books pricing `fair ≈ breakEven`, so a floor pick sits *at* its break-even, not below it.) The floor change stands anyway, on the **graded history, not the break-even math**: claimed 43–55% returned **+3.10% on n=494** while 55%+ returned **−3.62% on n=106**, so the 0.55 floor was publishing the only losing slice. `WINNER_MIN` is now 0.45 (WZ-FLOOR-2026-07-24).
 
 ### The correct calculation
 
@@ -114,7 +114,7 @@ p̂  = σ( logit(fair) + γ·(logit(raw) − logit(fair)) )
 EV = p̂·b − (1−p̂)
 ```
 
-Implemented in **`backend/services/priceMath.js`** (pure, dependency-free, `node backend/services/priceMath.js` runs 13 self-tests). Use it. Do not re-derive price math inline anywhere.
+Implemented in **`backend/services/priceMath.js`** (pure, dependency-free, `node backend/services/priceMath.js` runs 13 self-tests). The primitives — `payout`, `breakEven`, `EV` — are **correct and reusable**; use them and do not re-derive price math inline anywhere. Note only that the *motivation* has shifted: this module was written to subtract a vig that best-of-books pricing already removes (item 1), so it is not a fix for a live −EV leak — it is the right way to express EV and to fit γ, nothing more.
 
 **`W_MODEL = 0.55` was chosen, never measured.** γ is the fraction of the model's disagreement with the market that is real. Fit it with `fitShrinkage()` before proposing any selection rule.
 
@@ -159,7 +159,7 @@ The US-book `clv` at line 236 is sound (vigged on both sides, cancels).
    The first read of this endpoint is the gate on everything else. Do not propose a selection rule before it.
 2. **Fix `pinnacle_clv`.** Then re-read every CLV-based conclusion.
 3. **Add `opp_odds` at write time.**
-4. **Only then touch the board** — move the gate from `blendedProb ≥ 0.55` to `EV ≥ margin` at the posted price, validated out-of-sample on CLV.
+4. **Only then touch the board** — move the gate from the raw probability floor (`blendedProb ≥ 0.45`, was 0.55, and effectively open per HOW A PICK step 7) to `EV ≥ margin` at the posted price, validated out-of-sample on CLV.
 
 Steps 1–3 change nothing a customer sees. Nothing reaches a subscriber on a backtest alone.
 
