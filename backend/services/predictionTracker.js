@@ -252,19 +252,28 @@ async function captureClosingLines() {
     }
 
     // SHARP CLV vs Pinnacle's de-vigged close (only for games in the tight window).
-    // De-vig Pinnacle's two-sided price to a fair no-vig probability for our side, then
-    // CLV = fairProb − our taken price's implied prob. Positive = we got a longer price
-    // than the sharpest book's fair line → genuinely beat the close. Guarded end-to-end.
-    if (pinEvents.length && pinWindowGameIds.has(String(pick.game_id)) && pickImplied != null) {
+    // WZ-HANDOFF44-2026-07-24 :: FIXED a units mismatch. Pinnacle's close is de-vigged
+    // (two-sided → fair prob), so our taken price must be de-vigged the SAME way before
+    // subtracting. The old code did `pinFair − pickImplied`, comparing a de-vigged prob
+    // to a raw VIGGED implied — biasing pinnacle_clv low by ~2.2-2.4 pts. Now we de-vig
+    // our pick side against its stored opposing price (opp_odds) and compare fair-to-fair.
+    // GUARD: pre-deploy rows have no opp_odds — SKIP the pinnacle write rather than record
+    // a wrong number. The US best-of-books CLV above (same side both times, vig cancels)
+    // is correct as-is and untouched.
+    if (pinEvents.length && pinWindowGameIds.has(String(pick.game_id)) && pickImplied != null && pick.opp_odds != null) {
       const pinEv = matchPickToOddsEvent(names, pinEvents);
       const pc = pinEv ? closingOddsForPick(pick, pinEv) : null;
       if (pc && pc.thisOdds != null && pc.oppOdds != null) {
         const ti = americanToImpliedProb(pc.thisOdds);
         const oi = americanToImpliedProb(pc.oppOdds);
         const pinFair = (ti != null && oi != null && ti + oi > 0) ? round4(ti / (ti + oi)) : null;
-        if (pinFair != null
+        // De-vig OUR taken price the same way pinFair is built, against opp_odds.
+        const pickOppImplied = americanToImpliedProb(pick.opp_odds);
+        const pickFair = (pickImplied != null && pickOppImplied != null && pickImplied + pickOppImplied > 0)
+          ? round4(pickImplied / (pickImplied + pickOppImplied)) : null;
+        if (pinFair != null && pickFair != null
             && !(pick.pinnacle_closing_odds != null && pick.pinnacle_closing_odds === pc.thisOdds)) {
-          const pinClv = round4(pinFair - pickImplied);
+          const pinClv = round4(pinFair - pickFair);
           upd.pinnacle_closing_odds = pc.thisOdds;
           upd.pinnacle_fair_prob = pinFair;
           upd.pinnacle_clv = pinClv;
@@ -569,6 +578,9 @@ async function recordPredictions(result) {
       cal_edge: e.edge ?? null,
       confidence: e.confidence, conviction: e.conviction ?? null, conviction_score: e.convictionScore ?? null, line: null,
       benched_at_pick: benchedNow("moneyline"), // WZ-BENCH-STAMP-2026-07-18
+      opp_odds: e.oppOdds ?? null,               // WZ-HANDOFF44-2026-07-24 :: opposing price at write time (unblocks correct de-vig CLV)
+      floor_at_pick: e.floorAtPick ?? null,      // WZ-HANDOFF44-2026-07-24 :: publish floor in force when the pick was stamped
+      inflation_gate_at_pick: e.inflationGateAtPick ?? null, // WZ-HANDOFF44-2026-07-24 :: inflation-gate regime (moneyline-only)
     });
   }
 
@@ -584,6 +596,7 @@ async function recordPredictions(result) {
       model_prob: e.modelProb, odds: e.odds, edge: e.edge,
       confidence: e.confidence, conviction: e.conviction ?? null, conviction_score: e.convictionScore ?? null, line: e.line,
       benched_at_pick: benchedNow("total"), // WZ-BENCH-STAMP-2026-07-18
+      opp_odds: e.oppOdds ?? null,          // WZ-HANDOFF44-2026-07-24 :: opposing price at write time
       bullpen_fatigue: fatigueById[e.gameId] || null,
       shadow_total: shadowById[e.gameId] ?? null,
       ...(breakdownById[e.gameId] || {}),
@@ -602,6 +615,7 @@ async function recordPredictions(result) {
       model_prob: e.modelProb, odds: e.odds, edge: e.edge,
       confidence: e.confidence, conviction: e.conviction ?? null, conviction_score: e.convictionScore ?? null, line: e.line,
       benched_at_pick: benchedNow("run_line"), // WZ-BENCH-STAMP-2026-07-18
+      opp_odds: e.oppOdds ?? null,             // WZ-HANDOFF44-2026-07-24 :: opposing price at write time
     });
   }
 

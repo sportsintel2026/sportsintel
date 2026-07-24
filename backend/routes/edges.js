@@ -648,8 +648,9 @@ router.get("/mlb", gatePicks, async (req, res) => {
       // recorded rows carrying edge, odds and result. Re-check it then; do not treat ~4 as fact.
       // Moneyline only -- totals/run_line boards are genuinely edge-selected and are not touched.
       // REVERT: delete the two lines below (the `inflation` const and its `continue`).
+      const ML_INFLATION_GATE = true; // single source of truth: gate behaviour AND recorded stamp
       const inflation = pickHome ? ml.homeInflation : ml.awayInflation;
-      if (inflation?.inflated) continue;
+      if (ML_INFLATION_GATE && inflation?.inflated) continue;
       const edge = pickHome ? ml.homeEdge : ml.awayEdge;
       moneylineBoard.push({
         gameId: ge.game.id,
@@ -660,6 +661,9 @@ router.get("/mlb", gatePicks, async (req, res) => {
         teamAbbr: pickHome ? ge.game.homeAbbr : ge.game.awayAbbr,
         modelProb: prob,
         odds: pickHome ? ml.homeOdds : ml.awayOdds,
+        oppOdds: pickHome ? ml.awayOdds : ml.homeOdds,
+        floorAtPick: WINNER_MIN,
+        inflationGateAtPick: ML_INFLATION_GATE,
         edge,
         isValue: (edge ?? 0) > 0, // "+VALUE" tag when the winner is also underpriced -- NEVER the sort key
         confidence: pickHome ? ml.homeConfidence : ml.awayConfidence,
@@ -688,6 +692,7 @@ router.get("/mlb", gatePicks, async (req, res) => {
           line: ge.totals.line,
           projected: ge.totals.projected,
           odds: ge.totals.overOdds,
+          oppOdds: ge.totals.underOdds,
           modelProb: ge.totals.overProb,
           edge: ge.totals.overEdge,
           confidence: ge.totals.overConfidence,
@@ -711,6 +716,7 @@ router.get("/mlb", gatePicks, async (req, res) => {
           line: ge.totals.line,
           projected: ge.totals.projected,
           odds: ge.totals.underOdds,
+          oppOdds: ge.totals.overOdds,
           modelProb: ge.totals.underProb,
           edge: ge.totals.underEdge,
           confidence: ge.totals.underConfidence,
@@ -766,6 +772,7 @@ router.get("/mlb", gatePicks, async (req, res) => {
           teamAbbr: ge.game.awayAbbr,
           modelProb: rl.awayCoverProb,
           odds: rl.awayOdds,
+          oppOdds: rl.homeOdds,
           line: rl.awayLine,
           edge: rl.awayEdge,
           confidence: rl.awayConfidence,
@@ -786,6 +793,7 @@ router.get("/mlb", gatePicks, async (req, res) => {
           teamAbbr: ge.game.homeAbbr,
           modelProb: rl.homeCoverProb,
           odds: rl.homeOdds,
+          oppOdds: rl.awayOdds,
           line: rl.homeLine,
           edge: rl.homeEdge,
           confidence: rl.homeConfidence,
