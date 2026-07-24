@@ -473,7 +473,7 @@ export default function HomePage(){
   // pipeline (moveAdjust -> oneSidePerGame -> win-first sort -> toBoard) so it matches today exactly.
   const pv = (sport==="mlb"&&preview&&!preview.rolledToNextDay) ? preview : null;
   const pvMlAdj=(pv?.moneylineEdges||[]).map(moveAdjust), pvTotAdj=(pv?.totalsEdges||[]).map(moveAdjust), pvSpAdj=[...(pv?.runLineEdges||[]),...(pv?.spreadEdges||[])].map(moveAdjust);
-  const previewItems = bestPerGame(pv ? [...pvMlAdj,...pvTotAdj,...pvSpAdj].filter(x=>(x.edge??0)>0).sort(byWinProb).map(toBoard) : []);
+  const previewItems = bestPerGame(pv ? [...pvMlAdj,...pvTotAdj,...pvSpAdj].filter(x=>sport==="mlb"?true:(x.edge??0)>0).sort(byWinProb).map(toBoard) : []); // WZ-MLGATE-FIX-2026-07-24 :: MLB edge gate removed here too — this is the board that renders when today is empty (isTomorrowMain)
   const previewLabel = pv&&pv.date ? fmtSlate(pv.date).toUpperCase() : "";
   const boardDate = fmtSlateFull(e.date || todayISO());
   // WZ-WINNERS-V2-2026-07-04 :: Best Plays carousel = winner+value plays first (our
