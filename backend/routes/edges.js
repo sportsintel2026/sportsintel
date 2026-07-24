@@ -610,7 +610,7 @@ router.get("/mlb", gatePicks, async (req, res) => {
     // has to clear the floor too. Ranked purely by win%. Price never chooses the pick -- when a winner
     // is also underpriced it just carries an isValue flag ("+VALUE"). This structurally ends the old
     // edge-ranked board that kept surfacing sub-50% dogs for the money (the 35-42% win leak).
-    const WINNER_MIN = 0.55; // 55% floor -- below this is a coin-flip, not a winner
+    const WINNER_MIN = 0.45; // WZ-FLOOR-2026-07-24 :: measured on graded history — claimed 43-55 returned +3.10% (n=494) while 55+ returned -3.62% (n=106). The 0.55 floor was selecting the only losing slice of the model's own output. Ranking is unchanged: still by win probability, highest first.
     const moneylineBoard = [];
     for (const ge of gameEdges) {
       const sourceGame = gamesWithOdds.find(g => g.id === ge.game.id);
