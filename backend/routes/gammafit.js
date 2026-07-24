@@ -1,53 +1,49 @@
 // gammafit.js
-// WZ-GAMMAFIT-2026-07-23 :: READ-ONLY. Mounted at /api/gammafit. No admin gate.
+// WZ-GAMMAFIT-2026-07-24 :: READ-ONLY. Mounted at /api/gammafit. No admin gate.
+// SUPERSEDES WZ-GAMMAFIT-2026-07-23.
 //
-// THE QUESTION THIS ANSWERS
-// -------------------------
-// edgesModel blends the model toward the market at a FIXED weight, W_MODEL = 0.55.
-// That number was chosen, never measured. This probe measures it.
+// WHAT THE FIRST VERSION GOT WRONG — keep this note
+// -------------------------------------------------
+// v1 gated everything on `vigTaxPts ≈ 2.2`, asserting that the board's `edge`
+// (model_prob − de-vigged fair) overstated true edge vs break-even by roughly half
+// the book's vig. It measured 0.00 and voided its own output.
 //
-//   blended = W·raw + (1−W)·fair        (edgesModel.js:1617)
-//   edge    = W·(raw − fair)            (blendedEdge, edgesModel.js:1240)
+// The gate was wrong, not the data. `edges.js:663` takes `ml.homeOdds`/`ml.awayOdds`,
+// which are BEST-OF-BOOKS prices — the best number for each side, possibly from
+// different books. Shopping both sides compresses the overround from ~4.5% toward 0%,
+// so `devigTwoWay` has almost nothing left to remove and `fair ≈ breakEven`. The
+// board's `edge` was ALREADY an EV measure against the real price. Price shopping had
+// solved that problem before anyone named it.
 //
-// so on every stored row:
+// The lesson is why this file exists: a validation gate must test an IDENTITY, not a
+// THESIS. v1 encoded a belief as a check, and when the belief failed it declared the
+// data void.
 //
-//   fair = model_prob − edge            ← the market's own de-vigged opinion
-//   raw  = fair + edge / W              ← the model's un-anchored opinion
+// WHAT IS ACTUALLY BEING MEASURED
+// -------------------------------
+//   fair = model_prob − edge          ← arithmetic identity, cannot fail
+//   raw  = fair + edge / W            ← depends on W_MODEL being 0.55
 //
-// γ ("gamma") is the fraction of the model's DISAGREEMENT with the market that
-// reality subsequently confirms:
+//   γ:  P(win) = σ( logit(fair) + γ · (logit(raw) − logit(fair)) )
 //
-//   P(win) = σ( logit(fair) + γ · (logit(raw) − logit(fair)) )
+// γ is the fraction of the model's disagreement with the market that reality
+// confirms. γ ≤ 0 means the fundamentals subtract value: the further the model
+// strays from the price, the worse it does.
 //
-//   γ ≈ 1   the model's disagreement is fully vindicated — trust it, W is too low
-//   γ ≈ 0.55 W is correctly set
-//   γ ≈ 0   the model adds nothing the market didn't already know; every "edge"
-//           on the board is a repackaged book price
-//   γ < 0   the model is a CONTRARIAN indicator — the disagreement is worse than
-//           useless and the board is systematically betting the wrong side
+// ROBUSTNESS: changing W rescales raw's log-odds distance from fair roughly
+// linearly, which rescales γ by roughly the same factor. **The SIGN of γ is
+// invariant to W.** A negative γ therefore cannot be an artifact of guessing W
+// wrong. `gammaWSweep` demonstrates that rather than asserting it.
 //
-// γ is what killed the edge selector on 2026-07-20 (in-sample top-50 by edge went
-// 68%; frozen and pointed at unseen games it went 51.7%). Nobody measured it. It is
-// step 1 before any selection rule is proposed.
-//
-// FIT TWICE, ON PURPOSE
-// ---------------------
-// (A) vs OUTCOMES — ground truth, but nearly unreadable at n≈96. Resolving a
-//     2-point ROI difference needs ~7,500 bets.
-// (B) vs the PINNACLE CLOSING FAIR PRICE — roughly 100x the statistical power,
-//     because a closing price is a low-variance estimate of true probability
-//     while a win/loss is a single coin flip. ~62 picks resolve half a point.
-//
-// If (A) and (B) disagree in SIGN, believe (B) and say so — that is the whole
-// reason CLV exists as a metric.
-//
-// TEST THE RULER BEFORE TRUSTING THE MEASUREMENT
-// ----------------------------------------------
-// Three of five probes shipped on 2026-07-20 had bugs. This one validates its own
-// reconstruction before it reports anything: `reconstruction.vigTaxPts` must come
-// back in a plausible half-vig range (~1.0–3.0 points). If it doesn't, the
-// fair = model_prob − edge identity does not hold on these rows and EVERY number
-// below is void. That check is reported first, deliberately.
+// FOUR OUTPUTS, ORDERED BY HOW MUCH THEY DEPEND ON ASSUMPTIONS
+// ------------------------------------------------------------
+// 1. `calibration`    — claimed vs actual win rate by bucket. Depends on NOTHING but
+//                       model_prob and result. Trust this first; it localises the
+//                       overclaim to a probability range.
+// 2. `published`      — realised ROI at real posted prices. Odds + result only.
+// 3. `marketBaseline` — what selecting on the MARKET's probability alone would have
+//                       returned. The null model the product must beat to exist.
+// 4. `gammaVsClose` / `gammaVsOutcome` — depend on the reconstruction and on W.
 
 const express = require("express");
 const router = express.Router();
@@ -57,7 +53,6 @@ function db() {
   return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 }
 
-// ── math ─────────────────────────────────────────────────────────────────────
 const EPS = 1e-6;
 const clamp01 = (p) => Math.min(1 - EPS, Math.max(EPS, p));
 const logit = (p) => Math.log(clamp01(p) / (1 - clamp01(p)));
@@ -67,66 +62,169 @@ const unitProfit = (a) => (a == null || !Number.isFinite(a) || a === 0 ? null : 
 const r3 = (x) => (Number.isFinite(x) ? Math.round(x * 1000) / 1000 : null);
 const r2 = (x) => (Number.isFinite(x) ? Math.round(x * 100) / 100 : null);
 const mean = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
+const median = (a) => { if (!a.length) return null; const s = a.slice().sort((x, y) => x - y); return s[Math.floor(s.length / 2)]; };
 
-/** OLS of y on x with intercept. Used for the CLV fit. */
+/** OLS with intercept. */
 function ols(pairs) {
   const n = pairs.length;
-  if (n < 3) return { gamma: null, alpha: null, n, se: null, note: "n too small" };
+  if (n < 5) return { gamma: null, alpha: null, n, se: null, note: "n too small" };
   const sx = pairs.reduce((s, p) => s + p.x, 0);
   const sy = pairs.reduce((s, p) => s + p.y, 0);
   const sxx = pairs.reduce((s, p) => s + p.x * p.x, 0);
   const sxy = pairs.reduce((s, p) => s + p.x * p.y, 0);
   const den = n * sxx - sx * sx;
-  if (!(Math.abs(den) > 1e-12)) return { gamma: null, alpha: null, n, se: null, note: "no variation in disagreement" };
+  if (!(Math.abs(den) > 1e-12)) return { gamma: null, alpha: null, n, se: null, note: "no variation" };
   const gamma = (n * sxy - sx * sy) / den;
   const alpha = (sy - gamma * sx) / n;
   const rss = pairs.reduce((s, p) => s + Math.pow(p.y - (alpha + gamma * p.x), 2), 0);
-  const sigma2 = rss / Math.max(1, n - 2);
-  const se = Math.sqrt((sigma2 * n) / den);
-  return { gamma, alpha, n, se, ci95: [gamma - 1.96 * se, gamma + 1.96 * se] };
+  const se = Math.sqrt((rss / Math.max(1, n - 2)) * n / den);
+  return { gamma, alpha, n, se, ci95: [gamma - 1.96 * se, gamma + 1.96 * se], significant: Math.abs(gamma) > 1.96 * se };
 }
 
-/** Offset logistic regression: P = σ(logit(fair) + γ·x). One free parameter.
- *  Newton-Raphson; this is the statistically correct fit for a binary target. */
+/** Offset logistic regression: P = σ(offset + γ·x). Newton-Raphson. */
 function offsetLogit(pairs) {
   const n = pairs.length;
   if (n < 10) return { gamma: null, n, se: null, note: "n too small" };
   let g = 0;
-  for (let iter = 0; iter < 60; iter++) {
+  for (let i = 0; i < 60; i++) {
     let score = 0, info = 0;
     for (const p of pairs) {
-      const eta = p.offset + g * p.x;
-      const mu = sigmoid(eta);
+      const mu = sigmoid(p.offset + g * p.x);
       score += p.x * (p.y - mu);
       info += p.x * p.x * mu * (1 - mu);
     }
-    if (!(info > 1e-12)) return { gamma: null, n, se: null, note: "no variation in disagreement" };
+    if (!(info > 1e-12)) return { gamma: null, n, se: null, note: "no variation" };
     const step = score / info;
     g += step;
     if (Math.abs(step) < 1e-9) break;
     if (!Number.isFinite(g) || Math.abs(g) > 50) return { gamma: null, n, se: null, note: "did not converge" };
   }
   let info = 0;
-  for (const p of pairs) {
-    const mu = sigmoid(p.offset + g * p.x);
-    info += p.x * p.x * mu * (1 - mu);
-  }
+  for (const p of pairs) { const mu = sigmoid(p.offset + g * p.x); info += p.x * p.x * mu * (1 - mu); }
   const se = info > 0 ? 1 / Math.sqrt(info) : null;
-  return { gamma: g, n, se, ci95: se == null ? null : [g - 1.96 * se, g + 1.96 * se] };
+  return { gamma: g, n, se, ci95: se == null ? null : [g - 1.96 * se, g + 1.96 * se], significant: se != null && Math.abs(g) > 1.96 * se };
 }
 
-/** Realized units at real posted prices. */
+/** Realised units at real posted prices. Depends on odds + result only. */
 function scoreRows(rows) {
   const n = rows.length;
   if (!n) return { n: 0 };
   const w = rows.filter(r => r.won).length;
   const units = rows.reduce((s, r) => s + (r.won ? r.profit : -1), 0);
-  const be = mean(rows.map(r => 1 / (1 + r.profit)));
   return {
     n, wins: w, losses: n - w,
     winPct: r2((w / n) * 100),
-    breakEvenPct: r2(be * 100),
+    breakEvenPct: r2(mean(rows.map(r => 1 / (1 + r.profit))) * 100),
     realRoiPct: r2((units / n) * 100),
+  };
+}
+
+async function analyseMarket(supabase, league, market, W, BAND) {
+  const PAGE = 1000;
+  const raw = [];
+  let from = 0;
+  for (let i = 0; i < 40; i++) {
+    const { data, error } = await supabase.from("model_predictions")
+      .select("game_id, game_date, model_prob, edge, odds, result, pinnacle_fair_prob")
+      .eq("league", league).eq("market", market)
+      .in("result", ["win", "loss"])
+      .order("game_date", { ascending: true }).range(from, from + PAGE - 1);
+    if (error) throw error;
+    if (!data || !data.length) break;
+    raw.push(...data);
+    if (data.length < PAGE) break;
+    from += PAGE;
+  }
+  if (!raw.length) return { market, note: "no graded rows" };
+
+  const rows = [];
+  let skipped = 0;
+  const effVig = [];
+  for (const r of raw) {
+    const mp = r.model_prob == null ? null : Number(r.model_prob);
+    const ed = r.edge == null ? null : Number(r.edge);
+    const profit = unitProfit(Number(r.odds));
+    const be = impliedProb(Number(r.odds));
+    if (mp == null || !Number.isFinite(mp) || profit == null || be == null) { skipped++; continue; }
+    const hasEdge = ed != null && Number.isFinite(ed);
+    const fair = hasEdge ? mp - ed : null;
+    const model = fair != null && fair > 0 && fair < 1 ? fair + ed / W : null;
+    if (fair != null) effVig.push((be - fair) * 100);
+    rows.push({
+      date: String(r.game_date).slice(0, 10),
+      claimed: mp, edge: hasEdge ? ed : null, fair, model,
+      odds: Number(r.odds), profit, breakEven: be,
+      won: r.result === "win",
+      published: mp >= BAND,
+      pinFair: r.pinnacle_fair_prob == null ? null : Number(r.pinnacle_fair_prob),
+    });
+  }
+  if (!rows.length) return { market, note: "no usable rows", skipped };
+
+  // ── 1. CALIBRATION — assumption-free ──────────────────────────────────────
+  const calibration = [];
+  for (let lo = 0.30; lo < 0.80; lo += 0.05) {
+    const hi = lo + 0.05;
+    const sel = rows.filter(r => r.claimed >= lo && r.claimed < hi);
+    if (sel.length < 8) continue;
+    const claimed = mean(sel.map(r => r.claimed));
+    const actual = sel.filter(r => r.won).length / sel.length;
+    calibration.push({
+      bucket: `${(lo * 100).toFixed(0)}-${(hi * 100).toFixed(0)}`,
+      n: sel.length,
+      claimedPct: r2(claimed * 100),
+      actualPct: r2(actual * 100),
+      gapPts: r2((actual - claimed) * 100),
+      realRoiPct: scoreRows(sel).realRoiPct,
+    });
+  }
+
+  // ── 2. WHAT THE BOARD PUBLISHED ───────────────────────────────────────────
+  const published = rows.filter(r => r.published);
+
+  // ── 3. MARKET-ONLY BASELINE — the null model ──────────────────────────────
+  const withFair = rows.filter(r => r.fair != null);
+  const marketPicked = withFair.filter(r => r.fair >= BAND);
+  const modelPicked = withFair.filter(r => r.claimed >= BAND);
+
+  // ── 4. γ, with a W sweep ──────────────────────────────────────────────────
+  const usable = rows.filter(r => r.fair != null && r.model != null && r.model > 0 && r.model < 1);
+  const clvRows = usable.filter(r => r.pinFair != null && r.pinFair > 0 && r.pinFair < 1);
+
+  const gammaVsOutcome = offsetLogit(usable.map(r => ({ x: logit(r.model) - logit(r.fair), offset: logit(r.fair), y: r.won ? 1 : 0 })));
+  const gammaVsClose = ols(clvRows.map(r => ({ x: logit(r.model) - logit(r.fair), y: logit(r.pinFair) - logit(r.fair) })));
+
+  const gammaWSweep = [];
+  for (const w of [0.30, 0.45, 0.55, 0.70, 0.90]) {
+    const pts = clvRows.map(r => {
+      const m = r.fair + r.edge / w;
+      if (!(m > 0 && m < 1)) return null;
+      return { x: logit(m) - logit(r.fair), y: logit(r.pinFair) - logit(r.fair) };
+    }).filter(Boolean);
+    const f = ols(pts);
+    gammaWSweep.push({ w, gamma: r3(f.gamma), se: r3(f.se), n: f.n, significant: f.significant ?? null });
+  }
+  const signs = gammaWSweep.map(s => (s.gamma == null ? null : Math.sign(s.gamma))).filter(s => s != null);
+  const gammaSignStableAcrossW = signs.length > 1 ? signs.every(s => s === signs[0]) : null;
+
+  return {
+    market,
+    rows: rows.length, skipped,
+    effectiveVigPts: { mean: r2(mean(effVig)), median: r2(median(effVig)), n: effVig.length,
+      note: "breakEven minus fair. Near zero means best-of-books shopping already stripped the vig and `edge` is effectively an EV measure." },
+    calibration,
+    published: scoreRows(published),
+    medianPublishedClaimPct: published.length ? r2(median(published.map(r => r.claimed)) * 100) : null,
+    medianPublishedBreakEvenPct: published.length ? r2(median(published.map(r => r.breakEven)) * 100) : null,
+    marketBaseline: {
+      note: "Same floor, selecting on the MARKET's probability instead of the model's. The model must beat this to justify existing.",
+      modelSelected: scoreRows(modelPicked),
+      marketSelected: scoreRows(marketPicked),
+    },
+    gammaVsClose: { ...gammaVsClose, gamma: r3(gammaVsClose.gamma), alpha: r3(gammaVsClose.alpha), se: r3(gammaVsClose.se), ci95: gammaVsClose.ci95 ? gammaVsClose.ci95.map(r3) : null },
+    gammaVsOutcome: { ...gammaVsOutcome, gamma: r3(gammaVsOutcome.gamma), se: r3(gammaVsOutcome.se), ci95: gammaVsOutcome.ci95 ? gammaVsOutcome.ci95.map(r3) : null },
+    gammaWSweep,
+    gammaSignStableAcrossW,
   };
 }
 
@@ -134,185 +232,45 @@ router.get("/", async (req, res) => {
   try {
     const supabase = db();
     const league = req.query.league || "mlb";
-    const market = req.query.market || "moneyline";
-    const W = Number(req.query.w) || 0.55; // W_MODEL in edgesModel.js
-    const BAND = Number(req.query.band) || 0.55; // the publish floor
-    const PAGE = 1000;
+    const W = Number(req.query.w) || 0.55;
+    const BAND = Number(req.query.band) || 0.55;
+    const requested = req.query.market || "all";
+    const markets = requested === "all" ? ["moneyline", "total", "run_line"] : [requested];
 
-    // ── pull graded history ──────────────────────────────────────────────────
-    const raw = [];
-    let from = 0;
-    for (let i = 0; i < 40; i++) {
-      const { data, error } = await supabase.from("model_predictions")
-        .select("game_id, game_date, model_prob, edge, odds, result, selection, pinnacle_fair_prob, pinnacle_closing_odds, closing_odds, closing_opp_odds")
-        .eq("league", league).eq("market", market)
-        .in("result", ["win", "loss"])
-        .order("game_date", { ascending: true }).range(from, from + PAGE - 1);
-      if (error) throw error;
-      if (!data || !data.length) break;
-      raw.push(...data);
-      if (data.length < PAGE) break;
-      from += PAGE;
+    const perMarket = {};
+    for (const m of markets) {
+      try { perMarket[m] = await analyseMarket(supabase, league, m, W, BAND); }
+      catch (e) { perMarket[m] = { market: m, error: e.message }; }
     }
 
-    if (!raw.length) {
-      return res.json({ token: "WZ-GAMMAFIT-2026-07-23", league, market, note: "no graded rows" });
-    }
-
-    // ── reconstruct fair + raw, and CHECK the reconstruction ─────────────────
-    const rows = [];
-    let skippedNoEdge = 0, skippedNoOdds = 0, skippedOutOfRange = 0;
-    const vigTax = [];
-
-    for (const r of raw) {
-      const mp = r.model_prob == null ? null : Number(r.model_prob);
-      const ed = r.edge == null ? null : Number(r.edge);
-      if (mp == null || ed == null || !Number.isFinite(mp) || !Number.isFinite(ed)) { skippedNoEdge++; continue; }
-      const profit = unitProfit(Number(r.odds));
-      const be = impliedProb(Number(r.odds));
-      if (profit == null || be == null) { skippedNoOdds++; continue; }
-
-      const fair = mp - ed;                 // the market's de-vigged opinion
-      const model = fair + ed / W;          // the model's un-anchored opinion
-      if (!(fair > 0 && fair < 1) || !(model > 0 && model < 1)) { skippedOutOfRange++; continue; }
-
-      // THE RULER CHECK: break-even minus fair should be a plausible half-vig.
-      vigTax.push((be - fair) * 100);
-
-      rows.push({
-        date: String(r.game_date).slice(0, 10),
-        fair, model, blended: mp, edge: ed,
-        odds: Number(r.odds), profit, breakEven: be,
-        won: r.result === "win",
-        published: mp >= BAND,
-        pinFair: r.pinnacle_fair_prob == null ? null : Number(r.pinnacle_fair_prob),
-        x: logit(model) - logit(fair), // the disagreement, in log-odds
-      });
-    }
-
-    if (!rows.length) {
-      return res.json({ token: "WZ-GAMMAFIT-2026-07-23", league, market, note: "no reconstructable rows", skippedNoEdge, skippedNoOdds, skippedOutOfRange });
-    }
-
-    const taxMean = mean(vigTax);
-    const taxSorted = vigTax.slice().sort((a, b) => a - b);
-    const taxMed = taxSorted[Math.floor(taxSorted.length / 2)];
-    const reconstructionOk = taxMean > 0.5 && taxMean < 4.0;
-
-    const reconstruction = {
-      wModelAssumed: W,
-      rowsUsable: rows.length,
-      skippedNoEdge, skippedNoOdds, skippedOutOfRange,
-      // If this identity holds, break-even sits ABOVE fair by roughly half the vig.
-      vigTaxPtsMean: r2(taxMean),
-      vigTaxPtsMedian: r2(taxMed),
-      ok: reconstructionOk,
-      meaning: reconstructionOk
-        ? "fair = model_prob - edge holds. vigTaxPts is how many probability points the board's `edge` metric overstates true edge vs break-even. Everything below is readable."
-        : "IDENTITY DOES NOT HOLD on these rows — W may differ for this market, or edge is stored on a different basis. TREAT EVERY NUMBER BELOW AS VOID.",
-    };
-
-    // ── (A) γ vs OUTCOMES ────────────────────────────────────────────────────
-    const outPairs = rows.map(r => ({ x: r.x, offset: logit(r.fair), y: r.won ? 1 : 0 }));
-    const gammaVsOutcome = offsetLogit(outPairs);
-
-    // ── (B) γ vs the PINNACLE CLOSING FAIR PRICE ─────────────────────────────
-    const clvRows = rows.filter(r => r.pinFair != null && r.pinFair > 0 && r.pinFair < 1);
-    const clvPairs = clvRows.map(r => ({ x: r.x, y: logit(r.pinFair) - logit(r.fair) }));
-    const gammaVsClose = ols(clvPairs);
-
-    // ── OUT-OF-SAMPLE: fit on the early 60%, score the late 40% at real prices ──
-    const cut = Math.floor(rows.length * 0.6);
-    const early = rows.slice(0, cut);
-    const late = rows.slice(cut);
-    let oos = { note: "not enough rows to split" };
-    if (early.length >= 20 && late.length >= 20) {
-      const fitEarly = offsetLogit(early.map(r => ({ x: r.x, offset: logit(r.fair), y: r.won ? 1 : 0 })));
-      const gHat = fitEarly.gamma;
-      if (gHat != null) {
-        const priced = late.map(r => {
-          const p = sigmoid(logit(r.fair) + gHat * r.x);
-          return { ...r, pHat: p, ev: p * r.profit - (1 - p) };
-        });
-        const plus = priced.filter(r => r.ev > 0);
-        const minus = priced.filter(r => r.ev <= 0);
-        const pubPlus = priced.filter(r => r.published && r.ev > 0);
-        const pubMinus = priced.filter(r => r.published && r.ev <= 0);
-        oos = {
-          gammaFitOnEarly: r3(gHat),
-          earlyN: early.length, lateN: late.length,
-          cutDate: late.length ? late[0].date : null,
-          // Does an EV>0 filter, formed WITHOUT seeing these games, actually pay?
-          lateEvPositive: scoreRows(plus),
-          lateEvNegative: scoreRows(minus),
-          // And within what the board actually published:
-          publishedEvPositive: scoreRows(pubPlus),
-          publishedEvNegative: scoreRows(pubMinus),
-        };
-      }
-    }
-
-    // ── EV AUDIT of what the board published, under the fitted γ ─────────────
-    const gUse = gammaVsOutcome.gamma != null ? gammaVsOutcome.gamma : W;
-    const published = rows.filter(r => r.published);
-    const pubPriced = published.map(r => {
-      const p = sigmoid(logit(r.fair) + gUse * r.x);
-      return { ...r, ev: p * r.profit - (1 - p) };
-    });
-    const negEv = pubPriced.filter(r => r.ev <= 0);
-
-    const evAudit = {
-      gammaUsed: r3(gUse),
-      publishedN: published.length,
-      publishedNegativeEv: negEv.length,
-      publishedNegativeEvPct: published.length ? r2((negEv.length / published.length) * 100) : null,
-      publishedAll: scoreRows(published),
-      // The arithmetic claim, checked against the data: at the publish floor the
-      // board's own stated win prob sits BELOW the price it must beat.
-      medianPublishedBreakEvenPct: published.length
-        ? r2(published.map(r => r.breakEven).sort((a, b) => a - b)[Math.floor(published.length / 2)] * 100)
-        : null,
-      medianPublishedClaimPct: published.length
-        ? r2(published.map(r => r.blended).sort((a, b) => a - b)[Math.floor(published.length / 2)] * 100)
-        : null,
-    };
-
-    // ── VERDICT — honest about power ─────────────────────────────────────────
     const verdict = [];
-    if (!reconstructionOk) {
-      verdict.push("VOID: the fair = model_prob - edge identity failed. Fix the reconstruction before reading anything else.");
-    } else {
-      const gc = gammaVsClose.gamma, gcSe = gammaVsClose.se;
-      const go = gammaVsOutcome.gamma, goSe = gammaVsOutcome.se;
-      if (gc != null && gcSe != null) {
-        const sig = Math.abs(gc) > 1.96 * gcSe;
-        verdict.push(`CLV fit (n=${gammaVsClose.n}): gamma=${r3(gc)} +/- ${r3(1.96 * gcSe)}. ${sig ? (gc > 0 ? "SIGNIFICANT and POSITIVE — the sharp close moves toward the model. Real information." : "SIGNIFICANT and NEGATIVE — the model is a contrarian indicator. Every edge on the board is inverted.") : "NOT distinguishable from zero. The model's disagreement is not confirmed by the sharp close."}`);
+    for (const m of markets) {
+      const d = perMarket[m];
+      if (!d || d.note || d.error) { verdict.push(`${m}: ${d?.note || d?.error || "no data"}`); continue; }
+      const gc = d.gammaVsClose || {};
+      if (gc.gamma != null && gc.significant) {
+        verdict.push(gc.gamma < 0
+          ? `${m}: gamma ${gc.gamma} [${gc.ci95[0]}, ${gc.ci95[1]}] n=${gc.n} — SIGNIFICANTLY NEGATIVE. The sharp close moves AGAINST the model's disagreement. The fundamentals are subtracting value on this market.`
+          : `${m}: gamma ${gc.gamma} [${gc.ci95[0]}, ${gc.ci95[1]}] n=${gc.n} — significantly POSITIVE. Real information; W_MODEL could rise toward it.`);
+      } else if (gc.gamma != null) {
+        verdict.push(`${m}: gamma ${gc.gamma} not distinguishable from zero (n=${gc.n}). Disagreement unconfirmed either way.`);
       } else {
-        verdict.push("CLV fit unavailable — pinnacle_fair_prob is null on these rows. This is the high-power test and it is the one to get working.");
+        verdict.push(`${m}: no CLV rows — pinnacle_fair_prob is null. This is the high-power test; populating it matters more than any board change.`);
       }
-      if (go != null && goSe != null) {
-        const sig = Math.abs(go) > 1.96 * goSe;
-        verdict.push(`Outcome fit (n=${gammaVsOutcome.n}): gamma=${r3(go)} +/- ${r3(1.96 * goSe)}. ${sig ? "Significant." : "NOT significant — expected at this sample size; do not read a verdict into it either way."}`);
+      if (d.gammaSignStableAcrossW === false) verdict.push(`${m}: WARNING — gamma sign flips across W. Sign AND magnitude unresolved.`);
+      const mb = d.marketBaseline || {};
+      if (mb.modelSelected?.n && mb.marketSelected?.n) {
+        verdict.push(`${m}: model-selected ${mb.modelSelected.realRoiPct}% ROI (n=${mb.modelSelected.n}) vs market-selected ${mb.marketSelected.realRoiPct}% (n=${mb.marketSelected.n}).`);
       }
-      if (gc != null && go != null && Math.sign(gc) !== Math.sign(go)) {
-        verdict.push("The two fits DISAGREE IN SIGN. Believe the CLV fit; the outcome fit has ~100x less power at these sample sizes.");
-      }
-      verdict.push(`W_MODEL is set to ${W}. ${gc != null ? `The CLV fit says the honest weight is ~${r3(gc)}.` : ""} A W above the true gamma means every published edge is overstated by the difference.`);
+      const worst = (d.calibration || []).filter(b => b.gapPts != null).sort((a, b) => a.gapPts - b.gapPts)[0];
+      if (worst) verdict.push(`${m}: worst calibration bucket ${worst.bucket} — claimed ${worst.claimedPct}%, delivered ${worst.actualPct}% (${worst.gapPts} pts, n=${worst.n}).`);
     }
+    verdict.push("Calibration and published ROI depend on nothing but model_prob, odds and result — trust those first. gamma depends on the reconstruction and on W; gammaWSweep shows whether its sign survives W being wrong.");
 
-    res.json({
-      token: "WZ-GAMMAFIT-2026-07-23",
-      league, market, publishFloor: BAND,
-      reconstruction,
-      gammaVsClose: { ...gammaVsClose, gamma: r3(gammaVsClose.gamma), alpha: r3(gammaVsClose.alpha), se: r3(gammaVsClose.se), ci95: gammaVsClose.ci95 ? gammaVsClose.ci95.map(r3) : null },
-      gammaVsOutcome: { ...gammaVsOutcome, gamma: r3(gammaVsOutcome.gamma), se: r3(gammaVsOutcome.se), ci95: gammaVsOutcome.ci95 ? gammaVsOutcome.ci95.map(r3) : null },
-      oos,
-      evAudit,
-      verdict,
-    });
+    res.json({ token: "WZ-GAMMAFIT-2026-07-24", league, publishFloor: BAND, wAssumed: W, perMarket, verdict });
   } catch (e) {
     console.error("[gammafit] error:", e.message);
-    res.status(500).json({ token: "WZ-GAMMAFIT-2026-07-23", error: e.message });
+    res.status(500).json({ token: "WZ-GAMMAFIT-2026-07-24", error: e.message });
   }
 });
 
