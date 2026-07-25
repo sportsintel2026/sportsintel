@@ -2003,7 +2003,7 @@ router.get("/cfb", gatePicks, async (req, res) => {
       moneylineEdges, spreadEdges, totalsEdges,
       runLineEdges: [], hrPropEdges: [], kPropEdges: [], hitsPropEdges: [],
       computedAt: new Date().toISOString(),
-      disclaimer: "PROVISIONAL: 2025-seeded FBS ratings (SRS strength-of-schedule applied) vs preseason lines. Not calibrated — no graded CFB results yet. For build/validation only; not betting advice until shadow-graded in-season.",
+      disclaimer: `PROVISIONAL: 2025-seeded FBS ratings (SRS strength-of-schedule applied) vs ${slate?.phase?.selected === "preseason" ? "preseason" : "regular-season"} lines. Not calibrated — no graded CFB results yet. For build/validation only; not betting advice until shadow-graded in-season.`,
     });
   } catch (e) {
     console.error("[edges/cfb] error:", e.message);
