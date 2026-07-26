@@ -259,10 +259,32 @@ async function refreshGuard() {
       const claimed = n ? (claimSum / n) * 100 : null;
       const actual = n ? (hit / n) * 100 : null;
       const gap = (claimed != null && actual != null) ? Math.round((claimed - actual) * 10) / 10 : null;
-      const cleared = n >= cfg.minN && gap != null && gap < cfg.gapUnbench;
+      // WZ-RELEASE-BOTH-GATES-2026-07-26 :: releasing on the SHADOW rows alone is not sufficient and
+      // leaked -EV picks onto the live board. run_line's rebuilt-model shadow (n=119, gap 2.4) said
+      // "release," but its PUBLISHED/core rows (n=178, gap 8.0) were still ~8pts over-claiming; once
+      // released, isBenched() defers to the flapping auto-guard and edges.js:933 let the RL board
+      // through. Require BOTH the shadow gap AND the published/core gap to clear GAP_UNBENCH.
+      const shadowClear = n >= cfg.minN && gap != null && gap < cfg.gapUnbench;
+      // Published/core verdict from the auto-guard computed just above (`_status = next`). Mirror its
+      // own allClear standard: every read with a real sample must sit under GAP_UNBENCH, and at least
+      // one read must have a real sample (never release on zero published evidence).
+      const core = _status[m] || {};
+      const coreRec = core.recent || {};
+      const coreCumReady = core.n != null && core.n >= MIN_N && core.gapPts != null;
+      const coreRecReady = coreRec.effectiveN != null && coreRec.effectiveN >= MIN_N && coreRec.gapPts != null;
+      const publishedClear = (coreCumReady || coreRecReady)
+        && (!coreCumReady || core.gapPts < GAP_UNBENCH)
+        && (!coreRecReady || coreRec.gapPts < GAP_UNBENCH);
+      const cleared = shadowClear && publishedClear;
       if (cleared && !_released.has(m)) {
         _released.add(m);
-        console.warn(`[CALIB-GUARD] ${m} RELEASED from manual bench by shadow-watch (n=${n}, gap ${gap}pts, claimed ${claimed.toFixed(1)}% vs actual ${actual.toFixed(1)}%) -- now governed by the live published guard.`);
+        console.warn(`[CALIB-GUARD] ${m} RELEASED from manual bench -- BOTH gates clear: shadow n=${n} gap ${gap}pts AND published n=${core.n} gap ${core.gapPts}pts (recent ${coreRec.gapPts}pts). Now governed by the live published guard.`);
+      } else if (!cleared && _released.has(m)) {
+        // WZ-RELEASE-BOTH-GATES-2026-07-26 :: revoke a stale release the instant EITHER gate re-breaks,
+        // so a market can't sit released-and-flapping at the bench threshold. Re-instates the hard
+        // manual bench immediately (isBenched short-circuits true again) instead of waiting for a restart.
+        _released.delete(m);
+        console.warn(`[CALIB-GUARD] ${m} RE-BENCHED (manual) -- release revoked: shadow n=${n} gap ${gap}pts / published n=${core.n} gap ${core.gapPts}pts no longer BOTH clear GAP_UNBENCH ${GAP_UNBENCH}.`);
       }
       shadowNext[m] = {
         shadowMarket: cfg.market, sinceRebuild: cfg.since, n,
