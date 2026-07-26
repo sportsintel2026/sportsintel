@@ -397,6 +397,118 @@ router.get("/rlbacktest", async (req, res) => {
   }
 });
 
+// WZ-RLBIAS-2026-07-26 :: read-only run-line over-claim ATTRIBUTION. Extends /rlbacktest with two things
+// it lacked: (a) uses the model's STORED projectedTotal (total_shadow.projected, logged since 2026-07-17)
+// as T -- the REAL input the live cover used -- instead of the market-line proxy; and (b) decomposes the
+// confident-band over-claim (guard: ~+8) across T (totals projection) vs phi (NegBin dispersion) by
+// re-scoring at projected-T vs ACTUAL total and sweeping phi. Pure REPLAY of the live runLineCoverModel:
+// no model change, no logging. GET /api/performance/rlbias [?since=YYYY-MM-DD]
+router.get("/rlbias", async (req, res) => {
+  try {
+    const supabase = db();
+    const since = req.query.since || null;
+    const SHADOW = ["moneyline_shadow", "total_shadow", "run_line_shadow"];
+    const LIVE_PHI = 1.8;                         // must mirror RUN_PHI in edgesModel.js (WZ-RUNPHI-1P8-2026-07-17)
+    const PHIS = [1.8, 2.2, 2.6, 3.0, 3.5, 4.0];
+    const r1 = (x) => (Number.isFinite(x) ? Math.round(x * 10) / 10 : null);
+
+    const PAGE = 1000; let from = 0; const rows = [];
+    for (let i = 0; i < 40; i++) {
+      let q = supabase.from("model_predictions")
+        .select("game_id, matchup, market, model_prob, line, result, game_date, projected, actual_value")
+        .eq("league", "mlb").in("market", SHADOW)
+        .order("game_date", { ascending: true }).range(from, from + PAGE - 1);
+      if (since) q = q.gte("game_date", since);
+      const { data, error } = await q;
+      if (error) throw error;
+      if (!data || !data.length) break;
+      rows.push(...data);
+      if (data.length < PAGE) break;
+      from += PAGE;
+    }
+
+    // Join the three shadow markets per game (same key strategy as /rlbacktest).
+    const games = new Map();
+    for (const r of rows) {
+      const key = (r.game_id != null ? String(r.game_id) : (r.matchup || "?")) + "|" + (r.game_date || "?");
+      let g = games.get(key); if (!g) { g = {}; games.set(key, g); }
+      if (r.market === "moneyline_shadow") g.p = r.model_prob != null ? Number(r.model_prob) : null;
+      else if (r.market === "total_shadow") { g.Tproj = r.projected != null ? Number(r.projected) : null; g.Tactual = r.actual_value != null ? Number(r.actual_value) : null; }
+      else if (r.market === "run_line_shadow") { g.rlLine = r.line != null ? Number(r.line) : null; g.rlResult = r.result; }
+    }
+    // Attribution set: needs projected T, ACTUAL total, win prob, RL line, and a graded cover.
+    const G = [];
+    for (const g of games.values()) {
+      if (g.Tproj == null || g.Tactual == null || g.p == null || g.rlLine == null || (g.rlResult !== "win" && g.rlResult !== "loss")) continue;
+      G.push(g);
+    }
+    const n = G.length;
+    if (!n) return res.json({ token: "WZ-RLBIAS-2026-07-26", n: 0, note: "No graded run_line_shadow games yet that join a stored total_shadow.projected + total_shadow.actual_value + moneyline_shadow prob. Projected logs since 2026-07-17; re-check after a few graded slates." });
+
+    // Home-cover over-claim = mean(model P(home covers)) - actual home-cover rate. run_line_shadow always
+    // books the HOME side, so this needs no confident-side flipping and is a clean scalar to attribute
+    // across T-source and phi. Also report the confident featured-side 0.60+ band (the guard's lens).
+    const score = (Tget, phi) => {
+      let claimSum = 0, hit = 0, m = 0, cbClaim = 0, cbHit = 0, cbN = 0;
+      for (const g of G) {
+        const pc = runLineCoverModel(Tget(g), g.p, g.rlLine, phi);
+        const homeCovered = g.rlResult === "win";
+        claimSum += pc; if (homeCovered) hit++; m++;
+        const confP = Math.max(pc, 1 - pc);
+        if (confP >= 0.60) { cbClaim += confP; if (pc >= 0.5 ? homeCovered : !homeCovered) cbHit++; cbN++; }
+      }
+      const claimed = m ? claimSum / m * 100 : null, actual = m ? hit / m * 100 : null;
+      const cbC = cbN ? cbClaim / cbN * 100 : null, cbA = cbN ? cbHit / cbN * 100 : null;
+      return {
+        n: m,
+        homeCoverClaimedPct: r1(claimed), homeCoverActualPct: r1(actual),
+        homeCoverGapPts: (claimed != null && actual != null) ? r1(claimed - actual) : null,
+        confBand060: { n: cbN, claimedPct: r1(cbC), actualPct: r1(cbA), gapPts: (cbC != null && cbA != null) ? r1(cbC - cbA) : null },
+      };
+    };
+
+    const baseline = score(g => g.Tproj, LIVE_PHI);     // live model, projected T -> reproduces the guard over-claim
+    const perfectT = score(g => g.Tactual, LIVE_PHI);   // swap in the ACTUAL total -> isolates T's contribution
+    const phiSweepProjectedT = PHIS.map(phi => ({ phi, ...score(g => g.Tproj, phi) }));
+    const phiSweepPerfectT = PHIS.map(phi => ({ phi, ...score(g => g.Tactual, phi) }));
+
+    const tContributionGapPts = (baseline.homeCoverGapPts != null && perfectT.homeCoverGapPts != null) ? r1(baseline.homeCoverGapPts - perfectT.homeCoverGapPts) : null;
+    const phiClearProjT = phiSweepProjectedT.filter(s => s.homeCoverGapPts != null).sort((a, b) => Math.abs(a.homeCoverGapPts) - Math.abs(b.homeCoverGapPts))[0];
+    const phiClearPerfectT = phiSweepPerfectT.filter(s => s.homeCoverGapPts != null).sort((a, b) => Math.abs(a.homeCoverGapPts) - Math.abs(b.homeCoverGapPts))[0];
+
+    const verdict = [];
+    verdict.push(`Baseline (projected T, phi ${LIVE_PHI}): home-cover claimed ${baseline.homeCoverClaimedPct}% vs actual ${baseline.homeCoverActualPct}% = ${baseline.homeCoverGapPts}pt over-claim; confident 0.60+ band ${baseline.confBand060.gapPts}pt (n=${baseline.confBand060.n}). Should track the guard's published +8.`);
+    if (tContributionGapPts != null) verdict.push(`T attribution: replacing the model's projected total with the ACTUAL total moves the over-claim by ${tContributionGapPts}pt. That much of the +8 is the totals projection (PR #12 just reduced projected T -- re-run after a few post-deploy slates). The remainder is the margin model / dispersion, NOT totals.`);
+    if (phiClearProjT) verdict.push(`phi sweep (projected T): over-claim is smallest at phi=${phiClearProjT.phi} (gap ${phiClearProjT.homeCoverGapPts}pt). RUN_PHI is ${LIVE_PHI} now; if a higher phi flattens it, the NegBin margins are too tight (covers over-predicted).`);
+    if (phiClearPerfectT) verdict.push(`phi sweep (perfect T): with totals removed, over-claim is smallest at phi=${phiClearPerfectT.phi} (gap ${phiClearPerfectT.homeCoverGapPts}pt) -- this is the DISPERSION lever in isolation.`);
+    verdict.push("Two documented proxies (inherited from /rlbacktest): p = moneyline_shadow.model_prob (blended home win prob); cover outcome = the shadow HOME side. Directional attribution, not a bench gate.");
+
+    res.json({
+      token: "WZ-RLBIAS-2026-07-26",
+      livePhi: LIVE_PHI,
+      gamesScored: n,
+      attribution: {
+        note: "home-cover over-claim = mean model P(home covers) - actual home-cover rate. baseline = live (projected T, live phi). tContributionGapPts = baseline gap - perfect-T gap = the totals projection's share. Whatever remains after perfect T is the margin model / phi.",
+        baseline_projectedT_livePhi: baseline,
+        perfectT_livePhi: perfectT,
+        tContributionGapPts,
+      },
+      phiSweep_projectedT: phiSweepProjectedT,
+      phiSweep_perfectT: phiSweepPerfectT,
+      verdict,
+      caveats: [
+        "Pure REPLAY of the LIVE run-line margin model (runLineCoverModel) -- no model change, no logging.",
+        "T = total_shadow.projected (the model's own projected total, logged since 2026-07-17), NOT the market line.",
+        "perfectT swaps in total_shadow.actual_value (the real total); the attribution set requires it, so pushed-total games (actual_value null) are excluded.",
+        "p = moneyline_shadow.model_prob (blended home win prob); cover outcome = run_line_shadow HOME side.",
+      ],
+    });
+  } catch (err) {
+    console.error("[rlbias] error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // WZ-TOTALSBIAS-2026-07-17 :: read-only totals over-lean meter. For graded full-slate total_shadow rows
 // that carry a stored projected total, measures mean(projected - actual_value) = the projection's bias in
 // runs (+ = projects HIGH = over-lean), recommends the TOTAL_MEAN_ADJ that centers it, and dials candidate
