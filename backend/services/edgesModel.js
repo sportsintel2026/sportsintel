@@ -367,8 +367,15 @@ function calculateTotalProjection(game, awayPitcher, homePitcher, awayTeamHit, h
   if (weather && !weather.indoor) {
     if (weather.windEffect === "out") weatherAdj += 0.4;
     if (weather.windEffect === "in") weatherAdj -= 0.4;
-    if (weather.tempEffect === "hot") weatherAdj += 0.3;
-    if (weather.tempEffect === "cold") weatherAdj -= 0.3;
+    // WZ-TEMP-CENTERED-2026-07-26 :: temperature WAS an asymmetric binary step (tempEffect
+    // "hot" >80F +0.3 / "cold" <55F -0.3). In summer "hot" fires on most open-air games while
+    // "cold" almost never does, so it added ~+0.3 nearly every game -- the structural totals
+    // over-lean root-caused tonight to weather_adj. Replace with a CONTINUOUS term centered at
+    // 72F so it nets ~0 across a season; same +/-0.3 cap (reached near 59F / 85F). Wind logic
+    // is unchanged (its sign was confirmed correct). tempF is on the weather object already.
+    if (weather.tempF != null) {
+      weatherAdj += Math.max(-0.3, Math.min(0.3, (weather.tempF - 72) * 0.023));
+    }
   }
 
   // Bullpen adjustment: scale by EXPECTED bullpen innings (9 minus the starter's

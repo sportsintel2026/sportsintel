@@ -132,9 +132,10 @@ async function getWeatherForVenue(venueName, gameTimeISO) {
       const precip = src.precipitation;
       const code = src.weather_code;
 
-      // Calculate wind direction relative to home plate → CF
-      // If wind direction matches venue orientation (±45deg), wind is "out to CF"
-      // If wind direction is 180° opposite, wind is "in from CF" (suppresses HRs)
+      // Calculate wind direction relative to home plate → CF.
+      // wind_direction_10m is the FROM direction (meteorological convention). So windDir ≈
+      // orientation means wind coming FROM center field → blowing IN toward home (suppresses);
+      // windDir ≈ 180° opposite orientation means wind blowing OUT to CF (boosts HRs).
       const relativeAngle = Math.abs(((windDir - venue.orientation + 540) % 360) - 180);
       let windEffect;
       let windLabel;
