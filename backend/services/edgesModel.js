@@ -2724,6 +2724,7 @@ async function calculateTriplesBoard(games, oddsByEvent) { return calculateRareH
 module.exports = {
   calculateGameEdges,
   runLineCoverModel, // WZ-RL-BACKTEST-2026-07-17 :: real run-line margin model, for the replay probe
+  RUN_PHI,           // WZ-RLBIAS-LIVEPHI-2026-07-26 :: exported so diagnostics read the LIVE phi (single source of truth)
   calculateHRPropEdges,
   calculateStrikeoutPropEdges,
   calculateStrikeoutShadow,

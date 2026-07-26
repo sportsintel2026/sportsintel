@@ -13,7 +13,7 @@ const express = require("express");
 const router = express.Router();
 const { createClient } = require("@supabase/supabase-js");
 const calibrationGuard = require("../services/calibrationGuard"); // WZ-CALIB-GUARD-2026-07-17
-const { runLineCoverModel } = require("../services/edgesModel"); // WZ-RL-BACKTEST-2026-07-17 :: real run-line model for replay
+const { runLineCoverModel, RUN_PHI } = require("../services/edgesModel"); // WZ-RL-BACKTEST-2026-07-17 :: real run-line model for replay + live RUN_PHI (single source)
 
 // --- per-sport market config -------------------------------------------------
 // core  = team markets that count toward the overall record + CLV
@@ -408,7 +408,7 @@ router.get("/rlbias", async (req, res) => {
     const supabase = db();
     const since = req.query.since || null;
     const SHADOW = ["moneyline_shadow", "total_shadow", "run_line_shadow"];
-    const LIVE_PHI = 1.8;                         // must mirror RUN_PHI in edgesModel.js (WZ-RUNPHI-1P8-2026-07-17)
+    const LIVE_PHI = RUN_PHI;                     // WZ-RLBIAS-LIVEPHI-2026-07-26 :: reads the LIVE model RUN_PHI from edgesModel (was hardcoded 1.8). Single source of truth -- auto-follows RUN_PHI, can never drift/mislabel again.
     const PHIS = [1.8, 2.2, 2.6, 3.0, 3.5, 4.0];
     const r1 = (x) => (Number.isFinite(x) ? Math.round(x * 10) / 10 : null);
 
