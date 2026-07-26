@@ -531,6 +531,9 @@ async function recordPredictions(result) {
         weather_adj: b.weatherAdj ?? null,
         bullpen_adj: b.bullpenAdj ?? null,
         fatigue_adj: b.fatigueAdj ?? null,
+        ou_adj: b.ouAdj ?? null,     // WZ-LOG-NUDGES-2026-07-26 :: the three 07-09/07-10 mean nudges,
+        ump_adj: b.umpAdj ?? null,   // persisted per-pick so /totalsbias can attribute the over-lean
+        def_adj: b.defAdj ?? null,   // to a specific term instead of only measuring them as a lumped residual
       };
     }
   }
@@ -659,6 +662,9 @@ async function recordPredictions(result) {
         model_prob: g.totals.overProb, odds: g.totals.overOdds,
         edge: g.totals.overEdge ?? null, confidence: g.totals.overConfidence ?? "NEUTRAL", line: g.totals.line,
         projected: g.totals.projected ?? null, // WZ-TOTALSPROJ-2026-07-17 :: store the model projection so /totalsbias can measure over-lean = mean(projected - actual_value)
+        ou_adj: g.totals.breakdown?.ouAdj ?? null,   // WZ-LOG-NUDGES-2026-07-26 :: the three mean nudges on the
+        ump_adj: g.totals.breakdown?.umpAdj ?? null, // full-slate shadow row too, so the per-term counterfactual
+        def_adj: g.totals.breakdown?.defAdj ?? null, // (projected - nudge) is exact on the whole n, no join needed
       });
       shadowPushed++;
     }
