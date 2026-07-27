@@ -115,10 +115,20 @@ async function parseBout(bout, oddsMap) {
   if (!red || !blue) return null;
 
   // market odds: Cito per-bout first, else The Odds API by name
-  let implRed = impliedFromAny(bout.odds && bout.odds.red);
-  let implBlue = impliedFromAny(bout.odds && bout.odds.blue);
-  let amRed = Number.isFinite(Number(bout.odds && bout.odds.red)) ? Number(bout.odds.red) : null;
-  let amBlue = Number.isFinite(Number(bout.odds && bout.odds.blue)) ? Number(bout.odds.blue) : null;
+  // WZ-UFC-ODDSNULL-2026-07-27 :: resolve each side's raw price ONCE, then test that value.
+  // The previous form guarded the TEST but not the branch the test protects:
+  //   Number.isFinite(Number(bout.odds && bout.odds.red)) ? Number(bout.odds.red) : null
+  // With bout.odds null the guard yields null, Number(null) is 0, Number.isFinite(0) is TRUE,
+  // so it took the true branch and dereferenced bout.odds.red on a null object. That TypeError
+  // rejected the Promise.all in buildCitoCard and blacked out the ENTIRE card whenever any
+  // single bout had no line posted yet -- routine for prelims days before an event.
+  // It also returned 0 (a meaningless American price) when odds existed but one side was null.
+  const rawRed = bout.odds && bout.odds.red != null ? bout.odds.red : null;
+  const rawBlue = bout.odds && bout.odds.blue != null ? bout.odds.blue : null;
+  let implRed = impliedFromAny(rawRed);
+  let implBlue = impliedFromAny(rawBlue);
+  let amRed = rawRed != null && Number.isFinite(Number(rawRed)) ? Number(rawRed) : null;
+  let amBlue = rawBlue != null && Number.isFinite(Number(rawBlue)) ? Number(rawBlue) : null;
   if (implRed == null || implBlue == null) {
     const oR = oddsMap.get(normName(red.name));
     const oB = oddsMap.get(normName(blue.name));
