@@ -509,6 +509,125 @@ router.get("/rlbias", async (req, res) => {
   }
 });
 
+// WZ-MLCALIB-2026-07-26 :: read-only moneyline calibration audit. Bands model_prob vs actual win rate for
+// BOTH the unbiased full-slate moneyline_shadow set AND the selection-biased published moneyline set (since
+// the 2026-07-08 reset), side by side in one response. CLV/beat_close on the CORE set only -- the CLV capture
+// sweep in predictionTracker.js filters .in("market", ["moneyline","total","run_line"]), so shadow rows never
+// receive clv/beat_close (structurally NULL, not zero). No writes, no model change. GET /api/performance/mlcalib
+router.get("/mlcalib", async (req, res) => {
+  try {
+    const supabase = db();
+    const CORE_SINCE = "2026-07-08"; // moneyline reset cutoff
+    const r1 = (x) => (Number.isFinite(x) ? Math.round(x * 10) / 10 : null);
+    const pct2 = (x) => (Number.isFinite(x) ? Math.round(x * 10000) / 100 : null); // mean(clv) -> clv percentage points
+
+    // Paged pull -- copies the totalsbias PAGEFIX cursor advance (`from += PAGE`), NOT the pre-fix bug that
+    // re-fetched page one up to 40x.
+    const pull = async (market, cols, since) => {
+      const PAGE = 1000; let from = 0; const rows = [];
+      for (let i = 0; i < 40; i++) {
+        let q = supabase.from("model_predictions")
+          .select(cols)
+          .eq("league", "mlb").eq("market", market)
+          .in("result", ["win", "loss"])
+          .order("game_date", { ascending: true }).range(from, from + PAGE - 1);
+        if (since) q = q.gte("game_date", since);
+        const { data, error } = await q;
+        if (error) throw error;
+        if (!data || !data.length) break;
+        rows.push(...data);
+        if (data.length < PAGE) break;
+        from += PAGE; // advance the cursor (WZ-TOTALSBIAS-PAGEFIX pattern)
+      }
+      return rows;
+    };
+
+    const BANDS = [
+      { key: "0.50-0.55", lo: 0.50, hi: 0.55 },
+      { key: "0.55-0.60", lo: 0.55, hi: 0.60 },
+      { key: "0.60-0.65", lo: 0.60, hi: 0.65 },
+      { key: "0.65-0.70", lo: 0.65, hi: 0.70 },
+      { key: "0.70+",     lo: 0.70, hi: 1.0001 },
+    ];
+    const bandOf = (p) => { for (const b of BANDS) if (p >= b.lo && p < b.hi) return b.key; return null; };
+
+    const bandRows = (rows, withClv) => {
+      const acc = {};
+      for (const b of BANDS) acc[b.key] = { n: 0, probSum: 0, wins: 0, clvSum: 0, clvN: 0, beat: 0, beatN: 0 };
+      let bandedN = 0;
+      for (const r of rows) {
+        const p = r.model_prob == null ? null : Number(r.model_prob);
+        if (p == null || !Number.isFinite(p)) continue;
+        const k = bandOf(p); if (!k) continue;      // model_prob < 0.50 (home dogs on the shadow side) fall outside the bands
+        const a = acc[k]; a.n++; a.probSum += p; if (r.result === "win") a.wins++; bandedN++;
+        if (withClv) {
+          if (r.clv != null && Number.isFinite(Number(r.clv))) { a.clvSum += Number(r.clv); a.clvN++; }
+          if (r.beat_close != null) { a.beatN++; if (r.beat_close === true) a.beat++; }
+        }
+      }
+      const bands = {};
+      for (const b of BANDS) {
+        const a = acc[b.key];
+        const claimed = a.n ? a.probSum / a.n * 100 : null;
+        const actual = a.n ? a.wins / a.n * 100 : null;
+        const row = { n: a.n, claimedPct: r1(claimed), actualPct: r1(actual), gapPts: (claimed != null && actual != null) ? r1(claimed - actual) : null };
+        if (withClv) { row.avgClvPct = a.clvN ? pct2(a.clvSum / a.clvN) : null; row.beatCloseRatePct = a.beatN ? r1(a.beat / a.beatN * 100) : null; row.clvN = a.clvN; }
+        bands[b.key] = row;
+      }
+      return { bands, bandedN };
+    };
+
+    const shadowRows = await pull("moneyline_shadow", "model_prob, result, game_date", null);
+    const coreRows = await pull("moneyline", "model_prob, result, game_date, clv, beat_close", CORE_SINCE);
+    const shadow = bandRows(shadowRows, false);
+    const core = bandRows(coreRows, true);
+
+    // Verdict: n>=40 AND gap>0 = REAL over-claim; n<40 = underpowered (no verdict).
+    const verdict = [];
+    let anyOver = false;
+    const judge = (label, bands) => {
+      for (const b of BANDS) {
+        const row = bands[b.key];
+        if (row.n >= 40 && row.gapPts != null && row.gapPts > 0) { anyOver = true; verdict.push(`${label} ${b.key}: OVER-CLAIM (n=${row.n}>=40) -- claimed ${row.claimedPct}% vs actual ${row.actualPct}%, gap +${row.gapPts}pt. Real: sold stronger than it hits.`); }
+        else if (row.n > 0 && row.n < 40) { verdict.push(`${label} ${b.key}: underpowered (n=${row.n}<40) -- no verdict.`); }
+        else if (row.n >= 40) { verdict.push(`${label} ${b.key}: OK (n=${row.n}, gap ${row.gapPts}pt, not over-claiming).`); }
+      }
+    };
+    judge("shadow", shadow.bands);
+    judge("core", core.bands);
+    verdict.unshift(anyOver ? "OVER-CLAIM in a well-sampled band (n>=40, gap>0) -- see flags below." : "No well-sampled band (n>=40) over-claims. Underpowered bands (n<40) are marked, not judged.");
+
+    res.json({
+      token: "WZ-MLCALIB-2026-07-26",
+      bands: BANDS.map(b => b.key),
+      shadow: {
+        market: "moneyline_shadow",
+        note: "UNBIASED full-slate sample (home side of every scheduled game); no selection filter. CLV is NOT available here and is NOT zero: the CLV capture sweep in predictionTracker.js filters .in('market', ['moneyline','total','run_line']), so moneyline_shadow rows never receive clv/beat_close -- they are structurally NULL. Omitted deliberately; do not read the absence as zero CLV.",
+        nTotal: shadowRows.length, nBanded: shadow.bandedN,
+        bands: shadow.bands,
+      },
+      core: {
+        market: "moneyline",
+        since: CORE_SINCE,
+        note: "SELECTION-BIASED published board (only picks surfaced since the 2026-07-08 reset). CLV present (US best-of-books, sound). Core under-claiming vs the shadow set may be selection, not calibration.",
+        nTotal: coreRows.length, nBanded: core.bandedN,
+        bands: core.bands,
+      },
+      verdict,
+      caveats: [
+        "Read-only; no writes, no model change, no migration.",
+        "claimedPct = mean model_prob; actualPct = win rate; gapPts = claimed - actual (POSITIVE = OVER-claim, dangerous).",
+        "shadow = unbiased (home side, every game); core = selection-biased (published picks since 2026-07-08).",
+        "CLV/beat_close on CORE only. Shadow CLV is structurally NULL (see shadow.note) -- never mistake for zero.",
+        "avgClvPct = mean(clv)*100 (percentage points); clvN = graded core rows in that band that carry a clv value.",
+      ],
+    });
+  } catch (err) {
+    console.error("[mlcalib] error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // WZ-TOTALSBIAS-2026-07-17 :: read-only totals over-lean meter. For graded full-slate total_shadow rows
 // that carry a stored projected total, measures mean(projected - actual_value) = the projection's bias in
 // runs (+ = projects HIGH = over-lean), recommends the TOTAL_MEAN_ADJ that centers it, and dials candidate
