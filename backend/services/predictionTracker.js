@@ -5,7 +5,7 @@
 // gradeFinishedGames()  → cron: grades pending MLB (team scores) and NBA (player gamelog).
 
 const { createClient } = require("@supabase/supabase-js");
-const { getEasternDate, getScheduleForDate, getGameHRHitters, getGamePitcherStrikeouts, getGameBatterHits, getGameBatterTotalBases, getLinescore, getGameStatusAndScore, normPlayerName } = require("./mlbStatsApi");
+const { isPreGame, getEasternDate, getScheduleForDate, getGameHRHitters, getGamePitcherStrikeouts, getGameBatterHits, getGameBatterTotalBases, getLinescore, getGameStatusAndScore, normPlayerName } = require("./mlbStatsApi");
 const { fetchGamelog } = require("./nbaGamelog");
 const { fetchScoreboard } = require("./nbaDataSource");
 const { fetchScoreboard: fetchNflScoreboard } = require("./nflDataSource");
@@ -175,7 +175,7 @@ async function captureClosingLines() {
       const schedule = await getScheduleForDate(date);
       for (const g of schedule) {
         gameNames[String(g.id)] = { away: g.away, home: g.home, date };
-        if (g.status !== "scheduled" || !g.startTimeUTC) continue;
+        if (!isPreGame(g.status) || !g.startTimeUTC) continue; // WZ-SLATESTATE-SSOT-2026-07-27
         const msToStart = new Date(g.startTimeUTC).getTime() - now;
         if (msToStart > 0 && msToStart <= CLOSING_WINDOW_MS) {
           closingWindowGameIds.add(String(g.id));
@@ -642,7 +642,7 @@ async function recordPredictions(result) {
   // is skipped -- honestly unmeasurable for ROI anyway.
   let shadowPushed = 0;
   for (const g of result.games) {
-    if (g.status !== "scheduled") continue; // pre-game snapshots only (mirrors the board's isPreGame gate)
+    if (!isPreGame(g.status)) continue; // WZ-SLATESTATE-SSOT-2026-07-27 :: pre-game snapshots only -- now the SAME predicate as the board, not a hand-kept mirror
     const abbrs = `${g.awayAbbr || "?"} @ ${g.homeAbbr || "?"}`;
     if (g.moneyline && g.moneyline.homeWinProb != null && g.moneyline.homeOdds != null) {
       rows.push({

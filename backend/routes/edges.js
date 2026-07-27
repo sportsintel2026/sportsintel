@@ -83,6 +83,7 @@ function gatePicks(req, res, next) {
 const {
   getEasternDate,
   getScheduleForDate,
+  isPreGame, // WZ-SLATESTATE-SSOT-2026-07-27 :: shared pre-game predicate
 } = require("../services/mlbStatsApi");
 const { canonAbbr } = require("../services/teamKey"); // WZ-TEAMKEY-SSOT-2026-07-17
 const {
@@ -262,9 +263,13 @@ async function resolveSlateDate() {
   // Stay on today's board until the WHOLE West Coast slate is FINAL. While any of today's games is
   // still scheduled or live, this is TODAY'S board -- tomorrow's games never show early.
   const allFinal = playable.length > 0 && playable.every(g => g.status === "final");
-  // "underway" = today's slate has started (any game live or final). Used to decide when to
-  // surface the next slate's preview beneath today's board.
-  const underway = playable.some(g => g.status === "live" || g.status === "final");
+  // WZ-PREVIEW-LASTFIRSTPITCH-2026-07-27 :: "underway" gates tomorrow's preview board. It used to
+  // mean "ANY game live or final", which flipped true on the day's FIRST first pitch -- ~10am PT --
+  // while ten-plus night games were still pre-game and today's board was still fully bettable.
+  // It now means "NO game is still pre-game", which is the exact moment today's board can no longer
+  // produce a pick, because the edge builders below admit pre-game games only. Same shared
+  // predicate, so the gate and the board can never disagree again.
+  const underway = playable.length > 0 && !playable.some(g => isPreGame(g.status));
 
   if (playable.length > 0 && !allFinal) {
     return { date: today, rolled: false, underway };
@@ -602,7 +607,6 @@ router.get("/mlb", gatePicks, async (req, res) => {
     // strict allow-list rather than a block-list so live/in-progress/delayed/final
     // can never slip into the rankings, whatever the exact status word is.
     // (Live games still get accurate LIVE edges on their own detail page.)
-    const isPreGame = (status) => status === "scheduled";
     // WZ-WINNERS-2026-07-07 :: MONEYLINE = WINNERS. For each game we take the ONE side our model
     // gives the higher win probability (the team we think WINS -- favorite OR underdog), and keep it
     // only when that win% clears the floor. No edge gate and no dog cap: an underdog appears ONLY when
@@ -1300,7 +1304,6 @@ router.get("/market-read/mlb", gateModelData, async (req, res) => {
     } catch (_) { /* move read just goes quiet if history is unavailable */ }
 
     const MOVE_MIN_CENTS = 12; // a move must clear this to be "convincing"
-    const isPreGame = (status) => status === "scheduled";
 
     const out = [];
     for (const ge of gameEdges) {
