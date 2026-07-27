@@ -26,6 +26,11 @@ const ODDS_TTL_MS = 10 * 60 * 1000;
 let cardCache = { at: 0, data: null };
 let cardInflight = null;
 let oddsCache = { at: 0, map: null };
+// WZ-UFC-CARDERR-2026-07-27 :: the two catch blocks that emit source:"none" discarded the
+// error, so a live UFC outage produced a 200 with an empty card and NOTHING anywhere to
+// debug. Capture the last failure (message + stack) and log it. Read back via /api/ufc/probe,
+// which is adminGuard'd. Never rendered to a customer.
+let _lastCardError = null;
 
 // ---- odds helpers ----------------------------------------------------------
 function impliedFromAmerican(a) {
@@ -444,7 +449,9 @@ async function loadCard() {
       };
       cardCache = { at: Date.now(), data: flat };
       return flat;
-    } catch (_) {
+    } catch (e) {
+      _lastCardError = { at: new Date().toISOString(), where: "loadCard", message: String(e && e.message || e), stack: String(e && e.stack || "").split("\n").slice(0, 6).join(" | ") };
+      console.error("[UFC] loadCard threw:", _lastCardError.message, "::", _lastCardError.stack);
       return cardCache.data || { ok: true, source: "none", picksLive: false, edgePending: true, event: null, mainCard: [], prelims: [] };
     } finally {
       cardInflight = null;
@@ -457,7 +464,9 @@ router.get("/card", async (_req, res) => {
   try {
     const card = await loadCard();
     res.json(card);
-  } catch (_) {
+  } catch (e) {
+    _lastCardError = { at: new Date().toISOString(), where: "route:/card", message: String(e && e.message || e), stack: String(e && e.stack || "").split("\n").slice(0, 6).join(" | ") };
+    console.error("[UFC] /card route threw:", _lastCardError.message, "::", _lastCardError.stack);
     res.json({ ok: true, source: "none", picksLive: false, edgePending: true, event: null, mainCard: [], prelims: [] });
   }
 });
@@ -772,6 +781,7 @@ router.get("/probe", adminGuard, async (_req, res) => {
   } catch (e) {
     out.nextPPVError = String(e.message || e);
   }
+  out.lastCardError = _lastCardError; // WZ-UFC-CARDERR-2026-07-27
   res.json(out);
 });
 
