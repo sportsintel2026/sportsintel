@@ -953,19 +953,24 @@ function BoardCardCompact({d,i,sport,onClick}){
   const _pk=String(d.p||""); const _sp=_pk.lastIndexOf(" ");
   const pkHead=_sp>0?_pk.slice(0,_sp):_pk; const pkTail=_sp>0?_pk.slice(_sp+1):"";
   return (
-    <div className={"ufcard"+(isTot?" tot":"")} onClick={onClick}>
-      <div className="ufmid">
-        <div className="l1"><span className="ufmatch">{d.a[0]} @ {d.h[0]}</span>{d.starts&&<span className="uftime">{d.starts}</span>}</div>
-        <div className="l2"><span className="ufp" style={{color:accent}}>{pkHead}</span>{pkTail&&<span className="ufpl" style={{color:accent}}>{pkTail}</span>}{d.mk&&<span className="ufmk">{d.mk}</span>}{d.odds&&<span className="ufod">{d.odds}</span>}</div>
-      </div>
-      <div className="ufrt">
-        <div className="ufgauge">
-          {wpv!=null&&<div className="ufg"><span className="ufgl">WIN</span><span className="ufgt"><i className="w" style={{width:winW+"%"}}/></span><span className="ufgv w">{Math.round(wpv)}%</span></div>}
-          {showEdge&&<div className="ufg"><span className="ufgl">EDGE</span><span className="ufgt"><i className="e" style={{width:edgeW+"%"}}/></span><span className="ufgv e">{d.edge>=0?"+":""}{Number(d.edge).toFixed(1)}%</span></div>}
+    <>
+      <div className={"ufcard"+(isTot?" tot":"")} onClick={onClick}>
+        <div className="ufmid">
+          <div className="l1"><span className="ufmatch">{d.a[0]} @ {d.h[0]}</span>{d.starts&&<span className="uftime">{d.starts}</span>}</div>
+          <div className="l2"><span className="ufp" style={{color:accent}}>{pkHead}</span>{pkTail&&<span className="ufpl" style={{color:accent}}>{pkTail}</span>}{d.mk&&<span className="ufmk">{d.mk}</span>}{d.odds&&<span className="ufod">{d.odds}</span>}</div>
         </div>
-        <span className="ufchev">{"\u203A"}</span>
+        <div className="ufrt">
+          <div className="ufgauge">
+            {wpv!=null&&<div className="ufg"><span className="ufgl">WIN</span><span className="ufgt"><i className="w" style={{width:winW+"%"}}/></span><span className="ufgv w">{Math.round(wpv)}%</span></div>}
+            {showEdge&&<div className="ufg"><span className="ufgl">EDGE</span><span className="ufgt"><i className="e" style={{width:edgeW+"%"}}/></span><span className="ufgv e">{d.edge>=0?"+":""}{Number(d.edge).toFixed(1)}%</span></div>}
+          </div>
+        </div>
       </div>
-    </div>
+      <div className="ufstrip" onClick={onClick}>
+        <span className="ufstriptx">WHY THIS PICK</span>
+        <span className="ufstripch">{"\u2304"}</span>
+      </div>
+    </>
   );
 }
 /* BoardGrid: kept for desktop grid view (not used on mobile as of 2026-06-24) */
@@ -1445,7 +1450,7 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 /* WZ-BOARD-TICKER-2026-07-12 :: unified list panel of single-line ticker rows */
 .ufboard{margin:10px 6px 0;border:1px solid var(--line);border-radius:14px;background:var(--panel);overflow:hidden}
 .ufboard .gr.open{background:var(--panel2);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
-.ufcard{display:flex;align-items:center;gap:11px;padding:11px 13px;border-bottom:1px solid var(--line);cursor:pointer}
+.ufcard{display:flex;align-items:center;gap:11px;padding:11px 13px 7px;cursor:pointer}
 .ufcard:last-child{border-bottom:0}
 .ufcard .ufring{position:relative;width:34px;height:34px;flex:none}.ufcard .ufring svg{width:34px;height:34px;display:block}
 .ufcard .ufpc{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:var(--mono);font-weight:600;font-size:11px;line-height:1}
@@ -1471,6 +1476,16 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .ufcard .ufrt .ufg .ufgv.w{color:var(--green)}
 .ufcard .ufrt .ufg .ufgv.e{color:var(--gold)}
 .ufcard .ufrt .ufchev{font-family:var(--mono);font-size:15px;color:var(--mut2);line-height:1}
+/* WZ-CARD-STRIP-2026-07-26 :: the old right-pointing chevron read as
+   "navigate away" -- the same glyph this app uses for Unlock, See all,
+   and Full matchup breakdown. Replaced with an explicit full-width tap
+   strip. Compact card is swapped for BoardRow when open, so this never
+   needs an open state. */
+.ufstrip{display:flex;align-items:center;justify-content:center;gap:6px;
+  padding:7px 13px 10px;border-bottom:1px solid var(--line);cursor:pointer}
+.ufstrip:last-child{border-bottom:0}
+.ufstriptx{font-family:var(--mono);font-size:9px;letter-spacing:.7px;color:var(--mut2)}
+.ufstripch{font-family:var(--mono);font-size:10px;color:var(--mut2);line-height:1}
 /* WZ-TOPPROPS-2026-07-08 :: tight edge-to-edge 3x2 prop grid + headshot cards */
 .propgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin:12px 4px 0;background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
 .ppc{padding:12px 8px 10px;text-align:center;cursor:pointer}
