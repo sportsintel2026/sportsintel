@@ -104,6 +104,19 @@ function mapStatus(abstractState, detailedState) {
   return "scheduled";
 }
 
+// WZ-SLATESTATE-SSOT-2026-07-27 :: SINGLE SOURCE OF TRUTH for "has this game started yet".
+// mapStatus above is the only place the status vocabulary is created, so the predicate that
+// interprets it lives here too. Anything asking "can this game still be picked, bet, or
+// pre-game snapshotted" MUST call isPreGame. Do NOT restate `status === "scheduled"` (or its
+// complement) anywhere else in the codebase.
+// Why this exists: the same rule was hand-copied into seven places across three files. They
+// drifted. The tomorrow-preview gate in edges.js was written as the complement -- "any game
+// live or final" -- which flips true on the day's FIRST first pitch (~10am PT) instead of the
+// last, so tomorrow's board surfaced next to picks the customer could still bet today.
+// Deliberately an allow-list, not a block-list: postponed, cancelled and suspended are all
+// correctly NOT pre-game, whatever new status words MLB introduces later.
+const isPreGame = (status) => status === "scheduled";
+
 // ── Pitcher stats ─────────────────────────────────────────────────────────────
 async function getPitcherSeasonStats(playerId, season) {
   if (!playerId) return null;
@@ -1045,6 +1058,7 @@ async function getSeasonHeadToHead(teamIdA, teamIdB, season) {
 
 module.exports = {
   getEasternDate, getScheduleForDate,
+  isPreGame,
   getGameHRHitters,
   getGamePitcherStrikeouts,
   getGameBatterHits, normPlayerName,

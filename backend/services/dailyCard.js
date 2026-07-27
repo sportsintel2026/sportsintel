@@ -3,7 +3,7 @@
 // value edges in model_predictions. Touches no edge math — it only reads picks
 // the model already produced, packages them, and stores one card per day.
 const { createClient } = require("@supabase/supabase-js");
-const { getEasternDate, getScheduleForDate } = require("./mlbStatsApi");
+const { isPreGame, getEasternDate, getScheduleForDate } = require("./mlbStatsApi"); // WZ-SLATESTATE-SSOT-2026-07-27
 const { fetchScoreboard } = require("./nbaDataSource");
 
 function db() {
@@ -31,7 +31,7 @@ async function preGameMlbIds(date) {
     const now = Date.now();
     const ids = new Set();
     for (const g of schedule) {
-      const notStarted = g.status === "scheduled"
+      const notStarted = isPreGame(g.status)
         && g.startTimeUTC && new Date(g.startTimeUTC).getTime() > now;
       if (notStarted) ids.add(String(g.id));
     }
