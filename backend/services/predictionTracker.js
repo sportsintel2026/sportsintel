@@ -665,6 +665,22 @@ async function recordPredictions(result) {
         ou_adj: g.totals.breakdown?.ouAdj ?? null,   // WZ-LOG-NUDGES-2026-07-26 :: the three mean nudges on the
         ump_adj: g.totals.breakdown?.umpAdj ?? null, // full-slate shadow row too, so the per-term counterfactual
         def_adj: g.totals.breakdown?.defAdj ?? null, // (projected - nudge) is exact on the whole n, no join needed
+        // WZ-SHADOW-BASE7-2026-07-26 :: the remaining base-seven breakdown terms, sourced from the SAME
+        // g.totals.breakdown object the core `total` row reads at ~line 526 (no new plumbing). WHY here:
+        // these seven are currently written ONLY on the core `total` row, but totals is benched, so
+        // edges.js:932 returns totalsEdges: [] -> the core totals loop iterates nothing -> weather_adj &
+        // the rest are persisted for ZERO graded games. That blinds two of the three Aug 2 totals
+        // verification criteria (weather_adj bias_if_removed + the term-by-term counterfactual). Logging
+        // them on the always-recorded full-slate shadow row un-blinds it. All ten columns already exist
+        // (core row has written them since the factor-attribution work) -- NO migration. All `?? null`,
+        // so this cannot trip the batch-rejection hardening above. Additive; no math, no existing field touched.
+        base: g.totals.breakdown?.base ?? null,
+        pitcher_adj: g.totals.breakdown?.pitcherAdj ?? null,
+        ace_adj: g.totals.breakdown?.aceAdj ?? null,
+        park_adj: g.totals.breakdown?.parkAdj ?? null,
+        weather_adj: g.totals.breakdown?.weatherAdj ?? null,
+        bullpen_adj: g.totals.breakdown?.bullpenAdj ?? null,
+        fatigue_adj: g.totals.breakdown?.fatigueAdj ?? null,
       });
       shadowPushed++;
     }
