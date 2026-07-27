@@ -1483,6 +1483,7 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
    needs an open state. */
 .ufstrip{display:flex;align-items:center;justify-content:center;gap:6px;
   padding:7px 13px 10px;border-bottom:1px solid var(--line);cursor:pointer}
+.ufstrip:last-child{border-bottom:0}
 .ufstriptx{font-family:var(--mono);font-size:9px;letter-spacing:.7px;color:var(--mut2)}
 .ufstripch{font-family:var(--mono);font-size:10px;color:var(--mut2);line-height:1}
 /* WZ-TOPPROPS-2026-07-08 :: tight edge-to-edge 3x2 prop grid + headshot cards */
