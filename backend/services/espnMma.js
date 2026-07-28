@@ -18,11 +18,15 @@
 
 const axios = require("axios");
 
+const { foldStrokes } = require("./nameFold"); // WZ-NAMEFOLD-2026-07-28
+
 const ESPN_UFC_SCOREBOARD = "https://site.api.espn.com/apis/site/v2/sports/mma/ufc/scoreboard";
 
 // strip accents + common suffixes + non-alphanumerics, lowercase -> stable GLUED match key
 function normName(s) {
-  return String(s || "")
+  // WZ-NAMEFOLD-2026-07-28 :: stroked letters (ł đ ø ħ) have no NFD decomposition, so the pass below
+  // would delete them outright and a Polish or Balkan winner could fail to settle from ESPN.
+  return foldStrokes(String(s || ""))
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "")   // Benoît -> Benoit
     .toLowerCase()
     .replace(/\b(jr|sr|ii|iii|iv)\b/g, "")
