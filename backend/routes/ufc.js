@@ -153,7 +153,7 @@ async function parseBout(bout, oddsMap) {
     // reach modelRed, and parseBout threw all of it away -- only the final number survived. The
     // card had no way to answer "why this pick" beyond a percentage. Declared here so the shape is
     // stable on every early return (no market, no profiles, model throw), not only the happy path.
-    factors: [], totalTilt: null, tiltFavors: null, usedFactors: 0,
+    factors: [], totalTilt: null, tiltFavors: null, usedFactors: 0, netPoints: null,
   };
 
   // no market -> pending (no pick/edge until sportsbooks post the line)
@@ -179,6 +179,9 @@ async function parseBout(bout, oddsMap) {
         .map((f) => ({
           name: f.name,
           delta: f.delta,
+          // WZ-UFC-POINTS-2026-07-28 :: same quantity as delta, expressed in percentage points of
+          // win probability so the panel reads in the card's own units instead of raw log-odds.
+          points: Number.isFinite(f.points) ? f.points : null,
           detail: f.detail != null ? f.detail : null,
           favors: f.delta > 0 ? "red" : "blue",
         }));
@@ -187,6 +190,9 @@ async function parseBout(bout, oddsMap) {
         out.totalTilt = scored.totalTilt;
         out.tiltFavors = scored.totalTilt > 0 ? "red" : scored.totalTilt < 0 ? "blue" : null;
       }
+      // WZ-UFC-POINTS-2026-07-28 :: the whole bout's effect in points, red-positive. Its magnitude
+      // is edgePct, so the panel's bottom line and the card's edge badge finally agree.
+      if (Number.isFinite(scored.netPoints)) out.netPoints = scored.netPoints;
     }
     if (typeof methodLean === "function") out.methodLean = methodLean(rp, bp) || null; // WZ-UFC-METHOD-2026-07-09
   } catch (_) { /* stay at market */ }

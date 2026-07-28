@@ -134,8 +134,12 @@ const WHY_CSS = `
 .ufc-bar{flex:1;height:6px;position:relative;background:rgba(255,255,255,.04);border-radius:2px;min-width:44px}
 .ufc-bar:before{content:"";position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;background:rgba(255,255,255,.15)}
 .ufc-bar i{position:absolute;top:0;bottom:0;border-radius:2px;min-width:2px}
-.ufc-bar i.f1{background:#C9A86A;left:50%}
-.ufc-bar i.f0{background:#6E7681;right:50%}
+.ufc-bar i.l{right:50%}
+.ufc-bar i.r{left:50%}
+.ufc-bar i.f1{background:#C9A86A}
+.ufc-bar i.f0{background:#6E7681}
+.ufc-ft .dir .pk{color:#C9A86A;font-weight:600}
+.ufc-fr .fv.nil{color:#4E565D;font-weight:400}
 .ufc-tilt{display:flex;align-items:center;gap:8px;margin-top:10px;padding-top:9px;border-top:1px dashed rgba(255,255,255,.09)}
 .ufc-tilt .k{flex:1;font-family:'IBM Plex Mono',monospace;font-size:8.5px;letter-spacing:.3px;color:#99A2AA;text-transform:uppercase;line-height:1.4}
 .ufc-tilt .k em{display:block;font-style:normal;color:#5B646C;font-size:8px;text-transform:none;letter-spacing:0;margin-top:2px}
@@ -154,7 +158,14 @@ const WHY_CSS = `
 // WZ-UFC-WHY-2026-07-27 :: the deterministic "A" read, built from the factor list itself.
 // No network, no API key, cannot fail -- this is the floor the panel always has, and it is what
 // gets handed to /api/ai-read as baseRead so the AI enriches real numbers instead of inventing any.
-function pts(v) { return (v > 0 ? "+" : "\u2212") + Math.abs(v * 100).toFixed(1); }
+// WZ-UFC-POINTS-2026-07-28 :: takes percentage points, not the model's raw log-odds. Anything that
+// cannot reach 0.1 renders as a dot rather than a fake "+0.0" that reads like a broken value -- the
+// factor was considered and moved nothing, and saying so plainly is better than printing a zero.
+function pts(v) {
+  if (v == null || !Number.isFinite(v)) return "";
+  if (Math.abs(v) < 0.05) return "\u00b7";
+  return (v > 0 ? "+" : "\u2212") + Math.abs(v).toFixed(1);
+}
 function buildAread(b) {
   const fs = Array.isArray(b.factors) ? b.factors : [];
   if (!fs.length) return null;
@@ -341,33 +352,54 @@ function whyBody(b, aRead, aiRead, pickName, otherName) {
     );
   }
   const pickRed = b.pickCorner === "red";
+  // WZ-UFC-AXIS-2026-07-28 :: the axis follows the CARD, not the pick: red corner left, blue corner
+  // right, matching the fighter row directly above and the model's own detail strings ("34 vs 40"
+  // is red then blue). It was originally oriented pick-on-the-right, which mirrored the panel
+  // against the photos -- a gold bar running right under a red-corner pick pointed at the fighter
+  // on the RIGHT of the card, who was the opponent. Direction now comes from the corner; colour
+  // still comes from whether the factor favours our pick. Those were one CSS class before, which
+  // is what forced the two to disagree.
+  const redName = (b.red && b.red.name) || "Red";
+  const blueName = (b.blue && b.blue.name) || "Blue";
+  // WZ-UFC-POINTS-2026-07-28 :: read points where the backend supplies them; fall back to the raw
+  // log-odds x100 only for a response cached before PR #26, so an old payload still renders.
+  const val = (f) => (f.points != null && Number.isFinite(f.points)) ? f.points : f.delta * 100;
+  const net = (b.netPoints != null && Number.isFinite(b.netPoints)) ? b.netPoints
+            : (b.totalTilt != null ? b.totalTilt * 100 : null);
   const favours = (f) => (f.favors === "red") === pickRed;
-  const sorted = fs.slice().sort((x, y) => Math.abs(y.delta) - Math.abs(x.delta));
-  const maxAbs = Math.abs(sorted[0].delta) || 1;
-  const tiltForPick = b.totalTilt != null ? ((b.totalTilt > 0) === pickRed) : null;
+  const sorted = fs.slice().sort((x, y) => Math.abs(val(y)) - Math.abs(val(x)));
+  const maxAbs = Math.abs(val(sorted[0])) || 1;
+  const tiltForPick = net != null ? ((net > 0) === pickRed) : null;
   return (
     <>
       <div className="ufc-ft">
         <span className="k">Model factors</span>
-        <span className="dir">{"\u25c2"} {otherName} {"\u00b7"} <b>{pickName}</b> {"\u25b8"}</span>
+        <span className="dir">{"\u25c2"} <span className={pickRed ? "pk" : ""}>{redName}</span> {"\u00b7"} <span className={pickRed ? "" : "pk"}>{blueName}</span> {"\u25b8"}</span>
       </div>
       {sorted.map((f, i) => {
         const good = favours(f);
-        const w = Math.max(2, (Math.abs(f.delta) / maxAbs) * 50);
+        const toRed = f.favors === "red";
+        const v = val(f);
+        const w = Math.max(2, (Math.abs(v) / maxAbs) * 50);
+        const nil = Math.abs(v) < 0.05;
         return (
           <div className="ufc-fr" key={f.name + i}>
             <span className="fn2">{f.name}</span>
             <span className="fd">{f.detail || ""}</span>
-            <span className="ufc-bar"><i className={good ? "f1" : "f0"} style={{ width: w + "%" }} /></span>
-            <span className={"fv " + (good ? "f1" : "f0")}>{pts(f.delta)}</span>
+            <span className="ufc-bar"><i className={(toRed ? "l" : "r") + " " + (good ? "f1" : "f0")} style={{ width: w + "%" }} /></span>
+            <span className={"fv " + (nil ? "nil" : good ? "f1" : "f0")}>{pts(v)}</span>
           </div>
         );
       })}
-      {b.totalTilt != null ? (
+      {net != null ? (
         <div className="ufc-tilt">
-          <span className="k">Net tilt<em>model vs market price</em></span>
+          {/* WZ-UFC-POINTS-2026-07-28 :: the magnitude here IS edgePct, so this line and the edge
+              badge on the card are finally the same number in the same unit. Labelled "net effect"
+              rather than a total on purpose: the mapping is non-linear, so the rows above do not
+              sum to it exactly and must not be presented as if they do. */}
+          <span className="k">Net effect<em>this is the edge shown above</em></span>
           <span className={"v" + (tiltForPick ? "" : " f0")}>
-            {pts(b.totalTilt)} {tiltForPick ? pickName : otherName}
+            {pts(Math.abs(net) < 0.05 ? 0 : net)} pts {tiltForPick ? pickName : otherName}
             <small>{b.usedFactors || fs.length} of 10 factors had data</small>
           </span>
         </div>

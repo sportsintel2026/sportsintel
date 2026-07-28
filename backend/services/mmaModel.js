@@ -275,7 +275,21 @@ function scoreBout(redProfile, blueProfile, pMktRed, opts) {
   total = clamp(total, -0.42, 0.42); // hard cap: model only nudges the market
 
   const modelRed = sigmoid(logit(pMktRed) + total);
-  return { modelRed, edgeRed: modelRed - pMktRed, totalTilt: total, factors, usedFactors: used };
+
+  // WZ-UFC-POINTS-2026-07-28 :: every delta above is a LOG-ODDS nudge, which is the only space this
+  // model works in. The card speaks win-percentage everywhere else, so publishing the raw deltas put
+  // "+16.4" directly under a "+3% edge" badge -- the same quantity in two units with nothing saying so.
+  // Convert here, next to the sigmoid/logit that define the mapping, so no consumer has to reimplement
+  // it. `points` is leave-one-out: what the win probability moves by if this factor is dropped, in
+  // percentage points, keeping the red-positive sign convention of `delta`.
+  // Non-linear, so points do NOT sum exactly to netPoints -- consumers must not present them as a total.
+  const base = modelRed;
+  for (const f of factors) {
+    f.points = (base - sigmoid(logit(pMktRed) + total - f.delta)) * 100;
+  }
+  const netPoints = (modelRed - pMktRed) * 100;
+
+  return { modelRed, edgeRed: modelRed - pMktRed, totalTilt: total, netPoints, factors, usedFactors: used };
 }
 
 // WZ-UFC-METHOD-2026-07-09 :: method LEAN -- an info-only read of how a fight is most likely to
