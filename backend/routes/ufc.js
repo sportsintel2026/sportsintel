@@ -149,6 +149,11 @@ async function parseBout(bout, oddsMap) {
     pick: null, winPct: null, pickCorner: null, odds: null,
     marketWinPct: null, edgePct: null, value: false,
     methodLean: null, // WZ-UFC-METHOD-2026-07-09 :: info-only KO/SUB/DEC read (no market to beat)
+    // WZ-UFC-FACTORS-2026-07-27 :: scoreBout already returns the per-factor breakdown it used to
+    // reach modelRed, and parseBout threw all of it away -- only the final number survived. The
+    // card had no way to answer "why this pick" beyond a percentage. Declared here so the shape is
+    // stable on every early return (no market, no profiles, model throw), not only the happy path.
+    factors: [], totalTilt: null, tiltFavors: null, usedFactors: 0,
   };
 
   // no market -> pending (no pick/edge until sportsbooks post the line)
@@ -164,6 +169,25 @@ async function parseBout(bout, oddsMap) {
     ]);
     const scored = scoreBout(rp, bp, pMktRed, { redFights: rf, blueFights: bf, asOf: Date.now() });
     if (scored && Number.isFinite(scored.modelRed)) modelRed = scored.modelRed;
+    // WZ-UFC-FACTORS-2026-07-27 :: surface the breakdown. `delta` keeps the model's native
+    // orientation (positive favours RED) so the API does not quietly re-sign the model's own
+    // numbers. `favors` is derived HERE, once, from that sign -- every consumer reads a corner
+    // name instead of redoing sign maths against pickCorner and eventually getting it backwards.
+    if (scored && Array.isArray(scored.factors)) {
+      out.factors = scored.factors
+        .filter((f) => f && f.name && Number.isFinite(f.delta))
+        .map((f) => ({
+          name: f.name,
+          delta: f.delta,
+          detail: f.detail != null ? f.detail : null,
+          favors: f.delta > 0 ? "red" : "blue",
+        }));
+      out.usedFactors = Number.isFinite(scored.usedFactors) ? scored.usedFactors : out.factors.length;
+      if (Number.isFinite(scored.totalTilt)) {
+        out.totalTilt = scored.totalTilt;
+        out.tiltFavors = scored.totalTilt > 0 ? "red" : scored.totalTilt < 0 ? "blue" : null;
+      }
+    }
     if (typeof methodLean === "function") out.methodLean = methodLean(rp, bp) || null; // WZ-UFC-METHOD-2026-07-09
   } catch (_) { /* stay at market */ }
 
