@@ -13,6 +13,9 @@ import TerminalShell from "./TerminalShell";
 // WZ-UFC-DESKTOP-2026-07-11 :: UFC card gains a desktop layout inside the shared Vault shell; mobile untouched.
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
+// WZ-UFC-WHY-2026-07-27 :: session cache so an opened bout fetches its AI (B) read at most once.
+// Same pattern as the MLB board's AI_READ_CACHE in Home.jsx.
+const AI_READ_CACHE = new Map();
 
 const CSS = `
 .ufc-wrap{min-height:100vh;background:#0A0B0D;color:#ECEFF2;font-family:'Inter',system-ui,-apple-system,sans-serif;padding:0 0 96px}
@@ -108,6 +111,73 @@ const CSS = `
 }
 `;
 
+/* WZ-UFC-WHY-2026-07-27 */
+const WHY_CSS = `
+.ufc-strip{margin-top:10px;padding-top:9px;border-top:1px solid rgba(255,255,255,.07);display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;user-select:none}
+.ufc-strip .s{font-family:'IBM Plex Mono',monospace;font-size:9px;font-weight:600;letter-spacing:1.6px;color:#7A838B;text-transform:uppercase}
+.ufc-strip .cv{font-size:11px;color:#7A838B;transition:transform .22s ease;line-height:1}
+.ufc-b.wopen .ufc-strip .cv{transform:rotate(180deg)}
+.ufc-b.wopen .ufc-strip .s{color:#C9A86A}
+.ufc-panel{max-height:0;overflow:hidden;transition:max-height .32s ease}
+.ufc-b.wopen .ufc-panel{max-height:1200px}
+.ufc-panel .pad{padding-top:11px}
+.ufc-ft{display:flex;align-items:baseline;gap:6px;margin-bottom:9px}
+.ufc-ft .k{font-family:'IBM Plex Mono',monospace;font-size:7.5px;font-weight:700;letter-spacing:1.3px;color:#5B646C;text-transform:uppercase}
+.ufc-ft .dir{flex:1;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:7.5px;color:#4E565D;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ufc-ft .dir b{color:#C9A86A;font-weight:600}
+.ufc-fr{display:flex;align-items:center;gap:7px;padding:3.5px 0}
+.ufc-fr .fn2{flex:0 0 58px;font-family:'IBM Plex Mono',monospace;font-size:9px;color:#99A2AA;text-transform:uppercase;letter-spacing:.3px}
+.ufc-fr .fd{flex:0 0 58px;font-family:'IBM Plex Mono',monospace;font-size:8.5px;color:#5B646C;white-space:nowrap;overflow:hidden}
+.ufc-fr .fv{flex:0 0 34px;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:9px;font-weight:600}
+.ufc-fr .fv.f1{color:#C9A86A}
+.ufc-fr .fv.f0{color:#7A838B}
+.ufc-bar{flex:1;height:6px;position:relative;background:rgba(255,255,255,.04);border-radius:2px;min-width:44px}
+.ufc-bar:before{content:"";position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;background:rgba(255,255,255,.15)}
+.ufc-bar i{position:absolute;top:0;bottom:0;border-radius:2px;min-width:2px}
+.ufc-bar i.f1{background:#C9A86A;left:50%}
+.ufc-bar i.f0{background:#6E7681;right:50%}
+.ufc-tilt{display:flex;align-items:center;gap:8px;margin-top:10px;padding-top:9px;border-top:1px dashed rgba(255,255,255,.09)}
+.ufc-tilt .k{flex:1;font-family:'IBM Plex Mono',monospace;font-size:8.5px;letter-spacing:.3px;color:#99A2AA;text-transform:uppercase;line-height:1.4}
+.ufc-tilt .k em{display:block;font-style:normal;color:#5B646C;font-size:8px;text-transform:none;letter-spacing:0;margin-top:2px}
+.ufc-tilt .v{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:700;color:#C9A86A;white-space:nowrap;text-align:right}
+.ufc-tilt .v.f0{color:#7A838B}
+.ufc-tilt .v small{display:block;color:#5B646C;font-weight:400;font-size:8px;margin-top:2px}
+.ufc-nofac{padding:10px 11px;border-radius:9px;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.06);font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:#7A838B;line-height:1.6}
+.ufc-read{margin-top:12px;padding-top:10px;border-top:1px solid rgba(255,255,255,.07)}
+.ufc-read .rl{display:flex;align-items:center;gap:6px;margin-bottom:5px}
+.ufc-read .rl .k{font-family:'IBM Plex Mono',monospace;font-size:7.5px;font-weight:700;letter-spacing:1.3px;color:#5B646C;text-transform:uppercase}
+.ufc-read .rl .src{font-family:'IBM Plex Mono',monospace;font-size:7px;letter-spacing:.4px;border-radius:3px;padding:1px 4px;border:1px solid rgba(255,255,255,.14);color:#6E7681}
+.ufc-read .tx{font-family:'IBM Plex Mono',monospace;font-size:10.5px;line-height:1.65;color:#ECEFF2}
+.ufc-read .tx.det{color:#99A2AA}
+`;
+
+// WZ-UFC-WHY-2026-07-27 :: the deterministic "A" read, built from the factor list itself.
+// No network, no API key, cannot fail -- this is the floor the panel always has, and it is what
+// gets handed to /api/ai-read as baseRead so the AI enriches real numbers instead of inventing any.
+function pts(v) { return (v > 0 ? "+" : "\u2212") + Math.abs(v * 100).toFixed(1); }
+function buildAread(b) {
+  const fs = Array.isArray(b.factors) ? b.factors : [];
+  if (!fs.length) return null;
+  const pickRed = b.pickCorner === "red";
+  const forNm = (pickRed ? b.red : b.blue) || {};
+  const agNm = (pickRed ? b.blue : b.red) || {};
+  const sorted = fs.slice().sort((x, y) => Math.abs(y.delta) - Math.abs(x.delta));
+  const favours = (f) => (f.favors === "red") === pickRed;
+  const forL = sorted.filter(favours).map((f) => f.name);
+  const agL = sorted.filter((f) => !favours(f)).map((f) => f.name);
+  const list = (a) => a.length > 2 ? a.slice(0, 2).join(", ") + " and " + a[2] : a.join(" and ");
+  const parts = [];
+  const vb = (a) => a.length === 1 ? " favours " : " favour ";
+  if (forL.length) parts.push(list(forL) + vb(forL) + (forNm.name || "our pick"));
+  if (agL.length) parts.push(list(agL) + vb(agL) + (agNm.name || "the other corner"));
+  let out = parts.join("; ") + ".";
+  if (fs.length < 5) out = "Thin read \u2014 only " + fs.length + " of 10 factors had data on both men. " + out;
+  if (b.winPct != null && b.marketWinPct != null) {
+    out += " Model " + b.winPct + "% against a market price of " + b.marketWinPct + "%.";
+  }
+  return out;
+}
+
 function initials(name) {
   const parts = String(name || "").trim().split(/\s+/);
   const last = parts[parts.length - 1] || "";
@@ -130,6 +200,32 @@ function Avatar({ src, name, isPick, won, dim }) {
 
 function Bout({ b, main }) {
   const hasPick = b && b.winPct != null;
+  // WZ-UFC-WHY-2026-07-27 :: expandable "why this pick" panel. Closed by default; the B read is
+  // only fetched once the panel is actually opened, so a 12-bout card costs zero AI calls on load.
+  const [wopen, setWopen] = useState(false);
+  const [aiRead, setAiRead] = useState(null);
+  const aRead = b ? buildAread(b) : null;
+  useEffect(() => {
+    if (!wopen || !b || !aRead) return;
+    const sig = "ufc|" + (b.id || "") + "|" + (b.pick || "") + "|" + aRead;
+    if (AI_READ_CACHE.has(sig)) { setAiRead(AI_READ_CACHE.get(sig)); return; }
+    let dead = false;
+    (async () => {
+      try {
+        const r = await fetch(`${API_BASE}/api/ai-read`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sig, sport: "ufc", pick: b.pick,
+            matchup: (b.red && b.red.name ? b.red.name : "TBD") + " vs " + (b.blue && b.blue.name ? b.blue.name : "TBD"),
+            odds: b.odds, model: b.winPct, market_pct: b.marketWinPct, edge: b.edgePct, baseRead: aRead,
+          }),
+        });
+        const j = await r.json();
+        if (!dead && j && j.read) { AI_READ_CACHE.set(sig, j.read); setAiRead(j.read); }
+      } catch (_) { /* fail-safe: the deterministic A read stays on screen */ }
+    })();
+    return () => { dead = true; };
+  }, [wopen, b, aRead]);
   // WZ-UFC-STATUS-2026-07-11 :: fight status from data we already have.
   // result (win/loss/push) once the grader settles -> FINAL. lineClosed with no result yet
   // (book pulled the line, Cito hasn't posted the winner) -> AWAITING RESULT. Live line -> upcoming.
@@ -150,8 +246,11 @@ function Bout({ b, main }) {
   const value = !!(b && b.value);
   const ringCol = res === "win" ? "#3FCB91" : res === "loss" ? "#E2655C" : "#C9A86A";
   const resChip = res === "win" ? ["w", "WON"] : res === "loss" ? ["l", "LOST"] : res === "push" ? ["p", "PUSH"] : null;
+  // WZ-UFC-WHY-2026-07-27 :: corner names for the panel's direction labels
+  const pickName = (b.pickCorner === "red" ? (b.red && b.red.name) : (b.blue && b.blue.name)) || "our pick";
+  const otherName = (b.pickCorner === "red" ? (b.blue && b.blue.name) : (b.red && b.red.name)) || "opponent";
   return (
-    <div className={"ufc-b" + (main ? " main" : "") + (isFinal ? " final " + res : "")}>
+    <div className={"ufc-b" + (main ? " main" : "") + (isFinal ? " final " + res : "") + (wopen ? " wopen" : "")}>
       <div className="ufc-head">
         {b.weightClass ? <span className="ufc-wc">{b.weightClass}</span> : null}
         {b.titleBout ? <span className="ufc-title">TITLE</span> : null}
@@ -212,7 +311,72 @@ function Bout({ b, main }) {
           {b.methodLean.note ? <span className="sub">{b.methodLean.note}</span> : null}
         </div>
       ) : null}
+
+      {/* WZ-UFC-WHY-2026-07-27 :: the strip only exists when there is a pick to explain. Bouts with
+          no posted line get nothing, so the affordance never opens onto an empty box. */}
+      {hasPick ? (
+        <>
+          <div className="ufc-strip" onClick={() => setWopen((v) => !v)}>
+            <span className="s">Why this pick</span><span className="cv">{"\u2304"}</span>
+          </div>
+          <div className="ufc-panel"><div className="pad">{whyBody(b, aRead, aiRead, pickName, otherName)}</div></div>
+        </>
+      ) : null}
     </div>
+  );
+}
+
+// WZ-UFC-WHY-2026-07-27 :: panel body. Factors are sorted biggest-first and the bar is scaled to the
+// largest magnitude in THIS bout, because the spread is extreme -- age routinely lands at its 0.22 cap
+// while grappling sits near 0.003. The signed value is printed alongside every bar for exactly that
+// reason: at a 15:1 ratio a linear bar alone renders eight of nine rows as visually zero.
+function whyBody(b, aRead, aiRead, pickName, otherName) {
+  const fs = Array.isArray(b.factors) ? b.factors : [];
+  if (!fs.length) {
+    return (
+      <div className="ufc-nofac">
+        No factor breakdown for this bout. The pick was locked before the line closed and is shown
+        from the banked record, so the model{"\u2019"}s per-factor working isn{"\u2019"}t available.
+      </div>
+    );
+  }
+  const pickRed = b.pickCorner === "red";
+  const favours = (f) => (f.favors === "red") === pickRed;
+  const sorted = fs.slice().sort((x, y) => Math.abs(y.delta) - Math.abs(x.delta));
+  const maxAbs = Math.abs(sorted[0].delta) || 1;
+  const tiltForPick = b.totalTilt != null ? ((b.totalTilt > 0) === pickRed) : null;
+  return (
+    <>
+      <div className="ufc-ft">
+        <span className="k">Model factors</span>
+        <span className="dir">{"\u25c2"} {otherName} {"\u00b7"} <b>{pickName}</b> {"\u25b8"}</span>
+      </div>
+      {sorted.map((f, i) => {
+        const good = favours(f);
+        const w = Math.max(2, (Math.abs(f.delta) / maxAbs) * 50);
+        return (
+          <div className="ufc-fr" key={f.name + i}>
+            <span className="fn2">{f.name}</span>
+            <span className="fd">{f.detail || ""}</span>
+            <span className="ufc-bar"><i className={good ? "f1" : "f0"} style={{ width: w + "%" }} /></span>
+            <span className={"fv " + (good ? "f1" : "f0")}>{pts(f.delta)}</span>
+          </div>
+        );
+      })}
+      {b.totalTilt != null ? (
+        <div className="ufc-tilt">
+          <span className="k">Net tilt<em>model vs market price</em></span>
+          <span className={"v" + (tiltForPick ? "" : " f0")}>
+            {pts(b.totalTilt)} {tiltForPick ? pickName : otherName}
+            <small>{b.usedFactors || fs.length} of 10 factors had data</small>
+          </span>
+        </div>
+      ) : null}
+      <div className="ufc-read">
+        <div className="rl"><span className="k">Read</span><span className="src">{aiRead ? "AI" : "MODEL"}</span></div>
+        <div className={"tx" + (aiRead ? "" : " det")}>{aiRead || aRead}</div>
+      </div>
+    </>
   );
 }
 
@@ -262,7 +426,7 @@ export default function UFCPage() {
   return (
     <TerminalShell active="/ufc" plan={plan} navigate={navigate}>
     <div className="ufc-wrap">
-      <style>{CSS}</style>
+      <style>{CSS + WHY_CSS}</style>
       <div className="ufc-in">
 
         {loading && (
