@@ -430,6 +430,20 @@ async function warmEdgesCache() {
 // Every 12 min during active hours (11am–2am ET), comfortably under the 15-min TTL.
 cron.schedule("*/12 11-23,0-2 * * *", warmEdgesCache, { timezone: "America/New_York" });
 
+// WZ-RESEARCH-BACKFILL-2026-07-28 :: research-only historical MLB closing-line backfill.
+// Inert unless RESEARCH_BACKFILL_ENABLED === 'true' (the flag is checked inside
+// runBackfillBatch before any network or DB call), so this cron is a no-op in normal
+// operation. One game_date and at most 12 Odds API calls per run; the module hard-stops if
+// credits run low. Research only — nothing customer-facing reads research_mlb_closing.
+cron.schedule("*/2 * * * *", async () => {
+  try {
+    const { runBackfillBatch } = require("./services/researchBackfill");
+    await runBackfillBatch();
+  } catch (err) {
+    console.error("[CRON] research backfill failed:", err.message);
+  }
+}, { timezone: "America/New_York" });
+
 // ── Error handler ─────────────────────────────────────────────────────────────
 app.use((err, req, res, next) => {
   console.error(err.stack);
