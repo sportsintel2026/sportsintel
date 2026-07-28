@@ -123,6 +123,44 @@ async function getUpcomingEvents() {
 // grader needs this: right after a fight, winnerFighterSlug fills in, but a cached copy
 // from up to 3h earlier still shows it null. Fresh forces a live read (and refreshes the
 // cache for the card too). Default callers pass nothing -> unchanged cached behavior.
+// WZ-UFC-DUPEBOUT-2026-07-27 :: Cito returns the SAME fight twice on completed events -- once
+// under a numeric bout id ("12961", cardPosition "Main Card 1") and once under a 16-char hex id
+// ("9009ec7b91f2be14", cardPosition "Main Card"). /diag returned 24 records for 12 fights on
+// ufc-fight-night-july-25-2026. Upcoming events have not shown it, but if one ever does, every
+// fight on the customer-facing card renders twice.
+// Collapsed here, at the single choke point all consumers share (card build, record cron, grader,
+// diag, probe), so they can never disagree about how many bouts an event has.
+// Identity = the unordered pair of fighter slugs, which is unique within a single event. A record
+// missing either slug is NEVER collapsed: an empty identity must not merge unrelated bouts.
+// All-numeric ids win ties, because every row already banked in ufc_picks uses that family --
+// preferring the hex id would turn previously banked picks into orphans overnight.
+function dedupeBouts(list, slug) {
+  if (!Array.isArray(list)) return [];
+  if (list.length < 2) return list;
+  const idOf = (b) => String(b && b.id != null ? b.id : "");
+  const isNumericId = (b) => /^\d+$/.test(idOf(b));
+  const identity = (b) => {
+    const fs = Array.isArray(b && b.fighters) ? b.fighters : [];
+    const slugs = fs
+      .map((f) => String((f && (f.fighterSlug || (f.profile && f.profile.slug))) || "").trim().toLowerCase())
+      .filter(Boolean);
+    return slugs.length === 2 ? slugs.slice().sort().join("::") : "";
+  };
+  const out = [];
+  const seenAt = new Map();
+  for (const b of list) {
+    const key = identity(b);
+    if (!key) { out.push(b); continue; }
+    const prev = seenAt.get(key);
+    if (prev === undefined) { seenAt.set(key, out.length); out.push(b); continue; }
+    if (!isNumericId(out[prev]) && isNumericId(b)) out[prev] = b;
+  }
+  if (out.length !== list.length) {
+    console.log(`[Cito] dedupeBouts: ${slug} returned ${list.length} bout record(s) for ${out.length} distinct fight(s) -- collapsed ${list.length - out.length}.`);
+  }
+  return out;
+}
+
 async function getEventBouts(slug, opts) {
   if (!slug) return [];
   const fresh = !!(opts && opts.fresh);
@@ -131,8 +169,9 @@ async function getEventBouts(slug, opts) {
   if (!fresh && hit && now - hit.at < BOUTS_TTL_MS) return hit.data;
   const data = await citoGet(`/ufc/events/${encodeURIComponent(slug)}/bouts`);
   if (data == null) return hit ? hit.data : []; // keep stale on failure
-  boutsCache.set(slug, { at: now, data });
-  return data;
+  const deduped = dedupeBouts(data, slug); // WZ-UFC-DUPEBOUT-2026-07-27
+  boutsCache.set(slug, { at: now, data: deduped });
+  return deduped;
 }
 
 // WZ-UFC-MODEL-2026-07-09 :: full fighter profile (age, reach, height, stance, record with

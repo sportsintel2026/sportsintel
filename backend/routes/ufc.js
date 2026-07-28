@@ -22,6 +22,9 @@ const ODDS_BASE = "https://api.the-odds-api.com/v4";
 const ODDS_API_KEY = process.env.ODDS_API_KEY;
 const CARD_TTL_MS = 15 * 60 * 1000; // assembled card cache (Cito + odds are cached deeper)
 const ODDS_TTL_MS = 10 * 60 * 1000;
+// WZ-UFC-PINBOUND-2026-07-27 :: how long an already-happened event may keep the card pinned
+// while it still has ungraded picks. See pickCardEvent below.
+const PIN_MAX_QUIET_MS = 6 * 60 * 60 * 1000;
 
 let cardCache = { at: 0, data: null };
 let cardInflight = null;
@@ -222,7 +225,33 @@ async function pickCardEvent() {
     // a live / just-finished event = has ungraded picks but is no longer on the upcoming list
     const live = (pend || []).find((r) => r.event_slug && !upcomingSlugs.has(r.event_slug));
     if (live && (!next || live.event_slug !== next.slug)) {
-      return { slug: live.event_slug, title: live.event_name || "UFC", _live: true };
+      // WZ-UFC-PINBOUND-2026-07-27 :: this pin used to be unbounded. It exists so results settle
+      // in front of the customer during and just after a card instead of the page jumping to next
+      // week -- but with no time limit, ONE pick that can never grade holds the whole UFC tab on a
+      // finished event indefinitely. That is exactly what bout 12897 (a fight scratched from the
+      // July 25 card) did for two days.
+      // Bound it by ACTIVITY, not by a fixed age. updated_at advances on every record-cron upsert
+      // before the fight and on every grade during it, so a genuinely live card keeps refreshing
+      // this timestamp and holds the pin for as long as it needs. Once grading stops -- finished,
+      // or stuck on something unreachable -- the timestamp freezes and the pin lets go.
+      // A fixed age cutoff would have to be either too short for a slow card or too long for a
+      // stuck one; this is short for the stuck case and unlimited for the live one.
+      const { data: recent } = await c
+        .from("ufc_picks")
+        .select("updated_at")
+        .eq("event_slug", live.event_slug)
+        .order("updated_at", { ascending: false })
+        .limit(1);
+      const lastTouch = recent && recent[0] && recent[0].updated_at ? new Date(recent[0].updated_at).getTime() : 0;
+      const quietMs = lastTouch ? Date.now() - lastTouch : Infinity;
+      if (quietMs < PIN_MAX_QUIET_MS) {
+        return { slug: live.event_slug, title: live.event_name || "UFC", _live: true };
+      }
+      console.warn(
+        `[UFC] pin released: ${live.event_slug} still has ungraded pick(s) but nothing on it has been ` +
+        `touched in ${Number.isFinite(quietMs) ? Math.round(quietMs / 3600000) + "h" : "ever"} -- showing the next event instead. ` +
+        `See /api/ufc/probe lastGradeReport.orphans for the stuck bout id(s).`
+      );
     }
   } catch (_) { /* fall through to the normal next event */ }
   return next;
