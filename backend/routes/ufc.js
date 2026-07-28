@@ -792,6 +792,15 @@ router.get("/probe", adminGuard, async (_req, res) => {
     out.nextPPVError = String(e.message || e);
   }
   out.lastCardError = _lastCardError; // WZ-UFC-CARDERR-2026-07-27
+  // WZ-UFC-ORPHAN-2026-07-27 :: last grader run, including any pending picks Cito no longer lists.
+  // Lazy require for the same reason server.js uses one: a load error in the grader must not be
+  // able to take down this route or boot.
+  try {
+    const { getLastGradeReport } = require("../services/ufcGrader");
+    out.lastGradeReport = typeof getLastGradeReport === "function" ? getLastGradeReport() : null;
+  } catch (e) {
+    out.lastGradeReport = { error: String((e && e.message) || e) };
+  }
   res.json(out);
 });
 
