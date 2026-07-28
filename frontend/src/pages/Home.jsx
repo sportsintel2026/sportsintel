@@ -629,7 +629,16 @@ export default function HomePage(){
       )}
       {sport==="cfb" && (
         <div style={{margin:"12px 4px 10px",padding:"9px 12px",border:"1px solid #6b4a16",background:"linear-gradient(180deg,#1a1305,#0d0a02)",borderRadius:10,fontFamily:"var(--mono)",fontSize:11,lineHeight:1.45,color:"#f3b94f"}}>
-          ⚠ CFB MODEL IN TRAINING — preseason preview. FBS power ratings are seeded from 2025 results with <b>no strength-of-schedule layer</b> yet, and are not yet calibrated against 2026 games. Edges shown are provisional, for preview only — not betting advice until validated in-season.
+          {/* WZ-CFB-SOSCOPY-2026-07-27 :: this banner claimed, in bold, "no strength-of-schedule layer yet".
+              CFB ratings have had SoS applied since 2026-06-22 -- cfbDataSource sets sosApplied:true
+              unconditionally and the ratings note describes it as league-centered SRS with margin-capped
+              MOV plus strength-of-schedule. So the most emphasised sentence on the CFB board was false for
+              five weeks, and it understated the model to paying customers.
+              Now read from the feed (ratingsSeed.sosApplied) instead of asserting it, so the copy cannot
+              drift away from the ratings again. "preseason preview" dropped: the CFB feed hardcodes
+              phase.selected to "regular", and the word turns plainly wrong once real lines post in late
+              August. What is left is true from now through the season opener. */}
+          ⚠ CFB MODEL IN TRAINING — FBS power ratings are seeded from 2025 results {edges?.ratingsSeed?.sosApplied ? <>with a <b>strength-of-schedule layer</b> applied</> : <>with <b>no strength-of-schedule layer</b> yet</>}, and are not yet calibrated against 2026 games. Edges shown are provisional, for preview only — not betting advice until validated in-season.
         </div>
       )}
       {/* WZ-PHASESEG-2026-07-20 :: the phase switcher was two free-floating outlined pills in a green
