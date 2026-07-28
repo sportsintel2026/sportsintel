@@ -17,6 +17,7 @@ const { getNextPPVEvent, getEventBouts, getFighter, getFighterFights, getUpcomin
 const { scoreBout, methodLean } = require("../services/mmaModel"); // WZ-UFC-MODEL-2026-07-09 / WZ-UFC-METHOD-2026-07-09
 const { createClient } = require("@supabase/supabase-js"); // WZ-UFC-REC-2026-07-09
 const { getEspnUfcResults, espnWinnerCorner, normName: espnNorm } = require("../services/espnMma"); // WZ-UFC-DIAGV2-2026-07-12
+const { foldStrokes } = require("../services/nameFold"); // WZ-NAMEFOLD-2026-07-28
 
 const ODDS_BASE = "https://api.the-odds-api.com/v4";
 const ODDS_API_KEY = process.env.ODDS_API_KEY;
@@ -56,7 +57,10 @@ function median(nums) {
   return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
 }
 function normName(name) {
-  return String(name || "")
+  // WZ-NAMEFOLD-2026-07-28 :: fold stroked letters BEFORE the NFD pass. NFD does not decompose them,
+  // so without this "Jan Błachowicz" became "jan b achowicz" and could never match The Odds API.
+  // The odds join below requires BOTH corners, so one mangled name blanked the entire bout.
+  return foldStrokes(String(name || ""))
     .toLowerCase()
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9]+/g, " ")
