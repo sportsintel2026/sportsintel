@@ -444,6 +444,20 @@ cron.schedule("*/2 * * * *", async () => {
   }
 }, { timezone: "America/New_York" });
 
+// WZ-RESEARCH-SCORES-2026-07-28 :: research-only StatsAPI final-score backfill for the closing-line
+// dataset. Inert unless RESEARCH_SCORES_ENABLED === 'true' (checked inside runScoreBatch before any
+// network or DB call). Offset to the odd minutes ('1-59/2') so it interleaves with the line backfill
+// (*/2) instead of firing the same minute. One date per run; never outruns the line cursor. Research
+// only — nothing customer-facing reads or writes research_mlb_closing.
+cron.schedule("1-59/2 * * * *", async () => {
+  try {
+    const { runScoreBatch } = require("./services/researchScores");
+    await runScoreBatch();
+  } catch (err) {
+    console.error("[CRON] research scores failed:", err.message);
+  }
+}, { timezone: "America/New_York" });
+
 // ── Error handler ─────────────────────────────────────────────────────────────
 app.use((err, req, res, next) => {
   console.error(err.stack);
