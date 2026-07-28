@@ -11,13 +11,13 @@
 // MIN_CREDITS. The enabled flag is checked FIRST — before any network or DB call — so a
 // deploy with the flag unset does nothing at all.
 //
-// CURSOR / KNOWN LIMITATION: resume point is the table's own max(game_date) (no separate
-// state table, by spec). A run advances only when the processed date yields >= 1 stored row.
-// A date with zero games therefore cannot advance the cursor — most importantly the range
-// start 2020-06-01, which predates both The Odds API's MLB historical coverage and the 2020
-// season. With the flag on, the batch will re-process that empty date each run without
-// progressing until the table holds at least one row on or after a real game date. Advancing
-// past an empty date would require state this design deliberately does not keep.
+// CURSOR: a single-row state table research_backfill_state (id=1) holds last_processed_date.
+// Each run processes last_processed_date + 1 day, then advances the cursor to that date
+// UNCONDITIONALLY — whether or not the date yielded rows — so offseason days, rainouts, and
+// coverage gaps move forward instead of stalling (which a max(game_date) cursor could not).
+// The one exception is a credit-floor abort: that date is only partially written, so the
+// cursor is left unchanged and the date is retried next run. If the state row is missing the
+// batch refuses to run rather than invent a start date.
 
 const axios = require("axios");
 const { createClient } = require("@supabase/supabase-js");
@@ -26,7 +26,6 @@ const { createClient } = require("@supabase/supabase-js");
 const ODDS_API_KEY = process.env.ODDS_API_KEY;
 const ODDS_BASE = "https://api.the-odds-api.com/v4";
 
-const RANGE_START = "2020-06-01";
 const RANGE_END = "2025-10-01";
 const MAX_CALLS = 12;                 // hard cap on Odds API calls per run
 const MIN_CREDITS = 100000;           // abort the batch if x-requests-remaining drops below this
@@ -104,16 +103,21 @@ async function runBackfillBatch() {
 
   const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 
-  // Cursor: resume from the day AFTER the latest stored game_date, else the range start.
-  // The table's own max(game_date) IS the cursor — no separate state table (see header note).
-  const { data: last, error: cursorErr } = await supabase
-    .from("research_mlb_closing")
-    .select("game_date")
-    .order("game_date", { ascending: false })
+  // Cursor: single-row state table (research_backfill_state, id=1) holds last_processed_date.
+  // Target = that date + 1 day. Missing row → refuse to run (do not invent a start date).
+  const { data: state, error: cursorErr } = await supabase
+    .from("research_backfill_state")
+    .select("last_processed_date")
+    .eq("id", 1)
     .limit(1);
   if (cursorErr) throw new Error(`cursor read failed: ${cursorErr.message}`);
-  const maxDate = last && last[0] && last[0].game_date ? String(last[0].game_date).slice(0, 10) : null;
-  const processDate = maxDate ? addDaysUTC(maxDate, 1) : RANGE_START;
+  const lastProcessed = state && state[0] && state[0].last_processed_date
+    ? String(state[0].last_processed_date).slice(0, 10) : null;
+  if (!lastProcessed) {
+    console.error("[research] research_backfill_state row (id=1) is missing — refusing to invent a start date. Seed it first.");
+    return { error: "state row missing" };
+  }
+  const processDate = addDaysUTC(lastProcessed, 1);
 
   if (processDate > RANGE_END) {
     console.log(`[research] backfill complete — cursor ${processDate} is past ${RANGE_END}; nothing to do.`);
@@ -163,8 +167,22 @@ async function runBackfillBatch() {
     inserted = Array.isArray(data) ? data.length : 0;
   }
 
-  console.log(`[research] date=${processDate} calls=${calls} rowsInserted=${inserted} creditsRemaining=${creditsRemaining != null ? creditsRemaining : "n/a"}${stoppedForCredits ? " (stopped: low credits)" : ""}`);
-  return { processDate, calls, inserted, creditsRemaining, stoppedForCredits };
+  // Advance the cursor UNLESS the batch aborted on the credit floor — a credit-floor abort leaves
+  // this date only partially written, so we hold the cursor and retry it next run. Otherwise
+  // advance UNCONDITIONALLY: a zero-row date (offseason, rainout, coverage gap) still moves forward.
+  // That is the whole point of the state table.
+  let advanced = false;
+  if (!stoppedForCredits) {
+    const { error: advErr } = await supabase
+      .from("research_backfill_state")
+      .update({ last_processed_date: processDate, updated_at: new Date().toISOString() })
+      .eq("id", 1);
+    if (advErr) throw new Error(`cursor advance failed: ${advErr.message}`);
+    advanced = true;
+  }
+
+  console.log(`[research] date=${processDate} calls=${calls} rowsInserted=${inserted} creditsRemaining=${creditsRemaining != null ? creditsRemaining : "n/a"} cursorAdvanced=${advanced}${stoppedForCredits ? " (stopped: low credits — cursor held)" : ""}`);
+  return { processDate, calls, inserted, creditsRemaining, stoppedForCredits, advanced };
 }
 
 module.exports = { runBackfillBatch };
