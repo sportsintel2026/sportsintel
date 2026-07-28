@@ -47,9 +47,20 @@ function winnerOf(bout) {
   };
 }
 
+// WZ-UFC-ORPHAN-2026-07-27 :: the grader used to iterate Cito's bouts and look up our pending
+// rows, so a pending pick whose bout Cito no longer lists was never visited -- no grade, no log,
+// no counter, forever. On 07-20 a scratched fight (bout 12897, Dulatov vs Turman, July 25) left
+// exactly one such row; it pinned the customer-facing UFC card to a finished event for two days
+// and the grader never said a word about it across ~100 runs.
+// This does NOT auto-settle orphans -- absence could be a transient Cito response, and silently
+// pushing a live pick would corrupt the record. It only makes them impossible to miss.
+let _lastReport = null;
+function finish(r) { _lastReport = { at: new Date().toISOString(), ...r }; return r; }
+function getLastGradeReport() { return _lastReport; }
+
 async function gradeUFCPicks() {
   const c = sb();
-  if (!c) return { skipped: "no-supabase" };
+  if (!c) return finish({ skipped: "no-supabase" });
 
   // 1) Pending picks (cheap Supabase read; touches no external API).
   const { data: pending, error } = await c
@@ -58,9 +69,9 @@ async function gradeUFCPicks() {
     .eq("result", "pending");
   if (error) {
     console.error("[UFC grade] pending fetch failed:", error.message);
-    return { error: error.message };
+    return finish({ error: error.message });
   }
-  if (!pending || !pending.length) return { graded: 0, pending: 0 };
+  if (!pending || !pending.length) return finish({ graded: 0, pending: 0, orphans: [], emptyEvents: [] });
 
   // 2) Which events are gradable? Started (startsAt <= now) or already dropped off upcoming.
   //    getUpcomingEvents is cached (6h) and shared with the card, so this adds ~no calls.
@@ -79,7 +90,7 @@ async function gradeUFCPicks() {
     return t == null || t <= now;               // started (or unknown start) -> grade
   });
   if (!gradableSlugs.length) {
-    return { graded: 0, pending: pending.length, waiting: pendingSlugs.length };
+    return finish({ graded: 0, pending: pending.length, waiting: pendingSlugs.length, orphans: [], emptyEvents: [] });
   }
 
   const pendingByBout = new Map(pending.map((r) => [String(r.bout_id), r]));
@@ -90,10 +101,30 @@ async function gradeUFCPicks() {
   try { espnResults = await getEspnUfcResults(); } catch (_) { espnResults = []; }
 
   let graded = 0, pushed = 0, stillPending = 0;
+  const orphans = [];      // WZ-UFC-ORPHAN-2026-07-27 :: pending picks Cito no longer lists
+  const emptyEvents = [];  // WZ-UFC-ORPHAN-2026-07-27 :: events Cito returned no bouts for
   for (const slug of gradableSlugs) {
     let bouts = [];
     try { bouts = await getEventBouts(slug, { fresh: true }); } catch (_) { bouts = []; }
-    if (!Array.isArray(bouts) || !bouts.length) continue;
+    const slugPending = pending.filter((r) => r.event_slug === slug);
+    if (!Array.isArray(bouts) || !bouts.length) {
+      // WZ-UFC-ORPHAN-2026-07-27 :: this `continue` used to be silent. An event Cito returns
+      // nothing for can never grade ANY of its picks, which is worth shouting about.
+      emptyEvents.push({ slug, pending: slugPending.length });
+      console.error(`[UFC grade] ORPHAN EVENT: ${slug} has ${slugPending.length} pending pick(s) but Cito returned 0 bouts -- none of them can grade.`);
+      continue;
+    }
+    // WZ-UFC-ORPHAN-2026-07-27 :: pending rows for this event that Cito does not list at all.
+    // These are unreachable by the bout loop below no matter how many times the cron fires.
+    const seenIds = new Set(bouts.map((b) => String(b.id)));
+    const missing = slugPending.filter((r) => !seenIds.has(String(r.bout_id)));
+    if (missing.length) {
+      for (const r of missing) orphans.push({ slug, bout_id: String(r.bout_id) });
+      console.error(
+        `[UFC grade] ORPHAN: ${missing.length} pending pick(s) for ${slug} are absent from Cito's ${bouts.length} bout(s) and can NEVER grade: ` +
+        missing.map((r) => String(r.bout_id)).join(", ")
+      );
+    }
 
     for (const bout of bouts) {
       const row = pendingByBout.get(String(bout.id));
@@ -131,9 +162,9 @@ async function gradeUFCPicks() {
   }
 
   console.log(
-    `[UFC grade] ${graded} win/loss, ${pushed} push, ${stillPending} still pending across ${gradableSlugs.length} event(s)`
+    `[UFC grade] ${graded} win/loss, ${pushed} push, ${stillPending} still pending, ${orphans.length} ORPHANED across ${gradableSlugs.length} event(s)`
   );
-  return { graded, pushed, stillPending, events: gradableSlugs.length };
+  return finish({ graded, pushed, stillPending, events: gradableSlugs.length, orphans, emptyEvents });
 }
 
-module.exports = { gradeUFCPicks };
+module.exports = { gradeUFCPicks, getLastGradeReport }; // WZ-UFC-ORPHAN-2026-07-27
