@@ -189,6 +189,126 @@ router.get("/cfb-calibrate", async (req, res) => {
   }
 });
 
+// WZ-NFL-BACKTEST-2026-07-28 :: NFL calibration harness. Same analysis as /cfb-calibrate, but the
+// NFL source (nflverse games.csv) already ships spread_line + total_line + result + total joined per
+// game, so it is ONE unauthenticated CSV fetch — no key, no per-season loop, no line-join step.
+// nflverse sign convention (VERIFIED against the live CSV, and the REVERSE of CFBD): result =
+// home_score - away_score, and spread_line is POSITIVE when the HOME team is favored, so the model's
+// expected home margin is +spread_line and a push is result === spread_line. Returns residual SDs,
+// per-key push rates WITH sample counts, and a fitted key-number comb WITH sample counts (cfb-calibrate
+// computes the count and throws it away — this does not). Read-only; no Supabase writes.
+//   GET /api/backtest/nfl-calibrate?seasons=2010,2011,...,2025   (default 2010..2025)
+// Registered before "/:league" so Express doesn't read "nfl-calibrate" as a league.
+router.get("/nfl-calibrate", async (req, res) => {
+  try {
+    const seasons = req.query.seasons
+      ? String(req.query.seasons).split(",").map((s) => s.trim()).filter(Boolean)
+      : Array.from({ length: 2025 - 2010 + 1 }, (_, i) => String(2010 + i));
+    const seasonSet = new Set(seasons);
+
+    const CSV_URL = "https://raw.githubusercontent.com/nflverse/nfldata/master/data/games.csv";
+    const resp = await fetch(CSV_URL);
+    if (!resp.ok) throw new Error(`nflverse games.csv -> ${resp.status} ${resp.statusText}`);
+    const text = await resp.text();
+
+    // Minimal quote-aware CSV field splitter (the columns we need precede the free-text tail, but be safe).
+    const splitCsv = (line) => {
+      const out = []; let cur = "", q = false;
+      for (let i = 0; i < line.length; i++) {
+        const c = line[i];
+        if (q) { if (c === '"') { if (line[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += c; }
+        else if (c === '"') q = true;
+        else if (c === ",") { out.push(cur); cur = ""; }
+        else cur += c;
+      }
+      out.push(cur); return out;
+    };
+    const num = (x) => (x == null || x === "" ? null : Number(x));
+    const lines = text.split(/\r?\n/).filter((l) => l.length);
+    const header = splitCsv(lines[0]);
+    const col = {}; header.forEach((h, i) => { col[h] = i; });
+
+    // Completed, regular-season, in-range games that carry a spread_line. Sign: + = home favored.
+    const rows = [];
+    for (let i = 1; i < lines.length; i++) {
+      const f = splitCsv(lines[i]);
+      if (f[col.game_type] !== "REG") continue;              // regular season only (mirrors cfb seasonType=regular)
+      if (!seasonSet.has(String(f[col.season]))) continue;   // season filter
+      const homeMargin = num(f[col.result]);                 // home_score - away_score
+      const spread = num(f[col.spread_line]);                // + = HOME favored (nflverse convention)
+      if (homeMargin == null || spread == null) continue;    // skip unplayed / lineless games
+      rows.push({ homeMargin, spread, total: num(f[col.total]), ou: num(f[col.total_line]) });
+    }
+    if (rows.length < 100) return res.json({ token: "WZ-NFL-BACKTEST-2026-07-28", warning: `only ${rows.length} games after filters — check seasons/source`, seasons });
+
+    // 1) residuals + a SIGN sanity check (expected home margin = +spread_line under nflverse convention)
+    const sd = (a) => { const m = a.reduce((s, x) => s + x, 0) / a.length; return Math.sqrt(a.reduce((s, x) => s + (x - m) * (x - m), 0) / a.length); };
+    const marginSD = sd(rows.map((g) => g.homeMargin - g.spread));
+    const coverRate = rows.filter((g) => g.homeMargin > g.spread).length / rows.length;
+    const totalRows = rows.filter((g) => g.ou != null);
+    const totalSD = totalRows.length ? sd(totalRows.map((g) => g.total - g.ou)) : null;
+
+    // 2) ACTUAL push rate + SAMPLE COUNT at each key spread, then fit the comb at the measured sigma.
+    const S = marginSD > 0 ? Math.round(marginSD * 10) / 10 : 13;
+    const KEY_CANDIDATES = [1, 2, 3, 4, 5, 6, 7, 10, 13, 14, 17, 20, 21, 24, 28]; // NFL scoring lattice; gated below
+    // excludes keys with no meaningful sample; sits in the observed gap between n=57 and n=94 so the fit set is not threshold-sensitive.
+    const MIN_N = 75;
+    const keyN = {};          // k -> games landing on that spread (RETAINED — cfb-calibrate discards this)
+    const keyPush = {};       // k -> measured push rate (%), defined only when n >= MIN_N (may be 0)
+    const pushTargets = {};   // k -> push rate FED TO THE FIT: n >= MIN_N AND push rate > 0 only
+    for (const k of KEY_CANDIDATES) {
+      const at = rows.filter((g) => Math.abs(g.spread) === k);
+      keyN[k] = at.length;
+      if (at.length >= MIN_N) {
+        const rate = Math.round(1000 * at.filter((g) => g.homeMargin === g.spread).length / at.length) / 10;
+        keyPush[k] = rate;
+        // ZERO-PUSH GUARD: a 0% observed rate would drive the multiplicative update (target/cur)^0.5 to 0,
+        // pinning keys[k] at the -0.9 clamp — maximum suppression manufactured from missing evidence, not
+        // measured from data. Exclude it from the fit; it is still reported in perKey (with its reason).
+        if (rate > 0) pushTargets[k] = rate;
+      }
+    }
+    const pushAt = (k, keys) => { let Z = 0, wk = 0; for (let m = Math.floor(k - 6 * S); m <= Math.ceil(k + 6 * S); m++) { const w = Math.exp(-0.5 * ((m - k) / S) ** 2) * (1 + (keys[Math.abs(m)] || 0)); Z += w; if (m === k) wk = w; } return wk / Z * 100; };
+    const keys = {}; for (const k of Object.keys(pushTargets)) keys[k] = 0.5;
+    for (let it = 0; it < 150; it++) for (const k of Object.keys(pushTargets)) { const cur = pushAt(+k, keys) || 0.01; keys[k] = (1 + keys[k]) * Math.pow(pushTargets[k] / cur, 0.5) - 1; keys[k] = Math.max(-0.9, Math.min(6, keys[k])); }
+    const nflComb = {}; for (const k of Object.keys(keys)) nflComb[k] = Math.round(keys[k] * 100) / 100;
+
+    // Per-key rollup: sample count + push rate + comb + WHY a key was excluded (never silently dropped).
+    const perKey = {};
+    for (const k of KEY_CANDIDATES) {
+      const n = keyN[k];
+      let pushRate = null, comb = null, fitted = false, reason = null;
+      if (n < MIN_N) {
+        reason = `n<${MIN_N} (below sample threshold)`;
+      } else if (keyPush[k] === 0) {
+        pushRate = 0;
+        reason = "0 observed pushes — excluded from fit (a 0% rate would manufacture a -0.9 suppression notch)";
+      } else {
+        pushRate = keyPush[k]; comb = nflComb[k]; fitted = true;
+      }
+      perKey[k] = { n, pushRate, comb, fitted, reason };
+    }
+
+    res.json({
+      token: "WZ-NFL-BACKTEST-2026-07-28",
+      source: CSV_URL,
+      seasons, gamesUsed: rows.length, minKeyN: MIN_N,
+      sanity: {
+        homeCoverRate: Math.round(coverRate * 1000) / 10 + "%",
+        signOk: coverRate >= 0.4 && coverRate <= 0.6,
+        note: (coverRate < 0.4 || coverRate > 0.6) ? "Cover rate is far from ~50% — the spread sign may be flipped for this source. Verify before applying." : "Cover ~50% — sign convention looks correct.",
+      },
+      recommend: { NFL_SIGMA: S, NFL_TOTAL_SIGMA: totalSD != null ? Math.round(totalSD * 10) / 10 : null, nflComb },
+      current: { NFL_SIGMA: 13.0, NFL_TOTAL_SIGMA: 13.2 },
+      perKey,          // { k: { n, pushRate, comb, fitted, reason } } — sample count + reason on EVERY key
+      pushTargets,     // flat push rates ACTUALLY FED TO THE FIT (keys match nflComb; zero-push keys excluded)
+      howToApply: "nflComb -> footballMargin.js KEY.nfl; NFL_SIGMA/NFL_TOTAL_SIGMA -> nflModel.js (and footballMargin SIGMA.nfl). Same recipe as the CFB calibration. If sanity.signOk is false, don't apply — ping me.",
+    });
+  } catch (err) {
+    res.status(500).json({ token: "WZ-NFL-BACKTEST-2026-07-28", error: String((err && err.message) || err) });
+  }
+});
+
 router.get("/:league", async (req, res) => {
   const league = String(req.params.league || "").toLowerCase();
   const fTier = req.query.tier ? String(req.query.tier).toUpperCase() : null;
