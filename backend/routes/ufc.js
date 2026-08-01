@@ -243,6 +243,40 @@ async function getNextEventChrono() {
   const withBouts = list
     .filter((e) => e && e.slug && e.dataAvailability && e.dataAvailability.bouts === "available")
     .sort(byDate);
+  // WZ-UFC-FLAGTRUST-2026-08-01 :: dataAvailability.bouts is Cito's CLAIM about an event, and it
+  // goes stale on event day -- UFC Fight Night 283 (Belgrade, 08-01) stopped reporting "available"
+  // hours before its first bell while /events/{slug}/bouts still returned all of its fights (the
+  // grader read them the same morning). Trusting the flag alone silently dropped today's card and
+  // promoted next week's, which is what a customer opening the app on fight morning actually saw.
+  // Fix: for any event SOONER than the flagged winner, do not take the flag's word for it -- ask
+  // the bouts endpoint. Bouts come back = the card is real = it wins on imminence, which is the
+  // whole point of chronological selection. Capped at the 3 soonest and floored at 24h ago so this
+  // can never walk backwards onto a finished card or fan out into a call storm; getEventBouts is
+  // cached 3h, so in steady state this costs nothing. Falls through to the old behavior on any
+  // error or empty read.
+  const boutsCutoffMs = Date.now() - 24 * 60 * 60 * 1000;
+  const flaggedFirstMs = withBouts.length ? Date.parse(withBouts[0].startsAt || "") : NaN;
+  const unflaggedSooner = list
+    .filter((e) => e && e.slug && !(e.dataAvailability && e.dataAvailability.bouts === "available"))
+    .filter((e) => {
+      const t = Date.parse(e.startsAt || "");
+      if (isNaN(t) || t < boutsCutoffMs) return false;
+      return isNaN(flaggedFirstMs) ? true : t < flaggedFirstMs;
+    })
+    .sort(byDate)
+    .slice(0, 3);
+  for (const cand of unflaggedSooner) {
+    let probeBouts = [];
+    try { probeBouts = await getEventBouts(cand.slug); } catch (_) { probeBouts = []; }
+    if (Array.isArray(probeBouts) && probeBouts.length) {
+      console.log(
+        `[UFC] chrono: ${cand.slug} is sooner than the flagged event and returned ` +
+        `${probeBouts.length} bout(s) despite dataAvailability.bouts=` +
+        `${(cand.dataAvailability && cand.dataAvailability.bouts) || "missing"} -- using it as the card.`
+      );
+      return cand;
+    }
+  }
   if (withBouts.length) return withBouts[0];
   return list.filter((e) => e && e.slug).sort(byDate)[0] || null;
 }
