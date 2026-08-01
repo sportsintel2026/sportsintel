@@ -73,7 +73,7 @@ async function gradeUFCPicks() {
   // 1) Pending picks (cheap Supabase read; touches no external API).
   const { data: pending, error } = await c
     .from("ufc_picks")
-    .select("bout_id,event_slug,pick_corner")
+    .select("bout_id,event_slug,pick_corner,cito_winner_at,espn_winner_at,source_conflict") // WZ-UFC-SRCLAG-2026-08-01
     .eq("result", "pending");
   if (error) {
     console.error("[UFC grade] pending fetch failed:", error.message);
@@ -122,7 +122,7 @@ async function gradeUFCPicks() {
     const sinceIso = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
     const { data: gr } = await c
       .from("ufc_picks")
-      .select("bout_id,event_slug,pick_corner,result,winner_name")
+      .select("bout_id,event_slug,pick_corner,result,winner_name,cito_winner_at,espn_winner_at,source_conflict") // WZ-UFC-SRCLAG-2026-08-01
       .in("event_slug", gradableSlugs)
       .in("result", ["win", "loss", "push"]) // WZ-UFC-PUSHNARROW-2026-08-01 :: a wrongly-settled push must be correctable too
       .gte("graded_at", sinceIso);
@@ -130,7 +130,7 @@ async function gradeUFCPicks() {
   } catch (_) { gradedRows = []; }
   const gradedByBout = new Map(gradedRows.map((r) => [String(r.bout_id), r]));
 
-  let graded = 0, pushed = 0, stillPending = 0, corrected = 0;
+  let graded = 0, pushed = 0, stillPending = 0, corrected = 0, conflicts = 0;
   const orphans = [];      // WZ-UFC-ORPHAN-2026-07-27 :: pending picks Cito no longer lists
   const emptyEvents = [];  // WZ-UFC-ORPHAN-2026-07-27 :: events Cito returned no bouts for
   for (const slug of gradableSlugs) {
@@ -158,6 +158,37 @@ async function gradeUFCPicks() {
 
     for (const bout of bouts) {
       const row = pendingByBout.get(String(bout.id));
+
+      // WZ-UFC-SRCLAG-2026-08-01 :: measure the feeds instead of arguing about them. Every pass,
+      // stamp the FIRST time each source has a winner for this bout. The gap between the two is
+      // Cito's lag against ESPN, per fight, in writing -- which is the thing actually worth taking
+      // to them, and the thing that decides whether Cito should stay the primary grading source.
+      // Runs on pending AND recently-graded rows so the slower feed still gets timed after we have
+      // already settled from the faster one. Stamps once and never overwrites, so it records first
+      // sighting, not latest. Resolution is the cron interval (30 min); a two-hour lag reads as
+      // four passes, which is enough to make the case.
+      const lagRow = row || gradedByBout.get(String(bout.id));
+      if (lagRow) {
+        const cwObs = winnerOf(bout);
+        const ewObs = espnWinnerCorner(bout, espnResults);
+        const stamp = new Date().toISOString();
+        const patch = {};
+        if (cwObs && cwObs.corner && !lagRow.cito_winner_at) patch.cito_winner_at = stamp;
+        if (ewObs && ewObs.corner && !lagRow.espn_winner_at) patch.espn_winner_at = stamp;
+        if (cwObs && ewObs && cwObs.corner && ewObs.corner && cwObs.corner !== ewObs.corner && !lagRow.source_conflict) {
+          patch.source_conflict = true;
+          conflicts++;
+          console.error(
+            `[UFC lag] SOURCE CONFLICT bout ${bout.id} (${lagRow.event_slug}): Cito says ` +
+            `${cwObs.name || "?"} (${cwObs.corner}), ESPN says ${ewObs.name || "?"} (${ewObs.corner}). ` +
+            `One fight, one winner -- a feed is wrong. Do not grade this from either until it is resolved.`
+          );
+        }
+        if (Object.keys(patch).length) {
+          try { await c.from("ufc_picks").update(patch).eq("bout_id", String(bout.id)); } catch (_) {}
+        }
+      }
+
       if (!row) {
         // WZ-UFC-REGRADE-2026-08-01 :: already graded. Ask Cito whether that grade still holds.
         const g = gradedByBout.get(String(bout.id));
@@ -194,7 +225,7 @@ async function gradeUFCPicks() {
           win.corner === String(row.pick_corner || "").toLowerCase() ? "win" : "loss";
         await c
           .from("ufc_picks")
-          .update({ result, winner_name: win.name || null, graded_at: nowIso, updated_at: nowIso })
+          .update({ result, winner_name: win.name || null, settled_by: winSource, graded_at: nowIso, updated_at: nowIso }) // WZ-UFC-SRCLAG-2026-08-01 :: which feed actually settled it
           .eq("bout_id", String(bout.id));
         if (winSource === "espn") console.log(`[UFC grade] bout ${bout.id} settled from ESPN (winner=${win.name || "?"})`);
         graded++;
@@ -217,7 +248,7 @@ async function gradeUFCPicks() {
   console.log(
     `[UFC grade] ${graded} win/loss, ${pushed} push, ${corrected} CORRECTED, ${stillPending} still pending, ${orphans.length} ORPHANED across ${gradableSlugs.length} event(s)`
   );
-  return finish({ graded, pushed, corrected, stillPending, events: gradableSlugs.length, orphans, emptyEvents });
+  return finish({ graded, pushed, corrected, conflicts, stillPending, events: gradableSlugs.length, orphans, emptyEvents });
 }
 
 module.exports = { gradeUFCPicks, getLastGradeReport }; // WZ-UFC-ORPHAN-2026-07-27
