@@ -35,7 +35,12 @@ function normName(s) {
 
 // accent-stripped, lowercased, suffix-dropped WORD TOKENS -> ["zachary","reese"] (for fuzzy tier)
 function nameTokens(s) {
-  return String(s || "")
+  // WZ-NAMEFOLD-TOKENS-2026-08-01 :: normName above folds stroked letters before the NFD pass, but
+  // this fuzzy tier never did -- NFD leaves l-stroke/d-stroke/o-slash undecomposed and the class
+  // below then deletes them, so "Blachowicz" (l-stroke) tokenized to ["b","achowicz"]. That is
+  // precisely the tier that exists to rescue a name the exact key already missed, so the fallback
+  // was blind for the names most likely to need it. Same fold, same order, as normName.
+  return foldStrokes(String(s || ""))
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, " ")
