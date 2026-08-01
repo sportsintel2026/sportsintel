@@ -335,8 +335,15 @@ async function pickCardEvent() {
       try {
         const pinBouts = await getEventBouts(live.event_slug);
         if (Array.isArray(pinBouts) && pinBouts.length) {
-          const anyTerminal = pinBouts.some((b) => PIN_TERMINAL_RE.test(String((b && b.status) || "")));
-          if (!anyTerminal) {
+          // WZ-UFC-PINWINNER-2026-08-01 :: "any terminal status" was the wrong test for "has this
+          // event started". A bout scratched from the card carries a terminal status (cancel/void)
+          // while the event itself has not begun, so ONE cancelled undercard fight made the whole
+          // card look finished and released the pin -- which is what kept Belgrade off the board
+          // even after the pin guard shipped. A WINNER is the unambiguous signal: winnerFighterSlug
+          // is only ever populated by a fight that actually happened, and a cancellation never
+          // produces one. Zero winners = first bell has not rung = hold.
+          const anyWinner = pinBouts.some((b) => b && b.winnerFighterSlug);
+          if (!anyWinner) {
             console.log(
               `[UFC] pin held: ${live.event_slug} is off the upcoming list but no bout has a terminal ` +
               `status yet -- the event has not started. Holding the card on it.`
