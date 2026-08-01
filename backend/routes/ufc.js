@@ -552,6 +552,42 @@ async function recordUpcomingUFC() {
       out.events++;
       out.banked += await recordUFCPicks(parsed, { slug: ev.slug, name: ev.title || ev.shortTitle || "UFC" });
     }
+
+    // WZ-UFC-BANKCARD-2026-08-01 :: everything above is gated on Cito's upcoming list AND on its
+    // dataAvailability.bouts flag. Both go stale on event day, so the event the customer is
+    // ACTUALLY looking at can be invisible to the recorder. On the 08-01 Belgrade card that meant
+    // prelim lines posted after the event dropped off the list were never banked -- the pick
+    // rendered live from the open market, then vanished into "ODDS PENDING - no line posted yet"
+    // the moment the book pulled the line post-fight. A pick the customer saw, on a fight that had
+    // already happened, erased because we only ever stored picks for events Cito still advertised.
+    // Fix: bank the pinned card too. pickCardEvent() is the single source of truth for what is on
+    // the board, so if it is on the board its picks get written, list or no list. Skipped when the
+    // loop above already covered it, so the normal path costs nothing extra.
+    const coveredSlugs = new Set(inWindow.map((e) => String(e.slug)));
+    try {
+      const cardEv = await pickCardEvent();
+      if (cardEv && cardEv.slug && !coveredSlugs.has(String(cardEv.slug))) {
+        const cardBouts = await getEventBouts(cardEv.slug);
+        const cardParsed = Array.isArray(cardBouts) && cardBouts.length
+          ? (await Promise.all(cardBouts.map((b) => parseBout(b, oddsMap)))).filter(Boolean)
+          : [];
+        if (cardParsed.length) {
+          out.events++;
+          out.banked += await recordUFCPicks(cardParsed, {
+            slug: cardEv.slug,
+            name: cardEv.title || cardEv.shortTitle || "UFC",
+          });
+          console.log(
+            `[UFC] recordUpcomingUFC: banked the pinned card ${cardEv.slug}, which Cito's upcoming ` +
+            `list no longer covers. Without this its picks would never be stored.`
+          );
+        } else {
+          out.skipped++;
+        }
+      }
+    } catch (e) {
+      console.error("[UFC] recordUpcomingUFC: pinned-card bank failed:", e.message);
+    }
     if (out.events || out.skipped) {
       console.log(`[UFC] recordUpcomingUFC: banked ${out.banked} pick(s) across ${out.events} event(s), ${out.skipped} skipped.`);
     }
