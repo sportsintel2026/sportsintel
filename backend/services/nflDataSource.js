@@ -531,6 +531,125 @@ async function fetchSchedulesProbe(season = 2025) {
   };
 }
 
+/* ---- READ-ONLY PROBE: reconcile SCHEDULE data against the /record seed ----------
+ * WZ-NFLRECONCILE-2026-08-01
+ * The 3-team schedule probe came back clean on shape but NOT on arithmetic. Summing
+ * each team's per-game scores reproduced pointsFor EXACTLY, while pointsAgainst was
+ * off (SEA +14, DET -18) and each W-L disagreed by one game. Because a team's own
+ * score reconciles and only the OPPONENT's score does not, the suspicion is the
+ * opponent read in parseScheduleEvents, not ESPN's totals.
+ *
+ * SRS is built entirely on per-game margins, so a wrong opponent score corrupts every
+ * margin it touches. Nothing gets ported until this reconciles across all 32 teams.
+ *
+ * Two independent checks:
+ *   1) AGGREGATE — sum each team's parsed games and compare pf/pa/W-L to the /record
+ *      values buildTeamRatings already uses. Any team that disagrees is reported.
+ *   2) SYMMETRY  — every game appears on two schedules. Team A's `teamScore` is
+ *      trustworthy (its sum reconciles); so for A-vs-B in week W, A's `oppScore`
+ *      must equal B's own `teamScore` for that same week. Where it doesn't, the
+ *      opponent read is provably wrong and the game is reported with both sides.
+ *      This isolates the defect to specific games rather than guessing.
+ *
+ * Writes nothing. No cache write, no model input, no side effects. */
+const RECONCILE_BATCH = 8; // concurrency cap so we don't hammer ESPN with 32 at once
+
+async function fetchScheduleReconcile(season = 2025) {
+  // 1) the /record seed the model actually runs on — the reference to reconcile against.
+  const ratings = await buildTeamRatings(season);
+  const recTeams = (ratings && ratings.teams) || {};
+  if (!Object.keys(recTeams).length) {
+    return { season, error: "buildTeamRatings returned no rated teams — nothing to reconcile against", ratingsNote: ratings && ratings.note };
+  }
+
+  // 2) every team's schedule, regular season only.
+  const ids = Object.keys(recTeams);
+  const sched = {}; // id -> parsed games (completed, seasonType 2)
+  for (let i = 0; i < ids.length; i += RECONCILE_BATCH) {
+    const batch = ids.slice(i, i + RECONCILE_BATCH);
+    await Promise.all(batch.map(async (id) => {
+      try {
+        const s = await espnGet(`${BASE}/teams/${id}/schedule?season=${season}`);
+        sched[id] = parseScheduleEvents(s.events || [], id)
+          .filter((p) => p.completed && p.seasonType === 2 && p.teamScore != null && p.oppScore != null);
+      } catch (_) { sched[id] = null; }
+    }));
+  }
+
+  // 3) AGGREGATE check.
+  const perTeam = [];
+  for (const id of ids) {
+    const rec = recTeams[id];
+    const g = sched[id];
+    if (g == null) { perTeam.push({ id, abbr: rec.abbr, error: "schedule fetch failed" }); continue; }
+    const pfS = g.reduce((s, x) => s + x.teamScore, 0);
+    const paS = g.reduce((s, x) => s + x.oppScore, 0);
+    const wS = g.filter((x) => x.teamScore > x.oppScore).length;
+    const lS = g.filter((x) => x.teamScore < x.oppScore).length;
+    // a team's own score repeated with the same opponent score in two different weeks
+    // is the visual tell that surfaced in the 3-team probe — count it, don't assume it.
+    const seen = {}; let dupPairs = 0;
+    for (const x of g) { const k = `${x.teamScore}-${x.oppScore}`; seen[k] = (seen[k] || 0) + 1; }
+    for (const k of Object.keys(seen)) if (seen[k] > 1) dupPairs += seen[k] - 1;
+    perTeam.push({
+      id, abbr: rec.abbr, name: rec.name,
+      gamesSched: g.length, gamesRecord: rec.gp,
+      pfSched: pfS, pfRecord: rec.pf, pfDelta: pfS - rec.pf,
+      paSched: paS, paRecord: rec.pa, paDelta: paS - rec.pa,
+      wlSched: `${wS}-${lS}`, wlRecord: `${rec.wins}-${rec.losses}`,
+      duplicateScorePairs: dupPairs,
+      reconciles: pfS === rec.pf && paS === rec.pa && wS === rec.wins && lS === rec.losses,
+    });
+  }
+
+  // 4) SYMMETRY check — key each game by week + the unordered pair of team ids, then
+  //    compare what each side reports. Weeks disambiguate division rematches.
+  const byGame = {};
+  for (const id of ids) {
+    for (const x of (sched[id] || [])) {
+      if (!x.opponentId || x.week == null) continue;
+      const key = `w${x.week}:${[String(id), String(x.opponentId)].sort().join("-")}`;
+      (byGame[key] = byGame[key] || []).push({ selfId: String(id), oppId: String(x.opponentId), teamScore: x.teamScore, oppScore: x.oppScore, week: x.week });
+    }
+  }
+  const asymmetric = [];
+  let pairsChecked = 0;
+  for (const [key, sides] of Object.entries(byGame)) {
+    if (sides.length !== 2) continue; // only games we saw from BOTH schedules are checkable
+    pairsChecked++;
+    const [a, b] = sides;
+    // a.oppScore should equal b.teamScore, and b.oppScore should equal a.teamScore
+    if (a.oppScore !== b.teamScore || b.oppScore !== a.teamScore) {
+      asymmetric.push({
+        key, week: a.week,
+        sideA: { team: recTeams[a.selfId]?.abbr || a.selfId, reportsSelf: a.teamScore, reportsOpp: a.oppScore },
+        sideB: { team: recTeams[b.selfId]?.abbr || b.selfId, reportsSelf: b.teamScore, reportsOpp: b.oppScore },
+        // own-score is the trustworthy field (team pf sums reconcile), so this is the truth:
+        impliedTruth: `${recTeams[a.selfId]?.abbr || a.selfId} ${a.teamScore} - ${b.teamScore} ${recTeams[b.selfId]?.abbr || b.selfId}`,
+      });
+    }
+  }
+
+  const mismatched = perTeam.filter((t) => t.reconciles === false || t.error);
+  return {
+    season,
+    summary: {
+      teamsChecked: perTeam.length,
+      teamsReconciled: perTeam.filter((t) => t.reconciles).length,
+      teamsMismatched: mismatched.length,
+      totalPfDelta: perTeam.reduce((s, t) => s + (t.pfDelta || 0), 0),
+      totalPaDelta: perTeam.reduce((s, t) => s + (t.paDelta || 0), 0),
+      gamePairsChecked: pairsChecked,
+      gamePairsAsymmetric: asymmetric.length,
+      totalDuplicateScorePairs: perTeam.reduce((s, t) => s + (t.duplicateScorePairs || 0), 0),
+    },
+    note: "GO/NO-GO for porting the CFB SRS to the NFL. teamsMismatched must be 0 and gamePairsAsymmetric must be 0 before any margin-based math is written. If pfDelta is 0 everywhere while paDelta is not, the opponent read in parseScheduleEvents is the defect, not ESPN. asymmetricGames lists the exact games where the two schedules disagree and what the own-score fields imply the real result was.",
+    mismatchedTeams: mismatched,
+    asymmetricGames: asymmetric.slice(0, 80),
+    allTeams: perTeam,
+  };
+}
+
 module.exports = {
   fetchScoreboard,
   getUpcomingGames,
@@ -538,6 +657,7 @@ module.exports = {
   fetchSeasonProbe,
   fetchPointsProbe,
   fetchSchedulesProbe, // WZ-NFLSCHEDPROBE-2026-08-01
+  fetchScheduleReconcile, // WZ-NFLRECONCILE-2026-08-01
   buildTeamRatings,
   statMap,
   parseRecords,
