@@ -405,12 +405,139 @@ async function buildTeamRatings(season = 2025) {
   return result;
 }
 
+/* ---- READ-ONLY PROBE: per-team SCHEDULE/opponent shape for a future SoS layer ----
+ * WZ-NFLSCHEDPROBE-2026-08-01
+ * buildTeamRatings above seeds from season-aggregate PF/PA (the /record endpoint),
+ * which has NO opponent breakdown — so a soft schedule is indistinguishable from a
+ * brutal one and `sosApplied` is false. CFB already solved this with an SRS fixpoint
+ * (cfbDataSource). Before any of that math is ported to the NFL we confirm the site
+ * schedule endpoint actually carries opponent id + home/away + final score per game.
+ *
+ * ONE THING CFB DID NOT HAVE TO HANDLE: the NFL plays a PRESEASON. ESPN marks it with
+ * seasonType 1 (pre), 2 (regular), 3 (post). CFB's SRS filters only on `completed`,
+ * which here would fold August exhibition games — where starters play a quarter —
+ * straight into the ratings. So this probe reports seasonType per game and counts them
+ * separately. If the counts come back clean, the port filters to seasonType 2.
+ *
+ * Writes nothing. No cache, no model input, no side effects. */
+function scoreVal(c) {
+  if (c == null) return null;
+  const s = c.score;
+  if (s == null) return null;
+  if (typeof s === "number") return s;
+  if (typeof s === "string") { const n = Number(s); return Number.isFinite(n) ? n : null; }
+  if (typeof s === "object") { const n = Number(s.value != null ? s.value : s.displayValue); return Number.isFinite(n) ? n : null; }
+  return null;
+}
+
+function parseScheduleEvents(events, selfId) {
+  const out = [];
+  for (const ev of (events || [])) {
+    const comp = (ev.competitions || [])[0];
+    if (!comp) continue;
+    const cs = comp.competitors || [];
+    const me = cs.find((c) => String(c.id || c.team?.id) === String(selfId));
+    const opp = cs.find((c) => String(c.id || c.team?.id) !== String(selfId));
+    // seasonType: 1=pre, 2=regular, 3=post. Read from the event, then the competition,
+    // then the top-level season block — ESPN puts it in different places by endpoint.
+    const stRaw = ev.seasonType?.type ?? ev.seasonType?.id ?? ev.seasonType
+      ?? comp.seasonType?.type ?? comp.seasonType?.id ?? ev.season?.type ?? null;
+    const seasonType = stRaw == null ? null : Number(stRaw);
+    out.push({
+      week: ev.week?.number ?? null,
+      seasonType,
+      seasonTypeName: ev.seasonType?.name ?? ev.season?.name ?? null,
+      opponentId: opp ? String(opp.id || opp.team?.id || "") : null,
+      opponentName: opp ? (opp.team?.displayName || opp.team?.name || opp.team?.abbreviation || null) : null,
+      homeAway: me ? (me.homeAway || null) : null,
+      teamScore: scoreVal(me),
+      oppScore: scoreVal(opp),
+      completed: !!(comp.status?.type?.completed),
+      neutralSite: !!comp.neutralSite,
+    });
+  }
+  return out;
+}
+
+async function fetchSchedulesProbe(season = 2025) {
+  // 1) team list — same call buildTeamRatings uses, so ids match exactly.
+  let teamsList = [];
+  try {
+    const t = await espnGet(`${BASE}/teams`);
+    teamsList = (t.sports?.[0]?.leagues?.[0]?.teams || []).map((x) => x.team).filter(Boolean);
+  } catch (e) {
+    return { season, error: `teams fetch failed: ${e.message}` };
+  }
+  if (!teamsList.length) return { season, error: "no teams returned" };
+
+  const nameById = {};
+  const idByAbbr = {};
+  for (const tm of teamsList) {
+    if (!tm.id) continue;
+    nameById[String(tm.id)] = tm.displayName || tm.name || null;
+    if (tm.abbreviation) idByAbbr[String(tm.abbreviation).toUpperCase()] = String(tm.id);
+  }
+
+  // 2) sample the two extremes of the current seed plus a middle team, so we can see
+  //    whether the schedule data explains any of the spread. SEA is the top-rated team
+  //    in the 2025 seed, NYJ the bottom, DET the middle.
+  let sampleIds = ["SEA", "NYJ", "DET"].map((a) => idByAbbr[a]).filter(Boolean);
+  if (sampleIds.length < 3) {
+    for (const tm of teamsList) { if (sampleIds.length >= 3) break; const id = String(tm.id); if (!sampleIds.includes(id)) sampleIds.push(id); }
+  }
+
+  // 3) fetch each sample team's schedule, parse opponent + score + seasonType per game.
+  const teams = [];
+  let rawSampleFirstEvent = null;
+  for (const id of sampleIds) {
+    try {
+      const sch = await espnGet(`${BASE}/teams/${id}/schedule?season=${season}`);
+      const events = sch.events || [];
+      if (rawSampleFirstEvent == null && events.length) {
+        const comp = (events[0].competitions || [])[0] || {};
+        rawSampleFirstEvent = {
+          week: events[0].week,
+          seasonType: events[0].seasonType ?? null,
+          season: events[0].season ?? null,
+          competitors: (comp.competitors || []).map((c) => ({ id: c.id, homeAway: c.homeAway, score: c.score, winner: c.winner, team: c.team ? { id: c.team.id, displayName: c.team.displayName, abbreviation: c.team.abbreviation } : null })),
+          status: comp.status?.type,
+        };
+      }
+      const parsed = parseScheduleEvents(events, id);
+      const done = parsed.filter((p) => p.completed);
+      teams.push({
+        id, name: nameById[String(id)] || `Team ${id}`,
+        gameCount: events.length,
+        completedCount: done.length,
+        parsableOpponents: parsed.filter((p) => p.opponentId).length,
+        parsableScores: parsed.filter((p) => p.teamScore != null && p.oppScore != null).length,
+        // the NFL-specific question: how many completed games are exhibition?
+        bySeasonType: done.reduce((acc, p) => { const k = p.seasonType == null ? "null" : String(p.seasonType); acc[k] = (acc[k] || 0) + 1; return acc; }, {}),
+        completedRegularOnly: done.filter((p) => p.seasonType === 2).length,
+        games: parsed,
+      });
+    } catch (e) {
+      teams.push({ id, name: nameById[String(id)] || `Team ${id}`, error: e.message });
+    }
+  }
+
+  return {
+    season,
+    endpointTried: `${BASE}/teams/{id}/schedule?season=${season}`,
+    sampleTeamIds: sampleIds,
+    note: "GO/NO-GO for an NFL SoS layer. Need parsableOpponents and parsableScores to be ~= gameCount, and completedRegularOnly to be 17 per team. bySeasonType must separate 1=pre / 2=regular / 3=post — if seasonType comes back null the port cannot filter preseason out and must find another marker before any SRS math is written. rawSampleFirstEvent shows the live field names if a parse looks off.",
+    rawSampleFirstEvent,
+    teams,
+  };
+}
+
 module.exports = {
   fetchScoreboard,
   getUpcomingGames,
   getFinalScore,
   fetchSeasonProbe,
   fetchPointsProbe,
+  fetchSchedulesProbe, // WZ-NFLSCHEDPROBE-2026-08-01
   buildTeamRatings,
   statMap,
   parseRecords,
