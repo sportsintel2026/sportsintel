@@ -950,6 +950,119 @@ router.get("/totalsbias", async (req, res) => {
   }
 });
 
+// WZ-TOTALSLINEBIAS-2026-07-29 :: READ-ONLY. MLB totals PROJECTION-vs-LINE bias monitor.
+// Distinct from /totalsbias (which measures projected - ACTUAL and drives empiricalScale): this
+// measures mean(projected - line) -- how far the model's projected total sits above/below the
+// market's closing total -- on trailing windows + weekly, and backtests debiasing the projection
+// by the trailing-28d offset. Reads mlb `total_shadow` rows with projected & line non-null (NO
+// result filter for the bias windows); the grading blocks additionally require actual_value. No
+// writes, no schema change. Mirrors /calibprobe (no auth, shared db()).
+//   GET /api/performance/totalslinebias
+router.get("/totalslinebias", async (req, res) => {
+  try {
+    const supabase = db();
+    // All shadow rows carrying a projection AND a line. result is NOT required for the bias windows.
+    const rows = [];
+    const PAGE = 1000;
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await supabase
+        .from("model_predictions")
+        .select("projected, line, actual_value, game_date")
+        .eq("league", "mlb").eq("market", "total_shadow")
+        .not("projected", "is", null)
+        .not("line", "is", null)
+        .order("id", { ascending: true })
+        .range(from, from + PAGE - 1);
+      if (error) throw new Error(error.message);
+      const batch = data || [];
+      rows.push(...batch);
+      if (batch.length < PAGE) break;
+    }
+
+    // Clean observations: (projected - line) with a usable game_date. actual carried for grading.
+    const obs = [];
+    for (const r of rows) {
+      const p = Number(r.projected), l = Number(r.line);
+      const gd = r.game_date ? String(r.game_date).slice(0, 10) : null;
+      if (!Number.isFinite(p) || !Number.isFinite(l) || !gd) continue;
+      obs.push({ gd, diff: p - l, projected: p, line: l, actual: r.actual_value == null ? null : Number(r.actual_value) });
+    }
+
+    const round3 = (x) => (x == null ? null : Math.round(x * 1000) / 1000);
+    const pct1 = (x) => (x == null ? null : Math.round(x * 1000) / 10);        // fraction -> percent, 1 dp
+    const addDays = (dateStr, n) => { const d = new Date(dateStr + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+    const weekStart = (dateStr) => { const d = new Date(dateStr + "T00:00:00Z"); const back = (d.getUTCDay() + 6) % 7; d.setUTCDate(d.getUTCDate() - back); return d.toISOString().slice(0, 10); }; // Monday-anchored
+
+    // mean / sd / se over diffs -- guarded for n = 0 (all null) and n < 2 (sd/se null, never NaN).
+    const stats = (arr) => {
+      const n = arr.length;
+      if (n === 0) return { n: 0, bias: null, sd: null, se: null };
+      const mean = arr.reduce((s, x) => s + x, 0) / n;
+      const sd = n >= 2 ? Math.sqrt(arr.reduce((s, x) => s + (x - mean) * (x - mean), 0) / (n - 1)) : null;
+      const se = sd == null ? null : sd / Math.sqrt(n);
+      return { n, bias: round3(mean), sd: round3(sd), se: round3(se) };
+    };
+
+    if (obs.length === 0) {
+      return res.json({
+        token: "WZ-TOTALSLINEBIAS-2026-07-29", league: "mlb", market: "total_shadow",
+        as_of: null, total_rows: 0,
+        windows: { "14d": { n: 0, bias: null, sd: null, se: null }, "28d": { n: 0, bias: null, sd: null, se: null } },
+        weekly: [],
+        debiased_grade: { offset_used: null, n: 0, w: 0, l: 0, win_pct: null, push: 0 },
+        raw_grade: { n: 0, w: 0, l: 0, win_pct: null, push: 0 },
+        reading: "no total_shadow rows with projected & line yet",
+      });
+    }
+
+    // Trailing windows anchored to the latest game_date present (deterministic; always populated
+    // when rows exist, so the 28d debias offset is defined). `gd > asOf - days` = last `days` dates.
+    const asOf = obs.reduce((m, o) => (o.gd > m ? o.gd : m), obs[0].gd);
+    const windowStats = (days) => stats(obs.filter((o) => o.gd > addDays(asOf, -days)).map((o) => o.diff));
+    const win14 = windowStats(14);
+    const win28 = windowStats(28);
+
+    // Weekly: every week with rows, Monday-anchored, ascending.
+    const byWeek = new Map();
+    for (const o of obs) { const w = weekStart(o.gd); let a = byWeek.get(w); if (!a) { a = []; byWeek.set(w, a); } a.push(o.diff); }
+    const weekly = [...byWeek.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1))
+      .map(([week_start, diffs]) => { const s = stats(diffs); return { week_start, n: s.n, bias: s.bias, sd: s.sd }; });
+
+    // Grade every row that HAS actual_value. pick = over when (projected - offset) > line, else under.
+    // ties (actual == line) are a PUSH: excluded from w/l, counted separately. win_pct guarded at n=0.
+    const grade = (offset) => {
+      let w = 0, l = 0, push = 0;
+      for (const o of obs) {
+        if (o.actual == null || !Number.isFinite(o.actual)) continue;
+        if (o.actual === o.line) { push++; continue; }
+        const pickOver = (o.projected - offset) > o.line;
+        const wentOver = o.actual > o.line;
+        if (pickOver === wentOver) w++; else l++;
+      }
+      const decisive = w + l;
+      return { n: decisive, w, l, win_pct: decisive > 0 ? pct1(w / decisive) : null, push };
+    };
+
+    // Debias offset = trailing-28d bias. If that window is empty (bias null) there is nothing to
+    // debias by -> offset 0 (== raw), and offset_used is reported null so the fallback is visible.
+    const offset = (win28.bias == null) ? 0 : win28.bias;
+    const debiased_grade = { offset_used: win28.bias == null ? null : round3(win28.bias), ...grade(offset) };
+    const raw_grade = grade(0);
+
+    res.json({
+      token: "WZ-TOTALSLINEBIAS-2026-07-29", league: "mlb", market: "total_shadow",
+      as_of: asOf, total_rows: obs.length,
+      windows: { "14d": win14, "28d": win28 },
+      weekly,
+      debiased_grade,
+      raw_grade,
+      reading: "bias = avg(projected - line); positive => model projects ABOVE the market line. Windows are trailing calendar days anchored to as_of (the latest game_date present). debiased_grade picks over when (projected - trailing28dBias) > line; raw_grade uses offset 0. actual == line is a push (excluded from w/l, counted separately). Nulls (not NaN) whenever n = 0.",
+    });
+  } catch (err) {
+    res.status(500).json({ token: "WZ-TOTALSLINEBIAS-2026-07-29", error: String((err && err.message) || err) });
+  }
+});
+
 // WZ-SELECT-BACKTEST-2026-07-20 :: READ-ONLY. Does the confident band pick the right GAMES?
 // /totalsbias measured how loudly we claim. This measures WHICH ROWS we claim on -- a different
 // defect with a different fix. The board's published totals prob is a blend:
