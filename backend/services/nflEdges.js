@@ -276,6 +276,11 @@ async function runNFLSlate({ season = null, weeks = 1, phase = null } = {}) {
       loaded: ratingsLoaded,
       rated: ratings.rated || 0,
       note: ratings.note || null,
+      // WZ-NFLSOS-2026-08-01 :: the /api/edges/nfl disclaimer reads this to decide whether
+      // to claim SRS strength-of-schedule. applyNflSrs is all-or-nothing and can decline,
+      // so this must reflect what actually happened, never a hardcoded assumption.
+      sosApplied: ratings.sosApplied === true,
+      sosSkippedReason: ratings.sosSkippedReason || null,
       blend: ratings.blend || null,
     },
     match: {

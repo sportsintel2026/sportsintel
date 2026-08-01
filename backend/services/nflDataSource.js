@@ -327,6 +327,102 @@ function recStat(statsArr, name) {
   return s && s.value != null ? Number(s.value) : null;
 }
 
+/* ── SoS LAYER (SRS) ── WZ-NFLSOS-2026-08-01 ─────────────────────────────────
+ * The seed above is schedule-blind. Measured on the 2025 season via the read-only
+ * preview endpoint, that costs real accuracy at the tails: New England finished 14-3
+ * against the SOFTEST schedule in the league (-3.95) and was rated 3rd at +7.50; SRS
+ * puts them 5th at +4.91, a 2.59-point correction. Tennessee, 3-14 against the
+ * HARDEST schedule (+3.21), was 2.19 points too harsh. Correlation between schedule
+ * strength and the correction was 0.971 — the adjustment is schedule strength and
+ * essentially nothing else. Only 10.3% of games hit the margin cap, so the cap is not
+ * doing the work.
+ *
+ * Mirrors cfbDataSource's implementation, minus the FCS level (every NFL opponent is
+ * a rated team, so that branch can never fire) :
+ *     MOV(t)    = mean over t's regular-season games of clamp(margin, ±NFL_MOV_CAP)
+ *     rating(t) = MOV(t) + NFL_SOS_WEIGHT * mean(rating(opponent))   — fixpoint,
+ *                 re-centered each pass (SRS is identifiable only up to a constant)
+ *     final     = rating(t) * RATING_REGRESSION                      — unchanged
+ *
+ * NOT CALIBRATED. No NFL result has graded against this. preSosRating is preserved on
+ * every team so the shift stays auditable and shadow-gradable once games settle.
+ *
+ * FAILURE POLICY — this must never take the board down. If ANY rated team's schedule
+ * is missing or empty, the whole layer is abandoned and every team keeps its original
+ * schedule-blind rating with sosApplied:false. Partial application is worse than none:
+ * a league where some teams are SoS-adjusted and others are not is internally
+ * inconsistent, and rating differences across that boundary would be meaningless. */
+const NFL_MOV_CAP = 28;      // clip per-game margin (4 TD) at the GAME level
+const NFL_SRS_ITERS = 12;    // fixpoint iterations; converges to <1e-4 for 32 teams
+const NFL_SOS_WEIGHT = 0.80; // 1.0 = textbook SRS; 0.80 dampens, matching CFB
+const NFL_SRS_BATCH = 8;     // concurrency cap so we don't hammer ESPN with 32 at once
+
+// Mutates teamsOut in place ONLY on full success. Returns { applied, reason, gamesCapped }.
+async function applyNflSrs(season, ratedIds, teamsOut) {
+  if (!Array.isArray(ratedIds) || ratedIds.length < 2) return { applied: false, reason: "fewer than 2 rated teams" };
+
+  const sched = {};
+  for (let i = 0; i < ratedIds.length; i += NFL_SRS_BATCH) {
+    const batch = ratedIds.slice(i, i + NFL_SRS_BATCH);
+    await Promise.all(batch.map(async (id) => {
+      try {
+        const s = await espnGet(`${BASE}/teams/${id}/schedule?season=${season}`);
+        sched[id] = parseScheduleEvents(s.events || [], id)
+          .filter((p) => p.completed && p.seasonType === 2 && p.teamScore != null && p.oppScore != null && p.opponentId);
+      } catch (_) { sched[id] = null; }
+    }));
+  }
+
+  // all-or-nothing: every rated team needs games, and every opponent must itself be rated
+  const missing = ratedIds.filter((id) => !sched[id] || !sched[id].length);
+  if (missing.length) return { applied: false, reason: `schedule unavailable for ${missing.length} of ${ratedIds.length} rated teams` };
+  const rated = new Set(ratedIds.map(String));
+  for (const id of ratedIds) {
+    sched[id] = sched[id].filter((x) => rated.has(String(x.opponentId)));
+    if (!sched[id].length) return { applied: false, reason: "a rated team has no games against other rated teams" };
+  }
+
+  // capped MOV
+  const mov = {}; let gamesCapped = 0;
+  for (const id of ratedIds) {
+    const margins = sched[id].map((x) => {
+      const rawM = x.teamScore - x.oppScore;
+      const c = Math.max(-NFL_MOV_CAP, Math.min(NFL_MOV_CAP, rawM));
+      if (c !== rawM) gamesCapped++;
+      return c;
+    });
+    mov[id] = margins.reduce((s, v) => s + v, 0) / margins.length;
+  }
+
+  // SRS fixpoint, re-centered each pass
+  let srs = {};
+  for (const id of ratedIds) srs[id] = mov[id];
+  for (let k = 0; k < NFL_SRS_ITERS; k++) {
+    const next = {};
+    for (const id of ratedIds) {
+      const g = sched[id];
+      const s = g.reduce((acc, x) => acc + (srs[x.opponentId] != null ? srs[x.opponentId] : 0), 0) / g.length;
+      next[id] = mov[id] + NFL_SOS_WEIGHT * s;
+    }
+    const m = ratedIds.reduce((s, id) => s + next[id], 0) / ratedIds.length;
+    for (const id of ratedIds) next[id] = next[id] - m;
+    srs = next;
+  }
+  if (ratedIds.some((id) => !Number.isFinite(srs[id]))) return { applied: false, reason: "SRS produced a non-finite rating" };
+
+  // commit — preSosRating is already on each team from the caller
+  const r2 = (v) => Math.round(v * 100) / 100;
+  for (const id of ratedIds) {
+    const g = sched[id];
+    teamsOut[id].mov = r2(mov[id]);
+    teamsOut[id].scheduleStrength = r2(g.reduce((acc, x) => acc + srs[x.opponentId], 0) / g.length);
+    teamsOut[id].sosGames = g.length;
+    teamsOut[id].rating = r2(srs[id] * RATING_REGRESSION);
+    teamsOut[id].sosApplied = true;
+  }
+  return { applied: true, gamesCapped };
+}
+
 async function buildTeamRatings(season = 2025) {
   const key = `nflRatings:${season}`;
   const cached = cacheGet(key);
@@ -388,18 +484,36 @@ async function buildTeamRatings(season = 2025) {
   const teamsOut = {};
   for (const id of ratedIds) {
     const centered = raw[id].rawRating - meanRaw;
+    const blind = Math.round(centered * RATING_REGRESSION * 100) / 100;
     teamsOut[id] = {
       ...raw[id],
-      rating: Math.round(centered * RATING_REGRESSION * 100) / 100, // regressed, league-centered
+      rating: blind,          // regressed, league-centered — overwritten below if SoS lands
+      preSosRating: blind,    // WZ-NFLSOS-2026-08-01 :: audit trail, never overwritten
       regressed: true,
-      sosApplied: false,  // clean slot: SoS layer flips this true later
+      sosApplied: false,      // flipped true only if the SoS layer completes for EVERY team
     };
+  }
+
+  // WZ-NFLSOS-2026-08-01 :: strength-of-schedule. All-or-nothing — on any failure every
+  // team keeps its schedule-blind rating and sosApplied stays false. See applyNflSrs.
+  let sos = { applied: false, reason: "not attempted" };
+  try {
+    sos = await applyNflSrs(season, ratedIds, teamsOut);
+  } catch (e) {
+    sos = { applied: false, reason: `SoS layer threw: ${e.message}` };
   }
 
   const result = {
     season, rated: ratedIds.length, meanRawDiffPerGame: Math.round(meanRaw * 100) / 100,
-    regression: RATING_REGRESSION, teams: teamsOut,
-    note: "Power ratings = league-centered, regressed points differential per game (2025 seed). SoS/conference layers not yet applied.",
+    regression: RATING_REGRESSION,
+    sosApplied: sos.applied,
+    ...(sos.applied
+      ? { movCap: NFL_MOV_CAP, srsIters: NFL_SRS_ITERS, sosWeight: NFL_SOS_WEIGHT, gamesCapped: sos.gamesCapped }
+      : { sosSkippedReason: sos.reason }),
+    teams: teamsOut,
+    note: sos.applied
+      ? "Power ratings = league-centered SRS (margin-capped MOV + strength-of-schedule), regressed, 2025 seed. preSosRating shows each team's pre-SoS value for audit. NOT CALIBRATED — no NFL result has graded against this yet."
+      : `Power ratings = league-centered, regressed points differential per game (2025 seed). STRENGTH OF SCHEDULE NOT APPLIED (${sos.reason}) — ratings are schedule-blind on this build.`,
   };
   cacheSet(key, result, RATINGS_TTL_MS);
   return result;
