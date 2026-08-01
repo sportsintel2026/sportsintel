@@ -1719,6 +1719,30 @@ router.get("/nflpointsprobe", async (req, res) => {
   }
 });
 
+// ── TEMP DIAGNOSTIC: NFL schedule vs /record reconciliation (read-only) ──────
+// WZ-NFLRECONCILE-2026-08-01
+// The 3-team schedule probe passed on SHAPE but failed on ARITHMETIC: summing each
+// team's per-game scores reproduced pointsFor exactly while pointsAgainst was off
+// (SEA +14, DET -18) and both W-L records disagreed by one game. SRS is built on
+// per-game margins, so a wrong opponent score corrupts every margin it touches.
+// This runs all 32 teams and checks two things independently: the aggregate (does
+// each team's summed schedule equal its /record pf/pa/W-L) and the symmetry (every
+// game is on two schedules — does each side report the same score). Own-score is the
+// trustworthy field since pf reconciles, so asymmetry pinpoints the bad read.
+// NOTHING gets ported to the model until this comes back clean. Writes nothing.
+//   /api/edges/nflschedreconcile[?season=2025]
+router.get("/nflschedreconcile", async (req, res) => {
+  try {
+    const season = parseInt(req.query.season, 10) || 2025;
+    const { fetchScheduleReconcile } = require("../services/nflDataSource");
+    const result = await fetchScheduleReconcile(season);
+    res.json({ ok: true, league: "nfl", ...result });
+  } catch (e) {
+    console.error("[nflschedreconcile] error:", e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // ── TEMP DIAGNOSTIC: NFL per-team schedule shape (read-only) ─────────────────
 // WZ-NFLSCHEDPROBE-2026-08-01
 // NFL power ratings are schedule-blind: buildTeamRatings seeds from season-aggregate
