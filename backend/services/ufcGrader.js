@@ -73,7 +73,7 @@ async function gradeUFCPicks() {
   // 1) Pending picks (cheap Supabase read; touches no external API).
   const { data: pending, error } = await c
     .from("ufc_picks")
-    .select("bout_id,event_slug,pick,pick_corner,cito_winner_at,espn_winner_at,source_conflict") // WZ-UFC-SRCLAG-2026-08-01 / WZ-UFC-SETTLE-BYNAME-2026-08-01
+    .select("bout_id,event_slug,pick,pick_corner,cito_winner_at,espn_winner_at,source_conflict,result_locked") // WZ-UFC-SRCLAG-2026-08-01 / WZ-UFC-SETTLE-BYNAME-2026-08-01 / WZ-UFC-RESULTLOCK-2026-08-01
     .eq("result", "pending");
   if (error) {
     console.error("[UFC grade] pending fetch failed:", error.message);
@@ -122,7 +122,7 @@ async function gradeUFCPicks() {
     const sinceIso = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
     const { data: gr } = await c
       .from("ufc_picks")
-      .select("bout_id,event_slug,pick,pick_corner,result,winner_name,cito_winner_at,espn_winner_at,source_conflict") // WZ-UFC-SRCLAG-2026-08-01 / WZ-UFC-REGRADE-BYNAME-2026-08-01
+      .select("bout_id,event_slug,pick,pick_corner,result,winner_name,cito_winner_at,espn_winner_at,source_conflict,result_locked") // WZ-UFC-SRCLAG-2026-08-01 / WZ-UFC-REGRADE-BYNAME-2026-08-01 / WZ-UFC-RESULTLOCK-2026-08-01
       .in("event_slug", gradableSlugs)
       .in("result", ["win", "loss", "push"]) // WZ-UFC-PUSHNARROW-2026-08-01 :: a wrongly-settled push must be correctable too
       .gte("graded_at", sinceIso);
@@ -130,7 +130,7 @@ async function gradeUFCPicks() {
   } catch (_) { gradedRows = []; }
   const gradedByBout = new Map(gradedRows.map((r) => [String(r.bout_id), r]));
 
-  let graded = 0, pushed = 0, stillPending = 0, corrected = 0, conflicts = 0;
+  let graded = 0, pushed = 0, stillPending = 0, corrected = 0, conflicts = 0, locked = 0;
   const orphans = [];      // WZ-UFC-ORPHAN-2026-07-27 :: pending picks Cito no longer lists
   const emptyEvents = [];  // WZ-UFC-ORPHAN-2026-07-27 :: events Cito returned no bouts for
   for (const slug of gradableSlugs) {
@@ -177,6 +177,13 @@ async function gradeUFCPicks() {
         if (ewObs && ewObs.corner && !lagRow.espn_winner_at) patch.espn_winner_at = stamp;
         if (cwObs && ewObs && cwObs.corner && ewObs.corner && cwObs.corner !== ewObs.corner && !lagRow.source_conflict) {
           patch.source_conflict = true;
+          // WZ-UFC-RESULTLOCK-2026-08-01 :: two feeds naming different winners means one is wrong,
+          // and nothing inside this process can tell which. On 08-01 Cito had Buzukja beating Grad
+          // and Vologdin beating Nikolic; UFC.com, Yahoo, MMA Mania and Cageside Press all had the
+          // opposite, and the customer saw LOST on a fight we won. Picking a feed is how that
+          // happens. Freeze the row and shout instead -- a locked row is never touched again by
+          // any automated path, so a human decides.
+          patch.result_locked = true;
           conflicts++;
           console.error(
             `[UFC lag] SOURCE CONFLICT bout ${bout.id} (${lagRow.event_slug}): Cito says ` +
@@ -192,7 +199,9 @@ async function gradeUFCPicks() {
       if (!row) {
         // WZ-UFC-REGRADE-2026-08-01 :: already graded. Ask Cito whether that grade still holds.
         const g = gradedByBout.get(String(bout.id));
-        if (g) {
+        if (g && g.result_locked) {
+          locked++; // WZ-UFC-RESULTLOCK-2026-08-01 :: hand-set or conflicted. Never auto-correct.
+        } else if (g) {
           const citoWin = winnerOf(bout); // Cito only, deliberately: no ESPN fallback here
           if (citoWin && citoWin.corner) {
             // WZ-UFC-REGRADE-BYNAME-2026-08-01 :: compare NAMES, not corners. Corner is a third
@@ -231,7 +240,9 @@ async function gradeUFCPicks() {
       if (!win) { const ew = espnWinnerCorner(bout, espnResults); if (ew) { win = ew; winSource = "espn"; } }
       const nowIso = new Date().toISOString();
 
-      if (win && win.corner) {
+      if (row.result_locked) {
+        locked++; // WZ-UFC-RESULTLOCK-2026-08-01 :: hand-set or conflicted. Never auto-settle.
+      } else if (win && win.corner) {
         // WZ-UFC-SETTLE-BYNAME-2026-08-01 :: settle on WHO WON, not on which corner won. This is
         // the path that grades every new fight, and it was the last place still routing the answer
         // through pick_corner -- a third column that only has to disagree with `pick` once to
@@ -270,7 +281,7 @@ async function gradeUFCPicks() {
   console.log(
     `[UFC grade] ${graded} win/loss, ${pushed} push, ${corrected} CORRECTED, ${stillPending} still pending, ${orphans.length} ORPHANED across ${gradableSlugs.length} event(s)`
   );
-  return finish({ graded, pushed, corrected, conflicts, stillPending, events: gradableSlugs.length, orphans, emptyEvents });
+  return finish({ graded, pushed, corrected, conflicts, locked, stillPending, events: gradableSlugs.length, orphans, emptyEvents });
 }
 
 module.exports = { gradeUFCPicks, getLastGradeReport }; // WZ-UFC-ORPHAN-2026-07-27
