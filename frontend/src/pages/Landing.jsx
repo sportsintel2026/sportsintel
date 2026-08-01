@@ -297,6 +297,65 @@ export default function LandingPage(){
           </div>
         </div>
 
+        {/* WZ-LANDING-UFC-2026-08-01 :: UFC feature block. ADDED ONLY — no existing block was
+            moved, reordered or edited. Sits between Market Read and Player Profiles. Gold = the
+            model's pick, green = edge/value only, matching the UFC page's own colour contract. */}
+        <div className="feat" id="ufc">
+          <div className="ftxt">
+            <div className="eyebrow">UFC Fight Model</div>
+            <h3>Every fight on the card, priced.</h3>
+            <p>Main card and prelims — ten factors per fighter run against the market's own number. The pick is the fighter we make the winner, not whoever carries the biggest edge on the board.</p>
+            <Link className="lk" to="/signup">See this week's card →</Link>
+          </div>
+          <div className="panel">
+            <div className="pbar"><span>UFC Fight Night · Sat</span><span>13 bouts</span></div>
+
+            <div className="ufcl-row pk">
+              <div className="ufcl-top">
+                <div className="ufcl-av pick">AT</div>
+                <div className="ufcl-nm">
+                  <div className="ufcl-t">Arman Tsarukyan</div>
+                  <div className="ufcl-m">vs Islam Makhachev · main event</div>
+                </div>
+                <div className="ufcl-r"><div className="ufcl-v">61<small>%</small></div><div className="ufcl-l">to win</div></div>
+              </div>
+              <div className="ufcl-tags">
+                <span className="ufcl-tag">market 54%</span>
+                <span className="ufcl-tag edge">+7.0% edge</span>
+                <span className="ufcl-tag read">READ · leans decision</span>
+              </div>
+            </div>
+
+            <div className="ufcl-row pk">
+              <div className="ufcl-top">
+                <div className="ufcl-av pick">MD</div>
+                <div className="ufcl-nm">
+                  <div className="ufcl-t">Merab Dvalishvili</div>
+                  <div className="ufcl-m">vs Sean O'Malley · co-main</div>
+                </div>
+                <div className="ufcl-r"><div className="ufcl-v">58<small>%</small></div><div className="ufcl-l">to win</div></div>
+              </div>
+              <div className="ufcl-tags">
+                <span className="ufcl-tag">market 55%</span>
+                <span className="ufcl-tag edge">+3.1% edge</span>
+              </div>
+            </div>
+
+            <div className="ufcl-row">
+              <div className="ufcl-top">
+                <div className="ufcl-av">AG</div>
+                <div className="ufcl-nm">
+                  <div className="ufcl-t no">Alexa Grasso</div>
+                  <div className="ufcl-m">vs Manon Fiorot · prelim</div>
+                </div>
+                <div className="ufcl-r"><div className="ufcl-v dim">—</div><div className="ufcl-l">no line yet</div></div>
+              </div>
+            </div>
+
+            <div className="ufcl-note">Illustrative example — not a live card</div>
+          </div>
+        </div>
+
         {/* PLAYER PROFILE (new) — phone-left / copy-right */}
         <div className="feat rev" id="playerprofile">
           <div className="ftxt">
@@ -392,6 +451,54 @@ export default function LandingPage(){
           <div className="pb-foot">
             <span className="pb-ex">Illustrative examples — not live picks</span>
           </div>
+        </section>
+      </div></div>
+
+      {/* WZ-LANDING-UFC-2026-08-01 :: UFC band. ADDED ONLY — inserted between the props wall and
+          the existing black→white cut. Its background matches .propszone exactly (#0A0B0D) so the
+          cut below renders byte-for-byte as it does today. Nothing existing was touched. */}
+      <div className="ufczone"><div className="wrap">
+        <section className="ufcband">
+          <div className="ub-eyebrow">Now covering UFC</div>
+          <div className="ub-h">Every fight on the card. <span>Priced.</span></div>
+          <div className="ub-sub">Main card and prelims — not just the headliners. Every bout runs the model against the market's own number, then gets settled against the result and left up, win or lose.</div>
+
+          <div className="ub-stats">
+            <div className="ub-s"><div className="ub-sv">10</div><div className="ub-sl">factors read<br/>per fighter</div></div>
+            <div className="ub-s"><div className="ub-sv">All</div><div className="ub-sl">bouts covered<br/>mains and prelims</div></div>
+            <div className="ub-s"><div className="ub-sv">Public</div><div className="ub-sl">record kept<br/>wins and losses</div></div>
+          </div>
+
+          <div className="ub-card">
+            <div className="ub-cbar"><span>Saturday's card</span><span>model read</span></div>
+            <div className="ub-row">
+              <div className="ub-av">AT</div>
+              <div className="ub-rn">
+                <div className="ub-rt">Arman Tsarukyan</div>
+                <div className="ub-rm">vs Islam Makhachev · main event</div>
+              </div>
+              <div className="ub-rr"><div className="ub-rv">61<small>%</small></div><div className="ub-rl">to win</div></div>
+            </div>
+            <div className="ub-row">
+              <div className="ub-av">MD</div>
+              <div className="ub-rn">
+                <div className="ub-rt">Merab Dvalishvili</div>
+                <div className="ub-rm">vs Sean O'Malley · co-main</div>
+              </div>
+              <div className="ub-rr"><div className="ub-rv">58<small>%</small></div><div className="ub-rl">to win</div></div>
+            </div>
+            <div className="ub-row">
+              <div className="ub-av">BG</div>
+              <div className="ub-rn">
+                <div className="ub-rt">Bogdan Guskov</div>
+                <div className="ub-rm">vs Billy Elekana · prelim</div>
+              </div>
+              <div className="ub-rr"><div className="ub-rv">56<small>%</small></div><div className="ub-rl">to win</div></div>
+            </div>
+          </div>
+
+          <Link className="ub-btn" to="/signup">Open the fight card →</Link>
+          <div className="ub-foot"><span className="ub-ex">Illustrative examples — not live picks</span></div>
         </section>
       </div></div>
 
@@ -918,5 +1025,101 @@ const CSS = `
 .lpwrap .fdiv2{height:1px;max-width:520px;margin:30px auto 0;background:linear-gradient(90deg,transparent,rgba(201,168,106,.4),transparent)}
 .lpwrap .frg{margin-top:22px;font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--gold)}
 .lpwrap footer .fdisc{font-family:var(--mono);font-size:11px;color:#5C6770;margin-top:12px;line-height:1.7;max-width:560px;margin-left:auto;margin-right:auto;border-top:0;padding-top:0}
+
+/* ==========================================================================
+   WZ-LANDING-UFC-2026-08-01 :: UFC styles. APPENDED ONLY — every selector below
+   is new and namespaced (.ufcl-* for the feature block, .ufczone/.ufcband/.ub-*
+   for the band). No existing rule is overridden, redefined or reordered.
+   Colour contract matches the UFC page: GOLD = the model's pick, GREEN = edge only.
+   ========================================================================== */
+
+/* ---- feature block panel rows ---- */
+.lpwrap .ufcl-row{position:relative;padding:13px 14px;border-radius:12px;margin-bottom:9px;
+  background:linear-gradient(180deg,#1D222A,#171B20);border:1px solid var(--line);
+  box-shadow:0 14px 28px -22px #000,inset 0 1px 0 rgba(255,255,255,.028)}
+.lpwrap .ufcl-row.pk{border-color:rgba(201,168,106,.2)}
+.lpwrap .ufcl-row:last-of-type{margin-bottom:0}
+.lpwrap .ufcl-top{display:flex;align-items:center;gap:11px}
+.lpwrap .ufcl-av{width:36px;height:36px;flex:0 0 36px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-family:var(--disp);font-weight:700;font-size:12px;letter-spacing:.02em;color:#8A939B;background:#14171B;border:1.5px solid var(--line2)}
+.lpwrap .ufcl-av.pick{color:var(--gold);border-color:rgba(201,168,106,.55);
+  background:radial-gradient(circle at 50% 28%,rgba(201,168,106,.2),#14171B 72%);
+  box-shadow:0 0 0 3px rgba(201,168,106,.06)}
+.lpwrap .ufcl-nm{flex:1;min-width:0}
+.lpwrap .ufcl-t{font-family:var(--disp);font-weight:700;font-size:14.5px;letter-spacing:-.01em;color:var(--gold);line-height:1.2}
+.lpwrap .ufcl-t.no{color:#E8ECEF}
+.lpwrap .ufcl-m{font-family:var(--mono);font-size:10.5px;color:#8A939B;margin-top:4px}
+.lpwrap .ufcl-r{flex:0 0 auto;text-align:right}
+.lpwrap .ufcl-v{font-family:var(--mono);font-weight:700;font-size:18px;color:var(--gold);line-height:1}
+.lpwrap .ufcl-v.dim{color:#5C6770}
+.lpwrap .ufcl-v small{font-size:11px;font-weight:700;margin-left:1px;opacity:.75}
+.lpwrap .ufcl-l{font-family:var(--mono);font-size:8.5px;letter-spacing:.11em;text-transform:uppercase;color:#5C6770;margin-top:5px}
+.lpwrap .ufcl-tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:11px;padding-top:11px;border-top:1px solid rgba(255,255,255,.045)}
+.lpwrap .ufcl-tag{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.05em;padding:3.5px 8px;border-radius:6px;background:#14171B;border:1px solid var(--line2);color:#9AA4AD}
+.lpwrap .ufcl-tag.edge{color:var(--teal);background:rgba(63,203,145,.12);border-color:rgba(63,203,145,.3)}
+.lpwrap .ufcl-tag.read{color:var(--gold);background:rgba(201,168,106,.1);border-color:rgba(201,168,106,.28)}
+.lpwrap .ufcl-note{font-family:var(--mono);font-size:10px;letter-spacing:.05em;color:#5C6770;text-align:center;margin-top:15px}
+
+/* ---- UFC band (sits below the props wall, above the existing cut) ---- */
+.lpwrap .ufczone{background:#0A0B0D;padding-top:10px;padding-bottom:34px}
+.lpwrap .ufcband{position:relative;overflow:hidden;max-width:860px;margin:0 auto;padding:34px 0 32px;
+  border-radius:20px;border:1px solid rgba(201,168,106,.16);
+  background:radial-gradient(120% 130% at 50% -20%,rgba(201,168,106,.085),transparent 55%),#0C0E11;
+  box-shadow:inset 0 1px 0 rgba(201,168,106,.13),0 50px 90px -60px #000;text-align:center}
+.lpwrap .ub-eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:var(--gold);display:inline-flex;align-items:center;gap:9px;margin-bottom:12px}
+.lpwrap .ub-eyebrow::before,.lpwrap .ub-eyebrow::after{content:"";width:20px;height:1px;background:var(--gold);opacity:.6}
+.lpwrap .ub-h{font-family:var(--disp);font-weight:700;font-size:clamp(22px,3.2vw,32px);letter-spacing:-.02em;margin-bottom:11px;padding:0 18px}
+.lpwrap .ub-h span{color:var(--gold)}
+.lpwrap .ub-sub{font-size:14.5px;line-height:1.55;color:#9AA4AD;max-width:500px;margin:0 auto 22px;padding:0 18px}
+.lpwrap .ub-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;max-width:560px;margin:0 auto 24px;padding:0 18px}
+.lpwrap .ub-s{background:linear-gradient(180deg,#15191E,#111418);border:1px solid var(--line);border-radius:13px;padding:15px 8px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.03)}
+.lpwrap .ub-sv{font-family:var(--mono);font-weight:700;font-size:21px;color:var(--gold);line-height:1}
+.lpwrap .ub-sl{font-family:var(--mono);font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:#5C6770;margin-top:8px;line-height:1.5}
+.lpwrap .ub-card{max-width:560px;margin:0 auto;padding:0 18px;text-align:left}
+.lpwrap .ub-cbar{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#5C6770;margin-bottom:11px}
+.lpwrap .ub-row{display:flex;align-items:center;gap:11px;padding:13px 14px;border-radius:12px;margin-bottom:8px;
+  background:linear-gradient(180deg,#15191E,#111418);border:1px solid var(--line);
+  box-shadow:0 14px 28px -22px #000,inset 0 1px 0 rgba(255,255,255,.028)}
+.lpwrap .ub-row:last-child{margin-bottom:0}
+.lpwrap .ub-av{width:36px;height:36px;flex:0 0 36px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-family:var(--disp);font-weight:700;font-size:12px;color:var(--gold);border:1.5px solid rgba(201,168,106,.55);
+  background:radial-gradient(circle at 50% 28%,rgba(201,168,106,.2),#14171B 72%);box-shadow:0 0 0 3px rgba(201,168,106,.06)}
+.lpwrap .ub-rn{flex:1;min-width:0}
+.lpwrap .ub-rt{font-family:var(--disp);font-weight:700;font-size:14.5px;letter-spacing:-.01em;color:var(--gold);line-height:1.2}
+.lpwrap .ub-rm{font-family:var(--mono);font-size:10.5px;color:#8A939B;margin-top:4px}
+.lpwrap .ub-rr{flex:0 0 auto;text-align:right}
+.lpwrap .ub-rv{font-family:var(--mono);font-weight:700;font-size:18px;color:var(--gold);line-height:1}
+.lpwrap .ub-rv small{font-size:11px;font-weight:700;margin-left:1px;opacity:.75}
+.lpwrap .ub-rl{font-family:var(--mono);font-size:8.5px;letter-spacing:.11em;text-transform:uppercase;color:#5C6770;margin-top:5px}
+.lpwrap .ub-btn{display:inline-block;margin-top:26px;background:linear-gradient(180deg,#D8B978,#C09A57);color:#0A0B0D;
+  font-family:var(--disp);font-weight:700;font-size:14px;letter-spacing:-.01em;padding:13px 24px;border-radius:11px;
+  box-shadow:0 18px 34px -18px rgba(201,168,106,.55),inset 0 1px 0 rgba(255,255,255,.28);transition:transform .18s ease,box-shadow .18s ease}
+.lpwrap .ub-btn:hover{transform:translateY(-1px);box-shadow:0 22px 40px -18px rgba(201,168,106,.66),inset 0 1px 0 rgba(255,255,255,.28)}
+.lpwrap .ub-foot{margin-top:18px}
+.lpwrap .ub-ex{font-family:var(--mono);font-size:10px;letter-spacing:.05em;color:#5C6770}
+
+@media(prefers-reduced-motion:reduce){.lpwrap .ub-btn{transition:none}.lpwrap .ub-btn:hover{transform:none}}
+
+@media(max-width:859px){
+  .lpwrap .ufcl-row{padding:12px 12px;border-radius:11px}
+  .lpwrap .ufcl-av{width:32px;height:32px;flex:0 0 32px;font-size:11px}
+  .lpwrap .ufcl-t{font-size:13.5px}
+  .lpwrap .ufcl-m{font-size:10px}
+  .lpwrap .ufcl-v{font-size:16.5px}
+  .lpwrap .ufcl-tag{font-size:9.5px;padding:3px 7px}
+  .lpwrap .ufczone{padding-bottom:26px}
+  .lpwrap .ufcband{padding:28px 0 28px;border-radius:18px}
+  .lpwrap .ub-sub{font-size:13.5px;margin-bottom:18px}
+  .lpwrap .ub-stats{gap:8px;margin-bottom:20px}
+  .lpwrap .ub-s{padding:13px 6px}
+  .lpwrap .ub-sv{font-size:18px}
+  .lpwrap .ub-sl{font-size:8.5px}
+  .lpwrap .ub-row{padding:12px 12px;border-radius:11px}
+  .lpwrap .ub-av{width:32px;height:32px;flex:0 0 32px;font-size:11px}
+  .lpwrap .ub-rt{font-size:13.5px}
+  .lpwrap .ub-rm{font-size:10px}
+  .lpwrap .ub-rv{font-size:16.5px}
+}
 
 `;
