@@ -73,7 +73,7 @@ async function gradeUFCPicks() {
   // 1) Pending picks (cheap Supabase read; touches no external API).
   const { data: pending, error } = await c
     .from("ufc_picks")
-    .select("bout_id,event_slug,pick_corner,cito_winner_at,espn_winner_at,source_conflict") // WZ-UFC-SRCLAG-2026-08-01
+    .select("bout_id,event_slug,pick,pick_corner,cito_winner_at,espn_winner_at,source_conflict") // WZ-UFC-SRCLAG-2026-08-01 / WZ-UFC-SETTLE-BYNAME-2026-08-01
     .eq("result", "pending");
   if (error) {
     console.error("[UFC grade] pending fetch failed:", error.message);
@@ -232,8 +232,19 @@ async function gradeUFCPicks() {
       const nowIso = new Date().toISOString();
 
       if (win && win.corner) {
-        const result =
-          win.corner === String(row.pick_corner || "").toLowerCase() ? "win" : "loss";
+        // WZ-UFC-SETTLE-BYNAME-2026-08-01 :: settle on WHO WON, not on which corner won. This is
+        // the path that grades every new fight, and it was the last place still routing the answer
+        // through pick_corner -- a third column that only has to disagree with `pick` once to
+        // invert a correct result. That is exactly what bouts 12906 (Grad) and 12898 (Sola) did,
+        // and no amount of fixing the consumers downstream prevents it being written wrong here in
+        // the first place. Our pick won or it did not; the two names answer that with nothing in
+        // between. Corner stays as the fallback for a bout where either name is missing, which is
+        // the only case where it is the best information available.
+        const pickNm = normName(row.pick || "");
+        const winNm = normName(win.name || "");
+        const result = (pickNm && winNm)
+          ? (pickNm === winNm ? "win" : "loss")
+          : (win.corner === String(row.pick_corner || "").toLowerCase() ? "win" : "loss");
         await c
           .from("ufc_picks")
           .update({ result, winner_name: win.name || null, settled_by: winSource, graded_at: nowIso, updated_at: nowIso }) // WZ-UFC-SRCLAG-2026-08-01 :: which feed actually settled it
