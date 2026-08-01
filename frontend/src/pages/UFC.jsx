@@ -241,16 +241,24 @@ function Bout({ b, main }) {
   // result (win/loss/push) once the grader settles -> FINAL. lineClosed with no result yet
   // (book pulled the line, Cito hasn't posted the winner) -> AWAITING RESULT. Live line -> upcoming.
   const res = b && b.result;
-  const isFinal = res === "win" || res === "loss" || res === "push";
+  // WZ-UFC-BOUTRESULT-2026-08-01 :: a fight is over when CITO says it is, not only when we happen to
+  // hold a graded pick on it. Everything below used to hang off `res`, so a bout with no banked
+  // pick could never render as finished -- four Belgrade prelims sat in "ODDS PENDING" hours after
+  // ESPN had them final because their lines posted after we stopped recording that event. The API
+  // now sends the bout's own outcome, so read that first and fall back to our pick as before.
+  const boutDone = !!(b && b.boutFinished);
+  const isFinal = res === "win" || res === "loss" || res === "push" || boutDone;
   const awaiting = !isFinal && !!(b && b.lineClosed);
   // winner corner derived from result relative to our pick (win = our corner won; loss = the other)
   let winnerCorner = null;
   if (res === "win") winnerCorner = b.pickCorner;
   else if (res === "loss") winnerCorner = b.pickCorner === "red" ? "blue" : "red";
+  // WZ-UFC-BOUTRESULT-2026-08-01 :: no pick to derive from -> take the corner Cito reports.
+  if (!winnerCorner && b && b.boutWinnerCorner) winnerCorner = b.boutWinnerCorner;
   const redWon = isFinal && winnerCorner === "red";
   const blueWon = isFinal && winnerCorner === "blue";
-  const redDim = isFinal && res !== "push" && !redWon;
-  const blueDim = isFinal && res !== "push" && !blueWon;
+  const redDim = isFinal && res !== "push" && !!winnerCorner && !redWon;
+  const blueDim = isFinal && res !== "push" && !!winnerCorner && !blueWon;
   const redPick = hasPick && b.pickCorner === "red";
   const bluePick = hasPick && b.pickCorner === "blue";
   const dash = hasPick ? Math.round((b.winPct / 100) * 104) : 0;
@@ -312,7 +320,7 @@ function Bout({ b, main }) {
           </div>
         </div>
       ) : (
-        <div className="ufc-pb pending"><span className="pnd">ODDS PENDING &mdash; no line posted yet</span></div>
+        <div className="ufc-pb pending"><span className="pnd">{boutDone ? "NO PICK \u2014 no line was posted before this fight" : "ODDS PENDING \u2014 no line posted yet"}</span></div>
       )}
 
       {b.methodLean && b.methodLean.lean && b.methodLean.lean !== "EVEN" && !isFinal ? (
