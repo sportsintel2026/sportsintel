@@ -119,6 +119,9 @@ function fighterByCorner(bout, corner) {
   };
 }
 
+// WZ-UFC-BOUTRESULT-2026-08-01 :: same permissive set the grader uses to mean "this fight is over".
+const BOUT_TERMINAL_RE = /(final|complete|decision|ended|closed|result|draw|no.?contest|cancel|void)/i;
+
 async function parseBout(bout, oddsMap) {
   const red = fighterByCorner(bout, "red");
   const blue = fighterByCorner(bout, "blue");
@@ -161,7 +164,26 @@ async function parseBout(bout, oddsMap) {
     // card had no way to answer "why this pick" beyond a percentage. Declared here so the shape is
     // stable on every early return (no market, no profiles, model throw), not only the happy path.
     factors: [], totalTilt: null, tiltFavors: null, usedFactors: 0, netPoints: null,
+    // WZ-UFC-BOUTRESULT-2026-08-01 :: the bout's OWN outcome, straight from Cito, independent of
+    // whether we hold a pick on it. Everything the card renders about a finished fight -- the FINAL
+    // badge, the winner highlight, the dimmed loser -- was derived from our pick's result, so a
+    // bout with no banked pick could never display as finished however long ago it ended. On the
+    // 08-01 Belgrade card four prelims whose lines posted after we stopped recording sat in
+    // "ODDS PENDING - no line posted yet" while ESPN had them final, telling the customer we were
+    // waiting on a line that was never coming. Carrying the fight's own state fixes that at the
+    // source instead of rewording the message.
+    boutFinished: false, boutWinnerCorner: null, boutWinnerName: null,
   };
+
+  // WZ-UFC-BOUTRESULT-2026-08-01 :: winnerFighterSlug is only ever set by a fight that happened.
+  const wSlug = bout && bout.winnerFighterSlug ? String(bout.winnerFighterSlug) : null;
+  if (wSlug) {
+    if (red && String(red.slug) === wSlug) { out.boutWinnerCorner = "red"; out.boutWinnerName = red.name || null; }
+    else if (blue && String(blue.slug) === wSlug) { out.boutWinnerCorner = "blue"; out.boutWinnerName = blue.name || null; }
+    out.boutFinished = true;
+  } else if (BOUT_TERMINAL_RE.test(String((bout && bout.status) || ""))) {
+    out.boutFinished = true; // draw / no-contest / cancelled: over, but nobody won
+  }
 
   // no market -> pending (no pick/edge until sportsbooks post the line)
   if (implRed == null || implBlue == null || implRed + implBlue <= 0) return out;
