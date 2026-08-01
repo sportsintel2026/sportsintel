@@ -909,7 +909,18 @@ router.get("/record", async (_req, res) => {
     const value = tallyUFC(rows.filter((r) => r.is_value));
     const recent = rows.slice(0, 8).map((r) => ({
       pick: r.pick || null,
-      opponent: (r.pick_corner === "red" ? r.blue_name : r.red_name) || null,
+      // WZ-UFC-OPPONENT-2026-08-01 :: the opponent is, by definition, the fighter who is not our
+      // pick -- and we store BOTH names, so derive it from them. Reading it off pick_corner instead
+      // made the row depend on a third column agreeing with the first two, and a legacy row from
+      // 07-25 (bout 12898, written before the corner-sign fixes) has pick "Axel Sola" carrying
+      // pick_corner "blue" while red_name IS Axel Sola. The record dutifully printed
+      // "Axel Sola def. Axel Sola". Matching on the name cannot produce that. Corner stays as the
+      // fallback for the case where neither name matches the pick string.
+      opponent: (
+        r.pick && r.red_name && String(r.red_name) === String(r.pick) ? r.blue_name
+        : r.pick && r.blue_name && String(r.blue_name) === String(r.pick) ? r.red_name
+        : (r.pick_corner === "red" ? r.blue_name : r.red_name)
+      ) || null,
       result: r.result,
       odds: r.odds != null ? r.odds : null,
       event: r.event_name || null,
