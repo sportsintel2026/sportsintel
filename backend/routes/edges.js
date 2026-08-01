@@ -1954,7 +1954,11 @@ router.get("/nfl", gatePicks, async (req, res) => {
       // WZ-NFL-PRESEASON-KEY-2026-07-20 :: this string said "vs preseason lines" while the board was
       // serving regular-season Week 1 -- customer-facing text that was simply untrue. Now follows the
       // phase actually selected, so it describes what is on screen either way.
-      disclaimer: `PROVISIONAL: 2025-seeded ratings vs ${slate?.phase?.selected === "preseason" ? "preseason" : "regular-season"} lines. Not calibrated — no graded NFL results yet. For build/validation only; not betting advice until shadow-graded in-season.`,
+      // WZ-NFLSOS-2026-08-01 :: the SoS clause is driven by the ACTUAL flag, not hardcoded.
+      // applyNflSrs is all-or-nothing and can decline (e.g. ESPN schedule unavailable), in
+      // which case the ratings really are schedule-blind and this string must not claim
+      // otherwise. CFB's equivalent line hardcodes its SRS claim; this one cannot drift.
+      disclaimer: `PROVISIONAL: 2025-seeded ratings${slate?.ratingsMeta?.sosApplied ? " (SRS strength-of-schedule applied)" : ""} vs ${slate?.phase?.selected === "preseason" ? "preseason" : "regular-season"} lines. Not calibrated — no graded NFL results yet. For build/validation only; not betting advice until shadow-graded in-season.`,
     });
   } catch (e) {
     console.error("[edges/nfl] error:", e.message);
