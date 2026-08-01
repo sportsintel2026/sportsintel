@@ -100,7 +100,29 @@ async function gradeUFCPicks() {
   let espnResults = [];
   try { espnResults = await getEspnUfcResults(); } catch (_) { espnResults = []; }
 
-  let graded = 0, pushed = 0, stillPending = 0;
+  // WZ-UFC-REGRADE-2026-08-01 :: a grade used to be written once and never revisited. ESPN posts
+  // results ahead of Cito and is sometimes WRONG, and it corrects itself later -- on the 08-01
+  // Belgrade card it reported Bogdan Grad as the loser, we wrote "loss" from that, ESPN fixed it,
+  // and our badge stayed wrong while the card highlighted Grad as the winner off live Cito data.
+  // A customer saw our record contradict our own card. Fix: re-check recently graded rows against
+  // Cito and correct disagreements. Cito ONLY -- ESPN is the source that was wrong, so it never
+  // gets to overwrite a grade, only to make a first call on a row nothing else has settled.
+  // Scoped to the events already being fetched this run and to the last 7 days, so it adds zero
+  // Cito calls and cannot rewrite settled history.
+  let gradedRows = [];
+  try {
+    const sinceIso = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const { data: gr } = await c
+      .from("ufc_picks")
+      .select("bout_id,event_slug,pick_corner,result,winner_name")
+      .in("event_slug", gradableSlugs)
+      .in("result", ["win", "loss"])
+      .gte("graded_at", sinceIso);
+    gradedRows = Array.isArray(gr) ? gr : [];
+  } catch (_) { gradedRows = []; }
+  const gradedByBout = new Map(gradedRows.map((r) => [String(r.bout_id), r]));
+
+  let graded = 0, pushed = 0, stillPending = 0, corrected = 0;
   const orphans = [];      // WZ-UFC-ORPHAN-2026-07-27 :: pending picks Cito no longer lists
   const emptyEvents = [];  // WZ-UFC-ORPHAN-2026-07-27 :: events Cito returned no bouts for
   for (const slug of gradableSlugs) {
@@ -128,7 +150,30 @@ async function gradeUFCPicks() {
 
     for (const bout of bouts) {
       const row = pendingByBout.get(String(bout.id));
-      if (!row) continue; // not one of our pending picks (or already graded)
+      if (!row) {
+        // WZ-UFC-REGRADE-2026-08-01 :: already graded. Ask Cito whether that grade still holds.
+        const g = gradedByBout.get(String(bout.id));
+        if (g) {
+          const citoWin = winnerOf(bout); // Cito only, deliberately: no ESPN fallback here
+          if (citoWin && citoWin.corner) {
+            const should = citoWin.corner === String(g.pick_corner || "").toLowerCase() ? "win" : "loss";
+            if (should !== g.result) {
+              const fixIso = new Date().toISOString();
+              await c
+                .from("ufc_picks")
+                .update({ result: should, winner_name: citoWin.name || null, graded_at: fixIso, updated_at: fixIso })
+                .eq("bout_id", String(bout.id));
+              corrected++;
+              console.error(
+                `[UFC grade] CORRECTED bout ${bout.id} (${g.event_slug}): ${g.result} -> ${should}. ` +
+                `Cito winner is ${citoWin.name || "?"}; we had recorded ${g.winner_name || "?"}. ` +
+                `The original grade came from a source that has since changed its answer.`
+              );
+            }
+          }
+        }
+        continue; // not one of our pending picks
+      }
 
       // Cito first; if it hasn't posted a winner yet, fall back to ESPN (WZ-UFC-ESPN-2026-07-11).
       let win = winnerOf(bout);
@@ -162,9 +207,9 @@ async function gradeUFCPicks() {
   }
 
   console.log(
-    `[UFC grade] ${graded} win/loss, ${pushed} push, ${stillPending} still pending, ${orphans.length} ORPHANED across ${gradableSlugs.length} event(s)`
+    `[UFC grade] ${graded} win/loss, ${pushed} push, ${corrected} CORRECTED, ${stillPending} still pending, ${orphans.length} ORPHANED across ${gradableSlugs.length} event(s)`
   );
-  return finish({ graded, pushed, stillPending, events: gradableSlugs.length, orphans, emptyEvents });
+  return finish({ graded, pushed, corrected, stillPending, events: gradableSlugs.length, orphans, emptyEvents });
 }
 
 module.exports = { gradeUFCPicks, getLastGradeReport }; // WZ-UFC-ORPHAN-2026-07-27
