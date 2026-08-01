@@ -31,6 +31,14 @@ function sb() {
 // cancelled) -> settle as push. Kept permissive; any UNKNOWN status is logged (not force-graded)
 // so we can tighten this once real events grade out (first real data: UFC 329).
 const TERMINAL_RE = /(final|complete|decision|ended|closed|result|draw|no.?contest|cancel|void)/i;
+// WZ-UFC-PUSHNARROW-2026-08-01 :: TERMINAL_RE answers "is this fight over", and it was ALSO being
+// used to answer "did this fight end with nobody winning". Those are not the same question.
+// "final"/"complete"/"decision"/"ended"/"closed"/"result" all mean the fight HAPPENED and Cito has
+// simply not filled winnerFighterSlug in yet -- treating them as no-winner settles a real result as
+// a push. Bout 12882 (Todorovic vs Valentin) settled push at 07-31 08:00, a full DAY before the
+// fight, and the customer saw PUSH on a bout Valentin won. Only this narrow set genuinely means
+// nobody won; everything else stays pending until a winner appears.
+const NO_WINNER_RE = /(draw|no.?contest|cancel|void|scratch)/i;
 
 // Match Cito's winnerFighterSlug to a corner + name on the bout.
 function winnerOf(bout) {
@@ -116,7 +124,7 @@ async function gradeUFCPicks() {
       .from("ufc_picks")
       .select("bout_id,event_slug,pick_corner,result,winner_name")
       .in("event_slug", gradableSlugs)
-      .in("result", ["win", "loss"])
+      .in("result", ["win", "loss", "push"]) // WZ-UFC-PUSHNARROW-2026-08-01 :: a wrongly-settled push must be correctable too
       .gte("graded_at", sinceIso);
     gradedRows = Array.isArray(gr) ? gr : [];
   } catch (_) { gradedRows = []; }
@@ -190,7 +198,7 @@ async function gradeUFCPicks() {
           .eq("bout_id", String(bout.id));
         if (winSource === "espn") console.log(`[UFC grade] bout ${bout.id} settled from ESPN (winner=${win.name || "?"})`);
         graded++;
-      } else if (TERMINAL_RE.test(String(bout.status || ""))) {
+      } else if (NO_WINNER_RE.test(String(bout.status || ""))) { // WZ-UFC-PUSHNARROW-2026-08-01
         // Concluded with no winner -> draw / no-contest / cancelled = push (no action).
         await c
           .from("ufc_picks")
