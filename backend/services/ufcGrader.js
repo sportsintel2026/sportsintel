@@ -17,7 +17,7 @@
 
 const { createClient } = require("@supabase/supabase-js");
 const { getUpcomingEvents, getEventBouts } = require("./citoApi");
-const { getEspnUfcResults, espnWinnerCorner } = require("./espnMma"); // WZ-UFC-ESPN-2026-07-11
+const { getEspnUfcResults, espnWinnerCorner, normName } = require("./espnMma"); // WZ-UFC-ESPN-2026-07-11 / WZ-UFC-REGRADE-BYNAME-2026-08-01
 
 let _sb = null;
 function sb() {
@@ -122,7 +122,7 @@ async function gradeUFCPicks() {
     const sinceIso = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
     const { data: gr } = await c
       .from("ufc_picks")
-      .select("bout_id,event_slug,pick_corner,result,winner_name,cito_winner_at,espn_winner_at,source_conflict") // WZ-UFC-SRCLAG-2026-08-01
+      .select("bout_id,event_slug,pick,pick_corner,result,winner_name,cito_winner_at,espn_winner_at,source_conflict") // WZ-UFC-SRCLAG-2026-08-01 / WZ-UFC-REGRADE-BYNAME-2026-08-01
       .in("event_slug", gradableSlugs)
       .in("result", ["win", "loss", "push"]) // WZ-UFC-PUSHNARROW-2026-08-01 :: a wrongly-settled push must be correctable too
       .gte("graded_at", sinceIso);
@@ -195,7 +195,18 @@ async function gradeUFCPicks() {
         if (g) {
           const citoWin = winnerOf(bout); // Cito only, deliberately: no ESPN fallback here
           if (citoWin && citoWin.corner) {
-            const should = citoWin.corner === String(g.pick_corner || "").toLowerCase() ? "win" : "loss";
+            // WZ-UFC-REGRADE-BYNAME-2026-08-01 :: compare NAMES, not corners. Corner is a third
+            // column that has to agree with the pick, and on legacy rows it does not -- bout 12906
+            // (Grad) stores pick "Bogdan Grad" with the opposite pick_corner. Comparing corners
+            // inverted a correct grade: Cito had Grad winning, we had Grad as the pick, and the
+            // pass wrote "loss" and then rewrote it every cycle after it was fixed by hand. The
+            // pick name against the winner name answers the question directly and cannot be
+            // inverted by a bad corner. Corner remains the fallback for when either name is missing.
+            const pickN = normName(g.pick || "");
+            const winN = normName(citoWin.name || "");
+            const should = (pickN && winN)
+              ? (pickN === winN ? "win" : "loss")
+              : (citoWin.corner === String(g.pick_corner || "").toLowerCase() ? "win" : "loss");
             if (should !== g.result) {
               const fixIso = new Date().toISOString();
               await c
