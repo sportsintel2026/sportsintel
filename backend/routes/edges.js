@@ -1719,6 +1719,29 @@ router.get("/nflpointsprobe", async (req, res) => {
   }
 });
 
+// ── TEMP DIAGNOSTIC: NFL per-team schedule shape (read-only) ─────────────────
+// WZ-NFLSCHEDPROBE-2026-08-01
+// NFL power ratings are schedule-blind: buildTeamRatings seeds from season-aggregate
+// PF/PA, so `sosApplied` is false and a soft schedule looks identical to a brutal one.
+// CFB already runs an SRS strength-of-schedule fixpoint. Before porting that math to
+// the NFL this confirms the site schedule endpoint carries opponent id + home/away +
+// final score per game, AND — the thing CFB never had to handle — that ESPN's
+// seasonType marker cleanly separates PRESEASON exhibition games from regular-season
+// ones. Without that separator an SRS port would rate teams partly on August football.
+// Samples the top, bottom and middle of the current seed. Writes nothing.
+//   /api/edges/nflscheduleprobe[?season=2025]
+router.get("/nflscheduleprobe", async (req, res) => {
+  try {
+    const season = parseInt(req.query.season, 10) || 2025;
+    const { fetchSchedulesProbe } = require("../services/nflDataSource");
+    const result = await fetchSchedulesProbe(season);
+    res.json({ ok: true, league: "nfl", ...result });
+  } catch (e) {
+    console.error("[nflscheduleprobe] error:", e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // ── TEMP DIAGNOSTIC: NFL power ratings (read-only) ───────────────────────────
 // Runs buildTeamRatings over all 32 teams and returns the seeded power ratings
 // (league-centered, regressed points differential from 2025). Confirms the
