@@ -650,6 +650,140 @@ async function fetchScheduleReconcile(season = 2025) {
   };
 }
 
+/* ---- READ-ONLY PREVIEW: what SRS strength-of-schedule would do to NFL ratings ----
+ * WZ-NFLSRSPREVIEW-2026-08-01
+ * The live NFL ratings are schedule-blind (`sosApplied: false`): a team's rating is its
+ * league-centered points differential per game, regressed. Two 14-3 teams score the same
+ * whether they beat contenders or cupcakes. CFB already fixes this with an SRS fixpoint.
+ *
+ * This computes what that port WOULD produce and returns it beside the current numbers.
+ * It does NOT feed the model, the board, or buildTeamRatings. Nothing customer-facing
+ * changes. It exists so the SoS decision is made on real output, not on faith.
+ *
+ * WHY THE CFB CONSTANTS ARE NOT COPIED BLIND:
+ *   - CFB_FCS_LEVEL is dropped outright. It credits a fixed rating to unrated FCS
+ *     opponents; all 32 NFL teams are rated, so that branch can never fire here.
+ *   - CFB_MOV_CAP (28) and SOS_WEIGHT (0.80) were tuned for college, where schedule
+ *     disparity is enormous. The NFL is far more interconnected, so SoS should move
+ *     ratings much less. Both are QUERY PARAMETERS here precisely so they can be tried
+ *     against real numbers before anyone commits to a value.
+ *
+ * The math, per the CFB implementation:
+ *     MOV(t)    = mean over t's games of clamp(margin, ±movCap)
+ *     rating(t) = MOV(t) + sosWeight * mean(rating(opponent))   — solved as a fixpoint,
+ *                 re-centered each pass (SRS is identifiable only up to a constant)
+ *     final     = rating(t) * RATING_REGRESSION                 — same regression as live
+ *
+ * Writes nothing. No cache write, no model input, no side effects. */
+const SRS_PREVIEW_ITERS_MAX = 40;
+
+async function buildSrsPreview(season = 2025, opts = {}) {
+  const movCap = Math.max(7, Math.min(60, Number(opts.movCap) || 28));
+  const sosWeight = Math.max(0, Math.min(1, opts.sosWeight == null ? 0.8 : Number(opts.sosWeight)));
+  const iters = Math.max(1, Math.min(SRS_PREVIEW_ITERS_MAX, Number(opts.iters) || 12));
+
+  // 1) the live seed — both the reference ratings and the pf/pa/record fields.
+  const ratings = await buildTeamRatings(season);
+  const recTeams = (ratings && ratings.teams) || {};
+  const ids = Object.keys(recTeams);
+  if (!ids.length) return { season, error: "buildTeamRatings returned no rated teams", ratingsNote: ratings && ratings.note };
+
+  // 2) per-game margins, regular season only. Reuses the reconciled path.
+  const sched = {};
+  for (let i = 0; i < ids.length; i += RECONCILE_BATCH) {
+    const batch = ids.slice(i, i + RECONCILE_BATCH);
+    await Promise.all(batch.map(async (id) => {
+      try {
+        const s = await espnGet(`${BASE}/teams/${id}/schedule?season=${season}`);
+        sched[id] = parseScheduleEvents(s.events || [], id)
+          .filter((p) => p.completed && p.seasonType === 2 && p.teamScore != null && p.oppScore != null && p.opponentId);
+      } catch (_) { sched[id] = null; }
+    }));
+  }
+  const missing = ids.filter((id) => !sched[id] || !sched[id].length);
+  if (missing.length) {
+    return { season, error: `schedule missing for ${missing.length} team(s) — SRS needs every team`, missingTeams: missing.map((id) => recTeams[id]?.abbr || id) };
+  }
+
+  // 3) capped MOV per team.
+  const mov = {};
+  const cappedGames = {};
+  for (const id of ids) {
+    const g = sched[id];
+    let capped = 0;
+    const margins = g.map((x) => {
+      const raw = x.teamScore - x.oppScore;
+      const c = Math.max(-movCap, Math.min(movCap, raw));
+      if (c !== raw) capped++;
+      return c;
+    });
+    mov[id] = margins.reduce((s, v) => s + v, 0) / margins.length;
+    cappedGames[id] = capped;
+  }
+
+  // 4) SRS fixpoint. Every opponent is a rated NFL team, so there is no unrated fallback.
+  let srs = {};
+  for (const id of ids) srs[id] = mov[id];
+  for (let k = 0; k < iters; k++) {
+    const next = {};
+    for (const id of ids) {
+      const g = sched[id];
+      const sos = g.reduce((s, x) => s + (srs[x.opponentId] != null ? srs[x.opponentId] : 0), 0) / g.length;
+      next[id] = mov[id] + sosWeight * sos;
+    }
+    const m = ids.reduce((s, id) => s + next[id], 0) / ids.length;
+    for (const id of ids) next[id] = next[id] - m;
+    srs = next;
+  }
+
+  // 5) compare against the live rating, team by team.
+  const r2 = (v) => Math.round(v * 100) / 100;
+  const rows = ids.map((id) => {
+    const rec = recTeams[id];
+    const g = sched[id];
+    const sosAvg = g.reduce((s, x) => s + (srs[x.opponentId] != null ? srs[x.opponentId] : 0), 0) / g.length;
+    const srsRating = r2(srs[id] * RATING_REGRESSION);
+    return {
+      abbr: rec.abbr, name: rec.name,
+      record: `${rec.wins}-${rec.losses}`,
+      currentRating: rec.rating,          // live, schedule-blind
+      srsRating,                          // what SoS would make it
+      delta: r2(srsRating - rec.rating),
+      movCapped: r2(mov[id]),
+      rawDiffPerGame: r2(rec.rawRating),
+      scheduleStrength: r2(sosAvg),       // mean SRS rating of opponents faced
+      gamesCapped: cappedGames[id],
+    };
+  });
+
+  const byCurrent = [...rows].sort((a, b) => b.currentRating - a.currentRating).map((t) => t.abbr);
+  const bySrs = [...rows].sort((a, b) => b.srsRating - a.srsRating);
+  bySrs.forEach((t, i) => {
+    t.rankSrs = i + 1;
+    t.rankCurrent = byCurrent.indexOf(t.abbr) + 1;
+    t.rankShift = t.rankCurrent - t.rankSrs; // positive = SoS moved the team UP
+  });
+
+  const absDeltas = rows.map((t) => Math.abs(t.delta));
+  const movers = [...bySrs].sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
+
+  return {
+    season,
+    params: { movCap, sosWeight, iters, ratingRegression: RATING_REGRESSION, note: "movCap and sosWeight are query-tunable; nothing here is committed to the model." },
+    summary: {
+      teams: rows.length,
+      meanAbsDelta: r2(absDeltas.reduce((s, v) => s + v, 0) / absDeltas.length),
+      maxAbsDelta: r2(Math.max(...absDeltas)),
+      teamsMovingRank3Plus: bySrs.filter((t) => Math.abs(t.rankShift) >= 3).length,
+      biggestRiser: movers.find((t) => t.delta > 0) ? `${movers.find((t) => t.delta > 0).abbr} ${movers.find((t) => t.delta > 0).delta > 0 ? "+" : ""}${movers.find((t) => t.delta > 0).delta}` : null,
+      biggestFaller: movers.find((t) => t.delta < 0) ? `${movers.find((t) => t.delta < 0).abbr} ${movers.find((t) => t.delta < 0).delta}` : null,
+      totalGamesCapped: rows.reduce((s, t) => s + t.gamesCapped, 0),
+    },
+    note: "PREVIEW ONLY — the live board is untouched. Read meanAbsDelta first: if SoS barely moves the NFL (say under ~0.5 pts) it is not worth the 32 extra ESPN calls per refresh. If it moves teams several ranks, it matters. scheduleStrength is the mean SRS rating of the opponents a team actually played. gamesCapped counts games where movCap clipped the margin — if that is a large share of the league, movCap is doing more work than SoS is.",
+    ranked: bySrs,
+  };
+}
+
 module.exports = {
   fetchScoreboard,
   getUpcomingGames,
@@ -658,6 +792,7 @@ module.exports = {
   fetchPointsProbe,
   fetchSchedulesProbe, // WZ-NFLSCHEDPROBE-2026-08-01
   fetchScheduleReconcile, // WZ-NFLRECONCILE-2026-08-01
+  buildSrsPreview, // WZ-NFLSRSPREVIEW-2026-08-01
   buildTeamRatings,
   statMap,
   parseRecords,

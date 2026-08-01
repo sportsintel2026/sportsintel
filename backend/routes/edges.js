@@ -1719,6 +1719,32 @@ router.get("/nflpointsprobe", async (req, res) => {
   }
 });
 
+// ── TEMP DIAGNOSTIC: NFL SRS strength-of-schedule PREVIEW (read-only) ────────
+// WZ-NFLSRSPREVIEW-2026-08-01
+// The live NFL ratings are schedule-blind (`sosApplied: false`). CFB already runs an
+// SRS fixpoint. This shows what that port WOULD produce, side by side with the current
+// numbers, WITHOUT wiring anything into the model — the board, the edges and
+// buildTeamRatings are all untouched. movCap and sosWeight are query-tunable because
+// the CFB values (28 / 0.80) were tuned for college schedule disparity and should not
+// be copied into the NFL on faith. Decide from the output, then wire it. Writes nothing.
+//   /api/edges/nflsrspreview[?season=2025&movCap=28&sosWeight=0.8&iters=12]
+router.get("/nflsrspreview", async (req, res) => {
+  try {
+    const season = parseInt(req.query.season, 10) || 2025;
+    const opts = {
+      movCap: req.query.movCap != null ? Number(req.query.movCap) : undefined,
+      sosWeight: req.query.sosWeight != null ? Number(req.query.sosWeight) : undefined,
+      iters: req.query.iters != null ? Number(req.query.iters) : undefined,
+    };
+    const { buildSrsPreview } = require("../services/nflDataSource");
+    const result = await buildSrsPreview(season, opts);
+    res.json({ ok: true, league: "nfl", preview: true, appliedToModel: false, ...result });
+  } catch (e) {
+    console.error("[nflsrspreview] error:", e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // ── TEMP DIAGNOSTIC: NFL schedule vs /record reconciliation (read-only) ──────
 // WZ-NFLRECONCILE-2026-08-01
 // The 3-team schedule probe passed on SHAPE but failed on ARITHMETIC: summing each
