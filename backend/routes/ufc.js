@@ -26,6 +26,9 @@ const ODDS_TTL_MS = 10 * 60 * 1000;
 // WZ-UFC-PINBOUND-2026-07-27 :: how long an already-happened event may keep the card pinned
 // while it still has ungraded picks. See pickCardEvent below.
 const PIN_MAX_QUIET_MS = 6 * 60 * 60 * 1000;
+// WZ-UFC-PINSTART-2026-08-01 :: mirrors ufcGrader's TERMINAL_RE. A bout carrying one of these
+// statuses is over. Used ONLY to answer "has this event started yet", never to grade anything.
+const PIN_TERMINAL_RE = /(final|complete|decision|ended|closed|result|draw|no.?contest|cancel|void)/i;
 
 let cardCache = { at: 0, data: null };
 let cardInflight = null;
@@ -281,6 +284,33 @@ async function pickCardEvent() {
       if (quietMs < PIN_MAX_QUIET_MS) {
         return { slug: live.event_slug, title: live.event_name || "UFC", _live: true };
       }
+      // WZ-UFC-PINSTART-2026-08-01 :: quiet time alone cannot tell "finished and stuck" apart from
+      // "has not started yet", and those need opposite answers. Cito drops an event off
+      // /events/upcoming at UTC midnight on event day, so a NON-US card (Belgrade 08-01, Pudong
+      // 08-29) falls off the list ~11h before its first bell. From that moment nothing touches its
+      // ufc_picks rows -- recordUpcomingUFC only walks events still ON the upcoming list, and the
+      // grader has nothing to settle because no fight has happened -- so updated_at freezes, the
+      // 6h quiet bound expires mid-morning, the pin releases, and the board rolls to NEXT week
+      // while today's card is still hours from starting. That is what hid UFC Fight Night 283.
+      // Root fix: before releasing, ask the bouts whether the event actually started. Zero terminal
+      // statuses = first bell has not rung = hold the pin regardless of quiet time. The quiet bound
+      // still does its original job (releasing a FINISHED card stuck on an ungradeable bout, the
+      // bout-12897 case from 07-25) because a finished card always has terminal bouts.
+      // Costs one cached Cito read, and only on the narrow path where we were about to release.
+      // Fail-safe: any error or an empty bout list falls through to the existing release.
+      try {
+        const pinBouts = await getEventBouts(live.event_slug);
+        if (Array.isArray(pinBouts) && pinBouts.length) {
+          const anyTerminal = pinBouts.some((b) => PIN_TERMINAL_RE.test(String((b && b.status) || "")));
+          if (!anyTerminal) {
+            console.log(
+              `[UFC] pin held: ${live.event_slug} is off the upcoming list but no bout has a terminal ` +
+              `status yet -- the event has not started. Holding the card on it.`
+            );
+            return { slug: live.event_slug, title: live.event_name || "UFC", _live: true };
+          }
+        }
+      } catch (_) { /* fall through to the normal release */ }
       console.warn(
         `[UFC] pin released: ${live.event_slug} still has ungraded pick(s) but nothing on it has been ` +
         `touched in ${Number.isFinite(quietMs) ? Math.round(quietMs / 3600000) + "h" : "ever"} -- showing the next event instead. ` +
