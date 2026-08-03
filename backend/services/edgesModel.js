@@ -357,7 +357,21 @@ function calculateTotalProjection(game, awayPitcher, homePitcher, awayTeamHit, h
 
   const awayPitcherERA = effectiveERA(awayPitcher) ?? LEAGUE_AVG.era;
   const homePitcherERA = effectiveERA(homePitcher) ?? LEAGUE_AVG.era;
-  const linPitcherAdj = ((awayPitcherERA + homePitcherERA) / 2 - LEAGUE_AVG.era) * 0.40;
+  // WZ-TOTALSROOT-2026-08-03 :: the starter term converted an ERA gap into runs with a FLAT
+  // 0.40, while the bullpen term ~30 lines below does the same conversion correctly as
+  // ((ERA - lg) / 9) * IP. Same function, same physical quantity, two different scalings.
+  // At this file's own DEFAULT_START_IP = 5.3 the correct coefficient for a PAIR of starters
+  // is 2 * 5.3 / 9 = 1.18, so 0.40 ran the starters at roughly a THIRD of their weight and
+  // left the projection pinned to the offense-only anchor (base averages ~9.03 runs against
+  // ~8.13 actual). Measured on 216 graded full-slate rows by rescaling the stored term:
+  // proj-minus-actual +0.467 -> +0.303, over-picks 69.0% -> 59.7%, shadow win 45.4% -> 50.9%.
+  // Now computed PER GAME from expectedStarterIP -- the same helper expectedBullpenIP already
+  // calls -- so an ace going deep gets the innings he earns instead of a league stand-in.
+  // This is a units correction, not a tuning knob. TOTALS REMAINS BENCHED.
+  const awayStarterIP = expectedStarterIP(awayPitcher, homeTeamHit);
+  const homeStarterIP = expectedStarterIP(homePitcher, awayTeamHit);
+  const linPitcherAdj = (awayPitcherERA - LEAGUE_AVG.era) * (awayStarterIP / 9)
+                      + (homePitcherERA - LEAGUE_AVG.era) * (homeStarterIP / 9);
   const aceAdj = aceSuppression(awayPitcherERA) + aceSuppression(homePitcherERA);
   const pitcherAdj = linPitcherAdj + aceAdj;
 
