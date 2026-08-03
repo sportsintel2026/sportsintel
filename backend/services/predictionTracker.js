@@ -662,6 +662,17 @@ async function recordPredictions(result) {
         model_prob: g.totals.overProb, odds: g.totals.overOdds,
         edge: g.totals.overEdge ?? null, confidence: g.totals.overConfidence ?? "NEUTRAL", line: g.totals.line,
         projected: g.totals.projected ?? null, // WZ-TOTALSPROJ-2026-07-17 :: store the model projection so /totalsbias can measure over-lean = mean(projected - actual_value)
+        // WZ-TOTALSROOT-2026-08-03 :: calculateTotalProjectionShadow has been running on EVERY
+        // game since it shipped -- it builds the total the structurally correct way, from runs
+        // ALLOWED ((starterERA * starterIP) / 9 + (penERA * penIP) / 9, scaled by the opposing
+        // offense/park/weather) rather than from offense + offense. Its output was printed to
+        // the logs and attached to the API response as totals.shadow, and then THROWN AWAY --
+        // never written to a column, so it has never been graded once. Persisting it here puts
+        // it on the same row as the live projection, against the same line and the same actual,
+        // so the two anchors grade head-to-head on real games from the next slate onward with
+        // no preview endpoint and no second data path. Additive: one field, `?? null` like every
+        // sibling, no existing value touched, no math changed, nothing customer-facing moves.
+        projected_shadow: g.totals.shadow ?? null,
         ou_adj: g.totals.breakdown?.ouAdj ?? null,   // WZ-LOG-NUDGES-2026-07-26 :: the three mean nudges on the
         ump_adj: g.totals.breakdown?.umpAdj ?? null, // full-slate shadow row too, so the per-term counterfactual
         def_adj: g.totals.breakdown?.defAdj ?? null, // (projected - nudge) is exact on the whole n, no join needed
