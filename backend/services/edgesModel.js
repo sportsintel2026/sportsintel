@@ -1668,7 +1668,24 @@ async function calculateGameEdges(game, oddsForGame) {
     // how confident we were on every total (inflated edges). ~4.0 is closer to
     // the real spread of game outcomes.
     const TOTAL_SD = 4.0;
-    const rawOver = sigmoid((totals.projectedTotal - totalLine) / TOTAL_SD);
+    // WZ-TOTMEDIAN-2026-08-03 :: the closing total is the MEDIAN outcome; our projection is a
+    // MEAN. Game totals are right-skewed (a blowout runs 20, the floor is 0), so the mean sits
+    // permanently ABOVE the median -- meaning a PERFECT mean projection still reads high against
+    // every closing line in baseball. Measured on 12,993 graded games with closing totals,
+    // 2020-2025 (research_mlb_closing): median(actual - close) = 0.000 in four of six seasons and
+    // never beyond -0.25, while mean(actual - close) = +0.448 and is positive in ALL SIX. Pooled
+    // mean-minus-median = +0.502. Over/under splits ex-push land at 49.18% -- the market is
+    // honest; the mismatch was ours. Untreated it manufactured overs: 69.0% of totals picks went
+    // OVER, and the market-blend below cannot fix that because it moves the displayed prob, not
+    // the SIDE. Independently corroborated: the +0.44 empirical debias that lifted the shadow
+    // grade 44.7% -> 51.1% was this effect, working without knowing why.
+    // Applied HERE, at the probability conversion ONLY. projectedTotal itself is deliberately
+    // NOT touched -- the run line solves its run split from it (_solveRunSplit, ~line 1720) and
+    // must not move, and the stored `projected` column must stay comparable to history.
+    // A unit conversion derived from six seasons, NOT a knob fitted to a win rate. TOTALS
+    // REMAINS BENCHED; this ships on correctness and grades itself on the shadow ledger.
+    const TOTAL_MEAN_TO_MEDIAN = 0.50;
+    const rawOver = sigmoid((totals.projectedTotal - TOTAL_MEAN_TO_MEDIAN - totalLine) / TOTAL_SD);
     const rawUnder = 1 - rawOver;
     // Edge + overreaction flag stay on the RAW model prob (fundamentals vs the market),
     // exactly as moneyline does: blendedEdge already returns W_MODEL*(raw - fair), and the
