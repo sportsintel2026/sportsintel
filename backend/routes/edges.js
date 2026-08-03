@@ -736,7 +736,8 @@ router.get("/mlb", gatePicks, async (req, res) => {
         });
       }
     }
-    totalsEdges.sort((a, b) => (b.edge ?? -1) - (a.edge ?? -1));
+    // WZ-WINNERSFIRST-2026-08-03 :: winners lead, ranked by win% -- edge is NEVER the sort key.
+    totalsEdges.sort((a, b) => (b.modelProb ?? -1) - (a.modelProb ?? -1));
     // WZ-TBC-2026-07-10 :: TOTALS 3-6% BAND-CUT. Audit 2026-07-09 (post-calibration): the
     // [3%,6%) totals edge band is the model's single WORST slice -- -22% ROI on n=27 -- while
     // <3% is ~flat (-1.3%) and >=6% is +EV (+6.4%). Same overconfident-mid-band failure the
@@ -1867,7 +1868,12 @@ router.get("/nfl", gatePicks, async (req, res) => {
       const { away, home } = teamsOf(g.matchup);
       const ml = g.moneyline;
       if (ml && ml.edge != null && ml.fair) {
-        const pickHome = (ml.homeWinProb ?? 0) - (ml.fair.home ?? 0) >= (ml.awayWinProb ?? 0) - (ml.fair.away ?? 0);
+        // WZ-WINNERSFIRST-2026-08-03 :: the SIDE was picked by whichever side carried the larger
+        // EDGE (our prob minus the fair price) -- i.e. wherever we disagreed with the market most.
+        // Edge is measured ANTI-predictive (gamma = -0.316, sign-stable), so this could publish a
+        // team we ourselves price to LOSE. MLB's moneyline board at line ~625 already uses the
+        // winners-first form; NFL/CFB were copied from an older template and never caught up.
+        const pickHome = (ml.homeWinProb ?? 0) >= (ml.awayWinProb ?? 0);
         moneylineEdges.push({
           gameId: g.eventId, side: pickHome ? "home" : "away",
           matchup: g.matchup, teamAbbr: pickHome ? home : away,
@@ -1902,9 +1908,12 @@ router.get("/nfl", gatePicks, async (req, res) => {
         });
       }
     }
-    moneylineEdges.sort((a, b) => (b.edge ?? -1) - (a.edge ?? -1));
-    spreadEdges.sort((a, b) => (b.edge ?? -1) - (a.edge ?? -1));
-    totalsEdges.sort((a, b) => (b.edge ?? -1) - (a.edge ?? -1));
+    // WZ-WINNERSFIRST-2026-08-03 :: winners lead, ranked by win% -- edge is NEVER the sort key.
+    moneylineEdges.sort((a, b) => (b.modelProb ?? -1) - (a.modelProb ?? -1));
+    // WZ-WINNERSFIRST-2026-08-03 :: winners lead, ranked by win% -- edge is NEVER the sort key.
+    spreadEdges.sort((a, b) => (b.modelProb ?? -1) - (a.modelProb ?? -1));
+    // WZ-WINNERSFIRST-2026-08-03 :: winners lead, ranked by win% -- edge is NEVER the sort key.
+    totalsEdges.sort((a, b) => (b.modelProb ?? -1) - (a.modelProb ?? -1));
 
     // ── Market Read + best prices per game (already parsed; surface for the board) ─
     // marketRead = the books' consensus lean (win/cover/total) per game; bestPrices
@@ -2008,7 +2017,12 @@ router.get("/cfb", gatePicks, async (req, res) => {
       const { away, home } = teamsOf(g.matchup);
       const ml = g.moneyline;
       if (ml && ml.edge != null && ml.fair) {
-        const pickHome = (ml.homeWinProb ?? 0) - (ml.fair.home ?? 0) >= (ml.awayWinProb ?? 0) - (ml.fair.away ?? 0);
+        // WZ-WINNERSFIRST-2026-08-03 :: the SIDE was picked by whichever side carried the larger
+        // EDGE (our prob minus the fair price) -- i.e. wherever we disagreed with the market most.
+        // Edge is measured ANTI-predictive (gamma = -0.316, sign-stable), so this could publish a
+        // team we ourselves price to LOSE. MLB's moneyline board at line ~625 already uses the
+        // winners-first form; NFL/CFB were copied from an older template and never caught up.
+        const pickHome = (ml.homeWinProb ?? 0) >= (ml.awayWinProb ?? 0);
         moneylineEdges.push({
           gameId: g.eventId, side: pickHome ? "home" : "away",
           matchup: g.matchup, teamAbbr: pickHome ? home : away,
@@ -2040,9 +2054,12 @@ router.get("/cfb", gatePicks, async (req, res) => {
         });
       }
     }
-    moneylineEdges.sort((a, b) => (b.edge ?? -1) - (a.edge ?? -1));
-    spreadEdges.sort((a, b) => (b.edge ?? -1) - (a.edge ?? -1));
-    totalsEdges.sort((a, b) => (b.edge ?? -1) - (a.edge ?? -1));
+    // WZ-WINNERSFIRST-2026-08-03 :: winners lead, ranked by win% -- edge is NEVER the sort key.
+    moneylineEdges.sort((a, b) => (b.modelProb ?? -1) - (a.modelProb ?? -1));
+    // WZ-WINNERSFIRST-2026-08-03 :: winners lead, ranked by win% -- edge is NEVER the sort key.
+    spreadEdges.sort((a, b) => (b.modelProb ?? -1) - (a.modelProb ?? -1));
+    // WZ-WINNERSFIRST-2026-08-03 :: winners lead, ranked by win% -- edge is NEVER the sort key.
+    totalsEdges.sort((a, b) => (b.modelProb ?? -1) - (a.modelProb ?? -1));
 
     const marketByGame = {};
     for (const g of allGames) {
