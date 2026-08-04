@@ -250,6 +250,21 @@ async function runNFLSlate({ season = null, weeks = 1, phase = null } = {}) {
   const resolver = buildResolver(ratings.teams);
   const ratingsLoaded = (ratings.rated || 0) > 0;
   const leaguePPG = leaguePpgFrom(ratings.teams); // baseline for the totals scoring model
+  // WZ-FBNEUTRAL-2026-08-03 :: The Odds API carries no venue field, so every game reached
+  // nflModel as a home game and took the full NFL_HFA_POINTS 2.5 -- including the international
+  // slate, where no home edge exists. ESPN's scoreboard already carries neutralSite and
+  // nflDataSource already parses it; footballVenue joins the two using the SAME matcher
+  // predictionTracker.gradeFootball uses. Failure here must never take the board down: any
+  // throw leaves neutralIdx null and every game keeps today's behaviour.
+  let neutralIdx = null;
+  try {
+    const { buildNeutralIndex } = require("./footballVenue");
+    const { fetchScoreboard } = require("./nflDataSource");
+    neutralIdx = await buildNeutralIndex({ fetchBoard: fetchScoreboard, league: "nfl", events });
+  } catch (e) {
+    console.error("[nflEdges] neutral-site index failed, all games keep home-field:", e.message);
+    neutralIdx = null;
+  }
 
   let matched = 0, unmatched = 0;
   const unmatchedNames = new Set();
@@ -270,6 +285,11 @@ async function runNFLSlate({ season = null, weeks = 1, phase = null } = {}) {
       ? { home: { rating: homeT.rating, projPoints: projPointsFor(homeT, awayT, leaguePPG) },
           away: { rating: awayT.rating, projPoints: projPointsFor(awayT, homeT, leaguePPG) } }
       : {};
+    // WZ-FBNEUTRAL-2026-08-03 :: null = UNKNOWN (game not on ESPN's board yet, or name unmatched)
+    // -> leave unset, which is today's behaviour: full home-field. Only an explicit true from
+    // ESPN zeroes the HFA. We never guess a venue in either direction.
+    const nSite = neutralIdx ? neutralIdx.isNeutral(ev.awayTeam, ev.homeTeam) : null;
+    if (nSite === true) ctx.neutralSite = true;
     const pred = predictGame(ev, ctx);
     // Carry the books' Market Read (consensus lean) through onto the prediction so
     // the board can show it alongside the model's edge (facts vs model claim).
@@ -293,6 +313,9 @@ async function runNFLSlate({ season = null, weeks = 1, phase = null } = {}) {
       // so this must reflect what actually happened, never a hardcoded assumption.
       sosApplied: ratings.sosApplied === true,
       sosSkippedReason: ratings.sosSkippedReason || null,
+      // WZ-FBNEUTRAL-2026-08-03 :: coverage of the neutral-site join. "resolved 0 of 16" must not
+      // look identical to "no game was neutral" -- that ambiguity is what hid this bug for months.
+      neutral: neutralIdx ? neutralIdx.meta : null,
       blend: ratings.blend || null,
     },
     match: {
