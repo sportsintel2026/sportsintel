@@ -1103,14 +1103,44 @@ async function recordFootballPredictions(slate, league = "nfl") {
     const gameDate = etDate(g.commenceTime) || getEasternDate(0);
     const matchup = g.matchup;
 
-    // Moneyline — log only the side the model flags as value (positive edge).
+    // WZ-FBRECORD-MATCHES-BOARD-2026-08-03 :: THIS LOOP DROPPED ALMOST THE ENTIRE FOOTBALL BOARD.
+    // Identical in shape to WZ-ML-RECORD-MATCHES-BOARD-2026-07-19 (line ~544), which cost MLB ~91%
+    // of its board and months of ungovernable calibration. NFL/CFB were copied from the older
+    // template and never caught up.
+    //
+    // The board (routes/edges.js ~1867-1916 for NFL, ~2016 for CFB) pushes EVERY game that has an
+    // edge and a fair price -- value:false rows explicitly included, per its own comment -- picks
+    // the side by WIN PROBABILITY, and sorts by modelProb. WZ-WINNERSFIRST-2026-08-03 made that so.
+    // This recorder still required `value === true`, which is `edge >= EDGE_ML (0.03)` at
+    // NFL_W_MODEL 0.30 -- i.e. the model must disagree with the de-vigged market by 10.0 probability
+    // points, which is 3.3 pts of margin at a pick'em and 5.7 pts at a 4-1 favourite.
+    //
+    // Two harms, second worse than the first, exactly as in the MLB case:
+    //   1. The ledger disagrees with the board. Subscribers see the full slate; the record books
+    //      the handful of games where we most loudly disagreed with the sharp price.
+    //   2. That surviving sample is the model's MOST OPTIMISTIC tail -- the population most prone
+    //      to overclaiming, and the one CLAUDE.md's "NEVER CUT ON EDGE" rule exists to keep out of
+    //      the selection path. calibrationGuard would have governed NFL and CFB on it all season,
+    //      and at that volume could never reach MIN_N.
+    //
+    // `pick`/`pickTeam` are ALSO gated on value in nflModel/cfbModel (`out.moneyline.pick =
+    // value ? ... : null`), so dropping the value check alone would leave the side null. The side
+    // is therefore derived HERE the way the board derives it, from win probability -- not read off
+    // a field the model only populates for value rows.
+    //
+    // KEPT deliberately: the `dataQuality !== "rated"` skip above. An unrated game is one the model
+    // never ran on -- it is the market echoed back, not a pick. That is a data-coverage gate, not an
+    // edge filter, and ratings resolve for effectively every NFL game and every FBS-vs-FBS CFB game.
+    // The full slate including unrated games is already captured by the *_shadow rows below.
+    // REVERT: restore `ml.value === true &&` and `(ml.pick === "home" || ml.pick === "away") &&`.
     const ml = g.moneyline;
-    if (ml && ml.value === true && (ml.pick === "home" || ml.pick === "away") && ml.book) {
-      const home = ml.pick === "home";
+    if (ml && ml.homeWinProb != null && ml.awayWinProb != null && ml.book) {
+      const home = (ml.homeWinProb ?? 0) >= (ml.awayWinProb ?? 0);
+      const sel = home ? "home" : "away";
       rows.push({
         game_id: String(g.eventId), game_date: gameDate, league, matchup,
-        market: "moneyline", selection: ml.pick,
-        description: `${ml.pickTeam || (home ? g.homeTeam : g.awayTeam)} ML`,
+        market: "moneyline", selection: sel,
+        description: `${(home ? g.homeTeam : g.awayTeam)} ML`,
         model_prob: round3((home ? ml.homeWinProb : ml.awayWinProb) / 100),
         odds: home ? ml.book.home : ml.book.away,
         edge: round3((ml.edge || 0) / 100),
@@ -1119,14 +1149,17 @@ async function recordFootballPredictions(slate, league = "nfl") {
     }
 
     // Spread — line is that side's signed number (home line as-is, away line negated).
+    // WZ-FBRECORD-MATCHES-BOARD-2026-08-03 :: same fix, same reason. The board picks the spread side
+    // with `pickHome = (sp.homeCoverProb ?? 0) >= 50` and sorts by modelProb -- no edge gate.
     const sp = g.spread;
-    if (sp && sp.value === true && (sp.pick === "home" || sp.pick === "away") && sp.book && sp.line != null) {
-      const home = sp.pick === "home";
+    if (sp && sp.homeCoverProb != null && sp.book && sp.line != null) {
+      const home = (sp.homeCoverProb ?? 0) >= 50;
+      const sel = home ? "home" : "away";
       const line = home ? sp.line : -sp.line;
       rows.push({
         game_id: String(g.eventId), game_date: gameDate, league, matchup,
-        market: "spread", selection: sp.pick,
-        description: `${sp.pickTeam || (home ? g.homeTeam : g.awayTeam)} ${line > 0 ? "+" : ""}${line}`,
+        market: "spread", selection: sel,
+        description: `${(home ? g.homeTeam : g.awayTeam)} ${line > 0 ? "+" : ""}${line}`,
         model_prob: round3((home ? sp.homeCoverProb : (100 - sp.homeCoverProb)) / 100),
         odds: home ? sp.book.home : sp.book.away,
         edge: round3((sp.edge || 0) / 100),
@@ -1134,15 +1167,18 @@ async function recordFootballPredictions(slate, league = "nfl") {
       });
     }
 
-    // Total — only logs if the model flags value (NFL totals echo the market today,
-    // so value is false and nothing logs; kept so it activates for free once a real
-    // points model lands).
+    // WZ-FBRECORD-MATCHES-BOARD-2026-08-03 :: same fix, same reason. The board picks the total side
+    // with `pickOver = (tot.overProb ?? 50) >= 50` and sorts by modelProb -- no edge gate. The old
+    // comment here claimed NFL totals echo the market so nothing logs; that is stale -- nflEdges
+    // feeds ctx.projPoints via projPointsFor, so the totals model has had a real opinion since
+    // WZ-NFLTOTALS-2026-07-05.
     const tot = g.total;
-    if (tot && tot.value === true && (tot.pick === "over" || tot.pick === "under") && tot.book && tot.line != null) {
-      const over = tot.pick === "over";
+    if (tot && tot.overProb != null && tot.book && tot.line != null) {
+      const over = (tot.overProb ?? 50) >= 50;
+      const sel = over ? "over" : "under";
       rows.push({
         game_id: String(g.eventId), game_date: gameDate, league, matchup,
-        market: "total", selection: tot.pick,
+        market: "total", selection: sel,
         description: `${over ? "Over" : "Under"} ${tot.line}`,
         model_prob: round3((over ? tot.overProb : (100 - tot.overProb)) / 100),
         odds: over ? tot.book.over : tot.book.under,
@@ -1152,9 +1188,12 @@ async function recordFootballPredictions(slate, league = "nfl") {
     }
   }
 
-  // WZ-FBALL-SLATE-SHADOW-2026-07-17 :: FULL-SLATE shadow recorder — the calibration rig. The filtered
-  // block above only logs value===true picks, which is ~nothing while the model mirrors the market, so
-  // it can never accumulate a gradeable sample (the exact MLB trap that cost months). This logs ONE
+  // WZ-FBALL-SLATE-SHADOW-2026-07-17 :: FULL-SLATE shadow recorder — the calibration rig. The block
+  // above used to log only value===true picks, which was ~nothing while the model mirrors the market,
+  // so it could never accumulate a gradeable sample (the exact MLB trap that cost months). That gate
+  // is GONE as of WZ-FBRECORD-MATCHES-BOARD-2026-08-03 — the core loop now mirrors the board — but
+  // this rig is still the wider net: it ignores dataQuality, so it covers unrated and market-only
+  // games the core loop deliberately skips. Both are needed; neither replaces the other. This logs ONE
   // fixed-side row per game per market for EVERY game with a posted price — regardless of edge, value,
   // or dataQuality — into DISTINCT *_shadow markets (moneyline_shadow home / spread_shadow home /
   // total_shadow over). It stores the model internals the playbook wants (projected_margin, raw_win_prob,
