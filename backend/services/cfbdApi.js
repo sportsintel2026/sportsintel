@@ -89,8 +89,42 @@ async function getReturningProduction(year) {
   return Array.isArray(rows) ? rows : [];
 }
 
+// WZ-CFBDBACKTEST-2026-08-03 :: the three feeds the rating-system backtest needs.
+//
+// GET /ratings/srs?year=YYYY -> Array<TeamSRS> { year, team, conference, division,
+// rating, ranking }. This is CFBD's OWN margin-based schedule-adjusted rating --
+// structurally the same family as cfbDataSource.buildTeamRatings (capped MOV + SoS
+// fixpoint). It stands in as the CONTROL so the comparison costs one request instead of
+// ~292 ESPN calls per historical season. If SP+ cannot beat a plain SRS at this task,
+// the whole "SP+ is a better prior" thesis dies cheap and we stop.
+async function getSrsRatings(year) {
+  const y = parseInt(year, 10);
+  if (!Number.isFinite(y)) throw new Error(`getSrsRatings: bad year ${year}`);
+  const rows = await cfbdGet(`/ratings/srs?year=${y}`);
+  return Array.isArray(rows) ? rows : [];
+}
+
+// FBS-vs-FBS regular season results. Same filters routes/backtest.js already proved.
+async function getGames(year) {
+  const y = parseInt(year, 10);
+  if (!Number.isFinite(y)) throw new Error(`getGames: bad year ${year}`);
+  const rows = await cfbdGet(`/games?year=${y}&seasonType=regular&division=fbs`);
+  return Array.isArray(rows) ? rows : [];
+}
+
+// Closing spreads/totals by game. CFBD convention: `spread` NEGATIVE = home favoured.
+async function getLines(year) {
+  const y = parseInt(year, 10);
+  if (!Number.isFinite(y)) throw new Error(`getLines: bad year ${year}`);
+  const rows = await cfbdGet(`/lines?year=${y}&seasonType=regular`);
+  return Array.isArray(rows) ? rows : [];
+}
+
 module.exports = {
   getSpRatings,
   getReturningProduction,
+  getSrsRatings,
+  getGames,
+  getLines,
   _internal: { cfbdGet, apiKey, BASE, REQUEST_TIMEOUT_MS },
 };

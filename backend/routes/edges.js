@@ -2262,4 +2262,65 @@ router.get("/cfbdprobe", async (req, res) => {
   res.json(out);
 });
 
+// ── READ-ONLY: does SP+ beat a plain SRS as next-season's PRIOR? ── WZ-CFBDBACKTEST-2026-08-03 ──
+// The live CFB rating is a 2025 points-differential SRS off ESPN, pricing 2026 games.
+// The proposal is to swap in CFBD SP+. Both are LAST-season ratings, so neither knows
+// this year's roster -- the only question worth answering is whether SP+ predicts NEXT
+// season's games against the CLOSING LINE better than an SRS does. That is our exact
+// 2025 -> 2026 situation and it needs no 2026 data, so it settles before Week 0.
+//
+// CFBD's own /ratings/srs is the control: same family as ours, one request instead of
+// ~292 ESPN calls per historical season. Scoring lives in cfbRatingBacktest.js and is
+// PURE -- it was validated against a rigged dataset where the answer was known, including
+// the check that a RANDOM rating scores 49.9% ATS against a sharp line. An instrument
+// that cannot fail that test cannot be trusted to pass this one.
+//
+// Reads only. No writes, no board dependency, no key in the URL. ~4 CFBD calls per pair.
+//   /api/edges/cfbratingbacktest[?priors=2022,2023,2024][&provider=consensus]
+router.get("/cfbratingbacktest", async (req, res) => {
+  const out = { token: "WZ-CFBDBACKTEST-2026-08-03", pairs: [], pooled: null };
+  try {
+    const { getSpRatings, getSrsRatings, getGames, getLines } = require("../services/cfbdApi");
+    const { evaluatePair } = require("../services/cfbRatingBacktest");
+    const provider = String(req.query.provider || "consensus");
+    const priors = String(req.query.priors || "2022,2023,2024")
+      .split(",").map(s => parseInt(s.trim(), 10)).filter(Number.isFinite).slice(0, 6);
+
+    const acc = { sp: { n: 0, err: 0, w: 0, l: 0 }, srs: { n: 0, err: 0, w: 0, l: 0 }, mkt: { n: 0, err: 0 } };
+    for (const py of priors) {
+      const gy = py + 1;
+      try {
+        const [spRows, srsRows, games, lines] = await Promise.all([
+          getSpRatings(py), getSrsRatings(py), getGames(gy), getLines(gy),
+        ]);
+        const r = evaluatePair({ games, lines, spRows, srsRows, provider });
+        out.pairs.push({ ratingsFrom: py, gamesFrom: gy, ...r });
+        // pooled accumulators, weighted by the games each pair actually scored
+        acc.sp.n += r.sp.n; acc.sp.err += (r.sp.mae || 0) * r.sp.n; acc.sp.w += r.sp.atsWin; acc.sp.l += r.sp.atsLoss;
+        acc.srs.n += r.srs.n; acc.srs.err += (r.srs.mae || 0) * r.srs.n; acc.srs.w += r.srs.atsWin; acc.srs.l += r.srs.atsLoss;
+        acc.mkt.n += r.market.n; acc.mkt.err += (r.market.mae || 0) * r.market.n;
+      } catch (e) {
+        out.pairs.push({ ratingsFrom: py, gamesFrom: gy, ok: false, error: String((e && e.message) || e) });
+      }
+    }
+
+    const pct = (w, l) => (w + l) ? Math.round((w / (w + l)) * 1000) / 10 : null;
+    const mae = (err, n) => n ? Math.round((err / n) * 1000) / 1000 : null;
+    out.pooled = {
+      games: acc.sp.n,
+      sp: { mae: mae(acc.sp.err, acc.sp.n), atsN: acc.sp.w + acc.sp.l, atsPct: pct(acc.sp.w, acc.sp.l) },
+      srs: { mae: mae(acc.srs.err, acc.srs.n), atsN: acc.srs.w + acc.srs.l, atsPct: pct(acc.srs.w, acc.srs.l) },
+      market: { mae: mae(acc.mkt.err, acc.mkt.n) },
+      // Standard error on an ATS rate, so the gap is read against noise and not eyeballed.
+      // At n~3000 one SE is ~0.9pt: a 1-point difference between the two systems is NOTHING.
+      atsStdErrPts: acc.sp.w + acc.sp.l
+        ? Math.round(Math.sqrt(0.25 / (acc.sp.w + acc.sp.l)) * 1000) / 10 : null,
+      readMe: "atsPct is a SIGNAL check, not a profit claim -- it is unpriced, and per CLAUDE.md we never assume -110. Compare sp.atsPct to srs.atsPct against atsStdErrPts before concluding anything. market.mae is the bar: a rating whose mae is far above it has no business overriding the line.",
+    };
+    res.json(out);
+  } catch (e) {
+    res.status(500).json({ token: "WZ-CFBDBACKTEST-2026-08-03", error: String((e && e.message) || e) });
+  }
+});
+
 module.exports = router;
