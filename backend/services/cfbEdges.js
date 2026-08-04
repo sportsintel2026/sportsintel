@@ -203,6 +203,21 @@ async function runCFBSlate({ season = null, weeks = 1 } = {}) {
 
   let matched = 0, unmatched = 0;
   const unmatchedNames = new Set();
+  // WZ-FBNEUTRAL-2026-08-03 :: this file used to read `ev.neutralSite` off the odds event, but The
+  // Odds API never carries that field -- the read was always false, so every CFB game took the full
+  // CFB_HFA_POINTS 3.0 including Week 0 in Dublin and Rio. Those two dead reads are deleted below.
+  // ESPN's scoreboard carries the real flag and cfbDataSource already parses it; footballVenue joins
+  // them with the same collision-guarded matcher gradeFootball uses. Any throw leaves this null and
+  // every game keeps today's behaviour -- the board can never go down over a venue lookup.
+  let neutralIdx = null;
+  try {
+    const { buildNeutralIndex } = require("./footballVenue");
+    const { fetchScoreboard } = require("./cfbDataSource");
+    neutralIdx = await buildNeutralIndex({ fetchBoard: fetchScoreboard, league: "cfb", events });
+  } catch (e) {
+    console.error("[cfbEdges] neutral-site index failed, all games keep home-field:", e.message);
+    neutralIdx = null;
+  }
 
   const games = (events || []).map((ev) => {
     const homeT = resolveTeam(resolver, ev.homeTeam);
@@ -219,9 +234,12 @@ async function runCFBSlate({ season = null, weeks = 1 } = {}) {
     // is unrated (FCS opponent, or a name still to alias), the game stays market-only.
     const ctx = (ratingsLoaded && homeT && awayT)
       ? { home: { rating: homeT.rating, projPoints: projPointsFor(homeT, awayT, leaguePPG) },
-          away: { rating: awayT.rating, projPoints: projPointsFor(awayT, homeT, leaguePPG) },
-          neutralSite: !!ev.neutralSite }
-      : { neutralSite: !!ev.neutralSite };
+          away: { rating: awayT.rating, projPoints: projPointsFor(awayT, homeT, leaguePPG) } }
+      : {};
+    // WZ-FBNEUTRAL-2026-08-03 :: null = UNKNOWN -> leave unset (full home-field, today's behaviour).
+    // Only an explicit true from ESPN zeroes the HFA. Never guess a venue in either direction.
+    const nSite = neutralIdx ? neutralIdx.isNeutral(ev.awayTeam, ev.homeTeam) : null;
+    if (nSite === true) ctx.neutralSite = true;
     const pred = predictGame(ev, ctx);
     pred.marketRead = ev.marketRead || null;
     pred.oddsGrid = ev.oddsGrid || null;
@@ -237,6 +255,9 @@ async function runCFBSlate({ season = null, weeks = 1 } = {}) {
       rated: ratings.rated || 0,
       fbsListed: ratings.fbsListed || null,
       sosApplied: ratings.sosApplied || false,
+      // WZ-FBNEUTRAL-2026-08-03 :: coverage of the neutral-site join, same as NFL. On a Week 0 slate
+      // this should show a non-zero `neutral` count -- Dublin and Rio are both neutral.
+      neutral: neutralIdx ? neutralIdx.meta : null,
       note: ratings.note || null,
       blend: ratings.blend || null,
     },
