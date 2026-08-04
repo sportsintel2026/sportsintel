@@ -2158,4 +2158,108 @@ router.get("/fbseasonprobe", async (req, res) => {
   res.json(out);
 });
 
+// ── READ-ONLY PROBE: CFBD SP+ / returning production ── WZ-CFBD-2026-08-03 ──────
+// The live CFB rating layer is a 2025 points-differential SRS off ESPN -- schedule
+// adjusted, roster-blind. CFBD has SP+ (explicitly predictive: returning production,
+// recent history, recruiting, coaching change) and we have paid for the key since
+// WZ-CFB-BACKTEST-2026-07-17 without the model ever using it.
+//
+// TWO QUESTIONS must be answered from LIVE BYTES before any wiring, and neither can be
+// answered from this side of the network:
+//   1. Does /ratings/sp?year=YYYY return PRESEASON ratings now, before any 2026 game?
+//      If it returns an empty array, the whole plan waits for Week 1 and we say so.
+//   2. What fraction of CFBD's ~138 team names JOIN to our ESPN rating ids? CFBD is a
+//      THIRD naming space alongside ESPN and The Odds API. The UFC alias work is the
+//      standing lesson here: test a matcher against the real key population before
+//      proposing it, or you collide two real teams and never notice.
+//
+// So this reports coverage and the unmatched names verbatim -- the list is the work item.
+// It also reports the SP+ rating spread, because the plan assumes SP+ `rating` is already
+// in POINTS vs average (the same unit as cfbModel.ratingMargin). A min/max/mean in the
+// +/-30 range confirms that; anything else means it needs rescaling and the assumption dies.
+//
+// The key travels in an Authorization header inside cfbdApi and appears in NO url, log,
+// or payload -- nothing here can put ADMIN_TOKEN or CFBD_API_KEY in an address bar.
+// Read-only, no writes, no board dependency. TEMPORARY: delete when the layer ships.
+//   /api/edges/cfbdprobe[?year=2026]
+router.get("/cfbdprobe", async (req, res) => {
+  const year = parseInt(req.query.year, 10) || 2026;
+  const out = { token: "WZ-CFBD-2026-08-03", year, sp: {}, returning: {}, join: {} };
+  let sp = [];
+  try {
+    const { getSpRatings } = require("../services/cfbdApi");
+    sp = await getSpRatings(year);
+    const ratings = sp.map(r => r && r.rating).filter(v => typeof v === "number");
+    out.sp = {
+      ok: true,
+      count: sp.length,
+      // THE question: an empty array here means preseason SP+ is not published yet.
+      preseasonAvailable: sp.length > 0,
+      ratingSpread: ratings.length ? {
+        min: Math.round(Math.min(...ratings) * 100) / 100,
+        max: Math.round(Math.max(...ratings) * 100) / 100,
+        mean: Math.round((ratings.reduce((s, v) => s + v, 0) / ratings.length) * 100) / 100,
+        n: ratings.length,
+      } : null,
+      sample: sp.slice(0, 3).map(r => ({
+        team: r.team, conference: r.conference, rating: r.rating, ranking: r.ranking,
+        sos: r.sos, secondOrderWins: r.secondOrderWins,
+        offenseRating: r.offense && r.offense.rating,
+        defenseRating: r.defense && r.defense.rating,
+      })),
+    };
+  } catch (e) {
+    out.sp = { ok: false, error: String((e && e.message) || e) };
+  }
+
+  try {
+    const { getReturningProduction } = require("../services/cfbdApi");
+    const rp = await getReturningProduction(year);
+    out.returning = {
+      ok: true,
+      count: rp.length,
+      sample: rp.slice(0, 3).map(r => ({
+        team: r.team, percentPPA: r.percentPPA, usage: r.usage,
+        percentPassingPPA: r.percentPassingPPA,
+      })),
+    };
+  } catch (e) {
+    out.returning = { ok: false, error: String((e && e.message) || e) };
+  }
+
+  // JOIN TEST — CFBD names against our live ESPN rating keys, using the SHIPPED
+  // resolver (cfbEdges.buildResolver/resolveTeam), not a reimplementation.
+  try {
+    if (sp.length) {
+      const { buildTeamRatings } = require("../services/cfbDataSource");
+      const { _internal: cfbI } = require("../services/cfbEdges");
+      const espn = await buildTeamRatings(year - 1); // last completed season = our live seed
+      const resolver = cfbI.buildResolver(espn.teams || {});
+      const unmatched = [];
+      let matched = 0;
+      for (const r of sp) {
+        if (!r || !r.team) continue;
+        if (cfbI.resolveTeam(resolver, r.team)) matched++;
+        else unmatched.push(r.team);
+      }
+      out.join = {
+        ok: true,
+        cfbdTeams: sp.length,
+        espnRated: espn.rated || 0,
+        matched,
+        unmatched: unmatched.length,
+        coveragePct: sp.length ? Math.round((matched / sp.length) * 1000) / 10 : 0,
+        // The list IS the work item -- every name here needs an alias or an explanation.
+        unmatchedNames: unmatched.slice(0, 60),
+      };
+    } else {
+      out.join = { ok: false, error: "no SP+ rows to join" };
+    }
+  } catch (e) {
+    out.join = { ok: false, error: String((e && e.message) || e) };
+  }
+
+  res.json(out);
+});
+
 module.exports = router;
