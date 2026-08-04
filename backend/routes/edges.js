@@ -1944,7 +1944,7 @@ router.get("/nfl", gatePicks, async (req, res) => {
       league: "nfl",
       season,
       calibrated: false,          // ← no graded results yet; do NOT treat as live advice
-      preseason: true,            // ← lines are lookahead/preseason; ratings are a 2025 seed
+      preseason: slate?.phase?.selected === "preseason", // WZ-FBCAL-2026-08-03 :: was a hardcoded true, which goes false-but-still-true the moment Week 1 lines post. Derived from the phase actually on screen, exactly like the disclaimer below.
       provisional: true,          // ← dashboard reads this to show the "in training" banner
       ratingsSeed: slate.ratingsMeta,
       weekWindow: slate.weekWindow,   // the slate window the board is filtered to
@@ -2085,7 +2085,7 @@ router.get("/cfb", gatePicks, async (req, res) => {
       league: "cfb",
       season,
       calibrated: false,
-      preseason: true,
+      preseason: slate?.phase?.selected === "preseason", // WZ-FBCAL-2026-08-03 :: derived, not hardcoded. cfbEdges reports phase "regular" always (CFB has no preseason), so this reads false in season instead of claiming preseason lines over real Week 0 numbers.
       provisional: true,
       ratingsSeed: slate.ratingsMeta,
       weekWindow: slate.weekWindow,
@@ -2106,6 +2106,56 @@ router.get("/cfb", gatePicks, async (req, res) => {
     console.error("[edges/cfb] error:", e.message);
     res.status(500).json({ ok: false, error: e.message });
   }
+});
+
+// ── READ-ONLY PROBE: ESPN's own season-type boundaries ── WZ-FBCAL-2026-08-03 ────
+// The regular-season boundary is currently PINNED per year (nflEdges.nflRegularSeasonStart and
+// cfbEdges.cfbRegularSeasonStart) because the "Labor Day + 3" formula broke on 2026. ESPN's core
+// API carries the authoritative boundary at seasons/{year}/types/2, which would let us DERIVE the
+// boundary and never pin another year. This probe reports the RAW shape plus what our code
+// currently returns, so that swap can be made against verified bytes instead of an assumption.
+// Public, read-only, no secret in the URL, no board dependency -- it cannot affect /api/edges/nfl
+// or /api/edges/cfb. TEMPORARY: delete once the derivation lands.
+//   /api/edges/fbseasonprobe[?season=2026]
+router.get("/fbseasonprobe", async (req, res) => {
+  const season = parseInt(req.query.season, 10) || 2026;
+  const out = { token: "WZ-FBCAL-2026-08-03", season, pinned: {}, espn: {} };
+  try {
+    const { _internal: nflI } = require("../services/nflEdges");
+    out.pinned.nfl = nflI.nflRegularSeasonStart(season).toISOString();
+  } catch (e) { out.pinned.nfl = `error: ${e.message}`; }
+  try {
+    const { _internal: cfbI } = require("../services/cfbEdges");
+    out.pinned.cfb = cfbI.cfbRegularSeasonStart(season).toISOString();
+  } catch (e) { out.pinned.cfb = `error: ${e.message}`; }
+
+  const targets = {
+    nfl: `https://sports.core.api.espn.com/v2/sports/football/leagues/nfl/seasons/${season}/types/2`,
+    cfb: `https://sports.core.api.espn.com/v2/sports/football/leagues/college-football/seasons/${season}/types/2`,
+  };
+  for (const lg of Object.keys(targets)) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    try {
+      const r = await fetch(targets[lg], { signal: controller.signal, headers: { Accept: "application/json" } });
+      if (!r.ok) { out.espn[lg] = { ok: false, status: r.status }; continue; }
+      const j = await r.json();
+      out.espn[lg] = {
+        ok: true,
+        keys: Object.keys(j || {}),
+        type: j.type ?? null,
+        name: j.name ?? null,
+        abbreviation: j.abbreviation ?? null,
+        startDate: j.startDate ?? null,
+        endDate: j.endDate ?? null,
+      };
+    } catch (e) {
+      out.espn[lg] = { ok: false, error: String((e && e.message) || e) };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  res.json(out);
 });
 
 module.exports = router;

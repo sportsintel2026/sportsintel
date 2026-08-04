@@ -74,6 +74,18 @@ function resolveTeam(resolver, oddsTeamName) {
 // code so it auto-rolls year to year — no brittle hardcoded date. Returns a Date
 // at that Thursday 00:00 UTC (good enough as a phase boundary).
 function nflRegularSeasonStart(year) {
+  // WZ-FBCAL-2026-08-03 :: The "Labor Day Monday + 3 = Thursday" formula below is right for most
+  // seasons (2025 -> Sept 4, correct) but the league does not always open on a Thursday. 2026 opens
+  // WEDNESDAY Sept 9 (Patriots at Seahawks, Super Bowl LX rematch), so the formula returned Sept 10
+  // and tagged the season opener "preseason". nflPhaseFor then defaults the board to the earliest
+  // phase with upcoming games, and runNFLSlate FILTERS events to that phase -- so for the ~10 days
+  // before kickoff the board would have shown that ONE game and hidden the whole Week 1 slate,
+  // taking the Week 1 shadow rows (recordFootballPredictions runs on the same filtered slate) with
+  // it. Explicit sourced pins win; the formula stays as the fallback for unpinned years.
+  // /api/edges/fbseasonprobe reads ESPN's own seasons/{year}/types/2 boundary so a later cycle can
+  // DERIVE this instead of listing it.
+  const NFL_REG_START_UTC = { 2026: Date.UTC(2026, 8, 9, 0, 0, 0) }; // Sept 9, 2026
+  if (NFL_REG_START_UTC[year] != null) return new Date(NFL_REG_START_UTC[year]);
   // first Monday of September
   const sept1 = new Date(Date.UTC(year, 8, 1));
   const dow = sept1.getUTCDay(); // 0=Sun..6=Sat

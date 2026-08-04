@@ -92,6 +92,10 @@ function currentCfbSeasonYear(now = new Date()) {
 // season crawl before any games exist; correctness comes from the per-team games
 // weighting regardless of this boundary.
 function cfbRegularSeasonStart(year) {
+  // WZ-FBCAL-2026-08-03 :: 2026 Week 0 opens Aug 27, not Aug 20. Pinned explicitly; the Aug 20
+  // floor stays as the fallback for unpinned years. Same pattern as nflRegularSeasonStart.
+  const CFB_REG_START_UTC = { 2026: Date.UTC(2026, 7, 27, 0, 0, 0) }; // Aug 27, 2026
+  if (CFB_REG_START_UTC[year] != null) return new Date(CFB_REG_START_UTC[year]);
   return new Date(Date.UTC(year, 7, 20)); // Aug 20
 }
 
