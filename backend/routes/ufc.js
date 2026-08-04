@@ -143,8 +143,19 @@ async function parseBout(bout, oddsMap) {
   let amRed = rawRed != null && Number.isFinite(Number(rawRed)) ? Number(rawRed) : null;
   let amBlue = rawBlue != null && Number.isFinite(Number(rawBlue)) ? Number(rawBlue) : null;
   if (implRed == null || implBlue == null) {
-    const oR = oddsMap.get(normName(red.name));
-    const oB = oddsMap.get(normName(blue.name));
+    // WZ-UFCODDSJOIN-2026-08-03 :: the join was a single EXACT lookup on the fighter's full display
+    // name, and it requires BOTH corners to hit -- one miss blanks the whole bout. On the 08-08
+    // Gamrot card that silently killed 5 of 11 fights while the odds map was live and populated
+    // (two prices carried .5 medians, so multiple books were being read). Cito ships a SECOND key
+    // we were discarding: the fighter slug, which is the short form books actually use --
+    // "Billy Ray Goff" has slug billy-goff, "Jose Montanha da Silva" has slug jose-montanha.
+    // Try the name, then the slug. Purely ADDITIVE: this branch only runs when the market is
+    // already unresolved, and the slug is only consulted after the name lookup has missed, so no
+    // bout that resolves today can change. Names that match neither key remain pending and are
+    // now visible in oddsDiag on the card response instead of failing silently.
+    const lookupOdds = (f) => (f ? (oddsMap.get(normName(f.name)) || (f.slug ? oddsMap.get(normName(f.slug)) : null) || null) : null);
+    const oR = lookupOdds(red);
+    const oB = lookupOdds(blue);
     if (oR && oB) { implRed = oR.impl; implBlue = oB.impl; amRed = oR.american; amBlue = oB.american; }
   }
 
@@ -456,6 +467,28 @@ async function buildCitoCard() {
       imageUrl: event.imageUrl || null,
       live: !!event._live, // WZ-UFC-HOLDEVENT-2026-07-11 :: true when we're holding the in-progress event
     },
+    // WZ-UFCODDSJOIN-2026-08-03 :: read-only diagnostic. For every bout still without a market it
+    // reports both keys we tried and whether each is present in the odds map, plus the map's own
+    // key list. That makes a name mismatch READABLE from the public card instead of requiring the
+    // admin-gated probe (which would put ADMIN_TOKEN in a browser address bar). Book fighter names
+    // are public information; nothing sensitive is exposed. Delete once the join is settled.
+    oddsDiag: (() => {
+      const k = (v) => normName(v || "");
+      const unresolved = [];
+      for (const b of parsed) {
+        if (b.red && b.red.odds != null && b.blue && b.blue.odds != null) continue;
+        for (const f of [b.red, b.blue]) {
+          if (!f) continue;
+          unresolved.push({
+            bout: b.id, name: f.name, slug: f.slug || null,
+            byName: k(f.name), bySlug: k(f.slug),
+            hitName: oddsMap.has(k(f.name)),
+            hitSlug: !!(f.slug && oddsMap.has(k(f.slug))),
+          });
+        }
+      }
+      return { mapKeys: oddsMap.size, unresolved, mapSample: Array.from(oddsMap.keys()).sort() };
+    })(),
     mainCard,
     prelims,
   };
