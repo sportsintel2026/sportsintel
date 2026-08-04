@@ -675,7 +675,7 @@ export default function HomePage(){
         {/* WZ-WINNERS-REMOVED-2026-07-05 :: toggle + Winners view removed; Edge Board only */}
         {face==="edges" && <>
         <div className="boardhd">{/* WZ-WIZEBOARD-BAND-2026-07-08 :: full-width serif band + glow + winners/date subline */}
-          <span className="bht"><span className="bhwize">Wize</span>Board</span>
+          <span className="bht"><span className="bhwize">Top</span>Picks</span>{/* WZ-TOPPICKS-2026-08-03 :: board band renamed WizeBoard -> TopPicks. TEXT ONLY -- .bht/.bhwize CSS untouched, so the two-tone stays exactly as it was (white first word, gold second). Class name bhwize kept deliberately: renaming it would touch the stylesheet for zero visual gain. */}
           <div className="bhglow"/>
           <div className="bhsub">{(isTomorrowMain?previewItems.length:boardItems.length)>0?(isTomorrowMain?previewItems.length:boardItems.length)+" winners":"Ranked by win %"}{(isTomorrowMain?("Tomorrow"+(previewLabel?", "+previewLabel:"")):boardDate)&&<> <span className="bhd">{"\u00b7"}</span> {isTomorrowMain?("Tomorrow"+(previewLabel?", "+previewLabel:"")):boardDate}</>}</div>
         </div>
