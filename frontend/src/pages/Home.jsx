@@ -622,25 +622,7 @@ export default function HomePage(){
         </div>
       ) : null}
 
-      {sport==="nfl" && (
-        <div style={{margin:"12px 4px 10px",padding:"9px 12px",border:"1px solid #6b4a16",background:"linear-gradient(180deg,#1a1305,#0d0a02)",borderRadius:10,fontFamily:"var(--mono)",fontSize:11,lineHeight:1.45,color:"#f3b94f"}}>
-          ⚠ NFL MODEL IN TRAINING — preseason preview. Ratings are seeded from 2025 results and are <b>not yet calibrated</b> against 2026 games. Edges shown are provisional, for preview only — not betting advice until validated in-season.
-        </div>
-      )}
-      {sport==="cfb" && (
-        <div style={{margin:"12px 4px 10px",padding:"9px 12px",border:"1px solid #6b4a16",background:"linear-gradient(180deg,#1a1305,#0d0a02)",borderRadius:10,fontFamily:"var(--mono)",fontSize:11,lineHeight:1.45,color:"#f3b94f"}}>
-          {/* WZ-CFB-SOSCOPY-2026-07-27 :: this banner claimed, in bold, "no strength-of-schedule layer yet".
-              CFB ratings have had SoS applied since 2026-06-22 -- cfbDataSource sets sosApplied:true
-              unconditionally and the ratings note describes it as league-centered SRS with margin-capped
-              MOV plus strength-of-schedule. So the most emphasised sentence on the CFB board was false for
-              five weeks, and it understated the model to paying customers.
-              Now read from the feed (ratingsSeed.sosApplied) instead of asserting it, so the copy cannot
-              drift away from the ratings again. "preseason preview" dropped: the CFB feed hardcodes
-              phase.selected to "regular", and the word turns plainly wrong once real lines post in late
-              August. What is left is true from now through the season opener. */}
-          ⚠ CFB MODEL IN TRAINING — FBS power ratings are seeded from 2025 results {edges?.ratingsSeed?.sosApplied ? <>with a <b>strength-of-schedule layer</b> applied</> : <>with <b>no strength-of-schedule layer</b> yet</>}, and are not yet calibrated against 2026 games. Edges shown are provisional, for preview only — not betting advice until validated in-season.
-        </div>
-      )}
+      {/* WZ-NOBANNER-2026-08-03 :: the NFL and CFB "MODEL IN TRAINING" preseason banners were removed at Master G's direction. Both markets are out of season and paying subscribers already understand that; the banner was occupying the top of the board every visit to say so. The provisional/preview status is still carried by the model itself (edges.ratingsSeed, phase.selected) and by the site-wide disclaimer in App.jsx. TO RESTORE: git show df9ddf6:frontend/src/pages/Home.jsx and lift lines 625-643 back in verbatim. */}
       {/* WZ-PHASESEG-2026-07-20 :: the phase switcher was two free-floating outlined pills in a green
           that appears nowhere else on this screen -- it read as a debug control and was easy to scroll
           straight past. Rebuilt as a full-width SEGMENTED CONTROL in the app's own vocabulary: dark
