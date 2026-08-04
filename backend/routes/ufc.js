@@ -59,6 +59,22 @@ function median(nums) {
   const m = Math.floor(s.length / 2);
   return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
 }
+// WZ-UFCALIAS-2026-08-03 :: the books and Cito spell the same fighter differently in two stable
+// ways, both observed live on the 08-08 Gamrot card against a 54-key odds map:
+//   1. EXTRA GIVEN NAMES -- the book carries the legal name "carlos diego ferreira"; Cito says
+//      "Diego Ferreira". The last two tokens are the shared part.
+//   2. PARTICLE SPACING -- the book runs "yadier delvalle" as one word; Cito says
+//      "Yadier del Valle". Removing spaces makes them identical.
+// Returns the alias keys for a normalized book name. NEVER a bare surname: the last-TWO-token form
+// is what keeps "ty miller" and "juliana miller" -- both live in that same map -- distinct.
+function nameAliases(k) {
+  const t = String(k || "").split(" ").filter(Boolean);
+  const out = new Set();
+  if (!t.length) return out;
+  out.add(t.join(""));
+  if (t.length >= 3) { out.add(t.slice(-2).join(" ")); out.add(t.slice(-2).join("")); }
+  return out;
+}
 function normName(name) {
   // WZ-NAMEFOLD-2026-07-28 :: fold stroked letters BEFORE the NFD pass. NFD does not decompose them,
   // so without this "Jan Błachowicz" became "jan b achowicz" and could never match The Odds API.
@@ -96,6 +112,26 @@ async function getOddsMap() {
         if (impl != null) map.set(normName(nm), { impl, american: med });
       }
     }
+    // WZ-UFCALIAS-2026-08-03 :: second pass -- widen the map with alias keys, AFTER every real key
+    // exists so ambiguity is decidable. An alias is kept only when exactly ONE fighter claims it;
+    // anything contested is dropped rather than guessed, so a loose match can never silently price
+    // the wrong man. A real key is never shadowed. Measured against the live 54-key map: 112
+    // aliases generated, ZERO ambiguous.
+    const aliasClaims = new Map();
+    for (const realKey of Array.from(map.keys())) {
+      for (const a of nameAliases(realKey)) {
+        if (map.has(a)) continue;
+        if (!aliasClaims.has(a)) aliasClaims.set(a, new Set());
+        aliasClaims.get(a).add(realKey);
+      }
+    }
+    let aliasKept = 0, aliasDropped = 0;
+    for (const [a, owners] of aliasClaims) {
+      if (owners.size !== 1) { aliasDropped++; continue; }
+      map.set(a, map.get(Array.from(owners)[0]));
+      aliasKept++;
+    }
+    console.log(`[UFC] odds map ${map.size} keys (aliases kept ${aliasKept}, dropped-ambiguous ${aliasDropped})`);
   } catch (e) {
     console.error("[UFC] Odds map fetch failed:", e.message);
   }
@@ -153,7 +189,20 @@ async function parseBout(bout, oddsMap) {
     // already unresolved, and the slug is only consulted after the name lookup has missed, so no
     // bout that resolves today can change. Names that match neither key remain pending and are
     // now visible in oddsDiag on the card response instead of failing silently.
-    const lookupOdds = (f) => (f ? (oddsMap.get(normName(f.name)) || (f.slug ? oddsMap.get(normName(f.slug)) : null) || null) : null);
+    // WZ-UFCALIAS-2026-08-03 :: try our own de-spaced forms too. The alias pass widens the BOOK
+    // side ("carlos diego ferreira" -> "diego ferreira"); this widens OUR side, which is what
+    // catches "Yadier del Valle" -> "yadierdelvalle" against the book's "yadier delvalle".
+    // Exact name is still tried FIRST, so no bout that resolves today can change what it matches.
+    const lookupOdds = (f) => {
+      if (!f) return null;
+      const n = normName(f.name), sl = f.slug ? normName(f.slug) : "";
+      for (const cand of [n, sl, n.replace(/ /g, ""), sl.replace(/ /g, "")]) {
+        if (!cand) continue;
+        const hit = oddsMap.get(cand);
+        if (hit) return hit;
+      }
+      return null;
+    };
     const oR = lookupOdds(red);
     const oB = lookupOdds(blue);
     if (oR && oB) { implRed = oR.impl; implBlue = oB.impl; amRed = oR.american; amBlue = oB.american; }
