@@ -1966,7 +1966,8 @@ router.get("/nfl", gatePicks, async (req, res) => {
       // WZ-NFLSOS-2026-08-01 :: the SoS clause is driven by the ACTUAL flag, not hardcoded.
       // applyNflSrs is all-or-nothing and can decline (e.g. ESPN schedule unavailable), in
       // which case the ratings really are schedule-blind and this string must not claim
-      // otherwise. CFB's equivalent line hardcodes its SRS claim; this one cannot drift.
+      // otherwise. WZ-CFBSOSHONEST-2026-08-05 :: CFB's equivalent line hardcoded its SRS claim
+      // until this cycle; it now reads the same flag. Neither can drift.
       disclaimer: `PROVISIONAL: 2025-seeded ratings${slate?.ratingsMeta?.sosApplied ? " (SRS strength-of-schedule applied)" : ""} vs ${slate?.phase?.selected === "preseason" ? "preseason" : "regular-season"} lines. Not calibrated — no graded NFL results yet. For build/validation only; not betting advice until shadow-graded in-season.`,
     });
   } catch (e) {
@@ -2100,7 +2101,11 @@ router.get("/cfb", gatePicks, async (req, res) => {
       moneylineEdges, spreadEdges, totalsEdges,
       runLineEdges: [], hrPropEdges: [], kPropEdges: [], hitsPropEdges: [],
       computedAt: new Date().toISOString(),
-      disclaimer: `PROVISIONAL: 2025-seeded FBS ratings (SRS strength-of-schedule applied) vs ${slate?.phase?.selected === "preseason" ? "preseason" : "regular-season"} lines. Not calibrated — no graded CFB results yet. For build/validation only; not betting advice until shadow-graded in-season.`,
+      // WZ-CFBSOSHONEST-2026-08-05 :: the SRS clause is driven by the ACTUAL flag, not hardcoded.
+      // cfbDataSource's SoS layer is now all-or-nothing and can decline (e.g. an ESPN schedule
+      // fetch fails), in which case the ratings really are schedule-blind and this customer-facing
+      // string must not claim otherwise. Same contract as the NFL disclaimer above.
+      disclaimer: `PROVISIONAL: 2025-seeded FBS ratings${slate?.ratingsMeta?.sosApplied ? " (SRS strength-of-schedule applied)" : ""} vs ${slate?.phase?.selected === "preseason" ? "preseason" : "regular-season"} lines. Not calibrated — no graded CFB results yet. For build/validation only; not betting advice until shadow-graded in-season.`,
     });
   } catch (e) {
     console.error("[edges/cfb] error:", e.message);

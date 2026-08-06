@@ -341,6 +341,44 @@ const RATING_REGRESSION = 0.72;            // keep 72% of raw differential, shri
 const MIN_GAMES_FOR_RATING = 4;            // need a real sample before rating a team
 const RATINGS_TTL_MS = 6 * 60 * 60 * 1000; // 6h — refresh is ~146 calls; ratings move weekly
 const RATINGS_BATCH = 14;                  // concurrency cap so we don't hammer ESPN at once
+
+// WZ-CFBSOSHONEST-2026-08-05 :: the SoS layer is all-or-nothing, so ONE flaked schedule fetch
+// costs the whole league its SoS for a 6h cache window. espnGet is single-shot with an 8s abort
+// and there is no retry anywhere else in this file, so this is the only retry mechanism.
+// Bounded three ways: attempts per team, backoff between them, and a LEAGUE-WIDE wall-clock
+// budget so a comprehensive ESPN outage cannot stretch the request unboundedly -- past the
+// budget every remaining team is single-shot and the layer simply declines.
+const SOS_RETRY_ATTEMPTS = 3;              // initial try + 2 retries
+const SOS_RETRY_BACKOFF_MS = [250, 750];   // waits AFTER attempt 1 and attempt 2
+const SOS_RETRY_BUDGET_MS = 20000;         // total extra wall clock spent retrying, all teams
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Retry transport failures and ESPN's own overload signals. A 4xx that is not 429 is ESPN
+// saying "no such thing" -- retrying it just burns the budget, so it fails through at once.
+const sosRetryable = (e) => {
+  const m = String((e && e.message) || "");
+  const code = Number((m.match(/ESPN (\d{3})/) || [])[1]);
+  if (!Number.isFinite(code)) return true; // abort/timeout/DNS/socket -> worth another look
+  return code === 429 || code >= 500;
+};
+
+// Returns the parsed body, or throws the LAST error after exhausting attempts/budget.
+async function espnGetSchedule(url, deadline, stats) {
+  let last;
+  for (let a = 0; a < SOS_RETRY_ATTEMPTS; a++) {
+    try {
+      const body = await espnGet(url);
+      if (a > 0) stats.recovered++;
+      return body;
+    } catch (e) {
+      last = e;
+      if (a === SOS_RETRY_ATTEMPTS - 1 || !sosRetryable(e) || Date.now() >= deadline) break;
+      stats.retries++;
+      await sleep(SOS_RETRY_BACKOFF_MS[a]);
+    }
+  }
+  throw last;
+}
 // ── Strength-of-schedule (SRS) layer ────────────────────────────────────────
 // Aggregate point differential is schedule-blind: +35/game vs cupcakes scores the
 // same as +35 vs the SEC. SRS fixes this — rating = capped MOV + avg opponent rating,
@@ -430,11 +468,14 @@ async function buildTeamRatings(season = 2025) {
   //    Opponents that aren't rated (FCS, or FBS below the games gate) credit CFB_FCS_LEVEL.
   const scheduleUrl = (id) => `${BASE}/teams/${id}/schedule?season=${season}`;
   const games = {}; // id -> [{ oppId, margin(capped) }] over completed games only
+  // WZ-CFBSOSHONEST-2026-08-05 :: one retry budget for the whole crawl, started before batch 1.
+  const sosDeadline = Date.now() + SOS_RETRY_BUDGET_MS;
+  const sosFetch = { retries: 0, recovered: 0 };
   for (let i = 0; i < ratedIds.length; i += RATINGS_BATCH) {
     const batch = ratedIds.slice(i, i + RATINGS_BATCH);
     await Promise.all(batch.map(async (id) => {
       try {
-        const sch = await espnGet(scheduleUrl(id));
+        const sch = await espnGetSchedule(scheduleUrl(id), sosDeadline, sosFetch);
         const parsed = parseScheduleEvents(sch.events || [], id)
           .filter((p) => p.completed && p.teamScore != null && p.oppScore != null);
         games[id] = parsed.map((p) => ({
@@ -445,7 +486,22 @@ async function buildTeamRatings(season = 2025) {
     }));
   }
 
-  // MOV per team from capped margins (fallback to the aggregate seed if a schedule fails).
+  // WZ-CFBSOSHONEST-2026-08-05 :: ALL-OR-NOTHING, mirroring nflDataSource.applyNflSrs.
+  //    A failed fetch above leaves games[id] = [], and that team would then take sos = 0 --
+  //    a perfectly average schedule -- while every other team took a real one, AND it would
+  //    drag the re-centering pass for the whole league. One rating table, one basis: if ANY
+  //    rated team came back without a completed game, the SoS layer declines entirely and
+  //    every team keeps its schedule-blind rating.
+  //    NOTE: unlike NFL we do NOT require opponents to be rated -- CFB credits unrated FCS
+  //    opponents at CFB_FCS_LEVEL by design, so that gate would decline on nearly every slate.
+  //    MIN_GAMES_FOR_RATING guarantees a rated team played >= 4 games, so an empty schedule
+  //    here is always a fetch failure, never a legitimate early-season state.
+  const sosMissing = ratedIds.filter((id) => !games[id] || !games[id].length);
+  let sosApplied = sosMissing.length === 0;
+  let sosSkippedReason = sosApplied ? null : `schedule unavailable for ${sosMissing.length} of ${ratedIds.length} rated teams`;
+
+  // MOV per team from capped margins (aggregate-seed fallback only ever fires when the SoS
+  // layer has already declined above, in which case mov is not used for the emitted rating).
   const mov = {};
   for (const id of ratedIds) {
     const g = games[id] || [];
@@ -457,16 +513,23 @@ async function buildTeamRatings(season = 2025) {
   // additive constant; FCS sits at a FIXED CFB_FCS_LEVEL below the centered FBS mean).
   let srs = {};
   for (const id of ratedIds) srs[id] = mov[id];
-  for (let k = 0; k < CFB_SRS_ITERS; k++) {
+  // WZ-CFBSOSHONEST-2026-08-05 :: the loop does not run at all when SoS declined, so srs stays
+  // at the mov seed and is never read for the emitted rating. Inside the loop every rated team
+  // is guaranteed a non-empty schedule by the gate above, so the old `g.length ? ... : 0`
+  // fallback is unreachable and is gone -- that zero was the silent average-schedule bug.
+  for (let k = 0; sosApplied && k < CFB_SRS_ITERS; k++) {
     const next = {};
     for (const id of ratedIds) {
-      const g = games[id] || [];
-      const sos = g.length ? g.reduce((s, x) => s + ratingOf(srs, x.oppId), 0) / g.length : 0;
-      next[id] = mov[id] + SOS_WEIGHT * sos;
+      const g = games[id];
+      next[id] = mov[id] + SOS_WEIGHT * (g.reduce((s, x) => s + ratingOf(srs, x.oppId), 0) / g.length);
     }
     const m = ratedIds.reduce((s, id) => s + next[id], 0) / ratedIds.length;
     for (const id of ratedIds) next[id] = next[id] - m;
     srs = next;
+  }
+  if (sosApplied && ratedIds.some((id) => !Number.isFinite(srs[id]))) {
+    sosApplied = false;
+    sosSkippedReason = "SRS produced a non-finite rating";
   }
 
   // 5) emit: SRS rating (already centered) tamed by the existing regression. Keep the
@@ -474,22 +537,36 @@ async function buildTeamRatings(season = 2025) {
   const meanRaw = ratedIds.reduce((s, id) => s + raw[id].rawRating, 0) / ratedIds.length;
   const teamsOut = {};
   for (const id of ratedIds) {
+    // WZ-CFBSOSHONEST-2026-08-05 :: on decline the team falls back to its own preSosRating --
+    // the schedule-blind value we already computed for audit -- and reports sosApplied false.
+    const preSos = Math.round((raw[id].rawRating - meanRaw) * RATING_REGRESSION * 100) / 100;
     teamsOut[id] = {
       ...raw[id],
       mov: Math.round(mov[id] * 100) / 100,
       sosGames: (games[id] || []).length,
-      preSosRating: Math.round((raw[id].rawRating - meanRaw) * RATING_REGRESSION * 100) / 100,
-      rating: Math.round(srs[id] * RATING_REGRESSION * 100) / 100,
-      regressed: true, sosApplied: true,
+      preSosRating: preSos,
+      rating: sosApplied ? Math.round(srs[id] * RATING_REGRESSION * 100) / 100 : preSos,
+      regressed: true, sosApplied,
     };
   }
 
   const result = {
     season, rated: ratedIds.length, fbsListed: fbsIds.length,
     meanRawDiffPerGame: Math.round(meanRaw * 100) / 100,
-    regression: RATING_REGRESSION, movCap: CFB_MOV_CAP, srsIters: CFB_SRS_ITERS, fcsLevel: CFB_FCS_LEVEL, sosWeight: SOS_WEIGHT,
-    teams: teamsOut, sosApplied: true,
-    note: "CFB power ratings = league-centered SRS (margin-capped MOV + strength-of-schedule), regressed, 2025 seed. FBS only. SoS collapses cupcake-padded G5 differentials; FCS opponents credit a fixed below-FBS level. preSosRating shows each team's pre-SoS value for audit.",
+    regression: RATING_REGRESSION,
+    // WZ-CFBSOSHONEST-2026-08-05 :: SoS parameters only describe a run that actually happened;
+    // on decline they are replaced by the reason, same shape as nflDataSource.buildTeamRatings.
+    ...(sosApplied
+      ? { movCap: CFB_MOV_CAP, srsIters: CFB_SRS_ITERS, fcsLevel: CFB_FCS_LEVEL, sosWeight: SOS_WEIGHT }
+      : { sosSkippedReason }),
+    teams: teamsOut, sosApplied,
+    // WZ-CFBSOSHONEST-2026-08-05 :: first instrumentation this crawl has ever had. retries =
+    // fetches that threw and were tried again; recovered = teams that only succeeded because
+    // of a retry, i.e. flakes that would have declined the whole league before this cycle.
+    sosFetch: { retries: sosFetch.retries, recovered: sosFetch.recovered },
+    note: sosApplied
+      ? "CFB power ratings = league-centered SRS (margin-capped MOV + strength-of-schedule), regressed, 2025 seed. FBS only. SoS collapses cupcake-padded G5 differentials; FCS opponents credit a fixed below-FBS level. preSosRating shows each team's pre-SoS value for audit."
+      : `CFB power ratings = league-centered, regressed points differential per game (2025 seed). FBS only. STRENGTH OF SCHEDULE NOT APPLIED (${sosSkippedReason}) — ratings are schedule-blind on this build.`,
   };
   cacheSet(key, result, RATINGS_TTL_MS);
   return result;
