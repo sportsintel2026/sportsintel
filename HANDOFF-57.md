@@ -233,8 +233,22 @@ From `CLAUDE.md`, none of steps 2–4 started:
    the Week 0 slate. Week 1 already returns `neutral: 1` correctly (§3), so the matcher works — this
    is now a narrower check than HANDOFF-56 framed it.
 4. **2026-08-27 — CFB Week 0.** **2026-09-09 — NFL Week 1.**
-5. **Fix the NDSU / Sacramento State `CFB_FCS_LEVEL = -28` credit before Week 0** (§6). This is now
-   the largest known CFB correctness defect, and it is the one that survives the season opener.
+5. **NDSU / Sacramento State `CFB_FCS_LEVEL = −28` — INVESTIGATED 2026-08-06, DO NOT BUILD.**
+   HANDOFF-56 §4 called this badly wrong and §9 of this document originally repeated that. Checked
+   against the code and it is overstated. Three findings:
+   (a) **`fbsIds` is SEASON-SCOPED** — `seasons/${season}/types/2/groups/80/teams`. The seed is 2025
+   and both teams WERE FCS in 2025, so the −28 credit is the intended behaviour for that season, not
+   a misclassification. The only error is granularity: NDSU is elite FCS credited at average FCS.
+   (b) **The 2026 side is already handled.** `cfbEdges.js:121` has an explicit
+   `// new-to-FBS team: no prior to blend` branch — once either clears `MIN_GAMES_FOR_RATING = 4` in
+   the 2026 build they enter the table on their own. Until then their games run `market-only`, which
+   is honest. Self-heals ~late September.
+   (c) **Magnitude:** one misrated opponent in ~12 shifts a team by `SOS_WEIGHT × Δ/12 = 0.067Δ`,
+   then `× RATING_REGRESSION 0.72` → `0.048Δ`. At Δ ≈ 20 that is **~1.0 rating point**, ~2.5 win-%
+   raw, ~0.75 after `CFB_W_MODEL = 0.30`, landing on the **~2 FBS teams** they played in 2025.
+   Inside a rating layer HANDOFF-56 §0 measured at **50.0% ATS over 2,210 games**. Not worth a cycle.
+   **If a future session revisits this, it needs a measurement first** — nobody knows NDSU's
+   FBS-equivalent rating, and picking one is a parameter tune without data.
 6. **Fix `backtest.js:183`** stale/transposed sigma literal.
 7. **Rewrite the additive-only rule in `CLAUDE.md`** (§7).
 8. **Cleanup PR** for the accumulated temp diagnostics (§6).
