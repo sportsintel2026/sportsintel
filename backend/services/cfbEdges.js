@@ -255,6 +255,12 @@ async function runCFBSlate({ season = null, weeks = 1 } = {}) {
       rated: ratings.rated || 0,
       fbsListed: ratings.fbsListed || null,
       sosApplied: ratings.sosApplied || false,
+      // WZ-CFBSOSMETA-2026-08-06 :: WZ-CFBSOSHONEST added these counters to the ratings object
+      // but never wired them here, so they reached nothing. retries = schedule fetches that threw
+      // and were retried; recovered = teams that only succeeded because of a retry, i.e. flakes
+      // that would otherwise have declined the whole league. The decline REASON needs no field --
+      // it is already embedded in `note` by the decline branch of buildTeamRatings.
+      sosFetch: ratings.sosFetch || null,
       // WZ-FBNEUTRAL-2026-08-03 :: coverage of the neutral-site join, same as NFL. On a Week 0 slate
       // this should show a non-zero `neutral` count -- Dublin and Rio are both neutral.
       neutral: neutralIdx ? neutralIdx.meta : null,
