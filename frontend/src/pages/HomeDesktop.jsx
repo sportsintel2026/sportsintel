@@ -127,19 +127,19 @@ export default function HomeDesktop(props) {
     wpRecord, navigate, plan = {}, sport = "mlb", setSport, marketsLive, anyLive, marketRead = [], perf = null, wpToday = [], sharpRows = [], intelGroups = [] } = props;
   const lg = sport === "mlb" ? "mlb" : sport; // WZ-DESKTOP-FBALL-2026-07-11 :: NFL/CFB render in-board
   // Real tracked-record stats for the index cards (high-conviction ROI, honest beat-close CLV).
-  const perfStats = (() => { const d = perf; if (!d) return null;
-    const hi = d.byConfidence && d.byConfidence.HIGH ? d.byConfidence.HIGH : null;
-    const roi = (hi && hi.roi != null) ? hi.roi : (d.roi != null ? d.roi : null);
-    const roiLbl = (hi && hi.roi != null) ? "high-conv" : "all picks";
-    let w = 0, l = 0; if (d.byConfidence) { for (const k in d.byConfidence) { const b = d.byConfidence[k]; if (b) { w += b.wins || 0; l += b.losses || 0; } } }
-    const winRate = (w + l) > 0 ? (w / (w + l) * 100) : null;
-    const graded = d.n != null ? d.n : ((w + l) || null);
-    // CLV can arrive as an object (e.g. { value, n } or per-range); pull the real
-    // number the same way the mobile board does, else show "—". Never render raw.
-    const rng = (d.ranges && (d.ranges.Season || d.ranges[Object.keys(d.ranges)[0]])) || null;
-    const clvNum = (rng && typeof rng.clv === "number") ? rng.clv : (typeof d.clv === "number" ? d.clv : null);
-    return { roi, roiLbl, winRate, graded, clv: clvNum };
+  // WZ-FBRECORD-STRIP-2026-08-06 :: the model's OWN graded record, straight off
+  // /api/performance/<sport>. REPLACES the perfStats block that used to sit here computing
+  // roi/roiLbl/clv and was rendered nowhere in this file either -- dead in both. Identical
+  // derivation to Home.jsx so mobile and desktop can never print different records.
+  // NO MINIMUM SAMPLE, at Master G's direction; the "<n> graded" subline discloses the size.
+  const modelRec = (() => { const o = perf && perf.overall; if (!o) return null;
+    const total = (o.wins || 0) + (o.losses || 0); if (total < 1) return null;
+    return { wins: o.wins || 0, losses: o.losses || 0,
+      units: (typeof o.units === "number") ? o.units : null,
+      winPct: (o.winPct != null) ? o.winPct : Math.round((o.wins / total) * 100),
+      graded: total };
   })();
+  const isFb = (sport === "nfl" || sport === "cfb");
   const [market, setMarket] = useState("ml"); // WZ-WINNERS-V2-2026-07-04 :: Edge Board leads
   const [nbaStd, setNbaStd] = useState([]);
   useEffect(() => {
@@ -284,9 +284,19 @@ export default function HomeDesktop(props) {
           {/* INDEX ROW */}
                     <div className="indices">
             {/* WZ-EDGES-WIZEPLAYS-KPI-2026-07-10 :: desktop index row leads with the real WizePlays record (wl/winPct/units from wpRecord). */}
-            <div className="idx lead"><div className="k">WizePlays</div><div className="v num">{wl}</div><div className="chg">{wpRecord && (wpRecord.wins+wpRecord.losses+wpRecord.pushes)>0 ? "W-L-P · all graded" : "tracking"}</div></div>
-            <div className="idx green"><div className="k">Win Rate</div><div className="v num">{winPct != null ? `${winPct}%` : "—"}</div><div className="chg">{wpRecord ? `${wpRecord.wins+wpRecord.losses+wpRecord.pushes} graded` : "tracking"}</div></div>
-            <div className="idx teal"><div className="k">Units</div><div className="v num">{units != null ? `${units >= 0 ? "+" : ""}${units.toFixed(1)}u` : "—"}</div><div className="chg">all plays</div></div>
+            {/* WZ-FBRECORD-STRIP-2026-08-06 :: on football the first three cards read the MODEL's graded
+                record instead of WizePlays. Same cards, same classes, different source. MLB is untouched. */}
+            {isFb
+              ? <>
+                  <div className="idx lead"><div className="k">Model</div><div className="v num">{modelRec ? `${modelRec.wins}-${modelRec.losses}` : "—"}</div><div className="chg">{modelRec ? "W-L · graded" : "tracking"}</div></div>
+                  <div className="idx green"><div className="k">Win Rate</div><div className="v num">{modelRec ? `${Math.round(modelRec.winPct)}%` : "—"}</div><div className="chg">{modelRec ? `${modelRec.graded} graded` : "tracking"}</div></div>
+                  <div className="idx teal"><div className="k">Units</div><div className="v num">{(modelRec && modelRec.units != null) ? `${modelRec.units >= 0 ? "+" : ""}${modelRec.units.toFixed(1)}u` : "—"}</div><div className="chg">all picks</div></div>
+                </>
+              : <>
+                  <div className="idx lead"><div className="k">WizePlays</div><div className="v num">{wl}</div><div className="chg">{wpRecord && (wpRecord.wins+wpRecord.losses+wpRecord.pushes)>0 ? "W-L-P · all graded" : "tracking"}</div></div>
+                  <div className="idx green"><div className="k">Win Rate</div><div className="v num">{winPct != null ? `${winPct}%` : "—"}</div><div className="chg">{wpRecord ? `${wpRecord.wins+wpRecord.losses+wpRecord.pushes} graded` : "tracking"}</div></div>
+                  <div className="idx teal"><div className="k">Units</div><div className="v num">{units != null ? `${units >= 0 ? "+" : ""}${units.toFixed(1)}u` : "—"}</div><div className="chg">all plays</div></div>
+                </>}
             <div className="idx purple"><div className="k">Edges Live</div><div className="v num">{edgeCount}</div><div className="chg">{market.toUpperCase()} board · {rows.length} shown</div></div>
           </div>
 

@@ -538,16 +538,22 @@ export default function HomePage(){
   // WZ-BOARDSUM-CUT-2026-07-20 :: kpiHas / kAvg / kBest removed with the .sum strip they fed.
   // kBest was already dead. Nothing else in the file reads them.
   // Real tracked-record stats: high-conviction ROI when present, honest beat-close CLV.
-  const perfStats=(()=>{ const d=perf; if(!d) return null;
-    const hi=d.byConfidence&&d.byConfidence.HIGH?d.byConfidence.HIGH:null;
-    const roi=(hi&&hi.roi!=null)?hi.roi:(d.roi!=null?d.roi:null);
-    const roiLbl=(hi&&hi.roi!=null)?"high-conv":"all picks";
-    let w=0,l=0; if(d.byConfidence){ for(const k in d.byConfidence){ const b=d.byConfidence[k]; if(b){ w+=b.wins||0; l+=b.losses||0; } } }
-    const winRate=(w+l)>0?(w/(w+l)*100):null;
-    const graded=d.n!=null?d.n:((w+l)||null);
-    const rng=(d.ranges&&(d.ranges.Season||d.ranges[Object.keys(d.ranges)[0]]))||null;
-    const clvNum=(rng&&typeof rng.clv==="number")?rng.clv:(typeof d.clv==="number"?d.clv:null);
-    return { roi, roiLbl, winRate, graded, clv:clvNum };
+  // WZ-FBRECORD-STRIP-2026-08-06 :: the model's OWN graded record, straight off
+  // /api/performance/<sport>. REPLACES the perfStats block that used to sit here computing
+  // roi/roiLbl/clv and was rendered nowhere in this file -- dead since it was written. One
+  // source, and this one is on screen.
+  //   `overall` is the qualified headline bucket the endpoint already finalizes (wins, losses,
+  //   units, winPct). Football rows carry null confidence, which isQualified() maps to NEUTRAL,
+  //   so every graded NFL/CFB pick counts -- verified against performance.js before building.
+  // NO MINIMUM SAMPLE, at Master G's direction: the record starts the day it starts. The strip
+  // prints "<n> graded" under the percentage, so it always discloses how thin it is. The only
+  // guard is total > 0 -- an ungraded league renders nothing rather than a fabricated 0-0.
+  const modelRec=(()=>{ const o=perf&&perf.overall; if(!o) return null;
+    const total=(o.wins||0)+(o.losses||0); if(total<1) return null;
+    return { wins:o.wins||0, losses:o.losses||0,
+      units:(typeof o.units==="number")?o.units:null,
+      winPct:(o.winPct!=null)?o.winPct:Math.round((o.wins/total)*100),
+      graded:total };
   })();
 
   // WZ-ONEBOARD-CONNECT-2026-07-20 :: ONE CARD, NOT TWO STACKED CARDS.
@@ -646,11 +652,21 @@ export default function HomePage(){
               : <div className="herocar"><div className="hslide"><div className="hero" style={{textAlign:"center"}}><div className="eb">BEST EDGE</div><div className="heh">Edges post soon</div><div className="hes">Top edges appear ~2 hrs before first pitch.</div></div></div></div>)
           : <Gate title="Today's top edge is locked" navigate={navigate}/>}
         {/* WZ-EDGES-WIZEPLAYS-KPI-2026-07-10 :: Edges top strip leads with the real, fully-graded WizePlays record (live from expert_picks). Shows for any signed-in user once graded; the >0 guard means nothing is ever fabricated. */}
-        {wpRecord && (wpRecord.wins+wpRecord.losses+wpRecord.pushes)>0 && <div className="kpis">
+        {/* WZ-FBRECORD-STRIP-2026-08-06 :: football shows the MODEL's graded record instead. MLB keeps
+            WizePlays deliberately -- its model record was replaced after the earlier numbers problem, so
+            swapping MLB back would undo that decision. Same .kpis markup, different source, one strip
+            on screen either way. */}
+        {(sport==="nfl"||sport==="cfb")
+          ? (modelRec && <div className="kpis">
+              <div className="kpi"><div className="k">MODEL</div><div className="v g">{modelRec.wins}{"\u2013"}{modelRec.losses}</div><div className="ksub">W{"\u2013"}L</div></div>
+              <div className="kpi"><div className="k">WIN RATE</div><div className="v">{Math.round(modelRec.winPct)}%</div><div className="ksub">{modelRec.graded} graded</div></div>
+              <div className="kpi"><div className="k">UNITS</div><div className={"v "+((modelRec.units!=null&&modelRec.units>=0)?"g":"red")}>{modelRec.units!=null?((modelRec.units>=0?"+":"")+modelRec.units.toFixed(1)+"u"):"\u2014"}</div><div className="ksub">all picks</div></div>
+            </div>)
+          : (wpRecord && (wpRecord.wins+wpRecord.losses+wpRecord.pushes)>0 && <div className="kpis">
           <div className="kpi"><div className="k">WIZEPLAYS</div><div className="v g">{wpRecord.wins}{"\u2013"}{wpRecord.losses}</div><div className="ksub">{wpRecord.pushes?"\u2013"+wpRecord.pushes+" push \u00b7 ":""}W{"\u2013"}L{"\u2013"}P</div></div>
           <div className="kpi"><div className="k">WIN RATE</div><div className="v">{(wpRecord.wins+wpRecord.losses)>0?Math.round(wpRecord.wins/(wpRecord.wins+wpRecord.losses)*100)+"%":"\u2014"}</div><div className="ksub">{wpRecord.wins+wpRecord.losses+wpRecord.pushes} graded</div></div>
           <div className="kpi"><div className="k">UNITS</div><div className={"v "+(wpRecord.units>=0?"g":"red")}>{wpRecord.units>=0?"+":""}{wpRecord.units.toFixed(1)}u</div><div className="ksub">all plays</div></div>
-        </div>}
+        </div>)}
 
       <div id="content">
 
