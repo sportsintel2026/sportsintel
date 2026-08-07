@@ -2134,10 +2134,36 @@ router.get("/fbcalib", async (req, res) => {
       if (batch.length < PAGE) break;
     }
 
+    // WZ-FBCALIB-PHASE-2026-08-06 :: SPLIT BY SEASON PHASE. Until now this pooled preseason and
+    // regular-season rows, and by the Sept 9 opener that pool would have been ~45 preseason rows --
+    // past MIN_N 40 -- so the first NFL calibration read would have described preseason before a
+    // regular-season snap was played. Preseason outcomes are a poor proxy for regular-season
+    // strength (starters play a quarter, backups decide the result), and the ratings cannot see the
+    // part of preseason that IS informative -- nflDataSource builds a rating from gp/pf/pa only, so
+    // there is no injury, depth-chart or snap-count channel. Splitting does NOT discard preseason:
+    // it makes "is preseason predictive?" an answerable question instead of an invisible one.
+    // Phase comes from nflPhaseFor, the SAME function the board uses, so the calibration and the
+    // board can never disagree about what preseason is. CFB has no preseason at all -- cfbEdges
+    // hardcodes phase "regular" -- so every CFB row is regular by construction.
+    // LIMIT worth knowing: game_date is an ET DATE, not a timestamp, so this is exact only while no
+    // preseason and regular game share a calendar date. NFL 2026 clears that easily (preseason ends
+    // Aug 29, regular opens Sept 9).
+    const { nflPhaseFor } = require("../services/nflEdges")._internal;
+    const phaseOf = (r) => (league === "cfb" ? "regular" : nflPhaseFor(r.game_date));
+    const phaseCounts = { preseason: 0, regular: 0 };
+    for (const r of rows) phaseCounts[phaseOf(r)]++;
+    // Default REGULAR: a calibration read must never be dominated by preseason by accident.
+    // ?phase=preseason reads preseason alone; ?phase=all restores the old pooled behaviour
+    // explicitly, so the pooled number is still reachable but never the default.
+    const wantPhase = req.query.phase === "preseason" ? "preseason"
+      : req.query.phase === "all" ? "all" : "regular";
+    const scanned = rows.length;
+    const phaseRows = wantPhase === "all" ? rows : rows.filter((r) => phaseOf(r) === wantPhase);
+
     const markets = {};
     for (const m of MARKETS) markets[m] = { pending: 0, settled: 0, pushes: 0, firstDate: null, lastDate: null, bands: {} };
     let sDiffSum = 0, sN = 0, tDiffSum = 0, tN = 0; // bias accumulators
-    for (const r of rows) {
+    for (const r of phaseRows) {
       const s = markets[r.market];
       if (!s) continue;
       if (r.game_date) {
@@ -2163,7 +2189,11 @@ router.get("/fbcalib", async (req, res) => {
       spreadMargin: sN ? { n: sN, meanProjMinusActual: Math.round((sDiffSum / sN) * 100) / 100, note: "mean(projected home margin - actual home margin). Persistent >0 = model over-favors home; subtract it as a margin bias." } : { n: 0, note: "no settled spread shadows yet" },
       total: tN ? { n: tN, meanProjMinusActual: Math.round((tDiffSum / tN) * 100) / 100, note: "mean(projected total - actual total). Once n is meaningful, set the football TOTAL_MEAN_ADJ to the NEGATIVE of this (same recipe as MLB totalsbias)." } : { n: 0, note: "no settled total shadows yet" },
     };
-    res.json({ token: "WZ-FBALL-CALIB-2026-07-17", league, generatedAt: new Date().toISOString(), rowsScanned: rows.length, markets, bias });
+    res.json({ token: "WZ-FBALL-CALIB-2026-07-17", league, generatedAt: new Date().toISOString(),
+      // WZ-FBCALIB-PHASE-2026-08-06 :: which phase this read covers, and what the full pull held.
+      // phaseCounts is always the UNFILTERED census, so nothing is hidden by the default.
+      phase: wantPhase, phaseCounts, rowsScanned: scanned, rowsUsed: phaseRows.length,
+      markets, bias });
   } catch (err) {
     res.status(500).json({ token: "WZ-FBALL-CALIB-2026-07-17", error: String(err && err.message || err) });
   }
