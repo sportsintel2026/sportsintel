@@ -229,21 +229,44 @@ async function runNFLSlate({ season = null, weeks = 1, phase = null } = {}) {
   }
 
   // ── Week filter (Option B: anchor to earliest upcoming game, roll forward) ──
+  // WZ-FBHORIZON-2026-08-06 :: the board may not publish a slate the recorder will not log.
+  // recordFootballPredictions drops any game further out than FOOTBALL_IMMINENT_DAYS, so with an
+  // empty preseason feed the board fell through to regular season and published 16 games ~35 days
+  // out that the recorder silently dropped -- board and recorder disagreeing again, the same split
+  // WZ-FBRECORD-MATCHES-BOARD-2026-08-03 closed from the other side. The recorder owns the number;
+  // this reads it, so the two cannot drift.
+  // DELETED with this change: the `upcoming.length ? upcoming : times` fallback that anchored to a
+  // PAST game so the board would never be empty. A board showing finished games is worse than a
+  // board that reports it has none, and boardHorizon now carries the reason.
+  const { FOOTBALL_IMMINENT_DAYS } = require("./predictionTracker");
   let weekWindow = null;
+  let boardHorizon = null;
   if (weeks > 0 && events.length) {
     const DAY = 86400000;
     const times = events
       .map(e => ({ e, t: e.commenceTime ? new Date(e.commenceTime).getTime() : null }))
       .filter(x => x.t != null);
-    // Prefer games still upcoming; if none are upcoming (deep offseason), fall back
-    // to the earliest game in the feed so the board is never empty.
     const upcoming = times.filter(x => x.t >= now);
-    const pool = upcoming.length ? upcoming : times;
-    if (pool.length) {
-      const anchor = Math.min(...pool.map(x => x.t));
-      const windowEnd = anchor + DAY * 7 * weeks;
-      events = times.filter(x => x.t >= anchor && x.t < windowEnd).map(x => x.e);
-      weekWindow = { fromISO: new Date(anchor).toISOString(), toISO: new Date(windowEnd).toISOString(), weeks };
+    if (!upcoming.length) {
+      events = [];
+      boardHorizon = { published: false, reason: "no upcoming games in the feed", horizonDays: FOOTBALL_IMMINENT_DAYS, nextGameISO: null, daysOut: null };
+    } else {
+      const anchor = Math.min(...upcoming.map(x => x.t));
+      const daysOut = Math.round(((anchor - now) / DAY) * 10) / 10;
+      if (daysOut > FOOTBALL_IMMINENT_DAYS) {
+        events = [];
+        boardHorizon = { published: false, reason: "next game is beyond the publish horizon", horizonDays: FOOTBALL_IMMINENT_DAYS, nextGameISO: new Date(anchor).toISOString(), daysOut };
+      } else {
+        // Clamp the far edge too: a slate anchored 6 days out would otherwise reach 13 days and
+        // publish a tail the recorder still drops. Every published game sits inside the horizon.
+        // Math.max(anchor + 1, ...) because the game-filter below is `t < windowEnd`: a slate whose
+        // anchor sits EXACTLY on the horizon would otherwise clamp windowEnd to the anchor instant
+        // and exclude the very game it anchored on -- published:true over an empty board.
+        const windowEnd = Math.max(anchor + 1, Math.min(anchor + DAY * 7 * weeks, now + DAY * FOOTBALL_IMMINENT_DAYS));
+        events = times.filter(x => x.t >= anchor && x.t < windowEnd).map(x => x.e);
+        weekWindow = { fromISO: new Date(anchor).toISOString(), toISO: new Date(windowEnd).toISOString(), weeks };
+        boardHorizon = { published: true, reason: null, horizonDays: FOOTBALL_IMMINENT_DAYS, nextGameISO: new Date(anchor).toISOString(), daysOut };
+      }
     }
   }
 
@@ -303,6 +326,8 @@ async function runNFLSlate({ season = null, weeks = 1, phase = null } = {}) {
   return {
     season: ratings.season != null ? ratings.season : season,
     weekWindow,
+    // WZ-FBHORIZON-2026-08-06 :: why the board is empty when it is empty, for the UI to say so.
+    boardHorizon,
     phase: { selected: selectedPhase, available: availablePhases },
     ratingsMeta: {
       loaded: ratingsLoaded,
