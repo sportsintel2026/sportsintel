@@ -1948,6 +1948,9 @@ router.get("/nfl", gatePicks, async (req, res) => {
       provisional: true,          // ← dashboard reads this to show the "in training" banner
       ratingsSeed: slate.ratingsMeta,
       weekWindow: slate.weekWindow,   // the slate window the board is filtered to
+      // WZ-FBHORIZON-2026-08-06 :: null games + boardHorizon.published false means the board is
+      // deliberately empty; reason/nextGameISO/daysOut tell the UI what to say instead of blank.
+      boardHorizon: slate.boardHorizon,
       phase: slate.phase,             // { selected, available } → drives Preseason|Regular sub-tabs
       marketByGame,                   // per-game Market Read + best prices (line shopping)
       marketMovers: movers,           // line-movement history (fills in as ticks accumulate)
@@ -2090,6 +2093,9 @@ router.get("/cfb", gatePicks, async (req, res) => {
       provisional: true,
       ratingsSeed: slate.ratingsMeta,
       weekWindow: slate.weekWindow,
+      // WZ-FBHORIZON-2026-08-06 :: null games + boardHorizon.published false means the board is
+      // deliberately empty; reason/nextGameISO/daysOut tell the UI what to say instead of blank.
+      boardHorizon: slate.boardHorizon,
       phase: slate.phase,
       marketByGame,
       marketMovers: movers,

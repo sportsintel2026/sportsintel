@@ -1076,7 +1076,7 @@ async function recordNbaTeamPredictions(predictions) {
 // actual picks (the positive-edge `value:true` side) for ML/spread/total to
 // model_predictions as league:"nfl" so they auto-grade once games go final, building
 // a graded track record to calibrate against. Two deliberate gates:
-//   • IMMINENCE — only games kicking off within NFL_IMMINENT_DAYS are logged. Off-
+//   • IMMINENCE — only games kicking off within FOOTBALL_IMMINENT_DAYS are logged. Off-
 //     season / far-future Week-1 lines are 60+ days out, so this is a NO-OP until the
 //     season is near; that prevents logging stale far-future picks (the pick is then
 //     always snapshotted against ratings current at ~game week, not months stale).
@@ -1086,7 +1086,12 @@ async function recordNbaTeamPredictions(predictions) {
 // NOTE: NFL has no conviction tiering yet, so confidence/conviction are null — the
 // calibration read groups by edge bucket. Grading matches by team-name+date (the
 // Odds-API event id ≠ ESPN scoreboard id), so the matchup string is load-bearing.
-const NFL_IMMINENT_DAYS = 7;
+// WZ-FBHORIZON-2026-08-06 :: renamed from NFL_IMMINENT_DAYS — it has always governed CFB too
+// (recordCFBPredictions routes through the same function), so the NFL- prefix was a misnomer.
+// EXPORTED because it is now the SSOT for the football BOARD horizon as well: runNFLSlate and
+// runCFBSlate refuse to publish a slate whose first game sits beyond this, so the board can
+// never show a game this recorder will silently drop. One number, one meaning, no drift.
+const FOOTBALL_IMMINENT_DAYS = 7;
 // WZ-FBALL-CFB-SHADOW-2026-07-17 :: generalized over league ("nfl"|"cfb") — NFL and CFB record
 // identically (same predictGame output shape), so one implementation serves both; thin per-league
 // wrappers below preserve the existing call sites. Consumes runNFLSlate()/runCFBSlate() output.
@@ -1099,7 +1104,7 @@ async function recordFootballPredictions(slate, league = "nfl") {
     if (g.dataQuality !== "rated") continue;            // model didn't run on ratings → skip
     if (!g.commenceTime) continue;
     const daysOut = (new Date(g.commenceTime).getTime() - now) / 864e5;
-    if (daysOut > NFL_IMMINENT_DAYS || daysOut < 0) continue; // not within the pre-game window
+    if (daysOut > FOOTBALL_IMMINENT_DAYS || daysOut < 0) continue; // not within the pre-game window
     const gameDate = etDate(g.commenceTime) || getEasternDate(0);
     const matchup = g.matchup;
 
@@ -1206,7 +1211,7 @@ async function recordFootballPredictions(slate, league = "nfl") {
   for (const g of slate.games) {
     if (!g.commenceTime) continue;
     const daysOut = (new Date(g.commenceTime).getTime() - now) / 864e5;
-    if (daysOut > NFL_IMMINENT_DAYS || daysOut < 0) continue; // pre-game snapshots only
+    if (daysOut > FOOTBALL_IMMINENT_DAYS || daysOut < 0) continue; // pre-game snapshots only
     const gameDate = etDate(g.commenceTime) || getEasternDate(0);
     const matchup = g.matchup;
     const ml = g.moneyline, sp = g.spread, tot = g.total;
@@ -2093,4 +2098,4 @@ async function voidUnmatchedProps() {
   return { finalPropsChecked: finalChecked, voided, details };
 }
 
-module.exports = { recordPredictions, recordTotalBasesShadow, recordStrikeoutShadow, recordHitsShadow, recordNbaPropPredictions, recordNbaTeamPredictions, recordNFLPredictions, recordCFBPredictions, gradeFinishedGames, gradeNbaProp, captureClosingLines, captureNbaClosingLines, captureOddsTicks, voidUnmatchedProps };
+module.exports = { FOOTBALL_IMMINENT_DAYS, recordPredictions, recordTotalBasesShadow, recordStrikeoutShadow, recordHitsShadow, recordNbaPropPredictions, recordNbaTeamPredictions, recordNFLPredictions, recordCFBPredictions, gradeFinishedGames, gradeNbaProp, captureClosingLines, captureNbaClosingLines, captureOddsTicks, voidUnmatchedProps };
