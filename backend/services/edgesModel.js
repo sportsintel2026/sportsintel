@@ -1468,6 +1468,26 @@ function describeMoneyline(side, ctx) {
   return `${lead ? lead + " " : ""}Lean rests on ${joined}.`;
 }
 
+// WZ-RLREASON-2026-08-08 :: run-line reads. Until now `reason` was written for moneyline and
+// totals only (edges.js sets it in exactly 3 places), so every run-line row on the board fell
+// back to the bare "WHY THIS PICK" label with nothing behind it.
+//   Deliberately NARROWER than describeMoneyline: that one can cite ERA and OPS because the
+//   moneyline model consumes them. The run-line model does not have a starter/bats channel, so
+//   this states only what it actually knows -- the cover probability, the market's implied
+//   number, the line, and the price. No invented narrative.
+//   marketProb is derived the same way as moneyline (see mlMarket, ~line 1771): model - edge.
+function describeRunLine(ctx) {
+  const { coverProb, marketProb, teamAbbr, line, odds } = ctx;
+  if (coverProb == null) return null;
+  const sign = line != null ? (line > 0 ? `+${r1(line)}` : `${r1(line)}`) : null;
+  const lead = sign != null
+    ? `Model has ${teamAbbr} ${sign} covering ${pct(coverProb)}% of the time`
+    : `Model has ${teamAbbr} covering ${pct(coverProb)}% of the time`;
+  const vs = marketProb != null ? ` vs the market's ${marketProb}%` : "";
+  const at = odds != null ? ` at ${odds > 0 ? "+" : ""}${odds}` : "";
+  return `${lead}${vs}${at}.`;
+}
+
 // ── Bullpen fatigue → totals (EXPERIMENTAL, live 2026-06-07, small + capped) ──
 // A gassed pen tends to give up more late runs than its season ERA implies.
 // This is UNCALIBRATED — the magnitudes below are a deliberately small starting
@@ -1893,6 +1913,10 @@ async function calculateGameEdges(game, oddsForGame) {
       homeConviction: homeRLEdge != null ? cvHomeML.tier : null,
       awayConvictionScore: awayRLEdge != null ? cvAwayML.score : null,
       homeConvictionScore: homeRLEdge != null ? cvHomeML.score : null,
+      // WZ-RLREASON-2026-08-08 :: ADDITIVE. Two new fields; nothing above is touched. Same
+      // model - edge market derivation the moneyline reason uses.
+      awayReason: describeRunLine({ coverProb: awayCoverProb, marketProb: (awayCoverProb != null && awayRLEdge != null) ? Math.round((awayCoverProb - awayRLEdge) * 100) : null, teamAbbr: game.awayAbbr, line: awayRLLine, odds: awayRLOdds }),
+      homeReason: describeRunLine({ coverProb: homeCoverProb, marketProb: (homeCoverProb != null && homeRLEdge != null) ? Math.round((homeCoverProb - homeRLEdge) * 100) : null, teamAbbr: game.homeAbbr, line: homeRLLine, odds: homeRLOdds }),
     },
   };
 }
