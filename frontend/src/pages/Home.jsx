@@ -489,12 +489,18 @@ export default function HomePage(){
   ].sort(byWinProb).map(toBoard) : []);
   const previewLabel = pv&&pv.date ? fmtSlate(pv.date).toUpperCase() : "";
   const boardDate = fmtSlateFull(e.date || todayISO());
-  // WZ-WINNERS-V2-2026-07-04 :: Best Plays carousel = winner+value plays first (our
-  // winner AND the books underpay it), then the top pure-value plays. One card zone.
-  const wvItems = oneSidePerGame(mlAdj||[]).filter(x=>(x.edge??0)>0 && (x.modelProb??0)>=0.5).sort((a,b)=>(b.edge||0)-(a.edge||0)).slice(0,3).map(x=>({...toBoard(x),_wv:true}));
-  const wvKeys = new Set(wvItems.map(h=>h.k));
-  const evItems = oneSidePerGame(allAdj).filter(x=>(x.edge??0)>0).sort((a,b)=>(b.edge||0)-(a.edge||0)).map(toBoard).filter(h=>!wvKeys.has(h.k));
-  const heroItems = [...wvItems, ...evItems].slice(0,4);
+  // WZ-HERORANK-2026-08-07 :: ONE RANKING. The hero is now literally the #1 row of the same
+  // ranked pool the board list uses (`hero` = pool[0], line ~281), not a separately-selected
+  // moneyline. The old rule was moneyline-only, filtered at modelProb >= 0.50, sorted by edge --
+  // so any coin flip with a positive edge could be crowned "TOP PLAY". That is exactly how a
+  // 50.5% ML was headlining while a 66% run line sat in the list underneath it, and a subscriber
+  // reading the screen top-to-bottom saw the strongest number contradicted by the label above it.
+  // The list now starts at index 1 so #1 is never shown twice.
+  // NOTE: the DESKTOP board has always used `hero` (see the HomeDesktop props, line ~429) --
+  // only mobile diverged. This closes that gap rather than inventing a third rule.
+  // DELETED: wvItems / wvKeys / evItems. Their only consumer was heroItems; keeping them would
+  // leave a second, contradicting ranking alive next to the one that wins.
+  const heroItems = hero ? [toBoard(hero)] : [];
   const moverItems = movers.map((m)=>{return {p:edgeLabel(m),logo:edgeTeam(m)||(abbrById[m.gameId]?abbrById[m.gameId].h:""),g:(abbrById[m.gameId]?abbrById[m.gameId].a+" @ "+abbrById[m.gameId].h:m.matchup),mv:(m._open!=null&&m._now!=null&&m._delta!=null)?[formatOdds(m._open),formatOdds(m._now),(m._delta>0?"up":m._delta<0?"dn":"")]:null,odds:formatOdds(m.odds),model:m.modelProb!=null?Math.round(m.modelProb*100):null,delta:m._delta};});
 
   // WZ-LIVETICKER-2026-06-27 :: ticker = live scores (the backbone) with injury + late-scratch
@@ -840,7 +846,9 @@ function HeroSlide({h,i,navigate,sport,rolled}){ const lg=(SPORTS[sport]||SPORTS
   return (<div className="hslide"><div className="hero" onClick={()=>{ if(hasGameDetail(sport)&&h.gameId) navigate(`/game/${sport}/${h.gameId}`); }}>
     {/* WZ-MARQUEE-HERO-2026-07-08 :: Top Play as the marquee -- big glowing win% over the infield diamond; odds/conviction/line-move below; full breakdown one tap away */}
     <div className="diamond"/>
-    <div className="heyebrow">{h._wv?(rolled?"TOP PLAY \u00b7 WINNER + VALUE \u00b7 TOMORROW":"TOP PLAY \u00b7 WINNER + VALUE"):(rolled?"TOP PLAY \u00b7 TOMORROW":"TOP PLAY \u00b7 #1 EDGE TODAY")}</div>
+    {/* WZ-HERORANK-2026-08-07 :: the eyebrow makes a claim the number now actually supports.
+        `_wv` is gone with the old winner+value pool, so the only branch left is the rolled slate. */}
+    <div className="heyebrow">{rolled?"TOMORROW\u0027S BEST NUMBER":"TONIGHT\u0027S BEST NUMBER"}</div>
     <div className="hteam">{h.p}{h.mk&&<span className="hmk">{h.mk}</span>}</div>
     <div className="hmatch">{h.g}{h.starts?" \u00b7 "+h.starts:""}</div>
     <div className="hbig">{h.model!=null?h.model+"%":"\u2014"}</div>
