@@ -783,6 +783,8 @@ router.get("/mlb", gatePicks, async (req, res) => {
           confidence: rl.awayConfidence,
           conviction: rl.awayConviction,
           convictionScore: rl.awayConvictionScore,
+          // WZ-RLREASON-2026-08-08 :: carry the run-line read through, same as moneyline (line ~676).
+          reason: rl.awayReason || null,
           time: ge.game.time,
           status: sourceGame?.status,
           inning: sourceGame?.inning,
@@ -804,6 +806,8 @@ router.get("/mlb", gatePicks, async (req, res) => {
           confidence: rl.homeConfidence,
           conviction: rl.homeConviction,
           convictionScore: rl.homeConvictionScore,
+          // WZ-RLREASON-2026-08-08 :: carry the run-line read through, same as moneyline (line ~676).
+          reason: rl.homeReason || null,
           time: ge.game.time,
           status: sourceGame?.status,
           inning: sourceGame?.inning,
