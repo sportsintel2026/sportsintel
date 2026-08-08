@@ -696,7 +696,11 @@ export default function HomePage(){
               {/* WZ-BOARD-NEVER-EMPTY-2026-07-08 :: today's board when it has games (tomorrow preview below); when today is empty, tomorrow IS the board -- never blank */}
               {boardItems.length>0
                 ? <>
-                    <div className="ufboard top">{boardItems.map((d,i)=>{const id=d.gameId+d.cat+i;return openId===id?<BoardRow key={id} d={d} i={i} open={true} onToggle={()=>setOpenId(null)} navigate={navigate} sport={sport}/>:<BoardCardCompact key={id} d={d} i={i} sport={sport} onClick={()=>setOpenId(id)}/>;})}
+                    {/* WZ-BOARDROWS-2026-08-07 :: the hero IS boardItems[0] (see heroItems, line ~503),
+                        so the list starts at index 1 -- the top play is no longer printed twice. slice(1)
+                        only; the ORDER and CONTENTS of boardItems are untouched, and `i` still carries the
+                        true rank because the numeral below prints i+2. */}
+                    <div className="ufboard top">{boardItems.slice(1).map((d,i)=>{const id=d.gameId+d.cat+i;return openId===id?<BoardRow key={id} d={d} i={i} open={true} onToggle={()=>setOpenId(null)} navigate={navigate} sport={sport}/>:<BoardCardCompact key={id} d={d} i={i} sport={sport} onClick={()=>setOpenId(id)}/>;})}
                       {wpStrip}</div>
                     {previewItems.length>0 && <>
                       <div className="tmrwdiv"><span className="tln"/><span className="tlbl">TOMORROW{previewLabel&&<small>{previewLabel}</small>}</span><span className="tln r"/></div>
@@ -979,7 +983,10 @@ function BoardCardCompact({d,i,sport,onClick}){
     <>
       <div className={"ufcard"+(isTot?" tot":"")} onClick={onClick}>
         <div className="ufmid">
-          <div className="l1"><span className="ufmatch">{d.a[0]} @ {d.h[0]}</span>{d.starts&&<span className="uftime">{d.starts}</span>}</div>
+          {/* WZ-BOARDROWS-2026-08-07 :: rank numeral. The list is sliced from index 1, so this row's
+              true position is i+2. Numbering is honest here because the order genuinely is the
+              information -- boardItems is ranked model% desc, then edge. */}
+          <div className="l1"><span className="ufrank">{i+2}</span><span className="ufmatch">{d.a[0]} @ {d.h[0]}</span>{d.starts&&<span className="uftime">{d.starts}</span>}</div>
           <div className="l2"><span className="ufp" style={{color:accent}}>{pkHead}</span>{pkTail&&<span className="ufpl" style={{color:accent}}>{pkTail}</span>}{d.mk&&<span className="ufmk">{d.mk}</span>}{d.odds&&<span className="ufod">{d.odds}</span>}</div>
         </div>
         <div className="ufrt">
@@ -989,9 +996,15 @@ function BoardCardCompact({d,i,sport,onClick}){
           </div>
         </div>
       </div>
+      {/* WZ-BOARDROWS-2026-08-07 :: the read now shows its first line instead of hiding entirely
+          behind a tap -- a subscriber scrolling the card sees reasoning without opening anything.
+          d.why is the deterministic read already on the row (BoardRow passes it as baseRead). The
+          strip still toggles the full breakdown; when there is no read, it falls back to the old
+          bare label rather than rendering an empty line. */}
       <div className="ufstrip" onClick={onClick}>
-        <span className="ufstriptx">WHY THIS PICK</span>
-        <span className="ufstripch">{"\u2304"}</span>
+        {d.why
+          ? <><span className="ufwhy">{d.why}</span><span className="ufstripch">{"\u2304"}</span></>
+          : <><span className="ufstriptx">WHY THIS PICK</span><span className="ufstripch">{"\u2304"}</span></>}
       </div>
     </>
   );
@@ -1504,7 +1517,12 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
    and Full matchup breakdown. Replaced with an explicit full-width tap
    strip. Compact card is swapped for BoardRow when open, so this never
    needs an open state. */
-.ufstrip{display:flex;align-items:center;justify-content:center;gap:6px;
+/* WZ-BOARDROWS-2026-08-07 :: strip goes left-aligned so the read line reads as a sentence rather
+   than a centered label; .ufwhy truncates to one line so a long read can never change row height.
+   .ufrank is the list position, set in the mono face at label scale so it reads as data. */
+.ufrank{font-family:var(--mono);font-size:10px;font-weight:600;color:var(--mut2);flex:none;min-width:13px}
+.ufwhy{flex:1;min-width:0;font-family:var(--ui);font-size:11.5px;line-height:1.45;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ufstrip{display:flex;align-items:center;justify-content:flex-start;gap:8px;
   padding:7px 13px 10px;border-bottom:1px solid var(--line);cursor:pointer}
 .ufstrip:last-child{border-bottom:0}
 .ufstriptx{font-family:var(--mono);font-size:9px;letter-spacing:.7px;color:var(--mut2)}
