@@ -687,7 +687,11 @@ export default function HomePage(){
         {/* WZ-WINNERS-REMOVED-2026-07-05 :: toggle + Winners view removed; Edge Board only */}
         {face==="edges" && <>
         <div className="boardhd">{/* WZ-WIZEBOARD-BAND-2026-07-08 :: full-width serif band + glow + winners/date subline */}
-          <span className="bht"><span className="bhwize">Top</span>Picks</span>{/* WZ-TOPPICKS-2026-08-03 :: board band renamed WizeBoard -> TopPicks. TEXT ONLY -- .bht/.bhwize CSS untouched, so the two-tone stays exactly as it was (white first word, gold second). Class name bhwize kept deliberately: renaming it would touch the stylesheet for zero visual gain. */}
+          {/* WZ-BOARDCOPY-2026-08-07 :: band reads TONIGHT'S CARD. "TopPicks" competed with the
+              hero above it for the same claim; the hero is the top play, this is the card. TEXT
+              ONLY -- .bht/.bhwize CSS untouched, so the two-tone still renders (white first word,
+              gold second): TONIGHT'S white, CARD gold. Class name bhwize kept deliberately. */}
+          <span className="bht"><span className="bhwize">TONIGHT{"\u2019"}S </span>CARD</span>{/* WZ-TOPPICKS-2026-08-03 :: board band renamed WizeBoard -> TopPicks. TEXT ONLY -- .bht/.bhwize CSS untouched, so the two-tone stays exactly as it was (white first word, gold second). Class name bhwize kept deliberately: renaming it would touch the stylesheet for zero visual gain. */}
           <div className="bhglow"/>
           <div className="bhsub">{(isTomorrowMain?previewItems.length:boardItems.length)>0?(isTomorrowMain?previewItems.length:boardItems.length)+" winners":"Ranked by win %"}{(isTomorrowMain?("Tomorrow"+(previewLabel?", "+previewLabel:"")):boardDate)&&<> <span className="bhd">{"\u00b7"}</span> {isTomorrowMain?("Tomorrow"+(previewLabel?", "+previewLabel:"")):boardDate}</>}</div>
         </div>
@@ -865,7 +869,10 @@ function HeroSlide({h,i,navigate,sport,rolled}){ const lg=(SPORTS[sport]||SPORTS
     <div className="hmatch">{h.g}{h.starts?" \u00b7 "+h.starts:""}</div>
     <div className="hbig">{h.model!=null?h.model+"%":"\u2014"}</div>
     <div className="hbiglbl">MODEL TO WIN</div>
-    {h.edge>0&&<span className="hval">+{Number(h.edge).toFixed(1)}% VALUE</span>}
+    {/* WZ-BOARDCOPY-2026-08-07 :: "EDGE", not "VALUE". The hero pill and the list rows were
+        printing the same quantity under two different words on one screen. One concept, one name.
+        TEXT ONLY -- .hval CSS untouched. */}
+    {h.edge>0&&<span className="hval">+{Number(h.edge).toFixed(1)}% EDGE</span>}
     <div className="hsplit">
       <div className="hcell"><div className="v">{mv}</div><div className="k">ODDS / MOVE</div></div>
       <div className="hcell"><div className="v">{tier}</div><div className="k">CONVICTION</div></div>
