@@ -500,7 +500,15 @@ export default function HomePage(){
   // only mobile diverged. This closes that gap rather than inventing a third rule.
   // DELETED: wvItems / wvKeys / evItems. Their only consumer was heroItems; keeping them would
   // leave a second, contradicting ranking alive next to the one that wins.
-  const heroItems = hero ? [toBoard(hero)] : [];
+  // WZ-HEROMIRROR-2026-08-07 :: the hero mirrors the VISIBLE list, row one. The board the user
+  // scrolls is `boardItems` (line ~478, bestPerGame -> one row per game, sorted model% desc then
+  // edge) and it is rendered by the BoardRow map at line ~691. `hero`/`pool` (line ~281) is a
+  // DIFFERENT pipeline sorted by conviction tier, so pointing the card at pool[0] still let the
+  // card and the list disagree -- they matched only by coincidence. One list, one order.
+  // boardItems is already toBoard'd, so no conversion here.
+  // NOTE: this changes NOTHING about which plays are produced or how they rank. boardItems is
+  // untouched; the card just reads its first row.
+  const heroItems = boardItems.length ? [boardItems[0]] : [];
   const moverItems = movers.map((m)=>{return {p:edgeLabel(m),logo:edgeTeam(m)||(abbrById[m.gameId]?abbrById[m.gameId].h:""),g:(abbrById[m.gameId]?abbrById[m.gameId].a+" @ "+abbrById[m.gameId].h:m.matchup),mv:(m._open!=null&&m._now!=null&&m._delta!=null)?[formatOdds(m._open),formatOdds(m._now),(m._delta>0?"up":m._delta<0?"dn":"")]:null,odds:formatOdds(m.odds),model:m.modelProb!=null?Math.round(m.modelProb*100):null,delta:m._delta};});
 
   // WZ-LIVETICKER-2026-06-27 :: ticker = live scores (the backbone) with injury + late-scratch
