@@ -2199,6 +2199,97 @@ router.get("/fbcalib", async (req, res) => {
   }
 });
 
+// ── READ-ONLY PROBE: core `total` calibration windowed to an arbitrary cutoff ── WZ-TOTALRESETPROBE-2026-08-08 ──
+// WHY: RESETS.total = "2026-07-02" windows the published totals gate 16 days BEFORE the 2026-07-18
+// projection rebuild, so markets.total grades the OLD model. This measures the SAME core-total
+// confident-band read the guard uses (calibrationGuard.js:152-239) but with a caller-supplied cutoff,
+// so the pre-rebuild contribution is visible before anyone touches RESETS.
+// STRICTLY READ-ONLY: SELECT only, no writes, no schema change. It does NOT touch RESETS, isBenched,
+// _released, or any gate value -- it only computes and reports. TEMPORARY: delete once the RESETS
+// decision is made. Mirrors the existing probe routes (no auth, shared db()).
+//   /api/performance/totalresetprobe[?since=2026-07-18]
+router.get("/totalresetprobe", async (req, res) => {
+  const HALF_LIFE_DAYS = 10, DAY_MS = 86400000;  // mirror calibrationGuard.js exactly
+  const MIN_N = 40, GAP_UNBENCH = 4;             // mirror calibrationGuard.js exactly
+  const since = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.since || "")) ? String(req.query.since) : "2026-07-18";
+  const TOKEN = "WZ-TOTALRESETPROBE-2026-08-08";
+  try {
+    const supabase = db();
+    if (!supabase) return res.status(500).json({ token: TOKEN, error: "no supabase client" });
+    const rows = [];
+    const PAGE = 1000;
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await supabase
+        .from("model_predictions")
+        .select("market, model_prob, result, game_date")
+        .eq("league", "mlb")
+        .eq("market", "total")
+        .order("id", { ascending: true })
+        .range(from, from + PAGE - 1);
+      if (error) throw new Error(error.message);
+      const batch = data || [];
+      rows.push(...batch);
+      if (batch.length < PAGE) break;
+    }
+    const nowMs = Date.now();
+    // EXACT replica of calibrationGuard.js:168-205 for market=total, confident band >=0.55.
+    const read = (cutoff) => {
+      let n = 0, wins = 0, probSum = 0, wSum = 0, wSq = 0, wWins = 0, wProb = 0;
+      for (const r of rows) {
+        if (r.result !== "win" && r.result !== "loss") continue;               // settled only
+        if (r.model_prob == null || Number(r.model_prob) < 0.55) continue;      // confident/featured band
+        if (cutoff && r.game_date && String(r.game_date).slice(0, 10) < cutoff) continue; // since cutoff
+        n++;
+        if (r.result === "win") wins++;
+        probSum += Number(r.model_prob);
+        const t = r.game_date ? Date.parse(String(r.game_date).slice(0, 10) + "T00:00:00Z") : NaN;
+        if (!Number.isFinite(t)) continue;                                       // counts cumulative, not recency
+        const ageDays = Math.max(0, (nowMs - t) / DAY_MS);
+        const w = Math.pow(0.5, ageDays / HALF_LIFE_DAYS);
+        wSum += w; wSq += w * w; wProb += w * Number(r.model_prob);
+        if (r.result === "win") wWins += w;
+      }
+      const claimed = n ? (probSum / n) * 100 : null;
+      const actual = n ? (wins / n) * 100 : null;
+      const gap = (claimed != null && actual != null) ? Math.round((claimed - actual) * 10) / 10 : null;
+      const effN = wSq > 0 ? (wSum * wSum) / wSq : 0;                            // Kish effective N
+      const rClaimed = wSum > 0 ? (wProb / wSum) * 100 : null;
+      const rActual = wSum > 0 ? (wWins / wSum) * 100 : null;
+      const rGap = (rClaimed != null && rActual != null) ? Math.round((rClaimed - rActual) * 10) / 10 : null;
+      return {
+        since: cutoff,
+        cumulative: {
+          n, gapPts: gap, ready: n >= MIN_N && gap != null,
+          claimedPct: claimed != null ? Math.round(claimed * 10) / 10 : null,
+          actualPct: actual != null ? Math.round(actual * 10) / 10 : null,
+        },
+        recent: {
+          effectiveN: Math.round(effN * 10) / 10, gapPts: rGap, ready: effN >= MIN_N && rGap != null,
+          claimedPct: rClaimed != null ? Math.round(rClaimed * 10) / 10 : null,
+          actualPct: rActual != null ? Math.round(rActual * 10) / 10 : null,
+        },
+      };
+    };
+    const rebuilt = read(since);        // the ?since window (default the 2026-07-18 rebuild)
+    const current = read("2026-07-02"); // the live RESETS.total window, for side-by-side comparison
+    // publishedClear as calibrationGuard.js:274-277 WOULD evaluate on the `since` window. Reported only;
+    // nothing is released -- this route cannot change _released, RESETS, or isBenched.
+    const cc = rebuilt.cumulative, rr = rebuilt.recent;
+    const publishedClearAtSince = (cc.ready || rr.ready)
+      && (!cc.ready || cc.gapPts < GAP_UNBENCH)
+      && (!rr.ready || rr.gapPts < GAP_UNBENCH);
+    res.json({
+      token: TOKEN, market: "total", band: ">=0.55", halfLifeDays: HALF_LIFE_DAYS,
+      minN: MIN_N, gapUnbench: GAP_UNBENCH,
+      windows: { rebuilt, current },
+      publishedClearAtSince,
+      note: "READ-ONLY measurement. Mirrors calibrationGuard.js:152-239 for market=total, band >=0.55, with a caller-supplied cutoff. RESETS/isBenched/_released are NOT touched. `rebuilt` = the ?since window; `current` = the live 2026-07-02 window. publishedClearAtSince is what the release gate's published leg WOULD read if RESETS.total were the ?since date -- it releases nothing.",
+    });
+  } catch (e) {
+    res.status(500).json({ token: TOKEN, error: String((e && e.message) || e) });
+  }
+});
+
 router.get("/:league", async (req, res) => {
   const league = String(req.params.league || "").toLowerCase();
   const cfg = LEAGUE_CONFIG[league];
@@ -2518,95 +2609,5 @@ function propSummary(rows) {
     avgOdds: decN ? decimalToAmerican(decSum / decN) : null,
   };
 }
-// ── READ-ONLY PROBE: core `total` calibration windowed to an arbitrary cutoff ── WZ-TOTALRESETPROBE-2026-08-08 ──
-// WHY: RESETS.total = "2026-07-02" windows the published totals gate 16 days BEFORE the 2026-07-18
-// projection rebuild, so markets.total grades the OLD model. This measures the SAME core-total
-// confident-band read the guard uses (calibrationGuard.js:152-239) but with a caller-supplied cutoff,
-// so the pre-rebuild contribution is visible before anyone touches RESETS.
-// STRICTLY READ-ONLY: SELECT only, no writes, no schema change. It does NOT touch RESETS, isBenched,
-// _released, or any gate value -- it only computes and reports. TEMPORARY: delete once the RESETS
-// decision is made. Mirrors the existing probe routes (no auth, shared db()).
-//   /api/performance/totalresetprobe[?since=2026-07-18]
-router.get("/totalresetprobe", async (req, res) => {
-  const HALF_LIFE_DAYS = 10, DAY_MS = 86400000;  // mirror calibrationGuard.js exactly
-  const MIN_N = 40, GAP_UNBENCH = 4;             // mirror calibrationGuard.js exactly
-  const since = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.since || "")) ? String(req.query.since) : "2026-07-18";
-  const TOKEN = "WZ-TOTALRESETPROBE-2026-08-08";
-  try {
-    const supabase = db();
-    if (!supabase) return res.status(500).json({ token: TOKEN, error: "no supabase client" });
-    const rows = [];
-    const PAGE = 1000;
-    for (let from = 0; ; from += PAGE) {
-      const { data, error } = await supabase
-        .from("model_predictions")
-        .select("market, model_prob, result, game_date")
-        .eq("league", "mlb")
-        .eq("market", "total")
-        .order("id", { ascending: true })
-        .range(from, from + PAGE - 1);
-      if (error) throw new Error(error.message);
-      const batch = data || [];
-      rows.push(...batch);
-      if (batch.length < PAGE) break;
-    }
-    const nowMs = Date.now();
-    // EXACT replica of calibrationGuard.js:168-205 for market=total, confident band >=0.55.
-    const read = (cutoff) => {
-      let n = 0, wins = 0, probSum = 0, wSum = 0, wSq = 0, wWins = 0, wProb = 0;
-      for (const r of rows) {
-        if (r.result !== "win" && r.result !== "loss") continue;               // settled only
-        if (r.model_prob == null || Number(r.model_prob) < 0.55) continue;      // confident/featured band
-        if (cutoff && r.game_date && String(r.game_date).slice(0, 10) < cutoff) continue; // since cutoff
-        n++;
-        if (r.result === "win") wins++;
-        probSum += Number(r.model_prob);
-        const t = r.game_date ? Date.parse(String(r.game_date).slice(0, 10) + "T00:00:00Z") : NaN;
-        if (!Number.isFinite(t)) continue;                                       // counts cumulative, not recency
-        const ageDays = Math.max(0, (nowMs - t) / DAY_MS);
-        const w = Math.pow(0.5, ageDays / HALF_LIFE_DAYS);
-        wSum += w; wSq += w * w; wProb += w * Number(r.model_prob);
-        if (r.result === "win") wWins += w;
-      }
-      const claimed = n ? (probSum / n) * 100 : null;
-      const actual = n ? (wins / n) * 100 : null;
-      const gap = (claimed != null && actual != null) ? Math.round((claimed - actual) * 10) / 10 : null;
-      const effN = wSq > 0 ? (wSum * wSum) / wSq : 0;                            // Kish effective N
-      const rClaimed = wSum > 0 ? (wProb / wSum) * 100 : null;
-      const rActual = wSum > 0 ? (wWins / wSum) * 100 : null;
-      const rGap = (rClaimed != null && rActual != null) ? Math.round((rClaimed - rActual) * 10) / 10 : null;
-      return {
-        since: cutoff,
-        cumulative: {
-          n, gapPts: gap, ready: n >= MIN_N && gap != null,
-          claimedPct: claimed != null ? Math.round(claimed * 10) / 10 : null,
-          actualPct: actual != null ? Math.round(actual * 10) / 10 : null,
-        },
-        recent: {
-          effectiveN: Math.round(effN * 10) / 10, gapPts: rGap, ready: effN >= MIN_N && rGap != null,
-          claimedPct: rClaimed != null ? Math.round(rClaimed * 10) / 10 : null,
-          actualPct: rActual != null ? Math.round(rActual * 10) / 10 : null,
-        },
-      };
-    };
-    const rebuilt = read(since);        // the ?since window (default the 2026-07-18 rebuild)
-    const current = read("2026-07-02"); // the live RESETS.total window, for side-by-side comparison
-    // publishedClear as calibrationGuard.js:274-277 WOULD evaluate on the `since` window. Reported only;
-    // nothing is released -- this route cannot change _released, RESETS, or isBenched.
-    const cc = rebuilt.cumulative, rr = rebuilt.recent;
-    const publishedClearAtSince = (cc.ready || rr.ready)
-      && (!cc.ready || cc.gapPts < GAP_UNBENCH)
-      && (!rr.ready || rr.gapPts < GAP_UNBENCH);
-    res.json({
-      token: TOKEN, market: "total", band: ">=0.55", halfLifeDays: HALF_LIFE_DAYS,
-      minN: MIN_N, gapUnbench: GAP_UNBENCH,
-      windows: { rebuilt, current },
-      publishedClearAtSince,
-      note: "READ-ONLY measurement. Mirrors calibrationGuard.js:152-239 for market=total, band >=0.55, with a caller-supplied cutoff. RESETS/isBenched/_released are NOT touched. `rebuilt` = the ?since window; `current` = the live 2026-07-02 window. publishedClearAtSince is what the release gate's published leg WOULD read if RESETS.total were the ?since date -- it releases nothing.",
-    });
-  } catch (e) {
-    res.status(500).json({ token: TOKEN, error: String((e && e.message) || e) });
-  }
-});
 
 module.exports = router;
