@@ -2221,7 +2221,7 @@ router.get("/totalresetprobe", async (req, res) => {
     for (let from = 0; ; from += PAGE) {
       const { data, error } = await supabase
         .from("model_predictions")
-        .select("market, model_prob, result, game_date")
+        .select("market, model_prob, result, game_date, selection, odds, opp_odds, line") // WZ-TOTALPROBE-GRID-2026-08-08 :: extra cols for the per-bin curve + W/SD grid (read-only)
         .eq("league", "mlb")
         .eq("market", "total")
         .order("id", { ascending: true })
@@ -2272,6 +2272,75 @@ router.get("/totalresetprobe", async (req, res) => {
     };
     const rebuilt = read(since);        // the ?since window (default the 2026-07-18 rebuild)
     const current = read("2026-07-02"); // the live RESETS.total window, for side-by-side comparison
+
+    // ── WZ-TOTALPROBE-GRID-2026-08-08 :: per-bin calibration curve + W_MODEL x TOTAL_SD grid, ?since window.
+    // READ-ONLY. Nothing here changes RESETS/isBenched/_released or any constant. The grid RECOMPUTES what
+    // the published prob WOULD have been at other (W_MODEL, TOTAL_SD) by a back-out: fairOver from the
+    // stored two-sided price (odds + opp_odds), rawOver from the stored blended model_prob at the LIVE
+    // W_MODEL=0.55, then rescale the sigmoid for a new SD via sigmoid(logit(rawOver)*(4.0/SD)) and re-blend
+    // at a new W. At (W=0.55, SD=4.0) it reproduces the stored prob exactly (identity, see gridMeta).
+    // Rows without opp_odds (pre WZ-HANDOFF44-2026-07-24) cannot be de-vigged -> skipped from the GRID only.
+    const inWin = (r) => (r.result === "win" || r.result === "loss") && r.model_prob != null
+      && !(r.game_date && String(r.game_date).slice(0, 10) < since);
+    // (1) per-bin curve on the stored published prob (picked side), ALL settled rows in the ?since window.
+    const BIN_EDGES = [[0.50, 0.55], [0.55, 0.60], [0.60, 0.65], [0.65, 0.70], [0.70, 1.01]];
+    const bins = BIN_EDGES.map(([lo, hi]) => {
+      let n = 0, wins = 0, cs = 0;
+      for (const r of rows) { if (!inWin(r)) continue; const p = Number(r.model_prob); if (p < lo || p >= hi) continue; n++; cs += p; if (r.result === "win") wins++; }
+      const claimed = n ? (cs / n) * 100 : null, actual = n ? (wins / n) * 100 : null;
+      return { bin: `${lo.toFixed(2)}-${hi >= 1 ? "1.00" : hi.toFixed(2)}`, n,
+        claimedPct: claimed != null ? Math.round(claimed * 10) / 10 : null,
+        actualPct: actual != null ? Math.round(actual * 10) / 10 : null,
+        gapPts: (claimed != null && actual != null) ? Math.round((claimed - actual) * 10) / 10 : null };
+    });
+    // (2) W_MODEL x TOTAL_SD grid via the recompute.
+    const sig = (x) => 1 / (1 + Math.exp(-x));
+    const lgt = (p) => Math.log(p / (1 - p));
+    const impl = (o) => o > 0 ? 100 / (o + 100) : (-o) / (-o + 100);   // american -> implied prob (matches edgesModel)
+    const W0 = 0.55, SD0 = 4.0;
+    const Ws = [0.55, 0.45, 0.35, 0.25, 0.15, 0.00], SDs = [4.0, 5.0, 6.0, 7.0];
+    const cells = {}; for (const W of Ws) for (const SD of SDs) cells[`W${W}_SD${SD}`] = { n: 0, wins: 0, cs: 0 };
+    let gridEligibleN = 0, skippedNoOppOdds = 0, skippedBadBackout = 0;
+    for (const r of rows) {
+      if (!inWin(r)) continue;
+      const odds = r.odds, opp = r.opp_odds, sel = String(r.selection || "").toLowerCase();
+      if (odds == null || opp == null) { skippedNoOppOdds++; continue; }
+      const ia = impl(Number(odds)), ib = impl(Number(opp));
+      const fairPicked = ia / (ia + ib);                     // devigTwoWay(picked, opposing)
+      const fairOver = sel === "over" ? fairPicked : 1 - fairPicked;
+      const overStored = sel === "over" ? Number(r.model_prob) : 1 - Number(r.model_prob);
+      const rawOver = (overStored - (1 - W0) * fairOver) / W0;   // invert 0.55*raw + 0.45*fair
+      if (!(rawOver > 1e-6 && rawOver < 1 - 1e-6)) { skippedBadBackout++; continue; }
+      const overHit = sel === "over" ? (r.result === "win") : (r.result === "loss");
+      gridEligibleN++;
+      const lr = lgt(rawOver);
+      for (const W of Ws) for (const SD of SDs) {
+        const overNew = W * sig(lr * (SD0 / SD)) + (1 - W) * fairOver;
+        const claimed = Math.max(overNew, 1 - overNew);        // featured/shown side
+        if (claimed < 0.55) continue;
+        const won = (overNew >= 0.5) ? overHit : !overHit;      // recomputed pick side hit?
+        const c = cells[`W${W}_SD${SD}`]; c.n++; c.cs += claimed; if (won) c.wins++;
+      }
+    }
+    const grid = [];
+    for (const W of Ws) for (const SD of SDs) {
+      const c = cells[`W${W}_SD${SD}`];
+      const claimed = c.n ? (c.cs / c.n) * 100 : null, actual = c.n ? (c.wins / c.n) * 100 : null;
+      grid.push({ wModel: W, totalSd: SD, n: c.n,
+        claimedPct: claimed != null ? Math.round(claimed * 10) / 10 : null,
+        actualPct: actual != null ? Math.round(actual * 10) / 10 : null,
+        gapPts: (claimed != null && actual != null) ? Math.round((claimed - actual) * 10) / 10 : null });
+    }
+    const gridMeta = {
+      eligibleN: gridEligibleN, skippedNoOppOdds, skippedBadBackout,
+      identityCheck: {
+        at: "wModel=0.55, totalSd=4.0",
+        cell: grid.find(g => g.wModel === 0.55 && g.totalSd === 4.0),
+        directRebuiltCumulative: rebuilt.cumulative,
+        note: "The (0.55, 4.0) cell IS the recompute identity -- it reproduces the stored prob on the opp_odds subset. Compare its n to eligibleN and to windows.rebuilt.cumulative.n (which also counts opp_odds-null rows). If the (0.55,4.0) gap differs materially from windows.rebuilt.cumulative.gapPts, opp_odds coverage is thin or the back-out is off -- do not trust the grid.",
+      },
+      readMe: "wModel=0.00 is the PURE-MARKET baseline (de-vigged book price only): if its gap in the >=0.55 band is near 0 while higher wModel rows overclaim, the model's projection term is what adds the miscalibration. TOTAL_SD 4->7 flattens the sigmoid (less confident); watch whether the gap collapses as SD rises. Both are RECOMPUTES on past rows, not a released change.",
+    };
     // publishedClear as calibrationGuard.js:274-277 WOULD evaluate on the `since` window. Reported only;
     // nothing is released -- this route cannot change _released, RESETS, or isBenched.
     const cc = rebuilt.cumulative, rr = rebuilt.recent;
@@ -2282,6 +2351,8 @@ router.get("/totalresetprobe", async (req, res) => {
       token: TOKEN, market: "total", band: ">=0.55", halfLifeDays: HALF_LIFE_DAYS,
       minN: MIN_N, gapUnbench: GAP_UNBENCH,
       windows: { rebuilt, current },
+      bins,                 // WZ-TOTALPROBE-GRID-2026-08-08 :: calibration curve (0.50-0.55..0.70+) on the ?since window
+      grid, gridMeta,       // WZ-TOTALPROBE-GRID-2026-08-08 :: recomputed W_MODEL x TOTAL_SD gap grid (read-only)
       publishedClearAtSince,
       note: "READ-ONLY measurement. Mirrors calibrationGuard.js:152-239 for market=total, band >=0.55, with a caller-supplied cutoff. RESETS/isBenched/_released are NOT touched. `rebuilt` = the ?since window; `current` = the live 2026-07-02 window. publishedClearAtSince is what the release gate's published leg WOULD read if RESETS.total were the ?since date -- it releases nothing.",
     });
