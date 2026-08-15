@@ -320,7 +320,7 @@ function Bout({ b, main }) {
           </div>
         </div>
       ) : (
-        <div className="ufc-pb pending"><span className="pnd">{boutDone ? "NO PICK \u2014 no line was posted before this fight" : "ODDS PENDING \u2014 no line posted yet"}</span></div>
+        <div className="ufc-pb pending"><span className="pnd">{boutDone ? "NO PICK \u2014 this fight was not priced" : "ODDS PENDING"}</span></div>
       )}
 
       {b.methodLean && b.methodLean.lean && b.methodLean.lean !== "EVEN" && !isFinal ? (
