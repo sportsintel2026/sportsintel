@@ -40,6 +40,7 @@ const liveWinProbRoutes = require("./routes/liveWinProb");
 const newsRoutes = require("./routes/news"); // WZ-NEWS-MOUNT-2026-06-26
 const nflPropsProbeRoutes = require("./routes/nflPropsProbe"); // WZ-NFLPROPS-MOUNT-2026-07-05
 const ufcRoutes = require("./routes/ufc"); // WZ-UFC-CARD-2026-07-09 :: UFC/MMA card endpoint (read-only)
+const ufcSplitRoutes = require("./routes/ufcSplit"); // WZ-UFCEDGESPLIT-2026-08-15 :: read-only edge-sign split baseline
 const aiReadRoutes = require("./routes/aiRead"); // WZ-AI-READ-2026-07-12 :: on-demand AI read (B), fail-safe
 const gammafitRoutes = require("./routes/gammafit"); // WZ-GAMMAFIT-2026-07-23
 const adminGuard = require("./middleware/adminGuard"); // WZ-ADMIN-GUARD-2026-07-17 :: locks diagnostic/trigger endpoints
@@ -154,6 +155,7 @@ app.use("/api/live-winprob", liveWinProbRoutes);
 app.use("/api/news", newsRoutes); // WZ-NEWS-MOUNT-2026-06-26 :: blended ESPN+RotoWire feed
 app.use("/api/nfl-props-probe", adminGuard, nflPropsProbeRoutes); // WZ-NFLPROPS-MOUNT-2026-07-05 + WZ-ADMIN-GUARD-2026-07-17
 app.use("/api/ufc", ufcRoutes); // WZ-UFC-CARD-2026-07-09 :: UFC/MMA card (read-only, additive)
+app.use("/api/ufcsplit", ufcSplitRoutes); // WZ-UFCEDGESPLIT-2026-08-15 :: read-only (no adminGuard); distinct prefix -- /api/ufc does not match /api/ufcsplit, so it is reachable
 app.use("/api/ai-read", aiReadRoutes); // WZ-AI-READ-2026-07-12 :: on-demand AI read (B), env-gated + fail-safe
 
 // Health check
