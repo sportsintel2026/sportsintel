@@ -698,7 +698,9 @@ router.get("/totalsbias", async (req, res) => {
     // measures that scatter, and grades the model's own claimed probability against what actually
     // happened, bucketed by deviation size. No behavior changes; this only reports.
     const SIG = (x) => 1 / (1 + Math.exp(-x));
-    const LIVE_DIVISOR = 4.0;            // must mirror TOTAL_SD in edgesModel.js line ~1649
+    // 4.0 deliberately does NOT track TOTAL_SD (6.0 as of 2026-08-13).
+    // Grades historical rows priced at SD 4.0. Revisit when post-6.0 rows dominate.
+    const LIVE_DIVISOR = 4.0;
     const devs = [];                      // signed projected - line
     const picks = [];                     // { absDev, won }
     for (const r of usable) {
