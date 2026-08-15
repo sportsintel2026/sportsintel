@@ -1682,12 +1682,10 @@ async function calculateGameEdges(game, oddsForGame) {
   let overInflation = null;
   let underInflation = null;
   if (totalLine != null) {
-    // Convert the projected-vs-line gap into a probability. The divisor is the
-    // approximate standard deviation of an MLB game total (~4 runs). The old
-    // value of 3.0 was too small, making the sigmoid too steep and OVERSTATING
-    // how confident we were on every total (inflated edges). ~4.0 is closer to
-    // the real spread of game outcomes.
-    const TOTAL_SD = 4.0;
+    // 6.0 measured 2026-08-13 via /totalresetprobe grid, post-07-18 rows:
+    // SD 4.0 gap +4.5 (n38) | 5.0 -2.3 (n22) | 6.0 -0.1 (n16) | 7.0 +18.4 (n8)
+    // Do not change without re-running the grid. Prior value 4.0 was eyeballed.
+    const TOTAL_SD = 6.0;
     // WZ-TOTMEDIAN-2026-08-03 :: the closing total is the MEDIAN outcome; our projection is a
     // MEAN. Game totals are right-skewed (a blowout runs 20, the floor is 0), so the mean sits
     // permanently ABOVE the median -- meaning a PERFECT mean projection still reads high against
