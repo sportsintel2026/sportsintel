@@ -90,6 +90,10 @@ async function getOddsMap() {
   const now = Date.now();
   if (oddsCache.map && now - oddsCache.at < ODDS_TTL_MS) return oddsCache.map;
   const map = new Map();
+  // WZ-UFCJOIN-MAINEVENT-2026-08-15 :: a first+last reduced index rides along on the map object. It is a
+  // SEPARATE Map (never a `map` ENTRY), so it can never shadow or overwrite a real key. Empty until the
+  // reduction pass populates it in the success path below; consulted only after every exact/alias miss.
+  map.reducedMap = new Map();
   if (!ODDS_API_KEY) { oddsCache = { at: now, map }; return map; }
   try {
     const res = await axios.get(`${ODDS_BASE}/sports/mma_mixed_martial_arts/odds`, {
@@ -112,6 +116,9 @@ async function getOddsMap() {
         if (impl != null) map.set(normName(nm), { impl, american: med });
       }
     }
+    // WZ-UFCJOIN-MAINEVENT-2026-08-15 :: snapshot the REAL keys before the alias pass widens `map`, so the
+    // reduced index below reduces real keys only, not the alias forms the pass is about to add.
+    const realKeysForReduce = Array.from(map.keys());
     // WZ-UFCALIAS-2026-08-03 :: second pass -- widen the map with alias keys, AFTER every real key
     // exists so ambiguity is decidable. An alias is kept only when exactly ONE fighter claims it;
     // anything contested is dropped rather than guessed, so a loose match can never silently price
@@ -132,6 +139,28 @@ async function getOddsMap() {
       aliasKept++;
     }
     console.log(`[UFC] odds map ${map.size} keys (aliases kept ${aliasKept}, dropped-ambiguous ${aliasDropped})`);
+    // WZ-UFCJOIN-MAINEVENT-2026-08-15 :: MIRROR of the alias pass, for the opposite miss. nameAliases
+    // widens the BOOK side by dropping LEADING tokens (long book name -> short); but when the BOOK posts
+    // the SHORT name and Cito holds the LONG one ("ian garry" vs "ian machado garry"), no path existed.
+    // Index every real key (2+ tokens) under first+" "+last -- INCLUDING 2-token keys, which reduce to
+    // themselves, so a longer lookup name reduced the same way reaches them. SAME aliasClaims discipline:
+    // a first+last claimed by two DISTINCT real keys is DROPPED, never guessed. reducedMap is separate,
+    // so a real key is never shadowed; it is consulted only after every exact/alias candidate misses.
+    const reducedClaims = new Map();
+    for (const realKey of realKeysForReduce) {
+      const t = String(realKey).split(" ").filter(Boolean);
+      if (t.length < 2) continue;
+      const red = t[0] + " " + t[t.length - 1];
+      if (!reducedClaims.has(red)) reducedClaims.set(red, new Set());
+      reducedClaims.get(red).add(realKey);
+    }
+    let reducedKept = 0, reducedDropped = 0;
+    for (const [red, owners] of reducedClaims) {
+      if (owners.size !== 1) { reducedDropped++; continue; }
+      map.reducedMap.set(red, map.get(Array.from(owners)[0]));
+      reducedKept++;
+    }
+    console.log(`[UFC] odds reduced-map ${map.reducedMap.size} keys (kept ${reducedKept}, dropped-ambiguous ${reducedDropped})`);
   } catch (e) {
     console.error("[UFC] Odds map fetch failed:", e.message);
   }
@@ -199,6 +228,16 @@ async function parseBout(bout, oddsMap) {
       for (const cand of [n, sl, n.replace(/ /g, ""), sl.replace(/ /g, "")]) {
         if (!cand) continue;
         const hit = oddsMap.get(cand);
+        if (hit) return hit;
+      }
+      // WZ-UFCJOIN-MAINEVENT-2026-08-15 :: last resort -- reduce OUR name to first+last and try the
+      // reduced index. Catches the mirror of the alias pass: book posts the SHORT name ("ian garry"),
+      // Cito holds the LONG one ("ian machado garry"). The four exact candidates above are tried FIRST
+      // and unchanged, so no bout that resolves today can change what it already matches.
+      const firstLast = (s) => { const t = String(s || "").split(" ").filter(Boolean); return t.length >= 2 ? t[0] + " " + t[t.length - 1] : ""; };
+      for (const cand of [firstLast(n), firstLast(sl)]) {
+        if (!cand) continue;
+        const hit = oddsMap.reducedMap && oddsMap.reducedMap.get(cand);
         if (hit) return hit;
       }
       return null;
@@ -523,6 +562,8 @@ async function buildCitoCard() {
     // are public information; nothing sensitive is exposed. Delete once the join is settled.
     oddsDiag: (() => {
       const k = (v) => normName(v || "");
+      // WZ-UFCJOIN-MAINEVENT-2026-08-15 :: first+last reducer so hitName/hitSlug reflect the reduced path.
+      const fl = (s) => { const t = String(s || "").split(" ").filter(Boolean); return t.length >= 2 ? t[0] + " " + t[t.length - 1] : ""; };
       const unresolved = [];
       for (const b of parsed) {
         if (b.red && b.red.odds != null && b.blue && b.blue.odds != null) continue;
@@ -531,8 +572,8 @@ async function buildCitoCard() {
           unresolved.push({
             bout: b.id, name: f.name, slug: f.slug || null,
             byName: k(f.name), bySlug: k(f.slug),
-            hitName: oddsMap.has(k(f.name)),
-            hitSlug: !!(f.slug && oddsMap.has(k(f.slug))),
+            hitName: oddsMap.has(k(f.name)) || !!(oddsMap.reducedMap && oddsMap.reducedMap.has(fl(k(f.name)))),
+            hitSlug: !!(f.slug && (oddsMap.has(k(f.slug)) || (oddsMap.reducedMap && oddsMap.reducedMap.has(fl(k(f.slug)))))),
           });
         }
       }
