@@ -1,16 +1,20 @@
-// WZ-UFCEDGESPLIT-2026-08-15 :: read-only BASELINE of the settled UFC record, split by the sign of
-// edge_pct (model_win% - market_win%). The board ranks UFC picks on WIN PROBABILITY, not edge, so
-// most of a card is picked with a NEGATIVE edge (the model rates its own side below the book). The
-// question this freezes, BEFORE UFC 330 grades tonight: is the UFC record carried by the positive-edge
-// picks, or do the negative-edge picks win too? Taking the read now makes tonight out-of-sample; taking
-// it after would bake tonight in and the split could not be trusted (CLAUDE.md: in-sample top-50 by
-// edge went 68%, frozen out-of-sample it went 51.7%).
+// WZ-UFCEDGESPLIT-2026-08-15 / WZ-UFCSPLIT-WINDOW-2026-08-15 :: read-only split of the settled UFC
+// record by the sign of edge_pct (model_win% - market_win%). The board ranks UFC on WIN PROBABILITY,
+// not edge, so most of a card is picked with a NEGATIVE edge (the model rates its own side below the
+// book). This asks whether the record is carried by the positive-edge picks or the negative-edge ones.
+//
+// The first baseline read was contaminated: UFC 330 early prelims had already graded before it ran
+// (gradedAtMax came back after UFC 330 with ufc-330 in eventSlugs), so "out-of-sample" was lost.
+// WINDOWING recovers it retroactively -- graded_before=<UFC 330 first graded_at> reconstructs the true
+// pre-330 baseline; graded_after=<same> isolates UFC 330 once its main card finishes. Both bounds are
+// EXCLUSIVE ISO-8601 timestamps, applied at the query so the 1000-row cap cannot truncate before the
+// window is applied; a malformed bound returns 400, never a silent unfiltered read.
 //
 // STRICTLY READ-ONLY: SELECT-only, zero writes, no schema change, no adminGuard (openable in a browser,
 // no key in the URL). ROI is computed at the REAL posted price from the `odds` column via
 // priceMath.payout -- there is NO -110 default anywhere. Pushes are excluded from win rate and ROI and
 // counted separately. Every rate and ROI carries its own n in the same object.
-//   /api/ufcsplit
+//   /api/ufcsplit  [?graded_before=ISO-8601] [?graded_after=ISO-8601]
 const express = require("express");
 const { createClient } = require("@supabase/supabase-js");
 const { payout, breakEven, ev } = require("../services/priceMath"); // real posted-price math; NEVER -110
@@ -89,29 +93,66 @@ function computeSplit(rows) {
   };
 }
 
+// Strict ISO-8601 parse. Date.parse alone is lenient (accepts "2026", "May 3 2026"), so gate on an
+// explicit ISO shape FIRST, then require a real date. Returns { iso, ms } or null; a null becomes a 400
+// at the call site -- never a silent fall-through to an unfiltered read. Exported-by-brace for the ruler.
+function parseIsoStrict(v) {
+  if (typeof v !== "string") return null;
+  if (!/^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}(:\d{2}(\.\d{1,9})?)?(Z|[+-]\d{2}:?\d{2})?)?$/.test(v)) return null;
+  const ms = Date.parse(v);
+  if (!Number.isFinite(ms)) return null;
+  return { iso: new Date(ms).toISOString(), ms };
+}
+
 router.get("/", async (req, res) => {
   const TOKEN = "WZ-UFCEDGESPLIT-2026-08-15";
   try {
+    // WZ-UFCSPLIT-WINDOW-2026-08-15 :: optional EXCLUSIVE graded_at bounds. Validate BEFORE any fetch.
+    // A malformed bound is a hard 400 with the offending value echoed -- it must NOT fall back to an
+    // unfiltered read, because a whole-table answer that looks real is exactly the trap here.
+    let before = null;
+    let after = null;
+    if (req.query.graded_before !== undefined) {
+      before = parseIsoStrict(req.query.graded_before);
+      if (!before) return res.status(400).json({ token: TOKEN, error: "graded_before is not a valid ISO-8601 timestamp", graded_before: req.query.graded_before });
+    }
+    if (req.query.graded_after !== undefined) {
+      after = parseIsoStrict(req.query.graded_after);
+      if (!after) return res.status(400).json({ token: TOKEN, error: "graded_after is not a valid ISO-8601 timestamp", graded_after: req.query.graded_after });
+    }
+    if (before && after && after.ms >= before.ms) {
+      return res.status(400).json({ token: TOKEN, error: "empty window: graded_after must be strictly before graded_before", graded_after: after.iso, graded_before: before.iso });
+    }
+
     const supabase = db();
     if (!supabase) return res.status(500).json({ token: TOKEN, error: "no supabase client" });
-    // Supabase .select() silently caps at 1000 rows oldest-first -- paginate to get the whole table.
+    // Supabase .select() silently caps at 1000 rows oldest-first -- paginate to get the whole window.
+    // The bounds are applied INSIDE the query (.lt/.gt on graded_at), NOT to the fetched array: filtering
+    // after the fetch would let the 1000-row cap truncate before the window and return a partial answer.
+    // .lt/.gt also drop rows whose graded_at is NULL (SQL null comparisons are never true) -- the intended
+    // exclusion, since a null graded_at cannot satisfy a time bound (reported as nullGradedAtExcluded).
     const rows = [];
     const PAGE = 1000;
     for (let from = 0; ; from += PAGE) {
-      const { data, error } = await supabase
+      let q = supabase
         .from("ufc_picks")
-        .select("bout_id, event_slug, event_name, pick, win_pct, market_win_pct, edge_pct, is_value, odds, result, graded_at")
-        .order("bout_id", { ascending: true })
-        .range(from, from + PAGE - 1);
+        .select("bout_id, event_slug, event_name, pick, win_pct, market_win_pct, edge_pct, is_value, odds, result, graded_at");
+      if (before) q = q.lt("graded_at", before.iso); // exclusive upper bound
+      if (after) q = q.gt("graded_at", after.iso); // exclusive lower bound
+      q = q.order("bout_id", { ascending: true }).range(from, from + PAGE - 1);
+      const { data, error } = await q;
       if (error) throw new Error(error.message);
       const batch = data || [];
       rows.push(...batch);
       if (batch.length < PAGE) break;
     }
     const split = computeSplit(rows);
+    const bounded = !!(before || after);
     res.json({
       token: TOKEN,
-      note: "READ-ONLY baseline, frozen before UFC 330 grades so tonight is out-of-sample. Settled UFC record split by sign of edge_pct (model win% - market win%). Win rate and ROI are on win/loss rows only; pushes excluded and counted. ROI at the REAL posted price via priceMath.payout -- never -110; win/loss rows with no usable price are excluded from ROI (noPriceExcludedFromRoi) but kept in the win rate. is_value=true is reported separately to see whether the product's VALUE flag tracks the edge sign.",
+      note: "READ-ONLY. Settled UFC record split by sign of edge_pct (model win% - market win%), over the graded_at window in appliedWindow -- both bounds EXCLUSIVE, null = unbounded. Rows with a null graded_at are EXCLUDED whenever either bound is set (they cannot satisfy a time bound) and are included only on a fully unbounded read. Win rate and ROI are on win/loss rows only; pushes excluded and counted. ROI at the REAL posted price via priceMath.payout -- never -110; win/loss rows with no usable price are excluded from ROI (noPriceExcludedFromRoi) but kept in the win rate. is_value=true is reported separately. Reconstruct the pre-UFC-330 baseline with graded_before=<UFC 330 first graded_at>; isolate UFC 330 with graded_after=<same>.",
+      appliedWindow: { graded_before: before ? before.iso : null, graded_after: after ? after.iso : null },
+      nullGradedAtExcluded: bounded,
       rowsFetched: rows.length,
       pagedNotExactly1000: rows.length !== 1000, // proves pagination did not silently stop at the 1000-row cap
       ...split,
