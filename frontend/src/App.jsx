@@ -29,6 +29,8 @@ import DailyCardPage from "./pages/DailyCard";
 import MarketReadPage from "./pages/MarketRead";
 import NewsPage from "./pages/News"; // WZ-NEWS-ROUTE-2026-06-27 (nba/nhl)
 import { TermsPage, PrivacyPage } from "./pages/Legal"; // LEGAL-PAGES-2026-06-24
+import AboutPage from "./pages/About"; // WZ-SEO-TRUSTPAGES-2026-08-17 :: public trust page
+import HowItWorksPage from "./pages/HowItWorks"; // WZ-SEO-TRUSTPAGES-2026-08-17 :: public trust page
 import SportBar, { SportTabsHeader } from "./pages/SportNav"; // WIZEPICKS-SPORTNAV-2026-06-25
 import InstallNudge from "./pages/InstallNudge"; // WZ-GETAPP-2026-07-05 :: iOS "Get the app" nudge
 function PrivateRoute({ children }) {
@@ -141,6 +143,8 @@ function LegalFooter() {
       <style>{WPF_CSS}</style>
       <div className="wpf-inner">
         <div className="wpf-links">
+          <Link to="/about">About</Link><i/>
+          <Link to="/how-it-works">How it works</Link><i/>
           <Link to="/terms">Terms</Link><i/>
           <Link to="/privacy">Privacy</Link>
         </div>
@@ -201,6 +205,9 @@ export default function App() {
           <Route path="/pricing" element={<PricingPage />} />
           <Route path="/terms" element={<TermsPage />} />
           <Route path="/privacy" element={<PrivacyPage />} />
+          {/* WZ-SEO-TRUSTPAGES-2026-08-17 :: public trust pages (no auth) */}
+          <Route path="/about" element={<AboutPage />} />
+          <Route path="/how-it-works" element={<HowItWorksPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/admin" element={
             <PrivateRoute>

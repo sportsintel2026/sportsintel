@@ -53,6 +53,18 @@ const ROUTES = [
     description: "WizePicks Privacy Policy — how WizePicks collects, uses, and protects your information.",
     canonical: "https://www.wizepicks.com/privacy",
   },
+  {
+    out: "about/index.html",
+    title: "About WizePicks — Sharp Sports-Betting Analytics",
+    description: "WizePicks is a sports-betting analytics and information service (not a sportsbook) for adults 21+, with model-driven edges and tools across MLB, NFL, CFB, NBA, NHL, and UFC.",
+    canonical: "https://www.wizepicks.com/about",
+  },
+  {
+    out: "how-it-works/index.html",
+    title: "How WizePicks Works — Model, Plays & Tools",
+    description: "How WizePicks turns data into a vig-free fair price and surfaces only the bets with a real edge — the model's number, handpicked plays, and the tools to check the work yourself.",
+    canonical: "https://www.wizepicks.com/how-it-works",
+  },
 ];
 
 const esc = (s) =>
