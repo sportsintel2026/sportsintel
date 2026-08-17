@@ -505,6 +505,22 @@ export default function LandingPage(){
           <div className="wpc-eye">Why bettors trust it</div>
           <h2 className="wpc-h">We don't hide the <span>losses.</span></h2>
           <p className="wpc-sub wpc-sub-wide">Every pick, graded against the result and left up for good — the wins and the losses, side by side. Nothing buried, nothing cherry-picked. A record that only shows its winners isn't a record at all.</p>
+
+          {/* WZ-LANDING-SAMPLEPICK-2026-08-17 :: one REAL completed graded pick, shown as a clearly-labeled
+              historical example. Static (no API call), verified from the public graded record. Not a current pick. */}
+          <div className="sp-card">
+            <div className="sp-top">
+              <span className="sp-badge">Historical graded pick</span>
+              <span className="sp-meta">MLB · June 20, 2026</span>
+            </div>
+            <div className="sp-matchup">Baltimore Orioles @ Los Angeles Dodgers</div>
+            <div className="sp-row">
+              <span className="sp-pick">Pick: <b>Baltimore Orioles Moneyline (+205)</b></span>
+              <span className="sp-result">WON</span>
+            </div>
+            <p className="sp-note">A real, completed WizePicks pick — <b>recorded before the game and graded against the actual result.</b> This is a historical example, <b>not a current recommendation.</b> Every pick is tracked the same way, wins and losses alike. Past performance does not guarantee future results. 21+.</p>
+            <Link className="sp-link" to="/how-it-works">See how it works →</Link>
+          </div>
         </div>
       </div></div>
 
@@ -917,6 +933,20 @@ const CSS = `
 .lpwrap .wpc-eye::before{content:"◆";font-size:9px;color:#C9A86A}
 .lpwrap .wpc-h{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:clamp(34px,9vw,54px);line-height:1.0;letter-spacing:.4px;color:#fff}
 .lpwrap .wpc-h span{background:linear-gradient(180deg,#E8CE93,#C9A86A 60%,#9A7B3E);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+/* WZ-LANDING-SAMPLEPICK-2026-08-17 :: static historical graded-pick example card (PROOF section) */
+.lpwrap .sp-card{max-width:520px;margin:30px auto 0;background:#14171B;border:1px solid #2A3138;border-radius:14px;padding:18px 20px;text-align:left}
+.lpwrap .sp-top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.lpwrap .sp-badge{font-family:'IBM Plex Mono',monospace;font-size:10.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#1a1408;background:#C9A86A;padding:4px 9px;border-radius:6px}
+.lpwrap .sp-meta{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#8B98A3;letter-spacing:.04em}
+.lpwrap .sp-matchup{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:22px;letter-spacing:.3px;color:#ECEFF2;line-height:1.1;margin-bottom:8px}
+.lpwrap .sp-row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.lpwrap .sp-pick{font-size:14.5px;color:#cfd7e1}
+.lpwrap .sp-pick b{color:#fff;font-weight:700}
+.lpwrap .sp-result{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:700;letter-spacing:.1em;color:#0c1f16;background:#3FCB91;padding:5px 12px;border-radius:7px;white-space:nowrap}
+.lpwrap .sp-note{font-size:11.5px;line-height:1.55;color:#7c8792;margin:14px 0 0}
+.lpwrap .sp-note b{color:#9aa3ad}
+.lpwrap .sp-link{display:inline-block;margin-top:12px;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;color:#C9A86A;text-decoration:none}
+.lpwrap .sp-link:hover{text-decoration:underline;text-underline-offset:2px}
 .lpwrap .wpc-sub{font-family:'Inter',sans-serif;font-size:16px;line-height:1.6;color:#9AA4AD;max-width:460px;margin:18px auto 0}
 .lpwrap .wpc-sub-wide{max-width:560px}
 
