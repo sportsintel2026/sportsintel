@@ -1,0 +1,13 @@
+# WizePicks -- https://www.wizepicks.com
+# Analytics and information service. Public marketing and legal pages are
+# crawlable; authenticated app routes carry no crawlable content.
+
+User-agent: *
+Allow: /
+
+# Admin and account/token utility routes -- no public content.
+Disallow: /admin
+Disallow: /settings
+Disallow: /reset-password
+
+Sitemap: https://www.wizepicks.com/sitemap.xml
