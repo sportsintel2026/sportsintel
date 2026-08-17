@@ -65,6 +65,12 @@ const ROUTES = [
     description: "How WizePicks turns data into a vig-free fair price and surfaces only the bets with a real edge — the model's number, handpicked plays, and the tools to check the work yourself.",
     canonical: "https://www.wizepicks.com/how-it-works",
   },
+  {
+    out: "what-is-closing-line-value/index.html",
+    title: "What Is Closing Line Value (CLV)? — WizePicks",
+    description: "Closing line value (CLV) measures whether you bet at a better price than the market's closing line. Plain-English definition, moneyline and spread examples, and why sharp bettors track it.",
+    canonical: "https://www.wizepicks.com/what-is-closing-line-value",
+  },
 ];
 
 const esc = (s) =>

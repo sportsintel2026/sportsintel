@@ -31,6 +31,7 @@ import NewsPage from "./pages/News"; // WZ-NEWS-ROUTE-2026-06-27 (nba/nhl)
 import { TermsPage, PrivacyPage } from "./pages/Legal"; // LEGAL-PAGES-2026-06-24
 import AboutPage from "./pages/About"; // WZ-SEO-TRUSTPAGES-2026-08-17 :: public trust page
 import HowItWorksPage from "./pages/HowItWorks"; // WZ-SEO-TRUSTPAGES-2026-08-17 :: public trust page
+import ClosingLineValuePage from "./pages/ClosingLineValue"; // WZ-SEO-CLV-ARTICLE-2026-08-17 :: public educational page
 import SportBar, { SportTabsHeader } from "./pages/SportNav"; // WIZEPICKS-SPORTNAV-2026-06-25
 import InstallNudge from "./pages/InstallNudge"; // WZ-GETAPP-2026-07-05 :: iOS "Get the app" nudge
 function PrivateRoute({ children }) {
@@ -208,6 +209,8 @@ export default function App() {
           {/* WZ-SEO-TRUSTPAGES-2026-08-17 :: public trust pages (no auth) */}
           <Route path="/about" element={<AboutPage />} />
           <Route path="/how-it-works" element={<HowItWorksPage />} />
+          {/* WZ-SEO-CLV-ARTICLE-2026-08-17 :: public educational article (no auth) */}
+          <Route path="/what-is-closing-line-value" element={<ClosingLineValuePage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/admin" element={
             <PrivateRoute>

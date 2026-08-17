@@ -13,6 +13,7 @@ export function Section({ h, children }) {
 }
 export const P = ({ children }) => <p className="pg-p">{children}</p>;
 export const LI = ({ children }) => <li className="pg-li">{children}</li>;
+export const H3 = ({ children }) => <h3 className="pg-h3">{children}</h3>;
 
 // A crawlable in-page link row (rendered as real <a href> by react-router).
 export function PageNav({ links }) {
@@ -61,6 +62,7 @@ const PG_CSS = `
 .pg-lead{font-size:15px;line-height:1.6;color:#c3ccd6;margin:0 0 6px}
 .pg-sec{margin-top:24px}
 .pg-h2{font-size:17px;font-weight:800;color:#fff;margin:0 0 8px}
+.pg-h3{font-size:14.5px;font-weight:800;color:#e8ecef;margin:16px 0 6px}
 .pg-p{font-size:13.5px;line-height:1.62;color:#aeb8c2;margin:0 0 10px}
 .pg-p b{color:#e3e9ef;font-weight:700}
 .pg-p a{color:#C9A86A;text-decoration:none;font-weight:600}
