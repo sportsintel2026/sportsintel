@@ -38,6 +38,7 @@ export default function HowItWorksPage() {
 
       <PageNav
         links={[
+          { to: "/what-is-closing-line-value", label: "What is closing line value?" },
           { to: "/pricing", label: "See pricing" },
           { to: "/signup", label: "Start free" },
           { to: "/about", label: "About WizePicks" },
