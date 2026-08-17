@@ -536,6 +536,8 @@ export default function LandingPage(){
           <span className="tpill g"><i/>21+ only</span>
         </div>
         <div className="flinks">
+          <Link to="/about">About</Link><span className="fdot">·</span>
+          <Link to="/how-it-works">How it works</Link><span className="fdot">·</span>
           <Link to="/pricing">Pricing</Link><span className="fdot">·</span>
           <Link to="/login">Log in</Link><span className="fdot">·</span>
           <a href="mailto:wizepickshelp@gmail.com">Contact</a><span className="fdot">·</span>
