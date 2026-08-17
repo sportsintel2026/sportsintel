@@ -129,6 +129,7 @@ export default function MoneylineOddsPage() {
 
       <PageNav
         links={[
+          { to: "/implied-probability-sports-betting", label: "Implied probability" },
           { to: "/what-is-closing-line-value", label: "What is closing line value?" },
           { to: "/how-it-works", label: "How WizePicks works" },
           { to: "/pricing", label: "Pricing" },

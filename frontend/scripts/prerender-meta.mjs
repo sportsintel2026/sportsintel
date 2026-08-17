@@ -77,6 +77,12 @@ const ROUTES = [
     description: "Moneyline odds explained: what +150 and -150 mean, how to calculate profit, payout, break-even and implied probability, plus favorites vs. underdogs, vig, line moves, and beginner mistakes.",
     canonical: "https://www.wizepicks.com/how-to-read-moneyline-odds",
   },
+  {
+    out: "implied-probability-sports-betting/index.html",
+    title: "Implied Probability in Sports Betting — WizePicks",
+    description: "Implied probability explained: convert American odds to a percentage, see worked examples, and learn how implied probability differs from true win probability, break-even, expected value, and vig.",
+    canonical: "https://www.wizepicks.com/implied-probability-sports-betting",
+  },
 ];
 
 const esc = (s) =>
