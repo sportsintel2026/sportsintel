@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
+import { useSeo } from "../hooks/useSeo"; // WZ-SEO-ROUTEMETA-2026-08-17
 
 /* headshot sources (graceful fallback to initials on error) */
 const MLB_HEAD=(id)=>`https://midfield.mlbstatic.com/v1/people/${id}/spots/120`;
@@ -128,6 +129,11 @@ function CommercialVideo(){
    ============================================================ */
 
 export default function LandingPage(){
+  useSeo({
+    title: "WizePicks — Your Edge on Every Game",
+    description: "WizePicks — Live scores, H2H records, player stats, and weather analysis for MLB, NBA, and NFL.",
+    path: "/",
+  });
   return (
     <div className="lpwrap">
       <style>{CSS}</style>

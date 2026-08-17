@@ -3,6 +3,7 @@
 // Bracketed [PLACEHOLDERS] must be filled in by WizePicks.
 // LEGAL-FILL-COMPLETE-2026-06-24
 import { useNavigate } from "react-router-dom";
+import { useSeo } from "../hooks/useSeo"; // WZ-SEO-ROUTEMETA-2026-08-17
 
 const UPDATED = "June 24, 2026";
 
@@ -38,6 +39,11 @@ const P = ({ children }) => <p className="lg-p">{children}</p>;
 const LI = ({ children }) => <li className="lg-li">{children}</li>;
 
 export function TermsPage() {
+  useSeo({
+    title: "Terms of Service — WizePicks",
+    description: "WizePicks Terms of Service. WizePicks is an informational sports-analytics service, not a sportsbook.",
+    path: "/terms",
+  });
   return (
     <LegalShell
       title="Terms of Service"
@@ -122,6 +128,11 @@ export function TermsPage() {
 }
 
 export function PrivacyPage() {
+  useSeo({
+    title: "Privacy Policy — WizePicks",
+    description: "WizePicks Privacy Policy — how WizePicks collects, uses, and protects your information.",
+    path: "/privacy",
+  });
   return (
     <LegalShell
       title="Privacy Policy"

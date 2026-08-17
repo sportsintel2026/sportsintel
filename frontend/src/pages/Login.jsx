@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { supabase, subscriptionApi } from "../lib/api";
+import { useSeo } from "../hooks/useSeo"; // WZ-SEO-ROUTEMETA-2026-08-17
 
 function AuthLayout({ title, subtitle, children }) {
   return (
@@ -37,6 +38,11 @@ function Input({ label, type = "text", value, onChange, placeholder }) {
 }
 
 export function LoginPage() {
+  useSeo({
+    title: "Log In — WizePicks",
+    description: "Log in to WizePicks to access your model edges, picks, and sports-analytics dashboard.",
+    path: "/login",
+  });
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -106,6 +112,11 @@ const SIGNUP_PLANS = [
 ];
 
 export function SignupPage() {
+  useSeo({
+    title: "Sign Up — WizePicks",
+    description: "Create your WizePicks account for model edges, daily picks, and sports-betting analytics across MLB, NFL, CFB, NBA, NHL, and UFC.",
+    path: "/signup",
+  });
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
