@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { subscriptionApi } from "../lib/api";
+import { useSeo } from "../hooks/useSeo"; // WZ-SEO-ROUTEMETA-2026-08-17
 
 const PLANS = [
   { key: "weekly",  name: "Weekly",  price: "$7",   per: "/wk", sub: "Billed weekly" },
@@ -23,6 +24,11 @@ const Check = () => (
 );
 
 export default function PricingPage() {
+  useSeo({
+    title: "Pricing — WizePicks",
+    description: "WizePicks membership plans and pricing — model-driven picks, edges, and sports-betting analytics for MLB, NFL, CFB, NBA, NHL, and UFC.",
+    path: "/pricing",
+  });
   const { user } = useAuth();
   const navigate = useNavigate();
   const [selected, setSelected] = useState("monthly");
