@@ -207,7 +207,7 @@ export default function LandingPage(){
         <div className="wrap">
           <div>
             <div className="eyebrow">Sharp prices, made simple</div>
-            <h1 className="hl">Beat the books <em>before the line moves.</em></h1>
+            <h2 className="hl">Beat the books <em>before the line moves.</em></h2>
             <p className="sub">WizePicks grades every market against a vig-free fair price and hands you only the bets with a real edge. No spreadsheets. No guesswork.</p>
             <div className="cta-row">
               <Link className="btn btn-pri" to="/signup">Start free →</Link>
@@ -538,7 +538,9 @@ export default function LandingPage(){
         <div className="flinks">
           <Link to="/pricing">Pricing</Link><span className="fdot">·</span>
           <Link to="/login">Log in</Link><span className="fdot">·</span>
-          <a href="mailto:wizepickshelp@gmail.com">Contact</a>
+          <a href="mailto:wizepickshelp@gmail.com">Contact</a><span className="fdot">·</span>
+          <Link to="/terms">Terms of Service</Link><span className="fdot">·</span>
+          <Link to="/privacy">Privacy Policy</Link>
         </div>
         <div className="fdiv2"></div>
         <div className="frg">Play responsibly · 1-800-GAMBLER</div>
@@ -591,9 +593,9 @@ const CSS = `
 .lpwrap .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--gold);
   display:inline-flex;align-items:center;gap:9px;margin-bottom:22px}
 .lpwrap .eyebrow::before{content:"";width:26px;height:1px;background:var(--gold);opacity:.7}
-.lpwrap h1.hl{font-family:var(--disp);font-weight:700;font-size:clamp(38px,5vw,60px);line-height:1.03;letter-spacing:-.02em;
+.lpwrap h2.hl{font-family:var(--disp);font-weight:700;font-size:clamp(38px,5vw,60px);line-height:1.03;letter-spacing:-.02em;
   color:#fff}
-.lpwrap h1.hl em{font-style:normal;color:var(--gold)}
+.lpwrap h2.hl em{font-style:normal;color:var(--gold)}
 .lpwrap .hero .sub{color:#9AA4AD}
 .lpwrap .hero .btn-ghost{color:#E8ECEF;border:1px solid var(--line2)}
 .lpwrap .hero .btn-ghost:hover{border-color:#3a434c}
