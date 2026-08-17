@@ -7,6 +7,26 @@
     <meta name="description" content="WizePicks — Live scores, H2H records, player stats, and weather analysis for MLB, NBA, and NFL." />
     <title>WizePicks — Your Edge on Every Game</title>
 
+    <!-- WZ-SEO-META-2026-08-17 :: baseline global canonical + Open Graph + Twitter/X card.
+         Static in the SPA shell; per-route self-canonical is a later SEO step. Canonical
+         host is www.wizepicks.com, matching the apex->www 307 and /sitemap.xml. Title and
+         description are unchanged and mirrored into og:/twitter: below. -->
+    <link rel="canonical" href="https://www.wizepicks.com/" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="WizePicks" />
+    <meta property="og:url" content="https://www.wizepicks.com/" />
+    <meta property="og:title" content="WizePicks — Your Edge on Every Game" />
+    <meta property="og:description" content="WizePicks — Live scores, H2H records, player stats, and weather analysis for MLB, NBA, and NFL." />
+    <meta property="og:image" content="https://www.wizepicks.com/icon-512.png" />
+    <meta property="og:image:width" content="512" />
+    <meta property="og:image:height" content="512" />
+
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="WizePicks — Your Edge on Every Game" />
+    <meta name="twitter:description" content="WizePicks — Live scores, H2H records, player stats, and weather analysis for MLB, NBA, and NFL." />
+    <meta name="twitter:image" content="https://www.wizepicks.com/icon-512.png" />
+
     <!-- WZ-PWA-SAFEBOTTOM-2026-07-05 :: re-enable viewport-fit=cover so the sport bar's
          existing env(safe-area-inset-bottom) padding works in the installed app. -->
     <link rel="manifest" href="/manifest.webmanifest" />
