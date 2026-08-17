@@ -27,6 +27,33 @@
     <meta name="twitter:description" content="WizePicks — Live scores, H2H records, player stats, and weather analysis for MLB, NBA, and NFL." />
     <meta name="twitter:image" content="https://www.wizepicks.com/icon-512.png" />
 
+    <!-- WZ-SEO-JSONLD-2026-08-17 :: global Organization + WebSite structured data (SEO step 5, B1).
+         Truthful, verified fields only: brand name WizePicks, canonical www URL, and the real
+         public logo asset (/icon-512.png, HTTP 200). No sameAs (no official social profile in the
+         repo), no SearchAction (no public site search), no ratings/reviews. Static in the shell,
+         so every prerendered route inherits this one block. -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "Organization",
+          "@id": "https://www.wizepicks.com/#organization",
+          "name": "WizePicks",
+          "url": "https://www.wizepicks.com",
+          "logo": "https://www.wizepicks.com/icon-512.png"
+        },
+        {
+          "@type": "WebSite",
+          "@id": "https://www.wizepicks.com/#website",
+          "name": "WizePicks",
+          "url": "https://www.wizepicks.com",
+          "publisher": { "@id": "https://www.wizepicks.com/#organization" }
+        }
+      ]
+    }
+    </script>
+
     <!-- WZ-PWA-SAFEBOTTOM-2026-07-05 :: re-enable viewport-fit=cover so the sport bar's
          existing env(safe-area-inset-bottom) padding works in the installed app. -->
     <link rel="manifest" href="/manifest.webmanifest" />
