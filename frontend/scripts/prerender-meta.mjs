@@ -83,6 +83,12 @@ const ROUTES = [
     description: "Implied probability explained: convert American odds to a percentage, see worked examples, and learn how implied probability differs from true win probability, break-even, expected value, and vig.",
     canonical: "https://www.wizepicks.com/implied-probability-sports-betting",
   },
+  {
+    out: "how-point-spreads-work/index.html",
+    title: "How Point Spreads Work in Sports Betting — WizePicks",
+    description: "Point spreads explained: what -6.5 and +6.5 mean, covering the spread, pushes and the hook, spread odds and vig, run lines and puck lines, plus worked examples and common mistakes.",
+    canonical: "https://www.wizepicks.com/how-point-spreads-work",
+  },
 ];
 
 const esc = (s) =>

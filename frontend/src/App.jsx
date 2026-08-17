@@ -34,6 +34,7 @@ import HowItWorksPage from "./pages/HowItWorks"; // WZ-SEO-TRUSTPAGES-2026-08-17
 import ClosingLineValuePage from "./pages/ClosingLineValue"; // WZ-SEO-CLV-ARTICLE-2026-08-17 :: public educational page
 import MoneylineOddsPage from "./pages/MoneylineOdds"; // WZ-SEO-MONEYLINE-ARTICLE-2026-08-17 :: public educational page
 import ImpliedProbabilityPage from "./pages/ImpliedProbability"; // WZ-SEO-IMPLIEDPROB-ARTICLE-2026-08-17 :: public educational page
+import HowPointSpreadsPage from "./pages/HowPointSpreads"; // WZ-SEO-POINTSPREAD-ARTICLE-2026-08-17 :: public educational page
 import SportBar, { SportTabsHeader } from "./pages/SportNav"; // WIZEPICKS-SPORTNAV-2026-06-25
 import InstallNudge from "./pages/InstallNudge"; // WZ-GETAPP-2026-07-05 :: iOS "Get the app" nudge
 function PrivateRoute({ children }) {
@@ -217,6 +218,8 @@ export default function App() {
           <Route path="/how-to-read-moneyline-odds" element={<MoneylineOddsPage />} />
           {/* WZ-SEO-IMPLIEDPROB-ARTICLE-2026-08-17 :: public educational article (no auth) */}
           <Route path="/implied-probability-sports-betting" element={<ImpliedProbabilityPage />} />
+          {/* WZ-SEO-POINTSPREAD-ARTICLE-2026-08-17 :: public educational article (no auth) */}
+          <Route path="/how-point-spreads-work" element={<HowPointSpreadsPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/admin" element={
             <PrivateRoute>
