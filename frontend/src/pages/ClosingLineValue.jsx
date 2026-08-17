@@ -84,6 +84,7 @@ export default function ClosingLineValuePage() {
 
       <PageNav
         links={[
+          { to: "/how-to-read-moneyline-odds", label: "How to read moneyline odds" },
           { to: "/how-it-works", label: "How WizePicks works" },
           { to: "/pricing", label: "Pricing" },
           { to: "/signup", label: "Start free" },

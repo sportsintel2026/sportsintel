@@ -71,6 +71,12 @@ const ROUTES = [
     description: "Closing line value (CLV) measures whether you bet at a better price than the market's closing line. Plain-English definition, moneyline and spread examples, and why sharp bettors track it.",
     canonical: "https://www.wizepicks.com/what-is-closing-line-value",
   },
+  {
+    out: "how-to-read-moneyline-odds/index.html",
+    title: "How to Read Moneyline Odds — WizePicks",
+    description: "Moneyline odds explained: what +150 and -150 mean, how to calculate profit, payout, break-even and implied probability, plus favorites vs. underdogs, vig, line moves, and beginner mistakes.",
+    canonical: "https://www.wizepicks.com/how-to-read-moneyline-odds",
+  },
 ];
 
 const esc = (s) =>
