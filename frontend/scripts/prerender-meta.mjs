@@ -95,6 +95,12 @@ const ROUTES = [
     description: "Over/under (totals) betting explained: what the total means, betting the Over vs the Under, pushes, odds and vig, worked examples in the NFL, NBA and MLB, line moves, and common mistakes.",
     canonical: "https://www.wizepicks.com/over-under-betting",
   },
+  {
+    out: "expected-value-betting/index.html",
+    title: "Expected Value (EV) in Sports Betting — WizePicks",
+    description: "Expected value (EV) betting explained: what +EV and -EV mean, the EV formula, worked examples with real odds, why a +EV bet can still lose, EV vs implied probability and closing line value, and why EV matters over a large sample.",
+    canonical: "https://www.wizepicks.com/expected-value-betting",
+  },
 ];
 
 const esc = (s) =>

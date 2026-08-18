@@ -52,7 +52,7 @@ export default function ClosingLineValuePage() {
 
       <Section h="Why CLV does not guarantee a bet wins">
         <P>This is the part people miss: <b>CLV says nothing about whether a single bet wins.</b> You can take an underdog at +150, watch it close at +120 (great CLV), and still lose the game. Getting a good price and winning a specific game are two different things.</P>
-        <P>Sports are decided by one result each. A better price improves your <b>expected value over many bets</b>; it cannot make one game go your way. Positive CLV means you bet well. It does not mean you won that night.</P>
+        <P>Sports are decided by one result each. A better price improves your <b><a href="/expected-value-betting">expected value</a> over many bets</b>; it cannot make one game go your way. Positive CLV means you bet well. It does not mean you won that night.</P>
       </Section>
 
       <Section h="Getting a good price vs. predicting one game">
