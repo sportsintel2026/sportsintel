@@ -51,7 +51,7 @@ export default function OverUnderPage() {
       </Section>
 
       <Section h="Implied probability on a total">
-        <P>Because a total has a price, it also has an <b>implied probability</b> &mdash; and therefore a break-even rate. A -110 side implies about a <b>52.4%</b> break-even, not 50%, thanks to the vig. The same conversion that turns any odds into a percentage applies here; see <a href="/implied-probability-sports-betting">implied probability</a> for the math.</P>
+        <P>Because a total has a price, it also has an <b>implied probability</b> &mdash; and therefore a break-even rate. A -110 side implies about a <b>52.4%</b> break-even, not 50%, thanks to the vig. The same conversion that turns any odds into a percentage applies here; see <a href="/implied-probability-sports-betting">implied probability</a> for the math, or <a href="/expected-value-betting">expected value</a> for how price and probability combine over many bets.</P>
       </Section>
 
       <Section h="Worked examples in common sports">

@@ -70,7 +70,7 @@ export default function ImpliedProbabilityPage() {
       </Section>
 
       <Section h="How implied probability relates to expected value">
-        <P><b>Expected value</b> (EV) is the average result of a bet if you could make it many times. It turns positive when your estimated probability is higher than the price&rsquo;s break-even (implied) probability &mdash; that difference is the <b>edge</b>.</P>
+        <P><b><a href="/expected-value-betting">Expected value</a></b> (EV) is the average result of a bet if you could make it many times. It turns positive when your estimated probability is higher than the price&rsquo;s break-even (implied) probability &mdash; that difference is the <b>edge</b>.</P>
         <P>A quick way to see it: if a bet pays <b>b</b> profit per unit risked and you estimate the true win chance as <b>p</b>, then <b>EV = p &times; b &minus; (1 &minus; p)</b>. When your <b>p</b> beats the break-even implied by the price, EV is positive. Finding those spots &mdash; a real edge at the posted price &mdash; is exactly what <a href="/how-it-works">how WizePicks works</a> is built around.</P>
       </Section>
 
