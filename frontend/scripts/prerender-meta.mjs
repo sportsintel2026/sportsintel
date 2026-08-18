@@ -89,6 +89,12 @@ const ROUTES = [
     description: "Point spreads explained: what -6.5 and +6.5 mean, covering the spread, pushes and the hook, spread odds and vig, run lines and puck lines, plus worked examples and common mistakes.",
     canonical: "https://www.wizepicks.com/how-point-spreads-work",
   },
+  {
+    out: "over-under-betting/index.html",
+    title: "What Is Over/Under (Totals) Betting? — WizePicks",
+    description: "Over/under (totals) betting explained: what the total means, betting the Over vs the Under, pushes, odds and vig, worked examples in the NFL, NBA and MLB, line moves, and common mistakes.",
+    canonical: "https://www.wizepicks.com/over-under-betting",
+  },
 ];
 
 const esc = (s) =>
