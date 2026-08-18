@@ -39,6 +39,7 @@ export default function HowItWorksPage() {
       <PageNav
         links={[
           { to: "/what-is-closing-line-value", label: "What is closing line value?" },
+          { to: "/over-under-betting", label: "Over/under betting" },
           { to: "/pricing", label: "See pricing" },
           { to: "/signup", label: "Start free" },
           { to: "/about", label: "About WizePicks" },
