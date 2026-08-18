@@ -101,6 +101,12 @@ const ROUTES = [
     description: "Expected value (EV) betting explained: what +EV and -EV mean, the EV formula, worked examples with real odds, why a +EV bet can still lose, EV vs implied probability and closing line value, and why EV matters over a large sample.",
     canonical: "https://www.wizepicks.com/expected-value-betting",
   },
+  {
+    out: "bankroll-management/index.html",
+    title: "Sports Betting Bankroll Management & Unit Sizing — WizePicks",
+    description: "Sports betting bankroll management and unit sizing explained: what a bankroll and a unit are, percentage-based sizing, flat vs variable staking, variance and drawdowns, and why bankroll management protects you but never creates an edge.",
+    canonical: "https://www.wizepicks.com/bankroll-management",
+  },
 ];
 
 const esc = (s) =>
