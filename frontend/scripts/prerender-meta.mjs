@@ -113,6 +113,12 @@ const ROUTES = [
     description: "Parlay betting explained: what a parlay and a leg are, why every leg must win, how parlay odds and payouts are created, worked American-odds examples, pushes and voids, and why parlays carry more risk and house edge.",
     canonical: "https://www.wizepicks.com/what-is-a-parlay",
   },
+  {
+    out: "odds-formats-explained/index.html",
+    title: "American vs. Decimal vs. Fractional Odds Explained — WizePicks",
+    description: "Betting odds formats explained: American, decimal, and fractional odds, how to convert between them with worked examples, how each shows implied probability, and which format is used where.",
+    canonical: "https://www.wizepicks.com/odds-formats-explained",
+  },
 ];
 
 const esc = (s) =>

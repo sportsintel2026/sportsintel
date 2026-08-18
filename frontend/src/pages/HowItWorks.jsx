@@ -43,6 +43,7 @@ export default function HowItWorksPage() {
           { to: "/bankroll-management", label: "Bankroll management" },
           { to: "/over-under-betting", label: "Over/under betting" },
           { to: "/what-is-a-parlay", label: "What is a parlay?" },
+          { to: "/odds-formats-explained", label: "Odds formats explained" },
           { to: "/pricing", label: "See pricing" },
           { to: "/signup", label: "Start free" },
           { to: "/about", label: "About WizePicks" },

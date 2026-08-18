@@ -32,7 +32,7 @@ export default function ParlayPage() {
       </Section>
 
       <Section h="How parlay odds are created">
-        <P>Parlay odds come from <b>multiplying the odds of each leg together</b>. The cleanest way to see this is with <b>decimal odds</b> (the total return per unit, including your stake). To convert American odds to decimal:</P>
+        <P>Parlay odds come from <b>multiplying the odds of each leg together</b>. The cleanest way to see this is with <a href="/odds-formats-explained">decimal odds</a> (the total return per unit, including your stake). To convert American odds to decimal:</P>
         <ul className="pg-ul">
           <LI><b>Positive:</b> decimal = (odds &divide; 100) + 1. So +150 &rarr; 2.5.</LI>
           <LI><b>Negative:</b> decimal = (100 &divide; |odds|) + 1. So -110 &rarr; about 1.91.</LI>
