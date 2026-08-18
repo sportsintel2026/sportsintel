@@ -19,7 +19,7 @@ export default function HowPointSpreadsPage() {
     >
       <Section h="What a point spread is">
         <P>A point spread is a margin the sportsbook sets to level the playing field between a stronger and weaker team. The <b>favorite</b> must win by more than the spread; the <b>underdog</b> can lose by less than the spread &mdash; or win outright &mdash; and still cash the bet.</P>
-        <P>It is a different bet from the moneyline. A moneyline is simply <a href="/how-to-read-moneyline-odds">who wins</a>; a spread is <b>by how much</b>; and an <a href="/over-under-betting">over/under total</a> is about the combined score. That is why a big favorite can be a losing spread bet even when it wins the game.</P>
+        <P>It is a different bet from the moneyline. A moneyline is simply <a href="/how-to-read-moneyline-odds">who wins</a>; a spread is <b>by how much</b>; and an <a href="/over-under-betting">over/under total</a> is about the combined score. Combine several of these picks onto one ticket and you have a <a href="/what-is-a-parlay">parlay</a>. That is why a big favorite can be a losing spread bet even when it wins the game.</P>
       </Section>
 
       <Section h="Reading the favorite and the underdog">

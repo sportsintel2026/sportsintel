@@ -42,6 +42,7 @@ export default function HowItWorksPage() {
           { to: "/expected-value-betting", label: "Expected value (EV)" },
           { to: "/bankroll-management", label: "Bankroll management" },
           { to: "/over-under-betting", label: "Over/under betting" },
+          { to: "/what-is-a-parlay", label: "What is a parlay?" },
           { to: "/pricing", label: "See pricing" },
           { to: "/signup", label: "Start free" },
           { to: "/about", label: "About WizePicks" },

@@ -107,6 +107,12 @@ const ROUTES = [
     description: "Sports betting bankroll management and unit sizing explained: what a bankroll and a unit are, percentage-based sizing, flat vs variable staking, variance and drawdowns, and why bankroll management protects you but never creates an edge.",
     canonical: "https://www.wizepicks.com/bankroll-management",
   },
+  {
+    out: "what-is-a-parlay/index.html",
+    title: "What Is a Parlay? Parlay Betting & Odds Explained — WizePicks",
+    description: "Parlay betting explained: what a parlay and a leg are, why every leg must win, how parlay odds and payouts are created, worked American-odds examples, pushes and voids, and why parlays carry more risk and house edge.",
+    canonical: "https://www.wizepicks.com/what-is-a-parlay",
+  },
 ];
 
 const esc = (s) =>

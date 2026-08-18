@@ -38,6 +38,7 @@ import HowPointSpreadsPage from "./pages/HowPointSpreads"; // WZ-SEO-POINTSPREAD
 import OverUnderPage from "./pages/OverUnder"; // WZ-SEO-TOTALS-ARTICLE-2026-08-17 :: public educational page
 import ExpectedValuePage from "./pages/ExpectedValue"; // WZ-SEO-EV-ARTICLE-2026-08-17 :: public educational page
 import BankrollPage from "./pages/Bankroll"; // WZ-SEO-BANKROLL-ARTICLE-2026-08-17 :: public educational page
+import ParlayPage from "./pages/Parlay"; // WZ-SEO-PARLAY-ARTICLE-2026-08-17 :: public educational page
 import SportBar, { SportTabsHeader } from "./pages/SportNav"; // WIZEPICKS-SPORTNAV-2026-06-25
 import InstallNudge from "./pages/InstallNudge"; // WZ-GETAPP-2026-07-05 :: iOS "Get the app" nudge
 function PrivateRoute({ children }) {
@@ -229,6 +230,8 @@ export default function App() {
           <Route path="/expected-value-betting" element={<ExpectedValuePage />} />
           {/* WZ-SEO-BANKROLL-ARTICLE-2026-08-17 :: public educational article (no auth) */}
           <Route path="/bankroll-management" element={<BankrollPage />} />
+          {/* WZ-SEO-PARLAY-ARTICLE-2026-08-17 :: public educational article (no auth) */}
+          <Route path="/what-is-a-parlay" element={<ParlayPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/admin" element={
             <PrivateRoute>
