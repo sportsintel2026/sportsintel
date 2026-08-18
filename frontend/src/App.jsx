@@ -37,6 +37,7 @@ import ImpliedProbabilityPage from "./pages/ImpliedProbability"; // WZ-SEO-IMPLI
 import HowPointSpreadsPage from "./pages/HowPointSpreads"; // WZ-SEO-POINTSPREAD-ARTICLE-2026-08-17 :: public educational page
 import OverUnderPage from "./pages/OverUnder"; // WZ-SEO-TOTALS-ARTICLE-2026-08-17 :: public educational page
 import ExpectedValuePage from "./pages/ExpectedValue"; // WZ-SEO-EV-ARTICLE-2026-08-17 :: public educational page
+import BankrollPage from "./pages/Bankroll"; // WZ-SEO-BANKROLL-ARTICLE-2026-08-17 :: public educational page
 import SportBar, { SportTabsHeader } from "./pages/SportNav"; // WIZEPICKS-SPORTNAV-2026-06-25
 import InstallNudge from "./pages/InstallNudge"; // WZ-GETAPP-2026-07-05 :: iOS "Get the app" nudge
 function PrivateRoute({ children }) {
@@ -226,6 +227,8 @@ export default function App() {
           <Route path="/over-under-betting" element={<OverUnderPage />} />
           {/* WZ-SEO-EV-ARTICLE-2026-08-17 :: public educational article (no auth) */}
           <Route path="/expected-value-betting" element={<ExpectedValuePage />} />
+          {/* WZ-SEO-BANKROLL-ARTICLE-2026-08-17 :: public educational article (no auth) */}
+          <Route path="/bankroll-management" element={<BankrollPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/admin" element={
             <PrivateRoute>

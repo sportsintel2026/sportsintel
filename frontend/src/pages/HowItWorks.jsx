@@ -40,6 +40,7 @@ export default function HowItWorksPage() {
         links={[
           { to: "/what-is-closing-line-value", label: "What is closing line value?" },
           { to: "/expected-value-betting", label: "Expected value (EV)" },
+          { to: "/bankroll-management", label: "Bankroll management" },
           { to: "/over-under-betting", label: "Over/under betting" },
           { to: "/pricing", label: "See pricing" },
           { to: "/signup", label: "Start free" },

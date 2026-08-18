@@ -75,7 +75,7 @@ export default function ExpectedValuePage() {
       </Section>
 
       <Section h="Why EV matters over a large sample, not one bet">
-        <P>Expected value is a long-run concept. Over a handful of bets, luck dominates and a +EV strategy can be underwater. Over hundreds or thousands, results converge toward the underlying EV. That is why disciplined bettors judge themselves on process across a big sample &mdash; not on last night&rsquo;s ticket.</P>
+        <P>Expected value is a long-run concept. Over a handful of bets, luck dominates and a +EV strategy can be underwater. Over hundreds or thousands, results converge toward the underlying EV. That is why disciplined bettors judge themselves on process across a big sample &mdash; not on last night&rsquo;s ticket &mdash; and why surviving the swings long enough for that sample to matter takes <a href="/bankroll-management">bankroll management</a>.</P>
       </Section>
 
       <Section h="Common mistakes when evaluating EV">
