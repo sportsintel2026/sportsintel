@@ -140,7 +140,7 @@ export default function HomeDesktop(props) {
       graded: total };
   })();
   const isFb = (sport === "nfl" || sport === "cfb");
-  const [market, setMarket] = useState("ml"); // WZ-WINNERS-V2-2026-07-04 :: Edge Board leads
+  const [market, setMarket] = useState("all"); // WZ-MKTABS-2026-08-17 :: Edge Board leads on the All tab (was "ml")
   const [nbaStd, setNbaStd] = useState([]);
   useEffect(() => {
     if (sport !== "nba") { setNbaStd([]); return; }
@@ -169,14 +169,24 @@ export default function HomeDesktop(props) {
   const arrFor = (m) => m === "ml" ? e.moneylineEdges : m === "spread" ? e.spreadEdges : e.totalsEdges;
   // Build one row per GAME from the game's own moneyline/totals so the board shows the whole slate,
   // not just the handful the backend pre-flagged. NBA still uses its edges feed.
-  const mkRow = (g) => {
+  // WZ-MKTABS-2026-08-17 :: mkRow(g, mkt) builds ONE per-game row for the given market -- the desktop's
+  // single per-game classifier (no second classifier bolted on). MLB carries run line ("runline"); the
+  // shape mirrors totals/moneyline, reading g.runLine (awayCoverProb/awayEdge/awayOdds/awayLine, home*).
+  const mkRow = (g, mkt) => {
     const A = g.awayAbbr || shortTeam(g.away || ""); const H = g.homeAbbr || shortTeam(g.home || "");
     const base = { gameId: g.id, _a: A, _h: H, matchup: `${A} @ ${H}` };
-    if (market === "totals") {
+    if (mkt === "totals") {
       const t = g.totals || {}; if (t.line == null && t.overOdds == null) return null;
       const ov = { side: "over", edge: t.overEdge, odds: t.overOdds, book: t.overBook, modelProb: t.overProb, conviction: t.overConfidence, convictionScore: t.overConfidenceScore, line: t.line };
       const un = { side: "under", edge: t.underEdge, odds: t.underOdds, book: t.underBook, modelProb: t.underProb, conviction: t.underConfidence, convictionScore: t.underConfidenceScore, line: t.line };
       const best = ((ov.edge ?? -9) >= (un.edge ?? -9)) ? ov : un;
+      return { ...base, ...best };
+    }
+    if (mkt === "runline") {
+      const r = g.runLine || {}; if (r.awayOdds == null && r.homeOdds == null) return null;
+      const aw = { side: "away", edge: r.awayEdge, odds: r.awayOdds, book: r.awayBook, modelProb: r.awayCoverProb, conviction: r.awayConviction, convictionScore: r.awayConvictionScore, teamAbbr: A, line: r.awayLine };
+      const hm = { side: "home", edge: r.homeEdge, odds: r.homeOdds, book: r.homeBook, modelProb: r.homeCoverProb, conviction: r.homeConviction, convictionScore: r.homeConvictionScore, teamAbbr: H, line: r.homeLine };
+      const best = ((aw.edge ?? -9) >= (hm.edge ?? -9)) ? aw : hm;
       return { ...base, ...best };
     }
     const m = g.moneyline || {}; if (m.awayOdds == null && m.homeOdds == null) return null;
@@ -185,9 +195,19 @@ export default function HomeDesktop(props) {
     const best = ((aw.edge ?? -9) >= (hm.edge ?? -9)) ? aw : hm;
     return { ...base, ...best };
   };
+  // WZ-MKTABS-2026-08-17 :: "all" = best market per game (mirrors mobile bestPerGame): highest edge across
+  // ml/runline/totals (MLB) or across the edge arrays (non-MLB). A specific tab shows that one market.
+  const MLB_MKTS = ["ml", "runline", "totals"];
+  const bestOf = (cands) => { const v = cands.filter(Boolean); return v.length ? v.reduce((b, s) => ((s.edge ?? -Infinity) > (b.edge ?? -Infinity) ? s : b)) : null; };
   let rows = sport === "mlb"
-    ? games.map(mkRow).filter(Boolean)
-    : oneSidePerGame(arrFor(market) || []).filter((x) => x.edge != null);
+    ? (market === "all"
+        ? games.map((g) => bestOf(MLB_MKTS.map((m) => mkRow(g, m)))).filter(Boolean)
+        : games.map((g) => mkRow(g, market)).filter(Boolean))
+    : oneSidePerGame(
+        market === "all"
+          ? [...(e.moneylineEdges || []), ...(e.spreadEdges || []), ...(e.totalsEdges || [])]
+          : (arrFor(market) || [])
+      ).filter((x) => x.edge != null);
   // Movement guardrail: nudge each row's conviction one tier based on its line move
   // (computed in Home.jsx, passed as moveByPick). Bounded; flag explains it.
   rows = rows.map((x) => { const mv = moveByPick[x.gameId + x.side]; const dir = mv?.dir || 0; return dir ? { ...x, _moveDir: dir, _moveFlag: mv.flag, _convAdj: dTierBump(x.conviction, dir) } : { ...x, _moveDir: 0, _moveFlag: null, _convAdj: x.conviction }; });
@@ -297,7 +317,7 @@ export default function HomeDesktop(props) {
                   <div className="idx green"><div className="k">Win Rate</div><div className="v num">{winPct != null ? `${winPct}%` : "—"}</div><div className="chg">{wpRecord ? `${wpRecord.wins+wpRecord.losses+wpRecord.pushes} graded` : "tracking"}</div></div>
                   <div className="idx teal"><div className="k">Units</div><div className="v num">{units != null ? `${units >= 0 ? "+" : ""}${units.toFixed(1)}u` : "—"}</div><div className="chg">all plays</div></div>
                 </>}
-            <div className="idx purple"><div className="k">Edges Live</div><div className="v num">{edgeCount}</div><div className="chg">{market.toUpperCase()} board · {rows.length} shown</div></div>
+            <div className="idx purple"><div className="k">Edges Live</div><div className="v num">{edgeCount}</div><div className="chg">{({ all: "ALL", ml: "MONEYLINE", runline: "RUN LINE", spread: "SPREAD", totals: "TOTAL" }[market] || market.toUpperCase())} board · {rows.length} shown</div></div>
           </div>
 
           {/* WZ-DESKTOP-TOPPLAY-2026-07-15 :: featured Top Play at the top of the board column, per-sport
@@ -390,8 +410,11 @@ export default function HomeDesktop(props) {
           {/* EDGE BOARD */}
           <div className="panel">
             <div className="phead"><div className="t">Edge Board</div>
-              <div className="seg">{[["ml", "Moneyline"], ["totals", "Totals"], ...(sport !== "mlb" ? [["spread", "Spread"]] : [])].map(([m, lb]) => (
-                <b key={m} className={market === m ? "on" : ""} onClick={() => setMarket(m)}>{lb}</b>))}</div>
+              {/* WZ-MKTABS-2026-08-17 :: market filter tab row -- underline treatment (mono, uppercase, gold
+                  active w/ 2px gold bottom border, muted inactive) matching the top nav, not the filled .seg
+                  pill. ALL / MONEYLINE / RUN LINE|SPREAD / TOTAL. Reuses the existing `market` state. */}
+              <div className="mktabs">{[["all", "All"], ["ml", "Moneyline"], ...(sport === "mlb" ? [["runline", "Run line"]] : [["spread", "Spread"]]), ["totals", "Total"]].map(([m, lb]) => (
+                <button key={m} type="button" className={"mkt" + (market === m ? " on" : "")} onClick={() => setMarket(m)}>{lb}</button>))}</div>
               <div className="right"><span className="ldot" />click a column to sort</div>
             </div>
             {!planLoaded
@@ -399,7 +422,8 @@ export default function HomeDesktop(props) {
               : !hasFull
               ? <Lock title="Edges are an All-Access feature" sub={<>Every edge across the slate, ranked by conviction. <b>From $7/wk</b></>} navigate={navigate} />
               : rows.length === 0
-                ? <div className="empty">No {market === "ml" ? "moneyline" : market === "spread" ? "spread" : "totals"} edges on the board yet — fills in closer to first pitch.</div>
+                /* WZ-MKTABS-2026-08-17 :: empty market -> one centered mono line, never a blank list */
+                ? <div className="mktempty">NO QUALIFYING EDGES TONIGHT</div>
                 : (
                   <table className="tbl">
                     <thead><tr>
@@ -778,6 +802,12 @@ const TCSS = `
 .wpterm .phead .seg{display:flex;gap:2px;background:#080b12;border:1px solid var(--line);border-radius:9px;padding:3px;margin-left:6px}
 .wpterm .phead .seg b{font-size:11.5px;font-weight:700;color:var(--mut);padding:5px 12px;border-radius:6px;cursor:pointer}
 .wpterm .phead .seg b.on{background:#16203a;color:#fff;box-shadow:inset 0 0 0 1px rgba(38,116,176,.35)}
+/* WZ-MKTABS-2026-08-17 :: Edge Board market filter -- underline tabs (mono, uppercase, gold active with a
+   2px gold bottom border, muted inactive) matching the section nav, NOT the filled .seg pill above. */
+.wpterm .phead .mktabs{display:flex;gap:2px;margin-left:10px;align-self:flex-end}
+.wpterm .phead .mkt{appearance:none;background:none;border:none;cursor:pointer;font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--mut2);padding:4px 10px 7px;border-bottom:2px solid transparent}
+.wpterm .phead .mkt.on{color:var(--amber);border-bottom-color:var(--amber)}
+.wpterm .mktempty{font-family:var(--mono);font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:var(--mut2);text-align:center;padding:30px 16px}
 .wpterm .phead .right{margin-left:auto;display:flex;align-items:center;gap:7px;font-size:11px;color:var(--mut)}
 .wpterm .phead .right .ldot{width:6px;height:6px}
 .wpterm .empty{padding:22px 16px;color:var(--mut);font-size:12.5px}

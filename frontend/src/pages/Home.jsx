@@ -72,16 +72,19 @@ const teamCol=(ab)=>TEAMCOL[String(ab||"").toUpperCase()]||"#3a4a57";
 const colFor=(ab,sport)=> sport==="nba" ? (NBACOL[String(ab||"").toUpperCase()]||"#3a4a57") : teamCol(ab);
 
 // Per-sport config. MLB is the original behavior; NBA reads the /api/edges/nba feed.
-// markets sets the board toggle; spread is NBA-only (MLB run line was cut for ROI).
+// WZ-MKTABS-2026-08-17 :: `markets` now DRIVES the market filter tab row (was dead config). Each entry
+// is [mkToken, label] where mkToken is exactly what mkOf(x) returns (ML|RL|SPR|TOT) -- so the tab and
+// the pick's own mk are the same value and nothing re-derives market type. MLB carries RUN LINE (RL);
+// every other sport carries SPREAD (SPR). The board renders an "All" tab in front of these.
 // hasLive/hasHist/hasParks gate MLB-only sections. hasProps gates the props CTA
 // (NBA props page lands in Phase 2, so its CTA is hidden until then).
 const SPORTS={
-  mlb:{ feed:()=>edgesApi.getMLB(), lg:"mlb", markets:[["ml","ML"],["totals","Totals"]], propsCopy:"Every prop with an edge — HR, hits & strikeouts", hasLive:true, hasHist:true, hasParks:true, hasProps:true },
-  nba:{ feed:()=>edgesApi.getNBA(), lg:"nba", markets:[["ml","ML"],["spread","Spread"],["totals","Totals"]], propsCopy:"", hasLive:false, hasHist:false, hasParks:false, hasProps:false },
-  nfl:{ feed:(phase)=>edgesApi.getNFL(phase), lg:"nfl", markets:[["ml","ML"],["spread","Spread"],["totals","Totals"]], propsCopy:"", hasLive:false, hasHist:false, hasParks:false, hasProps:false, provisional:true },
-  cfb:{ feed:()=>edgesApi.getCFB(), lg:"cfb", markets:[["ml","ML"],["spread","Spread"],["totals","Totals"]], propsCopy:"", hasLive:false, hasHist:false, hasParks:false, hasProps:false, provisional:true },
+  mlb:{ feed:()=>edgesApi.getMLB(), lg:"mlb", markets:[["ML","Moneyline"],["RL","Run line"],["TOT","Total"]], propsCopy:"Every prop with an edge — HR, hits & strikeouts", hasLive:true, hasHist:true, hasParks:true, hasProps:true },
+  nba:{ feed:()=>edgesApi.getNBA(), lg:"nba", markets:[["ML","Moneyline"],["SPR","Spread"],["TOT","Total"]], propsCopy:"", hasLive:false, hasHist:false, hasParks:false, hasProps:false },
+  nfl:{ feed:(phase)=>edgesApi.getNFL(phase), lg:"nfl", markets:[["ML","Moneyline"],["SPR","Spread"],["TOT","Total"]], propsCopy:"", hasLive:false, hasHist:false, hasParks:false, hasProps:false, provisional:true },
+  cfb:{ feed:()=>edgesApi.getCFB(), lg:"cfb", markets:[["ML","Moneyline"],["SPR","Spread"],["TOT","Total"]], propsCopy:"", hasLive:false, hasHist:false, hasParks:false, hasProps:false, provisional:true },
   // WZ-DESKTOP-NHL-INBOARD-2026-07-11 :: NHL renders in the board like the rest; empty feed until the season (no fabricated games, no MLB fallback).
-  nhl:{ feed:()=>Promise.resolve({ moneylineEdges:[], totalsEdges:[], spreadEdges:[], games:[] }), lg:"nhl", markets:[["ml","ML"],["spread","Spread"],["totals","Totals"]], propsCopy:"", hasLive:false, hasHist:false, hasParks:false, hasProps:false, provisional:true, comingSoon:true },
+  nhl:{ feed:()=>Promise.resolve({ moneylineEdges:[], totalsEdges:[], spreadEdges:[], games:[] }), lg:"nhl", markets:[["ML","Moneyline"],["SPR","Spread"],["TOT","Total"]], propsCopy:"", hasLive:false, hasHist:false, hasParks:false, hasProps:false, provisional:true, comingSoon:true },
 };
 // Edge display differs by sport: MLB edge is a fraction (×100 → %); NBA ML edge is
 // already a % figure, and NBA spread/totals edges are POINT projections.
@@ -172,6 +175,7 @@ export default function HomePage(){
   const [isDesktop,setIsDesktop]=useState(typeof window!=="undefined"&&window.innerWidth>=1024);
   const [heroIdx,setHeroIdx]=useState(0);
   const [openId,setOpenId]=useState(null);
+  const [mktab,setMktab]=useState("all"); // WZ-MKTABS-2026-08-17 :: active market filter tab -- "all" or an mk token (ML|RL|SPR|TOT)
   useEffect(()=>{ const on=()=>setIsDesktop(window.innerWidth>=1024); window.addEventListener("resize",on); return ()=>window.removeEventListener("resize",on); },[]);
 
   useEffect(()=>{ subscriptionApi.getMyPlan().then(setPlan).catch(()=>{}).finally(()=>setPlanLoaded(true)); },[]);
@@ -203,6 +207,7 @@ export default function HomePage(){
   // WZ-TOMORROW-PREVIEW-2026-07-07 :: once today's slate is underway (backend flag) pull tomorrow's
   // board as a DISPLAY-ONLY preview (?date=). Never recorded/graded -- guaranteed server-side.
   useEffect(()=>{ if(sport!=="mlb"||!edges||!edges.slateUnderway||edges.rolledToNextDay||!edges.previewDate){ setPreview(null); return; } let dead=false; (async()=>{ try{ const d=await edgesApi.getMLBPreview(edges.previewDate); if(!dead) setPreview(d&&!d.rolledToNextDay?d:null); }catch(_){ if(!dead) setPreview(null); } })(); return ()=>{dead=true;}; },[sport,edges?.previewDate,edges?.slateUnderway,edges?.rolledToNextDay]);
+  useEffect(()=>{ setMktab("all"); },[sport]); // WZ-MKTABS-2026-08-17 :: a market absent for the new sport (e.g. RL after leaving MLB) must not persist -- reset to All on every sport switch
   useEffect(()=>{ if(!SPORTS[sport].hasLive){ setLive([]); return; } let t; const pull=async()=>{ try{ const d=await liveApi.getMLB(); setLive(d?.games||[]); }catch(_){ setLive([]); } t=setTimeout(pull,60000); }; pull(); return ()=>clearTimeout(t); },[sport]);
   useEffect(()=>{ if(!SPORTS[sport].hasHist){ setOddsHist([]); return; } let t; const pull=async()=>{ try{ const d=await edgesApi.getOddsHistory(); setOddsHist(d?.games||[]); }catch(_){ setOddsHist([]); } t=setTimeout(pull,300000); }; pull(); return ()=>clearTimeout(t); },[sport]);
   useEffect(()=>{ if(sport!=="mlb"){ setMarketRead([]); return; } let t; const pull=async()=>{ try{ const d=await edgesApi.getMarketRead(); setMarketRead(d?.games||[]); }catch(_){ setMarketRead([]); } t=setTimeout(pull,120000); }; pull(); return ()=>clearTimeout(t); },[sport]);
@@ -482,11 +487,14 @@ export default function HomePage(){
   const pvMlAdj=(pv?.moneylineEdges||[]).map(moveAdjust), pvTotAdj=(pv?.totalsEdges||[]).map(moveAdjust), pvSpAdj=[...(pv?.runLineEdges||[]),...(pv?.spreadEdges||[])].map(moveAdjust);
   // WZ-MLGATE-FIX-2026-07-24 :: key on MARKET, not sport (this is the board that renders when today is empty,
   // isTomorrowMain). ML ungated; totals/run-line keep the edge gate so a parked market un-benching can't leak.
-  const previewItems = bestPerGame(pv ? [
+  // WZ-MKTABS-2026-08-17 :: previewSrc is the RAW (pre-toBoard) tomorrow source, exposed so the market
+  // filter can slice it by mk before bestPerGame exactly like boardSrc. previewItems is unchanged.
+  const previewSrc = pv ? [
     ...pvMlAdj,
     ...pvTotAdj.filter(x=>(x.edge??0)>0),
     ...pvSpAdj.filter(x=>(x.edge??0)>0),
-  ].sort(byWinProb).map(toBoard) : []);
+  ].sort(byWinProb) : [];
+  const previewItems = bestPerGame(previewSrc.map(toBoard));
   const previewLabel = pv&&pv.date ? fmtSlate(pv.date).toUpperCase() : "";
   const boardDate = fmtSlateFull(e.date || todayISO());
   // WZ-HERORANK-2026-08-07 :: ONE RANKING. The hero is now literally the #1 row of the same
@@ -546,6 +554,15 @@ export default function HomePage(){
   const parkItems = parks.map(g=>{const f=g.parkRunFactor,hf=g.parkHRFactor,w=g.weather||{};const hot=(hf??f)>1.05,cold=(hf??f)<0.95;const tag=hot?["HITTER FRIENDLY","h"]:cold?["PITCHER FRIENDLY","p"]:["NEUTRAL","n"];const ab=mlbAbbr(g.home||"");const t=w.tempF!=null?Math.round(w.tempF):null;const wind=w.windMph?(w.windMph+" mph"+(w.windEffect?" "+w.windEffect:"")):null;const wx=w.indoor?"Dome \u00b7 roof closed":([t!=null?t+"\u00b0F":null,wind].filter(Boolean).join(" \u00b7 ")||"Forecast pending");return {venue:g.venue||g.park||((g.home||"")+" Park"),g:g.home||"",a:[ab,teamCol(ab)],tag,hr:(hf!=null?((hf>1?"+":"")+Math.round((hf-1)*100)+"%"):"0%"),run:((f>1?"+":"")+Math.round((f-1)*100)+"%"),wx};});
   const liveItems = liveGames.map(g=>{const a=g.awayAbbr||(abbrById[g.gameId]?abbrById[g.gameId].a:shortTeam(g.away||""));const h=g.homeAbbr||(abbrById[g.gameId]?abbrById[g.gameId].h:shortTeam(g.home||""));const rows=[];const ml=(g.awayEdge??-9)>=(g.homeEdge??-9)?[a+" ML",g.awayWinProb,g.awayEdge,g.awayOdds]:[h+" ML",g.homeWinProb,g.homeEdge,g.homeOdds];if(ml[2]!=null)rows.push([ml[0],(ml[1]!=null?Math.round(ml[1]*100)+"%":"\u2014"),formatOdds(ml[3]),ml[2]*100]);if(g.totalLine!=null){const tt=(g.overEdge??-9)>=(g.underEdge??-9)?["Over "+g.totalLine,g.overProb,g.overEdge,g.overOdds]:["Under "+g.totalLine,g.underProb,g.underEdge,g.underOdds];if(tt[2]!=null)rows.push([tt[0],(tt[1]!=null?Math.round(tt[1]*100)+"%":"\u2014"),formatOdds(tt[3]),tt[2]*100]);}return {a,h,ac:colFor(a,sport),hc:colFor(h,sport),state:(g.half==="bottom"?"Bot":"Top")+" "+(g.inning||"")+(g.outs!=null?" \u00b7 "+g.outs+" out":""),rows,gameId:g.gameId};});
   const isTomorrowMain = boardItems.length===0 && previewItems.length>0; // WZ-BOARD-NEVER-EMPTY-2026-07-08
+  // WZ-MKTABS-2026-08-17 :: market filter. mk (mkOf, ~line 436) already yields exactly ML|RL|SPR|TOT.
+  // Filter the RAW source BY mk BEFORE bestPerGame -- filtering AFTER the per-game collapse would drop a
+  // game whose single best edge is a different market (e.g. a game with a moneyline pick would vanish from
+  // the MONEYLINE tab if its top edge were a total). ALL keeps the existing boardItems/previewItems path,
+  // untouched. Per market each game has at most one pick, so bestPerGame is a no-op there and no pick is lost.
+  const activeMk = mktab==="all" ? null : mktab;
+  const mkFilter = (arr)=> activeMk ? arr.filter(x=>mkOf(x)===activeMk) : arr;
+  const tabItems = mktab==="all" ? boardItems : bestPerGame(mkFilter(boardSrc).map(toBoard));
+  const tabPreview = mktab==="all" ? previewItems : bestPerGame(mkFilter(previewSrc).map(toBoard));
   // WZ-BOARD-ASBREAK-2026-07-12 :: add ?break=1 to the URL to preview the All-Star break state on a
   // live day (it's normally date-gated to Jul 13-15 and only shows when the board is empty).
   const breakPreview = typeof window!=="undefined" && /[?&]break=1/.test(window.location.search);
@@ -694,9 +711,23 @@ export default function HomePage(){
           <span className="bht"><span className="bhwize">TONIGHT{"\u2019"}S </span>CARD</span>{/* WZ-TOPPICKS-2026-08-03 :: board band renamed WizeBoard -> TopPicks. TEXT ONLY -- .bht/.bhwize CSS untouched, so the two-tone stays exactly as it was (white first word, gold second). Class name bhwize kept deliberately: renaming it would touch the stylesheet for zero visual gain. */}
           <div className="bhglow"/>
           <div className="bhsub">{(isTomorrowMain?previewItems.length:boardItems.length)>0?(isTomorrowMain?previewItems.length:boardItems.length)+" winners":"Ranked by win %"}{(isTomorrowMain?("Tomorrow"+(previewLabel?", "+previewLabel:"")):boardDate)&&<> <span className="bhd">{"\u00b7"}</span> {isTomorrowMain?("Tomorrow"+(previewLabel?", "+previewLabel:"")):boardDate}</>}</div>
+          {/* WZ-MKTABS-2026-08-17 :: market filter tab row -- sits under the "N winners / date" subline and
+              above the first pick. Underline treatment (mono, uppercase, gold active with a 2px gold bottom
+              border, muted-gray inactive) to match the top section nav, NOT the filled .seg pill. Tabs are
+              [All, ...SPORTS[sport].markets] where each market entry is an mk token; renders only when there
+              is a slate to filter (never over the gated/empty state). */}
+          {hasFull && !breakPreview && (boardItems.length>0||previewItems.length>0) && (
+            <div className="mktabs" role="tablist">
+              {[["all","All"],...sp.markets].map(([mk,lb])=>(
+                <button key={mk} type="button" role="tab" aria-selected={mktab===mk}
+                  className={"mkt"+(mktab===mk?" on":"")} onClick={()=>setMktab(mk)}>{lb}</button>
+              ))}
+            </div>
+          )}
         </div>
         {hasFull
-          ? (breakPreview ? <AllStarBreak/> : <>
+          ? (breakPreview ? <AllStarBreak/> : (mktab==="all"
+              ? <>
               {/* WZ-BOARD-NEVER-EMPTY-2026-07-08 :: today's board when it has games (tomorrow preview below); when today is empty, tomorrow IS the board -- never blank */}
               {boardItems.length>0
                 ? <>
@@ -720,7 +751,26 @@ export default function HomePage(){
                   : (sport==="mlb" && inAllStarBreak())
                     ? <AllStarBreak/>
                     : <div className="ufboard top"><div className="estate"><div className="et">No winners on the board yet</div><div className="es">Winners post as books release tonight{"\u2019"}s lines.</div></div>{wpStrip}</div>}
-            </>)
+              </>
+              : (() => {
+                  // WZ-MKTABS-2026-08-17 :: a single market tab. tabItems/tabPreview are already filtered by
+                  // mk BEFORE bestPerGame, so no qualifying pick is dropped. Rows renumber from 1 (rank={i+1});
+                  // the ALL hero-slice does not apply here. An empty market shows one centered mono line,
+                  // never a blank list -- a blank list is exactly why this tab row was removed in b442c33.
+                  const isPrevMain = isTomorrowMain;
+                  const mainList = isPrevMain ? tabPreview : tabItems;
+                  if(mainList.length===0) return <div className="ufboard top"><div className="mktempty">NO QUALIFYING EDGES TONIGHT</div>{wpStrip}</div>;
+                  return <>
+                    <div className="ufboard top">{mainList.map((d,i)=>{const id=(isPrevMain?"pv":"")+d.gameId+d.cat+i;return openId===id?<BoardRow key={id} d={d} i={i} open={true} onToggle={()=>setOpenId(null)} navigate={navigate} sport={sport}/>:<BoardCardCompact key={id} d={d} i={i} rank={i+1} sport={sport} onClick={()=>setOpenId(id)}/>;})}
+                      {wpStrip}</div>
+                    {!isPrevMain && tabPreview.length>0 && <>
+                      <div className="tmrwdiv"><span className="tln"/><span className="tlbl">TOMORROW{previewLabel&&<small>{previewLabel}</small>}</span><span className="tln r"/></div>
+                      <div className="tmrwnote">Today{"\u2019"}s slate is underway {"\u00b7"} an early look at tomorrow</div>
+                      <div className="ufboard tmrw">{tabPreview.map((d,i)=>{const id="pv"+d.gameId+d.cat+i;return openId===id?<BoardRow key={id} d={d} i={i} open={true} onToggle={()=>setOpenId(null)} navigate={navigate} sport={sport}/>:<BoardCardCompact key={id} d={d} i={i} rank={i+1} sport={sport} onClick={()=>setOpenId(id)}/>;})}</div>
+                    </>}
+                  </>;
+                })()
+            ))
           : <Gate title="Edges are an All-Access feature" navigate={navigate}/>}
         </>}
 
@@ -968,7 +1018,7 @@ function BoardRow({d,i,open,onToggle,navigate,sport}){ const lg=(SPORTS[sport]||
 // The READ (d.why) is intentionally NOT shown here anymore -- it lives in the expanded BoardRow
 // (tap the row). Edge color follows value: green when it qualifies (>=1.0), gold otherwise; ring
 // color follows the pick side (green totals / gold spread+ML), unchanged from before.
-function BoardCardCompact({d,i,sport,onClick}){
+function BoardCardCompact({d,i,sport,onClick,rank}){
   const wp=Number(d.model);
   const wpv=isFinite(wp)?Math.max(0,Math.min(100,wp)):null;
   const C=125.7; // 2·π·20
@@ -993,7 +1043,7 @@ function BoardCardCompact({d,i,sport,onClick}){
           {/* WZ-BOARDROWS-2026-08-07 :: rank numeral. The list is sliced from index 1, so this row's
               true position is i+2. Numbering is honest here because the order genuinely is the
               information -- boardItems is ranked model% desc, then edge. */}
-          <div className="l1"><span className="ufrank">{i+2}</span><span className="ufmatch">{d.a[0]} @ {d.h[0]}</span>{d.starts&&<span className="uftime">{d.starts}</span>}</div>
+          <div className="l1"><span className="ufrank">{rank!=null?rank:i+2}</span><span className="ufmatch">{d.a[0]} @ {d.h[0]}</span>{d.starts&&<span className="uftime">{d.starts}</span>}</div>
           <div className="l2"><span className="ufp" style={{color:accent}}>{pkHead}</span>{pkTail&&<span className="ufpl" style={{color:accent}}>{pkTail}</span>}{d.mk&&<span className="ufmk">{d.mk}</span>}{d.odds&&<span className="ufod">{d.odds}</span>}</div>
         </div>
         <div className="ufrt">
@@ -1409,6 +1459,13 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .bht .bhwize{color:#ECEFF2}
 .bhglow{width:150px;height:1.5px;background:linear-gradient(90deg,transparent,var(--gold),transparent);border-radius:2px;margin:6px auto 0;box-shadow:0 0 12px rgba(201,168,106,.55)}
 .bhsub{font-family:var(--mono);font-size:10.5px;color:var(--mut);margin-top:6px;letter-spacing:.3px}.bhsub .bhd{color:var(--mut2)}
+/* WZ-MKTABS-2026-08-17 :: market filter tab row -- underline treatment mirroring the top section nav
+   (mono, uppercase, gold active with a 2px gold bottom border, muted-gray inactive). NOT the filled
+   .seg pill. Sits inside the .boardhd band, above the .ufboard rows. */
+.mktabs{display:flex;justify-content:center;gap:2px;margin-top:9px;border-bottom:1px solid var(--line)}
+.mkt{appearance:none;background:none;border:none;cursor:pointer;position:relative;font-family:var(--mono);font-size:10.5px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:var(--mut2);padding:6px 10px 7px;border-bottom:2px solid transparent;margin-bottom:-1px}
+.mkt.on{color:var(--gold);border-bottom-color:var(--gold)}
+.mktempty{font-family:var(--mono);font-size:10.5px;letter-spacing:.4px;color:var(--mut2);text-transform:uppercase;text-align:center;padding:26px 14px}
 /* WZ-PARKFACTORS-HEADER-2026-06-27 :: Park Factors identity — green title + wind/flight wave */
 .pfhd .bht{color:var(--green)}
 .pfarw{flex:0 0 auto}.pfarw path{stroke:var(--green);stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round}
