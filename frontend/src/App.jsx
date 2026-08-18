@@ -40,6 +40,7 @@ import ExpectedValuePage from "./pages/ExpectedValue"; // WZ-SEO-EV-ARTICLE-2026
 import BankrollPage from "./pages/Bankroll"; // WZ-SEO-BANKROLL-ARTICLE-2026-08-17 :: public educational page
 import ParlayPage from "./pages/Parlay"; // WZ-SEO-PARLAY-ARTICLE-2026-08-17 :: public educational page
 import OddsFormatsPage from "./pages/OddsFormats"; // WZ-SEO-ODDSFORMATS-ARTICLE-2026-08-17 :: public educational page
+import SportsBettingBeginnersPage from "./pages/SportsBettingBeginners"; // WZ-SEO-BEGINNERS-ARTICLE-2026-08-17 :: public educational page
 import SportBar, { SportTabsHeader } from "./pages/SportNav"; // WIZEPICKS-SPORTNAV-2026-06-25
 import InstallNudge from "./pages/InstallNudge"; // WZ-GETAPP-2026-07-05 :: iOS "Get the app" nudge
 function PrivateRoute({ children }) {
@@ -235,6 +236,8 @@ export default function App() {
           <Route path="/what-is-a-parlay" element={<ParlayPage />} />
           {/* WZ-SEO-ODDSFORMATS-ARTICLE-2026-08-17 :: public educational article (no auth) */}
           <Route path="/odds-formats-explained" element={<OddsFormatsPage />} />
+          {/* WZ-SEO-BEGINNERS-ARTICLE-2026-08-17 :: public educational article (no auth) */}
+          <Route path="/sports-betting-for-beginners" element={<SportsBettingBeginnersPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/admin" element={
             <PrivateRoute>
