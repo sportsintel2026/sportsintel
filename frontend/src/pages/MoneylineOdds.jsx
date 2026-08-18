@@ -54,7 +54,7 @@ export default function MoneylineOddsPage() {
           <LI>$100 at +150 &rarr; $150 profit + $100 stake = <b>$250</b> total return.</LI>
           <LI>$150 at -150 &rarr; $100 profit + $150 stake = <b>$250</b> total return.</LI>
         </ul>
-        <P>When someone quotes a bet &ldquo;to win X,&rdquo; they mean profit. When they say it &ldquo;returns X,&rdquo; they mean the total. Knowing which is which prevents a lot of confusion.</P>
+        <P>When someone quotes a bet &ldquo;to win X,&rdquo; they mean profit. When they say it &ldquo;returns X,&rdquo; they mean the total. Knowing which is which prevents a lot of confusion. Combine several bets onto one ticket and the payouts multiply &mdash; that is a <a href="/what-is-a-parlay">parlay</a>.</P>
       </Section>
 
       <Section h="Implied probability: what the odds are really saying">

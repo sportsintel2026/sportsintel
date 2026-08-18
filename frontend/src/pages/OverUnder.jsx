@@ -15,7 +15,7 @@ export default function OverUnderPage() {
   return (
     <PageShell
       title="What Is Over/Under (Totals) Betting?"
-      lead={<>An over/under bet &mdash; also called a <b>total</b> &mdash; ignores who wins entirely. You are betting on the <b>combined score</b> of both teams: whether it lands above or below a number the sportsbook sets. It is one of the three main bet types, alongside the <a href="/how-to-read-moneyline-odds">moneyline</a> and the <a href="/how-point-spreads-work">point spread</a>.</>}
+      lead={<>An over/under bet &mdash; also called a <b>total</b> &mdash; ignores who wins entirely. You are betting on the <b>combined score</b> of both teams: whether it lands above or below a number the sportsbook sets. It is one of the three main bet types, alongside the <a href="/how-to-read-moneyline-odds">moneyline</a> and the <a href="/how-point-spreads-work">point spread</a> &mdash; and any of them can be combined into a <a href="/what-is-a-parlay">parlay</a>.</>}
     >
       <Section h="What over/under (totals) betting means">
         <P>The sportsbook posts a <b>total</b> &mdash; a single number for the combined points, runs, or goals both teams are expected to score. You then bet one of two ways:</P>
