@@ -119,6 +119,12 @@ const ROUTES = [
     description: "Betting odds formats explained: American, decimal, and fractional odds, how to convert between them with worked examples, how each shows implied probability, and which format is used where.",
     canonical: "https://www.wizepicks.com/odds-formats-explained",
   },
+  {
+    out: "sports-betting-for-beginners/index.html",
+    title: "Sports Betting for Beginners: How to Bet on Sports — WizePicks",
+    description: "A beginner's guide to sports betting: how odds work, the main bet types (moneyline, spread, totals, parlays), reading odds as probability, the vig, finding value over picking winners, bankroll basics, and betting responsibly.",
+    canonical: "https://www.wizepicks.com/sports-betting-for-beginners",
+  },
 ];
 
 const esc = (s) =>

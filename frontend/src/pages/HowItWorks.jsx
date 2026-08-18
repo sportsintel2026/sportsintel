@@ -38,6 +38,7 @@ export default function HowItWorksPage() {
 
       <PageNav
         links={[
+          { to: "/sports-betting-for-beginners", label: "Sports betting for beginners" },
           { to: "/what-is-closing-line-value", label: "What is closing line value?" },
           { to: "/expected-value-betting", label: "Expected value (EV)" },
           { to: "/bankroll-management", label: "Bankroll management" },
