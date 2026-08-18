@@ -17,7 +17,7 @@ export default function MoneylineOddsPage() {
       lead={<>A moneyline is the simplest bet in sports: pick who wins, straight up. The odds attached to it tell you two things at once &mdash; <b>how much a bet pays</b> and <b>how likely the market thinks that side is</b>. This guide starts from the basics and builds to the math serious bettors use every day.</>}
     >
       <Section h="What moneyline odds are">
-        <P>A moneyline bet is a wager on which team or player wins outright &mdash; no <a href="/how-point-spreads-work">point spread</a>, no <a href="/over-under-betting">over/under total</a>, no margin of victory. The <b>moneyline odds</b> are the price of that bet, written in American format as a number with a <b>+</b> or a <b>-</b> sign, such as <b>+150</b> or <b>-150</b>.</P>
+        <P>A moneyline bet is a wager on which team or player wins outright &mdash; no <a href="/how-point-spreads-work">point spread</a>, no <a href="/over-under-betting">over/under total</a>, no margin of victory. The <b>moneyline odds</b> are the price of that bet, written in <a href="/odds-formats-explained">American format</a> as a number with a <b>+</b> or a <b>-</b> sign, such as <b>+150</b> or <b>-150</b>.</P>
         <P>The sign tells you which side is the favorite and which is the underdog, and the number tells you the payout. Everything else in this guide comes back to those two facts.</P>
       </Section>
 
