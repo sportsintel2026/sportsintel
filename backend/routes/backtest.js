@@ -18,6 +18,10 @@
 const express = require("express");
 const router = express.Router();
 const { supabase } = require("../middleware/auth");
+// WZ-SIGMA-IMPORT :: the `current` blocks below used to carry hand-typed literals and drifted.
+// Import the live constants so this harness can never again report a sigma the model is not using.
+const { CFB_SIGMA, CFB_TOTAL_SIGMA } = require("../services/cfbModel");
+const { NFL_SIGMA, NFL_TOTAL_SIGMA } = require("../services/nflModel");
 
 // Core markets per league — MUST match performance.js LEAGUE_CONFIG. Props and
 // *_shadow rows are NEVER part of the bettable board (props live in their own
@@ -180,7 +184,7 @@ router.get("/cfb-calibrate", async (req, res) => {
         note: (coverRate < 0.4 || coverRate > 0.6) ? "Cover rate is far from ~50% — the CFBD spread sign may be flipped for this provider. Verify before applying." : "Cover ~50% — sign convention looks correct.",
       },
       recommend: { CFB_SIGMA: S, CFB_TOTAL_SIGMA: totalSD != null ? Math.round(totalSD * 10) / 10 : null, cfbComb },
-      current: { CFB_SIGMA: 16.0, CFB_TOTAL_SIGMA: 13.0 },
+      current: { CFB_SIGMA, CFB_TOTAL_SIGMA },
       pushTargets,
       howToApply: "cfbComb → footballMargin.js KEY.cfb; CFB_SIGMA/CFB_TOTAL_SIGMA → cfbModel.js (and footballMargin SIGMA.cfb). Same recipe as the NFL calibration. If sanity.signOk is false, don't apply — ping me.",
     });
@@ -299,7 +303,7 @@ router.get("/nfl-calibrate", async (req, res) => {
         note: (coverRate < 0.4 || coverRate > 0.6) ? "Cover rate is far from ~50% — the spread sign may be flipped for this source. Verify before applying." : "Cover ~50% — sign convention looks correct.",
       },
       recommend: { NFL_SIGMA: S, NFL_TOTAL_SIGMA: totalSD != null ? Math.round(totalSD * 10) / 10 : null, nflComb },
-      current: { NFL_SIGMA: 13.0, NFL_TOTAL_SIGMA: 13.2 },
+      current: { NFL_SIGMA, NFL_TOTAL_SIGMA },
       perKey,          // { k: { n, pushRate, comb, fitted, reason } } — sample count + reason on EVERY key
       pushTargets,     // flat push rates ACTUALLY FED TO THE FIT (keys match nflComb; zero-push keys excluded)
       howToApply: "nflComb -> footballMargin.js KEY.nfl; NFL_SIGMA/NFL_TOTAL_SIGMA -> nflModel.js (and footballMargin SIGMA.nfl). Same recipe as the CFB calibration. If sanity.signOk is false, don't apply — ping me.",
