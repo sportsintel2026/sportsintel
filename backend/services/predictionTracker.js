@@ -1100,9 +1100,25 @@ async function recordFootballPredictions(slate, league = "nfl") {
   const supabase = db();
   const now = Date.now();
   const rows = [];
+
+  // WZ-FBPRESEASON-LEDGER-2026-08-18 :: NFL preseason games were being written into
+  // model_predictions and read straight back by calibrationGuard's football drift watch,
+  // which has no date floor. Measured on the 2026 preseason: total_shadow claimed 60.2%
+  // and hit 27.3% on n=11 -- a 32.9pt gap, 4x FB_GAP_BENCH -- because projPointsFor
+  // (nflEdges.js:194) builds the scoring projection from regular-season pf/pa while
+  // preseason starters play a series. 31 of 33 games projected OVER the posted line,
+  // mean +8.2 pts. Left alone that sample benches nfl:total at or near Week 1 and holds
+  // it there for 35-69 clean regular-season rows. Gate the LEDGER, never the board:
+  // no published pick changes, preseason or regular. CFB has no preseason.
+  function isNflPreseason(commenceISO) {
+    if (league !== "nfl" || !commenceISO) return false;
+    try { return require("./nflEdges")._internal.nflPhaseFor(commenceISO) === "preseason"; }
+    catch (e) { return false; }  // never let a phase lookup drop a real regular-season row
+  }
   for (const g of slate.games) {
     if (g.dataQuality !== "rated") continue;            // model didn't run on ratings → skip
     if (!g.commenceTime) continue;
+    if (isNflPreseason(g.commenceTime)) continue;      // WZ-FBPRESEASON-LEDGER-2026-08-18
     const daysOut = (new Date(g.commenceTime).getTime() - now) / 864e5;
     if (daysOut > FOOTBALL_IMMINENT_DAYS || daysOut < 0) continue; // not within the pre-game window
     const gameDate = etDate(g.commenceTime) || getEasternDate(0);
@@ -1210,6 +1226,7 @@ async function recordFootballPredictions(slate, league = "nfl") {
   // posted price so a single null can't reject the whole batch (same hardening as the MLB slate shadow).
   for (const g of slate.games) {
     if (!g.commenceTime) continue;
+    if (isNflPreseason(g.commenceTime)) continue;      // WZ-FBPRESEASON-LEDGER-2026-08-18
     const daysOut = (new Date(g.commenceTime).getTime() - now) / 864e5;
     if (daysOut > FOOTBALL_IMMINENT_DAYS || daysOut < 0) continue; // pre-game snapshots only
     const gameDate = etDate(g.commenceTime) || getEasternDate(0);

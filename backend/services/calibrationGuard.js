@@ -105,6 +105,13 @@ const FOOTBALL_LEAGUES = ["nfl", "cfb"];
 const FOOTBALL_MARKETS = ["moneyline", "spread", "total"];
 const FB_SHADOW = { moneyline: "moneyline_shadow", spread: "spread_shadow", total: "total_shadow" };
 const fbKey = (league, market) => `${league}:${market}`;
+// WZ-FBPRESEASON-LEDGER-2026-08-18 :: per-league floor on what the football drift watch counts.
+// This query has never had a date filter, unlike the MLB path (RESETS, top of file). NFL preseason
+// rows are structurally mispriced -- regular-season pf/pa against exhibition lines -- so they are
+// EXCLUDED from the read here. Rows stay in the table; the record is filtered, never deleted.
+// Date is the pinned 2026 Week 1 opener, same literal as nflEdges.js NFL_REG_START_UTC.
+// CFB has no preseason, so it gets no floor (Week 0 is real football).
+const FB_RESET = { nfl: "2026-09-09" };
 const FB_MIN_N = 40;        // need a real settled confident-side sample before benching a market
 const FB_GAP_BENCH = 8;     // auto-bench when claimed - actual >= 8 pts (drift)
 const FB_GAP_UNBENCH = 4;   // hysteresis: un-bench once the gap recovers below 4 pts
@@ -303,7 +310,7 @@ async function refreshGuard() {
       for (let from = 0; ; from += PAGE) {
         const { data, error } = await supabase
           .from("model_predictions")
-          .select("league, market, model_prob, result")
+          .select("league, market, model_prob, result, game_date")
           .in("league", FOOTBALL_LEAGUES)
           .in("market", Object.values(FB_SHADOW))
           .order("id", { ascending: true })
@@ -318,6 +325,8 @@ async function refreshGuard() {
       for (const r of fbRows) {
         if (r.result !== "win" && r.result !== "loss") continue;
         if (r.model_prob == null) continue;
+        const floor = FB_RESET[r.league];                          // WZ-FBPRESEASON-LEDGER-2026-08-18
+        if (floor && (!r.game_date || r.game_date < floor)) continue;
         const base = String(r.market).replace(/_shadow$/, "");
         const a = fbAgg[fbKey(r.league, base)];
         if (!a) continue;
