@@ -31,7 +31,14 @@ const KEY = {
   // 3,475 games, WZ-CFB-BACKTEST-2026-07-17). Fit so push@k matches ACTUAL push rates: 7=7.5%,
   // 3=5.8%, 10/14=4.8%. Note the college quirk — 7 pushes MORE than 3 (more games decided by exactly
   // a TD), the reverse of the NFL; the old estimate-based comb had that backwards.
-  cfb: { 3: 2.12, 4: 0.34, 6: -0.9, 7: 2.99, 10: 1.51, 14: 1.44, 17: 1.23, 21: 1.06 },
+  // WZ-CFB-KEY6-2026-08-19 :: key 6 REMOVED. It was never measured -- the fit was handed a 0%
+  // observed push rate and the multiplicative update (target/cur)^0.5 collapsed to 0, pinning the
+  // value at the -0.9 clamp floor. /cfb-calibrate now reports n=94 games on a 6-point spread with
+  // 0 pushes, and the zero-push guard (WZ-CFB-PERKEY-2026-08-19) excludes it from the fit. Absent
+  // key -> neutral, which puts push@6 at 1.82%, inside the observed 95% ceiling of 3.14% (0 of 94).
+  // Largest downstream effect is at spreads of SEVEN, not six: restoring mass at a 6-point margin
+  // moves it to the losing side of a 7-point threshold, shifting home cover by up to 1.55pp.
+  cfb: { 3: 2.12, 4: 0.34, 7: 2.99, 10: 1.51, 14: 1.44, 17: 1.23, 21: 1.06 },
 };
 
 // Default margin SDs (physical priors from the playbook). Callers pass sigma explicitly; these are
