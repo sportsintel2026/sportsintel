@@ -165,19 +165,51 @@ router.get("/cfb-calibrate", async (req, res) => {
 
     // 4) ACTUAL push rate at each key spread, then fit the comb to those rates at the measured sigma
     const S = marginSD > 0 ? Math.round(marginSD * 10) / 10 : 16;
-    const pushTargets = {};
-    for (const k of [3, 4, 6, 7, 10, 14, 17, 21, 24, 28]) {
+    // WZ-CFB-PERKEY-2026-08-19 :: this block used to gate on sample size alone and throw the count away,
+    // so a key could be fitted from a 0% observed push rate. That drives the multiplicative update
+    // (target/cur)^0.5 to 0, pinning keys[k] at the -0.9 clamp -- maximum suppression manufactured from
+    // missing evidence. It already happened: the 2021-2025 run returned pushTargets[6] = 0 and
+    // footballMargin.js KEY.cfb carries 6: -0.9 as a result. Mirrors the NFL rig at :262-294.
+    // NOTE the sign: CFBD's convention makes a push homeMargin === -spread. NFL's CSV uses
+    // homeMargin === spread. Do NOT unify these.
+    const CFB_KEY_CANDIDATES = [3, 4, 6, 7, 10, 14, 17, 21, 24, 28];
+    const CFB_MIN_N = 40;
+    const keyN = {};          // k -> games landing on that spread (RETAINED; this used to be discarded)
+    const keyPush = {};       // k -> measured push rate (%), defined only when n >= CFB_MIN_N (may be 0)
+    const pushTargets = {};   // k -> push rate FED TO THE FIT: n >= CFB_MIN_N AND push rate > 0 only
+    for (const k of CFB_KEY_CANDIDATES) {
       const at = rows.filter((g) => Math.abs(g.spread) === k);
-      if (at.length >= 40) pushTargets[k] = Math.round(1000 * at.filter((g) => g.homeMargin === -g.spread).length / at.length) / 10;
+      keyN[k] = at.length;
+      if (at.length >= CFB_MIN_N) {
+        const rate = Math.round(1000 * at.filter((g) => g.homeMargin === -g.spread).length / at.length) / 10;
+        keyPush[k] = rate;
+        if (rate > 0) pushTargets[k] = rate;   // ZERO-PUSH GUARD
+      }
     }
     const pushAt = (k, keys) => { let Z = 0, wk = 0; for (let m = Math.floor(k - 6 * S); m <= Math.ceil(k + 6 * S); m++) { const w = Math.exp(-0.5 * ((m - k) / S) ** 2) * (1 + (keys[Math.abs(m)] || 0)); Z += w; if (m === k) wk = w; } return wk / Z * 100; };
     const keys = {}; for (const k of Object.keys(pushTargets)) keys[k] = 0.5;
     for (let it = 0; it < 150; it++) for (const k of Object.keys(pushTargets)) { const cur = pushAt(+k, keys) || 0.01; keys[k] = (1 + keys[k]) * Math.pow(pushTargets[k] / cur, 0.5) - 1; keys[k] = Math.max(-0.9, Math.min(6, keys[k])); }
     const cfbComb = {}; for (const k of Object.keys(keys)) cfbComb[k] = Math.round(keys[k] * 100) / 100;
 
+    // Per-key rollup: sample count + push rate + comb + WHY a key was excluded (never silently dropped).
+    const perKey = {};
+    for (const k of CFB_KEY_CANDIDATES) {
+      const n = keyN[k];
+      let pushRate = null, comb = null, fitted = false, reason = null;
+      if (n < CFB_MIN_N) {
+        reason = `n<${CFB_MIN_N} (below sample threshold)`;
+      } else if (keyPush[k] === 0) {
+        pushRate = 0;
+        reason = "0 observed pushes — excluded from fit (a 0% rate would manufacture a -0.9 suppression notch)";
+      } else {
+        pushRate = keyPush[k]; comb = cfbComb[k]; fitted = true;
+      }
+      perKey[k] = { n, pushRate, comb, fitted, reason };
+    }
+
     res.json({
       token: "WZ-CFB-BACKTEST-2026-07-17",
-      seasons, provider: preferredProvider, gamesJoined: rows.length,
+      seasons, provider: preferredProvider, gamesJoined: rows.length, minKeyN: CFB_MIN_N,
       sanity: {
         homeCoverRate: Math.round(coverRate * 1000) / 10 + "%",
         signOk: coverRate >= 0.4 && coverRate <= 0.6,
@@ -185,7 +217,7 @@ router.get("/cfb-calibrate", async (req, res) => {
       },
       recommend: { CFB_SIGMA: S, CFB_TOTAL_SIGMA: totalSD != null ? Math.round(totalSD * 10) / 10 : null, cfbComb },
       current: { CFB_SIGMA, CFB_TOTAL_SIGMA },
-      pushTargets,
+      pushTargets, perKey,
       howToApply: "cfbComb → footballMargin.js KEY.cfb; CFB_SIGMA/CFB_TOTAL_SIGMA → cfbModel.js (and footballMargin SIGMA.cfb). Same recipe as the NFL calibration. If sanity.signOk is false, don't apply — ping me.",
     });
   } catch (err) {
