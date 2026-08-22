@@ -700,7 +700,14 @@ router.get("/totalsbias", async (req, res) => {
     const SIG = (x) => 1 / (1 + Math.exp(-x));
     // 4.0 deliberately does NOT track TOTAL_SD (6.0 as of 2026-08-13).
     // Grades historical rows priced at SD 4.0. Revisit when post-6.0 rows dominate.
-    const LIVE_DIVISOR = 4.0;
+    // WZ-XCHECK-MIRROR-2026-08-22 :: these two MUST mirror edgesModel.js's totals pricing or the
+    // decomposition below measures a pipeline that does not exist. LIVE_DIVISOR was 4.0 while
+    // edgesModel.js:1688 has carried TOTAL_SD = 6.0, and the MEAN_TO_MEDIAN shift (edgesModel.js:1705,
+    // applied at the probability conversion since WZ-TOTMEDIAN-2026-08-03) was missing entirely.
+    // Result: crossCheck ran meanAbsDiff 0.01918 / maxAbsDiff 0.08552 against its own ~0.003 ceiling,
+    // which correctly invalidated the confidenceSource block. Mirrors only -- no pricing changes here.
+    const LIVE_DIVISOR = 6.0;              // mirrors edgesModel.js:1688 TOTAL_SD
+    const MEAN_TO_MEDIAN_MIRROR = 0.50;    // mirrors edgesModel.js:1705 TOTAL_MEAN_TO_MEDIAN
     const devs = [];                      // signed projected - line
     const picks = [];                     // { absDev, won }
     for (const r of usable) {
@@ -858,7 +865,7 @@ router.get("/totalsbias", async (req, res) => {
       const mp = r.model_prob == null ? null : Number(r.model_prob);
       const ed = r.edge == null ? null : Number(r.edge);
       if (mp == null || ed == null) continue;
-      const raw = SIG((Number(r.projected) - Number(r.line)) / LIVE_DIVISOR);
+      const raw = SIG((Number(r.projected) - MEAN_TO_MEDIAN_MIRROR - Number(r.line)) / LIVE_DIVISOR);
       const fairFromEdge = mp - ed;                                       // exact identity
       const fairFromProb = (mp - W_MODEL_MIRROR * raw) / (1 - W_MODEL_MIRROR);
       // When no clean two-way market exists the code falls back to the RAW prob (no blend). Those rows
