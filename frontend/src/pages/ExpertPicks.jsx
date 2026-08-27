@@ -456,7 +456,7 @@ function LockedTeaser({ record, navigate }) {
         {hook}. Full parlay breakdowns, straight bets, and an honest, fully-tracked record.
       </div>
       <button onClick={() => navigate("/pricing")} style={{ background: "#ef4444", color: "#fff", border: "none", borderRadius: 8, padding: "12px 28px", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
-        Subscribe — $7/mo
+        Subscribe — From $7/week
       </button>
     </div>
   );

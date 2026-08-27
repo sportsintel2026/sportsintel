@@ -123,7 +123,7 @@ export default function Sidebar({ user, plan, signOut, navigate }) {
               onClick={() => navigate("/pricing")}
               style={{ width: "100%", background: "#ef4444", color: "#fff", border: "none", borderRadius: 6, padding: "6px 8px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}
             >
-              Subscribe — $7/mo
+              Subscribe — From $7/week
             </button>
           </div>
         ) : (

@@ -339,7 +339,7 @@ function EdgeLock({ navigate }) {
       <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", padding: 18, background: "radial-gradient(circle at 50% 40%, rgba(8,10,16,.5), rgba(10,14,20,.9))" }}>
         <div style={{ width: 42, height: 42, borderRadius: 13, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, background: "rgba(155,123,255,.14)", border: "1px solid rgba(155,123,255,.4)", marginBottom: 11 }}>🔒</div>
         <div style={{ fontSize: 15, fontWeight: 800, color: "#fff", marginBottom: 4 }}>Model edges are locked</div>
-        <div style={{ fontSize: 11.5, color: "#9aa6b2", lineHeight: 1.5, maxWidth: 250, marginBottom: 13 }}>Win probability, totals &amp; the biggest edge — all inside <b style={{ color: "#33e991" }}>All-Access · $7/mo</b></div>
+        <div style={{ fontSize: 11.5, color: "#9aa6b2", lineHeight: 1.5, maxWidth: 250, marginBottom: 13 }}>Win probability, totals &amp; the biggest edge — all inside <b style={{ color: "#33e991" }}>All-Access · From $7/week</b></div>
         <button onClick={() => navigate("/pricing")} style={{ background: "#1D9E75", color: "#04130d", border: "none", fontWeight: 800, fontSize: 13, padding: "11px 20px", borderRadius: 11, cursor: "pointer", fontFamily: "inherit" }}>Unlock All-Access →</button>
       </div>
     </div>

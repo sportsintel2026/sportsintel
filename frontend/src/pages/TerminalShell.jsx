@@ -82,10 +82,10 @@ export default function TerminalShell({ active, plan = {}, navigate, children })
             <div className="d">
               {hasFull
                 ? "Your plan is active — every edge unlocked."
-                : "Every edge, prop & live play — $7/mo."}
+                : "Every edge, prop & live play — From $7/week."}
             </div>
             <button onClick={() => navigate(hasFull ? "/settings" : "/pricing")}>
-              {hasFull ? "Manage plan" : "Unlock — $7/mo"}
+              {hasFull ? "Manage plan" : "Unlock — From $7/week"}
             </button>
           </div>
         </nav>
