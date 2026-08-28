@@ -3,8 +3,16 @@
 const express = require("express");
 const router = express.Router();
 const { getOrGenerateDailyCard, getDailyCardRecord, getAlternatePick, getAlternatePlay } = require("../services/dailyCard");
+const { resolveFullAccess } = require("../middleware/accessGate");
 
-router.get("/alternate", async (req, res) => {
+function gateDailyCardAccess(req, res, next) {
+  resolveFullAccess(req).then((full) => {
+    if (!full) return res.json({ teaser: true });
+    next();
+  }).catch(() => next());
+}
+
+router.get("/alternate", gateDailyCardAccess, async (req, res) => {
   try {
     const alt = await getAlternatePick(req.query.scope);
     res.json(alt);
@@ -16,7 +24,7 @@ router.get("/alternate", async (req, res) => {
 
 // The free-spin bonus play: a fresh single + a fresh parlay, both different from
 // the tracked card. Untracked — never written, locked, or graded.
-router.get("/alternate-play", async (req, res) => {
+router.get("/alternate-play", gateDailyCardAccess, async (req, res) => {
   try {
     const play = await getAlternatePlay(req.query.scope);
     res.json(play);
@@ -36,7 +44,7 @@ router.get("/record", async (req, res) => {
   }
 });
 
-router.get("/", async (req, res) => {
+router.get("/", gateDailyCardAccess, async (req, res) => {
   try {
     const card = await getOrGenerateDailyCard(req.query.scope);
     res.json(card);

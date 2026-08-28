@@ -82,3 +82,8 @@ export const subscriptionApi = {
   portal: () => apiFetch("/api/subscriptions/portal", { method: "POST" }),
   getAdminStats: () => apiFetch("/api/subscriptions/admin-stats"), // WZ-SUBSTATS-2026-07-13 :: owner-only subscriber counts
 };
+
+export const dailyCardApi = {
+  get: (scope) => apiFetch(`/api/daily-card?scope=${encodeURIComponent(scope)}`),
+  getAlternatePlay: (scope) => apiFetch(`/api/daily-card/alternate-play?scope=${encodeURIComponent(scope)}`),
+};
