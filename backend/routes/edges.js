@@ -64,11 +64,21 @@ async function wzResolveFullAccess(req) {
 // page never breaks (scores/ticker still work) and the paywall <Gate> shows as it already does.
 function wzTeaserizeBoard(body) {
   if (!body || typeof body !== "object") return body;
-  const EDGE_ARRAYS = ["moneylineEdges","totalsEdges","runLineEdges","spreadEdges","hrPropEdges","kPropEdges","hitsPropEdges","tbPropEdges","doublesPropEdges","triplesPropEdges"];
+  const EDGE_ARRAYS = ["moneylineEdges","totalsEdges","runLineEdges","spreadEdges","hrPropEdges","kPropEdges","hitsPropEdges","tbPropEdges","doublesPropEdges","triplesPropEdges","edges","marketMovers"];
+  const GAME_MODEL_FIELDS = ["spread","total","marketRead","oddsGrid","dataQuality"];
   const out = { ...body, teaser: true };
   for (const k of EDGE_ARRAYS) if (Array.isArray(out[k])) out[k] = [];
+  if (Object.prototype.hasOwnProperty.call(out, "marketByGame")) out.marketByGame = {};
+  if (Object.prototype.hasOwnProperty.call(out, "edgeCount")) out.edgeCount = 0;
   if (Array.isArray(out.games)) {
-    out.games = out.games.map((g) => (g && typeof g === "object") ? { ...g, moneyline: null, totals: null, runLine: null } : g);
+    out.games = out.games.map((g) => {
+      if (!g || typeof g !== "object") return g;
+      const game = { ...g, moneyline: null, totals: null, runLine: null };
+      for (const k of GAME_MODEL_FIELDS) {
+        if (Object.prototype.hasOwnProperty.call(game, k)) game[k] = null;
+      }
+      return game;
+    });
   }
   return out;
 }
