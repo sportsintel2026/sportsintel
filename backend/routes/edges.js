@@ -10,6 +10,7 @@
 const express = require("express");
 const router = express.Router();
 const { gateModelData } = require("../middleware/accessGate"); // WZ-LOCK-ROUND2-2026-07-15
+const adminGuard = require("../middleware/adminGuard");
 // ── WZ-LOCK-PICKS-2026-07-15 :: server-side access gate for the model's picks ─────────────────
 // The board's pick data must reach ONLY full-access users (paid, comped, admin, owner). The
 // frontend already shows a paywall <Gate> to everyone else, but the raw JSON was still shipped to
@@ -1025,7 +1026,7 @@ router.get("/mlb", gatePicks, async (req, res) => {
   }
 });
 // Debug endpoint — clear cache
-router.delete("/cache", (req, res) => {
+router.delete("/cache", adminGuard, (req, res) => {
   edgesCache = null;
   edgesCacheAt = 0;
   edgesCacheDate = null;

@@ -3,6 +3,7 @@
 //   GET /api/expert-grade           -> DRY RUN. Read-only preview of what WOULD be
 //                                      graded. Writes nothing. Safe to open anytime.
 //   GET /api/expert-grade?write=1   -> Actually writes results into expert_picks.
+//                                      Requires the existing admin authentication.
 //                                      Safe by design: only settles still-pending
 //                                      straight bets of FINISHED MLB/NBA games to
 //                                      their true result; never changes a pick
@@ -14,9 +15,19 @@
 const express = require("express");
 const router = express.Router();
 const { gradeExpertPicks } = require("../services/expertPicksGrader");
+const adminGuard = require("../middleware/adminGuard");
 
-router.get("/", async (req, res) => {
-  const write = req.query.write === "1" || req.query.write === "true";
+function isWriteRequest(req) {
+  return req.query.write === "1" || req.query.write === "true";
+}
+
+function guardWriteRequest(req, res, next) {
+  if (!isWriteRequest(req)) return next();
+  return adminGuard(req, res, next);
+}
+
+router.get("/", guardWriteRequest, async (req, res) => {
+  const write = isWriteRequest(req);
   try {
     const result = await gradeExpertPicks({ dryRun: !write });
     res.json(result);
