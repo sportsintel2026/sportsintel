@@ -5,7 +5,7 @@
 // HOMEDESKTOP-PREMIUM-DARK-RESKIN-2026-06-23
 // FIX-CLV-DESKTOP-OBJECT-2026-06-24
 import { useState, useEffect, useRef, Fragment } from "react";
-import { scoresApi } from "../lib/api"; // WZ-NBA-RECORDS-2026-07-11 :: real ESPN standings for the NBA board
+import { edgesApi, scoresApi } from "../lib/api"; // WZ-NBA-RECORDS-2026-07-11 :: real ESPN standings for the NBA board
 import { gameDetailPath } from "../lib/gameDetail"; // WZ-DETAIL-SSOT-2026-07-17
 
 // ---- self-contained helpers (kept local so this file stands alone) ----
@@ -24,7 +24,6 @@ const amCents = (o) => { if (o == null || isNaN(o)) return null; const n = Numbe
 const edgeLabel = (e) => isTotal(e) ? `${e.side === "over" ? "Over" : "Under"} ${e.line}` : (e.line != null ? `${e.teamAbbr || shortTeam(e.matchup)} ${e.line > 0 ? "+" : ""}${e.line}` : `${e.teamAbbr || shortTeam(e.matchup)} ML`);
 const sideOf = (e) => e.side === "over" ? "ov" : e.side === "under" ? "un" : "ml";
 const sideTag = (e) => { const s = sideOf(e); return `<span class="side ${s}">${s === "ov" ? "OVER" : s === "un" ? "UNDER" : "PICK"}</span>`; };
-const _API_BASE = import.meta.env.VITE_API_URL || "https://sportsintel-production.up.railway.app"; // WZ-DESKTOP-EXPAND-2026-07-15
 const impliedFromAmerican = (o) => { if (o == null || isNaN(+o)) return null; o = +o; return o > 0 ? 100 / (o + 100) : (-o) / (-o + 100); };
 const fairAmerican = (p) => { if (p == null || p <= 0 || p >= 1) return null; return p >= 0.5 ? Math.round(-100 * p / (1 - p)) : Math.round(100 * (1 - p) / p); };
 function oneSidePerGame(arr) { const g = new Map(); for (const e of arr || []) { const p = g.get(e.gameId); if (!p || (e.edge ?? -Infinity) > (p.edge ?? -Infinity)) g.set(e.gameId, e); } return [...g.values()]; }
@@ -85,8 +84,7 @@ function DesktopDetail({ x, sport, games, marketRead, lineSeries, abbrById }) {
     let dead = false;
     (async () => {
       try {
-        const r = await fetch(`${_API_BASE}/api/ai-read`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sig: x.gameId + "|" + x.side, sport, pick, market: isTot ? "TOT" : (x.line != null ? "SPREAD" : "ML"), matchup, odds: formatOdds(x.odds), model, market_pct: mkt, edge: ev, moneyDir: lm ? (lm.d < 0 ? 1 : lm.d > 0 ? -1 : 0) : 0, park, weather: wx, conviction: conv }) });
-        const j = await r.json();
+        const j = await edgesApi.aiRead({ sig: x.gameId + "|" + x.side, sport, pick, market: isTot ? "TOT" : (x.line != null ? "SPREAD" : "ML"), matchup, odds: formatOdds(x.odds), model, market_pct: mkt, edge: ev, moneyDir: lm ? (lm.d < 0 ? 1 : lm.d > 0 ? -1 : 0) : 0, park, weather: wx, conviction: conv });
         if (!dead && j && j.read) setAiRead(j.read);
       } catch (_) {}
     })();

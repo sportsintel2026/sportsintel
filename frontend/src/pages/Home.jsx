@@ -940,10 +940,8 @@ function BoardRow({d,i,open,onToggle,navigate,sport}){ const lg=(SPORTS[sport]||
     if(AI_READ_CACHE.has(sig)){ setAiRead(AI_READ_CACHE.get(sig)); return; }
     let dead=false;
     (async()=>{ try{
-      const r=await fetch(`${PERF_API_BASE}/api/ai-read`,{method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({sig,sport,pick:d.p,market:d.mk,matchup:d.g,odds:d.odds,model:d.model,market_pct:d.mkt,edge:d.edge,
-          lineMove:d.mv,moneyDir:d.delta>0?1:d.delta<0?-1:0,park:d.park,weather:d.wx,conviction:d.conv,booksLean:d.read,baseRead:d.why})});
-      const j=await r.json();
+      const j=await edgesApi.aiRead({sig,sport,pick:d.p,market:d.mk,matchup:d.g,odds:d.odds,model:d.model,market_pct:d.mkt,edge:d.edge,
+        lineMove:d.mv,moneyDir:d.delta>0?1:d.delta<0?-1:0,park:d.park,weather:d.wx,conviction:d.conv,booksLean:d.read,baseRead:d.why});
       if(!dead&&j&&j.read){ AI_READ_CACHE.set(sig,j.read); setAiRead(j.read); }
     }catch(_){} })();
     return ()=>{dead=true;};

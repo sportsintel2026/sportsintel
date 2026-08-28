@@ -16,6 +16,45 @@
 const express = require("express");
 const router = express.Router();
 const axios = require("axios");
+const { createClient } = require("@supabase/supabase-js");
+
+const OWNER_EMAIL = "r7002g@gmail.com";
+let entitlementClient = null;
+try {
+  if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY) {
+    entitlementClient = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+  }
+} catch (_) {
+  entitlementClient = null;
+}
+
+async function requireVerifiedFullAccess(req, res, next) {
+  const deny = () => res.json({ read: null });
+  if (!entitlementClient) return deny();
+
+  const authHeader = req.headers.authorization || "";
+  if (!authHeader.startsWith("Bearer ")) return deny();
+
+  try {
+    const { data: { user }, error: authError } = await entitlementClient.auth.getUser(authHeader.slice(7));
+    if (authError || !user) return deny();
+    if (user.email === OWNER_EMAIL) return next();
+
+    const [subscriptionResult, profileResult] = await Promise.all([
+      entitlementClient.from("subscriptions").select("tier").eq("user_id", user.id).single(),
+      entitlementClient.from("profiles").select("is_admin").eq("id", user.id).single(),
+    ]);
+
+    let tier = subscriptionResult.data && subscriptionResult.data.tier;
+    if (typeof tier === "string") tier = tier.trim().toLowerCase();
+    const isPaid = tier === "pro" || tier === "elite";
+    const isAdmin = profileResult.data && profileResult.data.is_admin === true;
+    if (isPaid || isAdmin) return next();
+    return deny();
+  } catch (_) {
+    return deny();
+  }
+}
 
 // One-line tunable. claude-sonnet-5 = richer prose (matches the mock); swap to
 // "claude-haiku-4-5-20251001" to cut cost if volume grows.
@@ -66,7 +105,7 @@ function factLines(b) {
   return L.join("\n");
 }
 
-router.post("/", async (req, res) => {
+router.post("/", requireVerifiedFullAccess, async (req, res) => {
   try {
     const key = process.env.ANTHROPIC_API_KEY;
     if (!key) return res.json({ read: null, reason: "no-key" });

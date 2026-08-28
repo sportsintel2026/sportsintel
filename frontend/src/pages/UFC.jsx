@@ -8,7 +8,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { subscriptionApi } from "../lib/api";
+import { edgesApi, subscriptionApi } from "../lib/api";
 import TerminalShell from "./TerminalShell";
 // WZ-UFC-DESKTOP-2026-07-11 :: UFC card gains a desktop layout inside the shared Vault shell; mobile untouched.
 
@@ -223,15 +223,11 @@ function Bout({ b, main }) {
     let dead = false;
     (async () => {
       try {
-        const r = await fetch(`${API_BASE}/api/ai-read`, {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            sig, sport: "ufc", pick: b.pick,
-            matchup: (b.red && b.red.name ? b.red.name : "TBD") + " vs " + (b.blue && b.blue.name ? b.blue.name : "TBD"),
-            odds: b.odds, model: b.winPct, market_pct: b.marketWinPct, edge: b.edgePct, baseRead: aRead,
-          }),
+        const j = await edgesApi.aiRead({
+          sig, sport: "ufc", pick: b.pick,
+          matchup: (b.red && b.red.name ? b.red.name : "TBD") + " vs " + (b.blue && b.blue.name ? b.blue.name : "TBD"),
+          odds: b.odds, model: b.winPct, market_pct: b.marketWinPct, edge: b.edgePct, baseRead: aRead,
         });
-        const j = await r.json();
         if (!dead && j && j.read) { AI_READ_CACHE.set(sig, j.read); setAiRead(j.read); }
       } catch (_) { /* fail-safe: the deterministic A read stays on screen */ }
     })();
