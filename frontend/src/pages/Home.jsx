@@ -211,15 +211,14 @@ export default function HomePage(){
   useEffect(()=>{ if(!SPORTS[sport].hasLive){ setLive([]); return; } let t; const pull=async()=>{ try{ const d=await liveApi.getMLB(); setLive(d?.games||[]); }catch(_){ setLive([]); } t=setTimeout(pull,60000); }; pull(); return ()=>clearTimeout(t); },[sport]);
   useEffect(()=>{ if(!SPORTS[sport].hasHist){ setOddsHist([]); return; } let t; const pull=async()=>{ try{ const d=await edgesApi.getOddsHistory(); setOddsHist(d?.games||[]); }catch(_){ setOddsHist([]); } t=setTimeout(pull,300000); }; pull(); return ()=>clearTimeout(t); },[sport]);
   useEffect(()=>{ if(sport!=="mlb"){ setMarketRead([]); return; } let t; const pull=async()=>{ try{ const d=await edgesApi.getMarketRead(); setMarketRead(d?.games||[]); }catch(_){ setMarketRead([]); } t=setTimeout(pull,120000); }; pull(); return ()=>clearTimeout(t); },[sport]);
-  useEffect(()=>{ if(sport!=="mlb"){ setSharpEdge([]); return; } let dead=false; /* WZ-SHARPEDGE-2026-07-13 :: read model-vs-Pinnacle from the cached snapshot; gated to MLB, no polling, fail-safe */
+  useEffect(()=>{ if(sport!=="mlb"||!planLoaded||!hasFull){ setSharpEdge([]); return; } let dead=false; /* WZ-SHARPEDGE-2026-07-13 :: read model-vs-Pinnacle from the cached snapshot; gated to MLB, no polling, fail-safe */
     (async()=>{ try{
-      const r=await fetch(`${PERF_API_BASE}/api/sharp-edge`); // WZ-SHARP-EDGE-2026-07-14 :: cached snapshot, was /api/pinnacle-probe
-      const d=await r.json();
+      const d=await edgesApi.getSharpEdge();
       const rows=(d&&Array.isArray(d.rows))?d.rows:[];
       if(!dead) setSharpEdge(rows);
     }catch(_){ if(!dead) setSharpEdge([]); } })();
     return ()=>{dead=true;};
-  },[sport]);
+  },[sport,planLoaded,hasFull]);
   // WZ-LIVEWIRE-2026-06-27 :: live wire — pull news feed (headlines + injury wire) for the ticker.
   // WZ-EDGETICKER-NEWS-2026-07-05 :: extended MLB-only -> also NFL/CFB, so the Edges-board ticker carries league news, not just scores.
   // WZ-MATCHUP-INTEL-2026-07-15 :: the model's own news -- one standout batter-vs-pitcher angle per

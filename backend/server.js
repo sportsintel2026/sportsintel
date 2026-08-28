@@ -44,6 +44,7 @@ const ufcSplitRoutes = require("./routes/ufcSplit"); // WZ-UFCEDGESPLIT-2026-08-
 const aiReadRoutes = require("./routes/aiRead"); // WZ-AI-READ-2026-07-12 :: on-demand AI read (B), fail-safe
 const gammafitRoutes = require("./routes/gammafit"); // WZ-GAMMAFIT-2026-07-23
 const adminGuard = require("./middleware/adminGuard"); // WZ-ADMIN-GUARD-2026-07-17 :: locks diagnostic/trigger endpoints
+const { resolveFullAccess } = require("./middleware/accessGate");
 const calibrationGuard = require("./services/calibrationGuard"); // WZ-CALIB-GUARD-2026-07-17 :: auto-benches drifting markets
 
 const { refreshDailyGames } = require("./services/sportsData");
@@ -167,6 +168,15 @@ app.get("/api/health", (req, res) => {
 // credits per load - the cron refreshes the snapshot. Read-only; returns { ok, rows, capturedAt }.
 app.get("/api/sharp-edge", async (req, res) => {
   try {
+    const deny = () => res.json({ ok: true, rows: [], capturedAt: null, teaser: true });
+    const authHeader = req.headers.authorization || "";
+    if (!authHeader.startsWith("Bearer ")) return deny();
+
+    let full = true;
+    try { full = await resolveFullAccess(req); }
+    catch (_) { full = true; }
+    if (!full) return deny();
+
     const sport = req.query.sport || "baseball_mlb";
     const out = await getLatestSharpEdge(sport);
     res.json(out);

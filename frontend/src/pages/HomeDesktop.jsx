@@ -487,13 +487,17 @@ export default function HomeDesktop(props) {
           )}
 
           {/* WZ-SHARP-EDGE-DESKTOP-2026-07-14 :: model-vs-Pinnacle disagreements as a Vault table, sibling to Market Read. MLB-gated; reads the same sharpRows the mobile card derives. */}
-          {sport === "mlb" && Array.isArray(sharpRows) && sharpRows.length > 0 && (
+          {sport === "mlb" && (!planLoaded || !hasFull || (Array.isArray(sharpRows) && sharpRows.length > 0)) && (
             <div className="panel">
               <div className="phead">
                 <div className="t"><span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--teal)", boxShadow: "0 0 8px rgba(63,203,145,.6)" }} />Sharp Edge</div>
                 <div className="right">model vs Pinnacle · the sharpest book</div>
               </div>
-              <table className="tbl">
+              {!planLoaded
+                ? <div className="empty">Loading…</div>
+                : !hasFull
+                ? <Lock title="Sharp Edge is an All-Access feature" sub={<><b>From $7/wk</b></>} navigate={navigate} />
+                : <><table className="tbl">
                 <thead><tr><th>Matchup</th><th>Model favors</th><th className="c">Model %</th><th className="c">Pinnacle %</th><th className="r">Edge (pp)</th></tr></thead>
                 <tbody>
                   {sharpRows.map((r, i) => {
@@ -517,7 +521,7 @@ export default function HomeDesktop(props) {
                   })}
                 </tbody>
               </table>
-              <div style={{ fontSize: 11, color: "var(--mut2)", padding: "9px 15px", borderTop: "1px solid var(--line)", fontStyle: "italic" }}>Where our model most disagrees with Pinnacle's de-vigged line. Read-only, not bet advice.</div>
+              <div style={{ fontSize: 11, color: "var(--mut2)", padding: "9px 15px", borderTop: "1px solid var(--line)", fontStyle: "italic" }}>Where our model most disagrees with Pinnacle's de-vigged line. Read-only, not bet advice.</div></>}
             </div>
           )}
 
