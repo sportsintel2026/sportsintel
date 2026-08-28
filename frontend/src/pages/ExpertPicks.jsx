@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-import { subscriptionApi, supabase } from "../lib/api";
+import { subscriptionApi, wizePicksApi } from "../lib/api";
 import Sidebar from "./Sidebar";
 import TerminalShell from "./TerminalShell";
 import BottomNav from "./BottomNav";
@@ -9,8 +9,8 @@ import BottomNav from "./BottomNav";
 // WZ-WIZEPLAYS-PAGE-REDESIGN-2026-07-11 :: standalone WizePlays page rebuilt to
 // match the Edge-board WizePlays card exactly — gold serif W mark, real ESPN team
 // logos, hairline pick rows, one clean record header. Data/logic unchanged: same
-// expert_picks fetch, same honest computeRecord (nothing shown until graded), same
-// access gate for non-subscribers, same parlay calculator + empty/loading states.
+// honest record, same access gate for non-subscribers, same parlay calculator +
+// empty/loading states. Customer data now arrives through the authenticated API.
 
 const MONO = "'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace";
 const SERIF = "'Fraunces',Georgia,'Times New Roman',serif";
@@ -93,6 +93,7 @@ export default function ExpertPicksPage() {
   const navigate = useNavigate();
   const [plan, setPlan] = useState({ tier: "free", isAdmin: false });
   const [rows, setRows] = useState([]);        // all expert_picks rows (newest first)
+  const [proof, setProof] = useState(null);
   const [loading, setLoading] = useState(true);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
@@ -105,19 +106,19 @@ export default function ExpertPicksPage() {
   useEffect(() => {
     (async () => {
       try {
-        const { data } = await supabase
-          .from("expert_picks")
-          .select("*")
-          .order("date", { ascending: false });
-        const parsed = (data || []).map((r) => {
+        const data = await wizePicksApi.get();
+        const fullRows = data?.access === "full" && Array.isArray(data.rows) ? data.rows : [];
+        const parsed = fullRows.map((r) => {
           let picks = [];
-          try { picks = r.picks ? JSON.parse(r.picks) : []; } catch (_) { picks = []; }
+          try { picks = Array.isArray(r.picks) ? r.picks : (r.picks ? JSON.parse(r.picks) : []); } catch (_) { picks = []; }
           return { date: r.date, picks };
         });
         setRows(parsed);
+        setProof(data?.proof?.overall || null);
       } catch (_) {
         // Table may not exist yet, or no rows — show the empty state, never crash.
         setRows([]);
+        setProof(null);
       }
       setLoading(false);
     })();
@@ -133,7 +134,7 @@ export default function ExpertPicksPage() {
   // Honest record across ALL graded picks (result === "win" | "loss" | "push").
   // Grading is the tracker (built separately) — until picks are graded these
   // stay zero and we DON'T show a record, so nothing is ever fabricated.
-  const record = computeRecord(rows);
+  const record = hasFullAccess ? computeRecord(rows) : (proof || computeRecord([]));
 
   return (
     <TerminalShell active="/expert-picks" plan={plan} navigate={navigate}>

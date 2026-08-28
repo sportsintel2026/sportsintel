@@ -56,6 +56,10 @@ export const playerCardApi = {
 export const consensusApi = {
   getMLB: () => apiFetch("/api/consensus/mlb"),
 };
+export const wizePicksApi = {
+  get: () => apiFetch("/api/wize-picks"),
+  runGrading: () => apiFetch("/api/expert-grade?write=1"),
+};
 // NEW — multi-book odds comparison (line-shopping page), read-only
 export const oddsApi = {
   getMLB: () => apiFetch("/api/odds/mlb"),

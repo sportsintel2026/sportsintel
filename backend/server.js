@@ -28,6 +28,7 @@ const backtestRoutes = require("./routes/backtest");
 const nbaRoutes = require("./routes/nba");
 const scoresRoutes = require("./routes/scores");
 const liveRoutes = require("./routes/live");
+const wizePicksRoutes = require("./routes/wizePicks");
 const expertGradeRoutes = require("./routes/expertGrade");
 const dailyCardRoutes = require("./routes/dailyCard");
 const gradeNowRoutes = require("./routes/gradeNow");
@@ -144,6 +145,7 @@ app.use("/api/backtest", backtestRoutes);
 app.use("/api/nba", nbaRoutes);
 app.use("/api/scores", scoresRoutes);
 app.use("/api/live", liveRoutes);
+app.use("/api/wize-picks", wizePicksRoutes);
 app.use("/api/expert-grade", expertGradeRoutes);
 app.use("/api/daily-card", dailyCardRoutes);
 app.use("/api/grade-now", adminGuard, gradeNowRoutes); // WZ-ADMIN-GUARD-2026-07-17
