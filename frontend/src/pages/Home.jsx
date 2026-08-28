@@ -15,7 +15,7 @@ import { useState, useEffect, useRef, useCallback, Children } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { useSport } from "../hooks/useSport"; // WIZEPICKS-SPORTNAV-2026-06-25
-import { edgesApi, subscriptionApi, liveApi, newsApi, supabase } from "../lib/api";
+import { edgesApi, subscriptionApi, liveApi, newsApi, matchupsApi, supabase } from "../lib/api";
 import { hasGameDetail } from "../lib/gameDetail"; // WZ-DETAIL-SSOT-2026-07-17
 import Sidebar from "./Sidebar";
 import HomeDesktop from "./HomeDesktop";
@@ -223,10 +223,10 @@ export default function HomePage(){
   // WZ-EDGETICKER-NEWS-2026-07-05 :: extended MLB-only -> also NFL/CFB, so the Edges-board ticker carries league news, not just scores.
   // WZ-MATCHUP-INTEL-2026-07-15 :: the model's own news -- one standout batter-vs-pitcher angle per
   // game, from the cached /api/matchups/mlb/intel snapshot. MLB-gated, no polling, fail-safe.
-  useEffect(()=>{ if(sport!=="mlb"){ setMatchupIntel([]); return; } let dead=false;
-    (async()=>{ try{ const r=await fetch(`${PERF_API_BASE}/api/matchups/mlb/intel`); const d=await r.json(); if(!dead) setMatchupIntel(Array.isArray(d?.items)?d.items:[]); }catch(_){ if(!dead) setMatchupIntel([]); } })();
+  useEffect(()=>{ if(sport!=="mlb"||!planLoaded||!hasFull){ setMatchupIntel([]); return; } let dead=false;
+    (async()=>{ try{ const d=await matchupsApi.getMLBIntel(); if(!dead) setMatchupIntel(Array.isArray(d?.items)?d.items:[]); }catch(_){ if(!dead) setMatchupIntel([]); } })();
     return ()=>{dead=true;};
-  },[sport]);
+  },[sport,planLoaded,hasFull]);
   useEffect(()=>{ if(sport!=="mlb"&&sport!=="nfl"&&sport!=="cfb"){ setNewsFeed([]); return; } let t,dead=false; const pull=async()=>{ try{ const d=await newsApi.getFeed(sport); if(!dead) setNewsFeed(Array.isArray(d?.items)?d.items:[]); }catch(_){ if(!dead) setNewsFeed([]); } t=setTimeout(pull,300000); }; pull(); return ()=>{dead=true;clearTimeout(t);}; },[sport]);
   // Tracked record (ROI / win rate / CLV) for the stats row, per current sport.
   // Honest: only real graded numbers; falls back to em-dashes if a league has none yet.
