@@ -13,6 +13,11 @@ const { fetchScoreboard: fetchCfbScoreboard } = require("./cfbDataSource"); // W
 const { getMLBMainOdds, getMLBPinnacleClose } = require("./oddsApi");
 const { teamKey, matchupKey, cfbSchoolKey } = require("./teamKey"); // WZ-TEAMKEY-SSOT-2026-07-17 / WZ-FBGRADE-TEAMKEY-2026-07-20
 const { rawProbabilityFor } = require("./mlbPredictionProvenance");
+const {
+  recordMlbTotalsCalibration,
+  captureMlbTotalsCalibrationClosing,
+  gradeMlbTotalsCalibration,
+} = require("./mlbTotalsCalibration");
 // WZ-CAL-MIRROR-2026-07-02 :: winProbCalibration import removed — calibration now applies
 // LIVE in edgesModel; this file just records the already-calibrated values it receives.
 
@@ -326,6 +331,46 @@ async function captureClosingLines() {
       else console.log(`[ClosingLines] captured ${clRows.length} game closing lines`);
     }
   } catch (e) { console.error("[ClosingLines] capture error:", e.message); }
+
+  // Reuse the exact US/Pinnacle provider responses already fetched above for the
+  // prospective totals challengers. Six variants never trigger six calls (or
+  // even one additional call); all variants for a game receive the same close.
+  try {
+    const calibrationCloses = [];
+    for (const gid of closingWindowGameIds) {
+      const nm = gameNames[gid];
+      if (!nm?.date) continue;
+      const ev = matchPickToOddsEvent(nm, oddsEvents);
+      const values = {};
+      if (ev?.totals?.line != null && ev?.totals?.over != null && ev?.totals?.under != null) {
+        values.closing_total = ev.totals.line;
+        values.closing_over_odds = ev.totals.over;
+        values.closing_under_odds = ev.totals.under;
+        values.closing_over_book = ev.totals.overBook || null;
+        values.closing_under_book = ev.totals.underBook || null;
+        values.closing_captured_at = new Date().toISOString();
+      }
+      if (pinEvents.length && pinWindowGameIds.has(String(gid))) {
+        const pinEv = matchPickToOddsEvent(nm, pinEvents);
+        const po = pinEv?.totals?.over;
+        const pu = pinEv?.totals?.under;
+        if (pinEv?.totals?.line != null && po != null && pu != null) {
+          const oi = americanToImpliedProb(po);
+          const ui = americanToImpliedProb(pu);
+          values.pinnacle_closing_total = pinEv.totals.line;
+          values.pinnacle_over_odds = po;
+          values.pinnacle_under_odds = pu;
+          values.pinnacle_fair_over_prob = oi != null && ui != null && oi + ui > 0 ? round4(oi / (oi + ui)) : null;
+          values.pinnacle_captured_at = new Date().toISOString();
+        }
+      }
+      if (Object.keys(values).length) calibrationCloses.push({ game_id: gid, game_date: nm.date, ...values });
+    }
+    const calibrationCaptured = await captureMlbTotalsCalibrationClosing(supabase, calibrationCloses);
+    if (calibrationCaptured) console.log(`[CLV] MLB totals calibration captured closes for ${calibrationCaptured} games`);
+  } catch (e) {
+    console.error("[CLV] MLB totals calibration capture failed:", e.message);
+  }
 
   console.log(`[CLV] captured closing lines for ${captured}/${toCapture.length} picks`
     + ` | misses: noOddsEvent=${miss.noOddsEvent} noClosingPrice=${miss.noClosingPrice} byMarket=${JSON.stringify(miss.byMarket)}`);
@@ -787,6 +832,22 @@ async function recordPredictions(result) {
     }
   } catch (e) {
     console.error("[Tracker] record exception:", e.message);
+  }
+
+  // Separate prospective totals calibration ledger. This consumes the same
+  // already-computed game objects as model_predictions, so five fatigue betas
+  // and the discrete challenger add zero sports-provider calls. Its failure is
+  // isolated from the production recorder.
+  try {
+    const eligibleGames = result.games.filter((game) => isPreGame(game.status));
+    const queued = await recordMlbTotalsCalibration(
+      supabase,
+      { ...result, games: eligibleGames },
+      gameDate
+    );
+    if (queued) console.log(`[Tracker] MLB totals calibration queued ${queued} challenger rows for ${gameDate}`);
+  } catch (e) {
+    console.error("[Tracker] MLB totals calibration record failed:", e.message);
   }
 }
 
@@ -1391,6 +1452,16 @@ async function gradeFinishedGames() {
   // hit?) can run once volume accumulates. Fully isolated -- wrapped so a failure here can NEVER
   // affect grading or CLV.
   try { await backfillClosingLineResults(supabase); } catch (e) { console.error("[ClosingLines] result backfill error:", e.message); }
+
+  // Grade the isolated totals challenger ledger from closing_lines after that
+  // ledger has been refreshed. This causes no second schedule/score fetch and
+  // leaves model_predictions grading and its return count unchanged.
+  try {
+    const calibrationGraded = await gradeMlbTotalsCalibration(supabase);
+    if (calibrationGraded) console.log(`[Tracker] MLB totals calibration graded ${calibrationGraded} games`);
+  } catch (e) {
+    console.error("[Tracker] MLB totals calibration grading failed:", e.message);
+  }
 
   console.log(`[Tracker] Graded ${graded} predictions`);
   return graded;

@@ -16,6 +16,11 @@ const calibrationGuard = require("../services/calibrationGuard"); // WZ-CALIB-GU
 const { runLineCoverModel, RUN_PHI } = require("../services/edgesModel"); // WZ-RL-BACKTEST-2026-07-17 :: real run-line model for replay + live RUN_PHI (single source)
 const { resolveMlbPredictionSources, summarizeMlbPredictionSources } = require("../services/mlbPredictionProvenance");
 const { mlbMonetaryProfit } = require("../services/mlbPerformanceMath");
+const adminGuard = require("../middleware/adminGuard");
+const {
+  fetchMlbTotalsCalibrationRows,
+  analyzeMlbTotalsCalibration,
+} = require("../services/mlbTotalsCalibration");
 
 // --- per-sport market config -------------------------------------------------
 // core  = team markets that count toward the overall record + CLV
@@ -2386,6 +2391,27 @@ router.get("/totalresetprobe", async (req, res) => {
     });
   } catch (e) {
     res.status(500).json({ token: TOKEN, error: String((e && e.message) || e) });
+  }
+});
+
+// Prospective full-slate MLB totals challenger comparison. Admin-only because it
+// exposes internal model factors and is not a customer-facing performance claim.
+// SELECT-only: recording/grading happen in predictionTracker's existing jobs.
+router.get("/mlb-totals-calibration", adminGuard, async (req, res) => {
+  try {
+    const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+    const since = req.query.since && datePattern.test(String(req.query.since)) ? String(req.query.since) : null;
+    const until = req.query.until && datePattern.test(String(req.query.until)) ? String(req.query.until) : null;
+    const rows = await fetchMlbTotalsCalibrationRows(db(), { since, until });
+    res.json({
+      ok: true,
+      filters: { since, until },
+      rows: rows.length,
+      ...analyzeMlbTotalsCalibration(rows),
+    });
+  } catch (error) {
+    console.error("[Performance] MLB totals calibration failed:", error.message);
+    res.status(500).json({ ok: false, error: "Calibration data unavailable" });
   }
 });
 
