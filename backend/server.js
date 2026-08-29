@@ -28,6 +28,7 @@ const backtestRoutes = require("./routes/backtest");
 const nbaRoutes = require("./routes/nba");
 const scoresRoutes = require("./routes/scores");
 const liveRoutes = require("./routes/live");
+const wizePicksRoutes = require("./routes/wizePicks");
 const expertGradeRoutes = require("./routes/expertGrade");
 const dailyCardRoutes = require("./routes/dailyCard");
 const gradeNowRoutes = require("./routes/gradeNow");
@@ -44,6 +45,7 @@ const ufcSplitRoutes = require("./routes/ufcSplit"); // WZ-UFCEDGESPLIT-2026-08-
 const aiReadRoutes = require("./routes/aiRead"); // WZ-AI-READ-2026-07-12 :: on-demand AI read (B), fail-safe
 const gammafitRoutes = require("./routes/gammafit"); // WZ-GAMMAFIT-2026-07-23
 const adminGuard = require("./middleware/adminGuard"); // WZ-ADMIN-GUARD-2026-07-17 :: locks diagnostic/trigger endpoints
+const { resolveFullAccess } = require("./middleware/accessGate");
 const calibrationGuard = require("./services/calibrationGuard"); // WZ-CALIB-GUARD-2026-07-17 :: auto-benches drifting markets
 
 const { refreshDailyGames } = require("./services/sportsData");
@@ -143,6 +145,7 @@ app.use("/api/backtest", backtestRoutes);
 app.use("/api/nba", nbaRoutes);
 app.use("/api/scores", scoresRoutes);
 app.use("/api/live", liveRoutes);
+app.use("/api/wize-picks", wizePicksRoutes);
 app.use("/api/expert-grade", expertGradeRoutes);
 app.use("/api/daily-card", dailyCardRoutes);
 app.use("/api/grade-now", adminGuard, gradeNowRoutes); // WZ-ADMIN-GUARD-2026-07-17
@@ -167,6 +170,15 @@ app.get("/api/health", (req, res) => {
 // credits per load - the cron refreshes the snapshot. Read-only; returns { ok, rows, capturedAt }.
 app.get("/api/sharp-edge", async (req, res) => {
   try {
+    const deny = () => res.json({ ok: true, rows: [], capturedAt: null, teaser: true });
+    const authHeader = req.headers.authorization || "";
+    if (!authHeader.startsWith("Bearer ")) return deny();
+
+    let full = true;
+    try { full = await resolveFullAccess(req); }
+    catch (_) { full = true; }
+    if (!full) return deny();
+
     const sport = req.query.sport || "baseball_mlb";
     const out = await getLatestSharpEdge(sport);
     res.json(out);

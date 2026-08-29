@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-import { supabase, edgesApi } from "../lib/api";
+import { supabase, edgesApi, wizePicksApi } from "../lib/api";
 
 const API_BASE = import.meta.env.VITE_API_URL || "https://sportsintel-production.up.railway.app";
 const ADMIN_EMAIL = "r7002g@gmail.com";
@@ -209,7 +209,7 @@ export default function AdminPage() {
   const needsLine = market==="total" || market==="run_line" || market==="spread" || market==="puck_line";
 
   const runGrading = async () => {
-    try { const r = await fetch(`${API_BASE}/api/expert-grade?write=1`); const j = await r.json(); alert("Grading run.\n" + JSON.stringify(j).slice(0,300)); loadToday(); loadRecord(); }
+    try { const j = await wizePicksApi.runGrading(); alert("Grading run.\n" + JSON.stringify(j).slice(0,300)); loadToday(); loadRecord(); }
     catch(e) { alert("Grading failed: " + (e?.message||e)); }
   };
   const clearCache = async () => {

@@ -231,7 +231,7 @@ export default function MarketReadPage() {
         {!hasFull ? (
           <div className="mrlock">
             <div className="lh">Market Read is an All-Access feature</div>
-            <div className="ls">See what every book is really saying on every game — <b>$7/mo</b>.</div>
+            <div className="ls">See what every book is really saying on every game — <b>From $7/week</b>.</div>
             <button onClick={() => navigate("/pricing")}>Unlock All-Access →</button>
           </div>
         ) : loading ? (

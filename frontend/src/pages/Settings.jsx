@@ -52,7 +52,7 @@ export default function SettingsPage() {
   const openPortal = async () => {
     if (!paid) { navigate("/pricing"); return; }
     setPortalLoading(true);
-    try { const url = await subscriptionApi.getCustomerPortalUrl(); if (url) window.location.href = (typeof url === "string" ? url : url.url); }
+    try { const url = await subscriptionApi.portal(); if (url) window.location.href = (typeof url === "string" ? url : url.url); }
     catch (_) {} finally { setPortalLoading(false); }
   };
   const pickTier = (i) => { if (paid) openPortal(); else navigate("/pricing"); };

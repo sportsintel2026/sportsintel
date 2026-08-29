@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-import { subscriptionApi } from "../lib/api";
+import { dailyCardApi, subscriptionApi } from "../lib/api";
 import Sidebar from "./Sidebar";
 import TerminalShell from "./TerminalShell";
 import BottomNav from "./BottomNav";
@@ -50,7 +50,7 @@ export default function DailyCardPage() {
   useEffect(() => {
     setLoading(true); setError(false);
     Promise.all([
-      fetch(`${API_BASE}/api/daily-card?scope=${scope}`).then(r => { if (!r.ok) throw new Error("bad"); return r.json(); }),
+      dailyCardApi.get(scope),
       fetch(`${API_BASE}/api/daily-card/record?scope=${scope}`).then(r => r.ok ? r.json() : null).catch(() => null),
     ])
       .then(([c, rec]) => { setCard(c); setRecord(rec); setLoading(false); })
@@ -223,8 +223,7 @@ function CardBody({ card, record, navigate }) {
   const doSpin = () => {
     if (used || fetching || spinning) return;
     setFetching(true); setSpinMsg("");
-    fetch(`${API_BASE}/api/daily-card/alternate-play?scope=${card.scope || "mix"}`)
-      .then(r => (r.ok ? r.json() : null))
+    dailyCardApi.getAlternatePlay(card.scope || "mix")
       .then(d => {
         setFetching(false);
         if (d && (d.single || d.parlay)) {

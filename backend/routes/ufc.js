@@ -12,7 +12,7 @@ const express = require("express");
 const router = express.Router();
 const axios = require("axios");
 const { fetchMMASchedule } = require("../services/sportsData");
-const adminGuard = require("../middleware/adminGuard"); // WZ-ADMIN-GUARD-2026-07-17 :: gate the 3 UFC debug routes (card/record stay public)
+const adminGuard = require("../middleware/adminGuard"); // WZ-ADMIN-GUARD-2026-07-17 :: gate the 3 UFC debug routes
 const { getNextPPVEvent, getEventBouts, getFighter, getFighterFights, getUpcomingEvents } = require("../services/citoApi"); // WZ-UFC-FORM-2026-07-09 / WZ-UFC-HOLDEVENT-2026-07-11
 const { scoreBout, methodLean } = require("../services/mmaModel"); // WZ-UFC-MODEL-2026-07-09 / WZ-UFC-METHOD-2026-07-09
 const { createClient } = require("@supabase/supabase-js"); // WZ-UFC-REC-2026-07-09
@@ -21,6 +21,7 @@ const { foldStrokes } = require("../services/nameFold"); // WZ-NAMEFOLD-2026-07-
 
 const ODDS_BASE = "https://api.the-odds-api.com/v4";
 const ODDS_API_KEY = process.env.ODDS_API_KEY;
+const OWNER_EMAIL = "r7002g@gmail.com";
 const CARD_TTL_MS = 15 * 60 * 1000; // assembled card cache (Cito + odds are cached deeper)
 const ODDS_TTL_MS = 10 * 60 * 1000;
 // WZ-UFC-PINBOUND-2026-07-27 :: how long an already-happened event may keep the card pinned
@@ -625,6 +626,45 @@ function sb() {
   _sbClient = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
   return _sbClient;
 }
+
+async function requireVerifiedUFCCardAccess(req, res, next) {
+  const deny = () => res.json({
+    ok: true,
+    locked: true,
+    teaser: true,
+    source: "locked",
+    picksLive: false,
+    edgePending: true,
+    event: null,
+    mainCard: [],
+    prelims: [],
+  });
+
+  try {
+    const c = sb();
+    if (!c) return deny();
+
+    const authHeader = req.headers.authorization || "";
+    if (!authHeader.startsWith("Bearer ")) return deny();
+
+    const { data: { user }, error: authError } = await c.auth.getUser(authHeader.slice(7));
+    if (authError || !user) return deny();
+    if (user.email === OWNER_EMAIL) return next();
+
+    const [subscriptionResult, profileResult] = await Promise.all([
+      c.from("subscriptions").select("tier").eq("user_id", user.id).single(),
+      c.from("profiles").select("is_admin").eq("id", user.id).single(),
+    ]);
+    let tier = subscriptionResult.data && subscriptionResult.data.tier;
+    if (typeof tier === "string") tier = tier.trim().toLowerCase();
+    const isPaid = tier === "pro" || tier === "elite";
+    const isAdmin = profileResult.data && profileResult.data.is_admin === true;
+    if (isPaid || isAdmin) return next();
+    return deny();
+  } catch (_) {
+    return deny();
+  }
+}
 // WZ-UFC-RECORD-CRON-2026-07-20 :: signature changed from (card) to (bouts, event). It used to take a
 // whole card object and bail on `card.source !== "cito"` -- a SILENT return that banked nothing whenever
 // Cito was down and loadCard fell back to the odds feed. Taking the bouts directly means the cron and
@@ -785,7 +825,7 @@ async function loadCard() {
   return cardInflight;
 }
 
-router.get("/card", async (_req, res) => {
+router.get("/card", requireVerifiedUFCCardAccess, async (_req, res) => {
   try {
     const card = await loadCard();
     res.json(card);

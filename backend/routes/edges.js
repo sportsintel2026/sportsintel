@@ -10,6 +10,7 @@
 const express = require("express");
 const router = express.Router();
 const { gateModelData } = require("../middleware/accessGate"); // WZ-LOCK-ROUND2-2026-07-15
+const adminGuard = require("../middleware/adminGuard");
 // ── WZ-LOCK-PICKS-2026-07-15 :: server-side access gate for the model's picks ─────────────────
 // The board's pick data must reach ONLY full-access users (paid, comped, admin, owner). The
 // frontend already shows a paywall <Gate> to everyone else, but the raw JSON was still shipped to
@@ -63,11 +64,21 @@ async function wzResolveFullAccess(req) {
 // page never breaks (scores/ticker still work) and the paywall <Gate> shows as it already does.
 function wzTeaserizeBoard(body) {
   if (!body || typeof body !== "object") return body;
-  const EDGE_ARRAYS = ["moneylineEdges","totalsEdges","runLineEdges","spreadEdges","hrPropEdges","kPropEdges","hitsPropEdges","tbPropEdges","doublesPropEdges","triplesPropEdges"];
+  const EDGE_ARRAYS = ["moneylineEdges","totalsEdges","runLineEdges","spreadEdges","hrPropEdges","kPropEdges","hitsPropEdges","tbPropEdges","doublesPropEdges","triplesPropEdges","edges","marketMovers"];
+  const GAME_MODEL_FIELDS = ["spread","total","marketRead","oddsGrid","dataQuality"];
   const out = { ...body, teaser: true };
   for (const k of EDGE_ARRAYS) if (Array.isArray(out[k])) out[k] = [];
+  if (Object.prototype.hasOwnProperty.call(out, "marketByGame")) out.marketByGame = {};
+  if (Object.prototype.hasOwnProperty.call(out, "edgeCount")) out.edgeCount = 0;
   if (Array.isArray(out.games)) {
-    out.games = out.games.map((g) => (g && typeof g === "object") ? { ...g, moneyline: null, totals: null, runLine: null } : g);
+    out.games = out.games.map((g) => {
+      if (!g || typeof g !== "object") return g;
+      const game = { ...g, moneyline: null, totals: null, runLine: null };
+      for (const k of GAME_MODEL_FIELDS) {
+        if (Object.prototype.hasOwnProperty.call(game, k)) game[k] = null;
+      }
+      return game;
+    });
   }
   return out;
 }
@@ -1025,7 +1036,7 @@ router.get("/mlb", gatePicks, async (req, res) => {
   }
 });
 // Debug endpoint — clear cache
-router.delete("/cache", (req, res) => {
+router.delete("/cache", adminGuard, (req, res) => {
   edgesCache = null;
   edgesCacheAt = 0;
   edgesCacheDate = null;
@@ -1537,7 +1548,7 @@ router.get("/tbgrade", async (req, res) => {
 //   /api/edges/oddsprobe?sport=baseball_mlb             → MLB (sanity check)
 //   &regions=us,us2,eu &markets=h2h,totals,spreads      → widen coverage
 // A 422 in the response = that sport isn't enabled on the current plan.
-router.get("/oddsprobe", async (req, res) => {
+router.get("/oddsprobe", adminGuard, async (req, res) => {
   try {
     const sport = req.query.sport || "americanfootball_nfl";
     const regions = req.query.regions || "us";

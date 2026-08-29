@@ -16,15 +16,7 @@ const {
   getEasternDate,
 } = require("../services/mlbStatsApi");
 const { backfillUmpireGames, getUmpireTendencies, getUmpireByName } = require("../services/umpireStore");
-
-// Light gate so the backfill isn't wide open to spam. This only writes public
-// box-score-derived rows (no secrets exposed), so a simple fixed key is fine —
-// no Railway env lookup, no special characters. Trimmed + case-insensitive so a
-// stray space or capital can't trip it.
-const BACKFILL_KEY = "wizeump";
-function adminOk(req) {
-  return String(req.query.key || "").trim().toLowerCase() === BACKFILL_KEY;
-}
+const adminGuard = require("../middleware/adminGuard");
 
 // GET /api/umpires/probe                  -> yesterday's finished games (ET)
 // GET /api/umpires/probe?date=YYYY-MM-DD  -> a specific date's finished games
@@ -65,11 +57,11 @@ router.get("/probe", async (req, res) => {
   }
 });
 
-// GET /api/umpires/backfill?from=YYYY-MM-DD[&to=YYYY-MM-DD][&cap=150]&key=ADMIN_TOKEN
+// GET /api/umpires/backfill?from=YYYY-MM-DD[&to=YYYY-MM-DD][&cap=150]
+// Requires the existing admin authentication.
 // Populates umpire_games for the range. Returns done:false + resumeFrom when capped —
 // re-hit with from=resumeFrom to continue (idempotent, so overlap is safe).
-router.get("/backfill", async (req, res) => {
-  if (!adminOk(req)) return res.status(403).json({ ok: false, error: "forbidden" });
+router.get("/backfill", adminGuard, async (req, res) => {
   const from = req.query.from;
   const to = req.query.to || getEasternDate(0);
   const cap = Math.max(1, Math.min(400, parseInt(req.query.cap, 10) || 150));

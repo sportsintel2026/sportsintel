@@ -37,6 +37,7 @@ export const edgesApi = {
   getNBAProps: () => apiFetch("/api/edges/nba/props"),
   getOddsHistory: () => apiFetch("/api/edges/odds-history/mlb"),
   getMarketRead: () => apiFetch("/api/edges/market-read/mlb"),
+  getSharpEdge: () => apiFetch("/api/sharp-edge"),
   aiRead: (body) => apiFetch("/api/ai-read", { method: "POST", body: JSON.stringify(body) }), // WZ-FB-DETAIL-RICH-2026-07-16
   clearCache: () => apiFetch("/api/edges/cache", { method: "DELETE" }),
 };
@@ -55,6 +56,10 @@ export const playerCardApi = {
 export const consensusApi = {
   getMLB: () => apiFetch("/api/consensus/mlb"),
 };
+export const wizePicksApi = {
+  get: () => apiFetch("/api/wize-picks"),
+  runGrading: () => apiFetch("/api/expert-grade?write=1"),
+};
 // NEW — multi-book odds comparison (line-shopping page), read-only
 export const oddsApi = {
   getMLB: () => apiFetch("/api/odds/mlb"),
@@ -72,6 +77,7 @@ export const scoresApi = {
 // NEW — per-game matchups: projected lineups + batter-vs-pitcher (keyed by gamePk)
 export const matchupsApi = {
   getMLB: (gameId) => apiFetch(`/api/matchups/mlb/${gameId}`),
+  getMLBIntel: () => apiFetch("/api/matchups/mlb/intel"),
 };
 export const subscriptionApi = {
   getMyPlan: () => apiFetch("/api/subscriptions/me"),
@@ -81,4 +87,13 @@ export const subscriptionApi = {
   }),
   portal: () => apiFetch("/api/subscriptions/portal", { method: "POST" }),
   getAdminStats: () => apiFetch("/api/subscriptions/admin-stats"), // WZ-SUBSTATS-2026-07-13 :: owner-only subscriber counts
+};
+
+export const dailyCardApi = {
+  get: (scope) => apiFetch(`/api/daily-card?scope=${encodeURIComponent(scope)}`),
+  getAlternatePlay: (scope) => apiFetch(`/api/daily-card/alternate-play?scope=${encodeURIComponent(scope)}`),
+};
+
+export const ufcApi = {
+  getCard: () => apiFetch("/api/ufc/card"),
 };

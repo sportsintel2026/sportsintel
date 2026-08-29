@@ -15,7 +15,7 @@ import { useState, useEffect, useRef, useCallback, Children } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { useSport } from "../hooks/useSport"; // WIZEPICKS-SPORTNAV-2026-06-25
-import { edgesApi, subscriptionApi, liveApi, newsApi, supabase } from "../lib/api";
+import { edgesApi, subscriptionApi, liveApi, newsApi, matchupsApi, wizePicksApi } from "../lib/api";
 import { hasGameDetail } from "../lib/gameDetail"; // WZ-DETAIL-SSOT-2026-07-17
 import Sidebar from "./Sidebar";
 import HomeDesktop from "./HomeDesktop";
@@ -161,6 +161,7 @@ export default function HomePage(){
   // that puts a second, divergent code path back in the file six weeks from now.
   const [propTab,setPropTab]=useState("hr");
   const [wpRows,setWpRows]=useState([]); // WZ-WIZEPLAYS-LIST-2026-07-08 :: keep picks for the list (all sports; scoped per-sport in render)
+  const [wpProof,setWpProof]=useState(null);
   const [perf,setPerf]=useState(null);
   const [live,setLive]=useState(null);
   const [oddsHist,setOddsHist]=useState(null);
@@ -194,10 +195,11 @@ export default function HomePage(){
       .catch(()=>{ /* stay on /home; the paywall + subscribe button remain available */ });
   },[user]);
   useEffect(()=>{(async()=>{ try{
-    const { data }=await supabase.from("expert_picks").select("*").order("date",{ascending:false});
-    const rows=(data||[]).map(r=>{ let picks=[]; try{picks=r.picks?JSON.parse(r.picks):[];}catch(_){picks=[];} return {date:r.date,picks}; });
+    const data=await wizePicksApi.get();
+    const rows=(data?.access==="full"&&Array.isArray(data.rows)?data.rows:[]).map(r=>{ let picks=[]; try{picks=Array.isArray(r.picks)?r.picks:(r.picks?JSON.parse(r.picks):[]);}catch(_){picks=[];} return {date:r.date,picks}; });
     setWpRows(rows);
-  }catch(_){ setWpRows([]); } })();},[]);
+    setWpProof(data?.proof||null);
+  }catch(_){ setWpRows([]); setWpProof(null); } })();},[]);
   const load=useCallback(async()=>{ try{ const d=await (sport==="nfl"?SPORTS.nfl.feed(nflPhase):SPORTS[sport].feed());
     if(sport==="nfl"&&d&&d.phase){ setPhaseAvail(d.phase.available||[]); if(nflPhase==null&&d.phase.selected) setNflPhase(d.phase.selected); }
     const f={}; [...(d.moneylineEdges||[]),...(d.totalsEdges||[]),...(d.runLineEdges||[]),...(d.spreadEdges||[])].forEach(e=>{ const k=e.gameId+e.side; if(prev.current[k]!=null&&prev.current[k]!==e.odds)f[k]=e.odds>prev.current[k]?"up":"dn"; prev.current[k]=e.odds; });
@@ -211,23 +213,22 @@ export default function HomePage(){
   useEffect(()=>{ if(!SPORTS[sport].hasLive){ setLive([]); return; } let t; const pull=async()=>{ try{ const d=await liveApi.getMLB(); setLive(d?.games||[]); }catch(_){ setLive([]); } t=setTimeout(pull,60000); }; pull(); return ()=>clearTimeout(t); },[sport]);
   useEffect(()=>{ if(!SPORTS[sport].hasHist){ setOddsHist([]); return; } let t; const pull=async()=>{ try{ const d=await edgesApi.getOddsHistory(); setOddsHist(d?.games||[]); }catch(_){ setOddsHist([]); } t=setTimeout(pull,300000); }; pull(); return ()=>clearTimeout(t); },[sport]);
   useEffect(()=>{ if(sport!=="mlb"){ setMarketRead([]); return; } let t; const pull=async()=>{ try{ const d=await edgesApi.getMarketRead(); setMarketRead(d?.games||[]); }catch(_){ setMarketRead([]); } t=setTimeout(pull,120000); }; pull(); return ()=>clearTimeout(t); },[sport]);
-  useEffect(()=>{ if(sport!=="mlb"){ setSharpEdge([]); return; } let dead=false; /* WZ-SHARPEDGE-2026-07-13 :: read model-vs-Pinnacle from the cached snapshot; gated to MLB, no polling, fail-safe */
+  useEffect(()=>{ if(sport!=="mlb"||!planLoaded||!hasFull){ setSharpEdge([]); return; } let dead=false; /* WZ-SHARPEDGE-2026-07-13 :: read model-vs-Pinnacle from the cached snapshot; gated to MLB, no polling, fail-safe */
     (async()=>{ try{
-      const r=await fetch(`${PERF_API_BASE}/api/sharp-edge`); // WZ-SHARP-EDGE-2026-07-14 :: cached snapshot, was /api/pinnacle-probe
-      const d=await r.json();
+      const d=await edgesApi.getSharpEdge();
       const rows=(d&&Array.isArray(d.rows))?d.rows:[];
       if(!dead) setSharpEdge(rows);
     }catch(_){ if(!dead) setSharpEdge([]); } })();
     return ()=>{dead=true;};
-  },[sport]);
+  },[sport,planLoaded,hasFull]);
   // WZ-LIVEWIRE-2026-06-27 :: live wire — pull news feed (headlines + injury wire) for the ticker.
   // WZ-EDGETICKER-NEWS-2026-07-05 :: extended MLB-only -> also NFL/CFB, so the Edges-board ticker carries league news, not just scores.
   // WZ-MATCHUP-INTEL-2026-07-15 :: the model's own news -- one standout batter-vs-pitcher angle per
   // game, from the cached /api/matchups/mlb/intel snapshot. MLB-gated, no polling, fail-safe.
-  useEffect(()=>{ if(sport!=="mlb"){ setMatchupIntel([]); return; } let dead=false;
-    (async()=>{ try{ const r=await fetch(`${PERF_API_BASE}/api/matchups/mlb/intel`); const d=await r.json(); if(!dead) setMatchupIntel(Array.isArray(d?.items)?d.items:[]); }catch(_){ if(!dead) setMatchupIntel([]); } })();
+  useEffect(()=>{ if(sport!=="mlb"||!planLoaded||!hasFull){ setMatchupIntel([]); return; } let dead=false;
+    (async()=>{ try{ const d=await matchupsApi.getMLBIntel(); if(!dead) setMatchupIntel(Array.isArray(d?.items)?d.items:[]); }catch(_){ if(!dead) setMatchupIntel([]); } })();
     return ()=>{dead=true;};
-  },[sport]);
+  },[sport,planLoaded,hasFull]);
   useEffect(()=>{ if(sport!=="mlb"&&sport!=="nfl"&&sport!=="cfb"){ setNewsFeed([]); return; } let t,dead=false; const pull=async()=>{ try{ const d=await newsApi.getFeed(sport); if(!dead) setNewsFeed(Array.isArray(d?.items)?d.items:[]); }catch(_){ if(!dead) setNewsFeed([]); } t=setTimeout(pull,300000); }; pull(); return ()=>{dead=true;clearTimeout(t);}; },[sport]);
   // Tracked record (ROI / win rate / CLV) for the stats row, per current sport.
   // Honest: only real graded numbers; falls back to em-dashes if a league has none yet.
@@ -352,7 +353,7 @@ export default function HomePage(){
   const WP_SPORT={ mlb:"mlb", nba:"nba", nfl:"nfl", nhl:"nhl", cfb:"ncaafb" };
   const wpPickInSport=(pk,sp)=>{ const want=WP_SPORT[sp]; if(!want||!pk) return false; if(pk.type==="parlay") return Array.isArray(pk.legs)&&pk.legs.some(l=>String((l&&l.sport)||"").toLowerCase()===want); return String(pk.sport||"").toLowerCase()===want; };
   const wpRowsSport=(wpRows||[]).map(r=>({ date:r.date, picks:(r.picks||[]).filter(pk=>wpPickInSport(pk,sport)) }));
-  const wpRecord=computeRecord(wpRowsSport);
+  const wpRecord=hasFull?computeRecord(wpRowsSport):(wpProof?.bySport?.[sport]||computeRecord([]));
   const wpToday=(()=>{ const row=wpRowsSport.find(r=>String(r.date)>=wpTodayStr); if(!row||!Array.isArray(row.picks))return []; const picks=row.picks; const isDone=(pk)=>{const rr=String((pk&&pk.result)||"").toLowerCase();return rr==="win"||rr==="loss"||rr==="push"||rr==="won"||rr==="lost";}; const allDone=picks.length>0&&picks.every(isDone); return allDone?[]:picks; })();
   const liveGames=(live||[]).filter(g=>[g.awayEdge,g.homeEdge,g.overEdge,g.underEdge].some(x=>x!=null));
 
@@ -940,10 +941,8 @@ function BoardRow({d,i,open,onToggle,navigate,sport}){ const lg=(SPORTS[sport]||
     if(AI_READ_CACHE.has(sig)){ setAiRead(AI_READ_CACHE.get(sig)); return; }
     let dead=false;
     (async()=>{ try{
-      const r=await fetch(`${PERF_API_BASE}/api/ai-read`,{method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({sig,sport,pick:d.p,market:d.mk,matchup:d.g,odds:d.odds,model:d.model,market_pct:d.mkt,edge:d.edge,
-          lineMove:d.mv,moneyDir:d.delta>0?1:d.delta<0?-1:0,park:d.park,weather:d.wx,conviction:d.conv,booksLean:d.read,baseRead:d.why})});
-      const j=await r.json();
+      const j=await edgesApi.aiRead({sig,sport,pick:d.p,market:d.mk,matchup:d.g,odds:d.odds,model:d.model,market_pct:d.mkt,edge:d.edge,
+        lineMove:d.mv,moneyDir:d.delta>0?1:d.delta<0?-1:0,park:d.park,weather:d.wx,conviction:d.conv,booksLean:d.read,baseRead:d.why});
       if(!dead&&j&&j.read){ AI_READ_CACHE.set(sig,j.read); setAiRead(j.read); }
     }catch(_){} })();
     return ()=>{dead=true;};

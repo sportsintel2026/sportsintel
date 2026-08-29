@@ -63,7 +63,7 @@ export default function MarketPage() {
   const { user } = useAuth();
   const [plan, setPlan] = useState({ tier:"free", isAdmin:false });
   const [planLoaded, setPlanLoaded] = useState(false);
-  const hasFull = plan.isAdmin === true || plan.tier === "pro" || plan.tier === "elite"; // WZ-ODDS-LOCK-2026-07-13
+  const hasFull = plan.isAdmin === true || plan.tier === "pro" || plan.tier === "elite" || user?.email === "r7002g@gmail.com"; // WZ-ODDS-LOCK-2026-07-13
   const [sport, setSport] = useSport();
   const [odds, setOdds] = useState(null);
   const [edges, setEdges] = useState(null);
@@ -75,6 +75,11 @@ export default function MarketPage() {
 
   useEffect(() => { subscriptionApi.getMyPlan().then(setPlan).catch(()=>{}).finally(()=>setPlanLoaded(true)); }, []);
   useEffect(() => {
+    if (!planLoaded) return;
+    if (!hasFull) {
+      setOdds(null); setEdges(null); setOddsHist(null); setMarketRead(null); setLoading(false);
+      return;
+    }
     let c = false;
     const load = async () => {
       try {
@@ -115,7 +120,7 @@ export default function MarketPage() {
     };
     load(); const id = setInterval(load, 90000);
     return () => { c = true; clearInterval(id); };
-  }, [sport]);
+  }, [sport, planLoaded, hasFull]);
 
   const oddsGames = Array.isArray(odds) ? odds : (odds?.games || []);
   const e = edges || {};

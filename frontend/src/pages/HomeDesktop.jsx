@@ -5,7 +5,7 @@
 // HOMEDESKTOP-PREMIUM-DARK-RESKIN-2026-06-23
 // FIX-CLV-DESKTOP-OBJECT-2026-06-24
 import { useState, useEffect, useRef, Fragment } from "react";
-import { scoresApi } from "../lib/api"; // WZ-NBA-RECORDS-2026-07-11 :: real ESPN standings for the NBA board
+import { edgesApi, scoresApi } from "../lib/api"; // WZ-NBA-RECORDS-2026-07-11 :: real ESPN standings for the NBA board
 import { gameDetailPath } from "../lib/gameDetail"; // WZ-DETAIL-SSOT-2026-07-17
 
 // ---- self-contained helpers (kept local so this file stands alone) ----
@@ -24,7 +24,6 @@ const amCents = (o) => { if (o == null || isNaN(o)) return null; const n = Numbe
 const edgeLabel = (e) => isTotal(e) ? `${e.side === "over" ? "Over" : "Under"} ${e.line}` : (e.line != null ? `${e.teamAbbr || shortTeam(e.matchup)} ${e.line > 0 ? "+" : ""}${e.line}` : `${e.teamAbbr || shortTeam(e.matchup)} ML`);
 const sideOf = (e) => e.side === "over" ? "ov" : e.side === "under" ? "un" : "ml";
 const sideTag = (e) => { const s = sideOf(e); return `<span class="side ${s}">${s === "ov" ? "OVER" : s === "un" ? "UNDER" : "PICK"}</span>`; };
-const _API_BASE = import.meta.env.VITE_API_URL || "https://sportsintel-production.up.railway.app"; // WZ-DESKTOP-EXPAND-2026-07-15
 const impliedFromAmerican = (o) => { if (o == null || isNaN(+o)) return null; o = +o; return o > 0 ? 100 / (o + 100) : (-o) / (-o + 100); };
 const fairAmerican = (p) => { if (p == null || p <= 0 || p >= 1) return null; return p >= 0.5 ? Math.round(-100 * p / (1 - p)) : Math.round(100 * (1 - p) / p); };
 function oneSidePerGame(arr) { const g = new Map(); for (const e of arr || []) { const p = g.get(e.gameId); if (!p || (e.edge ?? -Infinity) > (p.edge ?? -Infinity)) g.set(e.gameId, e); } return [...g.values()]; }
@@ -85,8 +84,7 @@ function DesktopDetail({ x, sport, games, marketRead, lineSeries, abbrById }) {
     let dead = false;
     (async () => {
       try {
-        const r = await fetch(`${_API_BASE}/api/ai-read`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sig: x.gameId + "|" + x.side, sport, pick, market: isTot ? "TOT" : (x.line != null ? "SPREAD" : "ML"), matchup, odds: formatOdds(x.odds), model, market_pct: mkt, edge: ev, moneyDir: lm ? (lm.d < 0 ? 1 : lm.d > 0 ? -1 : 0) : 0, park, weather: wx, conviction: conv }) });
-        const j = await r.json();
+        const j = await edgesApi.aiRead({ sig: x.gameId + "|" + x.side, sport, pick, market: isTot ? "TOT" : (x.line != null ? "SPREAD" : "ML"), matchup, odds: formatOdds(x.odds), model, market_pct: mkt, edge: ev, moneyDir: lm ? (lm.d < 0 ? 1 : lm.d > 0 ? -1 : 0) : 0, park, weather: wx, conviction: conv });
         if (!dead && j && j.read) setAiRead(j.read);
       } catch (_) {}
     })();
@@ -489,13 +487,17 @@ export default function HomeDesktop(props) {
           )}
 
           {/* WZ-SHARP-EDGE-DESKTOP-2026-07-14 :: model-vs-Pinnacle disagreements as a Vault table, sibling to Market Read. MLB-gated; reads the same sharpRows the mobile card derives. */}
-          {sport === "mlb" && Array.isArray(sharpRows) && sharpRows.length > 0 && (
+          {sport === "mlb" && (!planLoaded || !hasFull || (Array.isArray(sharpRows) && sharpRows.length > 0)) && (
             <div className="panel">
               <div className="phead">
                 <div className="t"><span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--teal)", boxShadow: "0 0 8px rgba(63,203,145,.6)" }} />Sharp Edge</div>
                 <div className="right">model vs Pinnacle · the sharpest book</div>
               </div>
-              <table className="tbl">
+              {!planLoaded
+                ? <div className="empty">Loading…</div>
+                : !hasFull
+                ? <Lock title="Sharp Edge is an All-Access feature" sub={<><b>From $7/wk</b></>} navigate={navigate} />
+                : <><table className="tbl">
                 <thead><tr><th>Matchup</th><th>Model favors</th><th className="c">Model %</th><th className="c">Pinnacle %</th><th className="r">Edge (pp)</th></tr></thead>
                 <tbody>
                   {sharpRows.map((r, i) => {
@@ -519,7 +521,7 @@ export default function HomeDesktop(props) {
                   })}
                 </tbody>
               </table>
-              <div style={{ fontSize: 11, color: "var(--mut2)", padding: "9px 15px", borderTop: "1px solid var(--line)", fontStyle: "italic" }}>Where our model most disagrees with Pinnacle's de-vigged line. Read-only, not bet advice.</div>
+              <div style={{ fontSize: 11, color: "var(--mut2)", padding: "9px 15px", borderTop: "1px solid var(--line)", fontStyle: "italic" }}>Where our model most disagrees with Pinnacle's de-vigged line. Read-only, not bet advice.</div></>}
             </div>
           )}
 
