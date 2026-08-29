@@ -22,10 +22,15 @@
 // (self-tested — `node backend/routes/gammafit.js`), reported per market as
 // `reconstruction`. It verifies the de-vig round-trips at ANY vig level, including 0.
 //
-// WHAT IS ACTUALLY BEING MEASURED
-// -------------------------------
-//   fair = model_prob − edge          ← arithmetic identity, cannot fail
-//   raw  = fair + edge / W            ← depends on W_MODEL being 0.55
+// LEGACY RECONSTRUCTION (kept only as labelled coverage)
+// ------------------------------------------------------
+//   fair = model_prob − edge
+//   raw  = fair + edge / W
+//
+// MLB gamma fits now require stored raw_win_prob plus both pick-time prices.
+// Rows that only support the equations above are reported as reconstructed and
+// excluded from gamma; calibration and published ROI still use their original
+// stored model_prob/odds/result.
 //
 //   γ:  P(win) = σ( logit(fair) + γ · (logit(raw) − logit(fair)) )
 //
@@ -46,7 +51,8 @@
 // 2. `published`      — realised ROI at real posted prices. Odds + result only.
 // 3. `marketBaseline` — what selecting on the MARKET's probability alone would have
 //                       returned. The null model the product must beat to exist.
-// 4. `gammaVsClose` / `gammaVsOutcome` — depend on the reconstruction and on W.
+// 4. `gammaVsClose` / `gammaVsOutcome` — MLB requires stored raw probability and
+//                       two-sided pick-time prices; legacy reconstructions are excluded.
 
 // ── pure, dependency-free math ────────────────────────────────────────────────
 // Kept ABOVE the express/supabase requires so the self-test in this block can run
@@ -63,6 +69,7 @@ const r3 = (x) => (Number.isFinite(x) ? Math.round(x * 1000) / 1000 : null);
 const r2 = (x) => (Number.isFinite(x) ? Math.round(x * 100) / 100 : null);
 const mean = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
 const median = (a) => { if (!a.length) return null; const s = a.slice().sort((x, y) => x - y); return s[Math.floor(s.length / 2)]; };
+const { resolveMlbPredictionSources, summarizeMlbPredictionSources } = require("../services/mlbPredictionProvenance");
 
 // ── WZ-DEVIG-IDENTITY-2026-07-24 :: reconstruction validity — an IDENTITY, not a thesis ──
 // v1 gated on `vigTaxPts ≈ 2.2` (a THESIS about vig magnitude) and voided its own
@@ -187,7 +194,7 @@ async function analyseMarket(supabase, league, market, W, BAND) {
   let from = 0;
   for (let i = 0; i < 40; i++) {
     const { data, error } = await supabase.from("model_predictions")
-      .select("game_id, game_date, model_prob, edge, odds, result, pinnacle_fair_prob")
+      .select("game_id, game_date, model_prob, raw_win_prob, edge, odds, opp_odds, result, pinnacle_fair_prob")
       .eq("league", league).eq("market", market)
       .in("result", ["win", "loss"])
       .order("game_date", { ascending: true }).range(from, from + PAGE - 1);
@@ -204,15 +211,30 @@ async function analyseMarket(supabase, league, market, W, BAND) {
   const effVig = [];
   let devigChecked = 0, devigOk = 0;
   const devigInconsistent = [];
+  const resolvedSources = [];
   for (const r of raw) {
-    const mp = r.model_prob == null ? null : Number(r.model_prob);
-    const ed = r.edge == null ? null : Number(r.edge);
+    const isMlb = String(league).toLowerCase() === "mlb";
+    const legacyClaimed = r.model_prob == null ? null : Number(r.model_prob);
+    const legacyEdge = r.edge == null ? null : Number(r.edge);
+    const legacyFair = legacyClaimed != null && legacyEdge != null ? legacyClaimed - legacyEdge : null;
+    const source = isMlb ? resolveMlbPredictionSources(r, { wModel: W }) : {
+      claimed: legacyClaimed,
+      edge: legacyEdge,
+      fair: legacyFair,
+      raw: legacyFair != null ? legacyFair + legacyEdge / W : null,
+      fairSource: "legacy_non_mlb_behavior",
+      rawSource: "legacy_non_mlb_behavior",
+      authoritative: true,
+    };
+    if (isMlb) resolvedSources.push(source);
+    const mp = source.claimed;
+    const ed = source.edge;
     const profit = unitProfit(Number(r.odds));
     const be = impliedProb(Number(r.odds));
     if (mp == null || !Number.isFinite(mp) || profit == null || be == null) { skipped++; continue; }
     const hasEdge = ed != null && Number.isFinite(ed);
-    const fair = hasEdge ? mp - ed : null;
-    const model = fair != null && fair > 0 && fair < 1 ? fair + ed / W : null;
+    const fair = source.fair;
+    const model = source.raw;
     if (fair != null) {
       effVig.push((be - fair) * 100);
       const cons = devigConsistent(be, fair);
@@ -223,6 +245,9 @@ async function analyseMarket(supabase, league, market, W, BAND) {
     rows.push({
       date: String(r.game_date).slice(0, 10),
       claimed: mp, edge: hasEdge ? ed : null, fair, model,
+      fairSource: source.fairSource,
+      rawSource: source.rawSource,
+      authoritative: source.authoritative,
       odds: Number(r.odds), profit, breakEven: be,
       won: r.result === "win",
       published: mp >= BAND,
@@ -253,12 +278,15 @@ async function analyseMarket(supabase, league, market, W, BAND) {
   const published = rows.filter(r => r.published);
 
   // ── 3. MARKET-ONLY BASELINE — the null model ──────────────────────────────
-  const withFair = rows.filter(r => r.fair != null);
+  const withFair = rows.filter(r => r.fair != null && (String(league).toLowerCase() !== "mlb" || r.fairSource === "stored_pick_time_two_sided_odds"));
   const marketPicked = withFair.filter(r => r.fair >= BAND);
   const modelPicked = withFair.filter(r => r.claimed >= BAND);
 
   // ── 4. γ, with a W sweep ──────────────────────────────────────────────────
-  const usable = rows.filter(r => r.fair != null && r.model != null && r.model > 0 && r.model < 1);
+  // Gamma is presented only on rows whose raw probability and market baseline
+  // were both captured at prediction time. Older algebraic reconstructions stay
+  // visible in source coverage but cannot silently enter the fitted result.
+  const usable = rows.filter(r => r.authoritative && r.fair != null && r.model != null && r.model > 0 && r.model < 1);
   const clvRows = usable.filter(r => r.pinFair != null && r.pinFair > 0 && r.pinFair < 1);
 
   const gammaVsOutcome = offsetLogit(usable.map(r => ({ x: logit(r.model) - logit(r.fair), offset: logit(r.fair), y: r.won ? 1 : 0 })));
@@ -283,13 +311,18 @@ async function analyseMarket(supabase, league, market, W, BAND) {
     effectiveVigPts: { mean: r2(mean(effVig)), median: r2(median(effVig)), n: effVig.length,
       note: "breakEven minus fair. Near zero means best-of-books shopping already stripped the vig and `edge` is effectively an EV measure." },
     reconstruction: {
-      note: "IDENTITY check (WZ-DEVIG-IDENTITY-2026-07-24): fair = model_prob − edge must de-vig to a physically valid market — sides sum to 1, re-vig round-trips to the posted price, overround in [0, 20%]. Holds at ANY vig incl. exactly 0 (best-of-books). Replaces v1's vigTaxPts approx 2.2 thesis gate, which voided valid zero-vig data.",
+      note: "Source-aware check. Stored two-sided pick-time prices are preferred for fair market probability; raw_win_prob is preferred for the pre-blend model output. Algebraic fallbacks remain counted and labelled reconstructed, but are excluded from gamma fits.",
       checked: devigChecked,
       selfConsistent: devigOk,
       inconsistent: devigChecked - devigOk,
       ok: devigChecked > 0 && devigOk === devigChecked,
       sampleInconsistent: devigInconsistent,
     },
+    probabilitySources: String(league).toLowerCase() === "mlb" ? {
+      ...summarizeMlbPredictionSources(resolvedSources),
+      gammaEligible: usable.length,
+      note: "fullyAuthoritative/gammaEligible require stored raw_win_prob plus both stored pick-time prices. Historical NULLs are not backfilled or presented as originals.",
+    } : { note: "MLB-only provenance policy is not applied to other leagues; their prior diagnostic behavior is unchanged." },
     calibration,
     published: scoreRows(published),
     medianPublishedClaimPct: published.length ? r2(median(published.map(r => r.claimed)) * 100) : null,
@@ -345,11 +378,13 @@ router.get("/", async (req, res) => {
       const rec = d.reconstruction;
       if (rec && rec.checked) {
         verdict.push(rec.ok
-          ? `${m}: reconstruction self-consistent on all ${rec.checked} rows — fair=model_prob−edge de-vigs to a valid market at every row (median effective vig ${d.effectiveVigPts?.median} pts). Identity holds at any vig, including 0.`
-          : `${m}: reconstruction INCONSISTENT on ${rec.inconsistent}/${rec.checked} rows — fair=model_prob−edge does not de-vig to a valid market there. Fix before trusting gamma below.`);
+          ? `${m}: selected probability sources are self-consistent on all ${rec.checked} checked rows (median effective vig ${d.effectiveVigPts?.median} pts).`
+          : `${m}: legacy/reconstructed probability sources are inconsistent on ${rec.inconsistent}/${rec.checked} checked rows; they are excluded from authoritative gamma fits.`);
       }
     }
-    verdict.push("Calibration and published ROI depend on nothing but model_prob, odds and result — trust those first. gamma depends on the reconstruction and on W; gammaWSweep shows whether its sign survives W being wrong.");
+    verdict.push(league === "mlb"
+      ? "Calibration and published ROI depend on stored model_prob, odds and result. Gamma is reported only when raw_win_prob and both pick-time prices were stored; missing historical inputs remain unavailable rather than being treated as original output."
+      : "Calibration and published ROI depend on stored model_prob, odds and result. MLB-only probability provenance changes do not alter this league's prior diagnostic behavior.");
 
     res.json({ token: "WZ-GAMMAFIT-2026-07-24", league, publishFloor: BAND, wAssumed: W, perMarket, verdict });
   } catch (e) {

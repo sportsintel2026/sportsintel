@@ -14,6 +14,7 @@ const router = express.Router();
 const { createClient } = require("@supabase/supabase-js");
 const calibrationGuard = require("../services/calibrationGuard"); // WZ-CALIB-GUARD-2026-07-17
 const { runLineCoverModel, RUN_PHI } = require("../services/edgesModel"); // WZ-RL-BACKTEST-2026-07-17 :: real run-line model for replay + live RUN_PHI (single source)
+const { resolveMlbPredictionSources, summarizeMlbPredictionSources } = require("../services/mlbPredictionProvenance");
 
 // --- per-sport market config -------------------------------------------------
 // core  = team markets that count toward the overall record + CLV
@@ -640,7 +641,7 @@ router.get("/totalsbias", async (req, res) => {
     const PAGE = 1000; let from = 0; const rows = [];
     for (let i = 0; i < 40; i++) {
       let q = supabase.from("model_predictions")
-        .select("projected, actual_value, line, result, game_date, model_prob, edge, confidence")
+        .select("projected, actual_value, line, result, game_date, model_prob, raw_win_prob, edge, odds, opp_odds, confidence")
         .eq("league", "mlb").eq("market", "total_shadow")
         .in("result", ["win", "loss"])
         .order("game_date", { ascending: true }).range(from, from + PAGE - 1);
@@ -698,18 +699,22 @@ router.get("/totalsbias", async (req, res) => {
     // measures that scatter, and grades the model's own claimed probability against what actually
     // happened, bucketed by deviation size. No behavior changes; this only reports.
     const SIG = (x) => 1 / (1 + Math.exp(-x));
-    // 4.0 deliberately does NOT track TOTAL_SD (6.0 as of 2026-08-13).
-    // Grades historical rows priced at SD 4.0. Revisit when post-6.0 rows dominate.
-    const LIVE_DIVISOR = 4.0;
+    // This is a counterfactual reference curve, not a claim about the formula
+    // that generated every historical row. The live divisor changed by regime.
+    const REFERENCE_DIVISOR = 4.0;
     const devs = [];                      // signed projected - line
-    const picks = [];                     // { absDev, won }
+    const picks = [];                     // { absDev, won, rawClaimed|null, source }
     for (const r of usable) {
       const proj = Number(r.projected), act = Number(r.actual_value), line = Number(r.line);
       const dev = proj - line;
       devs.push(dev);
       const pickedOver = dev > 0;
       const actualOver = act > line;
-      picks.push({ absDev: Math.abs(dev), won: pickedOver === actualOver });
+      const source = resolveMlbPredictionSources(r);
+      const rawClaimed = source.rawSource === "stored_at_prediction_time" && source.raw != null
+        ? (pickedOver ? source.raw : 1 - source.raw)
+        : null;
+      picks.push({ absDev: Math.abs(dev), won: pickedOver === actualOver, rawClaimed, source });
     }
     const meanDev = devs.reduce((a, b) => a + b, 0) / n;
     const varDev = n > 1 ? devs.reduce((a, b) => a + (b - meanDev) * (b - meanDev), 0) / (n - 1) : 0;
@@ -728,7 +733,7 @@ router.get("/totalsbias", async (req, res) => {
     // disagrees loudly? That is the totals-level test of the tier inversion (HANDOFF-39 section 2G).
     const EDGES = [0, 0.5, 1, 2, 3, Infinity];
     const LABELS = ["0-0.5", "0.5-1", "1-2", "2-3", "3+"];
-    const buckets = LABELS.map(() => ({ n: 0, wins: 0, claimSum: 0, devSum: 0 }));
+    const buckets = LABELS.map(() => ({ n: 0, wins: 0, claimSum: 0, claimN: 0, devSum: 0 }));
     for (const p of picks) {
       let bi = EDGES.length - 2;
       for (let i = 0; i < EDGES.length - 1; i++) {
@@ -736,26 +741,27 @@ router.get("/totalsbias", async (req, res) => {
       }
       const b = buckets[bi];
       b.n++; if (p.won) b.wins++;
-      b.claimSum += SIG(p.absDev / LIVE_DIVISOR);
+      if (p.rawClaimed != null) { b.claimSum += p.rawClaimed; b.claimN++; }
       b.devSum += p.absDev;
     }
     const byDeviation = {};
     LABELS.forEach((lab, i) => {
       const b = buckets[i];
       if (!b.n) { byDeviation[lab] = { n: 0 }; return; }
-      const claimed = (b.claimSum / b.n) * 100;
+      const claimed = b.claimN ? (b.claimSum / b.claimN) * 100 : null;
       const actual = (b.wins / b.n) * 100;
       byDeviation[lab] = {
         n: b.n, meanAbsDev: r2(b.devSum / b.n),
-        rawClaimedPct: r1(claimed), actualPct: r1(actual), gapPts: r1(claimed - actual),
+        rawClaimedPct: claimed == null ? null : r1(claimed), rawClaimedN: b.claimN,
+        rawUnavailableN: b.n - b.claimN,
+        actualPct: r1(actual), gapPts: claimed == null ? null : r1(claimed - actual),
+        probabilitySource: "stored raw_win_prob only",
       };
     });
 
-    // Empirical scale. The live code prices totals as sigmoid(dev / 4.0) and its comment calls 4.0 "the
-    // standard deviation" -- but a LOGISTIC with scale s has SD = s*pi/sqrt(3), so scale 4.0 is really a
-    // ~7.26-run SD, not 4.0. Rather than argue from theory, fit the divisor that minimises Brier score
-    // against real settled outcomes. Larger fitted divisor = the model's disagreement with the market
-    // carries LESS information than it currently claims. Gated on sample size -- a fit on 15 rows is noise.
+    // Counterfactual empirical scale. Fit the divisor that minimises Brier score
+    // against real settled outcomes and compare it with a documented 4.0 reference.
+    // This does not reconstruct or assert the probability originally emitted.
     const MIN_FIT_N = 100;
     let empirical = { fitted: null, note: `needs n >= ${MIN_FIT_N} to fit; currently ${n}` };
     if (n >= MIN_FIT_N) {
@@ -767,26 +773,26 @@ router.get("/totalsbias", async (req, res) => {
         if (brier < bestBrier) { bestBrier = brier; bestD = d; }
       }
       let liveBrier = 0;
-      for (const p of picks) { const q = SIG(p.absDev / LIVE_DIVISOR); liveBrier += (q - (p.won ? 1 : 0)) ** 2; }
+      for (const p of picks) { const q = SIG(p.absDev / REFERENCE_DIVISOR); liveBrier += (q - (p.won ? 1 : 0)) ** 2; }
       liveBrier /= n;
       empirical = {
         fitted: Math.round(bestD * 100) / 100,
-        liveDivisor: LIVE_DIVISOR,
+        referenceDivisor: REFERENCE_DIVISOR,
         brierFitted: Math.round(bestBrier * 10000) / 10000,
-        brierLive: Math.round(liveBrier * 10000) / 10000,
+        brierReference: Math.round(liveBrier * 10000) / 10000,
         brierCoinFlip: 0.25,
-        note: "fitted > live => the model over-claims on totals and its projection-vs-line gap should be shrunk toward the market. fitted < live => it under-claims. If brierLive and brierFitted both sit at or above 0.25, the projection carries no usable information over a coin flip and NO divisor fixes that -- the projection itself is the problem.",
+        note: "Counterfactual fit against a documented 4.0 reference curve. It is not labelled live or treated as the original probability for rows generated under other regimes.",
       };
     }
 
     // Shrink dial: the interpretable form of the same fit. k = how much of our disagreement with the
-    // market we keep. k=1 is today's behavior. Reports what we WOULD have claimed vs what actually
+    // market we keep. k=1 is the reference curve. Reports what we WOULD have claimed vs what actually
     // happened. It cannot change which side we pick (shrinking never flips the sign), only how loudly
     // we claim it -- which is exactly what sets the confidence band and the conviction tier.
     const shrinkDial = {};
     for (const k of [1.0, 0.75, 0.5, 0.35, 0.25]) {
       let cs = 0, w = 0;
-      for (const p of picks) { cs += SIG((k * p.absDev) / LIVE_DIVISOR); if (p.won) w++; }
+      for (const p of picks) { cs += SIG((k * p.absDev) / REFERENCE_DIVISOR); if (p.won) w++; }
       const claimed = (cs / n) * 100, actual = (w / n) * 100;
       shrinkDial["k_" + k] = { meanClaimedPct: r1(claimed), actualPct: r1(actual), gapPts: r1(claimed - actual) };
     }
@@ -797,14 +803,9 @@ router.get("/totalsbias", async (req, res) => {
     // confident band (>= 0.55) is mostly the MARKET term, we are reading the book's own lean back to the
     // subscriber as our edge -- which would explain an over-claim the projection is too small to produce.
     //
-    // No new data is needed. In edgesModel.js `blendedEdge` returns (blended - fair) and `overProb` IS
-    // that same `blended`, so the stored columns satisfy an exact identity:
-    //        fairMarket = model_prob - edge
-    // And independently, since rawModel = sigmoid((projected - line)/TOTAL_SD):
-    //        fairMarket = (model_prob - W_MODEL*rawModel) / (1 - W_MODEL)
-    // Two independent recoveries of the same quantity. They MUST agree. `crossCheck` below measures the
-    // disagreement -- if it is not ~0, this decomposition's model of the pipeline is wrong and every
-    // number in this block should be discarded rather than believed.
+    // The decomposition now requires raw_win_prob and both prices captured at prediction time.
+    // model_prob-edge remains only a legacy algebraic cross-check against those stored sources;
+    // it is never substituted for a missing original probability.
     const W_MODEL_MIRROR = 0.55;   // must mirror W_MODEL in edgesModel.js (~line 1225)
     const CONF_BAND = 0.55;        // must mirror calibrationGuard confidentBand
     const mean = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
@@ -851,36 +852,40 @@ router.get("/totalsbias", async (req, res) => {
       };
     }
 
-    // ---- A. total_shadow rows (this endpoint's population; carries `projected`, so BOTH recoveries work)
+    // ---- A. total_shadow rows with stored probability provenance
     const shadowRecs = [], xcheck = [];
+    const shadowSources = [];
     let blendInactive = 0;
     for (const r of usable) {
-      const mp = r.model_prob == null ? null : Number(r.model_prob);
-      const ed = r.edge == null ? null : Number(r.edge);
+      const source = resolveMlbPredictionSources(r);
+      shadowSources.push(source);
+      const mp = source.claimed;
+      const ed = source.edge;
       if (mp == null || ed == null) continue;
-      const raw = SIG((Number(r.projected) - Number(r.line)) / LIVE_DIVISOR);
-      const fairFromEdge = mp - ed;                                       // exact identity
+      const raw = source.rawSource === "stored_at_prediction_time" ? source.raw : null;
+      const fairFromEdge = mp - ed;                                       // legacy algebraic check only
+      const fairStored = source.fairSource === "stored_pick_time_two_sided_odds" ? source.fair : null;
+      if (raw == null || fairStored == null) continue;
       const fairFromProb = (mp - W_MODEL_MIRROR * raw) / (1 - W_MODEL_MIRROR);
       // When no clean two-way market exists the code falls back to the RAW prob (no blend). Those rows
       // cannot be decomposed and must not be averaged in as if they could.
       if (Math.abs(mp - raw) < 0.0015) { blendInactive++; continue; }
-      xcheck.push(Math.abs(fairFromEdge - fairFromProb));
+      xcheck.push(Math.max(Math.abs(fairStored - fairFromProb), Math.abs(fairStored - fairFromEdge)));
       shadowRecs.push({
-        claimed: mp, fair: fairFromEdge, raw,
+        claimed: mp, fair: fairStored, raw,
         won: (Number(r.actual_value) > Number(r.line)),                   // shadow always books the OVER
       });
     }
     const confidentShadow = shadowRecs.filter(r => r.claimed >= CONF_BAND);
 
-    // ---- B. core `total` rows -- the population the guard's 58.8% actually reports on.
-    // No `projected` needed here: fair = model_prob - edge is exact on its own.
+    // ---- B. core `total` rows -- only rows with stored raw + two-sided prices decompose.
     let coreOut = { n: 0, note: "no graded core total rows with both model_prob and edge" };
     try {
       const coreRows = [];
       let cfrom = 0;
       for (let i = 0; i < 40; i++) {
         let cq = supabase.from("model_predictions")
-          .select("model_prob, edge, selection, result, game_date")
+          .select("model_prob, raw_win_prob, edge, odds, opp_odds, selection, result, game_date")
           .eq("league", "mlb").eq("market", "total")
           .in("result", ["win", "loss"])
           .order("game_date", { ascending: true }).range(cfrom, cfrom + PAGE - 1);
@@ -892,14 +897,16 @@ router.get("/totalsbias", async (req, res) => {
         if (data.length < PAGE) break;
         cfrom += PAGE;
       }
-      const cUsable = coreRows
-        .filter(r => r.model_prob != null && r.edge != null)
-        .map(r => ({ claimed: Number(r.model_prob), fair: Number(r.model_prob) - Number(r.edge), raw: null, won: r.result === "win" }));
+      const coreSources = coreRows.map((r) => resolveMlbPredictionSources(r));
+      const cUsable = coreRows.map((r, i) => ({ r, source: coreSources[i] }))
+        .filter(({ source }) => source.authoritative)
+        .map(({ r, source }) => ({ claimed: source.claimed, fair: source.fair, raw: source.raw, won: r.result === "win" }));
       const cConf = cUsable.filter(r => r.claimed >= CONF_BAND);
       coreOut = {
         allGraded: decompose(cUsable),
         confidentBand: decompose(cConf),
-        note: `Core \`total\` rows -- the same population the guard reports as claimed/actual. fairMarket recovered exactly as model_prob - edge. marketSharePct is the fraction of stated confidence-above-50% that came from the BOOK's de-vigged price rather than from our projection. If that is large in confidentBand, the confident band is selecting lopsided two-way markets and publishing the market's lean as our edge.`,
+        probabilitySources: summarizeMlbPredictionSources(coreSources),
+        note: "Core total decomposition includes only rows with stored raw_win_prob and both stored pick-time prices. Older rows remain counted in source coverage but are not silently reconstructed.",
       };
     } catch (e) {
       coreOut = { n: 0, error: e.message };
@@ -913,8 +920,9 @@ router.get("/totalsbias", async (req, res) => {
         rowsChecked: xcheck.length,
         meanAbsDiff: xcheck.length ? Math.round(mean(xcheck) * 100000) / 100000 : null,
         maxAbsDiff: xcheck.length ? Math.round(Math.max(...xcheck) * 100000) / 100000 : null,
-        note: "Two independent recoveries of fairMarket. Rounding alone should keep this under ~0.003. If it is larger, this block's model of the pricing pipeline is WRONG -- discard the numbers below, do not act on them.",
+        note: "Stored two-sided price fair is compared with the stored raw/published blend and the legacy model_prob-edge identity. Rounding alone should keep this under ~0.003.",
       },
+      probabilitySources: summarizeMlbPredictionSources(shadowSources),
       blendInactiveRows: blendInactive,
       shadowAllGraded: decompose(shadowRecs),
       shadowConfidentBand: decompose(confidentShadow),
@@ -1082,8 +1090,9 @@ router.get("/totalslinebias", async (req, res) => {
 // selection size, and the actual returned win% is read off real settled rows. Nothing ships unless
 // it beats the incumbent on this population.
 //
-// Recoveries (exact, no new data): fair = claimed - edge   (blendedEdge returns claimed - fair)
-//                                  raw  = (claimed - (1-W_MODEL)*fair) / W_MODEL
+// MLB rows use stored raw_win_prob and stored two-sided pick-time prices only.
+// Older rows without those sources are reported as unavailable, not silently
+// reconstructed into the authoritative backtest population.
 // GET /api/performance/selectbacktest [?since=YYYY-MM-DD][&league=mlb][&market=total]
 router.get("/selectbacktest", async (req, res) => {
   try {
@@ -1101,7 +1110,7 @@ router.get("/selectbacktest", async (req, res) => {
     let from = 0;
     for (let i = 0; i < 40; i++) {
       let q = supabase.from("model_predictions")
-        .select("game_id, model_prob, edge, selection, result, game_date")
+        .select("game_id, model_prob, raw_win_prob, edge, odds, opp_odds, selection, result, game_date")
         .eq("league", league).eq("market", market)
         .in("result", ["win", "loss"])
         .order("game_date", { ascending: true }).range(from, from + PAGE - 1);
@@ -1116,13 +1125,17 @@ router.get("/selectbacktest", async (req, res) => {
 
     let rawOutOfRange = 0;
     const pop = [];
+    const sourceRows = [];
     for (const r of rows) {
       if (r.model_prob == null || r.edge == null) continue;
-      const claimed = Number(r.model_prob);
-      const edge = Number(r.edge);
+      const source = league === "mlb" ? resolveMlbPredictionSources(r, { wModel: W }) : null;
+      if (source) sourceRows.push(source);
+      const claimed = source ? source.claimed : Number(r.model_prob);
+      const edge = source ? source.edge : Number(r.edge);
       if (!Number.isFinite(claimed) || !Number.isFinite(edge)) continue;
-      const fair = claimed - edge;
-      const raw = (claimed - (1 - W) * fair) / W;
+      if (source && !source.authoritative) continue;
+      const fair = source ? source.fair : claimed - edge;
+      const raw = source ? source.raw : (claimed - (1 - W) * fair) / W;
       if (!(raw > -0.01 && raw < 1.01)) rawOutOfRange++;
       pop.push({
         claimed, edge, fair, raw,
@@ -1213,11 +1226,12 @@ router.get("/selectbacktest", async (req, res) => {
         confidentBand: BAND,
         lopsidedThreshold: LOPSIDED,
         breakEvenPct: BREAK_EVEN,
+        probabilitySources: sourceRows.length ? summarizeMlbPredictionSources(sourceRows) : undefined,
       },
       selectionSize: N,
       rules,
       edgeSweep,
-      reading: "Compare actualWinPct and roiPctFlatAt110 across `rules` at the SAME selectionSize -- that is the only apples-to-apples comparison, because a smaller board always looks better on win%. A candidate ships ONLY if it beats current_claimedBand on actual return at equal n AND holds up across edgeSweep rather than at one lucky size. If rawOutOfRange is not 0, the blend identity does not hold on some rows and every number here is suspect. gapPts is over-claim (claimed minus delivered); vsBreakEvenPts under 0 means the selection lost money at -110 regardless of how good the win% looks.",
+      reading: "For MLB, selection comparisons include only rows with stored raw_win_prob and both stored pick-time prices. See population.probabilitySources for unavailable history. No missing raw probability is silently reconstructed as original model output.",
     });
   } catch (err) {
     console.error("[selectbacktest] error:", err.message);
@@ -1262,7 +1276,7 @@ router.get("/oossplit", async (req, res) => {
     let from = 0;
     for (let i = 0; i < 40; i++) {
       const { data, error } = await supabase.from("model_predictions")
-        .select("game_id, model_prob, edge, selection, result, game_date")
+        .select("game_id, model_prob, raw_win_prob, edge, odds, opp_odds, selection, result, game_date")
         .eq("league", league).eq("market", market)
         .in("result", ["win", "loss"])
         .order("game_date", { ascending: true }).range(from, from + PAGE - 1);
@@ -1275,13 +1289,17 @@ router.get("/oossplit", async (req, res) => {
 
     const outOfRangeRows = [];
     const pop = [];
+    const sourceRows = [];
     for (const r of rows) {
       if (r.model_prob == null || r.edge == null || !r.game_date) continue;
-      const claimed = Number(r.model_prob);
-      const edge = Number(r.edge);
+      const source = league === "mlb" ? resolveMlbPredictionSources(r, { wModel: W }) : null;
+      if (source) sourceRows.push(source);
+      const claimed = source ? source.claimed : Number(r.model_prob);
+      const edge = source ? source.edge : Number(r.edge);
       if (!Number.isFinite(claimed) || !Number.isFinite(edge)) continue;
-      const fair = claimed - edge;
-      const raw = (claimed - (1 - W) * fair) / W;
+      if (source && !source.authoritative) continue;
+      const fair = source ? source.fair : claimed - edge;
+      const raw = source ? source.raw : (claimed - (1 - W) * fair) / W;
       const rec = { date: String(r.game_date).slice(0, 10), claimed, edge, fair, raw, won: r.result === "win" };
       // Promised in the last handoff: identify the rawOutOfRange rows rather than step around them.
       if (!(raw > -0.01 && raw < 1.01)) {
@@ -1364,7 +1382,8 @@ router.get("/oossplit", async (req, res) => {
     res.json({
       token: "WZ-OOS-SPLIT-2026-07-20",
       league, market,
-      population: { gradedRowsPulled: rows.length, usable: pop.length, minReadableN: MIN_N, breakEvenPct: BREAK_EVEN },
+      population: { gradedRowsPulled: rows.length, usable: pop.length, minReadableN: MIN_N, breakEvenPct: BREAK_EVEN,
+        probabilitySources: sourceRows.length ? summarizeMlbPredictionSources(sourceRows) : undefined },
       regimeSplit,
       split: {
         cutoffDate: outSample.length ? outSample[0].date : null,
@@ -1378,7 +1397,7 @@ router.get("/oossplit", async (req, res) => {
       verdict,
       rawOutOfRange: { count: outOfRangeRows.length, rows: outOfRangeRows.slice(0, 20),
         note: "Rows where claimed/edge cannot be decomposed into the 55/45 blend -- expected on games with no clean two-way price. Listed rather than stepped around." },
-      reading: "Read regimeSplit FIRST. Then read `verdict` -- and if it says INCONCLUSIVE, that is the honest answer and nothing ships. A rule that beats the incumbent out-of-sample has earned forward shadow-recording only; it has not earned a customer.",
+      reading: "For MLB, read population.probabilitySources first. Only rows with stored raw_win_prob and both stored pick-time prices enter the split; unavailable historical inputs are not reconstructed as original output.",
     });
   } catch (err) {
     console.error("[oossplit] error:", err.message);
@@ -2223,7 +2242,7 @@ router.get("/totalresetprobe", async (req, res) => {
     for (let from = 0; ; from += PAGE) {
       const { data, error } = await supabase
         .from("model_predictions")
-        .select("market, model_prob, result, game_date, selection, odds, opp_odds, line") // WZ-TOTALPROBE-GRID-2026-08-08 :: extra cols for the per-bin curve + W/SD grid (read-only)
+        .select("market, model_prob, raw_win_prob, edge, result, game_date, selection, odds, opp_odds, line") // source-aware inputs for the per-bin curve + W/SD grid (read-only)
         .eq("league", "mlb")
         .eq("market", "total")
         .order("id", { ascending: true })
@@ -2277,11 +2296,10 @@ router.get("/totalresetprobe", async (req, res) => {
 
     // ── WZ-TOTALPROBE-GRID-2026-08-08 :: per-bin calibration curve + W_MODEL x TOTAL_SD grid, ?since window.
     // READ-ONLY. Nothing here changes RESETS/isBenched/_released or any constant. The grid RECOMPUTES what
-    // the published prob WOULD have been at other (W_MODEL, TOTAL_SD) by a back-out: fairOver from the
-    // stored two-sided price (odds + opp_odds), rawOver from the stored blended model_prob at the LIVE
-    // W_MODEL=0.55, then rescale the sigmoid for a new SD via sigmoid(logit(rawOver)*(4.0/SD)) and re-blend
-    // at a new W. At (W=0.55, SD=4.0) it reproduces the stored prob exactly (identity, see gridMeta).
-    // Rows without opp_odds (pre WZ-HANDOFF44-2026-07-24) cannot be de-vigged -> skipped from the GRID only.
+    // the published prob WOULD have been at other (W_MODEL, TOTAL_SD). It now requires the raw model
+    // probability and both prices stored at prediction time. Missing historical inputs are skipped and
+    // counted rather than reverse-engineered. Each row is rescaled from the SD regime that actually
+    // produced it (4.0 before 2026-08-15, 6.0 after), never from one hard-coded historical assumption.
     const inWin = (r) => (r.result === "win" || r.result === "loss") && r.model_prob != null
       && !(r.game_date && String(r.game_date).slice(0, 10) < since);
     // (1) per-bin curve on the stored published prob (picked side), ALL settled rows in the ?since window.
@@ -2298,26 +2316,30 @@ router.get("/totalresetprobe", async (req, res) => {
     // (2) W_MODEL x TOTAL_SD grid via the recompute.
     const sig = (x) => 1 / (1 + Math.exp(-x));
     const lgt = (p) => Math.log(p / (1 - p));
-    const impl = (o) => o > 0 ? 100 / (o + 100) : (-o) / (-o + 100);   // american -> implied prob (matches edgesModel)
-    const W0 = 0.55, SD0 = 4.0;
+    const W0 = 0.55;
     const Ws = [0.55, 0.45, 0.35, 0.25, 0.15, 0.00], SDs = [4.0, 5.0, 6.0, 7.0];
     const cells = {}; for (const W of Ws) for (const SD of SDs) cells[`W${W}_SD${SD}`] = { n: 0, wins: 0, cs: 0 };
-    let gridEligibleN = 0, skippedNoOppOdds = 0, skippedBadBackout = 0;
+    let gridEligibleN = 0, skippedUnavailableSource = 0, skippedBadStoredRaw = 0;
+    const gridSources = [];
+    const identityDiff = [];
     for (const r of rows) {
       if (!inWin(r)) continue;
-      const odds = r.odds, opp = r.opp_odds, sel = String(r.selection || "").toLowerCase();
-      if (odds == null || opp == null) { skippedNoOppOdds++; continue; }
-      const ia = impl(Number(odds)), ib = impl(Number(opp));
-      const fairPicked = ia / (ia + ib);                     // devigTwoWay(picked, opposing)
+      const source = resolveMlbPredictionSources(r, { wModel: W0 });
+      gridSources.push(source);
+      const sel = String(r.selection || "").toLowerCase();
+      if (!source.authoritative) { skippedUnavailableSource++; continue; }
+      const fairPicked = source.fair;
       const fairOver = sel === "over" ? fairPicked : 1 - fairPicked;
       const overStored = sel === "over" ? Number(r.model_prob) : 1 - Number(r.model_prob);
-      const rawOver = (overStored - (1 - W0) * fairOver) / W0;   // invert 0.55*raw + 0.45*fair
-      if (!(rawOver > 1e-6 && rawOver < 1 - 1e-6)) { skippedBadBackout++; continue; }
+      const rawOver = sel === "over" ? source.raw : 1 - source.raw;
+      if (!(rawOver > 1e-6 && rawOver < 1 - 1e-6)) { skippedBadStoredRaw++; continue; }
       const overHit = sel === "over" ? (r.result === "win") : (r.result === "loss");
       gridEligibleN++;
       const lr = lgt(rawOver);
+      const originalSd = String(r.game_date || "").slice(0, 10) >= "2026-08-15" ? 6.0 : 4.0;
+      identityDiff.push(Math.abs((W0 * rawOver + (1 - W0) * fairOver) - overStored));
       for (const W of Ws) for (const SD of SDs) {
-        const overNew = W * sig(lr * (SD0 / SD)) + (1 - W) * fairOver;
+        const overNew = W * sig(lr * (originalSd / SD)) + (1 - W) * fairOver;
         const claimed = Math.max(overNew, 1 - overNew);        // featured/shown side
         if (claimed < 0.55) continue;
         const won = (overNew >= 0.5) ? overHit : !overHit;      // recomputed pick side hit?
@@ -2334,14 +2356,15 @@ router.get("/totalresetprobe", async (req, res) => {
         gapPts: (claimed != null && actual != null) ? Math.round((claimed - actual) * 10) / 10 : null });
     }
     const gridMeta = {
-      eligibleN: gridEligibleN, skippedNoOppOdds, skippedBadBackout,
+      eligibleN: gridEligibleN, skippedUnavailableSource, skippedBadStoredRaw,
+      probabilitySources: summarizeMlbPredictionSources(gridSources),
       identityCheck: {
-        at: "wModel=0.55, totalSd=4.0",
-        cell: grid.find(g => g.wModel === 0.55 && g.totalSd === 4.0),
-        directRebuiltCumulative: rebuilt.cumulative,
-        note: "The (0.55, 4.0) cell IS the recompute identity -- it reproduces the stored prob on the opp_odds subset. Compare its n to eligibleN and to windows.rebuilt.cumulative.n (which also counts opp_odds-null rows). If the (0.55,4.0) gap differs materially from windows.rebuilt.cumulative.gapPts, opp_odds coverage is thin or the back-out is off -- do not trust the grid.",
+        rowsChecked: identityDiff.length,
+        meanAbsDiff: identityDiff.length ? Math.round((identityDiff.reduce((s, x) => s + x, 0) / identityDiff.length) * 100000) / 100000 : null,
+        maxAbsDiff: identityDiff.length ? Math.round(Math.max(...identityDiff) * 100000) / 100000 : null,
+        note: "Stored raw probability plus stored two-sided price is re-blended at W_MODEL=0.55 and compared with the stored published probability. Historical missing sources are unavailable, not back-filled.",
       },
-      readMe: "wModel=0.00 is the PURE-MARKET baseline (de-vigged book price only): if its gap in the >=0.55 band is near 0 while higher wModel rows overclaim, the model's projection term is what adds the miscalibration. TOTAL_SD 4->7 flattens the sigmoid (less confident); watch whether the gap collapses as SD rises. Both are RECOMPUTES on past rows, not a released change.",
+      readMe: "wModel=0.00 is the pure-market baseline. TOTAL_SD alternatives are counterfactual recomputes from each row's stored raw probability and its original 4.0/6.0 SD regime; no cell is labelled as the original historical prediction.",
     };
     // publishedClear as calibrationGuard.js:274-277 WOULD evaluate on the `since` window. Reported only;
     // nothing is released -- this route cannot change _released, RESETS, or isBenched.

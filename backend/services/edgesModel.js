@@ -1681,6 +1681,8 @@ async function calculateGameEdges(game, oddsForGame) {
   let underEdge = null;
   let overInflation = null;
   let underInflation = null;
+  let rawOverProb = null;
+  let rawUnderProb = null;
   if (totalLine != null) {
     // 6.0 measured 2026-08-13 via /totalresetprobe grid, post-07-18 rows:
     // SD 4.0 gap +4.5 (n38) | 5.0 -2.3 (n22) | 6.0 -0.1 (n16) | 7.0 +18.4 (n8)
@@ -1705,6 +1707,8 @@ async function calculateGameEdges(game, oddsForGame) {
     const TOTAL_MEAN_TO_MEDIAN = 0.50;
     const rawOver = sigmoid((totals.projectedTotal - TOTAL_MEAN_TO_MEDIAN - totalLine) / TOTAL_SD);
     const rawUnder = 1 - rawOver;
+    rawOverProb = rawOver;
+    rawUnderProb = rawUnder;
     // Edge + overreaction flag stay on the RAW model prob (fundamentals vs the market),
     // exactly as moneyline does: blendedEdge already returns W_MODEL*(raw - fair), and the
     // overreaction note flags when the market sits above our FUNDAMENTALS. Keeping these on raw
@@ -1739,6 +1743,7 @@ async function calculateGameEdges(game, oddsForGame) {
   const homeRLOdds = odds.spreads?.home ?? null;
   const awayRLOdds = odds.spreads?.away ?? null;
   let homeCoverProb = null, awayCoverProb = null, homeRLEdge = null, awayRLEdge = null;
+  let rawHomeCoverProb = null, rawAwayCoverProb = null;
   // A valid run line is a matched pair: one side -1.5, the other +1.5. Corrupt odds (e.g. BOTH at
   // -1.5) are incoherent -- skip rather than price a phantom.
   const validRunLine = homeRLLine != null && awayRLLine != null
@@ -1756,6 +1761,8 @@ async function calculateGameEdges(game, oddsForGame) {
     const marginPmf = _marginPmf(rlSplit.muHome, rlSplit.muAway);
     const hCoverModel = Math.max(0.02, Math.min(0.98, _pHomeCover(marginPmf, homeRLLine))); // raw model cover
     const aCoverModel = Math.max(0.02, Math.min(0.98, 1 - hCoverModel));
+    rawHomeCoverProb = hCoverModel;
+    rawAwayCoverProb = aCoverModel;
     // Blend the DISPLAYED cover toward the de-vigged run-line market (55/45), like totals; take the
     // edge off the RAW model cover so the market correction is applied once, not twice.
     const fairHomeCover = devigTwoWay(homeRLOdds, awayRLOdds);
@@ -1803,6 +1810,24 @@ async function calculateGameEdges(game, oddsForGame) {
   const underTrust = trustLine(cvUnder.tier, convBase.stability, convBase.completeness, agUnder);
 
   return {
+    // Recording-only provenance. routes/edges.js deliberately does not include
+    // this object in the customer response; it is passed only to the prediction
+    // tracker so historical analysis can use the value that existed now instead
+    // of reverse-engineering it later with whatever formula is current then.
+    recording: {
+      moneyline: {
+        awayRawModelProb: ml.awayWinProb != null ? round3(ml.awayWinProb) : null,
+        homeRawModelProb: ml.homeWinProb != null ? round3(ml.homeWinProb) : null,
+      },
+      totals: {
+        overRawModelProb: rawOverProb,
+        underRawModelProb: rawUnderProb,
+      },
+      runLine: {
+        awayRawModelProb: rawAwayCoverProb,
+        homeRawModelProb: rawHomeCoverProb,
+      },
+    },
     game: {
       id: game.id,
       away: game.away,

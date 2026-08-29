@@ -12,6 +12,7 @@ const { fetchScoreboard: fetchNflScoreboard } = require("./nflDataSource");
 const { fetchScoreboard: fetchCfbScoreboard } = require("./cfbDataSource"); // WZ-FBALL-CFB-SHADOW-2026-07-17
 const { getMLBMainOdds, getMLBPinnacleClose } = require("./oddsApi");
 const { teamKey, matchupKey, cfbSchoolKey } = require("./teamKey"); // WZ-TEAMKEY-SSOT-2026-07-17 / WZ-FBGRADE-TEAMKEY-2026-07-20
+const { rawProbabilityFor } = require("./mlbPredictionProvenance");
 // WZ-CAL-MIRROR-2026-07-02 :: winProbCalibration import removed — calibration now applies
 // LIVE in edgesModel; this file just records the already-calibrated values it receives.
 
@@ -509,6 +510,7 @@ async function recordPredictions(result) {
   const fatigueById = {};
   const shadowById = {};
   const breakdownById = {};
+  const recordingByGame = result.recordingByGame || {};
   for (const g of result.games) {
     statusById[g.id] = g.status;
     const b = g.totals && g.totals.breakdown;
@@ -573,6 +575,7 @@ async function recordPredictions(result) {
       matchup: e.matchup, market: "moneyline", selection: e.side,
       description: `${e.teamAbbr} ML`,
       model_prob: e.modelProb, odds: e.odds, edge: e.edge,
+      raw_win_prob: rawProbabilityFor(recordingByGame, e.gameId, "moneyline", e.side),
       // WZ-CAL-MIRROR-2026-07-02 :: the calibration went LIVE this deploy — model_prob and
       // edge above ARE the calibrated values (applied in edgesModel). These columns now
       // mirror them for query continuity; re-applying the haircut here would double-cut.
@@ -597,6 +600,7 @@ async function recordPredictions(result) {
       matchup: e.matchup, market: "total", selection: e.side,
       description: `${e.side === "over" ? "Over" : "Under"} ${e.line}`,
       model_prob: e.modelProb, odds: e.odds, edge: e.edge,
+      raw_win_prob: rawProbabilityFor(recordingByGame, e.gameId, "total", e.side),
       confidence: e.confidence, conviction: e.conviction ?? null, conviction_score: e.convictionScore ?? null, line: e.line,
       benched_at_pick: benchedNow("total"), // WZ-BENCH-STAMP-2026-07-18
       opp_odds: e.oppOdds ?? null,          // WZ-HANDOFF44-2026-07-24 :: opposing price at write time
@@ -616,6 +620,7 @@ async function recordPredictions(result) {
       matchup: e.matchup, market: "run_line", selection: e.side,
       description: `${e.teamAbbr} ${e.line > 0 ? "+" : ""}${e.line}`,
       model_prob: e.modelProb, odds: e.odds, edge: e.edge,
+      raw_win_prob: rawProbabilityFor(recordingByGame, e.gameId, "run_line", e.side),
       confidence: e.confidence, conviction: e.conviction ?? null, conviction_score: e.convictionScore ?? null, line: e.line,
       benched_at_pick: benchedNow("run_line"), // WZ-BENCH-STAMP-2026-07-18
       opp_odds: e.oppOdds ?? null,             // WZ-HANDOFF44-2026-07-24 :: opposing price at write time
@@ -651,6 +656,8 @@ async function recordPredictions(result) {
         description: `SHADOW ${g.homeAbbr || "home"} ML (full slate)`,
         model_prob: g.moneyline.homeWinProb, odds: g.moneyline.homeOdds,
         edge: g.moneyline.homeEdge ?? null, confidence: g.moneyline.homeConfidence ?? "NEUTRAL", line: null,
+        raw_win_prob: rawProbabilityFor(recordingByGame, g.id, "moneyline", "home"),
+        opp_odds: g.moneyline.awayOdds ?? null,
       });
       shadowPushed++;
     }
@@ -661,6 +668,8 @@ async function recordPredictions(result) {
         description: `SHADOW Over ${g.totals.line} (full slate)`,
         model_prob: g.totals.overProb, odds: g.totals.overOdds,
         edge: g.totals.overEdge ?? null, confidence: g.totals.overConfidence ?? "NEUTRAL", line: g.totals.line,
+        raw_win_prob: rawProbabilityFor(recordingByGame, g.id, "total", "over"),
+        opp_odds: g.totals.underOdds ?? null,
         projected: g.totals.projected ?? null, // WZ-TOTALSPROJ-2026-07-17 :: store the model projection so /totalsbias can measure over-lean = mean(projected - actual_value)
         // WZ-TOTALSROOT-2026-08-03 :: calculateTotalProjectionShadow has been running on EVERY
         // game since it shipped -- it builds the total the structurally correct way, from runs
@@ -702,6 +711,8 @@ async function recordPredictions(result) {
         description: `SHADOW ${g.homeAbbr || "home"} ${g.runLine.homeLine > 0 ? "+" : ""}${g.runLine.homeLine} (full slate)`,
         model_prob: g.runLine.homeCoverProb, odds: g.runLine.homeOdds,
         edge: g.runLine.homeEdge ?? null, confidence: g.runLine.homeConfidence ?? "NEUTRAL", line: g.runLine.homeLine,
+        raw_win_prob: rawProbabilityFor(recordingByGame, g.id, "run_line", "home"),
+        opp_odds: g.runLine.awayOdds ?? null,
       });
       shadowPushed++;
     }
