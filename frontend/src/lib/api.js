@@ -93,3 +93,7 @@ export const dailyCardApi = {
   get: (scope) => apiFetch(`/api/daily-card?scope=${encodeURIComponent(scope)}`),
   getAlternatePlay: (scope) => apiFetch(`/api/daily-card/alternate-play?scope=${encodeURIComponent(scope)}`),
 };
+
+export const ufcApi = {
+  getCard: () => apiFetch("/api/ufc/card"),
+};

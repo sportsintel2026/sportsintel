@@ -8,11 +8,11 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { edgesApi, subscriptionApi } from "../lib/api";
+import { useAuth } from "../hooks/useAuth";
+import { edgesApi, subscriptionApi, ufcApi } from "../lib/api";
 import TerminalShell from "./TerminalShell";
 // WZ-UFC-DESKTOP-2026-07-11 :: UFC card gains a desktop layout inside the shared Vault shell; mobile untouched.
 
-const API_BASE = import.meta.env.VITE_API_URL || "";
 // WZ-UFC-WHY-2026-07-27 :: session cache so an opened bout fetches its AI (B) read at most once.
 // Same pattern as the MLB board's AI_READ_CACHE in Home.jsx.
 const AI_READ_CACHE = new Map();
@@ -417,28 +417,36 @@ function whyBody(b, aRead, aiRead, pickName, otherName) {
 }
 
 export default function UFCPage() {
+  const { user } = useAuth();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const navigate = useNavigate();
   const [plan, setPlan] = useState({ tier: "free", isAdmin: false });
   const [planLoaded, setPlanLoaded] = useState(false);
-  const hasFull = plan.isAdmin === true || plan.tier === "pro" || plan.tier === "elite"; // WZ-UFC-LOCK-2026-07-13
+  const hasFull = plan.isAdmin === true || plan.tier === "pro" || plan.tier === "elite" || user?.email === "r7002g@gmail.com"; // WZ-UFC-LOCK-2026-07-13
   useEffect(() => { subscriptionApi.getMyPlan().then(setPlan).catch(() => {}).finally(() => setPlanLoaded(true)); }, []);
 
   const load = useCallback(async () => {
     setLoading(true); setError(false);
     try {
-      const res = await fetch(`${API_BASE}/api/ufc/card`);
-      if (!res.ok) throw new Error("status " + res.status);
-      setData(await res.json());
+      setData(await ufcApi.getCard());
     } catch (e) {
       console.error("Failed to load UFC card:", e);
       setError(true); setData(null);
     }
     setLoading(false);
   }, []);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    if (!planLoaded) return;
+    if (!hasFull) {
+      setLoading(false);
+      setError(false);
+      setData(null);
+      return;
+    }
+    load();
+  }, [planLoaded, hasFull, load]);
 
   const event = data && data.event;
   const mainCard = (data && Array.isArray(data.mainCard)) ? data.mainCard : [];

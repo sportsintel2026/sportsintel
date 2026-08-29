@@ -1548,7 +1548,7 @@ router.get("/tbgrade", async (req, res) => {
 //   /api/edges/oddsprobe?sport=baseball_mlb             → MLB (sanity check)
 //   &regions=us,us2,eu &markets=h2h,totals,spreads      → widen coverage
 // A 422 in the response = that sport isn't enabled on the current plan.
-router.get("/oddsprobe", async (req, res) => {
+router.get("/oddsprobe", adminGuard, async (req, res) => {
   try {
     const sport = req.query.sport || "americanfootball_nfl";
     const regions = req.query.regions || "us";

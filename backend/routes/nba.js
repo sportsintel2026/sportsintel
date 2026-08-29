@@ -18,6 +18,7 @@ const { getNbaMatchup } = require('../services/nbaMatchup');
 const { getNbaProps } = require('../services/nbaProps');
 const { getNbaPropProjections, getIdDebug } = require('../services/nbaProjectionService');
 const { recordNbaTeamPredictions } = require('../services/predictionTracker');
+const adminGuard = require('../middleware/adminGuard');
 router.get('/predictions', async (req, res) => {
   try {
     const opts = req.query.date ? { dateStr: req.query.date } : {};
@@ -146,11 +147,11 @@ router.get('/livediag/:gameId', async (req, res) => {
 // de-vigs each book's two-way moneyline, and returns the CONSENSUS (median)
 // no-vig market probability per team. READ-ONLY and NOT wired to any page —
 // this only proves the live-odds -> de-vig -> consensus pipeline against real
-// live data before we build the public live edge. Key via ?key= (temp) or the
-// ODDS_API_KEY env var. Safe to remove later.
-router.get('/liveoddsdiag', async (req, res) => {
-  const key = req.query.key || process.env.ODDS_API_KEY;
-  if (!key) return res.status(400).json({ error: 'no api key — pass ?key= or set ODDS_API_KEY' });
+// live data before we build the public live edge. Uses only the server-side
+// ODDS_API_KEY. Safe to remove later.
+router.get('/liveoddsdiag', adminGuard, async (req, res) => {
+  const key = process.env.ODDS_API_KEY;
+  if (!key) return res.status(400).json({ error: 'ODDS_API_KEY not configured' });
   const ODDS_URL = `https://api.the-odds-api.com/v4/sports/basketball_nba/odds/?apiKey=${key}&regions=us&markets=h2h&oddsFormat=american`;
   const imp = (o) => (o == null ? null : o > 0 ? 100 / (o + 100) : -o / (-o + 100)); // American -> raw implied
   const median = (vals) => {
