@@ -15,6 +15,7 @@ const { createClient } = require("@supabase/supabase-js");
 const calibrationGuard = require("../services/calibrationGuard"); // WZ-CALIB-GUARD-2026-07-17
 const { runLineCoverModel, RUN_PHI } = require("../services/edgesModel"); // WZ-RL-BACKTEST-2026-07-17 :: real run-line model for replay + live RUN_PHI (single source)
 const { resolveMlbPredictionSources, summarizeMlbPredictionSources } = require("../services/mlbPredictionProvenance");
+const { mlbMonetaryProfit } = require("../services/mlbPerformanceMath");
 
 // --- per-sport market config -------------------------------------------------
 // core  = team markets that count toward the overall record + CLV
@@ -216,7 +217,7 @@ router.get("/calibprobe", async (req, res) => {
     }
 
     // ---- 4. totals over/under split since 2026-07-02 -------------------------
-    const sideBlank = () => ({ settled: 0, wins: 0, units: 0, pending: 0, clvSum: 0, clvN: 0 });
+    const sideBlank = () => ({ settled: 0, wins: 0, units: 0, roiSample: 0, roiUnavailable: 0, pending: 0, clvSum: 0, clvN: 0 });
     const totalsSides = { since: "2026-07-02", over: sideBlank(), under: sideBlank() };
     for (const r of rows) {
       if (r.market !== "total" || !r.game_date || r.game_date < "2026-07-02") continue;
@@ -226,7 +227,9 @@ router.get("/calibprobe", async (req, res) => {
         side.settled++;
         const won = r.result === "win";
         if (won) side.wins++;
-        side.units += won ? unitProfit(r.odds) : -1;
+        const profit = mlbMonetaryProfit(r.result, r.odds);
+        if (profit == null) side.roiUnavailable++;
+        else { side.units += profit; side.roiSample++; }
         if (r.clv != null) { side.clvSum += Number(r.clv); side.clvN++; }
       } else if (r.result === "pending" || r.result == null) {
         side.pending++;
@@ -234,7 +237,7 @@ router.get("/calibprobe", async (req, res) => {
     }
     for (const s of [totalsSides.over, totalsSides.under]) {
       s.winPct = s.settled ? pct1(s.wins / s.settled) : null;
-      s.roi = s.settled ? pct1(s.units / s.settled) : null;
+      s.roi = s.roiSample ? pct1(s.units / s.roiSample) : null;
       s.units = Math.round(s.units * 100) / 100;
       s.avgClvPct = s.clvN ? pct2(s.clvSum / s.clvN) : null;
       delete s.clvSum; delete s.clvN;
@@ -2422,16 +2425,17 @@ router.get("/:league", async (req, res) => {
     // Qualified set drives the headline; full set kept for transparency.
     const qualifiedRows = coreRows.filter(r => isQualified(r) && wasShownToSubscribers(r)); // WZ-BENCH-NOT-COUNTED-2026-07-18
 
+    const useStoredMlbPrices = league === "mlb";
     const build = (set) => {
-      const buckets = { overall: blank(), byMarket: {}, byConfidence: {} };
+      const buckets = { overall: blank(useStoredMlbPrices), byMarket: {}, byConfidence: {} };
       for (const r of set) {
         const won = r.result === "win";
-        const profit = won ? unitProfit(r.odds) : -1;
+        const profit = useStoredMlbPrices ? mlbMonetaryProfit(r.result, r.odds) : (won ? unitProfit(r.odds) : -1);
         tally(buckets.overall, won, profit);
-        buckets.byMarket[r.market] ||= blank();
+        buckets.byMarket[r.market] ||= blank(useStoredMlbPrices);
         tally(buckets.byMarket[r.market], won, profit);
         const conf = (r.confidence || "NEUTRAL").toUpperCase();
-        buckets.byConfidence[conf] ||= blank();
+        buckets.byConfidence[conf] ||= blank(useStoredMlbPrices);
         tally(buckets.byConfidence[conf], won, profit);
       }
       finalize(buckets.overall);
@@ -2516,19 +2520,29 @@ router.get("/:league", async (req, res) => {
       // units curve, so the Performance win-rate chart redraws per window (7D/30D/Season/All) just
       // like the units chart already does. winSeries[k] = win% after the first k+1 graded picks in
       // this window. Additive: new field only; nothing existing changes.
-      let cum = 0, wins = 0, losses = 0; const series = [0]; const winSeries = [];
-      for (const r of sorted) { const won = r.result === "win"; const p = won ? unitProfit(r.odds) : -1; cum += p; if (won) wins++; else losses++; series.push(Math.round(cum * 100) / 100); winSeries.push(Math.round((wins / (wins + losses)) * 1000) / 10); }
+      let cum = 0, wins = 0, losses = 0, roiSample = 0, roiUnavailable = 0; const series = [0]; const winSeries = [];
+      for (const r of sorted) {
+        const won = r.result === "win";
+        const profit = useStoredMlbPrices ? mlbMonetaryProfit(r.result, r.odds) : (won ? unitProfit(r.odds) : -1);
+        if (profit == null) roiUnavailable++;
+        else { cum += profit; roiSample++; }
+        if (won) wins++; else losses++;
+        series.push(Math.round(cum * 100) / 100);
+        winSeries.push(Math.round((wins / (wins + losses)) * 1000) / 10);
+      }
       const total = wins + losses;
+      const roiN = useStoredMlbPrices ? roiSample : total;
       const cwin = clvRows.filter(r => inWindow(r.game_date, cut));
       const beat = cwin.filter(r => r.beat_close === true).length;
       const avgClv = cwin.length ? cwin.reduce((s, r) => s + (Number(r.clv) || 0), 0) / cwin.length : null;
       return {
-        roi: total ? Math.round((cum / total) * 1000) / 10 : 0,
+        roi: roiN ? Math.round((cum / roiN) * 1000) / 10 : (useStoredMlbPrices ? null : 0),
         units: Math.round(cum * 100) / 100,
         w: wins, l: losses, p: 0,
         clv: avgClv == null ? 0 : Math.round(avgClv * 10000) / 100,
         bc: cwin.length ? Math.round((beat / cwin.length) * 1000) / 10 : 0,
         n: total,
+        ...(useStoredMlbPrices ? { roiSample, roiUnavailable } : {}),
         series: series.length > 1 ? series : [0, 0],
         winSeries,
       };
@@ -2552,11 +2566,15 @@ router.get("/:league", async (req, res) => {
       const set = qualifiedRows
         .filter(r => inWindow(r.game_date, SEASON_START))
         .sort((a, b) => String(a.game_date || "").localeCompare(String(b.game_date || "")));
-      let sc = 0, sw = 0, sl = 0; const WARM = 10;
+      let sc = 0, sw = 0, sl = 0, sr = 0; const WARM = 10;
       for (const r of set) {
-        const won = r.result === "win"; sc += won ? unitProfit(r.odds) : -1; if (won) sw++; else sl++;
+        const won = r.result === "win";
+        const profit = useStoredMlbPrices ? mlbMonetaryProfit(r.result, r.odds) : (won ? unitProfit(r.odds) : -1);
+        if (profit != null) { sc += profit; sr++; }
+        if (won) sw++; else sl++;
         const tot = sw + sl;
-        if (tot >= WARM) { roiCurve.push(Math.round((sc / tot) * 1000) / 10); winCurve.push(Math.round((sw / tot) * 1000) / 10); }
+        if ((useStoredMlbPrices ? sr : tot) >= WARM) roiCurve.push(Math.round((sc / (useStoredMlbPrices ? sr : tot)) * 1000) / 10);
+        if (tot >= WARM) winCurve.push(Math.round((sw / tot) * 1000) / 10);
       }
     }
     {
@@ -2585,12 +2603,14 @@ router.get("/:league", async (req, res) => {
       const elig = (recRows || []).filter(r => isQualified(r)); // WZ-PROPS-DARK-2026-07-10 :: core-only
       recent = elig.slice(0, 20).map(r => {
         const won = r.result === "win";
+        const profit = useStoredMlbPrices ? mlbMonetaryProfit(r.result, r.odds) : (won ? unitProfit(r.odds) : -1);
         return {
           date: r.game_date,
           pick: pickLabel(r),
           result: won ? "W" : "L",
           edge: r.edge != null ? Math.round(Number(r.edge) * 1000) / 10 : null,
-          units: won ? Math.round(unitProfit(r.odds) * 100) / 100 : -1,
+          units: profit == null ? null : Math.round(profit * 100) / 100,
+          ...(useStoredMlbPrices ? { priceAvailable: profit != null } : {}),
           clvPct: r.clv != null ? Math.round(Number(r.clv) * 10000) / 100 : null,
           clvCents: (r.odds != null && r.closing_odds != null) ? clvCents(r.odds, r.closing_odds) : null,
         };
@@ -2641,10 +2661,19 @@ router.get("/:league", async (req, res) => {
   }
 });
 
-function blank() { return { wins: 0, losses: 0, units: 0 }; }
+function blank(trackPriceCoverage = false) {
+  return trackPriceCoverage
+    ? { wins: 0, losses: 0, units: 0, roiSample: 0, roiUnavailable: 0 }
+    : { wins: 0, losses: 0, units: 0 };
+}
 function tally(b, won, profit) {
   if (won) b.wins++; else b.losses++;
+  if (profit == null) {
+    if (Object.prototype.hasOwnProperty.call(b, "roiUnavailable")) b.roiUnavailable++;
+    return;
+  }
   b.units += profit;
+  if (Object.prototype.hasOwnProperty.call(b, "roiSample")) b.roiSample++;
 }
 // CLV in cents: our price vs the closing price on the same side. Positive = we
 // locked in a better number than the market closed at.
@@ -2680,9 +2709,10 @@ function pickLabel(r) {
 }
 function finalize(b) {
   const total = b.wins + b.losses;
+  const roiN = Object.prototype.hasOwnProperty.call(b, "roiSample") ? b.roiSample : total;
   b.total = total;
   b.winPct = total > 0 ? Math.round((b.wins / total) * 1000) / 10 : null;
-  b.roi = total > 0 ? Math.round((b.units / total) * 1000) / 10 : null; // % ROI per unit
+  b.roi = roiN > 0 ? Math.round((b.units / roiN) * 1000) / 10 : null; // % ROI per priced unit
   b.units = Math.round(b.units * 100) / 100;
 }
 // Hit-rate / ROI summary for a set of prop rows (used for the props table and
