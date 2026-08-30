@@ -984,6 +984,12 @@ router.get("/mlb", gatePicks, async (req, res) => {
       moneylineEdges: moneylineBoard,
       totalsEdges: totalsEdgesShown,
       runLineEdges: runLineEdges,
+      // Recording-only metadata from the same calculateGameEdges invocation.
+      // It is intentionally absent from `result` and therefore never reaches
+      // the customer API response.
+      recordingByGame: Object.fromEntries(
+        gameEdges.map((ge) => [String(ge.game.id), ge.recording || null])
+      ),
     }).catch(e => console.error("[Edges] recordPredictions failed:", e.message));
 
     // Total Bases SHADOW (log-only): auto-compute + persist once per fresh slate

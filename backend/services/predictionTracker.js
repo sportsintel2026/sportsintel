@@ -12,6 +12,13 @@ const { fetchScoreboard: fetchNflScoreboard } = require("./nflDataSource");
 const { fetchScoreboard: fetchCfbScoreboard } = require("./cfbDataSource"); // WZ-FBALL-CFB-SHADOW-2026-07-17
 const { getMLBMainOdds, getMLBPinnacleClose } = require("./oddsApi");
 const { teamKey, matchupKey, cfbSchoolKey } = require("./teamKey"); // WZ-TEAMKEY-SSOT-2026-07-17 / WZ-FBGRADE-TEAMKEY-2026-07-20
+const { rawProbabilityFor } = require("./mlbPredictionProvenance");
+const { buildSelectionProvenance } = require("./mlbMlRlValidation");
+const {
+  recordMlbTotalsCalibration,
+  captureMlbTotalsCalibrationClosing,
+  gradeMlbTotalsCalibration,
+} = require("./mlbTotalsCalibration");
 // WZ-CAL-MIRROR-2026-07-02 :: winProbCalibration import removed — calibration now applies
 // LIVE in edgesModel; this file just records the already-calibrated values it receives.
 
@@ -326,6 +333,46 @@ async function captureClosingLines() {
     }
   } catch (e) { console.error("[ClosingLines] capture error:", e.message); }
 
+  // Reuse the exact US/Pinnacle provider responses already fetched above for the
+  // prospective totals challengers. Six variants never trigger six calls (or
+  // even one additional call); all variants for a game receive the same close.
+  try {
+    const calibrationCloses = [];
+    for (const gid of closingWindowGameIds) {
+      const nm = gameNames[gid];
+      if (!nm?.date) continue;
+      const ev = matchPickToOddsEvent(nm, oddsEvents);
+      const values = {};
+      if (ev?.totals?.line != null && ev?.totals?.over != null && ev?.totals?.under != null) {
+        values.closing_total = ev.totals.line;
+        values.closing_over_odds = ev.totals.over;
+        values.closing_under_odds = ev.totals.under;
+        values.closing_over_book = ev.totals.overBook || null;
+        values.closing_under_book = ev.totals.underBook || null;
+        values.closing_captured_at = new Date().toISOString();
+      }
+      if (pinEvents.length && pinWindowGameIds.has(String(gid))) {
+        const pinEv = matchPickToOddsEvent(nm, pinEvents);
+        const po = pinEv?.totals?.over;
+        const pu = pinEv?.totals?.under;
+        if (pinEv?.totals?.line != null && po != null && pu != null) {
+          const oi = americanToImpliedProb(po);
+          const ui = americanToImpliedProb(pu);
+          values.pinnacle_closing_total = pinEv.totals.line;
+          values.pinnacle_over_odds = po;
+          values.pinnacle_under_odds = pu;
+          values.pinnacle_fair_over_prob = oi != null && ui != null && oi + ui > 0 ? round4(oi / (oi + ui)) : null;
+          values.pinnacle_captured_at = new Date().toISOString();
+        }
+      }
+      if (Object.keys(values).length) calibrationCloses.push({ game_id: gid, game_date: nm.date, ...values });
+    }
+    const calibrationCaptured = await captureMlbTotalsCalibrationClosing(supabase, calibrationCloses);
+    if (calibrationCaptured) console.log(`[CLV] MLB totals calibration captured closes for ${calibrationCaptured} games`);
+  } catch (e) {
+    console.error("[CLV] MLB totals calibration capture failed:", e.message);
+  }
+
   console.log(`[CLV] captured closing lines for ${captured}/${toCapture.length} picks`
     + ` | misses: noOddsEvent=${miss.noOddsEvent} noClosingPrice=${miss.noClosingPrice} byMarket=${JSON.stringify(miss.byMarket)}`);
   return captured;
@@ -509,6 +556,7 @@ async function recordPredictions(result) {
   const fatigueById = {};
   const shadowById = {};
   const breakdownById = {};
+  const recordingByGame = result.recordingByGame || {};
   for (const g of result.games) {
     statusById[g.id] = g.status;
     const b = g.totals && g.totals.breakdown;
@@ -568,11 +616,20 @@ async function recordPredictions(result) {
   for (const e of result.moneylineEdges || []) {
     if (statusById[e.gameId] === "final") continue;
     if (!claimSide(e.gameId, "moneyline")) continue; // WZ-ONE-SIDE-PER-GAME-2026-07-18
+    const rawWinProb = rawProbabilityFor(recordingByGame, e.gameId, "moneyline", e.side);
+    const provenance = buildSelectionProvenance(recordingByGame, e.gameId, "moneyline", e.side, {
+      rawProbability: rawWinProb,
+      publishedProbability: e.modelProb,
+      edge: e.edge,
+      entryOdds: e.odds,
+      opposingOdds: e.oppOdds,
+    });
     rows.push({
       game_id: e.gameId, game_date: gameDate, league: "mlb",
       matchup: e.matchup, market: "moneyline", selection: e.side,
       description: `${e.teamAbbr} ML`,
       model_prob: e.modelProb, odds: e.odds, edge: e.edge,
+      raw_win_prob: rawWinProb,
       // WZ-CAL-MIRROR-2026-07-02 :: the calibration went LIVE this deploy — model_prob and
       // edge above ARE the calibrated values (applied in edgesModel). These columns now
       // mirror them for query continuity; re-applying the haircut here would double-cut.
@@ -584,6 +641,7 @@ async function recordPredictions(result) {
       opp_odds: e.oppOdds ?? null,               // WZ-HANDOFF44-2026-07-24 :: opposing price at write time (unblocks correct de-vig CLV)
       floor_at_pick: e.floorAtPick ?? null,      // WZ-HANDOFF44-2026-07-24 :: publish floor in force when the pick was stamped
       inflation_gate_at_pick: e.inflationGateAtPick ?? null, // WZ-HANDOFF44-2026-07-24 :: inflation-gate regime (moneyline-only)
+      ...provenance,
     });
   }
 
@@ -597,6 +655,7 @@ async function recordPredictions(result) {
       matchup: e.matchup, market: "total", selection: e.side,
       description: `${e.side === "over" ? "Over" : "Under"} ${e.line}`,
       model_prob: e.modelProb, odds: e.odds, edge: e.edge,
+      raw_win_prob: rawProbabilityFor(recordingByGame, e.gameId, "total", e.side),
       confidence: e.confidence, conviction: e.conviction ?? null, conviction_score: e.convictionScore ?? null, line: e.line,
       benched_at_pick: benchedNow("total"), // WZ-BENCH-STAMP-2026-07-18
       opp_odds: e.oppOdds ?? null,          // WZ-HANDOFF44-2026-07-24 :: opposing price at write time
@@ -611,14 +670,24 @@ async function recordPredictions(result) {
     if (statusById[e.gameId] === "final") continue;
     if (e.edge == null || e.edge <= 0) continue;
     if (!claimSide(e.gameId, "run_line")) continue; // WZ-ONE-SIDE-PER-GAME-2026-07-18
+    const rawWinProb = rawProbabilityFor(recordingByGame, e.gameId, "run_line", e.side);
+    const provenance = buildSelectionProvenance(recordingByGame, e.gameId, "run_line", e.side, {
+      rawProbability: rawWinProb,
+      publishedProbability: e.modelProb,
+      edge: e.edge,
+      entryOdds: e.odds,
+      opposingOdds: e.oppOdds,
+    });
     rows.push({
       game_id: e.gameId, game_date: gameDate, league: "mlb",
       matchup: e.matchup, market: "run_line", selection: e.side,
       description: `${e.teamAbbr} ${e.line > 0 ? "+" : ""}${e.line}`,
       model_prob: e.modelProb, odds: e.odds, edge: e.edge,
+      raw_win_prob: rawWinProb,
       confidence: e.confidence, conviction: e.conviction ?? null, conviction_score: e.convictionScore ?? null, line: e.line,
       benched_at_pick: benchedNow("run_line"), // WZ-BENCH-STAMP-2026-07-18
       opp_odds: e.oppOdds ?? null,             // WZ-HANDOFF44-2026-07-24 :: opposing price at write time
+      ...provenance,
     });
   }
 
@@ -651,6 +720,8 @@ async function recordPredictions(result) {
         description: `SHADOW ${g.homeAbbr || "home"} ML (full slate)`,
         model_prob: g.moneyline.homeWinProb, odds: g.moneyline.homeOdds,
         edge: g.moneyline.homeEdge ?? null, confidence: g.moneyline.homeConfidence ?? "NEUTRAL", line: null,
+        raw_win_prob: rawProbabilityFor(recordingByGame, g.id, "moneyline", "home"),
+        opp_odds: g.moneyline.awayOdds ?? null,
       });
       shadowPushed++;
     }
@@ -661,6 +732,8 @@ async function recordPredictions(result) {
         description: `SHADOW Over ${g.totals.line} (full slate)`,
         model_prob: g.totals.overProb, odds: g.totals.overOdds,
         edge: g.totals.overEdge ?? null, confidence: g.totals.overConfidence ?? "NEUTRAL", line: g.totals.line,
+        raw_win_prob: rawProbabilityFor(recordingByGame, g.id, "total", "over"),
+        opp_odds: g.totals.underOdds ?? null,
         projected: g.totals.projected ?? null, // WZ-TOTALSPROJ-2026-07-17 :: store the model projection so /totalsbias can measure over-lean = mean(projected - actual_value)
         // WZ-TOTALSROOT-2026-08-03 :: calculateTotalProjectionShadow has been running on EVERY
         // game since it shipped -- it builds the total the structurally correct way, from runs
@@ -702,6 +775,8 @@ async function recordPredictions(result) {
         description: `SHADOW ${g.homeAbbr || "home"} ${g.runLine.homeLine > 0 ? "+" : ""}${g.runLine.homeLine} (full slate)`,
         model_prob: g.runLine.homeCoverProb, odds: g.runLine.homeOdds,
         edge: g.runLine.homeEdge ?? null, confidence: g.runLine.homeConfidence ?? "NEUTRAL", line: g.runLine.homeLine,
+        raw_win_prob: rawProbabilityFor(recordingByGame, g.id, "run_line", "home"),
+        opp_odds: g.runLine.awayOdds ?? null,
       });
       shadowPushed++;
     }
@@ -776,6 +851,22 @@ async function recordPredictions(result) {
     }
   } catch (e) {
     console.error("[Tracker] record exception:", e.message);
+  }
+
+  // Separate prospective totals calibration ledger. This consumes the same
+  // already-computed game objects as model_predictions, so five fatigue betas
+  // and the discrete challenger add zero sports-provider calls. Its failure is
+  // isolated from the production recorder.
+  try {
+    const eligibleGames = result.games.filter((game) => isPreGame(game.status));
+    const queued = await recordMlbTotalsCalibration(
+      supabase,
+      { ...result, games: eligibleGames },
+      gameDate
+    );
+    if (queued) console.log(`[Tracker] MLB totals calibration queued ${queued} challenger rows for ${gameDate}`);
+  } catch (e) {
+    console.error("[Tracker] MLB totals calibration record failed:", e.message);
   }
 }
 
@@ -1380,6 +1471,16 @@ async function gradeFinishedGames() {
   // hit?) can run once volume accumulates. Fully isolated -- wrapped so a failure here can NEVER
   // affect grading or CLV.
   try { await backfillClosingLineResults(supabase); } catch (e) { console.error("[ClosingLines] result backfill error:", e.message); }
+
+  // Grade the isolated totals challenger ledger from closing_lines after that
+  // ledger has been refreshed. This causes no second schedule/score fetch and
+  // leaves model_predictions grading and its return count unchanged.
+  try {
+    const calibrationGraded = await gradeMlbTotalsCalibration(supabase);
+    if (calibrationGraded) console.log(`[Tracker] MLB totals calibration graded ${calibrationGraded} games`);
+  } catch (e) {
+    console.error("[Tracker] MLB totals calibration grading failed:", e.message);
+  }
 
   console.log(`[Tracker] Graded ${graded} predictions`);
   return graded;

@@ -21,6 +21,7 @@ const {
 } = require("../services/mlbStatsApi");
 const { getRawTotalsDebug, probeOddsCoverage, getPinnacleAnchorComparison, getSportsCatalogue } = require("../services/oddsApi"); // WZ-ODDS-CATALOGUE-2026-07-20
 const { probeExpectedStats, probeBarrels, probePitcherWhiff, probePitcherWhiffData } = require("../services/savantApi");
+const { normalizeAmericanOdds, summarizeMlbRoi } = require("../services/mlbPerformanceMath");
 
 function db() {
   return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
@@ -715,16 +716,18 @@ async function mlBacktest() {
     const w = set.filter(r => r.result === "win").length;
     return set.length ? +(w / set.length * 100).toFixed(1) : null;
   };
-  // American odds -> profit on a 1-unit win (-1 on loss). The real decider: a 44%
-  // win rate on +money dogs can still be +EV, while 59% on juiced favorites may not.
-  const amerToProfit = (odds) => odds == null ? null : (odds > 0 ? odds / 100 : 100 / Math.abs(odds));
+  // Monetary results require the prediction-time entry price. Win-rate still
+  // counts every decisive result; rows without a stored price stay out of ROI.
   const roi = (set) => {
-    let profit = 0, decisions = 0;
-    for (const r of set) {
-      if (r.result === "win") { const p = amerToProfit(r.odds); if (p != null) { profit += p; decisions++; } }
-      else if (r.result === "loss") { profit -= 1; decisions++; }
-    }
-    return decisions ? { units: +profit.toFixed(2), roiPct: +(profit / decisions * 100).toFixed(1), avgOdds: Math.round(set.reduce((a, r) => a + (r.odds || 0), 0) / set.length) } : { units: 0, roiPct: null, avgOdds: null };
+    const summary = summarizeMlbRoi(set);
+    const pricedOdds = set.map(r => normalizeAmericanOdds(r.odds)).filter(o => o != null);
+    return {
+      units: summary.units,
+      roiPct: summary.roiPct,
+      roiSample: summary.roiSample,
+      roiUnavailable: summary.roiUnavailable,
+      avgOdds: pricedOdds.length ? Math.round(pricedOdds.reduce((a, o) => a + o, 0) / pricedOdds.length) : null,
+    };
   };
 
   // Favorite-fade split: market favorite = negative American odds on the bet side.

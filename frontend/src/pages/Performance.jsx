@@ -114,7 +114,7 @@ export default function PerformancePage() {
   const markets = [
     // WZ-PROPS-DARK-2026-07-10 :: core markets only. Props are graded behind the scenes but
     // never shown as a record (no win rate / ROI / CLV), so no prop rows are appended here.
-    ...Object.entries(D.byMarket || {}).map(([k,b]) => ({ nm:prettyMkt(k), w:b.wins, l:b.losses, roi:b.roi ?? 0 })),
+    ...Object.entries(D.byMarket || {}).map(([k,b]) => ({ nm:prettyMkt(k), w:b.wins, l:b.losses, roi:b.roi, roiSample:b.roiSample, roiUnavailable:b.roiUnavailable })),
   ];
 
   return (
@@ -150,8 +150,8 @@ export default function PerformancePage() {
           </div>
 
           <div className="kpis3">
-            <div className="kpi"><div className="k">ROI</div><div className={"v "+(d.roi>=0?"g":"r")}>{d.roi>=0?"+":""}{d.roi}%</div><div className="sub">1u flat</div></div>
-            <div className="kpi"><div className="k">UNITS</div><div className={"v "+(d.units>=0?"g":"r")}>{d.units>=0?"+":""}{d.units}u</div><div className="sub">cumulative</div></div>
+            <div className="kpi"><div className="k">ROI</div><div className={"v "+(d.roi==null?"":d.roi>=0?"g":"r")}>{d.roi==null?"\u2014":`${d.roi>=0?"+":""}${d.roi}%`}</div><div className="sub">{d.roiUnavailable>0?`${d.roiSample}/${d.n} priced`:"1u flat"}</div></div>
+            <div className="kpi"><div className="k">UNITS</div><div className={"v "+(d.units>=0?"g":"r")}>{d.units>=0?"+":""}{d.units}u</div><div className="sub">{d.roiUnavailable>0?"priced picks only":"cumulative"}</div></div>
             <div className="kpi"><div className="k">CLV</div><div className={"v "+(d.clv>=0?"g":"")}>{d.clv>=0?"+":""}{d.clv}%</div><div className="sub">beat {d.bc}%</div></div>
           </div>
 
@@ -170,8 +170,8 @@ export default function PerformancePage() {
           </div>}
 
           {markets.length>0 && <div className="blk"><div className="bl">BY MARKET <span className="bx">{range} {"\u00b7"} win rate {"\u00b7"} roi</span></div>
-            {markets.map((m,i)=>{ const wr=winPct(m.w,m.l); const pos=m.roi>=0; return (
-              <div className="mrow" key={i}><div style={{flex:1}}><div className="mn">{m.nm}</div><div className="mr">{m.w}{"\u2013"}{m.l}</div></div><div className="mwin">{wr}%</div><div className={"mroi "+(pos?"pos":"neg")}>{pos?"+":""}{m.roi}%</div></div>); })}
+            {markets.map((m,i)=>{ const wr=winPct(m.w,m.l); const pos=m.roi!=null&&m.roi>=0; return (
+              <div className="mrow" key={i}><div style={{flex:1}}><div className="mn">{m.nm}</div><div className="mr">{m.w}{"\u2013"}{m.l}{m.roiUnavailable>0?` \u00b7 ${m.roiSample}/${m.w+m.l} priced`:""}</div></div><div className="mwin">{wr}%</div><div className={"mroi "+(m.roi==null?"":pos?"pos":"neg")}>{m.roi==null?"\u2014":`${pos?"+":""}${m.roi}%`}</div></div>); })}
           </div>}
 
           <div className="blk"><div className="bl">CLOSING LINE VALUE <span className="bx">secondary {"\u00b7"} is the edge real?</span></div>
@@ -183,7 +183,7 @@ export default function PerformancePage() {
             <div className="clvnote">Win rate is the headline. CLV stays as the honesty check: over a large sample it separates a real edge from variance, independent of short-term wins and losses.</div>
           </div>
 
-          <div className="disc">All results are model picks graded at settled prices, 1-unit flat. Past performance does not guarantee future results. Bet responsibly.</div>
+          <div className="disc">{league==="mlb"?"Win rate counts every decisive model pick. ROI and units are 1-unit flat using stored entry prices; picks without a recorded price remain in W-L but are excluded from monetary results.":"All results are model picks graded at settled prices, 1-unit flat."} Past performance does not guarantee future results. Bet responsibly.</div>
         </>}
       </div>
 

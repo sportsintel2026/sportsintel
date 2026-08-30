@@ -25,6 +25,11 @@ const { winProbHaircut, calibrateWinProb, calibrateCoverProb, calibrateHitsProb 
 const { americanToImpliedProb } = require("./oddsApi");
 const { getBatterExpectedStats, getBatterBarrels, getPitcherWhiffStats, getTeamFielding } = require("./savantApi");
 const { getWeatherForVenue } = require("./weatherApi");
+const {
+  EXPERIMENT_VERSION: MLB_MLRL_EXPERIMENT_VERSION,
+  MONEYLINE_MODEL_VERSION,
+  RUN_LINE_MODEL_VERSION,
+} = require("./mlbMlRlValidation");
 
 const LEAGUE_AVG = {
   era: 4.30,
@@ -862,6 +867,58 @@ function runLineCoverModel(projectedTotal, homeWinProb, homeRLLine, phi) {
   return Math.max(0.02, Math.min(0.98, _pHomeCover(pm, homeRLLine)));
 }
 
+// Prospective totals challenger only. It reuses the SAME team-run NegBin
+// distribution and RUN_PHI already active in the run-line model, then convolves
+// the two team counts into a discrete game-total distribution. No live totals or
+// run-line output calls this function. Integer lines retain their push mass;
+// published probabilities are conditioned on a decisive result because standard
+// two-way O/U prices void pushes.
+function mlbTotalsDiscreteProbability(projectedTotal, homeWinProb, totalLine, overOdds, underOdds, phi) {
+  const total = Number(projectedTotal);
+  const line = Number(totalLine);
+  const homeP = Number(homeWinProb);
+  if (!Number.isFinite(total) || !(total > 0) || !Number.isFinite(line)
+      || !Number.isFinite(homeP) || !(homeP > 0 && homeP < 1)) return null;
+
+  const split = _solveRunSplit(total, homeP, phi);
+  const homePmf = _runPmf(split.muHome, phi);
+  const awayPmf = _runPmf(split.muAway, phi);
+  let rawOver = 0, rawUnder = 0, pushProb = 0;
+  for (let h = 0; h < homePmf.length; h++) {
+    for (let a = 0; a < awayPmf.length; a++) {
+      const mass = homePmf[h] * awayPmf[a];
+      const runs = h + a;
+      if (runs > line) rawOver += mass;
+      else if (runs < line) rawUnder += mass;
+      else pushProb += mass;
+    }
+  }
+  const decisiveMass = rawOver + rawUnder;
+  if (!(decisiveMass > 0)) return null;
+  const decisiveRawOver = rawOver / decisiveMass;
+  const decisiveRawUnder = rawUnder / decisiveMass;
+  const fairOver = devigTwoWay(overOdds, underOdds);
+  const publishedOver = (MARKET_BLEND_ENABLED && fairOver != null)
+    ? round3(W_MODEL * decisiveRawOver + (1 - W_MODEL) * fairOver)
+    : round3(decisiveRawOver);
+
+  return {
+    distribution: "independent-team-negbin",
+    phi: phi != null ? phi : RUN_PHI,
+    muHome: split.muHome,
+    muAway: split.muAway,
+    rawOver,
+    rawUnder,
+    pushProb,
+    decisiveRawOver,
+    decisiveRawUnder,
+    fairOver,
+    fairUnder: fairOver == null ? null : 1 - fairOver,
+    publishedOver,
+    publishedUnder: round3(1 - publishedOver),
+  };
+}
+
 // v2.1 (2026-06-09): the strikeout RATE now comes from Savant k_percent (true K per
 // batter faced) when available — a cleaner rate than K/9, which is contaminated by
 // baserunners/innings. λ = kRate × expected batters faced × opponent factor, where
@@ -1244,6 +1301,9 @@ function sanitizeEdge(edge) {
 // (or W_MODEL = 1.0) and redeploy — no old code to dig up.
 const MARKET_BLEND_ENABLED = true; // master switch — false = exact old behavior
 const W_MODEL = 0.55;              // 0.55 = 55% our model, 45% market. Higher = trust model more.
+const MLB_TOTAL_SD = 6.0;
+const MLB_TOTAL_MEAN_TO_MEDIAN = 0.50;
+const MLB_TOTALS_FORMULA_VERSION = "mlb-total-logistic-sd6-median050-w055-2026-08-15";
 
 // Blend our model probability toward the market's fair probability, then return the
 // edge vs that fair market number. Needs BOTH sides' odds for a real de-vig; if a
@@ -1260,6 +1320,27 @@ function blendedEdge(modelProb, thisOdds, otherOdds) {
   }
   const blended = W_MODEL * modelProb + (1 - W_MODEL) * fair;
   return round3(blended - fair);
+}
+
+// Single source for the ACTIVE MLB totals probability conversion. The live path
+// and prospective calibration recorder both call this function so beta=1 cannot
+// drift from production through a copied diagnostic formula.
+function mlbTotalsLogisticProbability(projectedTotal, totalLine, overOdds, underOdds) {
+  if (!Number.isFinite(Number(projectedTotal)) || !Number.isFinite(Number(totalLine))) return null;
+  const rawOver = sigmoid((Number(projectedTotal) - MLB_TOTAL_MEAN_TO_MEDIAN - Number(totalLine)) / MLB_TOTAL_SD);
+  const rawUnder = 1 - rawOver;
+  const fairOver = devigTwoWay(overOdds, underOdds);
+  const publishedOver = (MARKET_BLEND_ENABLED && fairOver != null)
+    ? round3(W_MODEL * rawOver + (1 - W_MODEL) * fairOver)
+    : round3(rawOver);
+  return {
+    rawOver,
+    rawUnder,
+    fairOver,
+    fairUnder: fairOver == null ? null : 1 - fairOver,
+    publishedOver,
+    publishedUnder: round3(1 - publishedOver),
+  };
 }
 
 // "Market overreaction" flag — the owner's contrarian read as honest CONTEXT, not a
@@ -1681,11 +1762,13 @@ async function calculateGameEdges(game, oddsForGame) {
   let underEdge = null;
   let overInflation = null;
   let underInflation = null;
+  let rawOverProb = null;
+  let rawUnderProb = null;
+  let totalsProbabilitySnapshot = null;
   if (totalLine != null) {
     // 6.0 measured 2026-08-13 via /totalresetprobe grid, post-07-18 rows:
     // SD 4.0 gap +4.5 (n38) | 5.0 -2.3 (n22) | 6.0 -0.1 (n16) | 7.0 +18.4 (n8)
     // Do not change without re-running the grid. Prior value 4.0 was eyeballed.
-    const TOTAL_SD = 6.0;
     // WZ-TOTMEDIAN-2026-08-03 :: the closing total is the MEDIAN outcome; our projection is a
     // MEAN. Game totals are right-skewed (a blowout runs 20, the floor is 0), so the mean sits
     // permanently ABOVE the median -- meaning a PERFECT mean projection still reads high against
@@ -1702,9 +1785,11 @@ async function calculateGameEdges(game, oddsForGame) {
     // must not move, and the stored `projected` column must stay comparable to history.
     // A unit conversion derived from six seasons, NOT a knob fitted to a win rate. TOTALS
     // REMAINS BENCHED; this ships on correctness and grades itself on the shadow ledger.
-    const TOTAL_MEAN_TO_MEDIAN = 0.50;
-    const rawOver = sigmoid((totals.projectedTotal - TOTAL_MEAN_TO_MEDIAN - totalLine) / TOTAL_SD);
-    const rawUnder = 1 - rawOver;
+    totalsProbabilitySnapshot = mlbTotalsLogisticProbability(totals.projectedTotal, totalLine, overOdds, underOdds);
+    const rawOver = totalsProbabilitySnapshot.rawOver;
+    const rawUnder = totalsProbabilitySnapshot.rawUnder;
+    rawOverProb = rawOver;
+    rawUnderProb = rawUnder;
     // Edge + overreaction flag stay on the RAW model prob (fundamentals vs the market),
     // exactly as moneyline does: blendedEdge already returns W_MODEL*(raw - fair), and the
     // overreaction note flags when the market sits above our FUNDAMENTALS. Keeping these on raw
@@ -1721,11 +1806,8 @@ async function calculateGameEdges(game, oddsForGame) {
     // every card win% - edge == the fair market price (no double-count) -- exactly the moneyline
     // pattern. No clean two-way market to de-vig -> fall back to the raw prob so nothing breaks.
     // Fully reversible via the existing MARKET_BLEND_ENABLED switch / W_MODEL knob.
-    const fairOver = devigTwoWay(overOdds, underOdds);
-    overProb = (MARKET_BLEND_ENABLED && fairOver != null)
-      ? round3(W_MODEL * rawOver + (1 - W_MODEL) * fairOver)
-      : round3(rawOver);
-    underProb = round3(1 - overProb);
+    overProb = totalsProbabilitySnapshot.publishedOver;
+    underProb = totalsProbabilitySnapshot.publishedUnder;
   }
 
   // Run line (+/-1.5) -- WZ-RL-MARGIN-2026-07-17 (rebuilt). OLD: muHome = MARGIN_SD(3.0, fixed) *
@@ -1739,6 +1821,8 @@ async function calculateGameEdges(game, oddsForGame) {
   const homeRLOdds = odds.spreads?.home ?? null;
   const awayRLOdds = odds.spreads?.away ?? null;
   let homeCoverProb = null, awayCoverProb = null, homeRLEdge = null, awayRLEdge = null;
+  let rawHomeCoverProb = null, rawAwayCoverProb = null;
+  let homeWinProbForRunSplit = null;
   // A valid run line is a matched pair: one side -1.5, the other +1.5. Corrupt odds (e.g. BOTH at
   // -1.5) are incoherent -- skip rather than price a phantom.
   const validRunLine = homeRLLine != null && awayRLLine != null
@@ -1750,12 +1834,15 @@ async function calculateGameEdges(game, oddsForGame) {
     const blendedHomeWin = (MARKET_BLEND_ENABLED && fairHomeWin != null)
       ? (W_MODEL * ml.homeWinProb + (1 - W_MODEL) * fairHomeWin)
       : ml.homeWinProb;
+    homeWinProbForRunSplit = blendedHomeWin;
     // Solve the per-team expected runs (sum = projected total) that reproduce that win prob under
     // the NegBin model, then read the cover directly off the resulting margin distribution.
     const rlSplit = _solveRunSplit(totals.projectedTotal, blendedHomeWin);
     const marginPmf = _marginPmf(rlSplit.muHome, rlSplit.muAway);
     const hCoverModel = Math.max(0.02, Math.min(0.98, _pHomeCover(marginPmf, homeRLLine))); // raw model cover
     const aCoverModel = Math.max(0.02, Math.min(0.98, 1 - hCoverModel));
+    rawHomeCoverProb = hCoverModel;
+    rawAwayCoverProb = aCoverModel;
     // Blend the DISPLAYED cover toward the de-vigged run-line market (55/45), like totals; take the
     // edge off the RAW model cover so the market correction is applied once, not twice.
     const fairHomeCover = devigTwoWay(homeRLOdds, awayRLOdds);
@@ -1803,6 +1890,41 @@ async function calculateGameEdges(game, oddsForGame) {
   const underTrust = trustLine(cvUnder.tier, convBase.stability, convBase.completeness, agUnder);
 
   return {
+    // Recording-only provenance. routes/edges.js deliberately does not include
+    // this object in the customer response; it is passed only to the prediction
+    // tracker so historical analysis can use the value that existed now instead
+    // of reverse-engineering it later with whatever formula is current then.
+    recording: {
+      moneyline: {
+        awayRawModelProb: ml.awayWinProb != null ? round3(ml.awayWinProb) : null,
+        homeRawModelProb: ml.homeWinProb != null ? round3(ml.homeWinProb) : null,
+        awayBook: odds.h2h?.awayBook ?? null,
+        homeBook: odds.h2h?.homeBook ?? null,
+        modelVersion: MONEYLINE_MODEL_VERSION,
+        experimentVersion: MLB_MLRL_EXPERIMENT_VERSION,
+      },
+      totals: {
+        overRawModelProb: rawOverProb,
+        underRawModelProb: rawUnderProb,
+        marketFairOverProb: totalsProbabilitySnapshot?.fairOver ?? null,
+        marketFairUnderProb: totalsProbabilitySnapshot?.fairUnder ?? null,
+        formulaVersion: MLB_TOTALS_FORMULA_VERSION,
+        totalSd: MLB_TOTAL_SD,
+        meanToMedian: MLB_TOTAL_MEAN_TO_MEDIAN,
+        marketBlendEnabled: MARKET_BLEND_ENABLED,
+        marketBlendWeight: W_MODEL,
+        runPhi: RUN_PHI,
+      },
+      runLine: {
+        awayRawModelProb: rawAwayCoverProb,
+        homeRawModelProb: rawHomeCoverProb,
+        homeWinProbForSplit: homeWinProbForRunSplit,
+        awayBook: odds.spreads?.awayBook ?? null,
+        homeBook: odds.spreads?.homeBook ?? null,
+        modelVersion: RUN_LINE_MODEL_VERSION,
+        experimentVersion: MLB_MLRL_EXPERIMENT_VERSION,
+      },
+    },
     game: {
       id: game.id,
       away: game.away,
@@ -2778,6 +2900,11 @@ module.exports = {
   calculateGameEdges,
   runLineCoverModel, // WZ-RL-BACKTEST-2026-07-17 :: real run-line margin model, for the replay probe
   RUN_PHI,           // WZ-RLBIAS-LIVEPHI-2026-07-26 :: exported so diagnostics read the LIVE phi (single source of truth)
+  mlbTotalsLogisticProbability,
+  mlbTotalsDiscreteProbability,
+  MLB_TOTAL_SD,
+  MLB_TOTAL_MEAN_TO_MEDIAN,
+  MLB_TOTALS_FORMULA_VERSION,
   calculateHRPropEdges,
   calculateStrikeoutPropEdges,
   calculateStrikeoutShadow,

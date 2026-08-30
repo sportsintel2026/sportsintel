@@ -22,6 +22,7 @@ const { supabase } = require("../middleware/auth");
 // Import the live constants so this harness can never again report a sigma the model is not using.
 const { CFB_SIGMA, CFB_TOTAL_SIGMA } = require("../services/cfbModel");
 const { NFL_SIGMA, NFL_TOTAL_SIGMA } = require("../services/nflModel");
+const { mlbMonetaryProfit } = require("../services/mlbPerformanceMath");
 
 // Core markets per league — MUST match performance.js LEAGUE_CONFIG. Props and
 // *_shadow rows are NEVER part of the bettable board (props live in their own
@@ -50,24 +51,35 @@ function decimalToAmerican(d) {
 }
 
 // ── Bucket accumulator ──────────────────────────────────────────────────────
-function blank() {
-  return { w: 0, l: 0, units: 0, clvSum: 0, clvN: 0, beat: 0, beatN: 0, decSum: 0 };
+function blank(trackPriceCoverage = false) {
+  return {
+    w: 0, l: 0, units: 0, clvSum: 0, clvN: 0, beat: 0, beatN: 0, decSum: 0,
+    ...(trackPriceCoverage ? { roiSample: 0, roiUnavailable: 0 } : {}),
+  };
 }
 function tally(b, won, profit, clv, beatClose) {
   if (won) b.w++; else b.l++;
-  b.units += profit;
+  if (profit == null) {
+    if (Object.prototype.hasOwnProperty.call(b, "roiUnavailable")) b.roiUnavailable++;
+  } else {
+    b.units += profit;
+    if (Object.prototype.hasOwnProperty.call(b, "roiSample")) b.roiSample++;
+  }
   if (clv != null && !Number.isNaN(clv)) { b.clvSum += clv; b.clvN++; }
   if (beatClose != null) { b.beatN++; if (beatClose) b.beat++; }
 }
 function finalize(b) {
   const n = b.w + b.l;
+  const tracksPriceCoverage = Object.prototype.hasOwnProperty.call(b, "roiSample");
+  const roiN = tracksPriceCoverage ? b.roiSample : n;
   return {
     plays: n,
     wins: b.w,
     losses: b.l,
     winPct: n ? Math.round((b.w / n) * 1000) / 10 : 0,
-    roi: n ? Math.round((b.units / n) * 1000) / 10 : 0,   // % ROI per unit staked
+    roi: roiN ? Math.round((b.units / roiN) * 1000) / 10 : (tracksPriceCoverage ? null : 0),   // % ROI per priced unit staked
     units: Math.round(b.units * 100) / 100,
+    ...(Object.prototype.hasOwnProperty.call(b, "roiSample") ? { roiSample: b.roiSample, roiUnavailable: b.roiUnavailable } : {}),
     avgClv: b.clvN ? Math.round((b.clvSum / b.clvN) * 100) / 100 : null,
     beatClosePct: b.beatN ? Math.round((b.beat / b.beatN) * 1000) / 10 : null,
   };
@@ -395,8 +407,10 @@ router.get("/:league", async (req, res) => {
     });
 
     // ── Accumulate into every requested category ────────────────────────────
+    const useStoredMlbPrices = league === "mlb";
+    const newBucket = () => blank(useStoredMlbPrices);
     const cats = {
-      overall: blank(),
+      overall: newBucket(),
       byMarket: {},
       byTier: {},
       byEdge: {},
@@ -407,19 +421,19 @@ router.get("/:league", async (req, res) => {
 
     for (const r of filtered) {
       const won = r.result === "win";
-      const profit = won ? unitProfit(r.odds) : -1;
+      const profit = useStoredMlbPrices ? mlbMonetaryProfit(r.result, r.odds) : (won ? unitProfit(r.odds) : -1);
       const tier = (r.confidence || "NEUTRAL").toUpperCase();
       const clv = r.clv != null ? Number(r.clv) : null;
       const bc = r.beat_close;
 
       tally(cats.overall, won, profit, clv, bc);
-      (cats.byMarket[r.market || "?"] ||= blank()) && tally(cats.byMarket[r.market || "?"], won, profit, clv, bc);
-      (cats.byTier[tier] ||= blank()) && tally(cats.byTier[tier], won, profit, clv, bc);
-      (cats.byEdge[edgeBucket(r.edge)] ||= blank()) && tally(cats.byEdge[edgeBucket(r.edge)], won, profit, clv, bc);
-      (cats.byOdds[oddsBucket(r.odds)] ||= blank()) && tally(cats.byOdds[oddsBucket(r.odds)], won, profit, clv, bc);
-      (cats.byMove[moveBucket(clv, bc)] ||= blank()) && tally(cats.byMove[moveBucket(clv, bc)], won, profit, clv, bc);
+      (cats.byMarket[r.market || "?"] ||= newBucket()) && tally(cats.byMarket[r.market || "?"], won, profit, clv, bc);
+      (cats.byTier[tier] ||= newBucket()) && tally(cats.byTier[tier], won, profit, clv, bc);
+      (cats.byEdge[edgeBucket(r.edge)] ||= newBucket()) && tally(cats.byEdge[edgeBucket(r.edge)], won, profit, clv, bc);
+      (cats.byOdds[oddsBucket(r.odds)] ||= newBucket()) && tally(cats.byOdds[oddsBucket(r.odds)], won, profit, clv, bc);
+      (cats.byMove[moveBucket(clv, bc)] ||= newBucket()) && tally(cats.byMove[moveBucket(clv, bc)], won, profit, clv, bc);
       const clvSign = clv == null ? "unknown" : clv > 0 ? "positive CLV" : clv < 0 ? "negative CLV" : "flat";
-      (cats.byClvSign[clvSign] ||= blank()) && tally(cats.byClvSign[clvSign], won, profit, clv, bc);
+      (cats.byClvSign[clvSign] ||= newBucket()) && tally(cats.byClvSign[clvSign], won, profit, clv, bc);
     }
 
     const finalizeMap = (m) => Object.fromEntries(
@@ -444,7 +458,7 @@ router.get("/:league", async (req, res) => {
     const edgeOrder = ["0-1%", "1-2%", "2-3%", "3-4%", "4-5%", "5-7%", "7%+"];
     const edgeSeq = edgeOrder
       .map((k) => ({ k, ...(out.byEdge[k] || { plays: 0, roi: 0 }) }))
-      .filter((e) => e.plays >= MIN_N);
+      .filter((e) => (useStoredMlbPrices ? e.roiSample : e.plays) >= MIN_N);
     let recommendedMinEdge = null;
     for (let i = 0; i < edgeSeq.length; i++) {
       if (edgeSeq[i].roi > 0 && edgeSeq.slice(i).every((e) => e.roi > 0)) {
@@ -457,7 +471,7 @@ router.get("/:league", async (req, res) => {
     const rankable = [];
     const pushRank = (dim, map) => {
       for (const [k, v] of Object.entries(map)) {
-        if (v.plays >= MIN_N) rankable.push({ dim, bucket: k, roi: v.roi, plays: v.plays, winPct: v.winPct, avgClv: v.avgClv });
+        if ((useStoredMlbPrices ? v.roiSample : v.plays) >= MIN_N) rankable.push({ dim, bucket: k, roi: v.roi, plays: v.plays, ...(useStoredMlbPrices ? { roiSample: v.roiSample } : {}), winPct: v.winPct, avgClv: v.avgClv });
       }
     };
     pushRank("market", out.byMarket);
@@ -480,7 +494,9 @@ router.get("/:league", async (req, res) => {
       recommendedMinEdge,
       bestFilters,
       worstFilters,
-      note: "Read-only. Buckets with < " + MIN_N + " plays are excluded from recommendations (too noisy to trust).",
+      note: useStoredMlbPrices
+        ? "Read-only. MLB win rate counts every decisive result; units/ROI use only rows with stored entry odds. Buckets with < " + MIN_N + " ROI-eligible plays are excluded from recommendations."
+        : "Read-only. Buckets with < " + MIN_N + " plays are excluded from recommendations (too noisy to trust).",
     });
   } catch (err) {
     console.error("[backtest] error:", err.message);
