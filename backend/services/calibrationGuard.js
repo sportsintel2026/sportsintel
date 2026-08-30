@@ -10,6 +10,7 @@
 // rebuilt/recalibrated. Fail-safe: on any error the previous status is kept (never auto-unbenches
 // on a transient failure).
 const { createClient } = require("@supabase/supabase-js");
+const { isRatedCfbGuardRow } = require("./cfbPredictionContract");
 
 const CORE = ["moneyline", "total", "run_line"];
 
@@ -310,7 +311,7 @@ async function refreshGuard() {
       for (let from = 0; ; from += PAGE) {
         const { data, error } = await supabase
           .from("model_predictions")
-          .select("league, market, model_prob, result, game_date")
+          .select("league, market, model_prob, result, game_date, data_quality")
           .in("league", FOOTBALL_LEAGUES)
           .in("market", Object.values(FB_SHADOW))
           .order("id", { ascending: true })
@@ -325,6 +326,7 @@ async function refreshGuard() {
       for (const r of fbRows) {
         if (r.result !== "win" && r.result !== "loss") continue;
         if (r.model_prob == null) continue;
+        if (!isRatedCfbGuardRow(r)) continue;            // CFB rated-model guard excludes suspect/market-only/legacy-null rows
         const floor = FB_RESET[r.league];                          // WZ-FBPRESEASON-LEDGER-2026-08-18
         if (floor && (!r.game_date || r.game_date < floor)) continue;
         const base = String(r.market).replace(/_shadow$/, "");
