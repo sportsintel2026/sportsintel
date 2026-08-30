@@ -14,6 +14,7 @@ const { getMLBMainOdds, getMLBPinnacleClose } = require("./oddsApi");
 const { teamKey, matchupKey, cfbSchoolKey } = require("./teamKey"); // WZ-TEAMKEY-SSOT-2026-07-17 / WZ-FBGRADE-TEAMKEY-2026-07-20
 const { rawProbabilityFor } = require("./mlbPredictionProvenance");
 const { buildSelectionProvenance } = require("./mlbMlRlValidation");
+const { toCfbLedgerRow } = require("./cfbPredictionContract");
 const {
   recordMlbTotalsCalibration,
   captureMlbTotalsCalibrationClosing,
@@ -1191,6 +1192,7 @@ async function recordFootballPredictions(slate, league = "nfl") {
   const supabase = db();
   const now = Date.now();
   const rows = [];
+  let cfbIncompleteProvenance = 0;
 
   // WZ-FBPRESEASON-LEDGER-2026-08-18 :: NFL preseason games were being written into
   // model_predictions and read straight back by calibrationGuard's football drift watch,
@@ -1214,6 +1216,18 @@ async function recordFootballPredictions(slate, league = "nfl") {
     if (daysOut > FOOTBALL_IMMINENT_DAYS || daysOut < 0) continue; // not within the pre-game window
     const gameDate = etDate(g.commenceTime) || getEasternDate(0);
     const matchup = g.matchup;
+
+    // CFB board and ledger consume the exact same selected-side objects produced by
+    // runCFBSlate. Never choose a side or recompute its probability/edge here.
+    if (league === "cfb") {
+      for (const market of ["moneyline", "spread", "total"]) {
+        const side = g.cfbPredictionContract?.[market]?.selected;
+        const row = toCfbLedgerRow(g, gameDate, market, market, side, false);
+        if (row && !side.provenanceComplete) cfbIncompleteProvenance++;
+        if (row) rows.push(row);
+      }
+      continue;
+    }
 
     // WZ-FBRECORD-MATCHES-BOARD-2026-08-03 :: THIS LOOP DROPPED ALMOST THE ENTIRE FOOTBALL BOARD.
     // Identical in shape to WZ-ML-RECORD-MATCHES-BOARD-2026-07-19 (line ~544), which cost MLB ~91%
@@ -1322,6 +1336,19 @@ async function recordFootballPredictions(slate, league = "nfl") {
     if (daysOut > FOOTBALL_IMMINENT_DAYS || daysOut < 0) continue; // pre-game snapshots only
     const gameDate = etDate(g.commenceTime) || getEasternDate(0);
     const matchup = g.matchup;
+    if (league === "cfb") {
+      const fixed = [
+        ["moneyline", "moneyline_shadow", g.cfbPredictionContract?.moneyline?.sides?.home],
+        ["spread", "spread_shadow", g.cfbPredictionContract?.spread?.sides?.home],
+        ["total", "total_shadow", g.cfbPredictionContract?.total?.sides?.over],
+      ];
+      for (const [market, rowMarket, side] of fixed) {
+        const row = toCfbLedgerRow(g, gameDate, market, rowMarket, side, true);
+        if (row && !side.provenanceComplete) cfbIncompleteProvenance++;
+        if (row) rows.push(row);
+      }
+      continue;
+    }
     const ml = g.moneyline, sp = g.spread, tot = g.total;
     const margin = (ml && ml.modelMargin != null) ? ml.modelMargin : null; // model's projected home margin
     if (ml && ml.homeWinProb != null && ml.book && ml.book.home != null) {
@@ -1363,7 +1390,8 @@ async function recordFootballPredictions(slate, league = "nfl") {
       .from("model_predictions")
       .upsert(rows, { onConflict: "game_id,market,selection,game_date", ignoreDuplicates: true });
     if (error) console.error(`[Tracker] ${league} record error:`, error.message);
-    else console.log(`[Tracker] Snapshotted ${rows.length} ${league.toUpperCase()} model picks for ${[...new Set(rows.map(r => r.game_date))].join(", ")} (dups ignored)`);
+    else console.log(`[Tracker] Snapshotted ${rows.length} ${league.toUpperCase()} model picks for ${[...new Set(rows.map(r => r.game_date))].join(", ")} (dups ignored)`
+      + (league === "cfb" ? `; incomplete provenance=${cfbIncompleteProvenance}` : ""));
   } catch (e) {
     console.error(`[Tracker] ${league} record exception:`, e.message);
   }

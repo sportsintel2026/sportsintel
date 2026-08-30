@@ -141,11 +141,9 @@ function predictGame(ev, ctx = {}) {
   const modelHomeWinProb = normalCDF(modelMargin / CFB_SIGMA);
 
   // data-quality gate
-  let trustworthy = true;
   if (hasRatings && (Math.abs(modelMargin) > MAX_TRUSTED_MARGIN
       || modelHomeWinProb > MAX_TRUSTED_WINPROB
       || modelHomeWinProb < 1 - MAX_TRUSTED_WINPROB)) {
-    trustworthy = false;
     out.dataQuality = "suspect";
   }
 
@@ -153,6 +151,10 @@ function predictGame(ev, ctx = {}) {
   if (CFB_BLEND_ENABLED && fairHomeProb != null) {
     homeWinProb = CFB_W_MODEL * modelHomeWinProb + (1 - CFB_W_MODEL) * fairHomeProb;
   }
+  // An unrated game has no independent WizePicks opinion. Keep its market information,
+  // but publish the de-vigged market probability exactly rather than manufacturing an edge
+  // from a market-derived fallback margin.
+  if (!hasRatings && fairHomeProb != null) homeWinProb = fairHomeProb;
   const awayWinProb = 1 - homeWinProb;
 
   out.moneyline = {
@@ -163,16 +165,8 @@ function predictGame(ev, ctx = {}) {
     pick: null, pickTeam: null, edge: null, value: false, fair: null, book: null,
   };
   if (fairHomeProb != null) {
-    const edgeHome = homeWinProb - fairHomeProb;
-    const edgeAway = awayWinProb - (1 - fairHomeProb);
-    const pickHome = edgeHome >= edgeAway;
-    const edge = pickHome ? edgeHome : edgeAway;
     out.moneyline.fair = { home: r(fairHomeProb * 100), away: r((1 - fairHomeProb) * 100) };
     out.moneyline.book = { home: mlHome, away: mlAway };
-    out.moneyline.edge = r(edge * 100);
-    out.moneyline.value = hasRatings && trustworthy && edge >= EDGE_ML;
-    out.moneyline.pick = out.moneyline.value ? (pickHome ? "home" : "away") : null;
-    out.moneyline.pickTeam = out.moneyline.value ? (pickHome ? ev.homeTeam : ev.awayTeam) : null;
   }
 
   // ── SPREAD ─────────────────────────────────────────────────────────────────
@@ -180,9 +174,11 @@ function predictGame(ev, ctx = {}) {
   if (sLine != null && ev.spreads?.home != null && ev.spreads?.away != null) {
     // WZ-FBALL-KEYNUM-2026-07-17 :: key-number-aware cover (3/7 mass + push), not a plain Normal.
     // WZ-FBALL-BLEND-2026-07-17 :: anchor the margin toward the market (-sLine) via the launch dial.
+    const rawHomeCoverProb = spreadCover(modelMargin, CFB_SIGMA, sLine, "cfb", CFB_KEY_STRENGTH).homeCoverProb;
     const sprMargin = CFB_BLEND_ENABLED ? (CFB_W_MODEL * modelMargin + (1 - CFB_W_MODEL) * (-sLine)) : modelMargin;
-    const { homeCoverProb, push: homePushProb } = spreadCover(sprMargin, CFB_SIGMA, sLine, "cfb", CFB_KEY_STRENGTH);
+    let { homeCoverProb, push: homePushProb } = spreadCover(sprMargin, CFB_SIGMA, sLine, "cfb", CFB_KEY_STRENGTH);
     const fairHomeCover = devigPair(ev.spreads.home, ev.spreads.away);
+    if (!hasRatings && fairHomeCover != null) homeCoverProb = fairHomeCover;
     out.spread = {
       line: sLine,
       homeCoverProb: r(homeCoverProb * 100),
@@ -191,16 +187,9 @@ function predictGame(ev, ctx = {}) {
       fair: fairHomeCover != null ? { home: r(fairHomeCover * 100), away: r((1 - fairHomeCover) * 100) } : null,
       book: { home: ev.spreads.home, away: ev.spreads.away, homeLine: sLine, awayLine: ev.spreads.awayLine },
     };
-    if (fairHomeCover != null) {
-      const eHome = homeCoverProb - fairHomeCover;
-      const eAway = (1 - homeCoverProb) - (1 - fairHomeCover);
-      const pickHome = eHome >= eAway;
-      const edge = pickHome ? eHome : eAway;
-      out.spread.edge = r(edge * 100);
-      out.spread.value = hasRatings && trustworthy && edge >= EDGE_SPREAD;
-      out.spread.pick = out.spread.value ? (pickHome ? "home" : "away") : null;
-      out.spread.pickTeam = out.spread.value ? (pickHome ? ev.homeTeam : ev.awayTeam) : null;
-    }
+    Object.defineProperty(out.spread, "modelHomeCoverProb", {
+      value: r(rawHomeCoverProb * 100), enumerable: false,
+    });
   }
 
   // ── TOTAL ──────────────────────────────────────────────────────────────────
@@ -214,10 +203,12 @@ function predictGame(ev, ctx = {}) {
     const refAdj = (ctx?.referees?.totalAdj != null)
       ? Math.max(-3, Math.min(3, ctx.referees.totalAdj)) : 0;
     // WZ-FBALL-BLEND-2026-07-17 :: anchor the projected total toward the market line via the same dial.
+    const rawOverProb = normalCDF(((projTotal + refAdj) - tLine) / CFB_TOTAL_SIGMA);
     const blendedTotal = CFB_BLEND_ENABLED ? (CFB_W_MODEL * (projTotal + refAdj) + (1 - CFB_W_MODEL) * tLine) : (projTotal + refAdj);
-    const overProb = normalCDF((blendedTotal - tLine) / CFB_TOTAL_SIGMA);
+    let overProb = normalCDF((blendedTotal - tLine) / CFB_TOTAL_SIGMA);
     const fairOver = devigPair(ev.totals.over, ev.totals.under);
     const hasTotalOpinion = (ctx?.home?.projPoints != null && ctx?.away?.projPoints != null) || refAdj !== 0;
+    if (!hasRatings && fairOver != null) overProb = fairOver;
     out.total = {
       line: tLine,
       overProb: r(overProb * 100),
@@ -226,15 +217,9 @@ function predictGame(ev, ctx = {}) {
       fair: fairOver != null ? { over: r(fairOver * 100), under: r((1 - fairOver) * 100) } : null,
       book: { over: ev.totals.over, under: ev.totals.under },
     };
-    if (fairOver != null) {
-      const eOver = overProb - fairOver;
-      const eUnder = (1 - overProb) - (1 - fairOver);
-      const pickOver = eOver >= eUnder;
-      const edge = pickOver ? eOver : eUnder;
-      out.total.edge = r(edge * 100);
-      out.total.value = hasTotalOpinion && trustworthy && edge >= EDGE_TOTAL;
-      out.total.pick = out.total.value ? (pickOver ? "over" : "under") : null;
-    }
+    Object.defineProperty(out.total, "modelOverProb", {
+      value: hasTotalOpinion ? r(rawOverProb * 100) : null, enumerable: false,
+    });
   }
 
   return out;

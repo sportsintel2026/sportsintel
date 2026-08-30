@@ -27,7 +27,11 @@
 
 const { getCFBMainOdds, getCFBPinnacleClose } = require("./oddsApi");
 const { buildTeamRatings } = require("./cfbDataSource");
-const { predictGame } = require("./cfbModel");
+const { predictGame, EDGE_ML, EDGE_SPREAD, EDGE_TOTAL } = require("./cfbModel");
+const {
+  buildCfbPredictionContract,
+  applyCfbContractToPrediction,
+} = require("./cfbPredictionContract");
 
 // WZ-TEAMKEY-SSOT-2026-07-17 :: the CFB name-matching primitives (diacritic-folding normalize,
 // schoolKey mascot-strip, and the verified odds→ESPN alias map) now live ONCE in ./teamKey. This
@@ -101,6 +105,11 @@ function cfbRegularSeasonStart(year) {
 
 function round2(n) { return n == null ? null : Math.round(n * 100) / 100; }
 
+function withRatingProvenance(team, fields) {
+  if (!team) return team;
+  return { ...team, ...fields };
+}
+
 // PURE: blend two buildTeamRatings() results by per-team current-season games, over the
 // UNION of both seasons' teams. Preserves every non-rating field of each team object.
 function blendRatings(prior, current, k = SEASON_BLEND_K) {
@@ -115,14 +124,31 @@ function blendRatings(prior, current, k = SEASON_BLEND_K) {
     const gCur = ct ? (ct.gp || 0) : 0;
     if (gCur > 0 && ct.rating != null && pt && pt.rating != null) {
       const w = gCur / (gCur + k);
-      teams[id] = { ...pt, rating: round2(w * ct.rating + (1 - w) * pt.rating), priorRating: pt.rating, currentRating: ct.rating, currentGp: gCur, blendWeight: round2(w) };
+      teams[id] = withRatingProvenance(pt, {
+        rating: round2(w * ct.rating + (1 - w) * pt.rating),
+        priorRating: pt.rating,
+        currentRating: ct.rating,
+        currentGp: gCur,
+        blendWeight: round2(w),
+        ratingSource: "blended",
+        ratingSosApplied: pt.sosApplied === true && ct.sosApplied === true,
+      });
       blendedTeams++;
     } else if (gCur > 0 && ct.rating != null) {
-      teams[id] = { ...ct }; // new-to-FBS team: no prior to blend
+      teams[id] = withRatingProvenance(ct, {
+        currentRating: ct.rating, currentGp: gCur, blendWeight: 1,
+        ratingSource: "current-only", ratingSosApplied: ct.sosApplied === true,
+      }); // new-to-FBS team: no prior to blend
     } else if (pt) {
-      teams[id] = { ...pt, currentGp: gCur };
+      teams[id] = withRatingProvenance(pt, {
+        priorRating: pt.rating, currentGp: gCur, blendWeight: 0,
+        ratingSource: "prior-only", ratingSosApplied: pt.sosApplied === true,
+      });
     } else if (ct) {
-      teams[id] = { ...ct };
+      teams[id] = withRatingProvenance(ct, {
+        currentRating: ct.rating, currentGp: gCur, blendWeight: 1,
+        ratingSource: "current-only", ratingSosApplied: ct.sosApplied === true,
+      });
     }
   }
   return { ...prior, teams, rated: Object.keys(teams).length, blend: { mode: blendedTeams ? "blended" : "prior-only", k, blendedTeams } };
@@ -137,12 +163,46 @@ async function buildBlendedTeamRatings({ now = new Date() } = {}) {
 
   const regStart = cfbRegularSeasonStart(currentSeason);
   if (now.getTime() < regStart.getTime()) {
-    return { ...prior, blend: { mode: "prior-only", priorSeason, currentSeason, k: SEASON_BLEND_K, blendedTeams: 0 } };
+    const teams = {};
+    for (const [id, team] of Object.entries(prior.teams || {})) {
+      teams[id] = withRatingProvenance(team, {
+        priorRating: team.rating, currentGp: 0, blendWeight: 0,
+        ratingSource: "prior-only", ratingSosApplied: team.sosApplied === true,
+      });
+    }
+    return { ...prior, teams, blend: { mode: "prior-only", priorSeason, currentSeason, k: SEASON_BLEND_K, blendedTeams: 0 } };
   }
   const current = await buildTeamRatings(currentSeason);
   const out = blendRatings(prior, current, SEASON_BLEND_K);
   out.blend = { ...out.blend, priorSeason, currentSeason };
   return out;
+}
+
+function ratingSourceFor(team) {
+  if (!team) return { source: "unavailable", weight: null, sosApplied: null };
+  const source = team.ratingSource || "current-only";
+  const weight = source === "prior-only" ? 0
+    : source === "current-only" ? 1
+      : source === "blended" ? team.blendWeight : null;
+  const sosApplied = typeof team.ratingSosApplied === "boolean"
+    ? team.ratingSosApplied
+    : (typeof team.sosApplied === "boolean" ? team.sosApplied : null);
+  return { source, weight, sosApplied };
+}
+
+function buildRatingSnapshot(ratings, homeTeam, awayTeam, neutralSiteStatus) {
+  const home = ratingSourceFor(homeTeam);
+  const away = ratingSourceFor(awayTeam);
+  const available = [home, away].filter((x) => x.source !== "unavailable");
+  if (!available.length) {
+    return { priorSeason: null, currentSeason: null, home, away, sosApplied: null, neutralSiteStatus };
+  }
+  const needsPrior = available.some((x) => x.source === "prior-only" || x.source === "blended");
+  const priorSeason = needsPrior ? (ratings?.blend?.priorSeason ?? null) : null;
+  const currentSeason = ratings?.blend?.currentSeason ?? ratings?.season ?? null;
+  const sosKnown = available.every((x) => typeof x.sosApplied === "boolean");
+  const sosApplied = sosKnown ? available.every((x) => x.sosApplied === true) : null;
+  return { priorSeason, currentSeason, home, away, sosApplied, neutralSiteStatus };
 }
 
 // ── Totals scoring model (2025-seeded; mirrors the margin model's honesty) ────
@@ -260,6 +320,21 @@ async function runCFBSlate({ season = null, weeks = 1 } = {}) {
     const nSite = neutralIdx ? neutralIdx.isNeutral(ev.awayTeam, ev.homeTeam) : null;
     if (nSite === true) ctx.neutralSite = true;
     const pred = predictGame(ev, ctx);
+    const ratingSnapshot = buildRatingSnapshot(
+      ratings,
+      homeT,
+      awayT,
+      nSite === true ? "neutral" : nSite === false ? "non-neutral" : "unknown"
+    );
+    const contract = buildCfbPredictionContract({ prediction: pred, event: ev, ratingSnapshot });
+    applyCfbContractToPrediction(pred, contract, {
+      moneyline: EDGE_ML, spread: EDGE_SPREAD, total: EDGE_TOTAL,
+    });
+    // The contract is recording-only/internal state. Both the board projection and recorder
+    // consume the same object, but JSON serialization of `games` cannot expose it.
+    Object.defineProperty(pred, "cfbPredictionContract", {
+      value: contract, enumerable: false, writable: false,
+    });
     pred.marketRead = ev.marketRead || null;
     pred.oddsGrid = ev.oddsGrid || null;
     return pred;
@@ -300,7 +375,7 @@ async function runCFBSlate({ season = null, weeks = 1 } = {}) {
   };
 }
 
-module.exports = { runCFBSlate, captureCFBOddsTicks, getCFBMarketMovers, _internal: { normName, schoolKey, resolveTeam, buildResolver, currentCfbSeasonYear, cfbRegularSeasonStart, blendRatings, buildBlendedTeamRatings, SEASON_BLEND_K, leaguePpgFrom, projPointsFor } };
+module.exports = { runCFBSlate, captureCFBOddsTicks, getCFBMarketMovers, _internal: { normName, schoolKey, resolveTeam, buildResolver, currentCfbSeasonYear, cfbRegularSeasonStart, blendRatings, buildBlendedTeamRatings, buildRatingSnapshot, ratingSourceFor, SEASON_BLEND_K, leaguePpgFrom, projPointsFor } };
 
 // ── CFB odds-tick snapshots (line-movement history) ──────────────────────────
 // Mirrors NFL ticks but writes to cfb_odds_ticks. Best-effort: if the table doesn't
@@ -333,8 +408,9 @@ async function captureCFBOddsTicks() {
   // WZ-CFB-PINN-TICKS-2026-07-14 :: also snapshot Pinnacle (sharp book, eu) into cfb_odds_ticks,
   // tagged side "...@Pinnacle", so sharp-side / reverse-line-movement detection can compare the
   // sharp line against the soft-book consensus. Fail-safe: a Pinnacle failure never blocks the US capture.
+  let pinEvents = [];
   try {
-    const pinEvents = await getCFBPinnacleClose();
+    pinEvents = await getCFBPinnacleClose();
     for (const ev of (pinEvents || [])) {
       const pa = ev.awayTeam, ph = ev.homeTeam;
       if (!pa || !ph) continue;
@@ -348,12 +424,33 @@ async function captureCFBOddsTicks() {
       if (ev.spreads?.home != null) rows.push({ ...pbase, market: "spread", side: "home@Pinnacle",  line: ev.spreads.homeLine ?? null, odds: ev.spreads.home });
     }
   } catch (e) { console.error("[CFB Ticks] Pinnacle snapshot failed:", e.message); }
-  if (!rows.length) return 0;
-  const { error } = await supabase.from("cfb_odds_ticks").insert(rows);
-  if (error) { console.error("[CFB Ticks] insert failed (table may not exist yet):", error.message); return 0; }
-  try { await supabase.from("cfb_odds_ticks").delete().lt("captured_at", new Date(Date.now() - 10 * 864e5).toISOString()); } catch (_) {}
-  console.log(`[CFB Ticks] saved ${rows.length} snapshots`);
-  return rows.length;
+  let saved = 0;
+  if (rows.length) {
+    const { error } = await supabase.from("cfb_odds_ticks").insert(rows);
+    if (error) console.error("[CFB Ticks] insert failed (table may not exist yet):", error.message);
+    else {
+      saved = rows.length;
+      try { await supabase.from("cfb_odds_ticks").delete().lt("captured_at", new Date(Date.now() - 10 * 864e5).toISOString()); } catch (_) {}
+      console.log(`[CFB Ticks] saved ${rows.length} snapshots`);
+    }
+  }
+
+  // Enrich pending CFB ledger rows from the two provider payloads already fetched
+  // above. This adds zero calls and is isolated so ledger trouble cannot break ticks.
+  try {
+    const { enrichCfbPredictionClosing } = require("./cfbClosing");
+    const enriched = await enrichCfbPredictionClosing(supabase, {
+      // Stamp at enrichment time (after both provider reads), not at tick-start. If
+      // either read crosses kickoff, the strict pre-kick guard must refuse the write.
+      usEvents: events, pinnacleEvents: pinEvents, capturedAt: new Date().toISOString(),
+    });
+    if (enriched.updated || enriched.errors) {
+      console.log(`[CFB Closing] updated=${enriched.updated} pending=${enriched.pending} skipped=${enriched.skipped} errors=${enriched.errors}`);
+    }
+  } catch (e) {
+    console.error("[CFB Closing] enrichment failed:", e.message);
+  }
+  return saved;
 }
 
 async function getCFBMarketMovers({ limit = 12 } = {}) {
