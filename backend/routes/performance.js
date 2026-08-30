@@ -21,6 +21,10 @@ const {
   fetchMlbTotalsCalibrationRows,
   analyzeMlbTotalsCalibration,
 } = require("../services/mlbTotalsCalibration");
+const {
+  fetchMlbMlRlValidationRows,
+  analyzeMlbMlRlValidation,
+} = require("../services/mlbMlRlValidation");
 
 // --- per-sport market config -------------------------------------------------
 // core  = team markets that count toward the overall record + CLV
@@ -2412,6 +2416,27 @@ router.get("/mlb-totals-calibration", adminGuard, async (req, res) => {
   } catch (error) {
     console.error("[Performance] MLB totals calibration failed:", error.message);
     res.status(500).json({ ok: false, error: "Calibration data unavailable" });
+  }
+});
+
+// Prospective comparison of the frozen MLB moneyline/run-line selection
+// challengers. This is an admin-only, SELECT-only view of immutable ledger
+// snapshots; it cannot change customer picks or experiment membership.
+router.get("/mlb-mlrl-validation", adminGuard, async (req, res) => {
+  try {
+    const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+    const since = req.query.since && datePattern.test(String(req.query.since)) ? String(req.query.since) : null;
+    const until = req.query.until && datePattern.test(String(req.query.until)) ? String(req.query.until) : null;
+    const rows = await fetchMlbMlRlValidationRows(db(), { since, until });
+    res.json({
+      ok: true,
+      filters: { since, until },
+      rows: rows.length,
+      ...analyzeMlbMlRlValidation(rows),
+    });
+  } catch (error) {
+    console.error("[Performance] MLB ML/RL validation failed:", error.message);
+    res.status(500).json({ ok: false, error: "Validation data unavailable" });
   }
 });
 

@@ -5,6 +5,7 @@ const Module = require("module");
 
 let capturedRows = null;
 let calibrationRows = null;
+let predictionUpsertOptions = null;
 
 class Query {
   constructor(table) { this.table = table; }
@@ -13,8 +14,11 @@ class Query {
   in() { return this; }
   range() { return this; }
   order() { return this; }
-  upsert(rows) {
-    if (this.table === "model_predictions") capturedRows = rows;
+  upsert(rows, options) {
+    if (this.table === "model_predictions") {
+      capturedRows = rows;
+      predictionUpsertOptions = options;
+    }
     if (this.table === "mlb_totals_calibration_shadow") calibrationRows = rows;
     return Promise.resolve({ error: null });
   }
@@ -62,6 +66,11 @@ Module._load = function mockedLoad(request, parent, isMain) {
 };
 
 const { recordPredictions } = require("./predictionTracker");
+const {
+  EXPERIMENT_VERSION,
+  MONEYLINE_MODEL_VERSION,
+  RUN_LINE_MODEL_VERSION,
+} = require("./mlbMlRlValidation");
 Module._load = originalLoad;
 
 async function main() {
@@ -70,7 +79,14 @@ async function main() {
     computedAt: "2026-08-29T16:00:00.000Z",
     recordingByGame: {
       "game-1": {
-        moneyline: { awayRawModelProb: 0.43, homeRawModelProb: 0.57 },
+        moneyline: {
+          awayRawModelProb: 0.43,
+          homeRawModelProb: 0.57,
+          awayBook: "Away Best Book",
+          homeBook: "Home Best Book",
+          modelVersion: MONEYLINE_MODEL_VERSION,
+          experimentVersion: EXPERIMENT_VERSION,
+        },
         totals: {
           overRawModelProb: 0.58,
           underRawModelProb: 0.42,
@@ -82,7 +98,14 @@ async function main() {
           marketBlendEnabled: true,
           marketBlendWeight: 0.55,
         },
-        runLine: { awayRawModelProb: 0.46, homeRawModelProb: 0.54 },
+        runLine: {
+          awayRawModelProb: 0.46,
+          homeRawModelProb: 0.54,
+          awayBook: "Matched Run Line Book",
+          homeBook: "Matched Run Line Book",
+          modelVersion: RUN_LINE_MODEL_VERSION,
+          experimentVersion: EXPERIMENT_VERSION,
+        },
       },
     },
     games: [{
@@ -114,6 +137,12 @@ async function main() {
     ["moneyline core raw stored", byMarket.moneyline?.raw_win_prob === 0.57],
     ["total selected-side raw stored", byMarket.total?.raw_win_prob === 0.42],
     ["run-line selected-side raw stored", byMarket.run_line?.raw_win_prob === 0.46],
+    ["moneyline selected/opposing books can differ", byMarket.moneyline?.entry_book === "Home Best Book" && byMarket.moneyline?.opposing_book === "Away Best Book"],
+    ["moneyline frozen versions stored", byMarket.moneyline?.model_version === MONEYLINE_MODEL_VERSION && byMarket.moneyline?.experiment_version === EXPERIMENT_VERSION],
+    ["run-line matched books stored", byMarket.run_line?.entry_book === "Matched Run Line Book" && byMarket.run_line?.opposing_book === "Matched Run Line Book"],
+    ["run-line frozen versions stored", byMarket.run_line?.model_version === RUN_LINE_MODEL_VERSION && byMarket.run_line?.experiment_version === EXPERIMENT_VERSION],
+    ["non-ML/RL rows do not gain provenance", [byMarket.total, byMarket.moneyline_shadow, byMarket.total_shadow, byMarket.run_line_shadow].every((row) => row?.experiment_version == null)],
+    ["first-snapshot upsert semantics remain unchanged", predictionUpsertOptions?.onConflict === "game_id,market,selection,game_date" && predictionUpsertOptions?.ignoreDuplicates === true],
     ["moneyline shadow raw and opposing price stored", byMarket.moneyline_shadow?.raw_win_prob === 0.57 && byMarket.moneyline_shadow?.opp_odds === 110],
     ["total shadow raw and opposing price stored", byMarket.total_shadow?.raw_win_prob === 0.58 && byMarket.total_shadow?.opp_odds === -115],
     ["run-line shadow raw and opposing price stored", byMarket.run_line_shadow?.raw_win_prob === 0.54 && byMarket.run_line_shadow?.opp_odds === -155],

@@ -25,6 +25,11 @@ const { winProbHaircut, calibrateWinProb, calibrateCoverProb, calibrateHitsProb 
 const { americanToImpliedProb } = require("./oddsApi");
 const { getBatterExpectedStats, getBatterBarrels, getPitcherWhiffStats, getTeamFielding } = require("./savantApi");
 const { getWeatherForVenue } = require("./weatherApi");
+const {
+  EXPERIMENT_VERSION: MLB_MLRL_EXPERIMENT_VERSION,
+  MONEYLINE_MODEL_VERSION,
+  RUN_LINE_MODEL_VERSION,
+} = require("./mlbMlRlValidation");
 
 const LEAGUE_AVG = {
   era: 4.30,
@@ -1893,6 +1898,10 @@ async function calculateGameEdges(game, oddsForGame) {
       moneyline: {
         awayRawModelProb: ml.awayWinProb != null ? round3(ml.awayWinProb) : null,
         homeRawModelProb: ml.homeWinProb != null ? round3(ml.homeWinProb) : null,
+        awayBook: odds.h2h?.awayBook ?? null,
+        homeBook: odds.h2h?.homeBook ?? null,
+        modelVersion: MONEYLINE_MODEL_VERSION,
+        experimentVersion: MLB_MLRL_EXPERIMENT_VERSION,
       },
       totals: {
         overRawModelProb: rawOverProb,
@@ -1910,6 +1919,10 @@ async function calculateGameEdges(game, oddsForGame) {
         awayRawModelProb: rawAwayCoverProb,
         homeRawModelProb: rawHomeCoverProb,
         homeWinProbForSplit: homeWinProbForRunSplit,
+        awayBook: odds.spreads?.awayBook ?? null,
+        homeBook: odds.spreads?.homeBook ?? null,
+        modelVersion: RUN_LINE_MODEL_VERSION,
+        experimentVersion: MLB_MLRL_EXPERIMENT_VERSION,
       },
     },
     game: {

@@ -13,6 +13,7 @@ const { fetchScoreboard: fetchCfbScoreboard } = require("./cfbDataSource"); // W
 const { getMLBMainOdds, getMLBPinnacleClose } = require("./oddsApi");
 const { teamKey, matchupKey, cfbSchoolKey } = require("./teamKey"); // WZ-TEAMKEY-SSOT-2026-07-17 / WZ-FBGRADE-TEAMKEY-2026-07-20
 const { rawProbabilityFor } = require("./mlbPredictionProvenance");
+const { buildSelectionProvenance } = require("./mlbMlRlValidation");
 const {
   recordMlbTotalsCalibration,
   captureMlbTotalsCalibrationClosing,
@@ -615,12 +616,20 @@ async function recordPredictions(result) {
   for (const e of result.moneylineEdges || []) {
     if (statusById[e.gameId] === "final") continue;
     if (!claimSide(e.gameId, "moneyline")) continue; // WZ-ONE-SIDE-PER-GAME-2026-07-18
+    const rawWinProb = rawProbabilityFor(recordingByGame, e.gameId, "moneyline", e.side);
+    const provenance = buildSelectionProvenance(recordingByGame, e.gameId, "moneyline", e.side, {
+      rawProbability: rawWinProb,
+      publishedProbability: e.modelProb,
+      edge: e.edge,
+      entryOdds: e.odds,
+      opposingOdds: e.oppOdds,
+    });
     rows.push({
       game_id: e.gameId, game_date: gameDate, league: "mlb",
       matchup: e.matchup, market: "moneyline", selection: e.side,
       description: `${e.teamAbbr} ML`,
       model_prob: e.modelProb, odds: e.odds, edge: e.edge,
-      raw_win_prob: rawProbabilityFor(recordingByGame, e.gameId, "moneyline", e.side),
+      raw_win_prob: rawWinProb,
       // WZ-CAL-MIRROR-2026-07-02 :: the calibration went LIVE this deploy — model_prob and
       // edge above ARE the calibrated values (applied in edgesModel). These columns now
       // mirror them for query continuity; re-applying the haircut here would double-cut.
@@ -632,6 +641,7 @@ async function recordPredictions(result) {
       opp_odds: e.oppOdds ?? null,               // WZ-HANDOFF44-2026-07-24 :: opposing price at write time (unblocks correct de-vig CLV)
       floor_at_pick: e.floorAtPick ?? null,      // WZ-HANDOFF44-2026-07-24 :: publish floor in force when the pick was stamped
       inflation_gate_at_pick: e.inflationGateAtPick ?? null, // WZ-HANDOFF44-2026-07-24 :: inflation-gate regime (moneyline-only)
+      ...provenance,
     });
   }
 
@@ -660,15 +670,24 @@ async function recordPredictions(result) {
     if (statusById[e.gameId] === "final") continue;
     if (e.edge == null || e.edge <= 0) continue;
     if (!claimSide(e.gameId, "run_line")) continue; // WZ-ONE-SIDE-PER-GAME-2026-07-18
+    const rawWinProb = rawProbabilityFor(recordingByGame, e.gameId, "run_line", e.side);
+    const provenance = buildSelectionProvenance(recordingByGame, e.gameId, "run_line", e.side, {
+      rawProbability: rawWinProb,
+      publishedProbability: e.modelProb,
+      edge: e.edge,
+      entryOdds: e.odds,
+      opposingOdds: e.oppOdds,
+    });
     rows.push({
       game_id: e.gameId, game_date: gameDate, league: "mlb",
       matchup: e.matchup, market: "run_line", selection: e.side,
       description: `${e.teamAbbr} ${e.line > 0 ? "+" : ""}${e.line}`,
       model_prob: e.modelProb, odds: e.odds, edge: e.edge,
-      raw_win_prob: rawProbabilityFor(recordingByGame, e.gameId, "run_line", e.side),
+      raw_win_prob: rawWinProb,
       confidence: e.confidence, conviction: e.conviction ?? null, conviction_score: e.convictionScore ?? null, line: e.line,
       benched_at_pick: benchedNow("run_line"), // WZ-BENCH-STAMP-2026-07-18
       opp_odds: e.oppOdds ?? null,             // WZ-HANDOFF44-2026-07-24 :: opposing price at write time
+      ...provenance,
     });
   }
 
