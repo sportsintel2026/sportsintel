@@ -1,0 +1,5675 @@
+{
+  "version": "cfb-historical-calibration-phase3-v1-2026-08-31",
+  "datasetVersion": "cfb-historical-od-dataset-phase3-v1-2026-08-31",
+  "phase3InputContentSha256": "99b84ce29d01e19600102bf3679a70cad14ee791836cf51f58de995e742e646b",
+  "protocol": {
+    "folds": [
+      {
+        "id": "fold-2023",
+        "train": [
+          2021,
+          2022
+        ],
+        "validate": 2023
+      },
+      {
+        "id": "fold-2024",
+        "train": [
+          2021,
+          2022,
+          2023
+        ],
+        "validate": 2024
+      },
+      {
+        "id": "fold-2025",
+        "train": [
+          2021,
+          2022,
+          2023,
+          2024
+        ],
+        "validate": 2025
+      }
+    ],
+    "preseasonSearchSpace": {
+      "offenseReturningWeight": [
+        0,
+        0.5,
+        1,
+        1.5,
+        2
+      ],
+      "talentWeight": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "homeFieldAdvantage": [
+        2.5,
+        3,
+        3.5
+      ],
+      "baseSigma": [
+        14,
+        15.5,
+        17
+      ]
+    },
+    "updaterPriorGames": [
+      4,
+      6,
+      8,
+      12
+    ],
+    "updaterMinimumGames": 4,
+    "currentOffenseDefenseConfig": {
+      "priorPseudoGames": 1,
+      "minimumGames": 4,
+      "iterations": 30,
+      "homeFieldPoints": 3
+    },
+    "rule": "Each validation season is predicted by parameters fit only on earlier seasons; within a season, each result updates only later kickoff groups.",
+    "targetSeasonLeakage": false,
+    "outcomesFrom2026Used": false
+  },
+  "data": {
+    "coverage": [
+      {
+        "season": 2021,
+        "expectedFbsTeams": 130,
+        "teamsWithPriorOffenseDefense": 125,
+        "teamsWithOffenseReturningProduction": 128,
+        "teamsWithDefenseReturningProduction": 0,
+        "teamsWithTalent": 127,
+        "finalEvaluatedGames": 679,
+        "excludedGames": 53
+      },
+      {
+        "season": 2022,
+        "expectedFbsTeams": 131,
+        "teamsWithPriorOffenseDefense": 130,
+        "teamsWithOffenseReturningProduction": 130,
+        "teamsWithDefenseReturningProduction": 0,
+        "teamsWithTalent": 128,
+        "finalEvaluatedGames": 724,
+        "excludedGames": 10
+      },
+      {
+        "season": 2023,
+        "expectedFbsTeams": 133,
+        "teamsWithPriorOffenseDefense": 131,
+        "teamsWithOffenseReturningProduction": 131,
+        "teamsWithDefenseReturningProduction": 0,
+        "teamsWithTalent": 130,
+        "finalEvaluatedGames": 729,
+        "excludedGames": 21
+      },
+      {
+        "season": 2024,
+        "expectedFbsTeams": 134,
+        "teamsWithPriorOffenseDefense": 133,
+        "teamsWithOffenseReturningProduction": 133,
+        "teamsWithDefenseReturningProduction": 0,
+        "teamsWithTalent": 131,
+        "finalEvaluatedGames": 741,
+        "excludedGames": 11
+      },
+      {
+        "season": 2025,
+        "expectedFbsTeams": 136,
+        "teamsWithPriorOffenseDefense": 134,
+        "teamsWithOffenseReturningProduction": 134,
+        "teamsWithDefenseReturningProduction": 0,
+        "teamsWithTalent": 135,
+        "finalEvaluatedGames": 740,
+        "excludedGames": 22
+      }
+    ],
+    "providerBudget": {
+      "inheritedPhase2CfbdCalls": 5,
+      "phase3NewCfbdCalls": 0,
+      "phase3MaximumAllowed": 60
+    },
+    "sourceNotes": {
+      "offenseDefensePrior": "Previous-season-only FBS-vs-FBS final scores, opponent-adjusted by deterministic ridge-style alternating updates.",
+      "offenseReturningProduction": "Exact target-season preseason CFBD percentPPA; passing/rushing/receiving components retained for audit.",
+      "defenseReturningProduction": "Unavailable from CFBD /player/returning; no defensive value is fabricated.",
+      "qb": "No exact historical target-season starting-QB identity with a stable athlete ID is present; name-only and target-season usage joins are forbidden.",
+      "transfers": "No cached 2021-2025 exact team-season portal aggregate exists; player-level name joins are forbidden and no speculative provider calls were consumed.",
+      "talent": "SportsDataverse cfb_team_talent; 247Sports talent composite published through the SportsDataverse build.",
+      "targetOutcomes": "Used only after each frozen historical prediction for validation and chronological updater evidence."
+    },
+    "qbIncluded": false,
+    "transferIncluded": false,
+    "defensiveReturningProductionIncluded": false
+  },
+  "models": {
+    "v1": {
+      "params": {
+        "returningProductionCoefficient": 0.75,
+        "talentCoefficient": 0.5,
+        "homeFieldAdvantage": 3,
+        "baseSigma": 15.5,
+        "uncertaintyScale": 0
+      },
+      "validation": {
+        "metrics": {
+          "n": 2210,
+          "probabilityN": 2210,
+          "marginBias": -0.9192245,
+          "mae": 14.10966982,
+          "rmse": 17.87991859,
+          "brier": 0.20643131,
+          "logLoss": 0.59867387,
+          "calibrationInterceptSlope": {
+            "intercept": -0.00752052,
+            "slope": 1.05124521,
+            "n": 2210
+          },
+          "reliability": {
+            "bins": [
+              {
+                "label": "0.00-0.35",
+                "n": 252,
+                "meanPredicted": 0.27036172,
+                "observed": 0.25,
+                "absoluteGap": 0.02036172
+              },
+              {
+                "label": "0.35-0.45",
+                "n": 299,
+                "meanPredicted": 0.40022403,
+                "observed": 0.39130435,
+                "absoluteGap": 0.00891968
+              },
+              {
+                "label": "0.45-0.55",
+                "n": 384,
+                "meanPredicted": 0.5044054,
+                "observed": 0.51302083,
+                "absoluteGap": 0.00861544
+              },
+              {
+                "label": "0.55-0.65",
+                "n": 416,
+                "meanPredicted": 0.59947481,
+                "observed": 0.59375,
+                "absoluteGap": 0.00572481
+              },
+              {
+                "label": "0.65-1.00",
+                "n": 859,
+                "meanPredicted": 0.76937615,
+                "observed": 0.78114086,
+                "absoluteGap": 0.01176471
+              }
+            ],
+            "ece": 0.01067596
+          },
+          "uncertainty": {
+            "exactHistoricalV1Reconstruction": false,
+            "correlationWithAbsoluteMarginError": null,
+            "bins": [
+              {
+                "quartile": 1,
+                "n": 552,
+                "meanUncertainty": 0,
+                "meanAbsoluteMarginError": 13.4555835
+              },
+              {
+                "quartile": 2,
+                "n": 553,
+                "meanUncertainty": 0,
+                "meanAbsoluteMarginError": 14.20068804
+              },
+              {
+                "quartile": 3,
+                "n": 552,
+                "meanUncertainty": 0,
+                "meanAbsoluteMarginError": 14.26412555
+              },
+              {
+                "quartile": 4,
+                "n": 553,
+                "meanUncertainty": 0,
+                "meanAbsoluteMarginError": 14.51737871
+              }
+            ]
+          },
+          "neutral": {
+            "n": 78,
+            "marginBias": -0.35901095,
+            "mae": 13.89550913
+          },
+          "nonNeutral": {
+            "n": 2132,
+            "marginBias": -0.93972012,
+            "mae": 14.11750497
+          }
+        },
+        "bySeason": {
+          "2023": {
+            "n": 729,
+            "probabilityN": 729,
+            "marginBias": -0.38959735,
+            "mae": 13.40597205,
+            "rmse": 17.02359535,
+            "brier": 0.19411269,
+            "logLoss": 0.57114483,
+            "calibrationInterceptSlope": {
+              "intercept": -0.11483537,
+              "slope": 1.36976446,
+              "n": 729
+            },
+            "reliability": {
+              "bins": [
+                {
+                  "label": "0.00-0.35",
+                  "n": 77,
+                  "meanPredicted": 0.26651825,
+                  "observed": 0.16883117,
+                  "absoluteGap": 0.09768708
+                },
+                {
+                  "label": "0.35-0.45",
+                  "n": 104,
+                  "meanPredicted": 0.39900613,
+                  "observed": 0.30769231,
+                  "absoluteGap": 0.09131382
+                },
+                {
+                  "label": "0.45-0.55",
+                  "n": 136,
+                  "meanPredicted": 0.50707168,
+                  "observed": 0.53676471,
+                  "absoluteGap": 0.02969303
+                },
+                {
+                  "label": "0.55-0.65",
+                  "n": 126,
+                  "meanPredicted": 0.59994945,
+                  "observed": 0.57936508,
+                  "absoluteGap": 0.02058437
+                },
+                {
+                  "label": "0.65-1.00",
+                  "n": 286,
+                  "meanPredicted": 0.76391459,
+                  "observed": 0.81118881,
+                  "absoluteGap": 0.04727422
+                }
+              ],
+              "ece": 0.05098882
+            },
+            "uncertainty": {
+              "exactHistoricalV1Reconstruction": false,
+              "correlationWithAbsoluteMarginError": null,
+              "bins": [
+                {
+                  "quartile": 1,
+                  "n": 182,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 12.21721432
+                },
+                {
+                  "quartile": 2,
+                  "n": 182,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 14.47416504
+                },
+                {
+                  "quartile": 3,
+                  "n": 182,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 13.86531315
+                },
+                {
+                  "quartile": 4,
+                  "n": 183,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 13.06904692
+                }
+              ]
+            },
+            "neutral": {
+              "n": 21,
+              "marginBias": -2.09337255,
+              "mae": 12.83864325
+            },
+            "nonNeutral": {
+              "n": 708,
+              "marginBias": -0.33906164,
+              "mae": 13.4227996
+            }
+          },
+          "2024": {
+            "n": 741,
+            "probabilityN": 741,
+            "marginBias": -1.12783967,
+            "mae": 14.57526046,
+            "rmse": 18.36158267,
+            "brier": 0.21659805,
+            "logLoss": 0.62003675,
+            "calibrationInterceptSlope": {
+              "intercept": 0.04443221,
+              "slope": 0.85022448,
+              "n": 741
+            },
+            "reliability": {
+              "bins": [
+                {
+                  "label": "0.00-0.35",
+                  "n": 89,
+                  "meanPredicted": 0.2738475,
+                  "observed": 0.30337079,
+                  "absoluteGap": 0.02952328
+                },
+                {
+                  "label": "0.35-0.45",
+                  "n": 100,
+                  "meanPredicted": 0.39978424,
+                  "observed": 0.46,
+                  "absoluteGap": 0.06021576
+                },
+                {
+                  "label": "0.45-0.55",
+                  "n": 131,
+                  "meanPredicted": 0.50306361,
+                  "observed": 0.54198473,
+                  "absoluteGap": 0.03892112
+                },
+                {
+                  "label": "0.55-0.65",
+                  "n": 129,
+                  "meanPredicted": 0.59984487,
+                  "observed": 0.54263566,
+                  "absoluteGap": 0.05720921
+                },
+                {
+                  "label": "0.65-1.00",
+                  "n": 292,
+                  "meanPredicted": 0.77473259,
+                  "observed": 0.75342466,
+                  "absoluteGap": 0.02130794
+                }
+              ],
+              "ece": 0.03690921
+            },
+            "uncertainty": {
+              "exactHistoricalV1Reconstruction": false,
+              "correlationWithAbsoluteMarginError": null,
+              "bins": [
+                {
+                  "quartile": 1,
+                  "n": 185,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 15.38804792
+                },
+                {
+                  "quartile": 2,
+                  "n": 185,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 13.94480883
+                },
+                {
+                  "quartile": 3,
+                  "n": 185,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 14.16356482
+                },
+                {
+                  "quartile": 4,
+                  "n": 186,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 14.80338716
+                }
+              ]
+            },
+            "neutral": {
+              "n": 35,
+              "marginBias": 0.45742624,
+              "mae": 15.26903529
+            },
+            "nonNeutral": {
+              "n": 706,
+              "marginBias": -1.20642934,
+              "mae": 14.54086652
+            }
+          },
+          "2025": {
+            "n": 740,
+            "probabilityN": 740,
+            "marginBias": -1.23208175,
+            "mae": 14.33668742,
+            "rmse": 18.21142688,
+            "brier": 0.20838634,
+            "logLoss": 0.60440194,
+            "calibrationInterceptSlope": {
+              "intercept": 0.03173909,
+              "slope": 1.00498589,
+              "n": 740
+            },
+            "reliability": {
+              "bins": [
+                {
+                  "label": "0.00-0.35",
+                  "n": 86,
+                  "meanPredicted": 0.27019559,
+                  "observed": 0.26744186,
+                  "absoluteGap": 0.00275373
+                },
+                {
+                  "label": "0.35-0.45",
+                  "n": 95,
+                  "meanPredicted": 0.40202024,
+                  "observed": 0.41052632,
+                  "absoluteGap": 0.00850608
+                },
+                {
+                  "label": "0.45-0.55",
+                  "n": 117,
+                  "meanPredicted": 0.50280847,
+                  "observed": 0.45299145,
+                  "absoluteGap": 0.04981702
+                },
+                {
+                  "label": "0.55-0.65",
+                  "n": 161,
+                  "meanPredicted": 0.59880685,
+                  "observed": 0.64596273,
+                  "absoluteGap": 0.04715589
+                },
+                {
+                  "label": "0.65-1.00",
+                  "n": 281,
+                  "meanPredicted": 0.76936878,
+                  "observed": 0.77935943,
+                  "absoluteGap": 0.00999065
+                }
+              ],
+              "ece": 0.02334184
+            },
+            "uncertainty": {
+              "exactHistoricalV1Reconstruction": false,
+              "correlationWithAbsoluteMarginError": null,
+              "bins": [
+                {
+                  "quartile": 1,
+                  "n": 185,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 13.73539096
+                },
+                {
+                  "quartile": 2,
+                  "n": 185,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 13.72074967
+                },
+                {
+                  "quartile": 3,
+                  "n": 185,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 14.9288664
+                },
+                {
+                  "quartile": 4,
+                  "n": 185,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 14.96174264
+                }
+              ]
+            },
+            "neutral": {
+              "n": 22,
+              "marginBias": -0.0023613,
+              "mae": 12.7191804
+            },
+            "nonNeutral": {
+              "n": 718,
+              "marginBias": -1.2697612,
+              "mae": 14.38624891
+            }
+          }
+        }
+      }
+    },
+    "v2": {
+      "params": {
+        "returningProductionCoefficient": 1.25,
+        "talentCoefficient": 2.5,
+        "homeFieldAdvantage": 3,
+        "baseSigma": 15.5,
+        "uncertaintyScale": 0
+      },
+      "validation": {
+        "metrics": {
+          "n": 2210,
+          "probabilityN": 2210,
+          "marginBias": -0.74168699,
+          "mae": 13.82384733,
+          "rmse": 17.52625393,
+          "brier": 0.20246531,
+          "logLoss": 0.58776604,
+          "calibrationInterceptSlope": {
+            "intercept": -0.05963127,
+            "slope": 1.17596726,
+            "n": 2210
+          },
+          "reliability": {
+            "bins": [
+              {
+                "label": "0.00-0.35",
+                "n": 224,
+                "meanPredicted": 0.26926318,
+                "observed": 0.20535714,
+                "absoluteGap": 0.06390604
+              },
+              {
+                "label": "0.35-0.45",
+                "n": 286,
+                "meanPredicted": 0.40320845,
+                "observed": 0.37412587,
+                "absoluteGap": 0.02908257
+              },
+              {
+                "label": "0.45-0.55",
+                "n": 405,
+                "meanPredicted": 0.50243053,
+                "observed": 0.50864198,
+                "absoluteGap": 0.00621144
+              },
+              {
+                "label": "0.55-0.65",
+                "n": 459,
+                "meanPredicted": 0.59900122,
+                "observed": 0.60348584,
+                "absoluteGap": 0.00448462
+              },
+              {
+                "label": "0.65-1.00",
+                "n": 836,
+                "meanPredicted": 0.77149892,
+                "observed": 0.78827751,
+                "absoluteGap": 0.0167786
+              }
+            ],
+            "ece": 0.01865772
+          },
+          "uncertainty": {
+            "exactHistoricalV1Reconstruction": false,
+            "correlationWithAbsoluteMarginError": null,
+            "bins": [
+              {
+                "quartile": 1,
+                "n": 552,
+                "meanUncertainty": 0,
+                "meanAbsoluteMarginError": 12.92647251
+              },
+              {
+                "quartile": 2,
+                "n": 553,
+                "meanUncertainty": 0,
+                "meanAbsoluteMarginError": 13.84878689
+              },
+              {
+                "quartile": 3,
+                "n": 552,
+                "meanUncertainty": 0,
+                "meanAbsoluteMarginError": 14.1521128
+              },
+              {
+                "quartile": 4,
+                "n": 553,
+                "meanUncertainty": 0,
+                "meanAbsoluteMarginError": 14.36698799
+              }
+            ]
+          },
+          "neutral": {
+            "n": 78,
+            "marginBias": -0.49638868,
+            "mae": 13.52478977
+          },
+          "nonNeutral": {
+            "n": 2132,
+            "marginBias": -0.75066132,
+            "mae": 13.83478846
+          }
+        },
+        "bySeason": {
+          "2023": {
+            "n": 729,
+            "probabilityN": 729,
+            "marginBias": -0.25176467,
+            "mae": 13.00663729,
+            "rmse": 16.51406467,
+            "brier": 0.18849487,
+            "logLoss": 0.55634927,
+            "calibrationInterceptSlope": {
+              "intercept": -0.17358788,
+              "slope": 1.55269554,
+              "n": 729
+            },
+            "reliability": {
+              "bins": [
+                {
+                  "label": "0.00-0.35",
+                  "n": 78,
+                  "meanPredicted": 0.26960282,
+                  "observed": 0.17948718,
+                  "absoluteGap": 0.09011564
+                },
+                {
+                  "label": "0.35-0.45",
+                  "n": 95,
+                  "meanPredicted": 0.39992768,
+                  "observed": 0.24210526,
+                  "absoluteGap": 0.15782242
+                },
+                {
+                  "label": "0.45-0.55",
+                  "n": 131,
+                  "meanPredicted": 0.50149549,
+                  "observed": 0.50381679,
+                  "absoluteGap": 0.00232131
+                },
+                {
+                  "label": "0.55-0.65",
+                  "n": 151,
+                  "meanPredicted": 0.60253627,
+                  "observed": 0.62251656,
+                  "absoluteGap": 0.01998029
+                },
+                {
+                  "label": "0.65-1.00",
+                  "n": 274,
+                  "meanPredicted": 0.76929888,
+                  "observed": 0.82481752,
+                  "absoluteGap": 0.05551863
+                }
+              ],
+              "ece": 0.05563151
+            },
+            "uncertainty": {
+              "exactHistoricalV1Reconstruction": false,
+              "correlationWithAbsoluteMarginError": null,
+              "bins": [
+                {
+                  "quartile": 1,
+                  "n": 182,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 11.6069165
+                },
+                {
+                  "quartile": 2,
+                  "n": 182,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 13.74988037
+                },
+                {
+                  "quartile": 3,
+                  "n": 182,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 13.5699049
+                },
+                {
+                  "quartile": 4,
+                  "n": 183,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 13.09933804
+                }
+              ]
+            },
+            "neutral": {
+              "n": 21,
+              "marginBias": -1.4417831,
+              "mae": 11.77883647
+            },
+            "nonNeutral": {
+              "n": 708,
+              "marginBias": -0.21646752,
+              "mae": 13.04305511
+            }
+          },
+          "2024": {
+            "n": 741,
+            "probabilityN": 741,
+            "marginBias": -0.94118917,
+            "mae": 14.30003798,
+            "rmse": 18.09638495,
+            "brier": 0.21215056,
+            "logLoss": 0.60812349,
+            "calibrationInterceptSlope": {
+              "intercept": -0.00388483,
+              "slope": 0.95453522,
+              "n": 741
+            },
+            "reliability": {
+              "bins": [
+                {
+                  "label": "0.00-0.35",
+                  "n": 72,
+                  "meanPredicted": 0.26285398,
+                  "observed": 0.26388889,
+                  "absoluteGap": 0.0010349
+                },
+                {
+                  "label": "0.35-0.45",
+                  "n": 106,
+                  "meanPredicted": 0.40586272,
+                  "observed": 0.43396226,
+                  "absoluteGap": 0.02809954
+                },
+                {
+                  "label": "0.45-0.55",
+                  "n": 131,
+                  "meanPredicted": 0.500761,
+                  "observed": 0.50381679,
+                  "absoluteGap": 0.00305579
+                },
+                {
+                  "label": "0.55-0.65",
+                  "n": 151,
+                  "meanPredicted": 0.59955777,
+                  "observed": 0.60264901,
+                  "absoluteGap": 0.00309124
+                },
+                {
+                  "label": "0.65-1.00",
+                  "n": 281,
+                  "meanPredicted": 0.77807251,
+                  "observed": 0.7544484,
+                  "absoluteGap": 0.02362411
+                }
+              ],
+              "ece": 0.01424902
+            },
+            "uncertainty": {
+              "exactHistoricalV1Reconstruction": false,
+              "correlationWithAbsoluteMarginError": null,
+              "bins": [
+                {
+                  "quartile": 1,
+                  "n": 185,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 14.71448773
+                },
+                {
+                  "quartile": 2,
+                  "n": 185,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 13.56860499
+                },
+                {
+                  "quartile": 3,
+                  "n": 185,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 13.68262707
+                },
+                {
+                  "quartile": 4,
+                  "n": 186,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 15.22940852
+                }
+              ]
+            },
+            "neutral": {
+              "n": 35,
+              "marginBias": -0.2681282,
+              "mae": 14.96553303
+            },
+            "nonNeutral": {
+              "n": 706,
+              "marginBias": -0.97455622,
+              "mae": 14.26704602
+            }
+          },
+          "2025": {
+            "n": 740,
+            "probabilityN": 740,
+            "marginBias": -1.02455491,
+            "mae": 14.1520755,
+            "rmse": 17.91021029,
+            "brier": 0.20652973,
+            "logLoss": 0.59833083,
+            "calibrationInterceptSlope": {
+              "intercept": -0.01660298,
+              "slope": 1.10308,
+              "n": 740
+            },
+            "reliability": {
+              "bins": [
+                {
+                  "label": "0.00-0.35",
+                  "n": 74,
+                  "meanPredicted": 0.27514116,
+                  "observed": 0.17567568,
+                  "absoluteGap": 0.09946549
+                },
+                {
+                  "label": "0.35-0.45",
+                  "n": 85,
+                  "meanPredicted": 0.40356515,
+                  "observed": 0.44705882,
+                  "absoluteGap": 0.04349368
+                },
+                {
+                  "label": "0.45-0.55",
+                  "n": 143,
+                  "meanPredicted": 0.50481655,
+                  "observed": 0.51748252,
+                  "absoluteGap": 0.01266597
+                },
+                {
+                  "label": "0.55-0.65",
+                  "n": 157,
+                  "meanPredicted": 0.59506599,
+                  "observed": 0.58598726,
+                  "absoluteGap": 0.00907873
+                },
+                {
+                  "label": "0.65-1.00",
+                  "n": 281,
+                  "meanPredicted": 0.76707055,
+                  "observed": 0.78647687,
+                  "absoluteGap": 0.01940632
+                }
+              ],
+              "ece": 0.02668538
+            },
+            "uncertainty": {
+              "exactHistoricalV1Reconstruction": false,
+              "correlationWithAbsoluteMarginError": null,
+              "bins": [
+                {
+                  "quartile": 1,
+                  "n": 185,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 13.46206974
+                },
+                {
+                  "quartile": 2,
+                  "n": 185,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 13.93657016
+                },
+                {
+                  "quartile": 3,
+                  "n": 185,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 14.52927451
+                },
+                {
+                  "quartile": 4,
+                  "n": 185,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 14.68038759
+                }
+              ]
+            },
+            "neutral": {
+              "n": 22,
+              "marginBias": 0.04289157,
+              "mae": 12.89929002
+            },
+            "nonNeutral": {
+              "n": 718,
+              "marginBias": -1.05726218,
+              "mae": 14.19046168
+            }
+          }
+        }
+      }
+    },
+    "phase3Preseason": {
+      "validation": {
+        "metrics": {
+          "n": 2210,
+          "probabilityN": 2210,
+          "marginBias": -0.41214854,
+          "mae": 13.61577744,
+          "rmse": 17.27483084,
+          "brier": 0.2015341,
+          "logLoss": 0.5840988,
+          "calibrationInterceptSlope": {
+            "intercept": 0.0051669,
+            "slope": 1.03684256,
+            "n": 2210
+          },
+          "reliability": {
+            "bins": [
+              {
+                "label": "0.00-0.35",
+                "n": 290,
+                "meanPredicted": 0.25022488,
+                "observed": 0.23793103,
+                "absoluteGap": 0.01229385
+              },
+              {
+                "label": "0.35-0.45",
+                "n": 277,
+                "meanPredicted": 0.40467326,
+                "observed": 0.42599278,
+                "absoluteGap": 0.02131952
+              },
+              {
+                "label": "0.45-0.55",
+                "n": 383,
+                "meanPredicted": 0.50320678,
+                "observed": 0.49086162,
+                "absoluteGap": 0.01234516
+              },
+              {
+                "label": "0.55-0.65",
+                "n": 425,
+                "meanPredicted": 0.59883599,
+                "observed": 0.61176471,
+                "absoluteGap": 0.01292871
+              },
+              {
+                "label": "0.65-1.00",
+                "n": 835,
+                "meanPredicted": 0.78625353,
+                "observed": 0.79041916,
+                "absoluteGap": 0.00416564
+              }
+            ],
+            "ece": 0.01048504
+          },
+          "uncertainty": {
+            "exactHistoricalV1Reconstruction": false,
+            "correlationWithAbsoluteMarginError": null,
+            "bins": [
+              {
+                "quartile": 1,
+                "n": 552,
+                "meanUncertainty": 0,
+                "meanAbsoluteMarginError": 12.68797657
+              },
+              {
+                "quartile": 2,
+                "n": 553,
+                "meanUncertainty": 0,
+                "meanAbsoluteMarginError": 13.66878948
+              },
+              {
+                "quartile": 3,
+                "n": 552,
+                "meanUncertainty": 0,
+                "meanAbsoluteMarginError": 13.95223279
+              },
+              {
+                "quartile": 4,
+                "n": 553,
+                "meanUncertainty": 0,
+                "meanAbsoluteMarginError": 14.15304157
+              }
+            ]
+          },
+          "neutral": {
+            "n": 78,
+            "marginBias": -0.61946164,
+            "mae": 13.02672695
+          },
+          "nonNeutral": {
+            "n": 2132,
+            "marginBias": -0.40456391,
+            "mae": 13.63732806
+          }
+        },
+        "bySeason": {
+          "2023": {
+            "n": 729,
+            "probabilityN": 729,
+            "marginBias": 0.01357166,
+            "mae": 12.80680668,
+            "rmse": 16.17705713,
+            "brier": 0.1876069,
+            "logLoss": 0.55154546,
+            "calibrationInterceptSlope": {
+              "intercept": -0.08142034,
+              "slope": 1.3537079,
+              "n": 729
+            },
+            "reliability": {
+              "bins": [
+                {
+                  "label": "0.00-0.35",
+                  "n": 103,
+                  "meanPredicted": 0.25152683,
+                  "observed": 0.2038835,
+                  "absoluteGap": 0.04764333
+                },
+                {
+                  "label": "0.35-0.45",
+                  "n": 92,
+                  "meanPredicted": 0.40542711,
+                  "observed": 0.31521739,
+                  "absoluteGap": 0.09020972
+                },
+                {
+                  "label": "0.45-0.55",
+                  "n": 118,
+                  "meanPredicted": 0.50488611,
+                  "observed": 0.5,
+                  "absoluteGap": 0.00488611
+                },
+                {
+                  "label": "0.55-0.65",
+                  "n": 145,
+                  "meanPredicted": 0.60261748,
+                  "observed": 0.62758621,
+                  "absoluteGap": 0.02496872
+                },
+                {
+                  "label": "0.65-1.00",
+                  "n": 271,
+                  "meanPredicted": 0.78335218,
+                  "observed": 0.82287823,
+                  "absoluteGap": 0.03952605
+                }
+              ],
+              "ece": 0.03856672
+            },
+            "uncertainty": {
+              "exactHistoricalV1Reconstruction": false,
+              "correlationWithAbsoluteMarginError": null,
+              "bins": [
+                {
+                  "quartile": 1,
+                  "n": 182,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 11.18111114
+                },
+                {
+                  "quartile": 2,
+                  "n": 182,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 13.34042775
+                },
+                {
+                  "quartile": 3,
+                  "n": 182,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 13.65114771
+                },
+                {
+                  "quartile": 4,
+                  "n": 183,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 13.05318637
+                }
+              ]
+            },
+            "neutral": {
+              "n": 21,
+              "marginBias": -1.16598984,
+              "mae": 11.08038361
+            },
+            "nonNeutral": {
+              "n": 708,
+              "marginBias": 0.04855865,
+              "mae": 12.85801414
+            }
+          },
+          "2024": {
+            "n": 741,
+            "probabilityN": 741,
+            "marginBias": -0.58218579,
+            "mae": 14.22251682,
+            "rmse": 18.01540686,
+            "brier": 0.21281418,
+            "logLoss": 0.60863619,
+            "calibrationInterceptSlope": {
+              "intercept": 0.04520864,
+              "slope": 0.84564949,
+              "n": 741
+            },
+            "reliability": {
+              "bins": [
+                {
+                  "label": "0.00-0.35",
+                  "n": 92,
+                  "meanPredicted": 0.24843935,
+                  "observed": 0.30434783,
+                  "absoluteGap": 0.05590847
+                },
+                {
+                  "label": "0.35-0.45",
+                  "n": 100,
+                  "meanPredicted": 0.40530981,
+                  "observed": 0.48,
+                  "absoluteGap": 0.07469019
+                },
+                {
+                  "label": "0.45-0.55",
+                  "n": 125,
+                  "meanPredicted": 0.49877519,
+                  "observed": 0.48,
+                  "absoluteGap": 0.01877519
+                },
+                {
+                  "label": "0.55-0.65",
+                  "n": 138,
+                  "meanPredicted": 0.59632224,
+                  "observed": 0.58695652,
+                  "absoluteGap": 0.00936571
+                },
+                {
+                  "label": "0.65-1.00",
+                  "n": 286,
+                  "meanPredicted": 0.78859823,
+                  "observed": 0.75874126,
+                  "absoluteGap": 0.02985698
+                }
+              ],
+              "ece": 0.03345622
+            },
+            "uncertainty": {
+              "exactHistoricalV1Reconstruction": false,
+              "correlationWithAbsoluteMarginError": null,
+              "bins": [
+                {
+                  "quartile": 1,
+                  "n": 185,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 14.42506346
+                },
+                {
+                  "quartile": 2,
+                  "n": 185,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 13.40934561
+                },
+                {
+                  "quartile": 3,
+                  "n": 185,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 13.86834165
+                },
+                {
+                  "quartile": 4,
+                  "n": 186,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 15.18212947
+                }
+              ]
+            },
+            "neutral": {
+              "n": 35,
+              "marginBias": -0.60159076,
+              "mae": 14.30563695
+            },
+            "nonNeutral": {
+              "n": 706,
+              "marginBias": -0.58122379,
+              "mae": 14.21839614
+            }
+          },
+          "2025": {
+            "n": 740,
+            "probabilityN": 740,
+            "marginBias": -0.66127343,
+            "mae": 13.80516365,
+            "rmse": 17.56206384,
+            "brier": 0.20395893,
+            "logLoss": 0.5915977,
+            "calibrationInterceptSlope": {
+              "intercept": 0.04229546,
+              "slope": 0.98056035,
+              "n": 740
+            },
+            "reliability": {
+              "bins": [
+                {
+                  "label": "0.00-0.35",
+                  "n": 95,
+                  "meanPredicted": 0.25054245,
+                  "observed": 0.21052632,
+                  "absoluteGap": 0.04001613
+                },
+                {
+                  "label": "0.35-0.45",
+                  "n": 85,
+                  "meanPredicted": 0.40310844,
+                  "observed": 0.48235294,
+                  "absoluteGap": 0.0792445
+                },
+                {
+                  "label": "0.45-0.55",
+                  "n": 140,
+                  "meanPredicted": 0.50574812,
+                  "observed": 0.49285714,
+                  "absoluteGap": 0.01289097
+                },
+                {
+                  "label": "0.55-0.65",
+                  "n": 142,
+                  "meanPredicted": 0.59741756,
+                  "observed": 0.61971831,
+                  "absoluteGap": 0.02230075
+                },
+                {
+                  "label": "0.65-1.00",
+                  "n": 278,
+                  "meanPredicted": 0.78666963,
+                  "observed": 0.79136691,
+                  "absoluteGap": 0.00469727
+                }
+              ],
+              "ece": 0.02272243
+            },
+            "uncertainty": {
+              "exactHistoricalV1Reconstruction": false,
+              "correlationWithAbsoluteMarginError": null,
+              "bins": [
+                {
+                  "quartile": 1,
+                  "n": 185,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 12.74294267
+                },
+                {
+                  "quartile": 2,
+                  "n": 185,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 13.67738024
+                },
+                {
+                  "quartile": 3,
+                  "n": 185,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 14.42981318
+                },
+                {
+                  "quartile": 4,
+                  "n": 185,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 14.37051851
+                }
+              ]
+            },
+            "neutral": {
+              "n": 22,
+              "marginBias": -0.12620657,
+              "mae": 12.8499706
+            },
+            "nonNeutral": {
+              "n": 718,
+              "marginBias": -0.67766824,
+              "mae": 13.8344314
+            }
+          }
+        }
+      },
+      "breakdowns": {
+        "byWeekBand": {
+          "weeks1To3": {
+            "n": 426,
+            "probabilityN": 426,
+            "marginBias": -1.66426295,
+            "mae": 13.71640669,
+            "rmse": 17.26229129,
+            "brier": 0.16873486,
+            "logLoss": 0.50422922,
+            "calibrationInterceptSlope": {
+              "intercept": -0.06721688,
+              "slope": 1.25766892,
+              "n": 426
+            },
+            "reliability": {
+              "bins": [
+                {
+                  "label": "0.00-0.35",
+                  "n": 55,
+                  "meanPredicted": 0.25447083,
+                  "observed": 0.21818182,
+                  "absoluteGap": 0.03628901
+                },
+                {
+                  "label": "0.35-0.45",
+                  "n": 50,
+                  "meanPredicted": 0.40658345,
+                  "observed": 0.34,
+                  "absoluteGap": 0.06658345
+                },
+                {
+                  "label": "0.45-0.55",
+                  "n": 57,
+                  "meanPredicted": 0.50102706,
+                  "observed": 0.49122807,
+                  "absoluteGap": 0.00979899
+                },
+                {
+                  "label": "0.55-0.65",
+                  "n": 54,
+                  "meanPredicted": 0.59797404,
+                  "observed": 0.57407407,
+                  "absoluteGap": 0.02389997
+                },
+                {
+                  "label": "0.65-1.00",
+                  "n": 210,
+                  "meanPredicted": 0.82037106,
+                  "observed": 0.86190476,
+                  "absoluteGap": 0.04153371
+                }
+              ],
+              "ece": 0.03731523
+            },
+            "uncertainty": {
+              "exactHistoricalV1Reconstruction": false,
+              "correlationWithAbsoluteMarginError": null,
+              "bins": [
+                {
+                  "quartile": 1,
+                  "n": 106,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 12.93040031
+                },
+                {
+                  "quartile": 2,
+                  "n": 107,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 14.26737184
+                },
+                {
+                  "quartile": 3,
+                  "n": 106,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 14.4588311
+                },
+                {
+                  "quartile": 4,
+                  "n": 107,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 13.20861618
+                }
+              ]
+            },
+            "neutral": {
+              "n": 22,
+              "marginBias": -4.47887818,
+              "mae": 14.26325175
+            },
+            "nonNeutral": {
+              "n": 404,
+              "marginBias": -1.51099182,
+              "mae": 13.68662799
+            }
+          },
+          "weeks4To6": {
+            "n": 465,
+            "probabilityN": 465,
+            "marginBias": -0.25099701,
+            "mae": 12.65518051,
+            "rmse": 16.26923477,
+            "brier": 0.19673707,
+            "logLoss": 0.57280726,
+            "calibrationInterceptSlope": {
+              "intercept": 0.10089794,
+              "slope": 1.07865164,
+              "n": 465
+            },
+            "reliability": {
+              "bins": [
+                {
+                  "label": "0.00-0.35",
+                  "n": 60,
+                  "meanPredicted": 0.25053878,
+                  "observed": 0.21666667,
+                  "absoluteGap": 0.03387212
+                },
+                {
+                  "label": "0.35-0.45",
+                  "n": 54,
+                  "meanPredicted": 0.40239949,
+                  "observed": 0.46296296,
+                  "absoluteGap": 0.06056348
+                },
+                {
+                  "label": "0.45-0.55",
+                  "n": 88,
+                  "meanPredicted": 0.50420395,
+                  "observed": 0.56818182,
+                  "absoluteGap": 0.06397787
+                },
+                {
+                  "label": "0.55-0.65",
+                  "n": 80,
+                  "meanPredicted": 0.59791897,
+                  "observed": 0.575,
+                  "absoluteGap": 0.02291897
+                },
+                {
+                  "label": "0.65-1.00",
+                  "n": 183,
+                  "meanPredicted": 0.78588718,
+                  "observed": 0.81967213,
+                  "absoluteGap": 0.03378495
+                }
+              ],
+              "ece": 0.04075048
+            },
+            "uncertainty": {
+              "exactHistoricalV1Reconstruction": false,
+              "correlationWithAbsoluteMarginError": null,
+              "bins": [
+                {
+                  "quartile": 1,
+                  "n": 116,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 10.34013117
+                },
+                {
+                  "quartile": 2,
+                  "n": 116,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 13.4221946
+                },
+                {
+                  "quartile": 3,
+                  "n": 116,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 14.41674338
+                },
+                {
+                  "quartile": 4,
+                  "n": 117,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 12.44347792
+                }
+              ]
+            },
+            "neutral": {
+              "n": 8,
+              "marginBias": 5.34345997,
+              "mae": 9.2945733
+            },
+            "nonNeutral": {
+              "n": 457,
+              "marginBias": -0.34893061,
+              "mae": 12.71400952
+            }
+          },
+          "week7Plus": {
+            "n": 1319,
+            "probabilityN": 1319,
+            "marginBias": -0.06456304,
+            "mae": 13.92192566,
+            "rmse": 17.61963248,
+            "brier": 0.21381847,
+            "logLoss": 0.61387516,
+            "calibrationInterceptSlope": {
+              "intercept": -0.0079434,
+              "slope": 0.93918629,
+              "n": 1319
+            },
+            "reliability": {
+              "bins": [
+                {
+                  "label": "0.00-0.35",
+                  "n": 175,
+                  "meanPredicted": 0.24878282,
+                  "observed": 0.25142857,
+                  "absoluteGap": 0.00264575
+                },
+                {
+                  "label": "0.35-0.45",
+                  "n": 173,
+                  "meanPredicted": 0.40483091,
+                  "observed": 0.43930636,
+                  "absoluteGap": 0.03447544
+                },
+                {
+                  "label": "0.45-0.55",
+                  "n": 238,
+                  "meanPredicted": 0.50336011,
+                  "observed": 0.46218487,
+                  "absoluteGap": 0.04117524
+                },
+                {
+                  "label": "0.55-0.65",
+                  "n": 291,
+                  "meanPredicted": 0.59924805,
+                  "observed": 0.62886598,
+                  "absoluteGap": 0.02961793
+                },
+                {
+                  "label": "0.65-1.00",
+                  "n": 442,
+                  "meanPredicted": 0.77019552,
+                  "observed": 0.74434389,
+                  "absoluteGap": 0.02585163
+                }
+              ],
+              "ece": 0.02749977
+            },
+            "uncertainty": {
+              "exactHistoricalV1Reconstruction": false,
+              "correlationWithAbsoluteMarginError": null,
+              "bins": [
+                {
+                  "quartile": 1,
+                  "n": 329,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 13.6070469
+                },
+                {
+                  "quartile": 2,
+                  "n": 330,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 13.67251849
+                },
+                {
+                  "quartile": 3,
+                  "n": 330,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 13.23281432
+                },
+                {
+                  "quartile": 4,
+                  "n": 330,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 15.17436875
+                }
+              ]
+            },
+            "neutral": {
+              "n": 48,
+              "marginBias": 0.15561734,
+              "mae": 13.08201203
+            },
+            "nonNeutral": {
+              "n": 1271,
+              "marginBias": -0.07287827,
+              "mae": 13.95364545
+            }
+          }
+        },
+        "byMinimumPriorGames": {
+          "0": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.41214854,
+            "mae": 13.61577744,
+            "rmse": 17.27483084,
+            "brier": 0.2015341,
+            "logLoss": 0.5840988,
+            "calibrationInterceptSlope": {
+              "intercept": 0.0051669,
+              "slope": 1.03684256,
+              "n": 2210
+            },
+            "reliability": {
+              "bins": [
+                {
+                  "label": "0.00-0.35",
+                  "n": 290,
+                  "meanPredicted": 0.25022488,
+                  "observed": 0.23793103,
+                  "absoluteGap": 0.01229385
+                },
+                {
+                  "label": "0.35-0.45",
+                  "n": 277,
+                  "meanPredicted": 0.40467326,
+                  "observed": 0.42599278,
+                  "absoluteGap": 0.02131952
+                },
+                {
+                  "label": "0.45-0.55",
+                  "n": 383,
+                  "meanPredicted": 0.50320678,
+                  "observed": 0.49086162,
+                  "absoluteGap": 0.01234516
+                },
+                {
+                  "label": "0.55-0.65",
+                  "n": 425,
+                  "meanPredicted": 0.59883599,
+                  "observed": 0.61176471,
+                  "absoluteGap": 0.01292871
+                },
+                {
+                  "label": "0.65-1.00",
+                  "n": 835,
+                  "meanPredicted": 0.78625353,
+                  "observed": 0.79041916,
+                  "absoluteGap": 0.00416564
+                }
+              ],
+              "ece": 0.01048504
+            },
+            "uncertainty": {
+              "exactHistoricalV1Reconstruction": false,
+              "correlationWithAbsoluteMarginError": null,
+              "bins": [
+                {
+                  "quartile": 1,
+                  "n": 552,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 12.68797657
+                },
+                {
+                  "quartile": 2,
+                  "n": 553,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 13.66878948
+                },
+                {
+                  "quartile": 3,
+                  "n": 552,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 13.95223279
+                },
+                {
+                  "quartile": 4,
+                  "n": 553,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 14.15304157
+                }
+              ]
+            },
+            "neutral": {
+              "n": 78,
+              "marginBias": -0.61946164,
+              "mae": 13.02672695
+            },
+            "nonNeutral": {
+              "n": 2132,
+              "marginBias": -0.40456391,
+              "mae": 13.63732806
+            }
+          },
+          "1": {
+            "n": 0,
+            "probabilityN": 0,
+            "marginBias": null,
+            "mae": null,
+            "rmse": 0,
+            "brier": null,
+            "logLoss": null,
+            "calibrationInterceptSlope": null,
+            "reliability": {
+              "bins": [
+                {
+                  "label": "0.00-0.35",
+                  "n": 0,
+                  "meanPredicted": null,
+                  "observed": null,
+                  "absoluteGap": null
+                },
+                {
+                  "label": "0.35-0.45",
+                  "n": 0,
+                  "meanPredicted": null,
+                  "observed": null,
+                  "absoluteGap": null
+                },
+                {
+                  "label": "0.45-0.55",
+                  "n": 0,
+                  "meanPredicted": null,
+                  "observed": null,
+                  "absoluteGap": null
+                },
+                {
+                  "label": "0.55-0.65",
+                  "n": 0,
+                  "meanPredicted": null,
+                  "observed": null,
+                  "absoluteGap": null
+                },
+                {
+                  "label": "0.65-1.00",
+                  "n": 0,
+                  "meanPredicted": null,
+                  "observed": null,
+                  "absoluteGap": null
+                }
+              ],
+              "ece": null
+            },
+            "uncertainty": {
+              "exactHistoricalV1Reconstruction": false,
+              "correlationWithAbsoluteMarginError": null,
+              "bins": [
+                {
+                  "quartile": 1,
+                  "n": 0,
+                  "meanUncertainty": null,
+                  "meanAbsoluteMarginError": null
+                },
+                {
+                  "quartile": 2,
+                  "n": 0,
+                  "meanUncertainty": null,
+                  "meanAbsoluteMarginError": null
+                },
+                {
+                  "quartile": 3,
+                  "n": 0,
+                  "meanUncertainty": null,
+                  "meanAbsoluteMarginError": null
+                },
+                {
+                  "quartile": 4,
+                  "n": 0,
+                  "meanUncertainty": null,
+                  "meanAbsoluteMarginError": null
+                }
+              ]
+            },
+            "neutral": {
+              "n": 0,
+              "marginBias": null,
+              "mae": null
+            },
+            "nonNeutral": {
+              "n": 0,
+              "marginBias": null,
+              "mae": null
+            }
+          },
+          "2": {
+            "n": 0,
+            "probabilityN": 0,
+            "marginBias": null,
+            "mae": null,
+            "rmse": 0,
+            "brier": null,
+            "logLoss": null,
+            "calibrationInterceptSlope": null,
+            "reliability": {
+              "bins": [
+                {
+                  "label": "0.00-0.35",
+                  "n": 0,
+                  "meanPredicted": null,
+                  "observed": null,
+                  "absoluteGap": null
+                },
+                {
+                  "label": "0.35-0.45",
+                  "n": 0,
+                  "meanPredicted": null,
+                  "observed": null,
+                  "absoluteGap": null
+                },
+                {
+                  "label": "0.45-0.55",
+                  "n": 0,
+                  "meanPredicted": null,
+                  "observed": null,
+                  "absoluteGap": null
+                },
+                {
+                  "label": "0.55-0.65",
+                  "n": 0,
+                  "meanPredicted": null,
+                  "observed": null,
+                  "absoluteGap": null
+                },
+                {
+                  "label": "0.65-1.00",
+                  "n": 0,
+                  "meanPredicted": null,
+                  "observed": null,
+                  "absoluteGap": null
+                }
+              ],
+              "ece": null
+            },
+            "uncertainty": {
+              "exactHistoricalV1Reconstruction": false,
+              "correlationWithAbsoluteMarginError": null,
+              "bins": [
+                {
+                  "quartile": 1,
+                  "n": 0,
+                  "meanUncertainty": null,
+                  "meanAbsoluteMarginError": null
+                },
+                {
+                  "quartile": 2,
+                  "n": 0,
+                  "meanUncertainty": null,
+                  "meanAbsoluteMarginError": null
+                },
+                {
+                  "quartile": 3,
+                  "n": 0,
+                  "meanUncertainty": null,
+                  "meanAbsoluteMarginError": null
+                },
+                {
+                  "quartile": 4,
+                  "n": 0,
+                  "meanUncertainty": null,
+                  "meanAbsoluteMarginError": null
+                }
+              ]
+            },
+            "neutral": {
+              "n": 0,
+              "marginBias": null,
+              "mae": null
+            },
+            "nonNeutral": {
+              "n": 0,
+              "marginBias": null,
+              "mae": null
+            }
+          },
+          "3": {
+            "n": 0,
+            "probabilityN": 0,
+            "marginBias": null,
+            "mae": null,
+            "rmse": 0,
+            "brier": null,
+            "logLoss": null,
+            "calibrationInterceptSlope": null,
+            "reliability": {
+              "bins": [
+                {
+                  "label": "0.00-0.35",
+                  "n": 0,
+                  "meanPredicted": null,
+                  "observed": null,
+                  "absoluteGap": null
+                },
+                {
+                  "label": "0.35-0.45",
+                  "n": 0,
+                  "meanPredicted": null,
+                  "observed": null,
+                  "absoluteGap": null
+                },
+                {
+                  "label": "0.45-0.55",
+                  "n": 0,
+                  "meanPredicted": null,
+                  "observed": null,
+                  "absoluteGap": null
+                },
+                {
+                  "label": "0.55-0.65",
+                  "n": 0,
+                  "meanPredicted": null,
+                  "observed": null,
+                  "absoluteGap": null
+                },
+                {
+                  "label": "0.65-1.00",
+                  "n": 0,
+                  "meanPredicted": null,
+                  "observed": null,
+                  "absoluteGap": null
+                }
+              ],
+              "ece": null
+            },
+            "uncertainty": {
+              "exactHistoricalV1Reconstruction": false,
+              "correlationWithAbsoluteMarginError": null,
+              "bins": [
+                {
+                  "quartile": 1,
+                  "n": 0,
+                  "meanUncertainty": null,
+                  "meanAbsoluteMarginError": null
+                },
+                {
+                  "quartile": 2,
+                  "n": 0,
+                  "meanUncertainty": null,
+                  "meanAbsoluteMarginError": null
+                },
+                {
+                  "quartile": 3,
+                  "n": 0,
+                  "meanUncertainty": null,
+                  "meanAbsoluteMarginError": null
+                },
+                {
+                  "quartile": 4,
+                  "n": 0,
+                  "meanUncertainty": null,
+                  "meanAbsoluteMarginError": null
+                }
+              ]
+            },
+            "neutral": {
+              "n": 0,
+              "marginBias": null,
+              "mae": null
+            },
+            "nonNeutral": {
+              "n": 0,
+              "marginBias": null,
+              "mae": null
+            }
+          },
+          "4+": {
+            "n": 0,
+            "probabilityN": 0,
+            "marginBias": null,
+            "mae": null,
+            "rmse": 0,
+            "brier": null,
+            "logLoss": null,
+            "calibrationInterceptSlope": null,
+            "reliability": {
+              "bins": [
+                {
+                  "label": "0.00-0.35",
+                  "n": 0,
+                  "meanPredicted": null,
+                  "observed": null,
+                  "absoluteGap": null
+                },
+                {
+                  "label": "0.35-0.45",
+                  "n": 0,
+                  "meanPredicted": null,
+                  "observed": null,
+                  "absoluteGap": null
+                },
+                {
+                  "label": "0.45-0.55",
+                  "n": 0,
+                  "meanPredicted": null,
+                  "observed": null,
+                  "absoluteGap": null
+                },
+                {
+                  "label": "0.55-0.65",
+                  "n": 0,
+                  "meanPredicted": null,
+                  "observed": null,
+                  "absoluteGap": null
+                },
+                {
+                  "label": "0.65-1.00",
+                  "n": 0,
+                  "meanPredicted": null,
+                  "observed": null,
+                  "absoluteGap": null
+                }
+              ],
+              "ece": null
+            },
+            "uncertainty": {
+              "exactHistoricalV1Reconstruction": false,
+              "correlationWithAbsoluteMarginError": null,
+              "bins": [
+                {
+                  "quartile": 1,
+                  "n": 0,
+                  "meanUncertainty": null,
+                  "meanAbsoluteMarginError": null
+                },
+                {
+                  "quartile": 2,
+                  "n": 0,
+                  "meanUncertainty": null,
+                  "meanAbsoluteMarginError": null
+                },
+                {
+                  "quartile": 3,
+                  "n": 0,
+                  "meanUncertainty": null,
+                  "meanAbsoluteMarginError": null
+                },
+                {
+                  "quartile": 4,
+                  "n": 0,
+                  "meanUncertainty": null,
+                  "meanAbsoluteMarginError": null
+                }
+              ]
+            },
+            "neutral": {
+              "n": 0,
+              "marginBias": null,
+              "mae": null
+            },
+            "nonNeutral": {
+              "n": 0,
+              "marginBias": null,
+              "mae": null
+            }
+          }
+        }
+      }
+    },
+    "phase3Updater": {
+      "validation": {
+        "metrics": {
+          "n": 2210,
+          "probabilityN": 2210,
+          "marginBias": -0.35386339,
+          "mae": 12.84559772,
+          "rmse": 16.22911986,
+          "brier": 0.18613123,
+          "logLoss": 0.5484734,
+          "calibrationInterceptSlope": {
+            "intercept": -0.04318226,
+            "slope": 1.24798095,
+            "n": 2210
+          },
+          "reliability": {
+            "bins": [
+              {
+                "label": "0.00-0.35",
+                "n": 342,
+                "meanPredicted": 0.25054793,
+                "observed": 0.20467836,
+                "absoluteGap": 0.04586956
+              },
+              {
+                "label": "0.35-0.45",
+                "n": 268,
+                "meanPredicted": 0.40393831,
+                "observed": 0.38059701,
+                "absoluteGap": 0.02334129
+              },
+              {
+                "label": "0.45-0.55",
+                "n": 339,
+                "meanPredicted": 0.50281319,
+                "observed": 0.48672566,
+                "absoluteGap": 0.01608752
+              },
+              {
+                "label": "0.55-0.65",
+                "n": 398,
+                "meanPredicted": 0.60060867,
+                "observed": 0.60050251,
+                "absoluteGap": 0.00010616
+              },
+              {
+                "label": "0.65-1.00",
+                "n": 863,
+                "meanPredicted": 0.79294891,
+                "observed": 0.83314021,
+                "absoluteGap": 0.0401913
+              }
+            ],
+            "ece": 0.02811035
+          },
+          "uncertainty": {
+            "exactHistoricalV1Reconstruction": false,
+            "correlationWithAbsoluteMarginError": null,
+            "bins": [
+              {
+                "quartile": 1,
+                "n": 552,
+                "meanUncertainty": 0,
+                "meanAbsoluteMarginError": 12.44468314
+              },
+              {
+                "quartile": 2,
+                "n": 553,
+                "meanUncertainty": 0,
+                "meanAbsoluteMarginError": 12.99053162
+              },
+              {
+                "quartile": 3,
+                "n": 552,
+                "meanUncertainty": 0,
+                "meanAbsoluteMarginError": 13.22574356
+              },
+              {
+                "quartile": 4,
+                "n": 553,
+                "meanUncertainty": 0,
+                "meanAbsoluteMarginError": 12.72139502
+              }
+            ]
+          },
+          "neutral": {
+            "n": 78,
+            "marginBias": -0.0437113,
+            "mae": 12.28582651
+          },
+          "nonNeutral": {
+            "n": 2132,
+            "marginBias": -0.36521041,
+            "mae": 12.86607716
+          }
+        },
+        "bySeason": {
+          "2023": {
+            "n": 729,
+            "probabilityN": 729,
+            "marginBias": 0.06508809,
+            "mae": 12.47951079,
+            "rmse": 15.74213259,
+            "brier": 0.17861117,
+            "logLoss": 0.53171004,
+            "calibrationInterceptSlope": {
+              "intercept": -0.08728202,
+              "slope": 1.37641541,
+              "n": 729
+            },
+            "reliability": {
+              "bins": [
+                {
+                  "label": "0.00-0.35",
+                  "n": 125,
+                  "meanPredicted": 0.24925779,
+                  "observed": 0.176,
+                  "absoluteGap": 0.07325779
+                },
+                {
+                  "label": "0.35-0.45",
+                  "n": 91,
+                  "meanPredicted": 0.40955205,
+                  "observed": 0.34065934,
+                  "absoluteGap": 0.06889271
+                },
+                {
+                  "label": "0.45-0.55",
+                  "n": 96,
+                  "meanPredicted": 0.50289178,
+                  "observed": 0.51041667,
+                  "absoluteGap": 0.00752489
+                },
+                {
+                  "label": "0.55-0.65",
+                  "n": 127,
+                  "meanPredicted": 0.60365762,
+                  "observed": 0.60629921,
+                  "absoluteGap": 0.0026416
+                },
+                {
+                  "label": "0.65-1.00",
+                  "n": 290,
+                  "meanPredicted": 0.7903763,
+                  "observed": 0.84137931,
+                  "absoluteGap": 0.05100301
+                }
+              ],
+              "ece": 0.04290152
+            },
+            "uncertainty": {
+              "exactHistoricalV1Reconstruction": false,
+              "correlationWithAbsoluteMarginError": null,
+              "bins": [
+                {
+                  "quartile": 1,
+                  "n": 182,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 11.16881507
+                },
+                {
+                  "quartile": 2,
+                  "n": 182,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 12.80430053
+                },
+                {
+                  "quartile": 3,
+                  "n": 182,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 13.51430888
+                },
+                {
+                  "quartile": 4,
+                  "n": 183,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 12.43088583
+                }
+              ]
+            },
+            "neutral": {
+              "n": 21,
+              "marginBias": -1.12030075,
+              "mae": 11.16152574
+            },
+            "nonNeutral": {
+              "n": 708,
+              "marginBias": 0.10024793,
+              "mae": 12.51860356
+            }
+          },
+          "2024": {
+            "n": 741,
+            "probabilityN": 741,
+            "marginBias": -0.38929438,
+            "mae": 13.44284878,
+            "rmse": 16.85607501,
+            "brier": 0.19642439,
+            "logLoss": 0.56965493,
+            "calibrationInterceptSlope": {
+              "intercept": -0.02964221,
+              "slope": 1.08552689,
+              "n": 741
+            },
+            "reliability": {
+              "bins": [
+                {
+                  "label": "0.00-0.35",
+                  "n": 107,
+                  "meanPredicted": 0.25904161,
+                  "observed": 0.28037383,
+                  "absoluteGap": 0.02133223
+                },
+                {
+                  "label": "0.35-0.45",
+                  "n": 98,
+                  "meanPredicted": 0.40418258,
+                  "observed": 0.40816327,
+                  "absoluteGap": 0.00398068
+                },
+                {
+                  "label": "0.45-0.55",
+                  "n": 109,
+                  "meanPredicted": 0.50016229,
+                  "observed": 0.47706422,
+                  "absoluteGap": 0.02309807
+                },
+                {
+                  "label": "0.55-0.65",
+                  "n": 136,
+                  "meanPredicted": 0.59940279,
+                  "observed": 0.56617647,
+                  "absoluteGap": 0.03322632
+                },
+                {
+                  "label": "0.65-1.00",
+                  "n": 291,
+                  "meanPredicted": 0.79633735,
+                  "observed": 0.80756014,
+                  "absoluteGap": 0.01122279
+                }
+              ],
+              "ece": 0.01751006
+            },
+            "uncertainty": {
+              "exactHistoricalV1Reconstruction": false,
+              "correlationWithAbsoluteMarginError": null,
+              "bins": [
+                {
+                  "quartile": 1,
+                  "n": 185,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 13.74875547
+                },
+                {
+                  "quartile": 2,
+                  "n": 185,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 12.62200029
+                },
+                {
+                  "quartile": 3,
+                  "n": 185,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 12.90068581
+                },
+                {
+                  "quartile": 4,
+                  "n": 186,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 14.49427018
+                }
+              ]
+            },
+            "neutral": {
+              "n": 35,
+              "marginBias": 0.59530767,
+              "mae": 13.88704051
+            },
+            "nonNeutral": {
+              "n": 706,
+              "marginBias": -0.4381061,
+              "mae": 13.42082794
+            }
+          },
+          "2025": {
+            "n": 740,
+            "probabilityN": 740,
+            "marginBias": -0.73110833,
+            "mae": 12.60818468,
+            "rmse": 16.06086922,
+            "brier": 0.18323244,
+            "logLoss": 0.54377743,
+            "calibrationInterceptSlope": {
+              "intercept": -0.01474773,
+              "slope": 1.30310549,
+              "n": 740
+            },
+            "reliability": {
+              "bins": [
+                {
+                  "label": "0.00-0.35",
+                  "n": 110,
+                  "meanPredicted": 0.24375196,
+                  "observed": 0.16363636,
+                  "absoluteGap": 0.0801156
+                },
+                {
+                  "label": "0.35-0.45",
+                  "n": 79,
+                  "meanPredicted": 0.39716881,
+                  "observed": 0.39240506,
+                  "absoluteGap": 0.00476375
+                },
+                {
+                  "label": "0.45-0.55",
+                  "n": 134,
+                  "meanPredicted": 0.50491321,
+                  "observed": 0.47761194,
+                  "absoluteGap": 0.02730127
+                },
+                {
+                  "label": "0.55-0.65",
+                  "n": 135,
+                  "meanPredicted": 0.59895522,
+                  "observed": 0.62962963,
+                  "absoluteGap": 0.03067441
+                },
+                {
+                  "label": "0.65-1.00",
+                  "n": 282,
+                  "meanPredicted": 0.79209792,
+                  "observed": 0.85106383,
+                  "absoluteGap": 0.05896591
+                }
+              ],
+              "ece": 0.04542818
+            },
+            "uncertainty": {
+              "exactHistoricalV1Reconstruction": false,
+              "correlationWithAbsoluteMarginError": null,
+              "bins": [
+                {
+                  "quartile": 1,
+                  "n": 185,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 12.26286299
+                },
+                {
+                  "quartile": 2,
+                  "n": 185,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 12.63162909
+                },
+                {
+                  "quartile": 3,
+                  "n": 185,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 12.7286817
+                },
+                {
+                  "quartile": 4,
+                  "n": 185,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 12.80956494
+                }
+              ]
+            },
+            "neutral": {
+              "n": 22,
+              "marginBias": -0.0326788,
+              "mae": 10.81163681
+            },
+            "nonNeutral": {
+              "n": 718,
+              "marginBias": -0.75250868,
+              "mae": 12.66323211
+            }
+          }
+        }
+      },
+      "breakdowns": {
+        "byWeekBand": {
+          "weeks1To3": {
+            "n": 426,
+            "probabilityN": 426,
+            "marginBias": -1.66426295,
+            "mae": 13.71640669,
+            "rmse": 17.26229129,
+            "brier": 0.16873486,
+            "logLoss": 0.50422922,
+            "calibrationInterceptSlope": {
+              "intercept": -0.06721688,
+              "slope": 1.25766892,
+              "n": 426
+            },
+            "reliability": {
+              "bins": [
+                {
+                  "label": "0.00-0.35",
+                  "n": 55,
+                  "meanPredicted": 0.25447083,
+                  "observed": 0.21818182,
+                  "absoluteGap": 0.03628901
+                },
+                {
+                  "label": "0.35-0.45",
+                  "n": 50,
+                  "meanPredicted": 0.40658345,
+                  "observed": 0.34,
+                  "absoluteGap": 0.06658345
+                },
+                {
+                  "label": "0.45-0.55",
+                  "n": 57,
+                  "meanPredicted": 0.50102706,
+                  "observed": 0.49122807,
+                  "absoluteGap": 0.00979899
+                },
+                {
+                  "label": "0.55-0.65",
+                  "n": 54,
+                  "meanPredicted": 0.59797404,
+                  "observed": 0.57407407,
+                  "absoluteGap": 0.02389997
+                },
+                {
+                  "label": "0.65-1.00",
+                  "n": 210,
+                  "meanPredicted": 0.82037106,
+                  "observed": 0.86190476,
+                  "absoluteGap": 0.04153371
+                }
+              ],
+              "ece": 0.03731523
+            },
+            "uncertainty": {
+              "exactHistoricalV1Reconstruction": false,
+              "correlationWithAbsoluteMarginError": null,
+              "bins": [
+                {
+                  "quartile": 1,
+                  "n": 106,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 12.93040031
+                },
+                {
+                  "quartile": 2,
+                  "n": 107,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 14.26737184
+                },
+                {
+                  "quartile": 3,
+                  "n": 106,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 14.4588311
+                },
+                {
+                  "quartile": 4,
+                  "n": 107,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 13.20861618
+                }
+              ]
+            },
+            "neutral": {
+              "n": 22,
+              "marginBias": -4.47887818,
+              "mae": 14.26325175
+            },
+            "nonNeutral": {
+              "n": 404,
+              "marginBias": -1.51099182,
+              "mae": 13.68662799
+            }
+          },
+          "weeks4To6": {
+            "n": 465,
+            "probabilityN": 465,
+            "marginBias": -0.25099701,
+            "mae": 12.65518051,
+            "rmse": 16.26923477,
+            "brier": 0.19673707,
+            "logLoss": 0.57280726,
+            "calibrationInterceptSlope": {
+              "intercept": 0.10089794,
+              "slope": 1.07865164,
+              "n": 465
+            },
+            "reliability": {
+              "bins": [
+                {
+                  "label": "0.00-0.35",
+                  "n": 60,
+                  "meanPredicted": 0.25053878,
+                  "observed": 0.21666667,
+                  "absoluteGap": 0.03387212
+                },
+                {
+                  "label": "0.35-0.45",
+                  "n": 54,
+                  "meanPredicted": 0.40239949,
+                  "observed": 0.46296296,
+                  "absoluteGap": 0.06056348
+                },
+                {
+                  "label": "0.45-0.55",
+                  "n": 88,
+                  "meanPredicted": 0.50420395,
+                  "observed": 0.56818182,
+                  "absoluteGap": 0.06397787
+                },
+                {
+                  "label": "0.55-0.65",
+                  "n": 80,
+                  "meanPredicted": 0.59791897,
+                  "observed": 0.575,
+                  "absoluteGap": 0.02291897
+                },
+                {
+                  "label": "0.65-1.00",
+                  "n": 183,
+                  "meanPredicted": 0.78588718,
+                  "observed": 0.81967213,
+                  "absoluteGap": 0.03378495
+                }
+              ],
+              "ece": 0.04075048
+            },
+            "uncertainty": {
+              "exactHistoricalV1Reconstruction": false,
+              "correlationWithAbsoluteMarginError": null,
+              "bins": [
+                {
+                  "quartile": 1,
+                  "n": 116,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 10.34013117
+                },
+                {
+                  "quartile": 2,
+                  "n": 116,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 13.4221946
+                },
+                {
+                  "quartile": 3,
+                  "n": 116,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 14.41674338
+                },
+                {
+                  "quartile": 4,
+                  "n": 117,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 12.44347792
+                }
+              ]
+            },
+            "neutral": {
+              "n": 8,
+              "marginBias": 5.34345997,
+              "mae": 9.2945733
+            },
+            "nonNeutral": {
+              "n": 457,
+              "marginBias": -0.34893061,
+              "mae": 12.71400952
+            }
+          },
+          "week7Plus": {
+            "n": 1319,
+            "probabilityN": 1319,
+            "marginBias": 0.03309442,
+            "mae": 12.63148051,
+            "rmse": 15.86660461,
+            "brier": 0.18801079,
+            "logLoss": 0.55418438,
+            "calibrationInterceptSlope": {
+              "intercept": -0.08587417,
+              "slope": 1.30515825,
+              "n": 1319
+            },
+            "reliability": {
+              "bins": [
+                {
+                  "label": "0.00-0.35",
+                  "n": 227,
+                  "meanPredicted": 0.24959986,
+                  "observed": 0.19823789,
+                  "absoluteGap": 0.05136198
+                },
+                {
+                  "label": "0.35-0.45",
+                  "n": 164,
+                  "meanPredicted": 0.40363854,
+                  "observed": 0.36585366,
+                  "absoluteGap": 0.03778488
+                },
+                {
+                  "label": "0.45-0.55",
+                  "n": 194,
+                  "meanPredicted": 0.50270712,
+                  "observed": 0.44845361,
+                  "absoluteGap": 0.05425351
+                },
+                {
+                  "label": "0.55-0.65",
+                  "n": 264,
+                  "meanPredicted": 0.60196264,
+                  "observed": 0.61363636,
+                  "absoluteGap": 0.01167373
+                },
+                {
+                  "label": "0.65-1.00",
+                  "n": 470,
+                  "meanPredicted": 0.78344603,
+                  "observed": 0.82553191,
+                  "absoluteGap": 0.04208589
+                }
+              ],
+              "ece": 0.03885012
+            },
+            "uncertainty": {
+              "exactHistoricalV1Reconstruction": false,
+              "correlationWithAbsoluteMarginError": null,
+              "bins": [
+                {
+                  "quartile": 1,
+                  "n": 329,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 13.22114714
+                },
+                {
+                  "quartile": 2,
+                  "n": 330,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 12.24149805
+                },
+                {
+                  "quartile": 3,
+                  "n": 330,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 12.02616151
+                },
+                {
+                  "quartile": 4,
+                  "n": 330,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 13.03890219
+                }
+              ]
+            },
+            "neutral": {
+              "n": 48,
+              "marginBias": 1.09121165,
+              "mae": 11.87804882
+            },
+            "nonNeutral": {
+              "n": 1271,
+              "marginBias": -0.00686595,
+              "mae": 12.65993426
+            }
+          }
+        },
+        "byMinimumPriorGames": {
+          "0": {
+            "n": 242,
+            "probabilityN": 242,
+            "marginBias": -2.70279857,
+            "mae": 13.6634369,
+            "rmse": 17.33976967,
+            "brier": 0.16796226,
+            "logLoss": 0.50633754,
+            "calibrationInterceptSlope": {
+              "intercept": 0.05987093,
+              "slope": 1.14903247,
+              "n": 242
+            },
+            "reliability": {
+              "bins": [
+                {
+                  "label": "0.00-0.35",
+                  "n": 25,
+                  "meanPredicted": 0.2648798,
+                  "observed": 0.32,
+                  "absoluteGap": 0.0551202
+                },
+                {
+                  "label": "0.35-0.45",
+                  "n": 22,
+                  "meanPredicted": 0.41075451,
+                  "observed": 0.36363636,
+                  "absoluteGap": 0.04711815
+                },
+                {
+                  "label": "0.45-0.55",
+                  "n": 36,
+                  "meanPredicted": 0.50420078,
+                  "observed": 0.41666667,
+                  "absoluteGap": 0.08753411
+                },
+                {
+                  "label": "0.55-0.65",
+                  "n": 27,
+                  "meanPredicted": 0.5972753,
+                  "observed": 0.59259259,
+                  "absoluteGap": 0.00468271
+                },
+                {
+                  "label": "0.65-1.00",
+                  "n": 132,
+                  "meanPredicted": 0.81707929,
+                  "observed": 0.87878788,
+                  "absoluteGap": 0.06170859
+                }
+              ],
+              "ece": 0.05718099
+            },
+            "uncertainty": {
+              "exactHistoricalV1Reconstruction": false,
+              "correlationWithAbsoluteMarginError": null,
+              "bins": [
+                {
+                  "quartile": 1,
+                  "n": 60,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 12.1230685
+                },
+                {
+                  "quartile": 2,
+                  "n": 61,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 14.3474971
+                },
+                {
+                  "quartile": 3,
+                  "n": 60,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 15.52404242
+                },
+                {
+                  "quartile": 4,
+                  "n": 61,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 12.66438938
+                }
+              ]
+            },
+            "neutral": {
+              "n": 19,
+              "marginBias": -6.24257927,
+              "mae": 15.45883434
+            },
+            "nonNeutral": {
+              "n": 223,
+              "marginBias": -2.40120291,
+              "mae": 13.51046582
+            }
+          },
+          "1": {
+            "n": 210,
+            "probabilityN": 210,
+            "marginBias": 0.08716568,
+            "mae": 14.06628514,
+            "rmse": 17.43899964,
+            "brier": 0.18285562,
+            "logLoss": 0.53098071,
+            "calibrationInterceptSlope": {
+              "intercept": -0.27837801,
+              "slope": 1.23881043,
+              "n": 210
+            },
+            "reliability": {
+              "bins": [
+                {
+                  "label": "0.00-0.35",
+                  "n": 32,
+                  "meanPredicted": 0.24596791,
+                  "observed": 0.1875,
+                  "absoluteGap": 0.05846791
+                },
+                {
+                  "label": "0.35-0.45",
+                  "n": 30,
+                  "meanPredicted": 0.40112911,
+                  "observed": 0.3,
+                  "absoluteGap": 0.10112911
+                },
+                {
+                  "label": "0.45-0.55",
+                  "n": 26,
+                  "meanPredicted": 0.49620179,
+                  "observed": 0.53846154,
+                  "absoluteGap": 0.04225975
+                },
+                {
+                  "label": "0.55-0.65",
+                  "n": 37,
+                  "meanPredicted": 0.59924674,
+                  "observed": 0.51351351,
+                  "absoluteGap": 0.08573323
+                },
+                {
+                  "label": "0.65-1.00",
+                  "n": 85,
+                  "meanPredicted": 0.82589396,
+                  "observed": 0.81176471,
+                  "absoluteGap": 0.01412926
+                }
+              ],
+              "ece": 0.04941294
+            },
+            "uncertainty": {
+              "exactHistoricalV1Reconstruction": false,
+              "correlationWithAbsoluteMarginError": null,
+              "bins": [
+                {
+                  "quartile": 1,
+                  "n": 52,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 12.52680166
+                },
+                {
+                  "quartile": 2,
+                  "n": 53,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 14.40123305
+                },
+                {
+                  "quartile": 3,
+                  "n": 52,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 14.78127505
+                },
+                {
+                  "quartile": 4,
+                  "n": 53,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 14.54027429
+                }
+              ]
+            },
+            "neutral": {
+              "n": 3,
+              "marginBias": 6.69122868,
+              "mae": 6.69122868
+            },
+            "nonNeutral": {
+              "n": 207,
+              "marginBias": -0.00854538,
+              "mae": 14.17317001
+            }
+          },
+          "2": {
+            "n": 198,
+            "probabilityN": 198,
+            "marginBias": -0.67561549,
+            "mae": 12.11640142,
+            "rmse": 15.89718673,
+            "brier": 0.18569391,
+            "logLoss": 0.54811455,
+            "calibrationInterceptSlope": {
+              "intercept": 0.03596147,
+              "slope": 1.41145115,
+              "n": 198
+            },
+            "reliability": {
+              "bins": [
+                {
+                  "label": "0.00-0.35",
+                  "n": 21,
+                  "meanPredicted": 0.27720599,
+                  "observed": 0.04761905,
+                  "absoluteGap": 0.22958694
+                },
+                {
+                  "label": "0.35-0.45",
+                  "n": 21,
+                  "meanPredicted": 0.40760344,
+                  "observed": 0.42857143,
+                  "absoluteGap": 0.02096799
+                },
+                {
+                  "label": "0.45-0.55",
+                  "n": 41,
+                  "meanPredicted": 0.50708552,
+                  "observed": 0.6097561,
+                  "absoluteGap": 0.10267058
+                },
+                {
+                  "label": "0.55-0.65",
+                  "n": 40,
+                  "meanPredicted": 0.59884181,
+                  "observed": 0.675,
+                  "absoluteGap": 0.07615819
+                },
+                {
+                  "label": "0.65-1.00",
+                  "n": 75,
+                  "meanPredicted": 0.79061083,
+                  "observed": 0.82666667,
+                  "absoluteGap": 0.03605583
+                }
+              ],
+              "ece": 0.07687708
+            },
+            "uncertainty": {
+              "exactHistoricalV1Reconstruction": false,
+              "correlationWithAbsoluteMarginError": null,
+              "bins": [
+                {
+                  "quartile": 1,
+                  "n": 49,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 10.07923895
+                },
+                {
+                  "quartile": 2,
+                  "n": 50,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 13.40405979
+                },
+                {
+                  "quartile": 3,
+                  "n": 49,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 14.4787408
+                },
+                {
+                  "quartile": 4,
+                  "n": 50,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 10.51006967
+                }
+              ]
+            },
+            "neutral": {
+              "n": 3,
+              "marginBias": -5.26815111,
+              "mae": 5.26815111
+            },
+            "nonNeutral": {
+              "n": 195,
+              "marginBias": -0.6049611,
+              "mae": 12.22175911
+            }
+          },
+          "3": {
+            "n": 198,
+            "probabilityN": 198,
+            "marginBias": -0.34528509,
+            "mae": 12.69423381,
+            "rmse": 16.26510775,
+            "brier": 0.20148819,
+            "logLoss": 0.58556058,
+            "calibrationInterceptSlope": {
+              "intercept": 0.22078908,
+              "slope": 0.94950739,
+              "n": 198
+            },
+            "reliability": {
+              "bins": [
+                {
+                  "label": "0.00-0.35",
+                  "n": 29,
+                  "meanPredicted": 0.23989589,
+                  "observed": 0.31034483,
+                  "absoluteGap": 0.07044894
+                },
+                {
+                  "label": "0.35-0.45",
+                  "n": 26,
+                  "meanPredicted": 0.40047349,
+                  "observed": 0.5,
+                  "absoluteGap": 0.09952651
+                },
+                {
+                  "label": "0.45-0.55",
+                  "n": 37,
+                  "meanPredicted": 0.50030018,
+                  "observed": 0.56756757,
+                  "absoluteGap": 0.06726739
+                },
+                {
+                  "label": "0.55-0.65",
+                  "n": 25,
+                  "meanPredicted": 0.58843656,
+                  "observed": 0.48,
+                  "absoluteGap": 0.10843656
+                },
+                {
+                  "label": "0.65-1.00",
+                  "n": 81,
+                  "meanPredicted": 0.77856579,
+                  "observed": 0.82716049,
+                  "absoluteGap": 0.0485947
+                }
+              ],
+              "ece": 0.06952872
+            },
+            "uncertainty": {
+              "exactHistoricalV1Reconstruction": false,
+              "correlationWithAbsoluteMarginError": null,
+              "bins": [
+                {
+                  "quartile": 1,
+                  "n": 49,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 10.34827364
+                },
+                {
+                  "quartile": 2,
+                  "n": 50,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 12.6978232
+                },
+                {
+                  "quartile": 3,
+                  "n": 49,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 13.92651989
+                },
+                {
+                  "quartile": 4,
+                  "n": 50,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 13.782045
+                }
+              ]
+            },
+            "neutral": {
+              "n": 4,
+              "marginBias": 11.56987202,
+              "mae": 11.56987202
+            },
+            "nonNeutral": {
+              "n": 194,
+              "marginBias": -0.59095843,
+              "mae": 12.71741652
+            }
+          },
+          "4+": {
+            "n": 1362,
+            "probabilityN": 1362,
+            "marginBias": 0.04102254,
+            "mae": 12.6400834,
+            "rmse": 15.87008043,
+            "brier": 0.18769561,
+            "logLoss": 0.55331785,
+            "calibrationInterceptSlope": {
+              "intercept": -0.07793609,
+              "slope": 1.29998793,
+              "n": 1362
+            },
+            "reliability": {
+              "bins": [
+                {
+                  "label": "0.00-0.35",
+                  "n": 235,
+                  "meanPredicted": 0.24857922,
+                  "observed": 0.19574468,
+                  "absoluteGap": 0.05283454
+                },
+                {
+                  "label": "0.35-0.45",
+                  "n": 169,
+                  "meanPredicted": 0.40362728,
+                  "observed": 0.37278107,
+                  "absoluteGap": 0.03084622
+                },
+                {
+                  "label": "0.45-0.55",
+                  "n": 199,
+                  "meanPredicted": 0.50301298,
+                  "observed": 0.45226131,
+                  "absoluteGap": 0.05075167
+                },
+                {
+                  "label": "0.55-0.65",
+                  "n": 269,
+                  "meanPredicted": 0.60252454,
+                  "observed": 0.6133829,
+                  "absoluteGap": 0.01085835
+                },
+                {
+                  "label": "0.65-1.00",
+                  "n": 490,
+                  "meanPredicted": 0.78346901,
+                  "observed": 0.82653061,
+                  "absoluteGap": 0.0430616
+                }
+              ],
+              "ece": 0.03799544
+            },
+            "uncertainty": {
+              "exactHistoricalV1Reconstruction": false,
+              "correlationWithAbsoluteMarginError": null,
+              "bins": [
+                {
+                  "quartile": 1,
+                  "n": 340,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 12.95110909
+                },
+                {
+                  "quartile": 2,
+                  "n": 341,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 12.50026371
+                },
+                {
+                  "quartile": 3,
+                  "n": 340,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 12.25458916
+                },
+                {
+                  "quartile": 4,
+                  "n": 341,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 12.85415325
+                }
+              ]
+            },
+            "neutral": {
+              "n": 49,
+              "marginBias": 1.31940417,
+              "mae": 11.8861018
+            },
+            "nonNeutral": {
+              "n": 1313,
+              "marginBias": -0.00668554,
+              "mae": 12.66822133
+            }
+          }
+        }
+      }
+    }
+  },
+  "walkForward": [
+    {
+      "id": "fold-2023",
+      "train": [
+        2021,
+        2022
+      ],
+      "validate": 2023,
+      "preseasonParams": {
+        "offenseReturningWeight": 1,
+        "talentWeight": 4,
+        "homeFieldAdvantage": 3,
+        "baseSigma": 17
+      },
+      "updaterPriorGames": 4,
+      "preseasonTrainingMetrics": {
+        "n": 1403,
+        "probabilityN": 1403,
+        "marginBias": 0.4979361,
+        "mae": 14.13996758,
+        "rmse": 17.60646407,
+        "brier": 0.21117267,
+        "logLoss": 0.60746199,
+        "calibrationInterceptSlope": {
+          "intercept": 0.05437669,
+          "slope": 0.78136796,
+          "n": 1403
+        },
+        "reliability": {
+          "bins": [
+            {
+              "label": "0.00-0.35",
+              "n": 268,
+              "meanPredicted": 0.24025243,
+              "observed": 0.33208955,
+              "absoluteGap": 0.09183712
+            },
+            {
+              "label": "0.35-0.45",
+              "n": 142,
+              "meanPredicted": 0.39766822,
+              "observed": 0.45070423,
+              "absoluteGap": 0.05303601
+            },
+            {
+              "label": "0.45-0.55",
+              "n": 207,
+              "meanPredicted": 0.50457184,
+              "observed": 0.46376812,
+              "absoluteGap": 0.04080372
+            },
+            {
+              "label": "0.55-0.65",
+              "n": 205,
+              "meanPredicted": 0.60023568,
+              "observed": 0.56585366,
+              "absoluteGap": 0.03438203
+            },
+            {
+              "label": "0.65-1.00",
+              "n": 581,
+              "meanPredicted": 0.79529818,
+              "observed": 0.76592083,
+              "absoluteGap": 0.02937735
+            }
+          ],
+          "ece": 0.04612002
+        },
+        "uncertainty": {
+          "exactHistoricalV1Reconstruction": false,
+          "correlationWithAbsoluteMarginError": null,
+          "bins": [
+            {
+              "quartile": 1,
+              "n": 350,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 15.12294316
+            },
+            {
+              "quartile": 2,
+              "n": 351,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 14.42929198
+            },
+            {
+              "quartile": 3,
+              "n": 351,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 13.50645709
+            },
+            {
+              "quartile": 4,
+              "n": 351,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 13.50397861
+            }
+          ]
+        },
+        "neutral": {
+          "n": 39,
+          "marginBias": 0.87071224,
+          "mae": 15.78966069
+        },
+        "nonNeutral": {
+          "n": 1364,
+          "marginBias": 0.48727755,
+          "mae": 14.09279894
+        }
+      },
+      "updaterTrainingMetrics": {
+        "n": 1403,
+        "probabilityN": 1403,
+        "marginBias": 0.57722183,
+        "mae": 13.29077695,
+        "rmse": 16.5455155,
+        "brier": 0.19537191,
+        "logLoss": 0.57108243,
+        "calibrationInterceptSlope": {
+          "intercept": -0.0079635,
+          "slope": 0.98993141,
+          "n": 1403
+        },
+        "reliability": {
+          "bins": [
+            {
+              "label": "0.00-0.35",
+              "n": 248,
+              "meanPredicted": 0.23474566,
+              "observed": 0.22580645,
+              "absoluteGap": 0.00893921
+            },
+            {
+              "label": "0.35-0.45",
+              "n": 151,
+              "meanPredicted": 0.39846326,
+              "observed": 0.43708609,
+              "absoluteGap": 0.03862283
+            },
+            {
+              "label": "0.45-0.55",
+              "n": 214,
+              "meanPredicted": 0.50210306,
+              "observed": 0.50934579,
+              "absoluteGap": 0.00724273
+            },
+            {
+              "label": "0.55-0.65",
+              "n": 217,
+              "meanPredicted": 0.60081704,
+              "observed": 0.57142857,
+              "absoluteGap": 0.02938847
+            },
+            {
+              "label": "0.65-1.00",
+              "n": 573,
+              "meanPredicted": 0.79696508,
+              "observed": 0.79406632,
+              "absoluteGap": 0.00289876
+            }
+          ],
+          "ece": 0.01257106
+        },
+        "uncertainty": {
+          "exactHistoricalV1Reconstruction": false,
+          "correlationWithAbsoluteMarginError": null,
+          "bins": [
+            {
+              "quartile": 1,
+              "n": 350,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 13.93099949
+            },
+            {
+              "quartile": 2,
+              "n": 351,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 13.58526497
+            },
+            {
+              "quartile": 3,
+              "n": 351,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 12.76200564
+            },
+            {
+              "quartile": 4,
+              "n": 351,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 12.88666168
+            }
+          ]
+        },
+        "neutral": {
+          "n": 39,
+          "marginBias": 1.14713248,
+          "mae": 15.13068158
+        },
+        "nonNeutral": {
+          "n": 1364,
+          "marginBias": 0.56092673,
+          "mae": 13.2381697
+        }
+      },
+      "preseasonValidationMetrics": {
+        "n": 729,
+        "probabilityN": 729,
+        "marginBias": 0.01357166,
+        "mae": 12.80680668,
+        "rmse": 16.17705713,
+        "brier": 0.1876069,
+        "logLoss": 0.55154546,
+        "calibrationInterceptSlope": {
+          "intercept": -0.08142034,
+          "slope": 1.3537079,
+          "n": 729
+        },
+        "reliability": {
+          "bins": [
+            {
+              "label": "0.00-0.35",
+              "n": 103,
+              "meanPredicted": 0.25152683,
+              "observed": 0.2038835,
+              "absoluteGap": 0.04764333
+            },
+            {
+              "label": "0.35-0.45",
+              "n": 92,
+              "meanPredicted": 0.40542711,
+              "observed": 0.31521739,
+              "absoluteGap": 0.09020972
+            },
+            {
+              "label": "0.45-0.55",
+              "n": 118,
+              "meanPredicted": 0.50488611,
+              "observed": 0.5,
+              "absoluteGap": 0.00488611
+            },
+            {
+              "label": "0.55-0.65",
+              "n": 145,
+              "meanPredicted": 0.60261748,
+              "observed": 0.62758621,
+              "absoluteGap": 0.02496872
+            },
+            {
+              "label": "0.65-1.00",
+              "n": 271,
+              "meanPredicted": 0.78335218,
+              "observed": 0.82287823,
+              "absoluteGap": 0.03952605
+            }
+          ],
+          "ece": 0.03856672
+        },
+        "uncertainty": {
+          "exactHistoricalV1Reconstruction": false,
+          "correlationWithAbsoluteMarginError": null,
+          "bins": [
+            {
+              "quartile": 1,
+              "n": 182,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 11.18111114
+            },
+            {
+              "quartile": 2,
+              "n": 182,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 13.34042775
+            },
+            {
+              "quartile": 3,
+              "n": 182,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 13.65114771
+            },
+            {
+              "quartile": 4,
+              "n": 183,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 13.05318637
+            }
+          ]
+        },
+        "neutral": {
+          "n": 21,
+          "marginBias": -1.16598984,
+          "mae": 11.08038361
+        },
+        "nonNeutral": {
+          "n": 708,
+          "marginBias": 0.04855865,
+          "mae": 12.85801414
+        }
+      },
+      "updaterValidationMetrics": {
+        "n": 729,
+        "probabilityN": 729,
+        "marginBias": 0.06508809,
+        "mae": 12.47951079,
+        "rmse": 15.74213259,
+        "brier": 0.17861117,
+        "logLoss": 0.53171004,
+        "calibrationInterceptSlope": {
+          "intercept": -0.08728202,
+          "slope": 1.37641541,
+          "n": 729
+        },
+        "reliability": {
+          "bins": [
+            {
+              "label": "0.00-0.35",
+              "n": 125,
+              "meanPredicted": 0.24925779,
+              "observed": 0.176,
+              "absoluteGap": 0.07325779
+            },
+            {
+              "label": "0.35-0.45",
+              "n": 91,
+              "meanPredicted": 0.40955205,
+              "observed": 0.34065934,
+              "absoluteGap": 0.06889271
+            },
+            {
+              "label": "0.45-0.55",
+              "n": 96,
+              "meanPredicted": 0.50289178,
+              "observed": 0.51041667,
+              "absoluteGap": 0.00752489
+            },
+            {
+              "label": "0.55-0.65",
+              "n": 127,
+              "meanPredicted": 0.60365762,
+              "observed": 0.60629921,
+              "absoluteGap": 0.0026416
+            },
+            {
+              "label": "0.65-1.00",
+              "n": 290,
+              "meanPredicted": 0.7903763,
+              "observed": 0.84137931,
+              "absoluteGap": 0.05100301
+            }
+          ],
+          "ece": 0.04290152
+        },
+        "uncertainty": {
+          "exactHistoricalV1Reconstruction": false,
+          "correlationWithAbsoluteMarginError": null,
+          "bins": [
+            {
+              "quartile": 1,
+              "n": 182,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 11.16881507
+            },
+            {
+              "quartile": 2,
+              "n": 182,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 12.80430053
+            },
+            {
+              "quartile": 3,
+              "n": 182,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 13.51430888
+            },
+            {
+              "quartile": 4,
+              "n": 183,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 12.43088583
+            }
+          ]
+        },
+        "neutral": {
+          "n": 21,
+          "marginBias": -1.12030075,
+          "mae": 11.16152574
+        },
+        "nonNeutral": {
+          "n": 708,
+          "marginBias": 0.10024793,
+          "mae": 12.51860356
+        }
+      }
+    },
+    {
+      "id": "fold-2024",
+      "train": [
+        2021,
+        2022,
+        2023
+      ],
+      "validate": 2024,
+      "preseasonParams": {
+        "offenseReturningWeight": 1.5,
+        "talentWeight": 4,
+        "homeFieldAdvantage": 3,
+        "baseSigma": 17
+      },
+      "updaterPriorGames": 4,
+      "preseasonTrainingMetrics": {
+        "n": 2132,
+        "probabilityN": 2132,
+        "marginBias": 0.33486768,
+        "mae": 13.67769545,
+        "rmse": 17.11911547,
+        "brier": 0.20279595,
+        "logLoss": 0.58754014,
+        "calibrationInterceptSlope": {
+          "intercept": 0.0234048,
+          "slope": 0.91315024,
+          "n": 2132
+        },
+        "reliability": {
+          "bins": [
+            {
+              "label": "0.00-0.35",
+              "n": 380,
+              "meanPredicted": 0.24364981,
+              "observed": 0.28947368,
+              "absoluteGap": 0.04582388
+            },
+            {
+              "label": "0.35-0.45",
+              "n": 236,
+              "meanPredicted": 0.40024828,
+              "observed": 0.41949153,
+              "absoluteGap": 0.01924325
+            },
+            {
+              "label": "0.45-0.55",
+              "n": 314,
+              "meanPredicted": 0.5051062,
+              "observed": 0.47452229,
+              "absoluteGap": 0.03058391
+            },
+            {
+              "label": "0.55-0.65",
+              "n": 341,
+              "meanPredicted": 0.60065304,
+              "observed": 0.59530792,
+              "absoluteGap": 0.00534513
+            },
+            {
+              "label": "0.65-1.00",
+              "n": 861,
+              "meanPredicted": 0.79186513,
+              "observed": 0.7804878,
+              "absoluteGap": 0.01137732
+            }
+          ],
+          "ece": 0.02025159
+        },
+        "uncertainty": {
+          "exactHistoricalV1Reconstruction": false,
+          "correlationWithAbsoluteMarginError": null,
+          "bins": [
+            {
+              "quartile": 1,
+              "n": 533,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 14.96952225
+            },
+            {
+              "quartile": 2,
+              "n": 533,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 13.69468471
+            },
+            {
+              "quartile": 3,
+              "n": 533,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 12.72891681
+            },
+            {
+              "quartile": 4,
+              "n": 533,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 13.31765804
+            }
+          ]
+        },
+        "neutral": {
+          "n": 60,
+          "marginBias": 0.17624521,
+          "mae": 13.96861851
+        },
+        "nonNeutral": {
+          "n": 2072,
+          "marginBias": 0.33946099,
+          "mae": 13.66927104
+        }
+      },
+      "updaterTrainingMetrics": {
+        "n": 2132,
+        "probabilityN": 2132,
+        "marginBias": 0.40713744,
+        "mae": 13.01482655,
+        "rmse": 16.26892653,
+        "brier": 0.1896384,
+        "logLoss": 0.55748579,
+        "calibrationInterceptSlope": {
+          "intercept": -0.0280877,
+          "slope": 1.09262879,
+          "n": 2132
+        },
+        "reliability": {
+          "bins": [
+            {
+              "label": "0.00-0.35",
+              "n": 379,
+              "meanPredicted": 0.24010638,
+              "observed": 0.20580475,
+              "absoluteGap": 0.03430163
+            },
+            {
+              "label": "0.35-0.45",
+              "n": 243,
+              "meanPredicted": 0.40329316,
+              "observed": 0.42386831,
+              "absoluteGap": 0.02057515
+            },
+            {
+              "label": "0.45-0.55",
+              "n": 297,
+              "meanPredicted": 0.50130411,
+              "observed": 0.50505051,
+              "absoluteGap": 0.00374639
+            },
+            {
+              "label": "0.55-0.65",
+              "n": 349,
+              "meanPredicted": 0.60128711,
+              "observed": 0.58739255,
+              "absoluteGap": 0.01389456
+            },
+            {
+              "label": "0.65-1.00",
+              "n": 864,
+              "meanPredicted": 0.79554667,
+              "observed": 0.80671296,
+              "absoluteGap": 0.01116629
+            }
+          ],
+          "ece": 0.01576437
+        },
+        "uncertainty": {
+          "exactHistoricalV1Reconstruction": false,
+          "correlationWithAbsoluteMarginError": null,
+          "bins": [
+            {
+              "quartile": 1,
+              "n": 533,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 13.87950783
+            },
+            {
+              "quartile": 2,
+              "n": 533,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 12.9001148
+            },
+            {
+              "quartile": 3,
+              "n": 533,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 12.35365009
+            },
+            {
+              "quartile": 4,
+              "n": 533,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 12.92603346
+            }
+          ]
+        },
+        "neutral": {
+          "n": 60,
+          "marginBias": 0.40605752,
+          "mae": 13.63585002
+        },
+        "nonNeutral": {
+          "n": 2072,
+          "marginBias": 0.40716871,
+          "mae": 12.99684324
+        }
+      },
+      "preseasonValidationMetrics": {
+        "n": 741,
+        "probabilityN": 741,
+        "marginBias": -0.58218579,
+        "mae": 14.22251682,
+        "rmse": 18.01540686,
+        "brier": 0.21281418,
+        "logLoss": 0.60863619,
+        "calibrationInterceptSlope": {
+          "intercept": 0.04520864,
+          "slope": 0.84564949,
+          "n": 741
+        },
+        "reliability": {
+          "bins": [
+            {
+              "label": "0.00-0.35",
+              "n": 92,
+              "meanPredicted": 0.24843935,
+              "observed": 0.30434783,
+              "absoluteGap": 0.05590847
+            },
+            {
+              "label": "0.35-0.45",
+              "n": 100,
+              "meanPredicted": 0.40530981,
+              "observed": 0.48,
+              "absoluteGap": 0.07469019
+            },
+            {
+              "label": "0.45-0.55",
+              "n": 125,
+              "meanPredicted": 0.49877519,
+              "observed": 0.48,
+              "absoluteGap": 0.01877519
+            },
+            {
+              "label": "0.55-0.65",
+              "n": 138,
+              "meanPredicted": 0.59632224,
+              "observed": 0.58695652,
+              "absoluteGap": 0.00936571
+            },
+            {
+              "label": "0.65-1.00",
+              "n": 286,
+              "meanPredicted": 0.78859823,
+              "observed": 0.75874126,
+              "absoluteGap": 0.02985698
+            }
+          ],
+          "ece": 0.03345622
+        },
+        "uncertainty": {
+          "exactHistoricalV1Reconstruction": false,
+          "correlationWithAbsoluteMarginError": null,
+          "bins": [
+            {
+              "quartile": 1,
+              "n": 185,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 14.42506346
+            },
+            {
+              "quartile": 2,
+              "n": 185,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 13.40934561
+            },
+            {
+              "quartile": 3,
+              "n": 185,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 13.86834165
+            },
+            {
+              "quartile": 4,
+              "n": 186,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 15.18212947
+            }
+          ]
+        },
+        "neutral": {
+          "n": 35,
+          "marginBias": -0.60159076,
+          "mae": 14.30563695
+        },
+        "nonNeutral": {
+          "n": 706,
+          "marginBias": -0.58122379,
+          "mae": 14.21839614
+        }
+      },
+      "updaterValidationMetrics": {
+        "n": 741,
+        "probabilityN": 741,
+        "marginBias": -0.38929438,
+        "mae": 13.44284878,
+        "rmse": 16.85607501,
+        "brier": 0.19642439,
+        "logLoss": 0.56965493,
+        "calibrationInterceptSlope": {
+          "intercept": -0.02964221,
+          "slope": 1.08552689,
+          "n": 741
+        },
+        "reliability": {
+          "bins": [
+            {
+              "label": "0.00-0.35",
+              "n": 107,
+              "meanPredicted": 0.25904161,
+              "observed": 0.28037383,
+              "absoluteGap": 0.02133223
+            },
+            {
+              "label": "0.35-0.45",
+              "n": 98,
+              "meanPredicted": 0.40418258,
+              "observed": 0.40816327,
+              "absoluteGap": 0.00398068
+            },
+            {
+              "label": "0.45-0.55",
+              "n": 109,
+              "meanPredicted": 0.50016229,
+              "observed": 0.47706422,
+              "absoluteGap": 0.02309807
+            },
+            {
+              "label": "0.55-0.65",
+              "n": 136,
+              "meanPredicted": 0.59940279,
+              "observed": 0.56617647,
+              "absoluteGap": 0.03322632
+            },
+            {
+              "label": "0.65-1.00",
+              "n": 291,
+              "meanPredicted": 0.79633735,
+              "observed": 0.80756014,
+              "absoluteGap": 0.01122279
+            }
+          ],
+          "ece": 0.01751006
+        },
+        "uncertainty": {
+          "exactHistoricalV1Reconstruction": false,
+          "correlationWithAbsoluteMarginError": null,
+          "bins": [
+            {
+              "quartile": 1,
+              "n": 185,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 13.74875547
+            },
+            {
+              "quartile": 2,
+              "n": 185,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 12.62200029
+            },
+            {
+              "quartile": 3,
+              "n": 185,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 12.90068581
+            },
+            {
+              "quartile": 4,
+              "n": 186,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 14.49427018
+            }
+          ]
+        },
+        "neutral": {
+          "n": 35,
+          "marginBias": 0.59530767,
+          "mae": 13.88704051
+        },
+        "nonNeutral": {
+          "n": 706,
+          "marginBias": -0.4381061,
+          "mae": 13.42082794
+        }
+      }
+    },
+    {
+      "id": "fold-2025",
+      "train": [
+        2021,
+        2022,
+        2023,
+        2024
+      ],
+      "validate": 2025,
+      "preseasonParams": {
+        "offenseReturningWeight": 1.5,
+        "talentWeight": 4,
+        "homeFieldAdvantage": 3,
+        "baseSigma": 17
+      },
+      "updaterPriorGames": 4,
+      "preseasonTrainingMetrics": {
+        "n": 2873,
+        "probabilityN": 2873,
+        "marginBias": 0.09834257,
+        "mae": 13.81821499,
+        "rmse": 17.35471602,
+        "brier": 0.20537984,
+        "logLoss": 0.5929812,
+        "calibrationInterceptSlope": {
+          "intercept": 0.0283069,
+          "slope": 0.89726476,
+          "n": 2873
+        },
+        "reliability": {
+          "bins": [
+            {
+              "label": "0.00-0.35",
+              "n": 472,
+              "meanPredicted": 0.24458336,
+              "observed": 0.29237288,
+              "absoluteGap": 0.04778952
+            },
+            {
+              "label": "0.35-0.45",
+              "n": 336,
+              "meanPredicted": 0.40175469,
+              "observed": 0.4375,
+              "absoluteGap": 0.03574531
+            },
+            {
+              "label": "0.45-0.55",
+              "n": 439,
+              "meanPredicted": 0.50330352,
+              "observed": 0.476082,
+              "absoluteGap": 0.02722152
+            },
+            {
+              "label": "0.55-0.65",
+              "n": 479,
+              "meanPredicted": 0.59940534,
+              "observed": 0.59290188,
+              "absoluteGap": 0.00650346
+            },
+            {
+              "label": "0.65-1.00",
+              "n": 1147,
+              "meanPredicted": 0.79105054,
+              "observed": 0.77506539,
+              "absoluteGap": 0.01598515
+            }
+          ],
+          "ece": 0.02365731
+        },
+        "uncertainty": {
+          "exactHistoricalV1Reconstruction": false,
+          "correlationWithAbsoluteMarginError": null,
+          "bins": [
+            {
+              "quartile": 1,
+              "n": 718,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 14.76008549
+            },
+            {
+              "quartile": 2,
+              "n": 718,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 13.3624848
+            },
+            {
+              "quartile": 3,
+              "n": 718,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 13.02102968
+            },
+            {
+              "quartile": 4,
+              "n": 719,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 14.1288274
+            }
+          ]
+        },
+        "neutral": {
+          "n": 95,
+          "marginBias": -0.11032594,
+          "mae": 14.0927832
+        },
+        "nonNeutral": {
+          "n": 2778,
+          "marginBias": 0.10547846,
+          "mae": 13.80882551
+        }
+      },
+      "updaterTrainingMetrics": {
+        "n": 2873,
+        "probabilityN": 2873,
+        "marginBias": 0.20172289,
+        "mae": 13.12522142,
+        "rmse": 16.42237207,
+        "brier": 0.19138863,
+        "logLoss": 0.56062444,
+        "calibrationInterceptSlope": {
+          "intercept": -0.02854883,
+          "slope": 1.09092191,
+          "n": 2873
+        },
+        "reliability": {
+          "bins": [
+            {
+              "label": "0.00-0.35",
+              "n": 486,
+              "meanPredicted": 0.24427525,
+              "observed": 0.22222222,
+              "absoluteGap": 0.02205303
+            },
+            {
+              "label": "0.35-0.45",
+              "n": 341,
+              "meanPredicted": 0.40354877,
+              "observed": 0.41935484,
+              "absoluteGap": 0.01580607
+            },
+            {
+              "label": "0.45-0.55",
+              "n": 406,
+              "meanPredicted": 0.50099756,
+              "observed": 0.49753695,
+              "absoluteGap": 0.00346062
+            },
+            {
+              "label": "0.55-0.65",
+              "n": 485,
+              "meanPredicted": 0.60075873,
+              "observed": 0.5814433,
+              "absoluteGap": 0.01931543
+            },
+            {
+              "label": "0.65-1.00",
+              "n": 1155,
+              "meanPredicted": 0.79574588,
+              "observed": 0.80692641,
+              "absoluteGap": 0.01118053
+            }
+          ],
+          "ece": 0.01385108
+        },
+        "uncertainty": {
+          "exactHistoricalV1Reconstruction": false,
+          "correlationWithAbsoluteMarginError": null,
+          "bins": [
+            {
+              "quartile": 1,
+              "n": 718,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 13.74658962
+            },
+            {
+              "quartile": 2,
+              "n": 718,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 12.71767048
+            },
+            {
+              "quartile": 3,
+              "n": 718,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 12.71104389
+            },
+            {
+              "quartile": 4,
+              "n": 719,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 13.32530303
+            }
+          ]
+        },
+        "neutral": {
+          "n": 95,
+          "marginBias": 0.47578126,
+          "mae": 13.72839389
+        },
+        "nonNeutral": {
+          "n": 2778,
+          "marginBias": 0.19235085,
+          "mae": 13.10459457
+        }
+      },
+      "preseasonValidationMetrics": {
+        "n": 740,
+        "probabilityN": 740,
+        "marginBias": -0.66127343,
+        "mae": 13.80516365,
+        "rmse": 17.56206384,
+        "brier": 0.20395893,
+        "logLoss": 0.5915977,
+        "calibrationInterceptSlope": {
+          "intercept": 0.04229546,
+          "slope": 0.98056035,
+          "n": 740
+        },
+        "reliability": {
+          "bins": [
+            {
+              "label": "0.00-0.35",
+              "n": 95,
+              "meanPredicted": 0.25054245,
+              "observed": 0.21052632,
+              "absoluteGap": 0.04001613
+            },
+            {
+              "label": "0.35-0.45",
+              "n": 85,
+              "meanPredicted": 0.40310844,
+              "observed": 0.48235294,
+              "absoluteGap": 0.0792445
+            },
+            {
+              "label": "0.45-0.55",
+              "n": 140,
+              "meanPredicted": 0.50574812,
+              "observed": 0.49285714,
+              "absoluteGap": 0.01289097
+            },
+            {
+              "label": "0.55-0.65",
+              "n": 142,
+              "meanPredicted": 0.59741756,
+              "observed": 0.61971831,
+              "absoluteGap": 0.02230075
+            },
+            {
+              "label": "0.65-1.00",
+              "n": 278,
+              "meanPredicted": 0.78666963,
+              "observed": 0.79136691,
+              "absoluteGap": 0.00469727
+            }
+          ],
+          "ece": 0.02272243
+        },
+        "uncertainty": {
+          "exactHistoricalV1Reconstruction": false,
+          "correlationWithAbsoluteMarginError": null,
+          "bins": [
+            {
+              "quartile": 1,
+              "n": 185,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 12.74294267
+            },
+            {
+              "quartile": 2,
+              "n": 185,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 13.67738024
+            },
+            {
+              "quartile": 3,
+              "n": 185,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 14.42981318
+            },
+            {
+              "quartile": 4,
+              "n": 185,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 14.37051851
+            }
+          ]
+        },
+        "neutral": {
+          "n": 22,
+          "marginBias": -0.12620657,
+          "mae": 12.8499706
+        },
+        "nonNeutral": {
+          "n": 718,
+          "marginBias": -0.67766824,
+          "mae": 13.8344314
+        }
+      },
+      "updaterValidationMetrics": {
+        "n": 740,
+        "probabilityN": 740,
+        "marginBias": -0.73110833,
+        "mae": 12.60818468,
+        "rmse": 16.06086922,
+        "brier": 0.18323244,
+        "logLoss": 0.54377743,
+        "calibrationInterceptSlope": {
+          "intercept": -0.01474773,
+          "slope": 1.30310549,
+          "n": 740
+        },
+        "reliability": {
+          "bins": [
+            {
+              "label": "0.00-0.35",
+              "n": 110,
+              "meanPredicted": 0.24375196,
+              "observed": 0.16363636,
+              "absoluteGap": 0.0801156
+            },
+            {
+              "label": "0.35-0.45",
+              "n": 79,
+              "meanPredicted": 0.39716881,
+              "observed": 0.39240506,
+              "absoluteGap": 0.00476375
+            },
+            {
+              "label": "0.45-0.55",
+              "n": 134,
+              "meanPredicted": 0.50491321,
+              "observed": 0.47761194,
+              "absoluteGap": 0.02730127
+            },
+            {
+              "label": "0.55-0.65",
+              "n": 135,
+              "meanPredicted": 0.59895522,
+              "observed": 0.62962963,
+              "absoluteGap": 0.03067441
+            },
+            {
+              "label": "0.65-1.00",
+              "n": 282,
+              "meanPredicted": 0.79209792,
+              "observed": 0.85106383,
+              "absoluteGap": 0.05896591
+            }
+          ],
+          "ece": 0.04542818
+        },
+        "uncertainty": {
+          "exactHistoricalV1Reconstruction": false,
+          "correlationWithAbsoluteMarginError": null,
+          "bins": [
+            {
+              "quartile": 1,
+              "n": 185,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 12.26286299
+            },
+            {
+              "quartile": 2,
+              "n": 185,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 12.63162909
+            },
+            {
+              "quartile": 3,
+              "n": 185,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 12.7286817
+            },
+            {
+              "quartile": 4,
+              "n": 185,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 12.80956494
+            }
+          ]
+        },
+        "neutral": {
+          "n": 22,
+          "marginBias": -0.0326788,
+          "mae": 10.81163681
+        },
+        "nonNeutral": {
+          "n": 718,
+          "marginBias": -0.75250868,
+          "mae": 12.66323211
+        }
+      }
+    }
+  ],
+  "comparisons": {
+    "preseasonVsV2": {
+      "marginBias": 0.32953845,
+      "mae": -0.20806989,
+      "rmse": -0.25142309,
+      "brier": -0.00093121,
+      "logLoss": -0.00366724,
+      "ece": -0.00817268
+    },
+    "updaterVsV1": {
+      "marginBias": 0.56536111,
+      "mae": -1.2640721,
+      "rmse": -1.65079873,
+      "brier": -0.02030008,
+      "logLoss": -0.05020047,
+      "ece": 0.01743439
+    },
+    "updaterVsV2": {
+      "marginBias": 0.3878236,
+      "mae": -0.97824961,
+      "rmse": -1.29713407,
+      "brier": -0.01633408,
+      "logLoss": -0.03929264,
+      "ece": 0.00945263
+    },
+    "updaterVsPreseason": {
+      "marginBias": 0.05828515,
+      "mae": -0.77017972,
+      "rmse": -1.04571098,
+      "brier": -0.01540287,
+      "logLoss": -0.0356254,
+      "ece": 0.01762531
+    },
+    "v2Breakdowns": {
+      "byWeekBand": {
+        "weeks1To3": {
+          "n": 426,
+          "probabilityN": 426,
+          "marginBias": -2.65360432,
+          "mae": 14.26197017,
+          "rmse": 18.01568481,
+          "brier": 0.17065948,
+          "logLoss": 0.51191226,
+          "calibrationInterceptSlope": {
+            "intercept": -0.13609525,
+            "slope": 1.44132296,
+            "n": 426
+          },
+          "reliability": {
+            "bins": [
+              {
+                "label": "0.00-0.35",
+                "n": 42,
+                "meanPredicted": 0.27229656,
+                "observed": 0.16666667,
+                "absoluteGap": 0.10562989
+              },
+              {
+                "label": "0.35-0.45",
+                "n": 54,
+                "meanPredicted": 0.40196946,
+                "observed": 0.35185185,
+                "absoluteGap": 0.05011761
+              },
+              {
+                "label": "0.45-0.55",
+                "n": 61,
+                "meanPredicted": 0.50223366,
+                "observed": 0.47540984,
+                "absoluteGap": 0.02682383
+              },
+              {
+                "label": "0.55-0.65",
+                "n": 65,
+                "meanPredicted": 0.60244348,
+                "observed": 0.6,
+                "absoluteGap": 0.00244348
+              },
+              {
+                "label": "0.65-1.00",
+                "n": 204,
+                "meanPredicted": 0.80562125,
+                "observed": 0.85784314,
+                "absoluteGap": 0.05222189
+              }
+            ],
+            "ece": 0.04598862
+          },
+          "uncertainty": {
+            "exactHistoricalV1Reconstruction": false,
+            "correlationWithAbsoluteMarginError": null,
+            "bins": [
+              {
+                "quartile": 1,
+                "n": 106,
+                "meanUncertainty": 0,
+                "meanAbsoluteMarginError": 13.38604136
+              },
+              {
+                "quartile": 2,
+                "n": 107,
+                "meanUncertainty": 0,
+                "meanAbsoluteMarginError": 14.59113667
+              },
+              {
+                "quartile": 3,
+                "n": 106,
+                "meanUncertainty": 0,
+                "meanAbsoluteMarginError": 15.00965253
+              },
+              {
+                "quartile": 4,
+                "n": 107,
+                "meanUncertainty": 0,
+                "meanAbsoluteMarginError": 14.05985154
+              }
+            ]
+          },
+          "neutral": {
+            "n": 22,
+            "marginBias": -5.21972146,
+            "mae": 15.14105012
+          },
+          "nonNeutral": {
+            "n": 404,
+            "marginBias": -2.51386527,
+            "mae": 14.21409948
+          }
+        },
+        "weeks4To6": {
+          "n": 465,
+          "probabilityN": 465,
+          "marginBias": -0.55646107,
+          "mae": 12.94233708,
+          "rmse": 16.49459025,
+          "brier": 0.1988525,
+          "logLoss": 0.57935261,
+          "calibrationInterceptSlope": {
+            "intercept": 0.02617026,
+            "slope": 1.2057605,
+            "n": 465
+          },
+          "reliability": {
+            "bins": [
+              {
+                "label": "0.00-0.35",
+                "n": 43,
+                "meanPredicted": 0.26730017,
+                "observed": 0.18604651,
+                "absoluteGap": 0.08125366
+              },
+              {
+                "label": "0.35-0.45",
+                "n": 58,
+                "meanPredicted": 0.40217294,
+                "observed": 0.4137931,
+                "absoluteGap": 0.01162017
+              },
+              {
+                "label": "0.45-0.55",
+                "n": 92,
+                "meanPredicted": 0.50569676,
+                "observed": 0.54347826,
+                "absoluteGap": 0.0377815
+              },
+              {
+                "label": "0.55-0.65",
+                "n": 86,
+                "meanPredicted": 0.59579,
+                "observed": 0.60465116,
+                "absoluteGap": 0.00886117
+              },
+              {
+                "label": "0.65-1.00",
+                "n": 186,
+                "meanPredicted": 0.76964429,
+                "observed": 0.80645161,
+                "absoluteGap": 0.03680732
+              }
+            ],
+            "ece": 0.03279999
+          },
+          "uncertainty": {
+            "exactHistoricalV1Reconstruction": false,
+            "correlationWithAbsoluteMarginError": null,
+            "bins": [
+              {
+                "quartile": 1,
+                "n": 116,
+                "meanUncertainty": 0,
+                "meanAbsoluteMarginError": 10.80375559
+              },
+              {
+                "quartile": 2,
+                "n": 116,
+                "meanUncertainty": 0,
+                "meanAbsoluteMarginError": 13.38401664
+              },
+              {
+                "quartile": 3,
+                "n": 116,
+                "meanUncertainty": 0,
+                "meanAbsoluteMarginError": 14.85287535
+              },
+              {
+                "quartile": 4,
+                "n": 117,
+                "meanUncertainty": 0,
+                "meanAbsoluteMarginError": 12.73052669
+              }
+            ]
+          },
+          "neutral": {
+            "n": 8,
+            "marginBias": 4.14659069,
+            "mae": 9.00161937
+          },
+          "nonNeutral": {
+            "n": 457,
+            "marginBias": -0.6387902,
+            "mae": 13.0113212
+          }
+        },
+        "week7Plus": {
+          "n": 1319,
+          "probabilityN": 1319,
+          "marginBias": -0.18949084,
+          "mae": 13.99311339,
+          "rmse": 17.71792432,
+          "brier": 0.21401135,
+          "logLoss": 0.61523075,
+          "calibrationInterceptSlope": {
+            "intercept": -0.06665251,
+            "slope": 1.06568691,
+            "n": 1319
+          },
+          "reliability": {
+            "bins": [
+              {
+                "label": "0.00-0.35",
+                "n": 139,
+                "meanPredicted": 0.26895389,
+                "observed": 0.22302158,
+                "absoluteGap": 0.0459323
+              },
+              {
+                "label": "0.35-0.45",
+                "n": 174,
+                "meanPredicted": 0.40393813,
+                "observed": 0.36781609,
+                "absoluteGap": 0.03612204
+              },
+              {
+                "label": "0.45-0.55",
+                "n": 252,
+                "meanPredicted": 0.50128576,
+                "observed": 0.50396825,
+                "absoluteGap": 0.0026825
+              },
+              {
+                "label": "0.55-0.65",
+                "n": 308,
+                "meanPredicted": 0.59917141,
+                "observed": 0.6038961,
+                "absoluteGap": 0.00472469
+              },
+              {
+                "label": "0.65-1.00",
+                "n": 446,
+                "meanPredicted": 0.75666485,
+                "observed": 0.74887892,
+                "absoluteGap": 0.00778592
+              }
+            ],
+            "ece": 0.01385409
+          },
+          "uncertainty": {
+            "exactHistoricalV1Reconstruction": false,
+            "correlationWithAbsoluteMarginError": null,
+            "bins": [
+              {
+                "quartile": 1,
+                "n": 329,
+                "meanUncertainty": 0,
+                "meanAbsoluteMarginError": 13.78143897
+              },
+              {
+                "quartile": 2,
+                "n": 330,
+                "meanUncertainty": 0,
+                "meanAbsoluteMarginError": 13.64787669
+              },
+              {
+                "quartile": 3,
+                "n": 330,
+                "meanUncertainty": 0,
+                "meanAbsoluteMarginError": 13.20164956
+              },
+              {
+                "quartile": 4,
+                "n": 330,
+                "meanUncertainty": 0,
+                "meanAbsoluteMarginError": 15.34084691
+              }
+            ]
+          },
+          "neutral": {
+            "n": 48,
+            "marginBias": 0.89464228,
+            "mae": 13.53786551
+          },
+          "nonNeutral": {
+            "n": 1271,
+            "marginBias": -0.23043371,
+            "mae": 14.01030607
+          }
+        }
+      },
+      "byMinimumPriorGames": {
+        "0": {
+          "n": 2210,
+          "probabilityN": 2210,
+          "marginBias": -0.74168699,
+          "mae": 13.82384733,
+          "rmse": 17.52625393,
+          "brier": 0.20246531,
+          "logLoss": 0.58776604,
+          "calibrationInterceptSlope": {
+            "intercept": -0.05963127,
+            "slope": 1.17596726,
+            "n": 2210
+          },
+          "reliability": {
+            "bins": [
+              {
+                "label": "0.00-0.35",
+                "n": 224,
+                "meanPredicted": 0.26926318,
+                "observed": 0.20535714,
+                "absoluteGap": 0.06390604
+              },
+              {
+                "label": "0.35-0.45",
+                "n": 286,
+                "meanPredicted": 0.40320845,
+                "observed": 0.37412587,
+                "absoluteGap": 0.02908257
+              },
+              {
+                "label": "0.45-0.55",
+                "n": 405,
+                "meanPredicted": 0.50243053,
+                "observed": 0.50864198,
+                "absoluteGap": 0.00621144
+              },
+              {
+                "label": "0.55-0.65",
+                "n": 459,
+                "meanPredicted": 0.59900122,
+                "observed": 0.60348584,
+                "absoluteGap": 0.00448462
+              },
+              {
+                "label": "0.65-1.00",
+                "n": 836,
+                "meanPredicted": 0.77149892,
+                "observed": 0.78827751,
+                "absoluteGap": 0.0167786
+              }
+            ],
+            "ece": 0.01865772
+          },
+          "uncertainty": {
+            "exactHistoricalV1Reconstruction": false,
+            "correlationWithAbsoluteMarginError": null,
+            "bins": [
+              {
+                "quartile": 1,
+                "n": 552,
+                "meanUncertainty": 0,
+                "meanAbsoluteMarginError": 12.92647251
+              },
+              {
+                "quartile": 2,
+                "n": 553,
+                "meanUncertainty": 0,
+                "meanAbsoluteMarginError": 13.84878689
+              },
+              {
+                "quartile": 3,
+                "n": 552,
+                "meanUncertainty": 0,
+                "meanAbsoluteMarginError": 14.1521128
+              },
+              {
+                "quartile": 4,
+                "n": 553,
+                "meanUncertainty": 0,
+                "meanAbsoluteMarginError": 14.36698799
+              }
+            ]
+          },
+          "neutral": {
+            "n": 78,
+            "marginBias": -0.49638868,
+            "mae": 13.52478977
+          },
+          "nonNeutral": {
+            "n": 2132,
+            "marginBias": -0.75066132,
+            "mae": 13.83478846
+          }
+        },
+        "1": {
+          "n": 0,
+          "probabilityN": 0,
+          "marginBias": null,
+          "mae": null,
+          "rmse": 0,
+          "brier": null,
+          "logLoss": null,
+          "calibrationInterceptSlope": null,
+          "reliability": {
+            "bins": [
+              {
+                "label": "0.00-0.35",
+                "n": 0,
+                "meanPredicted": null,
+                "observed": null,
+                "absoluteGap": null
+              },
+              {
+                "label": "0.35-0.45",
+                "n": 0,
+                "meanPredicted": null,
+                "observed": null,
+                "absoluteGap": null
+              },
+              {
+                "label": "0.45-0.55",
+                "n": 0,
+                "meanPredicted": null,
+                "observed": null,
+                "absoluteGap": null
+              },
+              {
+                "label": "0.55-0.65",
+                "n": 0,
+                "meanPredicted": null,
+                "observed": null,
+                "absoluteGap": null
+              },
+              {
+                "label": "0.65-1.00",
+                "n": 0,
+                "meanPredicted": null,
+                "observed": null,
+                "absoluteGap": null
+              }
+            ],
+            "ece": null
+          },
+          "uncertainty": {
+            "exactHistoricalV1Reconstruction": false,
+            "correlationWithAbsoluteMarginError": null,
+            "bins": [
+              {
+                "quartile": 1,
+                "n": 0,
+                "meanUncertainty": null,
+                "meanAbsoluteMarginError": null
+              },
+              {
+                "quartile": 2,
+                "n": 0,
+                "meanUncertainty": null,
+                "meanAbsoluteMarginError": null
+              },
+              {
+                "quartile": 3,
+                "n": 0,
+                "meanUncertainty": null,
+                "meanAbsoluteMarginError": null
+              },
+              {
+                "quartile": 4,
+                "n": 0,
+                "meanUncertainty": null,
+                "meanAbsoluteMarginError": null
+              }
+            ]
+          },
+          "neutral": {
+            "n": 0,
+            "marginBias": null,
+            "mae": null
+          },
+          "nonNeutral": {
+            "n": 0,
+            "marginBias": null,
+            "mae": null
+          }
+        },
+        "2": {
+          "n": 0,
+          "probabilityN": 0,
+          "marginBias": null,
+          "mae": null,
+          "rmse": 0,
+          "brier": null,
+          "logLoss": null,
+          "calibrationInterceptSlope": null,
+          "reliability": {
+            "bins": [
+              {
+                "label": "0.00-0.35",
+                "n": 0,
+                "meanPredicted": null,
+                "observed": null,
+                "absoluteGap": null
+              },
+              {
+                "label": "0.35-0.45",
+                "n": 0,
+                "meanPredicted": null,
+                "observed": null,
+                "absoluteGap": null
+              },
+              {
+                "label": "0.45-0.55",
+                "n": 0,
+                "meanPredicted": null,
+                "observed": null,
+                "absoluteGap": null
+              },
+              {
+                "label": "0.55-0.65",
+                "n": 0,
+                "meanPredicted": null,
+                "observed": null,
+                "absoluteGap": null
+              },
+              {
+                "label": "0.65-1.00",
+                "n": 0,
+                "meanPredicted": null,
+                "observed": null,
+                "absoluteGap": null
+              }
+            ],
+            "ece": null
+          },
+          "uncertainty": {
+            "exactHistoricalV1Reconstruction": false,
+            "correlationWithAbsoluteMarginError": null,
+            "bins": [
+              {
+                "quartile": 1,
+                "n": 0,
+                "meanUncertainty": null,
+                "meanAbsoluteMarginError": null
+              },
+              {
+                "quartile": 2,
+                "n": 0,
+                "meanUncertainty": null,
+                "meanAbsoluteMarginError": null
+              },
+              {
+                "quartile": 3,
+                "n": 0,
+                "meanUncertainty": null,
+                "meanAbsoluteMarginError": null
+              },
+              {
+                "quartile": 4,
+                "n": 0,
+                "meanUncertainty": null,
+                "meanAbsoluteMarginError": null
+              }
+            ]
+          },
+          "neutral": {
+            "n": 0,
+            "marginBias": null,
+            "mae": null
+          },
+          "nonNeutral": {
+            "n": 0,
+            "marginBias": null,
+            "mae": null
+          }
+        },
+        "3": {
+          "n": 0,
+          "probabilityN": 0,
+          "marginBias": null,
+          "mae": null,
+          "rmse": 0,
+          "brier": null,
+          "logLoss": null,
+          "calibrationInterceptSlope": null,
+          "reliability": {
+            "bins": [
+              {
+                "label": "0.00-0.35",
+                "n": 0,
+                "meanPredicted": null,
+                "observed": null,
+                "absoluteGap": null
+              },
+              {
+                "label": "0.35-0.45",
+                "n": 0,
+                "meanPredicted": null,
+                "observed": null,
+                "absoluteGap": null
+              },
+              {
+                "label": "0.45-0.55",
+                "n": 0,
+                "meanPredicted": null,
+                "observed": null,
+                "absoluteGap": null
+              },
+              {
+                "label": "0.55-0.65",
+                "n": 0,
+                "meanPredicted": null,
+                "observed": null,
+                "absoluteGap": null
+              },
+              {
+                "label": "0.65-1.00",
+                "n": 0,
+                "meanPredicted": null,
+                "observed": null,
+                "absoluteGap": null
+              }
+            ],
+            "ece": null
+          },
+          "uncertainty": {
+            "exactHistoricalV1Reconstruction": false,
+            "correlationWithAbsoluteMarginError": null,
+            "bins": [
+              {
+                "quartile": 1,
+                "n": 0,
+                "meanUncertainty": null,
+                "meanAbsoluteMarginError": null
+              },
+              {
+                "quartile": 2,
+                "n": 0,
+                "meanUncertainty": null,
+                "meanAbsoluteMarginError": null
+              },
+              {
+                "quartile": 3,
+                "n": 0,
+                "meanUncertainty": null,
+                "meanAbsoluteMarginError": null
+              },
+              {
+                "quartile": 4,
+                "n": 0,
+                "meanUncertainty": null,
+                "meanAbsoluteMarginError": null
+              }
+            ]
+          },
+          "neutral": {
+            "n": 0,
+            "marginBias": null,
+            "mae": null
+          },
+          "nonNeutral": {
+            "n": 0,
+            "marginBias": null,
+            "mae": null
+          }
+        },
+        "4+": {
+          "n": 0,
+          "probabilityN": 0,
+          "marginBias": null,
+          "mae": null,
+          "rmse": 0,
+          "brier": null,
+          "logLoss": null,
+          "calibrationInterceptSlope": null,
+          "reliability": {
+            "bins": [
+              {
+                "label": "0.00-0.35",
+                "n": 0,
+                "meanPredicted": null,
+                "observed": null,
+                "absoluteGap": null
+              },
+              {
+                "label": "0.35-0.45",
+                "n": 0,
+                "meanPredicted": null,
+                "observed": null,
+                "absoluteGap": null
+              },
+              {
+                "label": "0.45-0.55",
+                "n": 0,
+                "meanPredicted": null,
+                "observed": null,
+                "absoluteGap": null
+              },
+              {
+                "label": "0.55-0.65",
+                "n": 0,
+                "meanPredicted": null,
+                "observed": null,
+                "absoluteGap": null
+              },
+              {
+                "label": "0.65-1.00",
+                "n": 0,
+                "meanPredicted": null,
+                "observed": null,
+                "absoluteGap": null
+              }
+            ],
+            "ece": null
+          },
+          "uncertainty": {
+            "exactHistoricalV1Reconstruction": false,
+            "correlationWithAbsoluteMarginError": null,
+            "bins": [
+              {
+                "quartile": 1,
+                "n": 0,
+                "meanUncertainty": null,
+                "meanAbsoluteMarginError": null
+              },
+              {
+                "quartile": 2,
+                "n": 0,
+                "meanUncertainty": null,
+                "meanAbsoluteMarginError": null
+              },
+              {
+                "quartile": 3,
+                "n": 0,
+                "meanUncertainty": null,
+                "meanAbsoluteMarginError": null
+              },
+              {
+                "quartile": 4,
+                "n": 0,
+                "meanUncertainty": null,
+                "meanAbsoluteMarginError": null
+              }
+            ]
+          },
+          "neutral": {
+            "n": 0,
+            "marginBias": null,
+            "mae": null
+          },
+          "nonNeutral": {
+            "n": 0,
+            "marginBias": null,
+            "mae": null
+          }
+        }
+      }
+    }
+  },
+  "ablations": {
+    "noOffenseReturning": {
+      "metrics": {
+        "n": 2210,
+        "probabilityN": 2210,
+        "marginBias": -0.37197579,
+        "mae": 12.91155902,
+        "rmse": 16.30137939,
+        "brier": 0.18724127,
+        "logLoss": 0.55093,
+        "calibrationInterceptSlope": {
+          "intercept": -0.04079262,
+          "slope": 1.24015147,
+          "n": 2210
+        },
+        "reliability": {
+          "bins": [
+            {
+              "label": "0.00-0.35",
+              "n": 344,
+              "meanPredicted": 0.25257869,
+              "observed": 0.20639535,
+              "absoluteGap": 0.04618334
+            },
+            {
+              "label": "0.35-0.45",
+              "n": 270,
+              "meanPredicted": 0.40493297,
+              "observed": 0.41111111,
+              "absoluteGap": 0.00617814
+            },
+            {
+              "label": "0.45-0.55",
+              "n": 319,
+              "meanPredicted": 0.50441041,
+              "observed": 0.46394984,
+              "absoluteGap": 0.04046057
+            },
+            {
+              "label": "0.55-0.65",
+              "n": 417,
+              "meanPredicted": 0.59943947,
+              "observed": 0.60671463,
+              "absoluteGap": 0.00727516
+            },
+            {
+              "label": "0.65-1.00",
+              "n": 860,
+              "meanPredicted": 0.79104499,
+              "observed": 0.82790698,
+              "absoluteGap": 0.03686199
+            }
+          ],
+          "ece": 0.02950097
+        },
+        "uncertainty": {
+          "exactHistoricalV1Reconstruction": false,
+          "correlationWithAbsoluteMarginError": null,
+          "bins": [
+            {
+              "quartile": 1,
+              "n": 552,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 12.53045813
+            },
+            {
+              "quartile": 2,
+              "n": 553,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 13.10451908
+            },
+            {
+              "quartile": 3,
+              "n": 552,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 13.30137629
+            },
+            {
+              "quartile": 4,
+              "n": 553,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 12.70989833
+            }
+          ]
+        },
+        "neutral": {
+          "n": 78,
+          "marginBias": -0.30378475,
+          "mae": 12.28457017
+        },
+        "nonNeutral": {
+          "n": 2132,
+          "marginBias": -0.37447058,
+          "mae": 12.93449763
+        }
+      },
+      "deltaVsFullUpdater": {
+        "marginBias": -0.0181124,
+        "mae": 0.0659613,
+        "rmse": 0.07225953,
+        "brier": 0.00111004,
+        "logLoss": 0.0024566,
+        "ece": 0.00139062
+      }
+    },
+    "noTalent": {
+      "metrics": {
+        "n": 2210,
+        "probabilityN": 2210,
+        "marginBias": -0.67302276,
+        "mae": 13.24473431,
+        "rmse": 16.69057809,
+        "brier": 0.19011508,
+        "logLoss": 0.55997551,
+        "calibrationInterceptSlope": {
+          "intercept": 0.00703104,
+          "slope": 1.14005723,
+          "n": 2210
+        },
+        "reliability": {
+          "bins": [
+            {
+              "label": "0.00-0.35",
+              "n": 363,
+              "meanPredicted": 0.24772575,
+              "observed": 0.23415978,
+              "absoluteGap": 0.01356597
+            },
+            {
+              "label": "0.35-0.45",
+              "n": 279,
+              "meanPredicted": 0.40054062,
+              "observed": 0.37992832,
+              "absoluteGap": 0.02061231
+            },
+            {
+              "label": "0.45-0.55",
+              "n": 308,
+              "meanPredicted": 0.50304859,
+              "observed": 0.47402597,
+              "absoluteGap": 0.02902262
+            },
+            {
+              "label": "0.55-0.65",
+              "n": 389,
+              "meanPredicted": 0.60022218,
+              "observed": 0.62467866,
+              "absoluteGap": 0.02445648
+            },
+            {
+              "label": "0.65-1.00",
+              "n": 871,
+              "meanPredicted": 0.78933376,
+              "observed": 0.82089552,
+              "absoluteGap": 0.03156177
+            }
+          ],
+          "ece": 0.02561906
+        },
+        "uncertainty": {
+          "exactHistoricalV1Reconstruction": false,
+          "correlationWithAbsoluteMarginError": null,
+          "bins": [
+            {
+              "quartile": 1,
+              "n": 552,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 12.96917654
+            },
+            {
+              "quartile": 2,
+              "n": 553,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 13.41937253
+            },
+            {
+              "quartile": 3,
+              "n": 552,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 13.5972185
+            },
+            {
+              "quartile": 4,
+              "n": 553,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 12.99330876
+            }
+          ]
+        },
+        "neutral": {
+          "n": 78,
+          "marginBias": 0.23244707,
+          "mae": 12.83343822
+        },
+        "nonNeutral": {
+          "n": 2132,
+          "marginBias": -0.70614971,
+          "mae": 13.25978172
+        }
+      },
+      "deltaVsFullUpdater": {
+        "marginBias": -0.31915937,
+        "mae": 0.39913659,
+        "rmse": 0.46145823,
+        "brier": 0.00398385,
+        "logLoss": 0.01150211,
+        "ece": -0.00249129
+      }
+    },
+    "noUpdater": {
+      "metrics": {
+        "n": 2210,
+        "probabilityN": 2210,
+        "marginBias": -0.41214854,
+        "mae": 13.61577744,
+        "rmse": 17.27483084,
+        "brier": 0.2015341,
+        "logLoss": 0.5840988,
+        "calibrationInterceptSlope": {
+          "intercept": 0.0051669,
+          "slope": 1.03684256,
+          "n": 2210
+        },
+        "reliability": {
+          "bins": [
+            {
+              "label": "0.00-0.35",
+              "n": 290,
+              "meanPredicted": 0.25022488,
+              "observed": 0.23793103,
+              "absoluteGap": 0.01229385
+            },
+            {
+              "label": "0.35-0.45",
+              "n": 277,
+              "meanPredicted": 0.40467326,
+              "observed": 0.42599278,
+              "absoluteGap": 0.02131952
+            },
+            {
+              "label": "0.45-0.55",
+              "n": 383,
+              "meanPredicted": 0.50320678,
+              "observed": 0.49086162,
+              "absoluteGap": 0.01234516
+            },
+            {
+              "label": "0.55-0.65",
+              "n": 425,
+              "meanPredicted": 0.59883599,
+              "observed": 0.61176471,
+              "absoluteGap": 0.01292871
+            },
+            {
+              "label": "0.65-1.00",
+              "n": 835,
+              "meanPredicted": 0.78625353,
+              "observed": 0.79041916,
+              "absoluteGap": 0.00416564
+            }
+          ],
+          "ece": 0.01048504
+        },
+        "uncertainty": {
+          "exactHistoricalV1Reconstruction": false,
+          "correlationWithAbsoluteMarginError": null,
+          "bins": [
+            {
+              "quartile": 1,
+              "n": 552,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 12.68797657
+            },
+            {
+              "quartile": 2,
+              "n": 553,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 13.66878948
+            },
+            {
+              "quartile": 3,
+              "n": 552,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 13.95223279
+            },
+            {
+              "quartile": 4,
+              "n": 553,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 14.15304157
+            }
+          ]
+        },
+        "neutral": {
+          "n": 78,
+          "marginBias": -0.61946164,
+          "mae": 13.02672695
+        },
+        "nonNeutral": {
+          "n": 2132,
+          "marginBias": -0.40456391,
+          "mae": 13.63732806
+        }
+      },
+      "deltaVsFullUpdater": {
+        "marginBias": -0.05828515,
+        "mae": 0.77017972,
+        "rmse": 1.04571098,
+        "brier": 0.01540287,
+        "logLoss": 0.0356254,
+        "ece": -0.01762531
+      }
+    }
+  },
+  "bootstrap": {
+    "vsV1": {
+      "absoluteMarginError": {
+        "n": 2210,
+        "mean": -1.2640721,
+        "standardError": 0.12219448,
+        "bootstrap95": [
+          -1.51833026,
+          -1.0091947
+        ],
+        "seed": 1128678039,
+        "replicates": 1000
+      },
+      "squaredMarginError": {
+        "n": 2210,
+        "mean": -56.30715751,
+        "standardError": 4.84884814,
+        "bootstrap95": [
+          -66.19883608,
+          -47.39686555
+        ],
+        "seed": 1128678040,
+        "replicates": 1000
+      },
+      "brier": {
+        "n": 2210,
+        "mean": -0.02030008,
+        "standardError": 0.00237361,
+        "bootstrap95": [
+          -0.0247137,
+          -0.01564238
+        ],
+        "seed": 1128678041,
+        "replicates": 1000
+      },
+      "logLoss": {
+        "n": 2210,
+        "mean": -0.05020047,
+        "standardError": 0.00543075,
+        "bootstrap95": [
+          -0.06142641,
+          -0.03884358
+        ],
+        "seed": 1128678042,
+        "replicates": 1000
+      }
+    },
+    "vsV2": {
+      "absoluteMarginError": {
+        "n": 2210,
+        "mean": -0.97824961,
+        "standardError": 0.1067178,
+        "bootstrap95": [
+          -1.19013728,
+          -0.7812092
+        ],
+        "seed": 1128678139,
+        "replicates": 1000
+      },
+      "squaredMarginError": {
+        "n": 2210,
+        "mean": -43.78524544,
+        "standardError": 4.27199594,
+        "bootstrap95": [
+          -52.17042346,
+          -35.54680988
+        ],
+        "seed": 1128678140,
+        "replicates": 1000
+      },
+      "brier": {
+        "n": 2210,
+        "mean": -0.01633407,
+        "standardError": 0.00204999,
+        "bootstrap95": [
+          -0.01982395,
+          -0.01251703
+        ],
+        "seed": 1128678141,
+        "replicates": 1000
+      },
+      "logLoss": {
+        "n": 2210,
+        "mean": -0.03929263,
+        "standardError": 0.00462378,
+        "bootstrap95": [
+          -0.04923177,
+          -0.02980885
+        ],
+        "seed": 1128678142,
+        "replicates": 1000
+      }
+    }
+  },
+  "gate": {
+    "primaryStrictImprovementVsV2": true,
+    "annualStability": true,
+    "oneGameShrinkSafe": true,
+    "bootstrapMeanDirectionVsV2": true,
+    "updaterJustified": true
+  },
+  "prospectiveRefit": {
+    "preseasonParams": {
+      "offenseReturningWeight": 1.5,
+      "talentWeight": 4,
+      "homeFieldAdvantage": 3,
+      "baseSigma": 17
+    },
+    "updaterPriorGames": 4,
+    "refitSeasons": [
+      2021,
+      2022,
+      2023,
+      2024,
+      2025
+    ],
+    "inSampleMetrics": {
+      "n": 3613,
+      "probabilityN": 3613,
+      "marginBias": 0.01066419,
+      "mae": 13.01932405,
+      "rmse": 16.34898146,
+      "brier": 0.18971811,
+      "logLoss": 0.5571739,
+      "calibrationInterceptSlope": {
+        "intercept": -0.02475857,
+        "slope": 1.12759918,
+        "n": 3613
+      },
+      "reliability": {
+        "bins": [
+          {
+            "label": "0.00-0.35",
+            "n": 596,
+            "meanPredicted": 0.24417867,
+            "observed": 0.2114094,
+            "absoluteGap": 0.03276927
+          },
+          {
+            "label": "0.35-0.45",
+            "n": 420,
+            "meanPredicted": 0.40234873,
+            "observed": 0.41428571,
+            "absoluteGap": 0.01193698
+          },
+          {
+            "label": "0.45-0.55",
+            "n": 540,
+            "meanPredicted": 0.50196922,
+            "observed": 0.49259259,
+            "absoluteGap": 0.00937663
+          },
+          {
+            "label": "0.55-0.65",
+            "n": 620,
+            "meanPredicted": 0.60036603,
+            "observed": 0.59193548,
+            "absoluteGap": 0.00843054
+          },
+          {
+            "label": "0.65-1.00",
+            "n": 1437,
+            "meanPredicted": 0.79503,
+            "observed": 0.81558803,
+            "absoluteGap": 0.02055803
+          }
+        ],
+        "ece": 0.01781794
+      },
+      "uncertainty": {
+        "exactHistoricalV1Reconstruction": false,
+        "correlationWithAbsoluteMarginError": null,
+        "bins": [
+          {
+            "quartile": 1,
+            "n": 903,
+            "meanUncertainty": 0,
+            "meanAbsoluteMarginError": 13.58102821
+          },
+          {
+            "quartile": 2,
+            "n": 903,
+            "meanUncertainty": 0,
+            "meanAbsoluteMarginError": 12.52877627
+          },
+          {
+            "quartile": 3,
+            "n": 903,
+            "meanUncertainty": 0,
+            "meanAbsoluteMarginError": 13.10225434
+          },
+          {
+            "quartile": 4,
+            "n": 904,
+            "meanUncertainty": 0,
+            "meanAbsoluteMarginError": 12.86540784
+          }
+        ]
+      },
+      "neutral": {
+        "n": 117,
+        "marginBias": 0.38017338,
+        "mae": 13.17994384
+      },
+      "nonNeutral": {
+        "n": 3496,
+        "marginBias": -0.00170211,
+        "mae": 13.01394862
+      }
+    },
+    "caveat": "All-pre-2026 refit is for future shadow collection only; these are not held-out metrics."
+  },
+  "decision": "C — In-season-updating parallel v3 justified.",
+  "resultSha256": "3b0ab9f04cd26069d4bb399320354513b15016a15f7bd7d72291e19101df7873"
+}

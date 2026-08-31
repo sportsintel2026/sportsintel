@@ -29,6 +29,17 @@ const {
   ML_METHOD: ML_METHOD_V2,
   SPREAD_METHOD: SPREAD_METHOD_V2,
 } = require("./cfbGameShadowChallengerV2");
+const {
+  buildCfbPreseasonChallengerV3,
+  MODEL_VERSION: TEAM_MODEL_VERSION_V3,
+} = require("./cfbPreseasonChallengerV3");
+const {
+  buildCfbGameShadowPredictionV3,
+  MODEL_VERSION: MODEL_VERSION_V3,
+  EXPERIMENT_VERSION: EXPERIMENT_VERSION_V3,
+  ML_METHOD: ML_METHOD_V3,
+  SPREAD_METHOD: SPREAD_METHOD_V3,
+} = require("./cfbGameShadowChallengerV3");
 
 const TEAM_TABLE = "cfb_team_preseason_snapshots";
 const INPUT_TABLE = "cfb_game_input_snapshots";
@@ -49,6 +60,14 @@ const V2_LANE = Object.freeze({
   mlMethod: ML_METHOD_V2,
   spreadMethod: SPREAD_METHOD_V2,
   buildPrediction: buildCfbGameShadowPredictionV2,
+});
+const V3_LANE = Object.freeze({
+  modelVersion: MODEL_VERSION_V3,
+  teamModelVersion: TEAM_MODEL_VERSION_V3,
+  experimentVersion: EXPERIMENT_VERSION_V3,
+  mlMethod: ML_METHOD_V3,
+  spreadMethod: SPREAD_METHOD_V3,
+  buildPrediction: buildCfbGameShadowPredictionV3,
 });
 
 function stableValue(value) {
@@ -247,6 +266,7 @@ function buildCandidate({
         sameMarketContext: true,
       },
     }),
+    ...(prediction.provenance == null ? {} : { shadowProvenance: prediction.provenance }),
   });
   const inputHash = sha256(inputSemantic);
   const status = homeTeam.status === "rated-input-ready" && awayTeam.status === "rated-input-ready"
@@ -279,6 +299,7 @@ function buildCandidate({
       marketQuoteAt: capturedAt,
       market: inputSemantic.market,
       ...(inputSemantic.parallelPair == null ? {} : { parallelPair: inputSemantic.parallelPair }),
+      ...(prediction.provenance == null ? {} : { shadowProvenance: prediction.provenance }),
     },
     quality: {
       homeTeamStatus: homeTeam.status,
@@ -288,8 +309,8 @@ function buildCandidate({
       identityMethod: "durable-espn-id-plus-exact-canonical-name",
       targetSeasonOutcomesUsed: false,
     },
-    home_current_season_weight: 0,
-    away_current_season_weight: 0,
+    home_current_season_weight: prediction.provenance?.homeCurrentSeasonWeight ?? 0,
+    away_current_season_weight: prediction.provenance?.awayCurrentSeasonWeight ?? 0,
     predicted_margin_mean: prediction.projectedHomeMargin,
     predicted_margin_sd: prediction.predictiveSigma,
     input_hash: inputHash,
@@ -301,7 +322,7 @@ function buildCandidate({
 
 function prepareCandidates({
   snapshots = [], usEvents = [], ledgerRows = [], capturedAt,
-  controls = CONTROL_2025,
+  controls = CONTROL_2025, odContext = null,
 } = {}) {
   if (!capturedAt || !Number.isFinite(Date.parse(capturedAt))) throw new Error("valid capturedAt is required");
   const predictionMs = Date.parse(capturedAt);
@@ -312,13 +333,21 @@ function prepareCandidates({
     generatedAt: capturedAt,
   });
   let teamChallengerV2 = null;
+  let teamChallengerV3 = null;
   try {
     teamChallengerV2 = buildCfbPreseasonChallengerV2({ v1Challenger: teamChallenger });
   } catch (_) {
     // The parallel lane must never interrupt the already-approved v1 collector.
   }
+  try {
+    teamChallengerV3 = buildCfbPreseasonChallengerV3({ v1Challenger: teamChallenger, odContext });
+  } catch (_) {
+    // v3 is an isolated parallel lane and may be unavailable in the tick-only path.
+  }
   const teamByEspn = new Map(teamChallenger.teams.map((team) => [String(team.team.espnTeamId), team]));
   const teamByEspnV2 = new Map((teamChallengerV2?.teams || [])
+    .map((team) => [String(team.team.espnTeamId), team]));
+  const teamByEspnV3 = new Map((teamChallengerV3?.teams || [])
     .map((team) => [String(team.team.espnTeamId), team]));
   const identity = buildExactIdentityIndex(snapshots, controls);
   const ledgerByGame = new Map();
@@ -329,6 +358,7 @@ function prepareCandidates({
   }
   const candidates = [];
   const v2Candidates = [];
+  const v3Candidates = [];
   const skipped = {
     alreadyStarted: 0,
     missingGameIdentity: 0,
@@ -338,6 +368,7 @@ function prepareCandidates({
     neutralUnknown: 0,
     invalidInput: 0,
     v2InvalidInput: 0,
+    v3InvalidInput: 0,
   };
 
   for (const event of usEvents || []) {
@@ -393,15 +424,33 @@ function prepareCandidates({
     } catch (_) {
       skipped.v2InvalidInput++;
     }
+    try {
+      v3Candidates.push(buildCandidate({
+        event,
+        homeSnapshot,
+        awaySnapshot,
+        homeTeam: teamByEspnV3.get(String(homeSnapshot.espn_team_id)),
+        awayTeam: teamByEspnV3.get(String(awaySnapshot.espn_team_id)),
+        neutralSiteStatus,
+        capturedAt,
+        lane: V3_LANE,
+        pairedV1InputHash: v1Candidate.input.input_hash,
+      }));
+    } catch (_) {
+      skipped.v3InvalidInput++;
+    }
   }
   return Object.freeze({
     candidates: Object.freeze(candidates),
     v2Candidates: Object.freeze(v2Candidates),
+    v3Candidates: Object.freeze(v3Candidates),
     skipped: Object.freeze(skipped),
     identityCollisions: identity.collisions.size,
     teamDiagnostics: teamChallenger.diagnostics.counts,
     v2SetupAvailable: teamChallengerV2 != null,
     v2TeamDiagnostics: teamChallengerV2?.diagnostics || Object.freeze({ unavailable: true }),
+    v3SetupAvailable: teamChallengerV3 != null,
+    v3TeamDiagnostics: teamChallengerV3?.diagnostics || Object.freeze({ unavailable: true }),
   });
 }
 
@@ -454,6 +503,7 @@ async function selectLedgerRows(supabase, eventIds) {
 
 async function collectCfbGameShadowPredictions(supabase, {
   usEvents = [], pinnacleEvents = [], capturedAt = new Date().toISOString(),
+  odContext = null,
 } = {}) {
   if (!supabase) throw new Error("Supabase client is required");
   // Accepted only to make the no-extra-call data flow explicit; v1 comparison is
@@ -468,7 +518,7 @@ async function collectCfbGameShadowPredictions(supabase, {
   const snapshots = snapshotsResponse.data || [];
   const eventIds = (usEvents || []).map((event) => String(event?.eventId || "")).filter(Boolean);
   const ledgerRows = eventIds.length ? await selectLedgerRows(supabase, eventIds) : [];
-  const plan = prepareCandidates({ snapshots, usEvents, ledgerRows, capturedAt });
+  const plan = prepareCandidates({ snapshots, usEvents, ledgerRows, capturedAt, odContext });
   const stats = {
     considered: (usEvents || []).length,
     eligible: plan.candidates.length,
@@ -484,6 +534,13 @@ async function collectCfbGameShadowPredictions(supabase, {
     v2InputSnapshotsCreated: 0,
     v2MarketComparisonUnavailable: 0,
     v2PersistenceErrors: 0,
+    v3SetupAvailable: plan.v3SetupAvailable,
+    v3Eligible: plan.v3Candidates.length,
+    v3Created: 0,
+    v3Duplicates: 0,
+    v3InputSnapshotsCreated: 0,
+    v3MarketComparisonUnavailable: 0,
+    v3PersistenceErrors: 0,
     skipped: plan.skipped,
   };
   for (const candidate of plan.candidates) {
@@ -516,6 +573,21 @@ async function collectCfbGameShadowPredictions(supabase, {
       console.error(`[CFB Game Shadow v2] persistence failed game=${candidate.input.game_id}: ${error.message}`);
     }
   }
+  for (const candidate of plan.v3Candidates) {
+    if (candidate.prediction.market.h2h.homeFair == null
+        || candidate.prediction.market.spread.homeFair == null) {
+      stats.v3MarketComparisonUnavailable++;
+    }
+    try {
+      const result = await persistCandidate(supabase, candidate);
+      if (result.inputCreated) stats.v3InputSnapshotsCreated++;
+      if (result.outputCreated) stats.v3Created++;
+      else stats.v3Duplicates++;
+    } catch (error) {
+      stats.v3PersistenceErrors++;
+      console.error(`[CFB Game Shadow v3] persistence failed game=${candidate.input.game_id}: ${error.message}`);
+    }
+  }
   return Object.freeze(stats);
 }
 
@@ -526,6 +598,7 @@ module.exports = {
   MARKET_SOURCE,
   V1_LANE,
   V2_LANE,
+  V3_LANE,
   collectCfbGameShadowPredictions,
   _internal: {
     stableValue,

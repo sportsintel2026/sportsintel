@@ -1414,6 +1414,7 @@ async function recordFootballPredictions(slate, league = "nfl") {
             usEvents: cfbControlContext.usEvents,
             pinnacleEvents: [],
             capturedAt: cfbControlCapturedAt,
+            odContext: cfbControlContext.odContext || null,
           });
           const { linkCfbShadowControls } = require("./cfbControlBenchmark");
           const linked = await linkCfbShadowControls(supabase, {

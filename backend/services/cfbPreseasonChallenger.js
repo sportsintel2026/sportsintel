@@ -521,6 +521,8 @@ module.exports = {
     recruitingDiagnostic,
     quantile,
     correlation,
+    keyedWinsorizedZ,
+    keyedZ,
     residualize,
     standardizeMap,
   },
