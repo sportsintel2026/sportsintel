@@ -144,6 +144,12 @@ function fakeSupabase() {
   const shadowHooks = [...edgeSource.matchAll(/collectCfbGameShadowPredictions/g)].map((match) => match.index);
   assert.deepStrictEqual(shadowHooks.length, 2, "measurement hook should contain one lazy import and one call");
   assert.ok(shadowHooks.every((index) => index > tickHook), "shadow collector must be reachable only inside the tick collector");
+  const trackerSource = fs.readFileSync(path.join(__dirname, "predictionTracker.js"), "utf8");
+  const recorderHook = trackerSource.indexOf("async function recordFootballPredictions");
+  const pairedHooks = [...trackerSource.matchAll(/collectCfbGameShadowPredictions/g)].map((match) => match.index);
+  assert.deepStrictEqual(pairedHooks.length, 2, "paired recorder should contain one lazy import and one call");
+  assert.ok(pairedHooks.every((index) => index > recorderHook), "paired collector must remain inside the active football recorder");
+  assert.match(trackerSource, /usEvents:\s*cfbControlContext\.usEvents/);
   console.log("cfbGameShadowCollector self-test: PASS");
 })().catch((error) => {
   console.error(error);

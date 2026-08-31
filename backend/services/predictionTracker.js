@@ -1193,6 +1193,10 @@ async function recordFootballPredictions(slate, league = "nfl") {
   const now = Date.now();
   const rows = [];
   let cfbIncompleteProvenance = 0;
+  const cfbControlContext = league === "cfb" ? slate.cfbControlContext : null;
+  const cfbControlCapturedAt = Number.isFinite(Date.parse(cfbControlContext?.capturedAt))
+    ? new Date(cfbControlContext.capturedAt).toISOString()
+    : null;
 
   // WZ-FBPRESEASON-LEDGER-2026-08-18 :: NFL preseason games were being written into
   // model_predictions and read straight back by calibrationGuard's football drift watch,
@@ -1385,13 +1389,44 @@ async function recordFootballPredictions(slate, league = "nfl") {
   }
 
   if (rows.length === 0) return;
+  // Every CFB row produced by this one production calculation shares the same
+  // immutable prediction/market timestamp. Existing non-CFB recording and CFB
+  // calls without the internal control context retain the database default.
+  if (league === "cfb" && cfbControlCapturedAt) {
+    for (const row of rows) row.snapshotted_at = cfbControlCapturedAt;
+  }
   try {
     const { error } = await supabase
       .from("model_predictions")
       .upsert(rows, { onConflict: "game_id,market,selection,game_date", ignoreDuplicates: true });
     if (error) console.error(`[Tracker] ${league} record error:`, error.message);
-    else console.log(`[Tracker] Snapshotted ${rows.length} ${league.toUpperCase()} model picks for ${[...new Set(rows.map(r => r.game_date))].join(", ")} (dups ignored)`
-      + (league === "cfb" ? `; incomplete provenance=${cfbIncompleteProvenance}` : ""));
+    else {
+      console.log(`[Tracker] Snapshotted ${rows.length} ${league.toUpperCase()} model picks for ${[...new Set(rows.map(r => r.game_date))].join(", ")} (dups ignored)`
+        + (league === "cfb" ? `; incomplete provenance=${cfbIncompleteProvenance}` : ""));
+
+      // Pair the frozen customer control with a shadow generated from the exact
+      // same already-fetched market payload. The context is recording-only and
+      // non-enumerable; these calls add database evidence but no provider work.
+      if (league === "cfb" && cfbControlCapturedAt && Array.isArray(cfbControlContext?.usEvents)) {
+        try {
+          const { collectCfbGameShadowPredictions } = require("./cfbGameShadowCollector");
+          const shadow = await collectCfbGameShadowPredictions(supabase, {
+            usEvents: cfbControlContext.usEvents,
+            pinnacleEvents: [],
+            capturedAt: cfbControlCapturedAt,
+          });
+          const { linkCfbShadowControls } = require("./cfbControlBenchmark");
+          const linked = await linkCfbShadowControls(supabase, {
+            gameIds: cfbControlContext.usEvents
+              .map((event) => String(event?.eventId || ""))
+              .filter(Boolean),
+          });
+          console.log(`[CFB Paired Benchmark] shadow=${JSON.stringify(shadow)} links=${JSON.stringify(linked)}`);
+        } catch (e) {
+          console.error("[CFB Paired Benchmark] capture failed:", e.message);
+        }
+      }
+    }
   } catch (e) {
     console.error(`[Tracker] ${league} record exception:`, e.message);
   }
