@@ -450,6 +450,20 @@ async function captureCFBOddsTicks() {
   } catch (e) {
     console.error("[CFB Closing] enrichment failed:", e.message);
   }
+
+  // Shadow-only preseason game projections reuse the exact same already-fetched
+  // US/Pinnacle payloads. Failure is isolated from ticks, closing, and customers.
+  try {
+    const { collectCfbGameShadowPredictions } = require("./cfbGameShadowCollector");
+    const shadow = await collectCfbGameShadowPredictions(supabase, {
+      usEvents: events,
+      pinnacleEvents: pinEvents,
+      capturedAt: new Date().toISOString(),
+    });
+    console.log(`[CFB Game Shadow] ${JSON.stringify(shadow)}`);
+  } catch (e) {
+    console.error("[CFB Game Shadow] collection failed:", e.message);
+  }
   return saved;
 }
 
