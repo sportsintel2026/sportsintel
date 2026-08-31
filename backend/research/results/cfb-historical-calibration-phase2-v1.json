@@ -1,0 +1,4035 @@
+{
+  "version": "cfb-historical-calibration-phase2-v1-2026-08-31",
+  "datasetVersion": "cfb-historical-preseason-dataset-phase2-v1-2026-08-31",
+  "semanticInputVersion": "cfb-historical-percentppa-semantic-input-v1-2026-08-31",
+  "semanticInputContentSha256": "221a43f56088f431abe47df60acef7073f4ab86cb93b3564c919ae5f2fb8d3cd",
+  "searchSpaceVersion": "cfb-historical-semantic-grid-v2-2026-08-31",
+  "searchSpace": {
+    "coarse": {
+      "returningProductionCoefficient": [
+        0,
+        0.25,
+        0.5,
+        0.75,
+        1,
+        1.25,
+        1.5
+      ],
+      "talentCoefficient": [
+        0,
+        0.25,
+        0.5,
+        0.75,
+        1,
+        1.25,
+        1.5,
+        1.75,
+        2,
+        2.25,
+        2.5
+      ],
+      "homeFieldAdvantage": [
+        2,
+        2.5,
+        3,
+        3.5
+      ],
+      "baseSigma": [
+        12,
+        12.5,
+        13,
+        13.5,
+        14,
+        14.5,
+        15,
+        15.5,
+        16,
+        16.5,
+        17,
+        17.5
+      ],
+      "uncertaintyScale": [
+        0
+      ]
+    },
+    "fine": {
+      "returningProductionRadius": 0.25,
+      "returningProductionStep": 0.125,
+      "talentRadius": 0.25,
+      "talentStep": 0.125,
+      "homeFieldRadius": 0.5,
+      "homeFieldStep": 0.25,
+      "sigmaRadius": 0.5,
+      "sigmaStep": 0.25
+    },
+    "uncertaintyScaleSearch": {
+      "tested": [
+        0
+      ],
+      "unavailable": [
+        0.25,
+        0.5,
+        0.75,
+        1,
+        1.25,
+        1.5
+      ],
+      "reason": "Prediction-time historical team uncertainty cannot be reconstructed semantically; only scale 0 is scientifically evaluable."
+    }
+  },
+  "folds": [
+    {
+      "id": "fold-2023",
+      "train": [
+        2021,
+        2022
+      ],
+      "validate": 2023
+    },
+    {
+      "id": "fold-2024",
+      "train": [
+        2021,
+        2022,
+        2023
+      ],
+      "validate": 2024
+    },
+    {
+      "id": "fold-2025",
+      "train": [
+        2021,
+        2022,
+        2023,
+        2024
+      ],
+      "validate": 2025
+    }
+  ],
+  "selectionProtocol": {
+    "initialTrainingSeasons": [
+      2021,
+      2022
+    ],
+    "frozenValidationSeasons": [
+      2023,
+      2024,
+      2025
+    ],
+    "rule": "Select the balanced candidate on 2021-2022 only, freeze it, then evaluate 2023/2024/2025. Each walk-forward fold reselects using only seasons before its validation year.",
+    "nearTieRule": "Within 0.00005 balanced-score units, prefer lower RP+talent magnitude, HFA nearest 3.0, then sigma nearest 15.5.",
+    "candidateId": "cfb-preseason-prior-shadow-v2-2026-rp1-tal2.5-hfa3-sig17.5",
+    "initialSearchCandidates": 4152
+  },
+  "baselines": {
+    "liveV1Frozen": {
+      "params": {
+        "returningProductionCoefficient": 0.75,
+        "talentCoefficient": 0.5,
+        "homeFieldAdvantage": 3,
+        "baseSigma": 15.5,
+        "uncertaintyScale": 1
+      },
+      "historicallyEvaluable": false,
+      "reason": "Historical transfer/QB/coaching/roster snapshots do not exist at prediction-time fidelity; uncertainty is fixed off for historical comparison."
+    },
+    "historicalComparableV1": {
+      "params": {
+        "returningProductionCoefficient": 0.75,
+        "talentCoefficient": 0.5,
+        "homeFieldAdvantage": 3,
+        "baseSigma": 15.5,
+        "uncertaintyScale": 0
+      },
+      "validation": {
+        "params": {
+          "returningProductionCoefficient": 0.75,
+          "talentCoefficient": 0.5,
+          "homeFieldAdvantage": 3,
+          "baseSigma": 15.5,
+          "uncertaintyScale": 0
+        },
+        "seasons": [
+          2023,
+          2024,
+          2025
+        ],
+        "metrics": {
+          "n": 2210,
+          "probabilityN": 2210,
+          "marginBias": -0.9192245,
+          "mae": 14.10966982,
+          "rmse": 17.87991859,
+          "brier": 0.20643131,
+          "logLoss": 0.59867387,
+          "calibrationInterceptSlope": {
+            "intercept": -0.00752052,
+            "slope": 1.05124521,
+            "n": 2210
+          },
+          "reliability": {
+            "bins": [
+              {
+                "label": "0.00-0.35",
+                "n": 252,
+                "meanPredicted": 0.27036172,
+                "observed": 0.25,
+                "absoluteGap": 0.02036172
+              },
+              {
+                "label": "0.35-0.45",
+                "n": 299,
+                "meanPredicted": 0.40022403,
+                "observed": 0.39130435,
+                "absoluteGap": 0.00891968
+              },
+              {
+                "label": "0.45-0.55",
+                "n": 384,
+                "meanPredicted": 0.5044054,
+                "observed": 0.51302083,
+                "absoluteGap": 0.00861544
+              },
+              {
+                "label": "0.55-0.65",
+                "n": 416,
+                "meanPredicted": 0.59947481,
+                "observed": 0.59375,
+                "absoluteGap": 0.00572481
+              },
+              {
+                "label": "0.65-1.00",
+                "n": 859,
+                "meanPredicted": 0.76937615,
+                "observed": 0.78114086,
+                "absoluteGap": 0.01176471
+              }
+            ],
+            "ece": 0.01067596
+          },
+          "uncertainty": {
+            "exactHistoricalV1Reconstruction": false,
+            "correlationWithAbsoluteMarginError": null,
+            "bins": [
+              {
+                "quartile": 1,
+                "n": 552,
+                "meanUncertainty": 0,
+                "meanAbsoluteMarginError": 13.4555835
+              },
+              {
+                "quartile": 2,
+                "n": 553,
+                "meanUncertainty": 0,
+                "meanAbsoluteMarginError": 14.20068804
+              },
+              {
+                "quartile": 3,
+                "n": 552,
+                "meanUncertainty": 0,
+                "meanAbsoluteMarginError": 14.26412555
+              },
+              {
+                "quartile": 4,
+                "n": 553,
+                "meanUncertainty": 0,
+                "meanAbsoluteMarginError": 14.51737871
+              }
+            ]
+          },
+          "neutral": {
+            "n": 78,
+            "marginBias": -0.35901095,
+            "mae": 13.89550913
+          },
+          "nonNeutral": {
+            "n": 2132,
+            "marginBias": -0.93972012,
+            "mae": 14.11750497
+          }
+        },
+        "bySeason": {
+          "2023": {
+            "n": 729,
+            "probabilityN": 729,
+            "marginBias": -0.38959735,
+            "mae": 13.40597205,
+            "rmse": 17.02359535,
+            "brier": 0.19411269,
+            "logLoss": 0.57114483,
+            "calibrationInterceptSlope": {
+              "intercept": -0.11483537,
+              "slope": 1.36976446,
+              "n": 729
+            },
+            "reliability": {
+              "bins": [
+                {
+                  "label": "0.00-0.35",
+                  "n": 77,
+                  "meanPredicted": 0.26651825,
+                  "observed": 0.16883117,
+                  "absoluteGap": 0.09768708
+                },
+                {
+                  "label": "0.35-0.45",
+                  "n": 104,
+                  "meanPredicted": 0.39900613,
+                  "observed": 0.30769231,
+                  "absoluteGap": 0.09131382
+                },
+                {
+                  "label": "0.45-0.55",
+                  "n": 136,
+                  "meanPredicted": 0.50707168,
+                  "observed": 0.53676471,
+                  "absoluteGap": 0.02969303
+                },
+                {
+                  "label": "0.55-0.65",
+                  "n": 126,
+                  "meanPredicted": 0.59994945,
+                  "observed": 0.57936508,
+                  "absoluteGap": 0.02058437
+                },
+                {
+                  "label": "0.65-1.00",
+                  "n": 286,
+                  "meanPredicted": 0.76391459,
+                  "observed": 0.81118881,
+                  "absoluteGap": 0.04727422
+                }
+              ],
+              "ece": 0.05098882
+            },
+            "uncertainty": {
+              "exactHistoricalV1Reconstruction": false,
+              "correlationWithAbsoluteMarginError": null,
+              "bins": [
+                {
+                  "quartile": 1,
+                  "n": 182,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 12.21721432
+                },
+                {
+                  "quartile": 2,
+                  "n": 182,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 14.47416504
+                },
+                {
+                  "quartile": 3,
+                  "n": 182,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 13.86531315
+                },
+                {
+                  "quartile": 4,
+                  "n": 183,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 13.06904692
+                }
+              ]
+            },
+            "neutral": {
+              "n": 21,
+              "marginBias": -2.09337255,
+              "mae": 12.83864325
+            },
+            "nonNeutral": {
+              "n": 708,
+              "marginBias": -0.33906164,
+              "mae": 13.4227996
+            }
+          },
+          "2024": {
+            "n": 741,
+            "probabilityN": 741,
+            "marginBias": -1.12783967,
+            "mae": 14.57526046,
+            "rmse": 18.36158267,
+            "brier": 0.21659805,
+            "logLoss": 0.62003675,
+            "calibrationInterceptSlope": {
+              "intercept": 0.04443221,
+              "slope": 0.85022448,
+              "n": 741
+            },
+            "reliability": {
+              "bins": [
+                {
+                  "label": "0.00-0.35",
+                  "n": 89,
+                  "meanPredicted": 0.2738475,
+                  "observed": 0.30337079,
+                  "absoluteGap": 0.02952328
+                },
+                {
+                  "label": "0.35-0.45",
+                  "n": 100,
+                  "meanPredicted": 0.39978424,
+                  "observed": 0.46,
+                  "absoluteGap": 0.06021576
+                },
+                {
+                  "label": "0.45-0.55",
+                  "n": 131,
+                  "meanPredicted": 0.50306361,
+                  "observed": 0.54198473,
+                  "absoluteGap": 0.03892112
+                },
+                {
+                  "label": "0.55-0.65",
+                  "n": 129,
+                  "meanPredicted": 0.59984487,
+                  "observed": 0.54263566,
+                  "absoluteGap": 0.05720921
+                },
+                {
+                  "label": "0.65-1.00",
+                  "n": 292,
+                  "meanPredicted": 0.77473259,
+                  "observed": 0.75342466,
+                  "absoluteGap": 0.02130794
+                }
+              ],
+              "ece": 0.03690921
+            },
+            "uncertainty": {
+              "exactHistoricalV1Reconstruction": false,
+              "correlationWithAbsoluteMarginError": null,
+              "bins": [
+                {
+                  "quartile": 1,
+                  "n": 185,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 15.38804792
+                },
+                {
+                  "quartile": 2,
+                  "n": 185,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 13.94480883
+                },
+                {
+                  "quartile": 3,
+                  "n": 185,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 14.16356482
+                },
+                {
+                  "quartile": 4,
+                  "n": 186,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 14.80338716
+                }
+              ]
+            },
+            "neutral": {
+              "n": 35,
+              "marginBias": 0.45742624,
+              "mae": 15.26903529
+            },
+            "nonNeutral": {
+              "n": 706,
+              "marginBias": -1.20642934,
+              "mae": 14.54086652
+            }
+          },
+          "2025": {
+            "n": 740,
+            "probabilityN": 740,
+            "marginBias": -1.23208175,
+            "mae": 14.33668742,
+            "rmse": 18.21142688,
+            "brier": 0.20838634,
+            "logLoss": 0.60440194,
+            "calibrationInterceptSlope": {
+              "intercept": 0.03173909,
+              "slope": 1.00498589,
+              "n": 740
+            },
+            "reliability": {
+              "bins": [
+                {
+                  "label": "0.00-0.35",
+                  "n": 86,
+                  "meanPredicted": 0.27019559,
+                  "observed": 0.26744186,
+                  "absoluteGap": 0.00275373
+                },
+                {
+                  "label": "0.35-0.45",
+                  "n": 95,
+                  "meanPredicted": 0.40202024,
+                  "observed": 0.41052632,
+                  "absoluteGap": 0.00850608
+                },
+                {
+                  "label": "0.45-0.55",
+                  "n": 117,
+                  "meanPredicted": 0.50280847,
+                  "observed": 0.45299145,
+                  "absoluteGap": 0.04981702
+                },
+                {
+                  "label": "0.55-0.65",
+                  "n": 161,
+                  "meanPredicted": 0.59880685,
+                  "observed": 0.64596273,
+                  "absoluteGap": 0.04715589
+                },
+                {
+                  "label": "0.65-1.00",
+                  "n": 281,
+                  "meanPredicted": 0.76936878,
+                  "observed": 0.77935943,
+                  "absoluteGap": 0.00999065
+                }
+              ],
+              "ece": 0.02334184
+            },
+            "uncertainty": {
+              "exactHistoricalV1Reconstruction": false,
+              "correlationWithAbsoluteMarginError": null,
+              "bins": [
+                {
+                  "quartile": 1,
+                  "n": 185,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 13.73539096
+                },
+                {
+                  "quartile": 2,
+                  "n": 185,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 13.72074967
+                },
+                {
+                  "quartile": 3,
+                  "n": 185,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 14.9288664
+                },
+                {
+                  "quartile": 4,
+                  "n": 185,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 14.96174264
+                }
+              ]
+            },
+            "neutral": {
+              "n": 22,
+              "marginBias": -0.0023613,
+              "mae": 12.7191804
+            },
+            "nonNeutral": {
+              "n": 718,
+              "marginBias": -1.2697612,
+              "mae": 14.38624891
+            }
+          }
+        }
+      }
+    },
+    "priorOnly": {
+      "params": {
+        "returningProductionCoefficient": 0,
+        "talentCoefficient": 0,
+        "homeFieldAdvantage": 3,
+        "baseSigma": 15.5,
+        "uncertaintyScale": 0
+      },
+      "validation": {
+        "params": {
+          "returningProductionCoefficient": 0,
+          "talentCoefficient": 0,
+          "homeFieldAdvantage": 3,
+          "baseSigma": 15.5,
+          "uncertaintyScale": 0
+        },
+        "seasons": [
+          2023,
+          2024,
+          2025
+        ],
+        "metrics": {
+          "n": 2210,
+          "probabilityN": 2210,
+          "marginBias": -0.97677376,
+          "mae": 14.27823982,
+          "rmse": 18.08964343,
+          "brier": 0.2098462,
+          "logLoss": 0.60690354,
+          "calibrationInterceptSlope": {
+            "intercept": 0.02177356,
+            "slope": 0.969318,
+            "n": 2210
+          },
+          "reliability": {
+            "bins": [
+              {
+                "label": "0.00-0.35",
+                "n": 263,
+                "meanPredicted": 0.26844721,
+                "observed": 0.25855513,
+                "absoluteGap": 0.00989208
+              },
+              {
+                "label": "0.35-0.45",
+                "n": 300,
+                "meanPredicted": 0.39907887,
+                "observed": 0.41666667,
+                "absoluteGap": 0.0175878
+              },
+              {
+                "label": "0.45-0.55",
+                "n": 370,
+                "meanPredicted": 0.50392225,
+                "observed": 0.52702703,
+                "absoluteGap": 0.02310478
+              },
+              {
+                "label": "0.55-0.65",
+                "n": 420,
+                "meanPredicted": 0.59977726,
+                "observed": 0.57857143,
+                "absoluteGap": 0.02120583
+              },
+              {
+                "label": "0.65-1.00",
+                "n": 857,
+                "meanPredicted": 0.77042973,
+                "observed": 0.7747958,
+                "absoluteGap": 0.00436607
+              }
+            ],
+            "ece": 0.01315606
+          },
+          "uncertainty": {
+            "exactHistoricalV1Reconstruction": false,
+            "correlationWithAbsoluteMarginError": null,
+            "bins": [
+              {
+                "quartile": 1,
+                "n": 552,
+                "meanUncertainty": 0,
+                "meanAbsoluteMarginError": 13.72882246
+              },
+              {
+                "quartile": 2,
+                "n": 553,
+                "meanUncertainty": 0,
+                "meanAbsoluteMarginError": 14.44788427
+              },
+              {
+                "quartile": 3,
+                "n": 552,
+                "meanUncertainty": 0,
+                "meanAbsoluteMarginError": 14.34460145
+              },
+              {
+                "quartile": 4,
+                "n": 553,
+                "meanUncertainty": 0,
+                "meanAbsoluteMarginError": 14.59077758
+              }
+            ]
+          },
+          "neutral": {
+            "n": 78,
+            "marginBias": -0.5375641,
+            "mae": 14.12474359
+          },
+          "nonNeutral": {
+            "n": 2132,
+            "marginBias": -0.9928424,
+            "mae": 14.28385553
+          }
+        },
+        "bySeason": {
+          "2023": {
+            "n": 729,
+            "probabilityN": 729,
+            "marginBias": -0.42857339,
+            "mae": 13.64602195,
+            "rmse": 17.34546219,
+            "brier": 0.19897769,
+            "logLoss": 0.58264185,
+            "calibrationInterceptSlope": {
+              "intercept": -0.07791015,
+              "slope": 1.24122692,
+              "n": 729
+            },
+            "reliability": {
+              "bins": [
+                {
+                  "label": "0.00-0.35",
+                  "n": 83,
+                  "meanPredicted": 0.27159801,
+                  "observed": 0.19277108,
+                  "absoluteGap": 0.07882692
+                },
+                {
+                  "label": "0.35-0.45",
+                  "n": 99,
+                  "meanPredicted": 0.39922561,
+                  "observed": 0.32323232,
+                  "absoluteGap": 0.07599328
+                },
+                {
+                  "label": "0.45-0.55",
+                  "n": 120,
+                  "meanPredicted": 0.50096915,
+                  "observed": 0.54166667,
+                  "absoluteGap": 0.04069752
+                },
+                {
+                  "label": "0.55-0.65",
+                  "n": 149,
+                  "meanPredicted": 0.59965029,
+                  "observed": 0.56375839,
+                  "absoluteGap": 0.0358919
+                },
+                {
+                  "label": "0.65-1.00",
+                  "n": 278,
+                  "meanPredicted": 0.76665088,
+                  "observed": 0.81294964,
+                  "absoluteGap": 0.04629876
+                }
+              ],
+              "ece": 0.05098576
+            },
+            "uncertainty": {
+              "exactHistoricalV1Reconstruction": false,
+              "correlationWithAbsoluteMarginError": null,
+              "bins": [
+                {
+                  "quartile": 1,
+                  "n": 182,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 12.52824176
+                },
+                {
+                  "quartile": 2,
+                  "n": 182,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 14.77021978
+                },
+                {
+                  "quartile": 3,
+                  "n": 182,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 14.09
+                },
+                {
+                  "quartile": 4,
+                  "n": 183,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 13.19808743
+                }
+              ]
+            },
+            "neutral": {
+              "n": 21,
+              "marginBias": -2.45142857,
+              "mae": 13.5247619
+            },
+            "nonNeutral": {
+              "n": 708,
+              "marginBias": -0.36857345,
+              "mae": 13.64961864
+            }
+          },
+          "2024": {
+            "n": 741,
+            "probabilityN": 741,
+            "marginBias": -1.18516869,
+            "mae": 14.75753036,
+            "rmse": 18.52237178,
+            "brier": 0.22037511,
+            "logLoss": 0.62916361,
+            "calibrationInterceptSlope": {
+              "intercept": 0.07191028,
+              "slope": 0.77711421,
+              "n": 741
+            },
+            "reliability": {
+              "bins": [
+                {
+                  "label": "0.00-0.35",
+                  "n": 94,
+                  "meanPredicted": 0.27159912,
+                  "observed": 0.30851064,
+                  "absoluteGap": 0.03691152
+                },
+                {
+                  "label": "0.35-0.45",
+                  "n": 101,
+                  "meanPredicted": 0.40015258,
+                  "observed": 0.5049505,
+                  "absoluteGap": 0.10479792
+                },
+                {
+                  "label": "0.45-0.55",
+                  "n": 128,
+                  "meanPredicted": 0.50448449,
+                  "observed": 0.546875,
+                  "absoluteGap": 0.04239051
+                },
+                {
+                  "label": "0.55-0.65",
+                  "n": 124,
+                  "meanPredicted": 0.59920506,
+                  "observed": 0.51612903,
+                  "absoluteGap": 0.08307603
+                },
+                {
+                  "label": "0.65-1.00",
+                  "n": 294,
+                  "meanPredicted": 0.77534096,
+                  "observed": 0.74829932,
+                  "absoluteGap": 0.02704164
+                }
+              ],
+              "ece": 0.05092028
+            },
+            "uncertainty": {
+              "exactHistoricalV1Reconstruction": false,
+              "correlationWithAbsoluteMarginError": null,
+              "bins": [
+                {
+                  "quartile": 1,
+                  "n": 185,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 15.65643243
+                },
+                {
+                  "quartile": 2,
+                  "n": 185,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 14.28605405
+                },
+                {
+                  "quartile": 3,
+                  "n": 185,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 14.43497297
+                },
+                {
+                  "quartile": 4,
+                  "n": 186,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 14.65322581
+                }
+              ]
+            },
+            "neutral": {
+              "n": 35,
+              "marginBias": 0.51485714,
+              "mae": 15.33714286
+            },
+            "nonNeutral": {
+              "n": 706,
+              "marginBias": -1.26944759,
+              "mae": 14.72879603
+            }
+          },
+          "2025": {
+            "n": 740,
+            "probabilityN": 740,
+            "marginBias": -1.30814865,
+            "mae": 14.42112162,
+            "rmse": 18.36705979,
+            "brier": 0.21001001,
+            "logLoss": 0.60851444,
+            "calibrationInterceptSlope": {
+              "intercept": 0.05560411,
+              "slope": 0.95158232,
+              "n": 740
+            },
+            "reliability": {
+              "bins": [
+                {
+                  "label": "0.00-0.35",
+                  "n": 86,
+                  "meanPredicted": 0.26196122,
+                  "observed": 0.26744186,
+                  "absoluteGap": 0.00548064
+                },
+                {
+                  "label": "0.35-0.45",
+                  "n": 100,
+                  "meanPredicted": 0.39784914,
+                  "observed": 0.42,
+                  "absoluteGap": 0.02215086
+                },
+                {
+                  "label": "0.45-0.55",
+                  "n": 122,
+                  "meanPredicted": 0.50623703,
+                  "observed": 0.49180328,
+                  "absoluteGap": 0.01443375
+                },
+                {
+                  "label": "0.55-0.65",
+                  "n": 147,
+                  "meanPredicted": 0.60038862,
+                  "observed": 0.6462585,
+                  "absoluteGap": 0.04586989
+                },
+                {
+                  "label": "0.65-1.00",
+                  "n": 285,
+                  "meanPredicted": 0.76904945,
+                  "observed": 0.76491228,
+                  "absoluteGap": 0.00413717
+                }
+              ],
+              "ece": 0.01671528
+            },
+            "uncertainty": {
+              "exactHistoricalV1Reconstruction": false,
+              "correlationWithAbsoluteMarginError": null,
+              "bins": [
+                {
+                  "quartile": 1,
+                  "n": 185,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 13.85097297
+                },
+                {
+                  "quartile": 2,
+                  "n": 185,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 13.68135135
+                },
+                {
+                  "quartile": 3,
+                  "n": 185,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 15.02010811
+                },
+                {
+                  "quartile": 4,
+                  "n": 185,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 15.13205405
+                }
+              ]
+            },
+            "neutral": {
+              "n": 22,
+              "marginBias": -0.385,
+              "mae": 12.76863636
+            },
+            "nonNeutral": {
+              "n": 718,
+              "marginBias": -1.33643454,
+              "mae": 14.47175487
+            }
+          }
+        }
+      }
+    },
+    "phase1CandidateReference": {
+      "params": {
+        "returningProductionCoefficient": 1,
+        "talentCoefficient": 1.25,
+        "homeFieldAdvantage": 3,
+        "baseSigma": 14,
+        "uncertaintyScale": 0
+      },
+      "validation": {
+        "params": {
+          "returningProductionCoefficient": 1,
+          "talentCoefficient": 1.25,
+          "homeFieldAdvantage": 3,
+          "baseSigma": 14,
+          "uncertaintyScale": 0
+        },
+        "seasons": [
+          2023,
+          2024,
+          2025
+        ],
+        "metrics": {
+          "n": 2210,
+          "probabilityN": 2210,
+          "marginBias": -0.85133145,
+          "mae": 13.96823658,
+          "rmse": 17.70685869,
+          "brier": 0.20400628,
+          "logLoss": 0.5921795,
+          "calibrationInterceptSlope": {
+            "intercept": -0.0343549,
+            "slope": 1.005451,
+            "n": 2210
+          },
+          "reliability": {
+            "bins": [
+              {
+                "label": "0.00-0.35",
+                "n": 268,
+                "meanPredicted": 0.26190319,
+                "observed": 0.22761194,
+                "absoluteGap": 0.03429125
+              },
+              {
+                "label": "0.35-0.45",
+                "n": 293,
+                "meanPredicted": 0.40170237,
+                "observed": 0.40614334,
+                "absoluteGap": 0.00444098
+              },
+              {
+                "label": "0.45-0.55",
+                "n": 338,
+                "meanPredicted": 0.50319048,
+                "observed": 0.51183432,
+                "absoluteGap": 0.00864384
+              },
+              {
+                "label": "0.55-0.65",
+                "n": 390,
+                "meanPredicted": 0.59765318,
+                "observed": 0.58461538,
+                "absoluteGap": 0.0130378
+              },
+              {
+                "label": "0.65-1.00",
+                "n": 921,
+                "meanPredicted": 0.78029106,
+                "observed": 0.7752443,
+                "absoluteGap": 0.00504676
+              }
+            ],
+            "ece": 0.01047316
+          },
+          "uncertainty": {
+            "exactHistoricalV1Reconstruction": false,
+            "correlationWithAbsoluteMarginError": null,
+            "bins": [
+              {
+                "quartile": 1,
+                "n": 552,
+                "meanUncertainty": 0,
+                "meanAbsoluteMarginError": 13.21369354
+              },
+              {
+                "quartile": 2,
+                "n": 553,
+                "meanUncertainty": 0,
+                "meanAbsoluteMarginError": 14.02786344
+              },
+              {
+                "quartile": 3,
+                "n": 552,
+                "meanUncertainty": 0,
+                "meanAbsoluteMarginError": 14.19649163
+              },
+              {
+                "quartile": 4,
+                "n": 553,
+                "meanUncertainty": 0,
+                "meanAbsoluteMarginError": 14.43394602
+              }
+            ]
+          },
+          "neutral": {
+            "n": 78,
+            "marginBias": -0.38923784,
+            "mae": 13.66028054
+          },
+          "nonNeutral": {
+            "n": 2132,
+            "marginBias": -0.86823731,
+            "mae": 13.97950327
+          }
+        },
+        "bySeason": {
+          "2023": {
+            "n": 729,
+            "probabilityN": 729,
+            "marginBias": -0.33745831,
+            "mae": 13.21814472,
+            "rmse": 16.78218634,
+            "brier": 0.18967536,
+            "logLoss": 0.55941744,
+            "calibrationInterceptSlope": {
+              "intercept": -0.14733998,
+              "slope": 1.32383223,
+              "n": 729
+            },
+            "reliability": {
+              "bins": [
+                {
+                  "label": "0.00-0.35",
+                  "n": 89,
+                  "meanPredicted": 0.26291576,
+                  "observed": 0.15730337,
+                  "absoluteGap": 0.10561239
+                },
+                {
+                  "label": "0.35-0.45",
+                  "n": 101,
+                  "meanPredicted": 0.40272538,
+                  "observed": 0.32673267,
+                  "absoluteGap": 0.07599271
+                },
+                {
+                  "label": "0.45-0.55",
+                  "n": 114,
+                  "meanPredicted": 0.5081415,
+                  "observed": 0.51754386,
+                  "absoluteGap": 0.00940236
+                },
+                {
+                  "label": "0.55-0.65",
+                  "n": 119,
+                  "meanPredicted": 0.5973075,
+                  "observed": 0.57142857,
+                  "absoluteGap": 0.02587893
+                },
+                {
+                  "label": "0.65-1.00",
+                  "n": 306,
+                  "meanPredicted": 0.77585666,
+                  "observed": 0.81372549,
+                  "absoluteGap": 0.03786883
+                }
+              ],
+              "ece": 0.04501247
+            },
+            "uncertainty": {
+              "exactHistoricalV1Reconstruction": false,
+              "correlationWithAbsoluteMarginError": null,
+              "bins": [
+                {
+                  "quartile": 1,
+                  "n": 182,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 11.94922614
+                },
+                {
+                  "quartile": 2,
+                  "n": 182,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 14.15870511
+                },
+                {
+                  "quartile": 3,
+                  "n": 182,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 13.70970885
+                },
+                {
+                  "quartile": 4,
+                  "n": 183,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 13.05583059
+                }
+              ]
+            },
+            "neutral": {
+              "n": 21,
+              "marginBias": -1.82951064,
+              "mae": 12.31457355
+            },
+            "nonNeutral": {
+              "n": 708,
+              "marginBias": -0.29320252,
+              "mae": 13.24494556
+            }
+          },
+          "2024": {
+            "n": 741,
+            "probabilityN": 741,
+            "marginBias": -1.05677909,
+            "mae": 14.43491508,
+            "rmse": 18.22593862,
+            "brier": 0.21509288,
+            "logLoss": 0.61597567,
+            "calibrationInterceptSlope": {
+              "intercept": 0.02035653,
+              "slope": 0.81333021,
+              "n": 741
+            },
+            "reliability": {
+              "bins": [
+                {
+                  "label": "0.00-0.35",
+                  "n": 88,
+                  "meanPredicted": 0.2584921,
+                  "observed": 0.28409091,
+                  "absoluteGap": 0.02559881
+                },
+                {
+                  "label": "0.35-0.45",
+                  "n": 104,
+                  "meanPredicted": 0.39999199,
+                  "observed": 0.46153846,
+                  "absoluteGap": 0.06154647
+                },
+                {
+                  "label": "0.45-0.55",
+                  "n": 111,
+                  "meanPredicted": 0.49814348,
+                  "observed": 0.52252252,
+                  "absoluteGap": 0.02437905
+                },
+                {
+                  "label": "0.55-0.65",
+                  "n": 131,
+                  "meanPredicted": 0.598876,
+                  "observed": 0.5648855,
+                  "absoluteGap": 0.0339905
+                },
+                {
+                  "label": "0.65-1.00",
+                  "n": 307,
+                  "meanPredicted": 0.78781376,
+                  "observed": 0.74592834,
+                  "absoluteGap": 0.04188542
+                }
+              ],
+              "ece": 0.03869255
+            },
+            "uncertainty": {
+              "exactHistoricalV1Reconstruction": false,
+              "correlationWithAbsoluteMarginError": null,
+              "bins": [
+                {
+                  "quartile": 1,
+                  "n": 185,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 15.09543433
+                },
+                {
+                  "quartile": 2,
+                  "n": 185,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 13.74588654
+                },
+                {
+                  "quartile": 3,
+                  "n": 185,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 13.95153303
+                },
+                {
+                  "quartile": 4,
+                  "n": 186,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 14.94405432
+                }
+              ]
+            },
+            "neutral": {
+              "n": 35,
+              "marginBias": 0.19773909,
+              "mae": 15.06318907
+            },
+            "nonNeutral": {
+              "n": 706,
+              "marginBias": -1.11897192,
+              "mae": 14.40376835
+            }
+          },
+          "2025": {
+            "n": 740,
+            "probabilityN": 740,
+            "marginBias": -1.15184066,
+            "mae": 14.23986929,
+            "rmse": 18.063019,
+            "brier": 0.20702258,
+            "logLoss": 0.60062623,
+            "calibrationInterceptSlope": {
+              "intercept": 0.00710229,
+              "slope": 0.95175244,
+              "n": 740
+            },
+            "reliability": {
+              "bins": [
+                {
+                  "label": "0.00-0.35",
+                  "n": 91,
+                  "meanPredicted": 0.26421152,
+                  "observed": 0.24175824,
+                  "absoluteGap": 0.02245328
+                },
+                {
+                  "label": "0.35-0.45",
+                  "n": 88,
+                  "meanPredicted": 0.40254958,
+                  "observed": 0.43181818,
+                  "absoluteGap": 0.0292686
+                },
+                {
+                  "label": "0.45-0.55",
+                  "n": 113,
+                  "meanPredicted": 0.50315333,
+                  "observed": 0.49557522,
+                  "absoluteGap": 0.0075781
+                },
+                {
+                  "label": "0.55-0.65",
+                  "n": 140,
+                  "meanPredicted": 0.5968028,
+                  "observed": 0.61428571,
+                  "absoluteGap": 0.01748292
+                },
+                {
+                  "label": "0.65-1.00",
+                  "n": 308,
+                  "meanPredicted": 0.77719839,
+                  "observed": 0.76623377,
+                  "absoluteGap": 0.01096463
+                }
+              ],
+              "ece": 0.01527017
+            },
+            "uncertainty": {
+              "exactHistoricalV1Reconstruction": false,
+              "correlationWithAbsoluteMarginError": null,
+              "bins": [
+                {
+                  "quartile": 1,
+                  "n": 185,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 13.60324275
+                },
+                {
+                  "quartile": 2,
+                  "n": 185,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 13.76437521
+                },
+                {
+                  "quartile": 3,
+                  "n": 185,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 14.75431759
+                },
+                {
+                  "quartile": 4,
+                  "n": 185,
+                  "meanUncertainty": 0,
+                  "meanAbsoluteMarginError": 14.83754161
+                }
+              ]
+            },
+            "neutral": {
+              "n": 22,
+              "marginBias": 0.05174107,
+              "mae": 12.7129191
+            },
+            "nonNeutral": {
+              "n": 718,
+              "marginBias": -1.18871921,
+              "mae": 14.28665606
+            }
+          }
+        }
+      },
+      "caveat": "RP coefficient was selected using a different Phase 1 proxy; this row is reference-only."
+    }
+  },
+  "frozenCandidate": {
+    "id": "cfb-preseason-prior-shadow-v2-2026-rp1-tal2.5-hfa3-sig17.5",
+    "params": {
+      "returningProductionCoefficient": 1,
+      "talentCoefficient": 2.5,
+      "homeFieldAdvantage": 3,
+      "baseSigma": 17.5,
+      "uncertaintyScale": 0
+    },
+    "trainingMetrics": {
+      "n": 1403,
+      "probabilityN": 1403,
+      "marginBias": 0.29240117,
+      "mae": 13.9883701,
+      "rmse": 17.50536803,
+      "brier": 0.20849105,
+      "logLoss": 0.60206055
+    },
+    "trainingScores": {
+      "margin": 0.9815052,
+      "probability": 0.98113329,
+      "balanced": 0.98131924,
+      "stabilityPenalty": 0,
+      "worstAnnualRelativeComposite": 0.98438481
+    },
+    "validationMetrics": {
+      "n": 2210,
+      "probabilityN": 2210,
+      "marginBias": -0.74695294,
+      "mae": 13.83350226,
+      "rmse": 17.53372975,
+      "brier": 0.20365648,
+      "logLoss": 0.59144126,
+      "calibrationInterceptSlope": {
+        "intercept": -0.06238223,
+        "slope": 1.34526052,
+        "n": 2210
+      },
+      "reliability": {
+        "bins": [
+          {
+            "label": "0.00-0.35",
+            "n": 169,
+            "meanPredicted": 0.27291927,
+            "observed": 0.19526627,
+            "absoluteGap": 0.077653
+          },
+          {
+            "label": "0.35-0.45",
+            "n": 314,
+            "meanPredicted": 0.40201614,
+            "observed": 0.34713376,
+            "absoluteGap": 0.05488239
+          },
+          {
+            "label": "0.45-0.55",
+            "n": 450,
+            "meanPredicted": 0.5016682,
+            "observed": 0.50666667,
+            "absoluteGap": 0.00499847
+          },
+          {
+            "label": "0.55-0.65",
+            "n": 522,
+            "meanPredicted": 0.5975556,
+            "observed": 0.61494253,
+            "absoluteGap": 0.01738692
+          },
+          {
+            "label": "0.65-1.00",
+            "n": 755,
+            "meanPredicted": 0.75727787,
+            "observed": 0.8,
+            "absoluteGap": 0.04272213
+          }
+        ],
+        "ece": 0.03345562
+      },
+      "uncertainty": {
+        "exactHistoricalV1Reconstruction": false,
+        "correlationWithAbsoluteMarginError": null,
+        "bins": [
+          {
+            "quartile": 1,
+            "n": 552,
+            "meanUncertainty": 0,
+            "meanAbsoluteMarginError": 12.95926356
+          },
+          {
+            "quartile": 2,
+            "n": 553,
+            "meanUncertainty": 0,
+            "meanAbsoluteMarginError": 13.87454796
+          },
+          {
+            "quartile": 3,
+            "n": 552,
+            "meanUncertainty": 0,
+            "meanAbsoluteMarginError": 14.14206382
+          },
+          {
+            "quartile": 4,
+            "n": 553,
+            "meanUncertainty": 0,
+            "meanAbsoluteMarginError": 14.35711079
+          }
+        ]
+      },
+      "neutral": {
+        "n": 78,
+        "marginBias": -0.58154772,
+        "mae": 13.53305406
+      },
+      "nonNeutral": {
+        "n": 2132,
+        "marginBias": -0.75300435,
+        "mae": 13.84449427
+      }
+    },
+    "validationBySeason": {
+      "2023": {
+        "n": 729,
+        "probabilityN": 729,
+        "marginBias": -0.25357182,
+        "mae": 13.03861379,
+        "rmse": 16.54865231,
+        "brier": 0.19138713,
+        "logLoss": 0.56452813,
+        "calibrationInterceptSlope": {
+          "intercept": -0.17871129,
+          "slope": 1.7749417,
+          "n": 729
+        },
+        "reliability": {
+          "bins": [
+            {
+              "label": "0.00-0.35",
+              "n": 59,
+              "meanPredicted": 0.27429194,
+              "observed": 0.13559322,
+              "absoluteGap": 0.13869872
+            },
+            {
+              "label": "0.35-0.45",
+              "n": 111,
+              "meanPredicted": 0.40297488,
+              "observed": 0.24324324,
+              "absoluteGap": 0.15973164
+            },
+            {
+              "label": "0.45-0.55",
+              "n": 138,
+              "meanPredicted": 0.50230104,
+              "observed": 0.51449275,
+              "absoluteGap": 0.01219171
+            },
+            {
+              "label": "0.55-0.65",
+              "n": 177,
+              "meanPredicted": 0.60066242,
+              "observed": 0.62146893,
+              "absoluteGap": 0.0208065
+            },
+            {
+              "label": "0.65-1.00",
+              "n": 244,
+              "meanPredicted": 0.75629936,
+              "observed": 0.84836066,
+              "absoluteGap": 0.09206129
+            }
+          ],
+          "ece": 0.07371961
+        },
+        "uncertainty": {
+          "exactHistoricalV1Reconstruction": false,
+          "correlationWithAbsoluteMarginError": null,
+          "bins": [
+            {
+              "quartile": 1,
+              "n": 182,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 11.65659047
+            },
+            {
+              "quartile": 2,
+              "n": 182,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 13.76404353
+            },
+            {
+              "quartile": 3,
+              "n": 182,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 13.60648605
+            },
+            {
+              "quartile": 4,
+              "n": 183,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 13.12685029
+            }
+          ]
+        },
+        "neutral": {
+          "n": 21,
+          "marginBias": -1.51984656,
+          "mae": 11.90286742
+        },
+        "nonNeutral": {
+          "n": 708,
+          "marginBias": -0.21601283,
+          "mae": 13.07230118
+        }
+      },
+      "2024": {
+        "n": 741,
+        "probabilityN": 741,
+        "marginBias": -0.94545573,
+        "mae": 14.31351036,
+        "rmse": 18.09577837,
+        "brier": 0.21228936,
+        "logLoss": 0.60925972,
+        "calibrationInterceptSlope": {
+          "intercept": -0.00359184,
+          "slope": 1.08440748,
+          "n": 741
+        },
+        "reliability": {
+          "bins": [
+            {
+              "label": "0.00-0.35",
+              "n": 54,
+              "meanPredicted": 0.26371317,
+              "observed": 0.2962963,
+              "absoluteGap": 0.03258312
+            },
+            {
+              "label": "0.35-0.45",
+              "n": 108,
+              "meanPredicted": 0.40180808,
+              "observed": 0.38888889,
+              "absoluteGap": 0.01291919
+            },
+            {
+              "label": "0.45-0.55",
+              "n": 154,
+              "meanPredicted": 0.49874875,
+              "observed": 0.5,
+              "absoluteGap": 0.00125125
+            },
+            {
+              "label": "0.55-0.65",
+              "n": 170,
+              "meanPredicted": 0.59792591,
+              "observed": 0.6,
+              "absoluteGap": 0.00207409
+            },
+            {
+              "label": "0.65-1.00",
+              "n": 255,
+              "meanPredicted": 0.7640031,
+              "observed": 0.77254902,
+              "absoluteGap": 0.00854592
+            }
+          ],
+          "ece": 0.00793422
+        },
+        "uncertainty": {
+          "exactHistoricalV1Reconstruction": false,
+          "correlationWithAbsoluteMarginError": null,
+          "bins": [
+            {
+              "quartile": 1,
+              "n": 185,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 14.72925008
+            },
+            {
+              "quartile": 2,
+              "n": 185,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 13.60833281
+            },
+            {
+              "quartile": 3,
+              "n": 185,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 13.72140863
+            },
+            {
+              "quartile": 4,
+              "n": 186,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 15.19031047
+            }
+          ]
+        },
+        "neutral": {
+          "n": 35,
+          "marginBias": -0.31771128,
+          "mae": 14.91610847
+        },
+        "nonNeutral": {
+          "n": 706,
+          "marginBias": -0.97657621,
+          "mae": 14.28363652
+        }
+      },
+      "2025": {
+        "n": 740,
+        "probabilityN": 740,
+        "marginBias": -1.03422898,
+        "mae": 14.13591807,
+        "rmse": 17.9012239,
+        "brier": 0.2070989,
+        "logLoss": 0.60011179,
+        "calibrationInterceptSlope": {
+          "intercept": -0.02157436,
+          "slope": 1.27342037,
+          "n": 740
+        },
+        "reliability": {
+          "bins": [
+            {
+              "label": "0.00-0.35",
+              "n": 56,
+              "meanPredicted": 0.28035037,
+              "observed": 0.16071429,
+              "absoluteGap": 0.11963608
+            },
+            {
+              "label": "0.35-0.45",
+              "n": 95,
+              "meanPredicted": 0.40113248,
+              "observed": 0.42105263,
+              "absoluteGap": 0.01992015
+            },
+            {
+              "label": "0.45-0.55",
+              "n": 158,
+              "meanPredicted": 0.503961,
+              "observed": 0.50632911,
+              "absoluteGap": 0.00236811
+            },
+            {
+              "label": "0.55-0.65",
+              "n": 175,
+              "meanPredicted": 0.59405355,
+              "observed": 0.62285714,
+              "absoluteGap": 0.02880359
+            },
+            {
+              "label": "0.65-1.00",
+              "n": 256,
+              "meanPredicted": 0.75151155,
+              "observed": 0.78125,
+              "absoluteGap": 0.02973845
+            }
+          ],
+          "ece": 0.02921604
+        },
+        "uncertainty": {
+          "exactHistoricalV1Reconstruction": false,
+          "correlationWithAbsoluteMarginError": null,
+          "bins": [
+            {
+              "quartile": 1,
+              "n": 185,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 13.42742218
+            },
+            {
+              "quartile": 2,
+              "n": 185,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 13.94109296
+            },
+            {
+              "quartile": 3,
+              "n": 185,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 14.48928764
+            },
+            {
+              "quartile": 4,
+              "n": 185,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 14.6858695
+            }
+          ]
+        },
+        "neutral": {
+          "n": 22,
+          "marginBias": -0.10563862,
+          "mae": 12.88882746
+        },
+        "nonNeutral": {
+          "n": 718,
+          "marginBias": -1.06268161,
+          "mae": 14.17412976
+        }
+      }
+    },
+    "pairedUncertaintyVsV1": {
+      "absoluteMarginError": {
+        "n": 2210,
+        "mean": -0.27616756,
+        "standardError": 0.04796821,
+        "bootstrap95": [
+          -0.3730156,
+          -0.1890439
+        ],
+        "seed": 20261031,
+        "replicates": 1000
+      },
+      "squaredMarginError": {
+        "n": 2210,
+        "mean": -12.25981009,
+        "standardError": 1.78212506,
+        "bootstrap95": [
+          -15.77991067,
+          -8.71218206
+        ],
+        "seed": 20261032,
+        "replicates": 1000
+      },
+      "brier": {
+        "n": 2210,
+        "mean": -0.00277483,
+        "standardError": 0.0010597,
+        "bootstrap95": [
+          -0.0048793,
+          -0.00063029
+        ],
+        "seed": 20261033,
+        "replicates": 1000
+      },
+      "logLoss": {
+        "n": 2210,
+        "mean": -0.00723261,
+        "standardError": 0.00253473,
+        "bootstrap95": [
+          -0.01224572,
+          -0.002102
+        ],
+        "seed": 20261034,
+        "replicates": 1000
+      }
+    },
+    "gate": {
+      "aggregateDeltas": {
+        "marginBias": 0.17227156,
+        "mae": -0.27616756,
+        "rmse": -0.34618884,
+        "brier": -0.00277483,
+        "logLoss": -0.00723261,
+        "ece": 0.02277966
+      },
+      "aggregateStrictImprovement": true,
+      "practicalImprovementThresholdsMet": true,
+      "bySeason": {
+        "2023": {
+          "delta": {
+            "marginBias": 0.13602553,
+            "mae": -0.36735826,
+            "rmse": -0.47494304,
+            "brier": -0.00272556,
+            "logLoss": -0.0066167,
+            "ece": 0.02273079
+          },
+          "relativeRegression": {
+            "mae": -0.02740258,
+            "rmse": -0.0278991,
+            "brier": -0.01404112,
+            "logLoss": -0.01158498
+          },
+          "materialCollapse": false
+        },
+        "2024": {
+          "delta": {
+            "marginBias": 0.18238394,
+            "mae": -0.2617501,
+            "rmse": -0.2658043,
+            "brier": -0.00430869,
+            "logLoss": -0.01077703,
+            "ece": -0.02897499
+          },
+          "relativeRegression": {
+            "mae": -0.01795852,
+            "rmse": -0.01447611,
+            "brier": -0.01989256,
+            "logLoss": -0.01738128
+          },
+          "materialCollapse": false
+        },
+        "2025": {
+          "delta": {
+            "marginBias": 0.19785277,
+            "mae": -0.20076935,
+            "rmse": -0.31020298,
+            "brier": -0.00128744,
+            "logLoss": -0.00429015,
+            "ece": 0.0058742
+          },
+          "relativeRegression": {
+            "mae": -0.01400389,
+            "rmse": -0.01703343,
+            "brier": -0.00617814,
+            "logLoss": -0.00709817
+          },
+          "materialCollapse": false
+        }
+      },
+      "noMaterialAnnualCollapse": true,
+      "bootstrapSupportsAllPrimaryMetrics": true,
+      "buildParallelV2": true,
+      "decision": "B — Parallel v2 shadow justified."
+    }
+  },
+  "prospectiveParallelV2": {
+    "teamModelVersion": "cfb-preseason-prior-shadow-v2-2026",
+    "gameModelVersion": "cfb-game-preseason-shadow-v2-2026",
+    "experimentVersion": "cfb-game-preseason-shadow-v2-parallel-2026",
+    "params": {
+      "returningProductionCoefficient": 1.25,
+      "talentCoefficient": 2.5,
+      "homeFieldAdvantage": 3,
+      "baseSigma": 15.5,
+      "uncertaintyScale": 0
+    },
+    "refitSeasons": [
+      2021,
+      2022,
+      2023,
+      2024,
+      2025
+    ],
+    "refitMetrics": {
+      "n": 3613,
+      "probabilityN": 3613,
+      "marginBias": -0.33997422,
+      "mae": 13.88913534,
+      "rmse": 17.51904961,
+      "brier": 0.20504095,
+      "logLoss": 0.59385878
+    },
+    "refitScores": {
+      "margin": 0.9806504,
+      "probability": 0.98223682,
+      "balanced": 0.98144361,
+      "stabilityPenalty": 0,
+      "worstAnnualRelativeComposite": 0.98790721
+    },
+    "rule": "Only after the held-out B gate passed, refit the unchanged deterministic search on all pre-2026 seasons for prospective 2026 shadow collection. These in-sample refit metrics are not validation evidence."
+  },
+  "walkForward": [
+    {
+      "id": "fold-2023",
+      "train": [
+        2021,
+        2022
+      ],
+      "validate": 2023,
+      "selectedParams": {
+        "returningProductionCoefficient": 1,
+        "talentCoefficient": 2.5,
+        "homeFieldAdvantage": 3,
+        "baseSigma": 17.5,
+        "uncertaintyScale": 0
+      },
+      "candidatesEvaluated": 4152,
+      "candidateMetrics": {
+        "n": 729,
+        "probabilityN": 729,
+        "marginBias": -0.25357182,
+        "mae": 13.03861379,
+        "rmse": 16.54865231,
+        "brier": 0.19138713,
+        "logLoss": 0.56452813,
+        "calibrationInterceptSlope": {
+          "intercept": -0.17871129,
+          "slope": 1.7749417,
+          "n": 729
+        },
+        "reliability": {
+          "bins": [
+            {
+              "label": "0.00-0.35",
+              "n": 59,
+              "meanPredicted": 0.27429194,
+              "observed": 0.13559322,
+              "absoluteGap": 0.13869872
+            },
+            {
+              "label": "0.35-0.45",
+              "n": 111,
+              "meanPredicted": 0.40297488,
+              "observed": 0.24324324,
+              "absoluteGap": 0.15973164
+            },
+            {
+              "label": "0.45-0.55",
+              "n": 138,
+              "meanPredicted": 0.50230104,
+              "observed": 0.51449275,
+              "absoluteGap": 0.01219171
+            },
+            {
+              "label": "0.55-0.65",
+              "n": 177,
+              "meanPredicted": 0.60066242,
+              "observed": 0.62146893,
+              "absoluteGap": 0.0208065
+            },
+            {
+              "label": "0.65-1.00",
+              "n": 244,
+              "meanPredicted": 0.75629936,
+              "observed": 0.84836066,
+              "absoluteGap": 0.09206129
+            }
+          ],
+          "ece": 0.07371961
+        },
+        "uncertainty": {
+          "exactHistoricalV1Reconstruction": false,
+          "correlationWithAbsoluteMarginError": null,
+          "bins": [
+            {
+              "quartile": 1,
+              "n": 182,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 11.65659047
+            },
+            {
+              "quartile": 2,
+              "n": 182,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 13.76404353
+            },
+            {
+              "quartile": 3,
+              "n": 182,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 13.60648605
+            },
+            {
+              "quartile": 4,
+              "n": 183,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 13.12685029
+            }
+          ]
+        },
+        "neutral": {
+          "n": 21,
+          "marginBias": -1.51984656,
+          "mae": 11.90286742
+        },
+        "nonNeutral": {
+          "n": 708,
+          "marginBias": -0.21601283,
+          "mae": 13.07230118
+        }
+      },
+      "v1Metrics": {
+        "n": 729,
+        "probabilityN": 729,
+        "marginBias": -0.38959735,
+        "mae": 13.40597205,
+        "rmse": 17.02359535,
+        "brier": 0.19411269,
+        "logLoss": 0.57114483,
+        "calibrationInterceptSlope": {
+          "intercept": -0.11483537,
+          "slope": 1.36976446,
+          "n": 729
+        },
+        "reliability": {
+          "bins": [
+            {
+              "label": "0.00-0.35",
+              "n": 77,
+              "meanPredicted": 0.26651825,
+              "observed": 0.16883117,
+              "absoluteGap": 0.09768708
+            },
+            {
+              "label": "0.35-0.45",
+              "n": 104,
+              "meanPredicted": 0.39900613,
+              "observed": 0.30769231,
+              "absoluteGap": 0.09131382
+            },
+            {
+              "label": "0.45-0.55",
+              "n": 136,
+              "meanPredicted": 0.50707168,
+              "observed": 0.53676471,
+              "absoluteGap": 0.02969303
+            },
+            {
+              "label": "0.55-0.65",
+              "n": 126,
+              "meanPredicted": 0.59994945,
+              "observed": 0.57936508,
+              "absoluteGap": 0.02058437
+            },
+            {
+              "label": "0.65-1.00",
+              "n": 286,
+              "meanPredicted": 0.76391459,
+              "observed": 0.81118881,
+              "absoluteGap": 0.04727422
+            }
+          ],
+          "ece": 0.05098882
+        },
+        "uncertainty": {
+          "exactHistoricalV1Reconstruction": false,
+          "correlationWithAbsoluteMarginError": null,
+          "bins": [
+            {
+              "quartile": 1,
+              "n": 182,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 12.21721432
+            },
+            {
+              "quartile": 2,
+              "n": 182,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 14.47416504
+            },
+            {
+              "quartile": 3,
+              "n": 182,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 13.86531315
+            },
+            {
+              "quartile": 4,
+              "n": 183,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 13.06904692
+            }
+          ]
+        },
+        "neutral": {
+          "n": 21,
+          "marginBias": -2.09337255,
+          "mae": 12.83864325
+        },
+        "nonNeutral": {
+          "n": 708,
+          "marginBias": -0.33906164,
+          "mae": 13.4227996
+        }
+      },
+      "deltaVsV1": {
+        "marginBias": 0.13602553,
+        "mae": -0.36735826,
+        "rmse": -0.47494304,
+        "brier": -0.00272556,
+        "logLoss": -0.0066167,
+        "ece": 0.02273079
+      }
+    },
+    {
+      "id": "fold-2024",
+      "train": [
+        2021,
+        2022,
+        2023
+      ],
+      "validate": 2024,
+      "selectedParams": {
+        "returningProductionCoefficient": 1.375,
+        "talentCoefficient": 2.5,
+        "homeFieldAdvantage": 3,
+        "baseSigma": 15.5,
+        "uncertaintyScale": 0
+      },
+      "candidatesEvaluated": 4074,
+      "candidateMetrics": {
+        "n": 741,
+        "probabilityN": 741,
+        "marginBias": -0.93905589,
+        "mae": 14.29876849,
+        "rmse": 18.09917758,
+        "brier": 0.2120226,
+        "logLoss": 0.60784245,
+        "calibrationInterceptSlope": {
+          "intercept": -0.00349567,
+          "slope": 0.95337469,
+          "n": 741
+        },
+        "reliability": {
+          "bins": [
+            {
+              "label": "0.00-0.35",
+              "n": 74,
+              "meanPredicted": 0.26405957,
+              "observed": 0.28378378,
+              "absoluteGap": 0.01972421
+            },
+            {
+              "label": "0.35-0.45",
+              "n": 105,
+              "meanPredicted": 0.40681192,
+              "observed": 0.42857143,
+              "absoluteGap": 0.02175951
+            },
+            {
+              "label": "0.45-0.55",
+              "n": 131,
+              "meanPredicted": 0.50100898,
+              "observed": 0.49618321,
+              "absoluteGap": 0.00482578
+            },
+            {
+              "label": "0.55-0.65",
+              "n": 145,
+              "meanPredicted": 0.59839097,
+              "observed": 0.6,
+              "absoluteGap": 0.00160903
+            },
+            {
+              "label": "0.65-1.00",
+              "n": 286,
+              "meanPredicted": 0.77641024,
+              "observed": 0.75524476,
+              "absoluteGap": 0.02116549
+            }
+          ],
+          "ece": 0.01439023
+        },
+        "uncertainty": {
+          "exactHistoricalV1Reconstruction": false,
+          "correlationWithAbsoluteMarginError": null,
+          "bins": [
+            {
+              "quartile": 1,
+              "n": 185,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 14.7071954
+            },
+            {
+              "quartile": 2,
+              "n": 185,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 13.55164805
+            },
+            {
+              "quartile": 3,
+              "n": 185,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 13.67602695
+            },
+            {
+              "quartile": 4,
+              "n": 186,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 15.25503456
+            }
+          ]
+        },
+        "neutral": {
+          "n": 35,
+          "marginBias": -0.24333666,
+          "mae": 14.99024531
+        },
+        "nonNeutral": {
+          "n": 706,
+          "marginBias": -0.97354622,
+          "mae": 14.26448848
+        }
+      },
+      "v1Metrics": {
+        "n": 741,
+        "probabilityN": 741,
+        "marginBias": -1.12783967,
+        "mae": 14.57526046,
+        "rmse": 18.36158267,
+        "brier": 0.21659805,
+        "logLoss": 0.62003675,
+        "calibrationInterceptSlope": {
+          "intercept": 0.04443221,
+          "slope": 0.85022448,
+          "n": 741
+        },
+        "reliability": {
+          "bins": [
+            {
+              "label": "0.00-0.35",
+              "n": 89,
+              "meanPredicted": 0.2738475,
+              "observed": 0.30337079,
+              "absoluteGap": 0.02952328
+            },
+            {
+              "label": "0.35-0.45",
+              "n": 100,
+              "meanPredicted": 0.39978424,
+              "observed": 0.46,
+              "absoluteGap": 0.06021576
+            },
+            {
+              "label": "0.45-0.55",
+              "n": 131,
+              "meanPredicted": 0.50306361,
+              "observed": 0.54198473,
+              "absoluteGap": 0.03892112
+            },
+            {
+              "label": "0.55-0.65",
+              "n": 129,
+              "meanPredicted": 0.59984487,
+              "observed": 0.54263566,
+              "absoluteGap": 0.05720921
+            },
+            {
+              "label": "0.65-1.00",
+              "n": 292,
+              "meanPredicted": 0.77473259,
+              "observed": 0.75342466,
+              "absoluteGap": 0.02130794
+            }
+          ],
+          "ece": 0.03690921
+        },
+        "uncertainty": {
+          "exactHistoricalV1Reconstruction": false,
+          "correlationWithAbsoluteMarginError": null,
+          "bins": [
+            {
+              "quartile": 1,
+              "n": 185,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 15.38804792
+            },
+            {
+              "quartile": 2,
+              "n": 185,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 13.94480883
+            },
+            {
+              "quartile": 3,
+              "n": 185,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 14.16356482
+            },
+            {
+              "quartile": 4,
+              "n": 186,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 14.80338716
+            }
+          ]
+        },
+        "neutral": {
+          "n": 35,
+          "marginBias": 0.45742624,
+          "mae": 15.26903529
+        },
+        "nonNeutral": {
+          "n": 706,
+          "marginBias": -1.20642934,
+          "mae": 14.54086652
+        }
+      },
+      "deltaVsV1": {
+        "marginBias": 0.18878378,
+        "mae": -0.27649197,
+        "rmse": -0.26240509,
+        "brier": -0.00457545,
+        "logLoss": -0.0121943,
+        "ece": -0.02251898
+      }
+    },
+    {
+      "id": "fold-2025",
+      "train": [
+        2021,
+        2022,
+        2023,
+        2024
+      ],
+      "validate": 2025,
+      "selectedParams": {
+        "returningProductionCoefficient": 1.5,
+        "talentCoefficient": 2.5,
+        "homeFieldAdvantage": 3,
+        "baseSigma": 15.5,
+        "uncertaintyScale": 0
+      },
+      "candidatesEvaluated": 4074,
+      "candidateMetrics": {
+        "n": 740,
+        "probabilityN": 740,
+        "marginBias": -1.01488083,
+        "mae": 14.17345398,
+        "rmse": 17.92644243,
+        "brier": 0.20697143,
+        "logLoss": 0.5993852,
+        "calibrationInterceptSlope": {
+          "intercept": -0.01024088,
+          "slope": 1.08075927,
+          "n": 740
+        },
+        "reliability": {
+          "bins": [
+            {
+              "label": "0.00-0.35",
+              "n": 72,
+              "meanPredicted": 0.27099904,
+              "observed": 0.18055556,
+              "absoluteGap": 0.09044349
+            },
+            {
+              "label": "0.35-0.45",
+              "n": 89,
+              "meanPredicted": 0.40154311,
+              "observed": 0.4494382,
+              "absoluteGap": 0.04789509
+            },
+            {
+              "label": "0.45-0.55",
+              "n": 145,
+              "meanPredicted": 0.50602375,
+              "observed": 0.50344828,
+              "absoluteGap": 0.00257548
+            },
+            {
+              "label": "0.55-0.65",
+              "n": 151,
+              "meanPredicted": 0.59567544,
+              "observed": 0.60927152,
+              "absoluteGap": 0.01359608
+            },
+            {
+              "label": "0.65-1.00",
+              "n": 283,
+              "meanPredicted": 0.76782538,
+              "observed": 0.77738516,
+              "absoluteGap": 0.00955978
+            }
+          ],
+          "ece": 0.02149522
+        },
+        "uncertainty": {
+          "exactHistoricalV1Reconstruction": false,
+          "correlationWithAbsoluteMarginError": null,
+          "bins": [
+            {
+              "quartile": 1,
+              "n": 185,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 13.4994306
+            },
+            {
+              "quartile": 2,
+              "n": 185,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 13.93636666
+            },
+            {
+              "quartile": 3,
+              "n": 185,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 14.572273
+            },
+            {
+              "quartile": 4,
+              "n": 185,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 14.68574568
+            }
+          ]
+        },
+        "neutral": {
+          "n": 22,
+          "marginBias": 0.19142176,
+          "mae": 12.94653344
+        },
+        "nonNeutral": {
+          "n": 718,
+          "marginBias": -1.05184275,
+          "mae": 14.21104765
+        }
+      },
+      "v1Metrics": {
+        "n": 740,
+        "probabilityN": 740,
+        "marginBias": -1.23208175,
+        "mae": 14.33668742,
+        "rmse": 18.21142688,
+        "brier": 0.20838634,
+        "logLoss": 0.60440194,
+        "calibrationInterceptSlope": {
+          "intercept": 0.03173909,
+          "slope": 1.00498589,
+          "n": 740
+        },
+        "reliability": {
+          "bins": [
+            {
+              "label": "0.00-0.35",
+              "n": 86,
+              "meanPredicted": 0.27019559,
+              "observed": 0.26744186,
+              "absoluteGap": 0.00275373
+            },
+            {
+              "label": "0.35-0.45",
+              "n": 95,
+              "meanPredicted": 0.40202024,
+              "observed": 0.41052632,
+              "absoluteGap": 0.00850608
+            },
+            {
+              "label": "0.45-0.55",
+              "n": 117,
+              "meanPredicted": 0.50280847,
+              "observed": 0.45299145,
+              "absoluteGap": 0.04981702
+            },
+            {
+              "label": "0.55-0.65",
+              "n": 161,
+              "meanPredicted": 0.59880685,
+              "observed": 0.64596273,
+              "absoluteGap": 0.04715589
+            },
+            {
+              "label": "0.65-1.00",
+              "n": 281,
+              "meanPredicted": 0.76936878,
+              "observed": 0.77935943,
+              "absoluteGap": 0.00999065
+            }
+          ],
+          "ece": 0.02334184
+        },
+        "uncertainty": {
+          "exactHistoricalV1Reconstruction": false,
+          "correlationWithAbsoluteMarginError": null,
+          "bins": [
+            {
+              "quartile": 1,
+              "n": 185,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 13.73539096
+            },
+            {
+              "quartile": 2,
+              "n": 185,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 13.72074967
+            },
+            {
+              "quartile": 3,
+              "n": 185,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 14.9288664
+            },
+            {
+              "quartile": 4,
+              "n": 185,
+              "meanUncertainty": 0,
+              "meanAbsoluteMarginError": 14.96174264
+            }
+          ]
+        },
+        "neutral": {
+          "n": 22,
+          "marginBias": -0.0023613,
+          "mae": 12.7191804
+        },
+        "nonNeutral": {
+          "n": 718,
+          "marginBias": -1.2697612,
+          "mae": 14.38624891
+        }
+      },
+      "deltaVsV1": {
+        "marginBias": 0.21720092,
+        "mae": -0.16323344,
+        "rmse": -0.28498445,
+        "brier": -0.00141491,
+        "logLoss": -0.00501674,
+        "ece": -0.00184662
+      }
+    }
+  ],
+  "parameterFindings": {
+    "returningProduction": {
+      "curve": [
+        {
+          "value": 0,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.29079732,
+            "mae": 14.04062423,
+            "rmse": 17.56819081,
+            "brier": 0.20960604,
+            "logLoss": 0.6046359
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.76801675,
+            "mae": 13.92202797,
+            "rmse": 17.63472393,
+            "brier": 0.20562641,
+            "logLoss": 0.59573011
+          }
+        },
+        {
+          "value": 0.125,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.2909978,
+            "mae": 14.02811647,
+            "rmse": 17.55404743,
+            "brier": 0.20937978,
+            "logLoss": 0.60411283
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.76538377,
+            "mae": 13.9064083,
+            "rmse": 17.61591509,
+            "brier": 0.20528142,
+            "logLoss": 0.59498717
+          }
+        },
+        {
+          "value": 0.25,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.29119828,
+            "mae": 14.01746177,
+            "rmse": 17.54169514,
+            "brier": 0.20917829,
+            "logLoss": 0.60364734
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.7627508,
+            "mae": 13.89204387,
+            "rmse": 17.59886433,
+            "brier": 0.20496456,
+            "logLoss": 0.59430345
+          }
+        },
+        {
+          "value": 0.375,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.29139877,
+            "mae": 14.00820702,
+            "rmse": 17.53113772,
+            "brier": 0.20900161,
+            "logLoss": 0.60323938
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.76011782,
+            "mae": 13.87899939,
+            "rmse": 17.58357677,
+            "brier": 0.20467591,
+            "logLoss": 0.59367889
+          }
+        },
+        {
+          "value": 0.5,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.29159925,
+            "mae": 14.00052036,
+            "rmse": 17.52237841,
+            "brier": 0.20884978,
+            "logLoss": 0.6028889
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.75748484,
+            "mae": 13.86739406,
+            "rmse": 17.57005701,
+            "brier": 0.2044155,
+            "logLoss": 0.59311343
+          }
+        },
+        {
+          "value": 0.625,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.29179973,
+            "mae": 13.99454108,
+            "rmse": 17.51541992,
+            "brier": 0.20872281,
+            "logLoss": 0.60259584
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.75485187,
+            "mae": 13.85711475,
+            "rmse": 17.55830913,
+            "brier": 0.20418335,
+            "logLoss": 0.592607
+          }
+        },
+        {
+          "value": 0.75,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.29200021,
+            "mae": 13.99043979,
+            "rmse": 17.51026439,
+            "brier": 0.20862072,
+            "logLoss": 0.60236013
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.75221889,
+            "mae": 13.84842986,
+            "rmse": 17.5483367,
+            "brier": 0.20397949,
+            "logLoss": 0.59215954
+          }
+        },
+        {
+          "value": 0.875,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.29220069,
+            "mae": 13.98827341,
+            "rmse": 17.50691342,
+            "brier": 0.20854347,
+            "logLoss": 0.60218173
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.74958592,
+            "mae": 13.8404408,
+            "rmse": 17.54014274,
+            "brier": 0.20380388,
+            "logLoss": 0.59177099
+          }
+        },
+        {
+          "value": 1,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.29240117,
+            "mae": 13.9883701,
+            "rmse": 17.50536803,
+            "brier": 0.20849105,
+            "logLoss": 0.60206055
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.74695294,
+            "mae": 13.83350226,
+            "rmse": 17.53372975,
+            "brier": 0.20365648,
+            "logLoss": 0.59144126
+          }
+        },
+        {
+          "value": 1.125,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.29260165,
+            "mae": 13.98956059,
+            "rmse": 17.50562871,
+            "brier": 0.20846342,
+            "logLoss": 0.60199655
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.74431997,
+            "mae": 13.8277687,
+            "rmse": 17.52909967,
+            "brier": 0.20353724,
+            "logLoss": 0.59117029
+          }
+        },
+        {
+          "value": 1.25,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.29280213,
+            "mae": 13.99197676,
+            "rmse": 17.50769538,
+            "brier": 0.2084605,
+            "logLoss": 0.60198965
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.74168699,
+            "mae": 13.82384733,
+            "rmse": 17.52625393,
+            "brier": 0.20344608,
+            "logLoss": 0.59095801
+          }
+        },
+        {
+          "value": 1.375,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.29300261,
+            "mae": 13.9959623,
+            "rmse": 17.5115674,
+            "brier": 0.20848224,
+            "logLoss": 0.60203979
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.73905402,
+            "mae": 13.82196761,
+            "rmse": 17.52519339,
+            "brier": 0.20338288,
+            "logLoss": 0.59080433
+          }
+        },
+        {
+          "value": 1.5,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.29320309,
+            "mae": 14.0012952,
+            "rmse": 17.51724357,
+            "brier": 0.20852854,
+            "logLoss": 0.60214689
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.73642104,
+            "mae": 13.82231869,
+            "rmse": 17.52591838,
+            "brier": 0.20334753,
+            "logLoss": 0.59070918
+          }
+        }
+      ],
+      "valueAddedVsSameCandidateWithRpZero": {
+        "marginBias": 0.02106381,
+        "mae": -0.08852571,
+        "rmse": -0.10099418,
+        "brier": -0.00196993,
+        "logLoss": -0.00428885,
+        "ece": 0.00512925
+      }
+    },
+    "talent": {
+      "curve": [
+        {
+          "value": 0,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.03687113,
+            "mae": 14.33139238,
+            "rmse": 17.96928009,
+            "brier": 0.2131414,
+            "logLoss": 0.61381987
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.95570995,
+            "mae": 14.20386936,
+            "rmse": 17.99535154,
+            "brier": 0.20820114,
+            "logLoss": 0.60335787
+          }
+        },
+        {
+          "value": 0.125,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.04964763,
+            "mae": 14.3053214,
+            "rmse": 17.93563401,
+            "brier": 0.21275882,
+            "logLoss": 0.61288045
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.9452721,
+            "mae": 14.17636106,
+            "rmse": 17.96145189,
+            "brier": 0.2078096,
+            "logLoss": 0.60239781
+          }
+        },
+        {
+          "value": 0.25,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.06242413,
+            "mae": 14.28058452,
+            "rmse": 17.90305716,
+            "brier": 0.21239178,
+            "logLoss": 0.61197836
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.93483425,
+            "mae": 14.14946763,
+            "rmse": 17.92865911,
+            "brier": 0.20743497,
+            "logLoss": 0.60147626
+          }
+        },
+        {
+          "value": 0.375,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.07520063,
+            "mae": 14.25787648,
+            "rmse": 17.87155538,
+            "brier": 0.21204036,
+            "logLoss": 0.61111354
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.9243964,
+            "mae": 14.12340166,
+            "rmse": 17.89697928,
+            "brier": 0.20707737,
+            "logLoss": 0.60059317
+          }
+        },
+        {
+          "value": 0.5,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.08797714,
+            "mae": 14.23564347,
+            "rmse": 17.84113437,
+            "brier": 0.21170463,
+            "logLoss": 0.61028595
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.91395855,
+            "mae": 14.09859378,
+            "rmse": 17.86641834,
+            "brier": 0.20673687,
+            "logLoss": 0.59974854
+          }
+        },
+        {
+          "value": 0.625,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.10075364,
+            "mae": 14.21400925,
+            "rmse": 17.81179966,
+            "brier": 0.21138464,
+            "logLoss": 0.60949553
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.9035207,
+            "mae": 14.07433547,
+            "rmse": 17.83698202,
+            "brier": 0.20641356,
+            "logLoss": 0.59894233
+          }
+        },
+        {
+          "value": 0.75,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.11353014,
+            "mae": 14.1927475,
+            "rmse": 17.78355663,
+            "brier": 0.21108045,
+            "logLoss": 0.60874222
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.89308285,
+            "mae": 14.05050946,
+            "rmse": 17.80867591,
+            "brier": 0.20610751,
+            "logLoss": 0.59817453
+          }
+        },
+        {
+          "value": 0.875,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.12630664,
+            "mae": 14.17224383,
+            "rmse": 17.75641049,
+            "brier": 0.21079211,
+            "logLoss": 0.60802598
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.882645,
+            "mae": 14.02823345,
+            "rmse": 17.7815054,
+            "brier": 0.20581879,
+            "logLoss": 0.5974451
+          }
+        },
+        {
+          "value": 1,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.13908314,
+            "mae": 14.15273449,
+            "rmse": 17.73036628,
+            "brier": 0.21051965,
+            "logLoss": 0.60734675
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.87220715,
+            "mae": 14.00749291,
+            "rmse": 17.75547572,
+            "brier": 0.20554745,
+            "logLoss": 0.59675403
+          }
+        },
+        {
+          "value": 1.125,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.15185965,
+            "mae": 14.13398309,
+            "rmse": 17.70542886,
+            "brier": 0.21026311,
+            "logLoss": 0.60670446
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.8617693,
+            "mae": 13.98724897,
+            "rmse": 17.73059187,
+            "brier": 0.20529354,
+            "logLoss": 0.59610128
+          }
+        },
+        {
+          "value": 1.25,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.16463615,
+            "mae": 14.11596328,
+            "rmse": 17.6816029,
+            "brier": 0.21002249,
+            "logLoss": 0.60609906
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.85133145,
+            "mae": 13.96823658,
+            "rmse": 17.70685869,
+            "brier": 0.20505709,
+            "logLoss": 0.59548682
+          }
+        },
+        {
+          "value": 1.375,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.17741265,
+            "mae": 14.09874714,
+            "rmse": 17.65889292,
+            "brier": 0.20979782,
+            "logLoss": 0.6055305
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.8408936,
+            "mae": 13.95071972,
+            "rmse": 17.68428082,
+            "brier": 0.20483815,
+            "logLoss": 0.59491062
+          }
+        },
+        {
+          "value": 1.5,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.19018915,
+            "mae": 14.08323466,
+            "rmse": 17.63730322,
+            "brier": 0.20958909,
+            "logLoss": 0.6049987
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.83045575,
+            "mae": 13.93403128,
+            "rmse": 17.66286268,
+            "brier": 0.20463673,
+            "logLoss": 0.59437266
+          }
+        },
+        {
+          "value": 1.625,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.20296565,
+            "mae": 14.06840955,
+            "rmse": 17.61683793,
+            "brier": 0.2093963,
+            "logLoss": 0.60450362
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.8200179,
+            "mae": 13.9184309,
+            "rmse": 17.64260851,
+            "brier": 0.20445285,
+            "logLoss": 0.5938729
+          }
+        },
+        {
+          "value": 1.75,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.21574216,
+            "mae": 14.0549202,
+            "rmse": 17.59750095,
+            "brier": 0.20921944,
+            "logLoss": 0.60404518
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.80958005,
+            "mae": 13.90338333,
+            "rmse": 17.6235223,
+            "brier": 0.20428651,
+            "logLoss": 0.59341131
+          }
+        },
+        {
+          "value": 1.875,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.22851866,
+            "mae": 14.04257339,
+            "rmse": 17.57929603,
+            "brier": 0.20905849,
+            "logLoss": 0.60362333
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.7991422,
+            "mae": 13.88942536,
+            "rmse": 17.60560787,
+            "brier": 0.20413773,
+            "logLoss": 0.59298784
+          }
+        },
+        {
+          "value": 2,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.24129516,
+            "mae": 14.03062105,
+            "rmse": 17.56222667,
+            "brier": 0.20891341,
+            "logLoss": 0.603238
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.78870435,
+            "mae": 13.87619746,
+            "rmse": 17.58886879,
+            "brier": 0.20400648,
+            "logLoss": 0.59260248
+          }
+        },
+        {
+          "value": 2.125,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.25407166,
+            "mae": 14.0189277,
+            "rmse": 17.54629619,
+            "brier": 0.20878418,
+            "logLoss": 0.60288912
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.7782665,
+            "mae": 13.86385747,
+            "rmse": 17.57330841,
+            "brier": 0.20389276,
+            "logLoss": 0.59225518
+          }
+        },
+        {
+          "value": 2.25,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.26684816,
+            "mae": 14.00799604,
+            "rmse": 17.5315077,
+            "brier": 0.20867074,
+            "logLoss": 0.60257663
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.76782865,
+            "mae": 13.85236383,
+            "rmse": 17.55892988,
+            "brier": 0.20379654,
+            "logLoss": 0.5919459
+          }
+        },
+        {
+          "value": 2.375,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.27962467,
+            "mae": 13.99776585,
+            "rmse": 17.51786409,
+            "brier": 0.20857305,
+            "logLoss": 0.60230047
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.75739079,
+            "mae": 13.8424702,
+            "rmse": 17.5457361,
+            "brier": 0.2037178,
+            "logLoss": 0.59167461
+          }
+        },
+        {
+          "value": 2.5,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.29240117,
+            "mae": 13.9883701,
+            "rmse": 17.50536803,
+            "brier": 0.20849105,
+            "logLoss": 0.60206055
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.74695294,
+            "mae": 13.83350226,
+            "rmse": 17.53372975,
+            "brier": 0.20365648,
+            "logLoss": 0.59144126
+          }
+        }
+      ],
+      "valueAddedVsSameCandidateWithTalentZero": {
+        "marginBias": 0.20875701,
+        "mae": -0.3703671,
+        "rmse": -0.46162179,
+        "brier": -0.00454466,
+        "logLoss": -0.01191661,
+        "ece": 0.01398897
+      },
+      "upperBoundary": 2.5
+    },
+    "homeFieldAdvantage": {
+      "curve": [
+        {
+          "value": 2,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": -0.67980125,
+            "mae": 13.99601116,
+            "rmse": 17.51936647,
+            "brier": 0.20898556,
+            "logLoss": 0.60317392
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -1.71165883,
+            "mae": 13.89928031,
+            "rmse": 17.60253505,
+            "brier": 0.20422779,
+            "logLoss": 0.59306797
+          }
+        },
+        {
+          "value": 2.25,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": -0.43675065,
+            "mae": 13.99012928,
+            "rmse": 17.51066363,
+            "brier": 0.20878933,
+            "logLoss": 0.60272666
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -1.47048236,
+            "mae": 13.8775886,
+            "rmse": 17.58021523,
+            "brier": 0.20400429,
+            "logLoss": 0.5924913
+          }
+        },
+        {
+          "value": 2.5,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": -0.19370004,
+            "mae": 13.98662239,
+            "rmse": 17.50542787,
+            "brier": 0.20864165,
+            "logLoss": 0.60239211
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -1.22930589,
+            "mae": 13.85943184,
+            "rmse": 17.56130072,
+            "brier": 0.20383476,
+            "logLoss": 0.59202807
+          }
+        },
+        {
+          "value": 2.75,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.04935056,
+            "mae": 13.9853073,
+            "rmse": 17.50366232,
+            "brier": 0.20854231,
+            "logLoss": 0.60217013
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.98812941,
+            "mae": 13.84515701,
+            "rmse": 17.54580254,
+            "brier": 0.20371892,
+            "logLoss": 0.59167811
+          }
+        },
+        {
+          "value": 3,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.29240117,
+            "mae": 13.9883701,
+            "rmse": 17.50536803,
+            "brier": 0.20849105,
+            "logLoss": 0.60206055
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.74695294,
+            "mae": 13.83350226,
+            "rmse": 17.53372975,
+            "brier": 0.20365648,
+            "logLoss": 0.59144126
+          }
+        },
+        {
+          "value": 3.25,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.53545177,
+            "mae": 13.99479967,
+            "rmse": 17.51054397,
+            "brier": 0.20848761,
+            "logLoss": 0.60206324
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.50577647,
+            "mae": 13.82447794,
+            "rmse": 17.52508942,
+            "brier": 0.20364711,
+            "logLoss": 0.59131735
+          }
+        },
+        {
+          "value": 3.5,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.77850238,
+            "mae": 14.00278936,
+            "rmse": 17.51918708,
+            "brier": 0.20853169,
+            "logLoss": 0.60217803
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.2646,
+            "mae": 13.81827732,
+            "rmse": 17.51988663,
+            "brier": 0.20369044,
+            "logLoss": 0.59130622
+          }
+        }
+      ],
+      "neutralAlwaysZero": true
+    },
+    "sigma": {
+      "curve": [
+        {
+          "value": 12,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.29240117,
+            "mae": 13.9883701,
+            "rmse": 17.50536803,
+            "brier": 0.21339091,
+            "logLoss": 0.61774933
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.74695294,
+            "mae": 13.83350226,
+            "rmse": 17.53372975,
+            "brier": 0.20283015,
+            "logLoss": 0.58812586
+          }
+        },
+        {
+          "value": 12.25,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.29240117,
+            "mae": 13.9883701,
+            "rmse": 17.50536803,
+            "brier": 0.21288521,
+            "logLoss": 0.61585614
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.74695294,
+            "mae": 13.83350226,
+            "rmse": 17.53372975,
+            "brier": 0.202688,
+            "logLoss": 0.58767955
+          }
+        },
+        {
+          "value": 12.5,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.29240117,
+            "mae": 13.9883701,
+            "rmse": 17.50536803,
+            "brier": 0.21241732,
+            "logLoss": 0.61414581
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.74695294,
+            "mae": 13.83350226,
+            "rmse": 17.53372975,
+            "brier": 0.20257165,
+            "logLoss": 0.58733202
+          }
+        },
+        {
+          "value": 12.75,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.29240117,
+            "mae": 13.9883701,
+            "rmse": 17.50536803,
+            "brier": 0.21198518,
+            "logLoss": 0.61260272
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.74695294,
+            "mae": 13.83350226,
+            "rmse": 17.53372975,
+            "brier": 0.20247938,
+            "logLoss": 0.58707381
+          }
+        },
+        {
+          "value": 13,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.29240117,
+            "mae": 13.9883701,
+            "rmse": 17.50536803,
+            "brier": 0.21158686,
+            "logLoss": 0.61121277
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.74695294,
+            "mae": 13.83350226,
+            "rmse": 17.53372975,
+            "brier": 0.20240957,
+            "logLoss": 0.58689644
+          }
+        },
+        {
+          "value": 13.25,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.29240117,
+            "mae": 13.9883701,
+            "rmse": 17.50536803,
+            "brier": 0.21122049,
+            "logLoss": 0.60996316
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.74695294,
+            "mae": 13.83350226,
+            "rmse": 17.53372975,
+            "brier": 0.20236071,
+            "logLoss": 0.58679224
+          }
+        },
+        {
+          "value": 13.5,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.29240117,
+            "mae": 13.9883701,
+            "rmse": 17.50536803,
+            "brier": 0.21088432,
+            "logLoss": 0.6088423
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.74695294,
+            "mae": 13.83350226,
+            "rmse": 17.53372975,
+            "brier": 0.2023314,
+            "logLoss": 0.5867543
+          }
+        },
+        {
+          "value": 13.75,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.29240117,
+            "mae": 13.9883701,
+            "rmse": 17.50536803,
+            "brier": 0.21057669,
+            "logLoss": 0.60783964
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.74695294,
+            "mae": 13.83350226,
+            "rmse": 17.53372975,
+            "brier": 0.2023203,
+            "logLoss": 0.58677634
+          }
+        },
+        {
+          "value": 14,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.29240117,
+            "mae": 13.9883701,
+            "rmse": 17.50536803,
+            "brier": 0.21029603,
+            "logLoss": 0.60694559
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.74695294,
+            "mae": 13.83350226,
+            "rmse": 17.53372975,
+            "brier": 0.20232617,
+            "logLoss": 0.58685272
+          }
+        },
+        {
+          "value": 14.25,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.29240117,
+            "mae": 13.9883701,
+            "rmse": 17.50536803,
+            "brier": 0.21004085,
+            "logLoss": 0.60615142
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.74695294,
+            "mae": 13.83350226,
+            "rmse": 17.53372975,
+            "brier": 0.20234787,
+            "logLoss": 0.58697828
+          }
+        },
+        {
+          "value": 14.5,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.29240117,
+            "mae": 13.9883701,
+            "rmse": 17.50536803,
+            "brier": 0.20980972,
+            "logLoss": 0.60544916
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.74695294,
+            "mae": 13.83350226,
+            "rmse": 17.53372975,
+            "brier": 0.20238429,
+            "logLoss": 0.58714837
+          }
+        },
+        {
+          "value": 14.75,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.29240117,
+            "mae": 13.9883701,
+            "rmse": 17.50536803,
+            "brier": 0.20960132,
+            "logLoss": 0.60483151
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.74695294,
+            "mae": 13.83350226,
+            "rmse": 17.53372975,
+            "brier": 0.20243443,
+            "logLoss": 0.58735876
+          }
+        },
+        {
+          "value": 15,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.29240117,
+            "mae": 13.9883701,
+            "rmse": 17.50536803,
+            "brier": 0.20941438,
+            "logLoss": 0.60429184
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.74695294,
+            "mae": 13.83350226,
+            "rmse": 17.53372975,
+            "brier": 0.20249732,
+            "logLoss": 0.58760559
+          }
+        },
+        {
+          "value": 15.25,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.29240117,
+            "mae": 13.9883701,
+            "rmse": 17.50536803,
+            "brier": 0.2092477,
+            "logLoss": 0.60382403
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.74695294,
+            "mae": 13.83350226,
+            "rmse": 17.53372975,
+            "brier": 0.20257208,
+            "logLoss": 0.58788536
+          }
+        },
+        {
+          "value": 15.5,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.29240117,
+            "mae": 13.9883701,
+            "rmse": 17.50536803,
+            "brier": 0.20910015,
+            "logLoss": 0.6034225
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.74695294,
+            "mae": 13.83350226,
+            "rmse": 17.53372975,
+            "brier": 0.20265787,
+            "logLoss": 0.58819488
+          }
+        },
+        {
+          "value": 15.75,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.29240117,
+            "mae": 13.9883701,
+            "rmse": 17.50536803,
+            "brier": 0.20897065,
+            "logLoss": 0.60308213
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.74695294,
+            "mae": 13.83350226,
+            "rmse": 17.53372975,
+            "brier": 0.20275389,
+            "logLoss": 0.58853125
+          }
+        },
+        {
+          "value": 16,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.29240117,
+            "mae": 13.9883701,
+            "rmse": 17.50536803,
+            "brier": 0.20885819,
+            "logLoss": 0.60279822
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.74695294,
+            "mae": 13.83350226,
+            "rmse": 17.53372975,
+            "brier": 0.20285942,
+            "logLoss": 0.58889181
+          }
+        },
+        {
+          "value": 16.25,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.29240117,
+            "mae": 13.9883701,
+            "rmse": 17.50536803,
+            "brier": 0.20876181,
+            "logLoss": 0.60256643
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.74695294,
+            "mae": 13.83350226,
+            "rmse": 17.53372975,
+            "brier": 0.20297377,
+            "logLoss": 0.58927413
+          }
+        },
+        {
+          "value": 16.5,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.29240117,
+            "mae": 13.9883701,
+            "rmse": 17.50536803,
+            "brier": 0.20868061,
+            "logLoss": 0.60238279
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.74695294,
+            "mae": 13.83350226,
+            "rmse": 17.53372975,
+            "brier": 0.20309629,
+            "logLoss": 0.58967602
+          }
+        },
+        {
+          "value": 16.75,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.29240117,
+            "mae": 13.9883701,
+            "rmse": 17.50536803,
+            "brier": 0.20861372,
+            "logLoss": 0.60224363
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.74695294,
+            "mae": 13.83350226,
+            "rmse": 17.53372975,
+            "brier": 0.20322637,
+            "logLoss": 0.59009545
+          }
+        },
+        {
+          "value": 17,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.29240117,
+            "mae": 13.9883701,
+            "rmse": 17.50536803,
+            "brier": 0.20856034,
+            "logLoss": 0.60214557
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.74695294,
+            "mae": 13.83350226,
+            "rmse": 17.53372975,
+            "brier": 0.20336344,
+            "logLoss": 0.59053057
+          }
+        },
+        {
+          "value": 17.25,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.29240117,
+            "mae": 13.9883701,
+            "rmse": 17.50536803,
+            "brier": 0.20851969,
+            "logLoss": 0.6020855
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.74695294,
+            "mae": 13.83350226,
+            "rmse": 17.53372975,
+            "brier": 0.20350698,
+            "logLoss": 0.59097969
+          }
+        },
+        {
+          "value": 17.5,
+          "training": {
+            "n": 1403,
+            "probabilityN": 1403,
+            "marginBias": 0.29240117,
+            "mae": 13.9883701,
+            "rmse": 17.50536803,
+            "brier": 0.20849105,
+            "logLoss": 0.60206055
+          },
+          "validation": {
+            "n": 2210,
+            "probabilityN": 2210,
+            "marginBias": -0.74695294,
+            "mae": 13.83350226,
+            "rmse": 17.53372975,
+            "brier": 0.20365648,
+            "logLoss": 0.59144126
+          }
+        }
+      ],
+      "compares14And15_5": true
+    },
+    "uncertainty": {
+      "selectedScale": 0,
+      "historicallyAvailable": false,
+      "reason": "Historical transfer/QB/coaching/roster snapshots do not exist at prediction-time fidelity; uncertainty is fixed off for historical comparison.",
+      "prospectiveValidationRequired": true
+    }
+  },
+  "dataQuality": {
+    "coverage": [
+      {
+        "season": 2021,
+        "priorSeason": 2020,
+        "expectedFbsTeams": 130,
+        "exactSemanticSourceRows": 128,
+        "exactSemanticIdentityMatches": 128,
+        "identityFailures": 0,
+        "teamsWithPriorRating": 125,
+        "teamsWithPercentPPA": 128,
+        "teamsWithTalent": 127,
+        "gamesExcluded": 53,
+        "finalEvaluatedGames": 679
+      },
+      {
+        "season": 2022,
+        "priorSeason": 2021,
+        "expectedFbsTeams": 131,
+        "exactSemanticSourceRows": 130,
+        "exactSemanticIdentityMatches": 130,
+        "identityFailures": 0,
+        "teamsWithPriorRating": 130,
+        "teamsWithPercentPPA": 130,
+        "teamsWithTalent": 128,
+        "gamesExcluded": 10,
+        "finalEvaluatedGames": 724
+      },
+      {
+        "season": 2023,
+        "priorSeason": 2022,
+        "expectedFbsTeams": 133,
+        "exactSemanticSourceRows": 131,
+        "exactSemanticIdentityMatches": 131,
+        "identityFailures": 0,
+        "teamsWithPriorRating": 131,
+        "teamsWithPercentPPA": 131,
+        "teamsWithTalent": 130,
+        "gamesExcluded": 21,
+        "finalEvaluatedGames": 729
+      },
+      {
+        "season": 2024,
+        "priorSeason": 2023,
+        "expectedFbsTeams": 134,
+        "exactSemanticSourceRows": 133,
+        "exactSemanticIdentityMatches": 133,
+        "identityFailures": 0,
+        "teamsWithPriorRating": 133,
+        "teamsWithPercentPPA": 133,
+        "teamsWithTalent": 131,
+        "gamesExcluded": 11,
+        "finalEvaluatedGames": 741
+      },
+      {
+        "season": 2025,
+        "priorSeason": 2024,
+        "expectedFbsTeams": 136,
+        "exactSemanticSourceRows": 134,
+        "exactSemanticIdentityMatches": 134,
+        "identityFailures": 0,
+        "teamsWithPriorRating": 134,
+        "teamsWithPercentPPA": 134,
+        "teamsWithTalent": 135,
+        "gamesExcluded": 22,
+        "finalEvaluatedGames": 740
+      }
+    ],
+    "providerBudget": {
+      "cfbdApiCallsAttempted": 7,
+      "cfbdAuthenticatedCalls": 6,
+      "cfbdDataCalls": 5,
+      "failedAuthenticationChecks": 1,
+      "maximumAllowed": 40,
+      "oddsApiCalls": 0,
+      "pinnacleCalls": 0,
+      "espnApiCalls": 0
+    },
+    "returningProductionField": "CFBD percentPPA",
+    "returningProductionSemanticsMatchLive2026": true,
+    "exactEspnIdentity": true,
+    "fuzzyIdentityUsed": false,
+    "targetOutcomeLeakage": false,
+    "outcomesFrom2026Used": false,
+    "historicalRowsMutated": false
+  },
+  "decision": "B — Parallel v2 shadow justified.",
+  "parallelV2Justified": true,
+  "researchGate": {
+    "aggregateStrictImprovementRequired": [
+      "mae",
+      "rmse",
+      "brier",
+      "logLoss"
+    ],
+    "minimumPracticalImprovement": {
+      "mae": 0.05,
+      "rmse": 0.05,
+      "brier": 0.0005,
+      "logLoss": 0.001
+    },
+    "maximumSingleSeasonRelativeRegression": 0.005,
+    "bootstrapUpperBoundMustBeBelowZero": [
+      "absoluteMarginError",
+      "squaredMarginError",
+      "brier",
+      "logLoss"
+    ],
+    "note": "This is a research gate for creating a parallel shadow lane, never a customer-promotion gate."
+  },
+  "resultSha256": "f8812c23a270741c801c0ae8fec8256bf2fedc511a637843b90b98b137da1db0"
+}
