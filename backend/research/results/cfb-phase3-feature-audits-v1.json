@@ -1,0 +1,34 @@
+{
+  "version": "cfb-phase3-feature-audits-v1-2026-08-31",
+  "calibrationVersion": "cfb-historical-calibration-phase3-v1-2026-08-31",
+  "phase3InputContentSha256": "99b84ce29d01e19600102bf3679a70cad14ee791836cf51f58de995e742e646b",
+  "offenseDefense": {
+    "included": true,
+    "source": "previous-season and pre-prediction completed FBS-vs-FBS final scores",
+    "decomposition": "separate opponent-adjusted offense and defense, neutral-aware, ridge-stabilized",
+    "currentFitConfig": {
+      "priorPseudoGames": 1,
+      "minimumGames": 4,
+      "iterations": 30,
+      "homeFieldPoints": 3
+    }
+  },
+  "returningProduction": {
+    "offensivePercentPpaIncluded": true,
+    "defensiveIncluded": false,
+    "reason": "Inspected CFBD /player/returning payload contains offensive percentPPA components and no defensive returning-production field."
+  },
+  "quarterback": {
+    "included": false,
+    "reason": "No exact historical target-season starting-QB identity with a stable athlete ID is present; name-only and target-season usage joins are forbidden."
+  },
+  "transfers": {
+    "included": false,
+    "reason": "No cached 2021-2025 exact team-season portal aggregate exists; player-level name joins are forbidden and no speculative provider calls were consumed."
+  },
+  "providerBudget": {
+    "inheritedPhase2CfbdCalls": 5,
+    "phase3NewCfbdCalls": 0,
+    "phase3MaximumAllowed": 60
+  }
+}

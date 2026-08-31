@@ -29,6 +29,19 @@ const FBS_GROUP = '80';        // ESPN group id for FBS (Division I-A)
 const SCOREBOARD_LIMIT = '300'; // big Saturdays have 60+ FBS games
 const LEAGUE_AVG_PPG = 28;     // CFB points/team/game fallback (higher than NFL's ~22.5)
 const REQUEST_TIMEOUT_MS = 8000;
+const { fitOffenseDefense } = require("./cfbOffenseDefense");
+const CFB_OD_PRIOR_CONFIG = Object.freeze({
+  priorPseudoGames: 4,
+  minimumGames: 4,
+  iterations: 30,
+  homeFieldPoints: 3,
+});
+const CFB_OD_CURRENT_CONFIG = Object.freeze({
+  priorPseudoGames: 1,
+  minimumGames: 4,
+  iterations: 30,
+  homeFieldPoints: 3,
+});
 
 /* ---- tiny TTL cache so the route + grading cron don't hammer ESPN ---- */
 const _cache = new Map();
@@ -479,7 +492,12 @@ async function buildTeamRatings(season = 2025) {
         const parsed = parseScheduleEvents(sch.events || [], id)
           .filter((p) => p.completed && p.teamScore != null && p.oppScore != null);
         games[id] = parsed.map((p) => ({
+          gameId: p.gameId,
           oppId: p.opponentId,
+          homeAway: p.homeAway,
+          teamScore: p.teamScore,
+          oppScore: p.oppScore,
+          neutralSite: p.neutralSite,
           margin: Math.max(-CFB_MOV_CAP, Math.min(CFB_MOV_CAP, p.teamScore - p.oppScore)),
         }));
       } catch (_) { games[id] = []; }
@@ -532,6 +550,13 @@ async function buildTeamRatings(season = 2025) {
     sosSkippedReason = "SRS produced a non-finite rating";
   }
 
+  // Phase 3 shadow-only offense/defense context. Reuse the schedule payloads
+  // already fetched for SRS; no additional ESPN call is made. If the all-or-
+  // nothing schedule crawl declined, this context declines too.
+  const odSourceGames = sosApplied ? buildUniqueFbsScoreGames(games, raw, nameById) : [];
+  const odFit = fitOffenseDefense(odSourceGames, CFB_OD_PRIOR_CONFIG);
+  const currentOdFit = fitOffenseDefense(odSourceGames, CFB_OD_CURRENT_CONFIG);
+
   // 5) emit: SRS rating (already centered) tamed by the existing regression. Keep the
   //    old aggregate fields (rawRating/diff/pf/pa) so the SoS shift is auditable.
   const meanRaw = ratedIds.reduce((s, id) => s + raw[id].rawRating, 0) / ratedIds.length;
@@ -547,6 +572,14 @@ async function buildTeamRatings(season = 2025) {
       preSosRating: preSos,
       rating: sosApplied ? Math.round(srs[id] * RATING_REGRESSION * 100) / 100 : preSos,
       regressed: true, sosApplied,
+      offenseRating: odFit.teams.get(String(id))?.offenseRating ?? null,
+      defenseRating: odFit.teams.get(String(id))?.defenseRating ?? null,
+      odGames: odFit.teams.get(String(id))?.games ?? null,
+      odLeagueMeanPoints: odFit.leagueMeanPoints,
+      odSourceSeason: season,
+      inSeasonOffenseRating: currentOdFit.teams.get(String(id))?.offenseRating ?? null,
+      inSeasonDefenseRating: currentOdFit.teams.get(String(id))?.defenseRating ?? null,
+      inSeasonOdGames: currentOdFit.teams.get(String(id))?.games ?? null,
     };
   }
 
@@ -560,6 +593,14 @@ async function buildTeamRatings(season = 2025) {
       ? { movCap: CFB_MOV_CAP, srsIters: CFB_SRS_ITERS, fcsLevel: CFB_FCS_LEVEL, sosWeight: SOS_WEIGHT }
       : { sosSkippedReason }),
     teams: teamsOut, sosApplied,
+    offenseDefense: {
+      source: "existing-completed-fbs-schedules",
+      ratedTeams: odFit.ratedTeams,
+      sourceGames: odSourceGames.length,
+      providerCallsAdded: 0,
+      priorConfig: CFB_OD_PRIOR_CONFIG,
+      currentConfig: CFB_OD_CURRENT_CONFIG,
+    },
     // WZ-CFBSOSHONEST-2026-08-05 :: first instrumentation this crawl has ever had. retries =
     // fetches that threw and were tried again; recovered = teams that only succeeded because
     // of a retry, i.e. flakes that would have declined the whole league before this cycle.
@@ -604,6 +645,7 @@ function parseScheduleEvents(events, selfId) {
     const opp = cs.find((c) => String(c.id || c.team?.id) !== String(selfId));
     const completed = !!(comp.status?.type?.completed);
     out.push({
+      gameId: ev.id == null ? null : String(ev.id),
       week: ev.week?.number ?? null,
       opponentId: opp ? String(opp.id || opp.team?.id || "") : null,
       opponentName: opp ? (opp.team?.displayName || opp.team?.name || opp.team?.abbreviation || null) : null,
@@ -615,6 +657,34 @@ function parseScheduleEvents(events, selfId) {
     });
   }
   return out;
+}
+
+function buildUniqueFbsScoreGames(scheduleByTeam, ratedTeams, nameById = {}) {
+  const unique = new Map();
+  const rated = new Set(Object.keys(ratedTeams || {}).map(String));
+  for (const [teamIdRaw, rows] of Object.entries(scheduleByTeam || {})) {
+    const teamId = String(teamIdRaw);
+    for (const row of rows || []) {
+      const opponentId = String(row.oppId || "");
+      const gameId = String(row.gameId || "");
+      if (!gameId || !rated.has(teamId) || !rated.has(opponentId)
+          || row.teamScore == null || row.oppScore == null || unique.has(gameId)) continue;
+      const teamIsHome = row.homeAway === "home";
+      const homeId = teamIsHome ? teamId : opponentId;
+      const awayId = teamIsHome ? opponentId : teamId;
+      unique.set(gameId, Object.freeze({
+        gameId,
+        homeId,
+        awayId,
+        homeName: nameById[homeId]?.name || null,
+        awayName: nameById[awayId]?.name || null,
+        homePoints: teamIsHome ? row.teamScore : row.oppScore,
+        awayPoints: teamIsHome ? row.oppScore : row.teamScore,
+        neutralSite: row.neutralSite === true,
+      }));
+    }
+  }
+  return [...unique.values()].sort((left, right) => left.gameId.localeCompare(right.gameId));
 }
 
 async function fetchSchedulesProbe(season = 2025) {
@@ -693,5 +763,6 @@ module.exports = {
   fetchSchedulesProbe,
   statMap,
   parseRecords,
+  buildUniqueFbsScoreGames,
   LEAGUE_AVG_PPG,
 };

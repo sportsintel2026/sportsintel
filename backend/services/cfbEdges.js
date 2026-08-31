@@ -132,22 +132,40 @@ function blendRatings(prior, current, k = SEASON_BLEND_K) {
         blendWeight: round2(w),
         ratingSource: "blended",
         ratingSosApplied: pt.sosApplied === true && ct.sosApplied === true,
+        priorOffenseRating: pt.offenseRating ?? null,
+        priorDefenseRating: pt.defenseRating ?? null,
+        priorOdGames: pt.odGames ?? null,
+        currentOffenseRating: ct.inSeasonOffenseRating ?? null,
+        currentDefenseRating: ct.inSeasonDefenseRating ?? null,
+        currentOdGames: ct.inSeasonOdGames ?? null,
       });
       blendedTeams++;
     } else if (gCur > 0 && ct.rating != null) {
       teams[id] = withRatingProvenance(ct, {
         currentRating: ct.rating, currentGp: gCur, blendWeight: 1,
         ratingSource: "current-only", ratingSosApplied: ct.sosApplied === true,
+        priorOffenseRating: null, priorDefenseRating: null, priorOdGames: null,
+        currentOffenseRating: ct.inSeasonOffenseRating ?? null,
+        currentDefenseRating: ct.inSeasonDefenseRating ?? null,
+        currentOdGames: ct.inSeasonOdGames ?? null,
       }); // new-to-FBS team: no prior to blend
     } else if (pt) {
       teams[id] = withRatingProvenance(pt, {
         priorRating: pt.rating, currentGp: gCur, blendWeight: 0,
         ratingSource: "prior-only", ratingSosApplied: pt.sosApplied === true,
+        priorOffenseRating: pt.offenseRating ?? null,
+        priorDefenseRating: pt.defenseRating ?? null,
+        priorOdGames: pt.odGames ?? null,
+        currentOffenseRating: null, currentDefenseRating: null, currentOdGames: 0,
       });
     } else if (ct) {
       teams[id] = withRatingProvenance(ct, {
         currentRating: ct.rating, currentGp: gCur, blendWeight: 1,
         ratingSource: "current-only", ratingSosApplied: ct.sosApplied === true,
+        priorOffenseRating: null, priorDefenseRating: null, priorOdGames: null,
+        currentOffenseRating: ct.inSeasonOffenseRating ?? null,
+        currentDefenseRating: ct.inSeasonDefenseRating ?? null,
+        currentOdGames: ct.inSeasonOdGames ?? null,
       });
     }
   }
@@ -168,6 +186,10 @@ async function buildBlendedTeamRatings({ now = new Date() } = {}) {
       teams[id] = withRatingProvenance(team, {
         priorRating: team.rating, currentGp: 0, blendWeight: 0,
         ratingSource: "prior-only", ratingSosApplied: team.sosApplied === true,
+        priorOffenseRating: team.offenseRating ?? null,
+        priorDefenseRating: team.defenseRating ?? null,
+        priorOdGames: team.odGames ?? null,
+        currentOffenseRating: null, currentDefenseRating: null, currentOdGames: 0,
       });
     }
     return { ...prior, teams, blend: { mode: "prior-only", priorSeason, currentSeason, k: SEASON_BLEND_K, blendedTeams: 0 } };
@@ -176,6 +198,27 @@ async function buildBlendedTeamRatings({ now = new Date() } = {}) {
   const out = blendRatings(prior, current, SEASON_BLEND_K);
   out.blend = { ...out.blend, priorSeason, currentSeason };
   return out;
+}
+
+function buildOffenseDefenseContext(ratings, asOf) {
+  const teams = {};
+  for (const [id, team] of Object.entries(ratings?.teams || {})) {
+    teams[id] = Object.freeze({
+      priorOffenseRating: team.priorOffenseRating ?? null,
+      priorDefenseRating: team.priorDefenseRating ?? null,
+      priorOdGames: team.priorOdGames ?? null,
+      currentOffenseRating: team.currentOffenseRating ?? null,
+      currentDefenseRating: team.currentDefenseRating ?? null,
+      currentOdGames: team.currentOdGames ?? 0,
+    });
+  }
+  return Object.freeze({
+    asOf,
+    priorSeason: ratings?.blend?.priorSeason ?? null,
+    currentSeason: ratings?.blend?.currentSeason ?? ratings?.season ?? null,
+    providerCallsAdded: 0,
+    teams: Object.freeze(teams),
+  });
 }
 
 function ratingSourceFor(team) {
@@ -382,6 +425,7 @@ async function runCFBSlate({ season = null, weeks = 1 } = {}) {
     value: Object.freeze({
       capturedAt: controlCapturedAt,
       usEvents: Object.freeze(events.slice()),
+      odContext: buildOffenseDefenseContext(ratings, controlCapturedAt),
     }),
     enumerable: false,
     writable: false,
@@ -389,7 +433,7 @@ async function runCFBSlate({ season = null, weeks = 1 } = {}) {
   return slate;
 }
 
-module.exports = { runCFBSlate, captureCFBOddsTicks, getCFBMarketMovers, _internal: { normName, schoolKey, resolveTeam, buildResolver, currentCfbSeasonYear, cfbRegularSeasonStart, blendRatings, buildBlendedTeamRatings, buildRatingSnapshot, ratingSourceFor, SEASON_BLEND_K, leaguePpgFrom, projPointsFor } };
+module.exports = { runCFBSlate, captureCFBOddsTicks, getCFBMarketMovers, _internal: { normName, schoolKey, resolveTeam, buildResolver, currentCfbSeasonYear, cfbRegularSeasonStart, blendRatings, buildBlendedTeamRatings, buildRatingSnapshot, ratingSourceFor, buildOffenseDefenseContext, SEASON_BLEND_K, leaguePpgFrom, projPointsFor } };
 
 // ── CFB odds-tick snapshots (line-movement history) ──────────────────────────
 // Mirrors NFL ticks but writes to cfb_odds_ticks. Best-effort: if the table doesn't
