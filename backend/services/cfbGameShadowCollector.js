@@ -18,11 +18,38 @@ const {
   ML_METHOD,
   SPREAD_METHOD,
 } = require("./cfbGameShadowChallenger");
+const {
+  buildCfbPreseasonChallengerV2,
+  MODEL_VERSION: TEAM_MODEL_VERSION_V2,
+} = require("./cfbPreseasonChallengerV2");
+const {
+  buildCfbGameShadowPredictionV2,
+  MODEL_VERSION: MODEL_VERSION_V2,
+  EXPERIMENT_VERSION: EXPERIMENT_VERSION_V2,
+  ML_METHOD: ML_METHOD_V2,
+  SPREAD_METHOD: SPREAD_METHOD_V2,
+} = require("./cfbGameShadowChallengerV2");
 
 const TEAM_TABLE = "cfb_team_preseason_snapshots";
 const INPUT_TABLE = "cfb_game_input_snapshots";
 const OUTPUT_TABLE = "cfb_game_shadow_predictions";
 const MARKET_SOURCE = "the-odds-api-us-best-price";
+const V1_LANE = Object.freeze({
+  modelVersion: MODEL_VERSION,
+  teamModelVersion: TEAM_MODEL_VERSION,
+  experimentVersion: EXPERIMENT_VERSION,
+  mlMethod: ML_METHOD,
+  spreadMethod: SPREAD_METHOD,
+  buildPrediction: buildCfbGameShadowPrediction,
+});
+const V2_LANE = Object.freeze({
+  modelVersion: MODEL_VERSION_V2,
+  teamModelVersion: TEAM_MODEL_VERSION_V2,
+  experimentVersion: EXPERIMENT_VERSION_V2,
+  mlMethod: ML_METHOD_V2,
+  spreadMethod: SPREAD_METHOD_V2,
+  buildPrediction: buildCfbGameShadowPredictionV2,
+});
 
 function stableValue(value) {
   if (Array.isArray(value)) return value.map(stableValue);
@@ -99,6 +126,7 @@ function eventMarket(event, capturedAt) {
 
 function outputRow(candidate, input) {
   const prediction = candidate.prediction;
+  const lane = candidate.lane || V1_LANE;
   const quote = prediction.market;
   const predictionAt = input.prediction_at;
   return {
@@ -108,13 +136,13 @@ function outputRow(candidate, input) {
     game_date: candidate.input.game_date,
     prediction_at: predictionAt,
     kickoff_at: candidate.input.kickoff_at,
-    model_version: MODEL_VERSION,
-    team_model_version: TEAM_MODEL_VERSION,
-    experiment_version: EXPERIMENT_VERSION,
-    ml_probability_method: ML_METHOD,
-    spread_probability_method: SPREAD_METHOD,
+    model_version: lane.modelVersion,
+    team_model_version: lane.teamModelVersion,
+    experiment_version: lane.experimentVersion,
+    ml_probability_method: lane.mlMethod,
+    spread_probability_method: lane.spreadMethod,
     input_fingerprint: candidate.input.input_hash,
-    output_fingerprint: sha256({ inputHash: candidate.input.input_hash, modelVersion: MODEL_VERSION }),
+    output_fingerprint: sha256({ inputHash: candidate.input.input_hash, modelVersion: lane.modelVersion }),
 
     home_team_name: candidate.homeSnapshot.team_name,
     away_team_name: candidate.awaySnapshot.team_name,
@@ -166,9 +194,12 @@ function outputRow(candidate, input) {
   };
 }
 
-function buildCandidate({ event, homeSnapshot, awaySnapshot, homeTeam, awayTeam, neutralSiteStatus, capturedAt }) {
+function buildCandidate({
+  event, homeSnapshot, awaySnapshot, homeTeam, awayTeam, neutralSiteStatus, capturedAt,
+  lane = V1_LANE, pairedV1InputHash = null,
+}) {
   const kickoffAt = new Date(event.commenceTime).toISOString();
-  const prediction = buildCfbGameShadowPrediction({
+  const prediction = lane.buildPrediction({
     game: Object.freeze({
       gameId: String(event.eventId),
       kickoffAt,
@@ -185,9 +216,9 @@ function buildCandidate({ event, homeSnapshot, awaySnapshot, homeTeam, awayTeam,
   const inputSemantic = Object.freeze({
     gameId: String(event.eventId),
     kickoffAt,
-    modelVersion: MODEL_VERSION,
-    experimentVersion: EXPERIMENT_VERSION,
-    teamModelVersion: TEAM_MODEL_VERSION,
+    modelVersion: lane.modelVersion,
+    experimentVersion: lane.experimentVersion,
+    teamModelVersion: lane.teamModelVersion,
     homeSnapshotId: homeSnapshot.id,
     awaySnapshotId: awaySnapshot.id,
     homeSnapshotHash: homeSnapshot.input_hash,
@@ -207,6 +238,15 @@ function buildCandidate({ event, homeSnapshot, awaySnapshot, homeTeam, awayTeam,
       h2h: prediction.market.h2h,
       spread: prediction.market.spread,
     },
+    ...(pairedV1InputHash == null ? {} : {
+      parallelPair: {
+        v1ModelVersion: V1_LANE.modelVersion,
+        v1InputHash: pairedV1InputHash,
+        samePredictionAt: capturedAt,
+        sameTeamSnapshotIds: true,
+        sameMarketContext: true,
+      },
+    }),
   });
   const inputHash = sha256(inputSemantic);
   const status = homeTeam.status === "rated-input-ready" && awayTeam.status === "rated-input-ready"
@@ -218,8 +258,8 @@ function buildCandidate({ event, homeSnapshot, awaySnapshot, homeTeam, awayTeam,
     prediction_at: capturedAt,
     kickoff_at: kickoffAt,
     contract_version: homeSnapshot.contract_version,
-    model_version: MODEL_VERSION,
-    experiment_version: EXPERIMENT_VERSION,
+    model_version: lane.modelVersion,
+    experiment_version: lane.experimentVersion,
     home_team_snapshot_id: homeSnapshot.id,
     away_team_snapshot_id: awaySnapshot.id,
     home_cfbd_team_id: homeSnapshot.cfbd_team_id,
@@ -232,12 +272,13 @@ function buildCandidate({ event, homeSnapshot, awaySnapshot, homeTeam, awayTeam,
       awayTeam: event.awayTeam,
       homeEspnTeamId: String(homeSnapshot.espn_team_id),
       awayEspnTeamId: String(awaySnapshot.espn_team_id),
-      teamModelVersion: TEAM_MODEL_VERSION,
+      teamModelVersion: lane.teamModelVersion,
       homeTeamInputFingerprint: homeTeam.inputFingerprint,
       awayTeamInputFingerprint: awayTeam.inputFingerprint,
       marketSource: MARKET_SOURCE,
       marketQuoteAt: capturedAt,
       market: inputSemantic.market,
+      ...(inputSemantic.parallelPair == null ? {} : { parallelPair: inputSemantic.parallelPair }),
     },
     quality: {
       homeTeamStatus: homeTeam.status,
@@ -253,7 +294,9 @@ function buildCandidate({ event, homeSnapshot, awaySnapshot, homeTeam, awayTeam,
     predicted_margin_sd: prediction.predictiveSigma,
     input_hash: inputHash,
   };
-  return Object.freeze({ input: Object.freeze(input), prediction, homeSnapshot, awaySnapshot, homeTeam, awayTeam });
+  return Object.freeze({
+    input: Object.freeze(input), prediction, homeSnapshot, awaySnapshot, homeTeam, awayTeam, lane,
+  });
 }
 
 function prepareCandidates({
@@ -268,7 +311,15 @@ function prepareCandidates({
     controlRatings: controls,
     generatedAt: capturedAt,
   });
+  let teamChallengerV2 = null;
+  try {
+    teamChallengerV2 = buildCfbPreseasonChallengerV2({ v1Challenger: teamChallenger });
+  } catch (_) {
+    // The parallel lane must never interrupt the already-approved v1 collector.
+  }
   const teamByEspn = new Map(teamChallenger.teams.map((team) => [String(team.team.espnTeamId), team]));
+  const teamByEspnV2 = new Map((teamChallengerV2?.teams || [])
+    .map((team) => [String(team.team.espnTeamId), team]));
   const identity = buildExactIdentityIndex(snapshots, controls);
   const ledgerByGame = new Map();
   for (const row of ledgerRows) {
@@ -277,6 +328,7 @@ function prepareCandidates({
     ledgerByGame.get(key).push(row);
   }
   const candidates = [];
+  const v2Candidates = [];
   const skipped = {
     alreadyStarted: 0,
     missingGameIdentity: 0,
@@ -285,6 +337,7 @@ function prepareCandidates({
     missingChallenger: 0,
     neutralUnknown: 0,
     invalidInput: 0,
+    v2InvalidInput: 0,
   };
 
   for (const event of usEvents || []) {
@@ -315,19 +368,40 @@ function prepareCandidates({
     }
     const neutralSiteStatus = trustedNeutralStatus(event, ledgerByGame.get(gameId) || []);
     if (!neutralSiteStatus) { skipped.neutralUnknown++; continue; }
+    let v1Candidate;
     try {
-      candidates.push(buildCandidate({
+      v1Candidate = buildCandidate({
         event, homeSnapshot, awaySnapshot, homeTeam, awayTeam, neutralSiteStatus, capturedAt,
-      }));
+      });
+      candidates.push(v1Candidate);
     } catch (_) {
       skipped.invalidInput++;
+      continue;
+    }
+    try {
+      v2Candidates.push(buildCandidate({
+        event,
+        homeSnapshot,
+        awaySnapshot,
+        homeTeam: teamByEspnV2.get(String(homeSnapshot.espn_team_id)),
+        awayTeam: teamByEspnV2.get(String(awaySnapshot.espn_team_id)),
+        neutralSiteStatus,
+        capturedAt,
+        lane: V2_LANE,
+        pairedV1InputHash: v1Candidate.input.input_hash,
+      }));
+    } catch (_) {
+      skipped.v2InvalidInput++;
     }
   }
   return Object.freeze({
     candidates: Object.freeze(candidates),
+    v2Candidates: Object.freeze(v2Candidates),
     skipped: Object.freeze(skipped),
     identityCollisions: identity.collisions.size,
     teamDiagnostics: teamChallenger.diagnostics.counts,
+    v2SetupAvailable: teamChallengerV2 != null,
+    v2TeamDiagnostics: teamChallengerV2?.diagnostics || Object.freeze({ unavailable: true }),
   });
 }
 
@@ -403,6 +477,13 @@ async function collectCfbGameShadowPredictions(supabase, {
     inputSnapshotsCreated: 0,
     marketComparisonUnavailable: 0,
     persistenceErrors: 0,
+    v2SetupAvailable: plan.v2SetupAvailable,
+    v2Eligible: plan.v2Candidates.length,
+    v2Created: 0,
+    v2Duplicates: 0,
+    v2InputSnapshotsCreated: 0,
+    v2MarketComparisonUnavailable: 0,
+    v2PersistenceErrors: 0,
     skipped: plan.skipped,
   };
   for (const candidate of plan.candidates) {
@@ -420,6 +501,21 @@ async function collectCfbGameShadowPredictions(supabase, {
       console.error(`[CFB Game Shadow] persistence failed game=${candidate.input.game_id}: ${error.message}`);
     }
   }
+  for (const candidate of plan.v2Candidates) {
+    if (candidate.prediction.market.h2h.homeFair == null
+        || candidate.prediction.market.spread.homeFair == null) {
+      stats.v2MarketComparisonUnavailable++;
+    }
+    try {
+      const result = await persistCandidate(supabase, candidate);
+      if (result.inputCreated) stats.v2InputSnapshotsCreated++;
+      if (result.outputCreated) stats.v2Created++;
+      else stats.v2Duplicates++;
+    } catch (error) {
+      stats.v2PersistenceErrors++;
+      console.error(`[CFB Game Shadow v2] persistence failed game=${candidate.input.game_id}: ${error.message}`);
+    }
+  }
   return Object.freeze(stats);
 }
 
@@ -428,6 +524,8 @@ module.exports = {
   INPUT_TABLE,
   OUTPUT_TABLE,
   MARKET_SOURCE,
+  V1_LANE,
+  V2_LANE,
   collectCfbGameShadowPredictions,
   _internal: {
     stableValue,

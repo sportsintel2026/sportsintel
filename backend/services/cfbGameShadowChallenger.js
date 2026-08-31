@@ -189,5 +189,5 @@ module.exports = {
   ML_METHOD,
   SPREAD_METHOD,
   buildCfbGameShadowPrediction,
-  _internal: { finite, round, erf, normalCDF, normalizedMarket },
+  _internal: { finite, round, erf, normalCDF, probabilityPair, normalizedMarket },
 };
