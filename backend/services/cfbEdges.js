@@ -236,6 +236,11 @@ async function runCFBSlate({ season = null, weeks = 1 } = {}) {
     getCFBMainOdds(),
     season == null ? buildBlendedTeamRatings() : buildTeamRatings(season),
   ]);
+  // Freeze the moment at which the already-fetched market payload becomes the
+  // production control input. This stays non-enumerable on the returned slate,
+  // so customer JSON is byte/semantically unchanged while the recorder can
+  // create a genuinely contemporaneous shadow/control pair with zero new calls.
+  const controlCapturedAt = new Date().toISOString();
 
   let events = Array.isArray(eventsRaw) ? eventsRaw.slice() : [];
   const now = Date.now();
@@ -340,7 +345,7 @@ async function runCFBSlate({ season = null, weeks = 1 } = {}) {
     return pred;
   });
 
-  return {
+  const slate = {
     season: ratings.season != null ? ratings.season : season,
     weekWindow,
     // WZ-FBHORIZON-2026-08-06 :: why the board is empty when it is empty, for the UI to say so.
@@ -373,6 +378,15 @@ async function runCFBSlate({ season = null, weeks = 1 } = {}) {
     },
     games,
   };
+  Object.defineProperty(slate, "cfbControlContext", {
+    value: Object.freeze({
+      capturedAt: controlCapturedAt,
+      usEvents: Object.freeze(events.slice()),
+    }),
+    enumerable: false,
+    writable: false,
+  });
+  return slate;
 }
 
 module.exports = { runCFBSlate, captureCFBOddsTicks, getCFBMarketMovers, _internal: { normName, schoolKey, resolveTeam, buildResolver, currentCfbSeasonYear, cfbRegularSeasonStart, blendRatings, buildBlendedTeamRatings, buildRatingSnapshot, ratingSourceFor, SEASON_BLEND_K, leaguePpgFrom, projPointsFor } };
@@ -463,6 +477,20 @@ async function captureCFBOddsTicks() {
     console.log(`[CFB Game Shadow] ${JSON.stringify(shadow)}`);
   } catch (e) {
     console.error("[CFB Game Shadow] collection failed:", e.message);
+  }
+
+  // Pair any now-complete prospective control/shadow evidence. This is a
+  // database-only, idempotent pass; it remains isolated from the collector.
+  try {
+    const { linkCfbShadowControls } = require("./cfbControlBenchmark");
+    const linked = await linkCfbShadowControls(supabase, {
+      gameIds: events.map((event) => String(event?.eventId || "")).filter(Boolean),
+    });
+    if (linked.linked || linked.errors) {
+      console.log(`[CFB Control Benchmark] ${JSON.stringify(linked)}`);
+    }
+  } catch (e) {
+    console.error("[CFB Control Benchmark] linking failed:", e.message);
   }
 
   // Bank exact-ID, side-aligned closing observations for immutable shadow rows

@@ -58,6 +58,12 @@ const { toCfbBoardEdge, toCfbLedgerRow } = require("./cfbPredictionContract");
 (async () => {
   const slate = await runCFBSlate({ season: 2026, weeks: 1 });
   assert.strictEqual(slate.games.length, 1);
+  assert.ok(slate.cfbControlContext, "recorder-only control context should be present");
+  assert.strictEqual(slate.cfbControlContext.usEvents.length, 1);
+  assert.strictEqual(Object.isFrozen(slate.cfbControlContext), true);
+  assert.strictEqual(Object.isFrozen(slate.cfbControlContext.usEvents), true);
+  assert.strictEqual(JSON.stringify(slate).includes("cfbControlContext"), false,
+    "recorder-only context must not enter the customer payload");
   const game = slate.games[0];
   assert.ok(game.cfbPredictionContract?.moneyline?.selected);
   assert.strictEqual(JSON.stringify(game).includes("cfbPredictionContract"), false);

@@ -10,6 +10,10 @@ let recorded = null;
 let upsertOptions = null;
 let pendingRows = [];
 const gradeUpdates = [];
+let pairedShadowCalls = 0;
+let pairedLinkCalls = 0;
+let pairedShadowArgs = null;
+let pairedLinkArgs = null;
 class Query {
   constructor() { this.mode = "select"; this.filters = {}; this.values = null; }
   select() { return this; }
@@ -62,10 +66,23 @@ Module._load = function mockedLoad(request, parent, isMain) {
     captureMlbTotalsCalibrationClosing: async () => 0,
     gradeMlbTotalsCalibration: async () => 0,
   };
+  if (request === "./cfbGameShadowCollector") return {
+    collectCfbGameShadowPredictions: async (_supabase, args) => {
+      pairedShadowCalls++;
+      pairedShadowArgs = args;
+      return { created: 1 };
+    },
+  };
+  if (request === "./cfbControlBenchmark") return {
+    linkCfbShadowControls: async (_supabase, args) => {
+      pairedLinkCalls++;
+      pairedLinkArgs = args;
+      return { linked: 2 };
+    },
+  };
   return originalLoad.call(this, request, parent, isMain);
 };
 const { recordCFBPredictions, gradeFinishedGames } = require("./predictionTracker");
-Module._load = originalLoad;
 
 const commenceTime = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
 const ev = {
@@ -91,7 +108,13 @@ applyCfbContractToPrediction(game, contract, { moneyline: 0.03, spread: 0.03, to
 Object.defineProperty(game, "cfbPredictionContract", { value: contract, enumerable: false });
 
 (async () => {
-  await recordCFBPredictions({ games: [game] });
+  const controlCapturedAt = new Date().toISOString();
+  const slate = { games: [game] };
+  Object.defineProperty(slate, "cfbControlContext", {
+    value: Object.freeze({ capturedAt: controlCapturedAt, usEvents: Object.freeze([ev]) }),
+    enumerable: false,
+  });
+  await recordCFBPredictions(slate);
   assert.strictEqual(recorded.length, 6);
   const byMarket = Object.fromEntries(recorded.map((row) => [row.market, row]));
   assert.strictEqual(byMarket.moneyline.selection, contract.moneyline.selected.selection);
@@ -105,6 +128,13 @@ Object.defineProperty(game, "cfbPredictionContract", { value: contract, enumerab
   assert.strictEqual(byMarket.total_shadow.selection, "over");
   assert.strictEqual(upsertOptions.onConflict, "game_id,market,selection,game_date");
   assert.strictEqual(upsertOptions.ignoreDuplicates, true);
+  assert.ok(recorded.every((row) => row.snapshotted_at === controlCapturedAt));
+  assert.strictEqual(pairedShadowCalls, 1);
+  assert.strictEqual(pairedLinkCalls, 1);
+  assert.deepStrictEqual(pairedShadowArgs.usEvents, [ev]);
+  assert.deepStrictEqual(pairedShadowArgs.pinnacleEvents, []);
+  assert.strictEqual(pairedShadowArgs.capturedAt, controlCapturedAt);
+  assert.deepStrictEqual(pairedLinkArgs.gameIds, [ev.eventId]);
 
   // New rows keep the existing market/selection/line contract understood by the
   // active CFB grader; provenance columns do not interfere with settlement.
@@ -114,8 +144,10 @@ Object.defineProperty(game, "cfbPredictionContract", { value: contract, enumerab
   assert.strictEqual(gradeUpdates.length, 1);
   assert.strictEqual(gradeUpdates[0].id, 1);
   assert.strictEqual(gradeUpdates[0].values.result, "win");
+  Module._load = originalLoad;
   console.log("cfbRecorder self-test: PASS");
 })().catch((error) => {
+  Module._load = originalLoad;
   console.error(error);
   process.exitCode = 1;
 });
