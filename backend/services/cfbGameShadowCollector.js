@@ -1,0 +1,447 @@
+"use strict";
+
+// Production-reachable only from the existing hourly CFB measurement collector.
+// This service has no provider imports: all market data arrives as arguments from
+// the already-fetched US/Pinnacle payloads. It writes only immutable shadow tables.
+const crypto = require("crypto");
+const { teamKey } = require("./teamKey");
+const CONTROL_2025 = require("./cfbPreseasonControl2025");
+const {
+  buildCfbPreseasonChallenger,
+  MODEL_VERSION: TEAM_MODEL_VERSION,
+  TARGET_SEASON,
+} = require("./cfbPreseasonChallenger");
+const {
+  buildCfbGameShadowPrediction,
+  MODEL_VERSION,
+  EXPERIMENT_VERSION,
+  ML_METHOD,
+  SPREAD_METHOD,
+} = require("./cfbGameShadowChallenger");
+
+const TEAM_TABLE = "cfb_team_preseason_snapshots";
+const INPUT_TABLE = "cfb_game_input_snapshots";
+const OUTPUT_TABLE = "cfb_game_shadow_predictions";
+const MARKET_SOURCE = "the-odds-api-us-best-price";
+
+function stableValue(value) {
+  if (Array.isArray(value)) return value.map(stableValue);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.keys(value).sort().map((key) => [key, stableValue(value[key])]));
+  }
+  return value;
+}
+
+function sha256(value) {
+  return crypto.createHash("sha256").update(JSON.stringify(stableValue(value))).digest("hex");
+}
+
+function snapshotForChallenger(row) {
+  return Object.freeze({
+    id: row.id,
+    season: row.season,
+    contract_version: row.contract_version,
+    snapshot_at: row.snapshot_at,
+    input_hash: row.input_hash,
+    team_name: row.team_name,
+    espn_team_id: row.espn_team_id,
+    cfbd_team_id: row.cfbd_team_id,
+    quarterback: row.quarterback,
+    roster: row.roster,
+    returning_production: row.returning_production,
+    transfers: row.transfers,
+    talent: row.talent,
+    coaching: row.coaching,
+    quality: row.quality,
+  });
+}
+
+function addIdentity(index, collisions, name, snapshot) {
+  const key = teamKey(name, "cfb");
+  if (!key || collisions.has(key)) return;
+  const prior = index.get(key);
+  if (prior && String(prior.espn_team_id) !== String(snapshot.espn_team_id)) {
+    index.delete(key);
+    collisions.add(key);
+    return;
+  }
+  index.set(key, snapshot);
+}
+
+function buildExactIdentityIndex(snapshots, controls = CONTROL_2025) {
+  const index = new Map();
+  const collisions = new Set();
+  for (const snapshot of snapshots) {
+    addIdentity(index, collisions, snapshot.team_name, snapshot);
+    const durableDisplayName = controls[String(snapshot.espn_team_id)]?.teamName;
+    if (durableDisplayName) addIdentity(index, collisions, durableDisplayName, snapshot);
+  }
+  return Object.freeze({ index, collisions });
+}
+
+function trustedNeutralStatus(event, ledgerRows = []) {
+  if (event?.neutralSite === true) return "neutral";
+  if (event?.neutralSite === false) return "non-neutral";
+  const statuses = new Set((ledgerRows || [])
+    .map((row) => row?.neutral_site_status)
+    .filter((value) => value === "neutral" || value === "non-neutral"));
+  return statuses.size === 1 ? [...statuses][0] : null;
+}
+
+function eventMarket(event, capturedAt) {
+  return Object.freeze({
+    source: MARKET_SOURCE,
+    quoteAt: capturedAt,
+    h2h: Object.freeze({ ...(event?.h2h || {}) }),
+    spreads: Object.freeze({ ...(event?.spreads || {}) }),
+  });
+}
+
+function outputRow(candidate, input) {
+  const prediction = candidate.prediction;
+  const quote = prediction.market;
+  const predictionAt = input.prediction_at;
+  return {
+    input_snapshot_id: input.id,
+    game_id: candidate.input.game_id,
+    season: candidate.input.season,
+    game_date: candidate.input.game_date,
+    prediction_at: predictionAt,
+    kickoff_at: candidate.input.kickoff_at,
+    model_version: MODEL_VERSION,
+    team_model_version: TEAM_MODEL_VERSION,
+    experiment_version: EXPERIMENT_VERSION,
+    ml_probability_method: ML_METHOD,
+    spread_probability_method: SPREAD_METHOD,
+    input_fingerprint: candidate.input.input_hash,
+    output_fingerprint: sha256({ inputHash: candidate.input.input_hash, modelVersion: MODEL_VERSION }),
+
+    home_team_name: candidate.homeSnapshot.team_name,
+    away_team_name: candidate.awaySnapshot.team_name,
+    home_espn_team_id: String(candidate.homeSnapshot.espn_team_id),
+    away_espn_team_id: String(candidate.awaySnapshot.espn_team_id),
+    home_cfbd_team_id: candidate.homeSnapshot.cfbd_team_id,
+    away_cfbd_team_id: candidate.awaySnapshot.cfbd_team_id,
+    home_team_status: candidate.homeTeam.status,
+    away_team_status: candidate.awayTeam.status,
+
+    neutral_site_status: prediction.neutralSiteStatus,
+    home_field_adjustment: prediction.homeFieldAdjustment,
+    home_team_rating: prediction.homeTeamRating,
+    away_team_rating: prediction.awayTeamRating,
+    home_team_uncertainty: prediction.homeTeamUncertainty,
+    away_team_uncertainty: prediction.awayTeamUncertainty,
+    combined_rating_uncertainty: prediction.combinedRatingUncertainty,
+    base_game_sigma: prediction.baseGameSigma,
+    predictive_sigma: prediction.predictiveSigma,
+    projected_home_margin: prediction.projectedHomeMargin,
+    home_win_probability: prediction.homeWinProbability,
+    away_win_probability: prediction.awayWinProbability,
+
+    market_source: quote.source,
+    market_quote_at: predictionAt,
+    home_ml_odds: quote.h2h.home,
+    away_ml_odds: quote.h2h.away,
+    home_ml_book: quote.h2h.homeBook,
+    away_ml_book: quote.h2h.awayBook,
+    market_fair_home_win_probability: quote.h2h.homeFair,
+    market_fair_away_win_probability: quote.h2h.awayFair,
+    home_ml_disagreement: prediction.homeMlDisagreement,
+    away_ml_disagreement: prediction.awayMlDisagreement,
+
+    home_spread: quote.spread.homeLine,
+    away_spread: quote.spread.awayLine,
+    home_spread_odds: quote.spread.homeOdds,
+    away_spread_odds: quote.spread.awayOdds,
+    home_spread_book: quote.spread.homeBook,
+    away_spread_book: quote.spread.awayBook,
+    home_cover_probability: prediction.homeCoverProbability,
+    away_cover_probability: prediction.awayCoverProbability,
+    spread_push_probability: prediction.pushProbability,
+    point_disagreement: prediction.pointDisagreement,
+    market_fair_home_cover_probability: quote.spread.homeFair,
+    market_fair_away_cover_probability: quote.spread.awayFair,
+    home_spread_disagreement: prediction.homeSpreadDisagreement,
+    away_spread_disagreement: prediction.awaySpreadDisagreement,
+  };
+}
+
+function buildCandidate({ event, homeSnapshot, awaySnapshot, homeTeam, awayTeam, neutralSiteStatus, capturedAt }) {
+  const kickoffAt = new Date(event.commenceTime).toISOString();
+  const prediction = buildCfbGameShadowPrediction({
+    game: Object.freeze({
+      gameId: String(event.eventId),
+      kickoffAt,
+      predictionAt: capturedAt,
+      homeTeam: event.homeTeam,
+      awayTeam: event.awayTeam,
+    }),
+    homeTeam,
+    awayTeam,
+    neutralSiteStatus,
+    market: eventMarket(event, capturedAt),
+  });
+
+  const inputSemantic = Object.freeze({
+    gameId: String(event.eventId),
+    kickoffAt,
+    modelVersion: MODEL_VERSION,
+    experimentVersion: EXPERIMENT_VERSION,
+    teamModelVersion: TEAM_MODEL_VERSION,
+    homeSnapshotId: homeSnapshot.id,
+    awaySnapshotId: awaySnapshot.id,
+    homeSnapshotHash: homeSnapshot.input_hash,
+    awaySnapshotHash: awaySnapshot.input_hash,
+    homeTeamInputFingerprint: homeTeam.inputFingerprint,
+    awayTeamInputFingerprint: awayTeam.inputFingerprint,
+    neutralSiteStatus,
+    homeFieldAdjustment: prediction.homeFieldAdjustment,
+    homeTeamRating: prediction.homeTeamRating,
+    awayTeamRating: prediction.awayTeamRating,
+    homeTeamUncertainty: prediction.homeTeamUncertainty,
+    awayTeamUncertainty: prediction.awayTeamUncertainty,
+    baseGameSigma: prediction.baseGameSigma,
+    predictiveSigma: prediction.predictiveSigma,
+    market: {
+      source: prediction.market.source,
+      h2h: prediction.market.h2h,
+      spread: prediction.market.spread,
+    },
+  });
+  const inputHash = sha256(inputSemantic);
+  const status = homeTeam.status === "rated-input-ready" && awayTeam.status === "rated-input-ready"
+    ? "rated" : "suspect";
+  const input = {
+    game_id: String(event.eventId),
+    season: TARGET_SEASON,
+    game_date: kickoffAt.slice(0, 10),
+    prediction_at: capturedAt,
+    kickoff_at: kickoffAt,
+    contract_version: homeSnapshot.contract_version,
+    model_version: MODEL_VERSION,
+    experiment_version: EXPERIMENT_VERSION,
+    home_team_snapshot_id: homeSnapshot.id,
+    away_team_snapshot_id: awaySnapshot.id,
+    home_cfbd_team_id: homeSnapshot.cfbd_team_id,
+    away_cfbd_team_id: awaySnapshot.cfbd_team_id,
+    neutral_site_status: neutralSiteStatus,
+    input_status: status,
+    game_context: {
+      week: event.week ?? null,
+      homeTeam: event.homeTeam,
+      awayTeam: event.awayTeam,
+      homeEspnTeamId: String(homeSnapshot.espn_team_id),
+      awayEspnTeamId: String(awaySnapshot.espn_team_id),
+      teamModelVersion: TEAM_MODEL_VERSION,
+      homeTeamInputFingerprint: homeTeam.inputFingerprint,
+      awayTeamInputFingerprint: awayTeam.inputFingerprint,
+      marketSource: MARKET_SOURCE,
+      marketQuoteAt: capturedAt,
+      market: inputSemantic.market,
+    },
+    quality: {
+      homeTeamStatus: homeTeam.status,
+      awayTeamStatus: awayTeam.status,
+      homeFeatureCompleteness: homeTeam.featureCompleteness,
+      awayFeatureCompleteness: awayTeam.featureCompleteness,
+      identityMethod: "durable-espn-id-plus-exact-canonical-name",
+      targetSeasonOutcomesUsed: false,
+    },
+    home_current_season_weight: 0,
+    away_current_season_weight: 0,
+    predicted_margin_mean: prediction.projectedHomeMargin,
+    predicted_margin_sd: prediction.predictiveSigma,
+    input_hash: inputHash,
+  };
+  return Object.freeze({ input: Object.freeze(input), prediction, homeSnapshot, awaySnapshot, homeTeam, awayTeam });
+}
+
+function prepareCandidates({
+  snapshots = [], usEvents = [], ledgerRows = [], capturedAt,
+  controls = CONTROL_2025,
+} = {}) {
+  if (!capturedAt || !Number.isFinite(Date.parse(capturedAt))) throw new Error("valid capturedAt is required");
+  const predictionMs = Date.parse(capturedAt);
+  const normalizedSnapshots = snapshots.map(snapshotForChallenger);
+  const teamChallenger = buildCfbPreseasonChallenger({
+    snapshots: normalizedSnapshots,
+    controlRatings: controls,
+    generatedAt: capturedAt,
+  });
+  const teamByEspn = new Map(teamChallenger.teams.map((team) => [String(team.team.espnTeamId), team]));
+  const identity = buildExactIdentityIndex(snapshots, controls);
+  const ledgerByGame = new Map();
+  for (const row of ledgerRows) {
+    const key = String(row.game_id);
+    if (!ledgerByGame.has(key)) ledgerByGame.set(key, []);
+    ledgerByGame.get(key).push(row);
+  }
+  const candidates = [];
+  const skipped = {
+    alreadyStarted: 0,
+    missingGameIdentity: 0,
+    ambiguousIdentity: 0,
+    unresolvedTeam: 0,
+    missingChallenger: 0,
+    neutralUnknown: 0,
+    invalidInput: 0,
+  };
+
+  for (const event of usEvents || []) {
+    const gameId = event?.eventId == null ? null : String(event.eventId);
+    const kickoffMs = Date.parse(event?.commenceTime);
+    if (!gameId || !event?.homeTeam || !event?.awayTeam || !Number.isFinite(kickoffMs)) {
+      skipped.missingGameIdentity++;
+      continue;
+    }
+    if (predictionMs >= kickoffMs) { skipped.alreadyStarted++; continue; }
+    const homeKey = teamKey(event.homeTeam, "cfb");
+    const awayKey = teamKey(event.awayTeam, "cfb");
+    if (identity.collisions.has(homeKey) || identity.collisions.has(awayKey)) {
+      skipped.ambiguousIdentity++;
+      continue;
+    }
+    const homeSnapshot = identity.index.get(homeKey);
+    const awaySnapshot = identity.index.get(awayKey);
+    if (!homeSnapshot || !awaySnapshot || homeSnapshot.id === awaySnapshot.id) {
+      skipped.unresolvedTeam++;
+      continue;
+    }
+    const homeTeam = teamByEspn.get(String(homeSnapshot.espn_team_id));
+    const awayTeam = teamByEspn.get(String(awaySnapshot.espn_team_id));
+    if (homeTeam?.challengerRating == null || awayTeam?.challengerRating == null) {
+      skipped.missingChallenger++;
+      continue;
+    }
+    const neutralSiteStatus = trustedNeutralStatus(event, ledgerByGame.get(gameId) || []);
+    if (!neutralSiteStatus) { skipped.neutralUnknown++; continue; }
+    try {
+      candidates.push(buildCandidate({
+        event, homeSnapshot, awaySnapshot, homeTeam, awayTeam, neutralSiteStatus, capturedAt,
+      }));
+    } catch (_) {
+      skipped.invalidInput++;
+    }
+  }
+  return Object.freeze({
+    candidates: Object.freeze(candidates),
+    skipped: Object.freeze(skipped),
+    identityCollisions: identity.collisions.size,
+    teamDiagnostics: teamChallenger.diagnostics.counts,
+  });
+}
+
+async function insertInputSnapshot(supabase, row) {
+  const inserted = await supabase
+    .from(INPUT_TABLE)
+    .upsert(row, { onConflict: "input_hash", ignoreDuplicates: true })
+    .select("id,input_hash,prediction_at")
+    .maybeSingle();
+  if (inserted.error) throw new Error(inserted.error.message);
+  if (inserted.data) return Object.freeze({ row: inserted.data, created: true });
+  const existing = await supabase
+    .from(INPUT_TABLE)
+    .select("id,input_hash,prediction_at")
+    .eq("input_hash", row.input_hash)
+    .maybeSingle();
+  if (existing.error || !existing.data) throw new Error(existing.error?.message || "deduplicated input snapshot was not found");
+  return Object.freeze({ row: existing.data, created: false });
+}
+
+async function insertOutput(supabase, row) {
+  const inserted = await supabase
+    .from(OUTPUT_TABLE)
+    .upsert(row, { onConflict: "input_snapshot_id,model_version", ignoreDuplicates: true })
+    .select("id")
+    .maybeSingle();
+  if (inserted.error) throw new Error(inserted.error.message);
+  return inserted.data != null;
+}
+
+async function persistCandidate(supabase, candidate) {
+  const input = await insertInputSnapshot(supabase, candidate.input);
+  const created = await insertOutput(supabase, outputRow(candidate, input.row));
+  return Object.freeze({ inputCreated: input.created, outputCreated: created });
+}
+
+async function selectLedgerRows(supabase, eventIds) {
+  const rows = [];
+  for (let index = 0; index < eventIds.length; index += 80) {
+    const response = await supabase
+      .from("model_predictions")
+      .select("game_id,neutral_site_status")
+      .eq("league", "cfb")
+      .in("game_id", eventIds.slice(index, index + 80));
+    if (response.error) throw new Error(response.error.message);
+    rows.push(...(response.data || []));
+  }
+  return rows;
+}
+
+async function collectCfbGameShadowPredictions(supabase, {
+  usEvents = [], pinnacleEvents = [], capturedAt = new Date().toISOString(),
+} = {}) {
+  if (!supabase) throw new Error("Supabase client is required");
+  // Accepted only to make the no-extra-call data flow explicit; v1 comparison is
+  // against the side-aligned US best-price snapshot. Pinnacle remains available to
+  // the existing closing collector and is never fetched here.
+  void pinnacleEvents;
+  const snapshotsResponse = await supabase
+    .from(TEAM_TABLE)
+    .select("id,season,contract_version,snapshot_at,team_name,espn_team_id,cfbd_team_id,quarterback,roster,returning_production,transfers,talent,coaching,quality,input_hash")
+    .eq("season", TARGET_SEASON);
+  if (snapshotsResponse.error) throw new Error(snapshotsResponse.error.message);
+  const snapshots = snapshotsResponse.data || [];
+  const eventIds = (usEvents || []).map((event) => String(event?.eventId || "")).filter(Boolean);
+  const ledgerRows = eventIds.length ? await selectLedgerRows(supabase, eventIds) : [];
+  const plan = prepareCandidates({ snapshots, usEvents, ledgerRows, capturedAt });
+  const stats = {
+    considered: (usEvents || []).length,
+    eligible: plan.candidates.length,
+    created: 0,
+    duplicates: 0,
+    inputSnapshotsCreated: 0,
+    marketComparisonUnavailable: 0,
+    persistenceErrors: 0,
+    skipped: plan.skipped,
+  };
+  for (const candidate of plan.candidates) {
+    if (candidate.prediction.market.h2h.homeFair == null
+        || candidate.prediction.market.spread.homeFair == null) {
+      stats.marketComparisonUnavailable++;
+    }
+    try {
+      const result = await persistCandidate(supabase, candidate);
+      if (result.inputCreated) stats.inputSnapshotsCreated++;
+      if (result.outputCreated) stats.created++;
+      else stats.duplicates++;
+    } catch (error) {
+      stats.persistenceErrors++;
+      console.error(`[CFB Game Shadow] persistence failed game=${candidate.input.game_id}: ${error.message}`);
+    }
+  }
+  return Object.freeze(stats);
+}
+
+module.exports = {
+  TEAM_TABLE,
+  INPUT_TABLE,
+  OUTPUT_TABLE,
+  MARKET_SOURCE,
+  collectCfbGameShadowPredictions,
+  _internal: {
+    stableValue,
+    sha256,
+    snapshotForChallenger,
+    buildExactIdentityIndex,
+    trustedNeutralStatus,
+    eventMarket,
+    outputRow,
+    buildCandidate,
+    prepareCandidates,
+    insertInputSnapshot,
+    insertOutput,
+    persistCandidate,
+    selectLedgerRows,
+  },
+};
