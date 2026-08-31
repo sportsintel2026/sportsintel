@@ -2182,7 +2182,7 @@ router.get("/fbseasonprobe", async (req, res) => {
 // or payload -- nothing here can put ADMIN_TOKEN or CFBD_API_KEY in an address bar.
 // Read-only, no writes, no board dependency. TEMPORARY: delete when the layer ships.
 //   /api/edges/cfbdprobe[?year=2026]
-router.get("/cfbdprobe", async (req, res) => {
+router.get("/cfbdprobe", adminGuard, async (req, res) => {
   const year = parseInt(req.query.year, 10) || 2026;
   const out = { token: "WZ-CFBD-2026-08-03", year, sp: {}, returning: {}, join: {} };
   let sp = [];
@@ -2277,7 +2277,7 @@ router.get("/cfbdprobe", async (req, res) => {
 //
 // Reads only. No writes, no board dependency, no key in the URL. ~4 CFBD calls per pair.
 //   /api/edges/cfbratingbacktest[?priors=2022,2023,2024][&provider=consensus]
-router.get("/cfbratingbacktest", async (req, res) => {
+router.get("/cfbratingbacktest", adminGuard, async (req, res) => {
   const out = { token: "WZ-CFBDBACKTEST-2026-08-03", pairs: [], pooled: null };
   try {
     const { getSpRatings, getSrsRatings, getGames, getLines } = require("../services/cfbdApi");

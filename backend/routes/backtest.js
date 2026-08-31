@@ -18,11 +18,53 @@
 const express = require("express");
 const router = express.Router();
 const { supabase } = require("../middleware/auth");
+const adminGuard = require("../middleware/adminGuard");
 // WZ-SIGMA-IMPORT :: the `current` blocks below used to carry hand-typed literals and drifted.
 // Import the live constants so this harness can never again report a sigma the model is not using.
 const { CFB_SIGMA, CFB_TOTAL_SIGMA } = require("../services/cfbModel");
 const { NFL_SIGMA, NFL_TOTAL_SIGMA } = require("../services/nflModel");
 const { mlbMonetaryProfit } = require("../services/mlbPerformanceMath");
+
+const CFB_CALIBRATION_DEFAULT_SEASONS = [2020, 2021, 2022, 2023, 2024];
+const CFB_CALIBRATION_MIN_SEASON = 2020;
+const CFB_CALIBRATION_MAX_SEASONS = 5;
+
+function stripCfbProviderQueryKey(req, _res, next) {
+  if (req.query && Object.prototype.hasOwnProperty.call(req.query, "key")) {
+    delete req.query.key;
+  }
+  next();
+}
+
+function parseCfbCalibrationSeasons(value) {
+  const currentSeason = new Date().getUTCFullYear();
+  const tokens = value == null
+    ? CFB_CALIBRATION_DEFAULT_SEASONS.map(String)
+    : String(value).split(",");
+  const seasons = [];
+  const seen = new Set();
+
+  for (const token of tokens) {
+    const normalized = String(token).trim();
+    if (!/^\d{4}$/.test(normalized)) {
+      return { error: "seasons must be comma-separated four-digit years" };
+    }
+    const year = Number(normalized);
+    if (year < CFB_CALIBRATION_MIN_SEASON || year > currentSeason) {
+      return { error: `seasons must be between ${CFB_CALIBRATION_MIN_SEASON} and ${currentSeason}` };
+    }
+    if (!seen.has(year)) {
+      seen.add(year);
+      seasons.push(year);
+    }
+  }
+
+  if (!seasons.length) return { error: "at least one season is required" };
+  if (seasons.length > CFB_CALIBRATION_MAX_SEASONS) {
+    return { error: `no more than ${CFB_CALIBRATION_MAX_SEASONS} seasons are allowed` };
+  }
+  return { seasons };
+}
 
 // Core markets per league — MUST match performance.js LEAGUE_CONFIG. Props and
 // *_shadow rows are NEVER part of the bettable board (props live in their own
@@ -123,14 +165,18 @@ function moveBucket(clv, beatClose) {
 // lines. Fetches FBS-vs-FBS results + closing spreads/totals across several seasons, joins by game,
 // measures the margin-vs-spread and total-vs-line residual SDs, the ACTUAL push rate at each key
 // spread, fits the key-number comb to those real push rates, and returns copy-paste-ready cfb comb +
-// sigmas. Read-only, on demand. Needs a free CFBD key (env CFBD_API_KEY, or ?key=; https://collegefootballdata.com/key).
+// sigmas. Read-only, on demand. Uses only the server-side CFBD_API_KEY.
 //   GET /api/backtest/cfb-calibrate?seasons=2020,2021,2022,2023,2024&provider=consensus
 // Registered before "/:league" so Express doesn't read "cfb-calibrate" as a league.
-router.get("/cfb-calibrate", async (req, res) => {
+router.get("/cfb-calibrate", stripCfbProviderQueryKey, adminGuard, async (req, res) => {
   try {
-    const key = req.query.key || process.env.CFBD_API_KEY;
-    if (!key) return res.status(400).json({ token: "WZ-CFB-BACKTEST-2026-07-17", error: "No CFBD key. Set env CFBD_API_KEY (or pass ?key=). Free key: https://collegefootballdata.com/key" });
-    const seasons = String(req.query.seasons || "2020,2021,2022,2023,2024").split(",").map((s) => s.trim()).filter(Boolean);
+    const parsed = parseCfbCalibrationSeasons(req.query.seasons);
+    if (parsed.error) {
+      return res.status(400).json({ token: "WZ-CFB-BACKTEST-2026-07-17", error: parsed.error });
+    }
+    const seasons = parsed.seasons;
+    const key = process.env.CFBD_API_KEY;
+    if (!key) return res.status(503).json({ token: "WZ-CFB-BACKTEST-2026-07-17", error: "CFBD provider unavailable" });
     const preferredProvider = String(req.query.provider || "consensus");
     const BASE = "https://api.collegefootballdata.com";
     const headers = { Authorization: `Bearer ${key}`, Accept: "application/json" };
