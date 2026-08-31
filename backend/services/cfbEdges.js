@@ -464,6 +464,23 @@ async function captureCFBOddsTicks() {
   } catch (e) {
     console.error("[CFB Game Shadow] collection failed:", e.message);
   }
+
+  // Bank exact-ID, side-aligned closing observations for immutable shadow rows
+  // using only the US/Pinnacle payloads already fetched by this tick. The
+  // lifecycle service has no provider client and cannot affect customer output.
+  try {
+    const { captureCfbGameShadowClosingObservations } = require("./cfbGameShadowEvaluator");
+    const observed = await captureCfbGameShadowClosingObservations(supabase, {
+      usEvents: events,
+      pinnacleEvents: pinEvents,
+      capturedAt: new Date().toISOString(),
+    });
+    if (observed.inserted || observed.errors) {
+      console.log(`[CFB Game Shadow Close] ${JSON.stringify(observed)}`);
+    }
+  } catch (e) {
+    console.error("[CFB Game Shadow Close] capture failed:", e.message);
+  }
   return saved;
 }
 

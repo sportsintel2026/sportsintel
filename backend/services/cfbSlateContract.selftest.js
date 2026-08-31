@@ -25,6 +25,7 @@ class Query {
   eq() { return this; }
   in() { return this; }
   is() { return this; }
+  gt() { return this; }
   lt() { return Promise.resolve({ error: null }); }
   insert() { return Promise.resolve({ error: null }); }
   delete() { return this; }

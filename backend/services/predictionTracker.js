@@ -1947,7 +1947,7 @@ async function gradeFootball(supabase, pending, fetchBoard, league) {
         }
       }
     }
-    sbCache[date] = { byKey, bySchool };
+    sbCache[date] = { byKey, bySchool, games: games || [] };
     return sbCache[date];
   };
 
@@ -1989,6 +1989,27 @@ async function gradeFootball(supabase, pending, fetchBoard, league) {
     console.warn(`[Tracker] ${String(league || "fb").toUpperCase()} grading: ${unmatched} pending row(s) matched no scoreboard game ` +
       `(bad matchup string ${miss.noMatchup}, not on board ${miss.noGame}, ambiguous school ${miss.ambiguous}); ` +
       `${miss.notFinal} not final, ${miss.noScore} final without a score.`);
+  }
+
+  // Evaluate immutable CFB game-shadow rows only from scoreboards the normal
+  // customer grader already fetched above. This adds no result-provider call,
+  // cannot alter grading, and writes only the isolated evaluation ledger.
+  if (isCfb) {
+    try {
+      const scoreboardGames = [];
+      for (const index of Object.values(sbCache)) {
+        if (Array.isArray(index?.games)) scoreboardGames.push(...index.games);
+      }
+      if (scoreboardGames.length) {
+        const { evaluateCfbGameShadowsFromScoreboard } = require("./cfbGameShadowEvaluator");
+        const evaluated = await evaluateCfbGameShadowsFromScoreboard(supabase, { scoreboardGames });
+        if (evaluated.evaluated || evaluated.errors) {
+          console.log(`[CFB Game Shadow Eval] ${JSON.stringify(evaluated)}`);
+        }
+      }
+    } catch (e) {
+      console.error("[CFB Game Shadow Eval] evaluation failed:", e.message);
+    }
   }
   return graded;
 }
