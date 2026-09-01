@@ -21,8 +21,8 @@ import { chooseEventDate, createLatestRequestGuard, eventDateGroups, formatEvent
 import EventDateSelector, { EVENT_DATE_CSS } from "../components/EventDateSelector";
 import FootballIntel, { FOOTBALL_INTEL_CSS } from "../components/FootballIntel";
 import { buildFootballIntel } from "../lib/footballIntel";
+import ApprovedEdgeBoard from "../components/ApprovedEdgeBoard";
 import Sidebar from "./Sidebar";
-import HomeDesktop from "./HomeDesktop";
 
 // Tracked-record feed (same source the Performance page reads).
 const PERF_API_BASE = import.meta.env.VITE_API_URL || "https://sportsintel-production.up.railway.app";
@@ -177,13 +177,11 @@ export default function HomePage(){
   const hasFull=plan.isAdmin===true||plan.tier==="pro"||plan.tier==="elite"||user?.email==="r7002g@gmail.com";
   const [face]=useState("edges"); // WZ-WINNERS-REMOVED-2026-07-05 :: Winners dropped; Edge Board is the only board face
   const sp=SPORTS[sport]||SPORTS.mlb;
-  const [isDesktop,setIsDesktop]=useState(typeof window!=="undefined"&&window.innerWidth>=1024);
   const [heroIdx,setHeroIdx]=useState(0);
   const [openId,setOpenId]=useState(null);
   const [eventDate,setEventDate]=useState(null);
   const feedRequestGuard=useRef(createLatestRequestGuard());
   const [mktab,setMktab]=useState("all"); // WZ-MKTABS-2026-08-17 :: active market filter tab -- "all" or an mk token (ML|RL|SPR|TOT)
-  useEffect(()=>{ const on=()=>setIsDesktop(window.innerWidth>=1024); window.addEventListener("resize",on); return ()=>window.removeEventListener("resize",on); },[]);
 
   useEffect(()=>{ subscriptionApi.getMyPlan().then(setPlan).catch(()=>{}).finally(()=>setPlanLoaded(true)); },[]);
   // Auto-resume checkout after signup: if a logged-out visitor picked a plan on
@@ -453,8 +451,6 @@ export default function HomePage(){
     return Object.keys(by).map(k=>{ const grp=by[k]; grp.items.sort((a,b)=>a.sev-b.sev); grp.minSev=grp.items[0].sev; grp.items=grp.items.slice(0,3); return grp; }).sort((a,b)=>(a.minSev-b.minSev)||(b.items.length-a.items.length)).slice(0,5);
   })();
 
-  if(isDesktop) return <HomeDesktop edges={e} games={games} movers={movers} live={live||[]} abbrById={abbrById} topProps={sport==="mlb"?topProps:[]} propList={sport==="mlb"?propList:[]} propsByType={sport==="mlb"?propsByType:{}} hero={hero} hasFull={hasFull} planLoaded={planLoaded} lineSeries={lineSeries} moveByPick={moveByPick} wpRecord={wpRecord} wpToday={wpToday} navigate={navigate} plan={plan} sport={sport} setSport={(k)=>{setSport(k);}} marketsLive={marketsLive} anyLive={anyLive} marketRead={marketRead} perf={perf} sharpRows={sharpRows} intelGroups={intelGroups} dateGroups={dateGroups} eventDate={eventDate} setEventDate={setEventDate} eventDateLabel={eventDateLabel} footballIntel={footballIntel} />;
-
   // ============ ADAPTERS: real data -> v11 mock shapes ============
   const edgeNum=(x)=> edgePct(x,sport); // WZ-EDGE-UNIT-2026-07-14 :: delegate to the single edge-unit normalizer
   const convOf=(x)=>{const c=String(x._convAdj||x.conviction||"").toLowerCase();return c.indexOf("high")===0?"high":c.indexOf("med")===0?"med":"low";};
@@ -481,7 +477,7 @@ export default function HomePage(){
       if(mr.total&&(mr.total.lean||mr.total.side||mr.total.favTeam))read.total=[mr.total.tier,String(mr.total.lean||mr.total.side||mr.total.favTeam).toUpperCase()+(mr.total.line!=null?" "+mr.total.line:""),formatOdds(mr.total.odds),!!mr.total.agrees];}
     const park=[];if(gm&&gm.parkRunFactor!=null)park.push((gm.parkRunFactor>1?"+":"")+Math.round((gm.parkRunFactor-1)*100)+"%");
     const wx=gm&&gm.weather&&gm.weather.tempF!=null?(Math.round(gm.weather.tempF)+"\u00b0F"+(gm.weather.windMph?" \u00b7 "+gm.weather.windMph+" mph":"")):null;
-    return {p:edgeLabel(x),mk:mkOf(x),cat:catOf(x),tier:(mkOf(x)==="ML"&&model!=null)?(model>=65?"LOCK":model>=58?"STRONG":model>=55?"LEAN":null):null,value:(mkOf(x)==="ML"&&(x.edge??0)>0),conv:convOf(x),edge:edgeNum(x),odds:formatOdds(x.odds),mv:mvOf(x),delta:x._delta,clv:null,a,h,g:x.matchup,starts:gm&&gm.time?fmtTime(gm.time):null,model,mkt,flags:flags.length?flags:null,read,why:x.reason,park:park.length?park:null,wx,series:lineSeries[x.gameId+x.side]||null,gameId:x.gameId,seed:i};
+    return {p:edgeLabel(x),mk:mkOf(x),cat:catOf(x),tier:(mkOf(x)==="ML"&&model!=null)?(model>=65?"LOCK":model>=58?"STRONG":model>=55?"LEAN":null):null,value:(mkOf(x)==="ML"&&(x.edge??0)>0),conv:convOf(x),edge:edgeNum(x),odds:formatOdds(x.odds),book:x.book||x.sportsbook||x.bestBook||null,mv:mvOf(x),delta:x._delta,clv:null,a,h,g:x.matchup,starts:gm&&gm.time?fmtTime(gm.time):null,model,mkt,flags:flags.length?flags:null,read,why:x.reason,park:park.length?park:null,wx,series:lineSeries[x.gameId+x.side]||null,gameId:x.gameId,seed:i};
   };
   const allAdj=[...mlAdj,...totAdj,...spAdj];
   const sortBoard=byWinProb;  // WZ-BOARD-WINFIRST-2026-07-06 :: All tab uses the same winner-first order (win/cover prob leads).
@@ -585,6 +581,11 @@ export default function HomePage(){
   const mkFilter = (arr)=> activeMk ? arr.filter(x=>mkOf(x)===activeMk) : arr;
   const tabItems = mktab==="all" ? boardItems : bestPerGame(mkFilter(boardSrc).map(toBoard));
   const tabPreview = mktab==="all" ? previewItems : bestPerGame(mkFilter(previewSrc).map(toBoard));
+  // Preserve the established per-market population exactly while the approved board owns
+  // the visual tab state. Filtering after the all-market one-row-per-game collapse would
+  // silently omit a valid alternate market for a game.
+  const boardItemsByMarket=Object.fromEntries(sp.markets.map(([mk])=>[mk,bestPerGame(boardSrc.filter(x=>mkOf(x)===mk).map(toBoard))]));
+  const previewItemsByMarket=Object.fromEntries(sp.markets.map(([mk])=>[mk,bestPerGame(previewSrc.filter(x=>mkOf(x)===mk).map(toBoard))]));
   // WZ-BOARD-ASBREAK-2026-07-12 :: add ?break=1 to the URL to preview the All-Star break state on a
   // live day (it's normally date-gated to Jul 13-15 and only shows when the board is empty).
   const breakPreview = typeof window!=="undefined" && /[?&]break=1/.test(window.location.search);
@@ -608,6 +609,30 @@ export default function HomePage(){
       winPct:(o.winPct!=null)?o.winPct:Math.round((o.wins/total)*100),
       graded:total };
   })();
+
+  // Approved Phase B shell: one responsive render path for mobile, tablet, and desktop.
+  // All data selection, gating, event-date scoping, and model calculations above remain unchanged.
+  return <ApprovedEdgeBoard
+    sport={sport}
+    dateGroups={dateGroups}
+    eventDate={eventDate}
+    setEventDate={setEventDate}
+    eventDateLabel={eventDateLabel}
+    games={games}
+    ratedGameCount={ratedGameCount}
+    items={boardItems}
+    previewItems={previewItems}
+    itemsByMarket={boardItemsByMarket}
+    previewItemsByMarket={previewItemsByMarket}
+    hasFull={hasFull}
+    planLoaded={planLoaded}
+    markets={sp.markets}
+    wpToday={wpToday}
+    wpRecord={wpRecord}
+    footballIntel={footballIntel}
+    movers={moverItems}
+    navigate={navigate}
+  />;
 
   // WZ-ONEBOARD-CONNECT-2026-07-20 :: ONE CARD, NOT TWO STACKED CARDS.
   // The previous pass left WizePlays in its own bordered card below the board, so on a day with no

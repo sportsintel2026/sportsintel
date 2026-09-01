@@ -9,10 +9,12 @@
 
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "../hooks/useAuth";
 import { edgesApi, subscriptionApi } from "../lib/api";
-import Sidebar from "./Sidebar";
-import BottomNav from "./BottomNav";
+import { useSport } from "../hooks/useSport";
+import { buildFootballIntel } from "../lib/footballIntel";
+import { chooseEventDate, eventDateGroups, scopeEdgeFeed } from "../lib/eventSlate";
+import EventDateSelector, { EVENT_DATE_CSS } from "../components/EventDateSelector";
+import FootballIntel, { FOOTBALL_INTEL_CSS } from "../components/FootballIntel";
 import TerminalShell from "./TerminalShell";
 
 function fmtOdds(a) { if (a == null || isNaN(a)) return "—"; const n = Math.round(Number(a)); return n > 0 ? `+${n}` : `${n}`; }
@@ -172,23 +174,25 @@ function Card({ g, market }) {
 }
 
 export default function MarketReadPage() {
-  const { user, signOut } = useAuth();
   const [plan, setPlan] = useState({ tier: "free", isAdmin: false });
   const hasFull = plan.isAdmin === true || plan.tier === "pro" || plan.tier === "elite";
   const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [market, setMarket] = useState("win");
-  const [sport, setSport] = useState("mlb");
+  const [sport] = useSport();
+  const [footballFeed, setFootballFeed] = useState(null);
+  const [eventDate, setEventDate] = useState(null);
 
   useEffect(() => { subscriptionApi.getMyPlan().then(setPlan).catch(() => {}); }, []);
   useEffect(() => {
     let on = true;
     const load = async () => {
+      if (on) setLoading(true);
       try {
-        const d = sport === "cfb"
-          ? marketReadFromFootball(await edgesApi.getCFB())
-          : await edgesApi.getMarketRead();
+        const feed = sport === "cfb" ? await edgesApi.getCFB() : sport === "nfl" ? await edgesApi.getNFL() : null;
+        const d = feed ? marketReadFromFootball(feed) : sport === "mlb" ? await edgesApi.getMarketRead() : { games: [] };
+        if (on) setFootballFeed(feed);
         if (on) setData(d);
       }
       catch (_) { if (on) setData({ games: [] }); }
@@ -199,57 +203,46 @@ export default function MarketReadPage() {
     return () => { on = false; clearInterval(id); };
   }, [sport]);
 
-  const games = data?.games || [];
+  const dateGroups = eventDateGroups(footballFeed?.games || [], footballFeed?.date || null);
+  useEffect(() => {
+    if (!dateGroups.length) { setEventDate(footballFeed?.date || null); return; }
+    const auto = chooseEventDate(footballFeed.games, { fallbackDate: footballFeed.date || null });
+    setEventDate((current) => dateGroups.some((group) => group.date === current && !group.complete) ? current : auto);
+  }, [sport, footballFeed]);
+  const scopedFootballFeed = footballFeed ? scopeEdgeFeed(footballFeed, eventDate || footballFeed.date || null) : null;
+  const currentData = scopedFootballFeed ? marketReadFromFootball(scopedFootballFeed) : data;
+  const games = currentData?.games || [];
   const has = (g) => market === "win" ? g.win : market === "cover" ? g.cover : g.total;
   const shown = games.filter(has);
+  const footballIntel = buildFootballIntel(scopedFootballFeed, sport);
 
   return (
     <TerminalShell active="/market-read" plan={plan} navigate={navigate}>
-    <div style={{ minHeight: "100vh", background: "#000", color: "#f2f6f4", fontFamily: "'Inter',system-ui,-apple-system,sans-serif" }}>
-      <style>{CSS}</style>
-      <BottomNav />
-      <div className="mrsb"><Sidebar user={user} plan={plan} signOut={signOut} navigate={navigate} /></div>
-      <div className="mrwrap">
-        <div onClick={() => navigate(-1)} className="mrback">← Back</div>
-        <div className="mrhdr">
-          <div className="mrtitle"><span className="b">Market</span> Read</div>
-          <div className="mrtag">What every book’s price is saying, how confident the market is, and where it’s moving. A read, not a guarantee.</div>
+      <main className="approved-intel"><style>{CSS + APPROVED_CSS + EVENT_DATE_CSS + FOOTBALL_INTEL_CSS}</style>
+        <div className="approved-intel__wrap">
+          {(sport === "nfl" || sport === "cfb") && <EventDateSelector groups={dateGroups} value={eventDate} onChange={setEventDate} label="EVENT DATE" />}
+          <header className="approved-intel__head"><span>{sport.toUpperCase()} · VERIFIED MARKET CONTEXT</span><h1>Market &amp; Intel</h1><p>What changed, why it matters, and where the model differs from the available market.</p></header>
+          {!hasFull ? <div className="approved-intel__lock"><span>ALL-ACCESS</span><h2>Market &amp; Intel is locked</h2><p>Full model-versus-market context is included with All-Access.</p><button onClick={() => navigate("/pricing")}>Unlock All-Access</button></div>
+            : loading ? <div className="approved-intel__empty">Reading the verified market…</div>
+            : (sport === "nfl" || sport === "cfb") ? <>
+                <FootballIntel sport={sport} rows={footballIntel} />
+                <section className="approved-pulse"><header><span>MARKET PULSE · WHAT CHANGED &amp; WHY</span></header>{(scopedFootballFeed?.marketMovers || []).length ? scopedFootballFeed.marketMovers.slice(0, 6).map((row, index) => <article key={index}><div><b>{row.matchup}</b><small>{String(row.market || "market").toUpperCase()} · {String(row.side || "").toUpperCase()}</small></div><strong>{row.open ?? "—"} → {row.now ?? "—"}</strong></article>) : <p>No verified line movement is available for this slate yet.</p>}</section>
+              </>
+            : shown.length ? <><section className="approved-gamegrid">{shown.map((g) => <Card key={g.gameId} g={g} market={market} />)}</section><div className="approved-tabs">{[["win","MONEYLINE"],["cover","RUN LINE"],["total","TOTAL"]].map(([key,label]) => <button key={key} className={market === key ? "on" : ""} onClick={() => setMarket(key)}>{label}</button>)}</div></>
+              : <div className="approved-intel__empty">No verified market read is available for this slate yet.</div>}
         </div>
-
-        <div className="mrsports">
-          {[["mlb", "MLB"], ["cfb", "CFB"]].map(([k, lb]) => (
-            <button key={k} className={sport === k ? "on" : ""} onClick={() => { if (k !== sport) { setSport(k); setLoading(true); if (k === "cfb" && market === "cover") setMarket("win"); } }}>{lb}</button>
-          ))}
-        </div>
-
-        <div className="mrtabs">
-          {[["win", "Win"], ["cover", "Cover"], ["total", "Total"]].filter(([k]) => !(sport === "cfb" && k === "cover")).map(([k, lb]) => (
-            <button key={k} className={market === k ? "on" : ""} onClick={() => setMarket(k)}>{lb}</button>
-          ))}
-        </div>
-
-        {!hasFull ? (
-          <div className="mrlock">
-            <div className="lh">Market Read is an All-Access feature</div>
-            <div className="ls">See what every book is really saying on every game — <b>From $7/week</b>.</div>
-            <button onClick={() => navigate("/pricing")}>Unlock All-Access →</button>
-          </div>
-        ) : loading ? (
-          <div className="mrempty">Reading the market…</div>
-        ) : shown.length === 0 ? (
-          <div className="mrempty">No market read available yet — books come online closer to game time.</div>
-        ) : (
-          <div className="mrgrid">
-            {shown.map((g) => <Card key={g.gameId} g={g} market={market} />)}
-          </div>
-        )}
-
-        <div className="mrnote">Reads cross-book consensus and price agreement. A lean to consider — never a guarantee.</div>
-      </div>
-    </div>
+      </main>
     </TerminalShell>
   );
 }
+
+const APPROVED_CSS = `
+@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&family=IBM+Plex+Mono:wght@500;600;700&family=Manrope:wght@500;600;700;800&display=swap');
+.approved-intel{min-height:100vh;background:#090a0c;color:#eeeae2;font-family:Manrope,Inter,sans-serif;padding:0 0 100px;overflow-x:hidden}.approved-intel *{box-sizing:border-box}.approved-intel__wrap{width:min(100% - 28px,920px);margin:0 auto;padding:20px 0}.approved-intel__head{padding-bottom:15px;border-bottom:1px solid #252620}.approved-intel__head>span,.approved-pulse header span{font:700 8px "IBM Plex Mono",monospace;letter-spacing:1.35px;color:#d2ad68}.approved-intel__head h1{margin:7px 0 4px;font:600 clamp(28px,5vw,40px)/1 Georgia,serif;letter-spacing:-.7px}.approved-intel__head p{max-width:620px;margin:0;color:#80817a;font-size:10.5px;line-height:1.55}.approved-gamegrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:14px}.approved-gamegrid .mrcard{border-color:#2a2b25;border-radius:10px;background:#101114}.approved-tabs{display:flex;gap:6px;margin-top:13px}.approved-tabs button{appearance:none;border:1px solid #2b2c26;border-radius:999px;background:#101114;color:#7d7e77;padding:7px 10px;font:700 8px "IBM Plex Mono",monospace;cursor:pointer}.approved-tabs button.on{border-color:#d2ad68;background:#d2ad68;color:#17140d}.approved-pulse{margin-top:14px;border:1px solid #2b2c26;border-radius:10px;background:#101114;padding:14px}.approved-pulse header{padding-bottom:10px;border-bottom:1px solid #252620}.approved-pulse article{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 0;border-bottom:1px solid #22231f}.approved-pulse article b{display:block;font-size:11px;overflow-wrap:anywhere}.approved-pulse article small{display:block;margin-top:3px;font:600 7px "IBM Plex Mono",monospace;color:#6f7069}.approved-pulse article strong{flex:0 0 auto;font:700 10px "IBM Plex Mono",monospace;color:#45d99d}.approved-pulse>p,.approved-intel__empty{padding:28px 12px;text-align:center;color:#74756e;font:600 9px/1.5 "IBM Plex Mono",monospace}.approved-intel__lock{margin-top:14px;border:1px solid rgba(210,173,104,.35);border-radius:10px;background:#101114;padding:28px 18px;text-align:center}.approved-intel__lock>span{font:700 8px "IBM Plex Mono",monospace;color:#d2ad68}.approved-intel__lock h2{margin:7px 0;font:600 23px Georgia,serif}.approved-intel__lock p{color:#7f8079;font-size:10.5px}.approved-intel__lock button{border:0;border-radius:8px;background:#d2ad68;color:#17140d;padding:10px 14px;font-weight:800;cursor:pointer}
+.approved-pulse>p,.approved-intel__empty{padding:17px 10px;font-size:8.5px}.approved-intel__lock{padding:24px 18px}.approved-intel__lock h2{font-size:22px}
+@media(max-width:680px){.approved-gamegrid{grid-template-columns:1fr}}
+@media(max-width:360px){.approved-intel__wrap{width:calc(100% - 20px)}.approved-intel__head h1{font-size:26px}}
+`;
 
 const CSS = `
 .mrwrap{max-width:560px;margin:0 auto;padding:18px 14px 90px}
