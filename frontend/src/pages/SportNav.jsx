@@ -1,6 +1,6 @@
-// SportNav.jsx — sport-first mobile navigation. WIZEPICKS-SPORTNAV-2026-06-26-ICONCHIPS
+// SportNav.jsx — shared mobile-first product navigation. WIZEPICKS-SPORTNAV-2026-06-26-ICONCHIPS
 //
-// One global nav, mounted once in App.jsx, mobile-only:
+// One global nav, mounted once in App.jsx at every product-page width:
 //   <SportTabsHeader/>  — rendered ABOVE the routes: a faithful clone of each
 //                         page's existing header (Georgia wordmark, green OPEN
 //                         badge, bell→/settings account icon) with the SECTION
@@ -8,17 +8,15 @@
 //   <SportBar/> (default) — rendered BELOW the routes: the bottom SPORT bar that
 //                           drives the app via the ?sport= URL.
 //
-// It changes the navigation model only. Each page's body, cards, skin and
-// spacing are untouched; on mobile we hide each page's own .hd (its chrome is
-// now supplied here) and its old bottom .nav. Desktop (>=1024px) renders nothing
-// and injects nothing — desktop is left exactly as it was.
+// It supplies the approved shared shell. Page-local legacy header, navigation,
+// and sidebar chrome is removed from active product render paths.
 //
 // Sport rule (honest to what each sport has today):
 //   MLB / NBA / NFL / CFB -> that sport's board on Home (/home?sport=KEY)
 //   NHL                   -> /nhl-games
 // News is a placeholder tab now; the feed wires into /news later.
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 
 // WZ-NAV-NEWS-PERF-SWAP-2026-06-26 :: News now sits before Performance (tab positions swapped)
@@ -26,7 +24,7 @@ const SECTIONS = [
   { key: "edges", lb: "Edges",       to: "/home",        match: ["/home", "/dashboard"] },
   { key: "props", lb: "Props",       to: "/props",       match: ["/props"] },
   { key: "games", lb: "Matchups",       to: "/games",       match: ["/games", "/nfl-games", "/cfb-games", "/nba-games", "/nhl-games"] },
-  { key: "mkt",   lb: "Market",      to: "/odds",        match: ["/odds", "/consensus", "/market-read"] },
+  { key: "mkt",   lb: "Market",      to: "/market-read", match: ["/odds", "/consensus", "/market-read"] },
   { key: "news",  lb: "News",        to: "/news",        match: ["/news"] },
 ];
 
@@ -77,6 +75,12 @@ const SPORT_ICON = {
       <path d="M5 14.8c0 1.55 3.13 2.8 7 2.8s7-1.25 7-2.8" />
     </svg>
   ),
+  ufc: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M8.2 4.5 5.5 8v7.3l3.2 4.2h6.6l3.2-4.2V8l-2.7-3.5z" />
+      <path d="M8.6 8.4h6.8M8.6 15.6h6.8M8.6 8.4v7.2M15.4 8.4v7.2" />
+    </svg>
+  ),
 };
 
 // Games is the one section whose page differs per sport: each sport has its own
@@ -97,17 +101,12 @@ const HIDE_ON = ["/", "/login", "/signup", "/pricing", "/terms", "/privacy", "/r
 
 function useShell() {
   const { pathname, search } = useLocation();
-  const [isMobile, setIsMobile] = useState(
-    typeof window !== "undefined" && window.innerWidth < 1024
-  );
   useEffect(() => {
-    const on = () => setIsMobile(window.innerWidth < 1024);
-    window.addEventListener("resize", on);
     const tap = () => {};
     document.addEventListener("touchstart", tap, { passive: true }); // iOS: enable :active press feedback
-    return () => { window.removeEventListener("resize", on); document.removeEventListener("touchstart", tap); };
+    return () => { document.removeEventListener("touchstart", tap); };
   }, []);
-  const visible = isMobile && !HIDE_ON.includes(pathname);
+  const visible = !HIDE_ON.includes(pathname);
   return { visible, pathname, search };
 }
 
@@ -154,7 +153,7 @@ export function SportTabsHeader() {
         <div className="wpnav-hr">
           {/* WZ-WIZEPLAYS-BRAND-2026-07-11 :: this shared header shows WizePlays only on the WizePlays page (/expert-picks); every other page keeps WizePicks. */}
           <div className="wpnav-bd">Wize<i>{pathname === "/expert-picks" ? "Plays" : "Picks"}</i></div>
-          <span className="wpnav-op"><span className="dot" />OPEN</span>
+          <span className="wpnav-op"><span className="dot" />LIVE</span>
           <div className="wpnav-spacer" />
           <div className="wpnav-ib" onClick={() => navigate("/settings")} aria-label="Account">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" /></svg>
@@ -209,6 +208,7 @@ export default function SportBar() {
             onClick={() => pickSport(sp.key)}
             aria-current={on ? "true" : undefined}
           >
+            <span className="wpnav-spi" aria-hidden="true">{SPORT_ICON[sp.key]}</span>
             <span className="wpnav-spl">{sp.lb}</span>
           </button>
         );
@@ -264,4 +264,16 @@ const CSS = `
 .wpnav-sp .wpnav-spl{position:relative;font-family:'Oswald',sans-serif;font-weight:700;font-size:19px;letter-spacing:.4px;line-height:1;color:inherit}
 @media(max-width:350px){.wpnav-sport{gap:2px;padding-left:4px;padding-right:4px}.wpnav-sp{padding-left:1px;padding-right:1px}.wpnav-sp .wpnav-spl{font-size:16px}.wpnav-tab{font-size:12px;padding-left:10px;padding-right:10px}.wpnav-bd{font-size:20px}}
 /* WZ-SPORTBAR-GOLDPILL-2026-07-07 :: status dots removed -- every sport treated the same; only the selected sport is marked (gold pill) */
+/* Approved mobile-first shell — one live header/navigation implementation at every width. */
+html,body,#root{max-width:100%;overflow-x:clip;background:#090a0c}
+.wpnav-hd{width:100%;max-width:none;padding:13px max(14px,calc((100vw - 860px)/2)) 0;background:rgba(9,10,12,.97);border-bottom:1px solid #23231f;backdrop-filter:blur(14px)}
+.wpnav-hd,.wpnav-hd *{box-sizing:border-box}
+.wpnav-hr{min-height:34px;gap:9px}.wpnav-bd{font-size:25px;letter-spacing:-.7px;color:#f5f1e9}.wpnav-bd i{color:#d3ae6b}
+.wpnav-op{font-size:8px;letter-spacing:.8px;color:#45d89c;border-color:rgba(69,216,156,.32);background:rgba(69,216,156,.08);padding:4px 8px}
+.wpnav-ib{width:31px;height:31px;border-color:#292a27;border-radius:50%;background:#111215;color:#aaa59b}
+.wpnav-tabs{padding-top:8px}.wpnav-tab{font-size:10px;letter-spacing:1px;color:#777871;padding:10px 13px 12px;transform:none;transition:color .18s ease}.wpnav-tab.on{color:#e2bd77;transform:none}.wpnav-tab.on::after{left:12px;right:12px;background:#d3ae6b}
+.wpnav-sport{width:min(100%,760px);max-width:none;gap:0;padding:5px 8px calc(5px + env(safe-area-inset-bottom));background:rgba(9,10,12,.985);border:1px solid #272721;border-bottom:0;border-radius:15px 15px 0 0;box-shadow:0 -12px 32px rgba(0,0,0,.42)}
+.wpnav-sp{display:flex;flex-direction:column;gap:3px;padding:7px 2px 6px;border:0;border-radius:0;color:#7d7e78}.wpnav-sp.on{border-color:transparent;background:transparent;color:#d6b46f;box-shadow:none}.wpnav-sp.on::before{content:"";position:absolute;left:25%;right:25%;top:-5px;height:2px;border-radius:2px;background:#d6b46f}.wpnav-spi{display:block;width:23px;height:23px}.wpnav-spi svg{display:block;width:100%;height:100%}.wpnav-sp .wpnav-spl{font:700 8px/1 'IBM Plex Mono',monospace;letter-spacing:.55px}
+@media(max-width:767px){.wpnav-hd{padding-left:14px;padding-right:14px}.wpnav-bd{font-size:23px}.wpnav-tabs{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:0;margin:0;overflow:visible}.wpnav-tab{min-width:0;font-size:8px;letter-spacing:.55px;padding:10px 1px 12px}.wpnav-tab.on::after{left:8px;right:8px}.wpnav-sport{width:100%;border-left:0;border-right:0;border-radius:0;padding-left:5px;padding-right:5px}.wpnav-sp{padding-left:1px;padding-right:1px}.wpnav-spi{width:21px;height:21px}.app,.wp-product-page{padding-bottom:calc(66px + env(safe-area-inset-bottom))!important}}
+@media(max-width:350px){.wpnav-tab{font-size:7.2px;letter-spacing:.35px}.wpnav-spi{width:19px;height:19px}.wpnav-sp .wpnav-spl{font-size:7px}.wpnav-bd{font-size:21px}}
 `;
