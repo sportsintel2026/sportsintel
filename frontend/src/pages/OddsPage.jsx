@@ -6,6 +6,8 @@ import { useAuth } from "../hooks/useAuth";
 import { useSport } from "../hooks/useSport";
 import { oddsApi, edgesApi, subscriptionApi } from "../lib/api";
 import TerminalShell from "./TerminalShell";
+import EventDateSelector, { EVENT_DATE_CSS } from "../components/EventDateSelector";
+import { chooseEventDate, eventDateGroups, scopeEdgeFeed } from "../lib/eventSlate";
 // WZ-ODDS-DESKTOP-2026-07-11 :: Market Price gains a desktop layout inside the shared Vault shell; mobile untouched.
 
 const TEAMCOL = {
@@ -72,6 +74,7 @@ export default function MarketPage() {
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState("odds");
   const [sel, setSel] = useState(null);
+  const [eventDate, setEventDate] = useState(null);
 
   useEffect(() => { subscriptionApi.getMyPlan().then(setPlan).catch(()=>{}).finally(()=>setPlanLoaded(true)); }, []);
   useEffect(() => {
@@ -123,7 +126,17 @@ export default function MarketPage() {
   }, [sport, planLoaded, hasFull]);
 
   const oddsGames = Array.isArray(odds) ? odds : (odds?.games || []);
-  const e = edges || {};
+  const rawEdges = edges || {};
+  const dateGroups = eventDateGroups(rawEdges.games || [], rawEdges.date || null);
+  useEffect(() => {
+    if (!dateGroups.length) { setEventDate(rawEdges.date || null); return; }
+    const auto = chooseEventDate(rawEdges.games, { fallbackDate: rawEdges.date || null });
+    setEventDate((current) => {
+      const group = dateGroups.find((item) => item.date === current);
+      return (!current || !group || group.complete) ? auto : current;
+    });
+  }, [sport, rawEdges.date, rawEdges.games]);
+  const e = scopeEdgeFeed(rawEdges, eventDate || rawEdges.date || null);
   const games = e.games || [];
   const histByKey = {}; (oddsHist||[]).forEach(g=>{ histByKey[normName(g.away_team)+"|"+normName(g.home_team)] = g; });
   const findHist = (gm) => gm ? (histByKey[normName(gm.away)+"|"+normName(gm.home)] || null) : null;
@@ -144,14 +157,15 @@ export default function MarketPage() {
   const moverPick = (x) => (x.isTotal || isTotalEdge(x)) ? `${x.side==="over"?"Over":"Under"} ${x.line??""}`.trim() : `${x.teamAbbr||shortTeam(x.matchup||"")} ML`;
   const moverMatch = (x) => { if(x.matchup) return x.matchup; const g=games.find(gm=>gm.id===x.gameId); return g ? `${g.awayAbbr||shortTeam(g.away)} @ ${g.homeAbbr||shortTeam(g.home)}` : ""; };
 
-  const consensus = marketRead || [];
+  const isFb = sport === "nfl" || sport === "cfb";
+  const scopedIds = new Set(games.map((game) => String(game.id ?? game.eventId ?? game.gameId)));
+  const consensus = isFb ? (marketRead || []).filter((row) => scopedIds.has(String(row.gameId))) : (marketRead || []);
 
   // Football line-shopping grid rides inside the edges feed: each game carries an
   // oddsGrid (book-by-book ML / total / spread) built server-side. Reshape it into
   // the same card/sheet contract the MLB odds view uses, with football colors + abbrs
   // and a spread block (isFball flag turns on the ATS columns in the grid sheet).
   // CFB has no per-team color/abbr map (146 teams) so it uses shortTeam + a neutral chip.
-  const isFb = sport === "nfl" || sport === "cfb";
   const fbOddsGames = isFb
     ? (games || [])
         .filter(g => g.oddsGrid && Array.isArray(g.oddsGrid.books) && g.oddsGrid.books.length)
@@ -191,7 +205,7 @@ export default function MarketPage() {
 
   return (
     <TerminalShell active="/odds" plan={plan} navigate={navigate}>
-    <div className="app"><style>{CSS}</style>
+    <div className="app"><style>{CSS+EVENT_DATE_CSS}</style>
       <div className="hd">
         <div className="hrow">
           <div className="logo">Wize<span className="w">Picks</span></div>
@@ -221,6 +235,7 @@ export default function MarketPage() {
           </div>
         )}
         {isFb && <div className="subnav">{VIEWS.map(v=><b key={v[0]} className={v[0]===view?"on":""} onClick={()=>setView(v[0])}>{v[1]}</b>)}</div>}
+        {isFb && <EventDateSelector groups={dateGroups} value={eventDate} onChange={setEventDate} label={`${sport.toUpperCase()} event date`} />}
         {loading ? <div className="mvlist">{[0,1,2,3,4].map(i=>(
           <div key={i} className="skrow">
             <div className="sk skc"/>
@@ -236,7 +251,7 @@ export default function MarketPage() {
           </> : <div className="estate"><div className="et">{sport==="cfb"?"No CFB lines posted yet":sport==="nfl"?"No NFL lines posted yet":"No games posted"}</div><div className="es">Lines appear as books open.</div></div>)}
 
           {view==="movers" && (movers.length ? <>
-            <div className="cap">Every line move today, ranked by cents. Open to now · updates as books adjust.</div>
+            <div className="cap">Every line move on this event-day slate, ranked by cents. Open to now · updates as books adjust.</div>
             <div className="mvlist">{movers.map((m,r)=><MoverRow key={r} rank={r+1} pick={moverPick(m)} match={moverMatch(m)} open={m._open} now={m._now} cents={m._delta}/>)}</div>
           </> : <div className="estate"><div className="et">No moves yet</div><div className="es">Line moves populate through the day as books adjust.</div></div>)}
 

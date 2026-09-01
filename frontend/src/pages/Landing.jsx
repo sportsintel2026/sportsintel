@@ -217,7 +217,7 @@ export default function LandingPage(){
           </div>
           <div>
             <div className="edgecard">
-              <div className="ec-h"><span>Today's top edges</span><span className="ec-live"><span className="ec-dot"/>live</span></div>
+              <div className="ec-h"><span>Current top edges</span><span className="ec-live"><span className="ec-dot"/>live</span></div>
               <div className="ec-row"><div><div className="ec-team">NYY @ TOR</div><div className="ec-meta">Over 8.5 · -104</div></div><div className="ec-edge">+4.1%</div></div>
               <div className="ec-row"><div><div className="ec-team">PHI @ MIL</div><div className="ec-meta">Under 7 · -110</div></div><div className="ec-edge">+3.6%</div></div>
               <div className="ec-row"><div><div className="ec-team">SD @ BAL</div><div className="ec-meta">Padres ML · +118</div></div><div className="ec-edge">+2.9%</div></div>
@@ -239,10 +239,10 @@ export default function LandingPage(){
             <div className="eyebrow">The Edge Board</div>
             <h3>Only the bets worth making</h3>
             <p>Every game, every market, priced against a vig-free fair line. We surface the handful with a real edge and skip the noise.</p>
-            <Link className="lk" to="/signup">See today's board →</Link>
+            <Link className="lk" to="/signup">See the current board →</Link>
           </div>
           <div className="panel">
-            <div className="pbar"><span>MLB · today</span><span>15 games</span></div>
+            <div className="pbar"><span>MLB · current slate</span><span>15 games</span></div>
             <div className="prow"><div><div className="t">NYY @ TOR</div><div className="m">Over 8.5 · -104</div></div><div className="pill">+4.1%</div></div>
             <div className="prow"><div><div className="t">PHI @ MIL</div><div className="m">Under 7 · -110</div></div><div className="pill">+3.6%</div></div>
             <div className="prow"><div><div className="t">SD @ BAL</div><div className="m">Padres ML · +118</div></div><div className="pill">+2.9%</div></div>
@@ -289,7 +289,7 @@ export default function LandingPage(){
             <Link className="lk" to="/signup">See the market read →</Link>
           </div>
           <div className="panel">
-            <div className="pbar"><span>Market Read · today</span><span>consensus</span></div>
+            <div className="pbar"><span>Market Read · current slate</span><span>consensus</span></div>
             <div className="mrcard">
               <div className="mrtop"><span className="mrmu">SD @ STL</span><span className="mrtier" style={{color:"#3FCB91"}}><span className="mrd" style={{background:"#3FCB91"}}/>Strong</span></div>
               <div className="mrread">Market is confident in the <b>Cardinals</b>.</div>
@@ -322,12 +322,12 @@ export default function LandingPage(){
               <div className="pppr"><div className="pppv">21<small>%</small></div><div className="pppvl">to homer</div></div>
             </div>
             <div className="pppbody">
-              <div className="pppmh"><span>Tonight vs <b>RHP starter</b></span><span><i className="ppppill">RHP</i><i className="pppadv">▲ platoon</i></span></div>
+              <div className="pppmh"><span>This matchup vs <b>RHP starter</b></span><span><i className="ppppill">RHP</i><i className="pppadv">▲ platoon</i></span></div>
 
               <div className="pppsec">Hand vs Hand · 2026</div>
               <div className="pppsp2">
                 <div className="pppsp"><div className="pppvh">vs LHP</div><div className="pppops">.700</div><div className="pppopsl">OPS</div><div className="pppsr"><div><div className="pppsv">.210</div><div className="pppsl">AVG</div></div><div><div className="pppsv">.400</div><div className="pppsl">SLG</div></div><div><div className="pppsv ppphr">7</div><div className="pppsl">HR</div></div></div></div>
-                <div className="pppsp act"><span className="ppptg">TONIGHT</span><div className="pppvh">vs RHP</div><div className="pppops">.960</div><div className="pppopsl">OPS</div><div className="pppsr"><div><div className="pppsv">.265</div><div className="pppsl">AVG</div></div><div><div className="pppsv">.580</div><div className="pppsl">SLG</div></div><div><div className="pppsv ppphr">28</div><div className="pppsl">HR</div></div></div></div>
+                <div className="pppsp act"><span className="ppptg">MATCHUP</span><div className="pppvh">vs RHP</div><div className="pppops">.960</div><div className="pppopsl">OPS</div><div className="pppsr"><div><div className="pppsv">.265</div><div className="pppsl">AVG</div></div><div><div className="pppsv">.580</div><div className="pppsl">SLG</div></div><div><div className="pppsv ppphr">28</div><div className="pppsl">HR</div></div></div></div>
               </div>
 
               <div className="pppsec">Model % vs Market %</div>
@@ -530,7 +530,7 @@ export default function LandingPage(){
       {/* CTA BAND */}
       <div className="ctaband"><div className="wrap">
         <div className="wpfin">
-          <div className="wpfin-eye">Your edge starts tonight</div>
+          <div className="wpfin-eye">Your edge starts with the next slate</div>
           <h2 className="wpfin-h">Stop renting picks.<br/>Start making <span>wise ones.</span></h2>
           <p className="wpfin-sub">One membership unlocks the model, the WizePlays, and every tool. No upsells. Cancel anytime.</p>
           <div className="wpfin-btns">

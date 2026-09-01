@@ -54,13 +54,13 @@ function MoveLine({ move, favTeam }) {
   if (move.towardFav) {
     return (
       <div className="mrmove up">
-        <span className="mi">↗</span><b>Money’s coming in.</b> Market moved toward {favTeam} today (+{move.cents}¢).
+        <span className="mi">↗</span><b>Money’s coming in.</b> Market moved toward {favTeam} on this slate (+{move.cents}¢).
       </div>
     );
   }
   return (
     <div className="mrmove dn">
-      <span className="mi">↘</span><b>{favTeam} drifting.</b> Market moved off them today (−{move.cents}¢) — support fading.
+      <span className="mi">↘</span><b>{favTeam} drifting.</b> Market moved off them on this slate (−{move.cents}¢) — support fading.
     </div>
   );
 }

@@ -17,6 +17,10 @@ import { useAuth } from "../hooks/useAuth";
 import { useSport } from "../hooks/useSport"; // WIZEPICKS-SPORTNAV-2026-06-25
 import { edgesApi, subscriptionApi, liveApi, newsApi, matchupsApi, wizePicksApi } from "../lib/api";
 import { hasGameDetail } from "../lib/gameDetail"; // WZ-DETAIL-SSOT-2026-07-17
+import { chooseEventDate, createLatestRequestGuard, eventDateGroups, formatEventDate, scopeEdgeFeed, sportStartLabel } from "../lib/eventSlate";
+import EventDateSelector, { EVENT_DATE_CSS } from "../components/EventDateSelector";
+import FootballIntel, { FOOTBALL_INTEL_CSS } from "../components/FootballIntel";
+import { buildFootballIntel } from "../lib/footballIntel";
 import Sidebar from "./Sidebar";
 import HomeDesktop from "./HomeDesktop";
 
@@ -176,6 +180,8 @@ export default function HomePage(){
   const [isDesktop,setIsDesktop]=useState(typeof window!=="undefined"&&window.innerWidth>=1024);
   const [heroIdx,setHeroIdx]=useState(0);
   const [openId,setOpenId]=useState(null);
+  const [eventDate,setEventDate]=useState(null);
+  const feedRequestGuard=useRef(createLatestRequestGuard());
   const [mktab,setMktab]=useState("all"); // WZ-MKTABS-2026-08-17 :: active market filter tab -- "all" or an mk token (ML|RL|SPR|TOT)
   useEffect(()=>{ const on=()=>setIsDesktop(window.innerWidth>=1024); window.addEventListener("resize",on); return ()=>window.removeEventListener("resize",on); },[]);
 
@@ -200,19 +206,20 @@ export default function HomePage(){
     setWpRows(rows);
     setWpProof(data?.proof||null);
   }catch(_){ setWpRows([]); setWpProof(null); } })();},[]);
-  const load=useCallback(async()=>{ try{ const d=await (sport==="nfl"?SPORTS.nfl.feed(nflPhase):SPORTS[sport].feed());
+  const load=useCallback(async()=>{ const token=feedRequestGuard.current.begin(sport); try{ const d=await (sport==="nfl"?SPORTS.nfl.feed(nflPhase):SPORTS[sport].feed());
+    if(!feedRequestGuard.current.accepts(token,sport)) return;
     if(sport==="nfl"&&d&&d.phase){ setPhaseAvail(d.phase.available||[]); if(nflPhase==null&&d.phase.selected) setNflPhase(d.phase.selected); }
     const f={}; [...(d.moneylineEdges||[]),...(d.totalsEdges||[]),...(d.runLineEdges||[]),...(d.spreadEdges||[])].forEach(e=>{ const k=e.gameId+e.side; if(prev.current[k]!=null&&prev.current[k]!==e.odds)f[k]=e.odds>prev.current[k]?"up":"dn"; prev.current[k]=e.odds; });
     setFlash(f); setEdges(d);
-  }catch(e){} setLoading(false); },[sport,nflPhase]);
-  useEffect(()=>{ setEdges(null); setLoading(true); prev.current={}; load(); const id=setInterval(load,45000); return ()=>clearInterval(id); },[load]);
+  }catch(e){} if(feedRequestGuard.current.accepts(token,sport)) setLoading(false); },[sport,nflPhase]);
+  useEffect(()=>{ setEdges(null); setEventDate(null); setLoading(true); prev.current={}; load(); const id=setInterval(load,45000); return ()=>{clearInterval(id);feedRequestGuard.current.invalidate();}; },[load]);
   // WZ-TOMORROW-PREVIEW-2026-07-07 :: once today's slate is underway (backend flag) pull tomorrow's
   // board as a DISPLAY-ONLY preview (?date=). Never recorded/graded -- guaranteed server-side.
   useEffect(()=>{ if(sport!=="mlb"||!edges||!edges.slateUnderway||edges.rolledToNextDay||!edges.previewDate){ setPreview(null); return; } let dead=false; (async()=>{ try{ const d=await edgesApi.getMLBPreview(edges.previewDate); if(!dead) setPreview(d&&!d.rolledToNextDay?d:null); }catch(_){ if(!dead) setPreview(null); } })(); return ()=>{dead=true;}; },[sport,edges?.previewDate,edges?.slateUnderway,edges?.rolledToNextDay]);
   useEffect(()=>{ setMktab("all"); },[sport]); // WZ-MKTABS-2026-08-17 :: a market absent for the new sport (e.g. RL after leaving MLB) must not persist -- reset to All on every sport switch
-  useEffect(()=>{ if(!SPORTS[sport].hasLive){ setLive([]); return; } let t; const pull=async()=>{ try{ const d=await liveApi.getMLB(); setLive(d?.games||[]); }catch(_){ setLive([]); } t=setTimeout(pull,60000); }; pull(); return ()=>clearTimeout(t); },[sport]);
-  useEffect(()=>{ if(!SPORTS[sport].hasHist){ setOddsHist([]); return; } let t; const pull=async()=>{ try{ const d=await edgesApi.getOddsHistory(); setOddsHist(d?.games||[]); }catch(_){ setOddsHist([]); } t=setTimeout(pull,300000); }; pull(); return ()=>clearTimeout(t); },[sport]);
-  useEffect(()=>{ if(sport!=="mlb"){ setMarketRead([]); return; } let t; const pull=async()=>{ try{ const d=await edgesApi.getMarketRead(); setMarketRead(d?.games||[]); }catch(_){ setMarketRead([]); } t=setTimeout(pull,120000); }; pull(); return ()=>clearTimeout(t); },[sport]);
+  useEffect(()=>{ if(!SPORTS[sport].hasLive){ setLive([]); return; } let t,dead=false; const pull=async()=>{ try{ const d=await liveApi.getMLB(); if(!dead)setLive(d?.games||[]); }catch(_){ if(!dead)setLive([]); } if(!dead)t=setTimeout(pull,60000); }; pull(); return ()=>{dead=true;clearTimeout(t);}; },[sport]);
+  useEffect(()=>{ if(!SPORTS[sport].hasHist){ setOddsHist([]); return; } let t,dead=false; const pull=async()=>{ try{ const d=await edgesApi.getOddsHistory(); if(!dead)setOddsHist(d?.games||[]); }catch(_){ if(!dead)setOddsHist([]); } if(!dead)t=setTimeout(pull,300000); }; pull(); return ()=>{dead=true;clearTimeout(t);}; },[sport]);
+  useEffect(()=>{ if(sport!=="mlb"){ setMarketRead([]); return; } let t,dead=false; const pull=async()=>{ try{ const d=await edgesApi.getMarketRead(); if(!dead)setMarketRead(d?.games||[]); }catch(_){ if(!dead)setMarketRead([]); } if(!dead)t=setTimeout(pull,120000); }; pull(); return ()=>{dead=true;clearTimeout(t);}; },[sport]);
   useEffect(()=>{ if(sport!=="mlb"||!planLoaded||!hasFull){ setSharpEdge([]); return; } let dead=false; /* WZ-SHARPEDGE-2026-07-13 :: read model-vs-Pinnacle from the cached snapshot; gated to MLB, no polling, fail-safe */
     (async()=>{ try{
       const d=await edgesApi.getSharpEdge();
@@ -240,6 +247,19 @@ export default function HomePage(){
     return ()=>{ c=true; };
   },[sport]);
 
+  const rawFeed=edges||{};
+  const rawGames=rawFeed.games||[];
+  const dateGroups=eventDateGroups(rawGames,rawFeed.date||null);
+  useEffect(()=>{
+    if(!dateGroups.length){ if(rawFeed.date) setEventDate(rawFeed.date); return; }
+    const auto=chooseEventDate(rawGames,{fallbackDate:rawFeed.date||null});
+    setEventDate((current)=>{
+      const group=dateGroups.find((item)=>item.date===current);
+      if(!current||!group||group.complete) return auto;
+      return current;
+    });
+  },[sport,rawFeed.date,rawGames]);
+
   if(loading&&!edges) return (<div className="app"><style>{CSS}</style>
     <div className="skwrap">
       <div className="skkpis">{[0,1,2].map(i=>(
@@ -259,11 +279,10 @@ export default function HomePage(){
         </div>))}</div>
     </div>
   </div>);
-  const e=edges||{}; const games=e.games||[];
-  // When the board has rolled forward (today's slate all started), label it
-  // "Tomorrow's" so it's clear these are next-day plays; flips back automatically.
-  const slateUpper=e.rolledToNextDay?"TOMORROW'S":"TODAY'S";
-  const slateLower=e.rolledToNextDay?"Tomorrow's":"Today's";
+  const e=scopeEdgeFeed(rawFeed,eventDate||rawFeed.date||null); const games=e.games||[];
+  const eventDateLabel=formatEventDate(eventDate||e.date);
+  const footballIntel=buildFootballIntel(e,sport);
+  const ratedGameCount=games.filter((game)=>game?.dataQuality==="rated").length;
   const histByKey={}; (oddsHist||[]).forEach(g=>{ histByKey[normName(g.away_team)+"|"+normName(g.home_team)]=g; });
   const findHist=(gm)=> gm?(histByKey[normName(gm.away)+"|"+normName(gm.home)]||null):null;
   const seriesFor=(edge)=>{ const gm=games.find(x=>x.id===edge.gameId)||(preview?.games||[]).find(x=>x.id===edge.gameId); const h=findHist(gm); if(!h)return null; return (isTotal(edge)?h.total[edge.side]:h.ml[edge.side])||null; };
@@ -308,9 +327,11 @@ export default function HomePage(){
   const moverPool=[...(_mb.moneylineEdges||[]),...(_mb.totalsEdges||[]),...(_mb.runLineEdges||[]),...(_mb.spreadEdges||[])].map(x=>{ const ser=seriesFor(x); const open=(ser&&ser.length)?ser[0].o:null; const now=(ser&&ser.length)?ser[ser.length-1].o:x.odds; const delta=(open!=null&&ser&&ser.length>1)?(amCents(now)-amCents(open)):null; return {...x,_open:open,_now:now,_delta:delta}; });
   const movers=moverPool.filter(m=>m._delta!=null).sort((a,b)=>{ const ad=Math.abs(a._delta); const bd=Math.abs(b._delta); return (bd-ad)||((b.edge??0)-(a.edge??0)); }).slice(0,30);
   const hasMoves=movers.some(m=>m._delta!=null);
-  const hrP=(e.hrPropEdges||[]).slice(0,6);
-  const hitsP=(e.hitsPropEdges||[]).slice(0,6);
-  const ksP=(e.kPropEdges||[]).slice(0,6);
+  // Props are explicitly MLB-only here. Football props use their own sport-scoped endpoint/page,
+  // so an old MLB response can never survive a sport switch and render on CFB/NFL.
+  const hrP=(sport==="mlb"?(e.hrPropEdges||[]):[]).slice(0,6);
+  const hitsP=(sport==="mlb"?(e.hitsPropEdges||[]):[]).slice(0,6);
+  const ksP=(sport==="mlb"?(e.kPropEdges||[]):[]).slice(0,6);
   const propArr=propTab==="hr"?hrP:propTab==="hits"?hitsP:propTab==="ks"?ksP:[];
   const mkProp=(p,kind)=>{
     const b={k:kind+(p.playerId||p.player),id:p.playerId,gameId:p.gameId,name:p.player,team:p.team,game:p.game,edge:p.edge??0,odds:p.odds};
@@ -322,9 +343,9 @@ export default function HomePage(){
   const propList=[...hitsP.map(x=>mkProp(x,"hits")),...ksP.map(x=>mkProp(x,"ks")),...hrP.map(x=>mkProp(x,"hr"))].sort((a,b)=>(b.edge-a.edge)).slice(0,12);
   const mkPropFull=(p,kind)=>{ const prob=kind==="hr"?p.hrProb:kind==="hits"?p.hitsProb:p.kProb; return {...mkProp(p,kind),prob,line:p.line,side:p.side}; };
   const propsByType={
-    hr:(e.hrPropEdges||[]).slice(0,14).map(x=>mkPropFull(x,"hr")),
-    hits:(e.hitsPropEdges||[]).slice(0,14).map(x=>mkPropFull(x,"hits")),
-    ks:(e.kPropEdges||[]).slice(0,14).map(x=>mkPropFull(x,"ks")),
+    hr:(sport==="mlb"?(e.hrPropEdges||[]):[]).slice(0,14).map(x=>mkPropFull(x,"hr")),
+    hits:(sport==="mlb"?(e.hitsPropEdges||[]):[]).slice(0,14).map(x=>mkPropFull(x,"hits")),
+    ks:(sport==="mlb"?(e.kPropEdges||[]):[]).slice(0,14).map(x=>mkPropFull(x,"ks")),
   };
   // WZ-TOPPROPS-2026-07-08 :: bottom-of-home "Top Prop Plays" grid -- a balanced 6 (best two by
   // model win% from each type: Hits / K / HR, interleaved) so no single prop type floods the grid.
@@ -354,7 +375,7 @@ export default function HomePage(){
   const wpPickInSport=(pk,sp)=>{ const want=WP_SPORT[sp]; if(!want||!pk) return false; if(pk.type==="parlay") return Array.isArray(pk.legs)&&pk.legs.some(l=>String((l&&l.sport)||"").toLowerCase()===want); return String(pk.sport||"").toLowerCase()===want; };
   const wpRowsSport=(wpRows||[]).map(r=>({ date:r.date, picks:(r.picks||[]).filter(pk=>wpPickInSport(pk,sport)) }));
   const wpRecord=hasFull?computeRecord(wpRowsSport):(wpProof?.bySport?.[sport]||computeRecord([]));
-  const wpToday=(()=>{ const row=wpRowsSport.find(r=>String(r.date)>=wpTodayStr); if(!row||!Array.isArray(row.picks))return []; const picks=row.picks; const isDone=(pk)=>{const rr=String((pk&&pk.result)||"").toLowerCase();return rr==="win"||rr==="loss"||rr==="push"||rr==="won"||rr==="lost";}; const allDone=picks.length>0&&picks.every(isDone); return allDone?[]:picks; })();
+  const wpToday=(()=>{ const selectedFootballDate=(sport==="nfl"||sport==="cfb")&&eventDate; const row=selectedFootballDate?wpRowsSport.find(r=>String(r.date)===selectedFootballDate):wpRowsSport.find(r=>String(r.date)>=wpTodayStr); if(!row||!Array.isArray(row.picks))return []; const picks=row.picks; const isDone=(pk)=>{const rr=String((pk&&pk.result)||"").toLowerCase();return rr==="win"||rr==="loss"||rr==="push"||rr==="won"||rr==="lost";}; const allDone=picks.length>0&&picks.every(isDone); return allDone?[]:picks; })();
   const liveGames=(live||[]).filter(g=>[g.awayEdge,g.homeEdge,g.overEdge,g.underEdge].some(x=>x!=null));
 
   const lineSeries={};
@@ -366,9 +387,9 @@ export default function HomePage(){
   // separate MLB market-read call. Map it into the same shape the board renderer
   // expects (win/cover/total with tier+favTeam+consensus) so NFL shows the same
   // "BOOKS LEAN" box. Keyed by eventId (= gameId on NFL board rows).
-  if((sport==="nfl"||sport==="cfb")&&edges&&edges.marketByGame){
-    for(const id in edges.marketByGame){
-      const mr=edges.marketByGame[id]&&edges.marketByGame[id].marketRead; if(!mr) continue;
+  if((sport==="nfl"||sport==="cfb")&&e&&e.marketByGame){
+    for(const id in e.marketByGame){
+      const mr=e.marketByGame[id]&&e.marketByGame[id].marketRead; if(!mr) continue;
       mrByGame[id]={
         win: mr.win?{tier:mr.win.tier,favTeam:mr.win.favTeam,consensus:mr.win.consensus,model:null}:null,
         cover: mr.cover?{tier:"",favTeam:mr.cover.favTeam,odds:null,agrees:false,line:mr.cover.favLine}:null,
@@ -423,7 +444,7 @@ export default function HomePage(){
       if(g.awayProbable&&g.awayProbable.name) put(g.awayProbable.name); if(g.homeProbable&&g.homeProbable.name) put(g.homeProbable.name);
     });
     const items=[]; const nf=newsFeed||[];
-    if(sport==="mlb") nf.filter(n=>n.scratch).forEach(n=>{ const g=nameGame[norm(n.playerName)]; if(!g) return; items.push({sev:0,c:"#ff5d4d",tag:"SCRATCH",tx:capWire(n.playerName||"Late scratch",44),rd:"Out of tonight\u2019s lineup \u2014 offense and the total tick down.",gid:g.id,gl:g.label}); });
+    if(sport==="mlb") nf.filter(n=>n.scratch).forEach(n=>{ const g=nameGame[norm(n.playerName)]; if(!g) return; items.push({sev:0,c:"#ff5d4d",tag:"SCRATCH",tx:capWire(n.playerName||"Late scratch",44),rd:"Out of the scheduled lineup \u2014 offense and the total tick down.",gid:g.id,gl:g.label}); });
     nf.filter(n=>!n.scratch&&(n.status==="injury"||n.type==="injury")).forEach(n=>{ const g=nameGame[norm(n.playerName)]; if(!g) return; items.push({sev:1,c:"#E89B4F",tag:"INJURY",tx:capWire(n.playerName?(n.playerName+" \u2014 "+wireBlurb(n)):(n.headline||"Injury"),50),rd:"Status change \u2014 check that number before you bet it.",gid:g.id,gl:g.label}); });
     (movers||[]).filter(m=>m._delta!=null&&Math.abs(m._delta)>=10).forEach(m=>{ const gl=glById[m.gameId]; if(!gl) return; const inbound=(m._delta||0)<0; items.push({sev:2,c:inbound?"#3FCB91":"#5da9e8",tag:"LINE MOVE",tx:edgeLabel(m)+"  "+formatOdds(m._open)+" \u2192 "+formatOdds(m._now),rd:inbound?"Money coming in \u2014 the market is backing this side.":"Number drifting \u2014 the market is fading this side.",gid:m.gameId,gl}); });
     if(sport==="mlb") (games||[]).forEach(g=>{ const w=g.weather||{}; if(w.indoor) return; const gl=glById[g.id]; const wOut=w.windEffect==="out"&&(w.windMph||0)>=12; const wIn=w.windEffect==="in"&&(w.windMph||0)>=12; const hot=(w.tempF||0)>=92; const cold=w.tempF!=null&&w.tempF<=46; const wx=w.summary||([w.tempF!=null?Math.round(w.tempF)+"\u00b0F":null,w.windMph?("wind "+w.windMph+"mph"):null].filter(Boolean).join(" \u00b7 ")); if(wOut||hot) items.push({sev:3,c:"#f3b94f",tag:"WEATHER",tx:capWire(wx||"Warm air",50),rd:"Air is carrying \u2014 slight lean to the over.",gid:g.id,gl}); else if(wIn||cold) items.push({sev:3,c:"#5da9e8",tag:"WEATHER",tx:capWire(wx||"Cool air",50),rd:"Air knocking it down \u2014 slight lean to the under.",gid:g.id,gl}); else if(w.isRaining) items.push({sev:3,c:"#5da9e8",tag:"WEATHER",tx:"Rain risk",rd:"Delay/postpone watch \u2014 totals get volatile.",gid:g.id,gl}); });
@@ -432,7 +453,7 @@ export default function HomePage(){
     return Object.keys(by).map(k=>{ const grp=by[k]; grp.items.sort((a,b)=>a.sev-b.sev); grp.minSev=grp.items[0].sev; grp.items=grp.items.slice(0,3); return grp; }).sort((a,b)=>(a.minSev-b.minSev)||(b.items.length-a.items.length)).slice(0,5);
   })();
 
-  if(isDesktop) return <HomeDesktop edges={edges} games={games} movers={movers} live={live||[]} abbrById={abbrById} topProps={topProps} propList={propList} propsByType={propsByType} hero={hero} hasFull={hasFull} planLoaded={planLoaded} lineSeries={lineSeries} moveByPick={moveByPick} wpRecord={wpRecord} wpToday={wpToday} navigate={navigate} plan={plan} sport={sport} setSport={(k)=>{setSport(k);}} marketsLive={marketsLive} anyLive={anyLive} marketRead={marketRead} perf={perf} sharpRows={sharpRows} intelGroups={intelGroups} />;
+  if(isDesktop) return <HomeDesktop edges={e} games={games} movers={movers} live={live||[]} abbrById={abbrById} topProps={sport==="mlb"?topProps:[]} propList={sport==="mlb"?propList:[]} propsByType={sport==="mlb"?propsByType:{}} hero={hero} hasFull={hasFull} planLoaded={planLoaded} lineSeries={lineSeries} moveByPick={moveByPick} wpRecord={wpRecord} wpToday={wpToday} navigate={navigate} plan={plan} sport={sport} setSport={(k)=>{setSport(k);}} marketsLive={marketsLive} anyLive={anyLive} marketRead={marketRead} perf={perf} sharpRows={sharpRows} intelGroups={intelGroups} dateGroups={dateGroups} eventDate={eventDate} setEventDate={setEventDate} eventDateLabel={eventDateLabel} footballIntel={footballIntel} />;
 
   // ============ ADAPTERS: real data -> v11 mock shapes ============
   const edgeNum=(x)=> edgePct(x,sport); // WZ-EDGE-UNIT-2026-07-14 :: delegate to the single edge-unit normalizer
@@ -497,7 +518,7 @@ export default function HomePage(){
   ].sort(byWinProb) : [];
   const previewItems = bestPerGame(previewSrc.map(toBoard));
   const previewLabel = pv&&pv.date ? fmtSlate(pv.date).toUpperCase() : "";
-  const boardDate = fmtSlateFull(e.date || todayISO());
+  const boardDate = fmtSlateFull(eventDate || e.date || todayISO());
   // WZ-HERORANK-2026-08-07 :: ONE RANKING. The hero is now literally the #1 row of the same
   // ranked pool the board list uses (`hero` = pool[0], line ~281), not a separately-selected
   // moneyline. The old rule was moneyline-only, filtered at modelProb >= 0.50, sorted by edge --
@@ -627,13 +648,13 @@ export default function HomePage(){
             </div>);})
         : <div className="wpempty">
             <div className="et">No active WizePlays right now</div>
-            <div className="es">Curated plays post before first pitch.</div>
+            <div className="es">Curated plays post before {sportStartLabel(sport)}.</div>
           </div>}
     </div>
   );
 
   return (
-    <div className="app"><style>{CSS}</style>
+    <div className="app"><style>{CSS+EVENT_DATE_CSS+FOOTBALL_INTEL_CSS}</style>
       <div className="hd">
         <div className="hrow">
           <div className="brand"><b>Wize</b><i>Picks</i></div>
@@ -651,7 +672,7 @@ export default function HomePage(){
       {/* WZ-LIVETICKER-2026-06-27 :: live-scores ticker (all sports) with MLB injury + late-scratch alerts woven in */}
       {/* WZ-TICKER-ABOVE-WARN-2026-07-05 :: ticker sits above the NFL/CFB preview warning, matching the MLB layout */}
       {tickerItems.length>0 ? (
-        <div className="scoretape"><span className="lvpill"><span className="d"/>{scoreTape.some(t=>t.live)?"LIVE":scoreTape.some(t=>t.as!=null)?"SCORES":"TODAY"}</span>
+        <div className="scoretape"><span className="lvpill"><span className="d"/>{scoreTape.some(t=>t.live)?"LIVE":scoreTape.some(t=>t.as!=null)?"SCORES":formatEventDate(eventDate,{compact:true}).toUpperCase()}</span>
           <div className="stwrap"><div className="sttrack" style={{animationDuration:tapeDur+"s"}}>{[...tickerLoop,...tickerLoop].map((s,i)=>(
             s.kind==="score"
               ? <span key={i}><span className="g">{s.a}</span> {s.as!=null?<span className="sc">{s.as}</span>:null} <span className="g">{s.h}</span> {s.hs!=null?<span className="sc">{s.hs}</span>:null} <span className="st">{s.state}</span></span>
@@ -676,13 +697,17 @@ export default function HomePage(){
         </div>
       )}
 
+      <div className="datewrap"><EventDateSelector groups={dateGroups} value={eventDate} onChange={setEventDate} label={`${sport.toUpperCase()} event date`} /></div>
+
+      {(sport==="nfl"||sport==="cfb") && <div className="datewrap"><FootballIntel sport={sport} rows={footballIntel}/></div>}
+
 
         {/* WZ-HERO-TOP-2026-07-08 :: Top Play marquee pinned to top -> proof strip -> WizeBoard -> Live Edges -> WizePlays -> Market Pulse/Movers -> onboarding last */}
         {hasFull
           ? (heroItems.length>0
-              ? <Swiper cls="herocar" dotcls="hdots">{heroItems.map((h,i)=><HeroSlide key={i} h={h} i={i} navigate={navigate} sport={sport} rolled={e.rolledToNextDay}/>)}</Swiper>
-              : <div className="herocar"><div className="hslide"><div className="hero" style={{textAlign:"center"}}><div className="eb">BEST EDGE</div><div className="heh">Edges post soon</div><div className="hes">Top edges appear ~2 hrs before first pitch.</div></div></div></div>)
-          : <Gate title="Today's top edge is locked" navigate={navigate}/>}
+              ? <Swiper cls="herocar" dotcls="hdots">{heroItems.map((h,i)=><HeroSlide key={i} h={h} i={i} navigate={navigate} sport={sport} dateLabel={eventDateLabel}/>)}</Swiper>
+              : <div className="herocar"><div className="hslide"><div className="hero" style={{textAlign:"center"}}><div className="eb">BEST EDGE</div><div className="heh">Edges post soon</div><div className="hes">Top edges appear closer to {sportStartLabel(sport)}.</div></div></div></div>)
+          : <Gate title={`${eventDateLabel} top edge is locked`} navigate={navigate}/>}
         {/* WZ-EDGES-WIZEPLAYS-KPI-2026-07-10 :: Edges top strip leads with the real, fully-graded WizePlays record (live from expert_picks). Shows for any signed-in user once graded; the >0 guard means nothing is ever fabricated. */}
         {/* WZ-FBRECORD-STRIP-2026-08-06 :: football shows the MODEL's graded record instead. MLB keeps
             WizePlays deliberately -- its model record was replaced after the earlier numbers problem, so
@@ -709,9 +734,11 @@ export default function HomePage(){
               hero above it for the same claim; the hero is the top play, this is the card. TEXT
               ONLY -- .bht/.bhwize CSS untouched, so the two-tone still renders (white first word,
               gold second): TONIGHT'S white, CARD gold. Class name bhwize kept deliberately. */}
-          <span className="bht"><span className="bhwize">TONIGHT{"\u2019"}S </span>CARD</span>{/* WZ-TOPPICKS-2026-08-03 :: board band renamed WizeBoard -> TopPicks. TEXT ONLY -- .bht/.bhwize CSS untouched, so the two-tone stays exactly as it was (white first word, gold second). Class name bhwize kept deliberately: renaming it would touch the stylesheet for zero visual gain. */}
+          <span className="bht"><span className="bhwize">{eventDateLabel.toUpperCase()} </span>CARD</span>{/* Event-date copy is derived from the games actually shown; no browser-clock "tonight" assumption. */}
           <div className="bhglow"/>
-          <div className="bhsub">{(isTomorrowMain?previewItems.length:boardItems.length)>0?(isTomorrowMain?previewItems.length:boardItems.length)+" winners":"Ranked by win %"}{(isTomorrowMain?("Tomorrow"+(previewLabel?", "+previewLabel:"")):boardDate)&&<> <span className="bhd">{"\u00b7"}</span> {isTomorrowMain?("Tomorrow"+(previewLabel?", "+previewLabel:"")):boardDate}</>}</div>
+          <div className="bhsub">{(sport==="nfl"||sport==="cfb")
+            ? <>{games.length} games <span className="bhd">{"\u00b7"}</span> {ratedGameCount} rated <span className="bhd">{"\u00b7"}</span> {boardItems.length} model edges</>
+            : <>{(isTomorrowMain?previewItems.length:boardItems.length)>0?(isTomorrowMain?previewItems.length:boardItems.length)+" winners":"Ranked by win %"}{(isTomorrowMain?("Tomorrow"+(previewLabel?", "+previewLabel:"")):boardDate)&&<> <span className="bhd">{"\u00b7"}</span> {isTomorrowMain?("Tomorrow"+(previewLabel?", "+previewLabel:"")):boardDate}</>}</>}</div>
           {/* WZ-MKTABS-2026-08-17 :: market filter tab row -- sits under the "N winners / date" subline and
               above the first pick. Underline treatment (mono, uppercase, gold active with a 2px gold bottom
               border, muted-gray inactive) to match the top section nav, NOT the filled .seg pill. Tabs are
@@ -751,7 +778,7 @@ export default function HomePage(){
                     </>
                   : (sport==="mlb" && inAllStarBreak())
                     ? <AllStarBreak/>
-                    : <div className="ufboard top"><div className="estate"><div className="et">No winners on the board yet</div><div className="es">Winners post as books release tonight{"\u2019"}s lines.</div></div>{wpStrip}</div>}
+                    : <div className="ufboard top"><div className="estate"><div className="et">No winners on the board yet</div><div className="es">Winners post as books release this event-day slate.</div></div>{wpStrip}</div>}
               </>
               : (() => {
                   // WZ-MKTABS-2026-08-17 :: a single market tab. tabItems/tabPreview are already filtered by
@@ -760,7 +787,7 @@ export default function HomePage(){
                   // never a blank list -- a blank list is exactly why this tab row was removed in b442c33.
                   const isPrevMain = isTomorrowMain;
                   const mainList = isPrevMain ? tabPreview : tabItems;
-                  if(mainList.length===0) return <div className="ufboard top"><div className="mktempty">NO QUALIFYING EDGES TONIGHT</div>{wpStrip}</div>;
+                  if(mainList.length===0) return <div className="ufboard top"><div className="mktempty">NO QUALIFYING EDGES ON THIS SLATE</div>{wpStrip}</div>;
                   return <>
                     <div className="ufboard top">{mainList.map((d,i)=>{const id=(isPrevMain?"pv":"")+d.gameId+d.cat+i;return openId===id?<BoardRow key={id} d={d} i={i} open={true} onToggle={()=>setOpenId(null)} navigate={navigate} sport={sport}/>:<BoardCardCompact key={id} d={d} i={i} rank={i+1} sport={sport} onClick={()=>setOpenId(id)}/>;})}
                       {wpStrip}</div>
@@ -806,7 +833,7 @@ export default function HomePage(){
           /* WZ-INTEL-ALLSPORTS-2026-07-15 :: section now shows for every board sport; empty-state wording is per-sport-state */
           const prov=sport==="nfl"||sport==="cfb"; const dormant=sport==="nba"||sport==="nhl";
           const t=dormant?"Board opens at the season":prov?"Model preview \u2014 market signals coming":(sport==="mlb"&&inAllStarBreak())?"Market quiet \u2014 All-Star break":"No market activity yet";
-          const sub=dormant?"Market intel arrives here from day one when games return.":prov?"Sharp money, line moves, and market reads fill in as the season opens.":(sport==="mlb"&&inAllStarBreak())?"Line movement and pulse return when the second half opens.":"Line movement and pulse post once tonight's lines are up.";
+          const sub=dormant?"Market intel arrives here from day one when games return.":prov?"Sharp money, line moves, and market reads fill in as the season opens.":(sport==="mlb"&&inAllStarBreak())?"Line movement and pulse return when the second half opens.":"Line movement and pulse post once the selected event-day lines are up.";
           return (<div className="intelempty"><div className="iet">{t}</div><div className="ies">{sub}</div></div>);
         })()}
       </>}
@@ -907,7 +934,7 @@ function HeroChartM({series,seed=0}){ const W=150,H=42;
     <path d={ar} fill={`url(#${gid})`}/><path d={ln} fill="none" stroke={col} strokeWidth="2" strokeLinejoin="round" vectorEffect="non-scaling-stroke"/>
     <circle cx={ex} cy={ey} r="2.6" fill={col}><animate attributeName="opacity" values="1;.3;1" dur="1.3s" repeatCount="indefinite"/></circle></svg>;
 }
-function HeroSlide({h,i,navigate,sport,rolled}){ const lg=(SPORTS[sport]||SPORTS.mlb).lg;
+function HeroSlide({h,i,navigate,sport,dateLabel}){ const lg=(SPORTS[sport]||SPORTS.mlb).lg;
   const mv=h.mv?<>{h.mv[0]} <span className="up">{"\u2192"} {h.mv[1]}</span></>:h.odds;
   const tier=(h.model!=null)?(h.model>=65?"LOCK":h.model>=58?"STRONG":h.model>=55?"LEAN":String(h.conv||"").toUpperCase()):String(h.conv||"").toUpperCase();
   return (<div className="hslide"><div className="hero" onClick={()=>{ if(hasGameDetail(sport)&&h.gameId) navigate(`/game/${sport}/${h.gameId}`); }}>
@@ -915,7 +942,7 @@ function HeroSlide({h,i,navigate,sport,rolled}){ const lg=(SPORTS[sport]||SPORTS
     <div className="diamond"/>
     {/* WZ-HERORANK-2026-08-07 :: the eyebrow makes a claim the number now actually supports.
         `_wv` is gone with the old winner+value pool, so the only branch left is the rolled slate. */}
-    <div className="heyebrow">{rolled?"TOMORROW\u0027S BEST NUMBER":"TONIGHT\u0027S BEST NUMBER"}</div>
+    <div className="heyebrow">{String(dateLabel||"SLATE").toUpperCase()} BEST NUMBER</div>
     <div className="hteam">{h.p}{h.mk&&<span className="hmk">{h.mk}</span>}</div>
     <div className="hmatch">{h.g}{h.starts?" \u00b7 "+h.starts:""}</div>
     <div className="hbig">{h.model!=null?h.model+"%":"\u2014"}</div>
@@ -1327,7 +1354,8 @@ const CSS=`@import url('https://fonts.googleapis.com/css2?family=Barlow+Condense
 body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-webkit-font-smoothing:antialiased}
 /* KPI-TIGHTEN-2026-06-26 :: stat cards tightened; movers note unchanged (cents shown) */
 /* LAYOUT-POLISH-8PT-DEBOX-2026-06-26 :: 12px page inset, 8pt vertical rhythm, de-boxed edge board, borders reduced to premium-only */
-.app{max-width:460px;margin:0 auto;min-height:100vh;padding-bottom:64px}
+.app{max-width:460px;width:100%;margin:0 auto;min-height:100vh;padding-bottom:64px;overflow-x:hidden}
+.datewrap{min-width:0;margin:0 4px}
 /* LOADING-SKELETON-2026-06-26 :: shimmer placeholder for the board load */
 .skwrap{padding:14px 4px 0} /* EDGE-4PX-2026-06-26 */
 .sk{background:#141a20;background-image:linear-gradient(90deg,rgba(255,255,255,0) 0,rgba(255,255,255,.06) 50%,rgba(255,255,255,0) 100%);background-size:200% 100%;animation:sksh 1.3s ease-in-out infinite;border-radius:6px}
@@ -1633,7 +1661,7 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .ghm{flex:1;min-width:0}
 .ghpick{font-family:var(--disp);font-weight:800;font-size:19px;color:#fff;line-height:1;letter-spacing:-.3px;display:flex;align-items:center;gap:7px}
 .ghmk{font-family:var(--mono);font-size:8.5px;font-weight:600;color:var(--mut);border:1px solid var(--line2);border-radius:4px;padding:1px 5px}
-.ghmu{font-family:var(--mono);font-size:10.5px;color:var(--mut);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ghmu{font-family:var(--mono);font-size:10.5px;line-height:1.35;color:var(--mut);margin-top:4px;white-space:normal;overflow-wrap:anywhere}
 .ghr{display:flex;align-items:center;gap:9px;flex:0 0 auto}
 .ghedge{font-family:var(--disp);font-weight:800;font-size:20px;line-height:1;font-variant-numeric:tabular-nums}.ghedge.pos{color:var(--green)}.ghedge.neg{color:var(--neg)}.ghedge i{font-size:11px;font-style:normal;color:inherit}
 .ghconv{font-family:var(--mono);font-size:8px;font-weight:700;letter-spacing:.5px;padding:3px 7px;border-radius:999px;white-space:nowrap}
@@ -1905,5 +1933,10 @@ body{background:var(--bg);color:var(--tx);font-family:var(--ui);font-size:13px;-
 .erow .etier.lean{color:#5AC8C8;border:1px solid rgba(90,200,200,.4)}
 .erow .ecv{font-family:var(--disp);font-weight:700;font-size:16px;line-height:1;font-variant-numeric:tabular-nums}
 .erow .ecv.pos{color:var(--green)}.erow .ecv.neg{color:var(--neg)}
+@media(max-width:350px){
+  .hero{padding:18px 12px 0}.hero .diamond{width:205px;height:205px}.hteam{font-size:30px}.hbig{font-size:58px;margin-top:10px}.hsplit .hcell{padding:9px 3px 10px}.hcell .v{font-size:11.5px}.hcell .k{font-size:7px;letter-spacing:.6px}
+  .propgrid{grid-template-columns:repeat(2,minmax(0,1fr))}.ppc{border-right:0!important;border-bottom:1px solid var(--line)!important}.ppc:nth-child(odd){border-right:1px solid var(--line)!important}.ppc:nth-last-child(-n+2){border-bottom:0!important}.tpdiv .tplbl{font-size:9px;letter-spacing:2px}.tpdiv .tpdia{margin:0 4px}
+  .ghead{gap:8px;padding-left:12px}.ghpick{font-size:17px}.erow .epick{font-size:16px}.erow .emu{white-space:normal;overflow-wrap:anywhere;line-height:1.3}
+}
 /* WZ-WINNERS-REMOVED-2026-07-05 :: dead Winners CSS swept — every .wn* class had 0 usage in JSX and appeared in no other file. */
 `;

@@ -222,6 +222,7 @@ const CSS = `
 /* UNIFIED-NAV-FOCUS-TABS-2026-06-26b :: focus tabs (scale/fade) + bigger tabs, sport status dots; scope line removed */
 /* HIDE-LEGACY-WPBN-2026-06-26 :: hide old BottomNav (.wpbn) on mobile; sport bar is the nav */
 @media (max-width:1023px){
+  html,body,#root{max-width:100%;overflow-x:clip}
   .hd{display:none!important}
   .nav{display:none!important}
   .wpbn{display:none!important}
@@ -261,5 +262,6 @@ const CSS = `
   padding:9px 2px;border:1px solid transparent;border-radius:12px;color:#E4E8EC;transition:background .15s ease,color .15s ease}
 .wpnav-sp.on{border-color:#C9A86A;background:linear-gradient(180deg,#e7cf9a,#C9A86A);color:#0A0B0D;box-shadow:0 4px 16px rgba(201,168,106,.28)} /* WZ-SPORTBAR-GOLDPILL-2026-07-07 :: Option A gold pill on the selected sport */
 .wpnav-sp .wpnav-spl{position:relative;font-family:'Oswald',sans-serif;font-weight:700;font-size:19px;letter-spacing:.4px;line-height:1;color:inherit}
+@media(max-width:350px){.wpnav-sport{gap:2px;padding-left:4px;padding-right:4px}.wpnav-sp{padding-left:1px;padding-right:1px}.wpnav-sp .wpnav-spl{font-size:16px}.wpnav-tab{font-size:12px;padding-left:10px;padding-right:10px}.wpnav-bd{font-size:20px}}
 /* WZ-SPORTBAR-GOLDPILL-2026-07-07 :: status dots removed -- every sport treated the same; only the selected sport is marked (gold pill) */
 `;

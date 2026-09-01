@@ -68,6 +68,12 @@ export const oddsApi = {
 export const liveApi = {
   getMLB: () => apiFetch("/api/live/mlb"),
 };
+export const footballPropsApi = {
+  get: (sport, date) => {
+    const qs = date ? `?date=${encodeURIComponent(date)}` : "";
+    return apiFetch(`/api/football-props/${encodeURIComponent(sport)}${qs}`);
+  },
+};
 // NEW — live scores (MLB + NBA): lists + per-game detail (innings/quarters + player stats)
 export const scoresApi = {
   getScores: (league) => apiFetch(`/api/scores/${league}`),

@@ -308,7 +308,7 @@ export default function App() {
           } />
           <Route path="/props" element={
             <PrivateRoute>
-              <SportGate section="Props" allow={["mlb"]}><PropsPage /></SportGate>
+              <SportGate section="Props" allow={["mlb","nfl","cfb"]}><PropsPage /></SportGate>
             </PrivateRoute>
           } />
           <Route path="/game/mlb/:gameId" element={

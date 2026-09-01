@@ -36,6 +36,10 @@ const MARKET_TO_SHADOW = {
   rec_yds: "player_rec_yds_shadow",
 };
 
+// Read-only customer snapshot populated by the EXISTING daily shadow run. The customer route
+// never calls a provider; an empty cache is an honest "not verified yet" state after a restart.
+let latestVerifiedSnapshot = { sport: "nfl", generatedAt: null, props: [] };
+
 function db() { return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY); }
 
 // ET calendar date (mirrors predictionTracker.etDate — a bare date string rolls back
@@ -66,6 +70,7 @@ function buildShadowRows(lines, byEvent, projections) {
   for (const p of projections || []) byName.set(normalizeName(p.name), p);
 
   const rows = [];
+  const verifiedProps = [];
   const unmatched = [];
   let matched = 0;
   for (const ln of lines || []) {
@@ -97,8 +102,28 @@ function buildShadowRows(lines, byEvent, projections) {
       proj_ip: proj.gamesPlayed ?? null,
       k_rate: ln.fairOverProb ?? null,
     });
+    verifiedProps.push({
+      sport: "nfl",
+      eventId: String(ln.eventId),
+      eventDate: gameDate,
+      commenceTime: evt.commence || null,
+      matchup: ln.matchup || evt.matchup || null,
+      player: ln.player,
+      team: proj.team || null,
+      position: proj.pos || null,
+      market: ln.market,
+      line: ln.line,
+      overOdds: ln.overOdds,
+      underOdds: ln.underOdds,
+      book: ln.book || null,
+      marketFairOverProb: ln.fairOverProb ?? null,
+      projection: mean,
+      modelOverProb: round3(mProb),
+      modelEdge: ln.fairOverProb == null ? null : round3(mProb - ln.fairOverProb),
+      gamesUsed: proj.gamesPlayed ?? null,
+    });
   }
-  return { rows, matched, unmatched };
+  return { rows, verifiedProps, matched, unmatched };
 }
 
 // ── LIVE: fetch lines + projections, build rows, upsert (dryRun returns rows) ─────
@@ -110,7 +135,7 @@ async function recordNflPropShadow({ daysAhead = NFL_IMMINENT_DAYS, dryRun = fal
 
   // Only crawl rosters when there are actually lines to match (in-season).
   const projRes = await buildPlayerProjections({ season: SEED_SEASON, teamLimit: 0 });
-  const { rows, matched, unmatched } = buildShadowRows(oddsRes.lines, oddsRes.byEvent, projRes.players || []);
+  const { rows, verifiedProps, matched, unmatched } = buildShadowRows(oddsRes.lines, oddsRes.byEvent, projRes.players || []);
 
   if (dryRun) {
     return { dryRun: true, linesSeen: oddsRes.lines.length, matched, wouldLog: rows.length, unmatchedSample: unmatched.slice(0, 15), sampleRows: rows.slice(0, 8) };
@@ -118,6 +143,7 @@ async function recordNflPropShadow({ daysAhead = NFL_IMMINENT_DAYS, dryRun = fal
   if (rows.length === 0) {
     return { logged: 0, linesSeen: oddsRes.lines.length, matched, reason: "no matched projectable lines", unmatchedSample: unmatched.slice(0, 15) };
   }
+  latestVerifiedSnapshot = { sport: "nfl", generatedAt: new Date().toISOString(), props: verifiedProps };
 
   try {
     const supabase = db();
@@ -136,10 +162,15 @@ async function recordNflPropShadow({ daysAhead = NFL_IMMINENT_DAYS, dryRun = fal
   }
 }
 
+function getLatestNflPropsSnapshot() {
+  return { ...latestVerifiedSnapshot, props: latestVerifiedSnapshot.props.map((prop) => ({ ...prop })) };
+}
+
 module.exports = {
   recordNflPropShadow,
   buildShadowRows,
   normalizeName,
+  getLatestNflPropsSnapshot,
   MARKET_TO_SHADOW,
   NFL_IMMINENT_DAYS,
 };

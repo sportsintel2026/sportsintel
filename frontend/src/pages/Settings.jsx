@@ -119,7 +119,7 @@ export default function SettingsPage() {
         <div className="blk"><div className="bl">NOTIFICATIONS</div>
           <div className="srow"><div className="sl"><div className="sn">Sharp line moves</div><div className="ss">when a pick’s line moves ≥15¢</div></div><Toggle on={nSharp} set={setNSharp}/></div>
           <div className="srow"><div className="sl"><div className="sn">Your tracked picks</div><div className="ss">result + CLV when a pick settles</div></div><Toggle on={nPicks} set={setNPicks}/></div>
-          <div className="srow"><div className="sl"><div className="sn">New edges posted</div><div className="ss">when tonight’s board goes live</div></div><Toggle on={nEdges} set={setNEdges}/></div>
+          <div className="srow"><div className="sl"><div className="sn">New edges posted</div><div className="ss">when the next event-day board goes live</div></div><Toggle on={nEdges} set={setNEdges}/></div>
           <div className="srow"><div className="sl"><div className="sn">Lineup / scratch alerts</div><div className="ss">when a starter or lineup changes</div></div><Toggle on={nLineups} set={setNLineups}/></div>
         </div>
 

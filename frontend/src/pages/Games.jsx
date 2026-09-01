@@ -4,6 +4,8 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { edgesApi, scoresApi, subscriptionApi } from "../lib/api";
 import TerminalShell from "./TerminalShell";
+import EventDateSelector, { EVENT_DATE_CSS } from "../components/EventDateSelector";
+import { chooseEventDate, eventDateGroups, eventDateKey, formatEventDate } from "../lib/eventSlate";
 
 // ---- helpers ----
 const TEAMCOL = {
@@ -68,6 +70,7 @@ export default function GamesPage() {
   const [loading, setLoading] = useState(true);
   const [plan, setPlan] = useState({ tier:"free", isAdmin:false });
   const [filter, setFilter] = useState("All");
+  const [eventDate, setEventDate] = useState(null);
 
   useEffect(() => { subscriptionApi.getMyPlan().then(setPlan).catch(()=>{}); }, []);
   const load = useCallback(async () => {
@@ -104,6 +107,7 @@ export default function GamesPage() {
     const park = parkOf(g);
     return {
       id: g.id, st,
+      eventDate: eventDateKey(g, edges?.date || null),
       a:{ ab:aAb, col:colFor(aAb), rec:"", s:g.awayScore },
       h:{ ab:hAb, col:colFor(hAb), rec:"", s:g.homeScore },
       time: fmtTime(g.time),
@@ -144,6 +148,7 @@ export default function GamesPage() {
     const aS = sg.away?.score, hS = sg.home?.score;
     return {
       id: sg.detailId || sg.id, st, fromScores: true,
+      eventDate: eventDateKey(sg, scores?.date || null),
       a:{ ab:aAb, col:colFor(aAb), rec:"", s:aS },
       h:{ ab:hAb, col:colFor(hAb), rec:"", s:hS },
       time:"", ou:"—", aml:"", hml:"",
@@ -156,9 +161,20 @@ export default function GamesPage() {
   const extra = [...(scores?.live||[]), ...(scores?.final||[])]
     .filter(sg => !haveIds.has(String(sg.detailId || sg.id)) && !haveMatch.has(mKey(sg.away?.abbrev, sg.home?.abbrev)))
     .map(scoreCard);
-  const live = [...cards.filter(c=>c.st==="live"), ...extra.filter(c=>c.st==="live")];
-  const pre = cards.filter(c=>c.st==="pre");
-  const fin = [...cards.filter(c=>c.st==="final"), ...extra.filter(c=>c.st==="final")];
+  const allCards = [...cards, ...extra];
+  const dateGroups = eventDateGroups(allCards, edges?.date || scores?.date || null);
+  useEffect(() => {
+    if (!dateGroups.length) { setEventDate(null); return; }
+    const auto = chooseEventDate(allCards, { fallbackDate: edges?.date || scores?.date || null });
+    setEventDate((current) => {
+      const group = dateGroups.find((item) => item.date === current);
+      return (!current || !group || group.complete) ? auto : current;
+    });
+  }, [edges, scores]);
+  const selectedCards = eventDate ? allCards.filter((card) => card.eventDate === eventDate) : allCards;
+  const live = selectedCards.filter(c=>c.st==="live");
+  const pre = selectedCards.filter(c=>c.st==="pre");
+  const fin = selectedCards.filter(c=>c.st==="final");
   const FILTS = ["All","Live","Upcoming","Final"];
   const showLive = (filter==="All"||filter==="Live") && live.length;
   const showPre  = (filter==="All"||filter==="Upcoming") && pre.length;
@@ -170,7 +186,7 @@ export default function GamesPage() {
 
   return (
     <TerminalShell active="/games" plan={plan} navigate={navigate}>
-    <div className="app"><style>{CSS}</style>
+    <div className="app"><style>{CSS+EVENT_DATE_CSS}</style>
       <div className="hd">
         <div className="hrow">
           <div className="logo">Wize<span className="w">Picks</span></div>
@@ -188,17 +204,18 @@ export default function GamesPage() {
       <div className="deskgrid">{/* WZ-GAMES-RAIL-2026-07-16 :: 2-col desktop (main | right rail), matches football */}
       <div className="deskmain">
       <div className="maintop">{/* WZ-GAMES-MAINTOP-2026-07-16 :: match football header (title + pills top-right) */}
-        <div><h1>MLB Games</h1><div className="msub">{live.length+pre.length+fin.length} games {"\u00b7"} MLB {"\u00b7"} live scores</div></div>
+        <div><h1>{formatEventDate(eventDate)} · MLB Games</h1><div className="msub">{live.length+pre.length+fin.length} games {"\u00b7"} MLB {"\u00b7"} live scores</div></div>
         <div className="sportbar">
           {[["MLB","mlb"],["NBA","nba"],["NFL","nfl"],["NHL","nhl"],["CFB","cfb"]].map(([lb,key])=>(
             <div key={key} className={"sp"+(key==="mlb"?" on":"")} onClick={()=>{ if(key==="nba")navigate("/nba"); else if(key!=="mlb")navigate(`/${key}-games`); }}><span className="d"/>{lb}</div>
           ))}
         </div>
       </div>
+      <EventDateSelector groups={dateGroups} value={eventDate} onChange={setEventDate} label="MLB event date" />
       <div className="chips">{FILTS.map(f=><b key={f} className={f===filter?"on":""} onClick={()=>setFilter(f)}>{f}</b>)}</div>
 
       <div id="wrap">
-        {loading && <div className="estate"><div className="et">Loading today's games…</div><div className="es">Pulling the slate.</div></div>}
+        {loading && <div className="estate"><div className="et">Loading scheduled games…</div><div className="es">Pulling the event-day slate.</div></div>}
         {!loading && showLive && <>
           <div className="seclbl"><span className="ld"/>LIVE NOW <span className="c">{live.length} in play</span></div>
           <div className="glist">{live.map(g=><GameCard key={g.id} g={g} navigate={navigate}/>)}</div>
@@ -208,7 +225,7 @@ export default function GamesPage() {
           <div className="glist">{pre.map(g=><GameCard key={g.id} g={g} navigate={navigate}/>)}</div>
         </>}
         {!loading && showFin && <>
-          <div className="seclbl">FINAL <span className="c">today</span></div>
+          <div className="seclbl">FINAL <span className="c">{formatEventDate(eventDate,{compact:true})}</span></div>
           <div className="glist">{fin.map(g=><GameCard key={g.id} g={g} navigate={navigate}/>)}</div>
         </>}
         {nothing && <div className="estate"><div className="et">Nothing here yet</div><div className="es">No {filter.toLowerCase()} games right now.</div></div>}
@@ -216,8 +233,8 @@ export default function GamesPage() {
       </div>
       <div className="rail">
         <div className="panel">
-          <div className="phead"><div className="t">Live</div><div className="right">{live.length>0?<><span className="ldot"/>{live.length} now</>:"today"}</div></div>
-          {live.length===0 && pre.length===0 && <div className="empty">No MLB games today.</div>}
+          <div className="phead"><div className="t">Live</div><div className="right">{live.length>0?<><span className="ldot"/>{live.length} now</>:formatEventDate(eventDate,{compact:true})}</div></div>
+          {live.length===0 && pre.length===0 && <div className="empty">No MLB games on {formatEventDate(eventDate)}.</div>}
           {[...live.slice(0,4),...pre.slice(0,Math.max(0,6-live.length))].map((c,i)=>(
             <div key={i} className="lvrow"><span className="lvtm">{c.a.ab} @ {c.h.ab}</span>{c.st==="live"?<span className="lvsc dn">{c.a.s}\u2013{c.h.s} \u00b7 {c.state||"LIVE"}</span>:<span className="lvsc">{c.st==="final"?"Final":c.time}</span>}</div>
           ))}
