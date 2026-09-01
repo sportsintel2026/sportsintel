@@ -7,6 +7,8 @@
 import { useState, useEffect, useRef, Fragment } from "react";
 import { edgesApi, scoresApi } from "../lib/api"; // WZ-NBA-RECORDS-2026-07-11 :: real ESPN standings for the NBA board
 import { gameDetailPath } from "../lib/gameDetail"; // WZ-DETAIL-SSOT-2026-07-17
+import EventDateSelector, { EVENT_DATE_CSS } from "../components/EventDateSelector";
+import FootballIntel, { FOOTBALL_INTEL_CSS } from "../components/FootballIntel";
 
 // ---- self-contained helpers (kept local so this file stands alone) ----
 const ESPN_ALIAS = { az: "ari" };
@@ -122,7 +124,8 @@ export default function HomeDesktop(props) {
   // WZ-WINNERS-REMOVED-2026-07-05 :: Winners lens removed — Edge Board is the sole board.
 
   const { edges, games = [], movers = [], live = [], abbrById = {}, topProps = [], propList = [], propsByType = {}, hero, hasFull, planLoaded = true, lineSeries = {}, moveByPick = {},
-    wpRecord, navigate, plan = {}, sport = "mlb", setSport, marketsLive, anyLive, marketRead = [], perf = null, wpToday = [], sharpRows = [], intelGroups = [] } = props;
+    wpRecord, navigate, plan = {}, sport = "mlb", setSport, marketsLive, anyLive, marketRead = [], perf = null, wpToday = [], sharpRows = [], intelGroups = [],
+    dateGroups = [], eventDate, setEventDate, eventDateLabel = "Schedule", footballIntel = [] } = props;
   const lg = sport === "mlb" ? "mlb" : sport; // WZ-DESKTOP-FBALL-2026-07-11 :: NFL/CFB render in-board
   // Real tracked-record stats for the index cards (high-conviction ROI, honest beat-close CLV).
   // WZ-FBRECORD-STRIP-2026-08-06 :: the model's OWN graded record, straight off
@@ -138,6 +141,7 @@ export default function HomeDesktop(props) {
       graded: total };
   })();
   const isFb = (sport === "nfl" || sport === "cfb");
+  const ratedGameCount = games.filter((game) => game?.dataQuality === "rated").length;
   const [market, setMarket] = useState("all"); // WZ-MKTABS-2026-08-17 :: Edge Board leads on the All tab (was "ml")
   const [nbaStd, setNbaStd] = useState([]);
   useEffect(() => {
@@ -257,7 +261,7 @@ export default function HomeDesktop(props) {
 
   return (
     <div className="wpterm">
-      <style>{TCSS}</style>
+      <style>{TCSS+EVENT_DATE_CSS+FOOTBALL_INTEL_CSS}</style>
       <div className="status">
         <div className="brand"><div className="logo">Wize<span className="b">Picks</span></div><div className="tag">TERMINAL</div></div>
         <div className="tape"><div className="tape-track" dangerouslySetInnerHTML={{ __html: tapeHtml + tapeHtml }} /></div>
@@ -283,7 +287,7 @@ export default function HomeDesktop(props) {
 
         <div className="content">
           <div className="maintop">
-            <div><h1>Today's Board</h1><div className="sub">{sport === "mlb" ? games.length : rows.length} {sport === "mlb" ? "games" : "edges"} · {sport.toUpperCase()} · {sport === "nhl" ? "season opens — model arrives with games" : (sport === "nfl" || sport === "cfb") ? "market live · model preview" : "model live"}</div></div>
+            <div><h1>{eventDateLabel} Board</h1><div className="sub">{isFb ? `${games.length} games · ${ratedGameCount} rated · ${rows.length} model edges` : `${sport === "mlb" ? games.length : rows.length} ${sport === "mlb" ? "games" : "edges"}`} · {sport.toUpperCase()} · {sport === "nhl" ? "season opens — model arrives with games" : isFb ? "market live · model preview" : "model live"}</div></div>
             <div className="sportbar">
               {[["MLB", "mlb"], ["NBA", "nba"], ["NFL", "nfl"], ["NHL", "nhl"], ["CFB", "cfb"], ["UFC", "ufc"]].map(([lb, k]) => (
                 <div key={k} className={"sp" + (sport === k ? " on" : "")} onClick={() => (k === "ufc") ? navigate("/ufc") : (setSport && setSport(k))} /* WZ-DESKTOP-NHL-INBOARD-2026-07-11 :: all sports switch in-board; only UFC navigates */><span className="d" />{lb}{k === "ufc" ? <span className="spnew">NEW</span> : null}</div>
@@ -298,6 +302,10 @@ export default function HomeDesktop(props) {
           {(sport === "nfl" || sport === "cfb") ? (
             <div className="provbar">{sport.toUpperCase()} preview &mdash; book prices are live, but the model behind these edges is uncalibrated (2025 seed). Treat edges as directional until the season calibrates.</div>
           ) : null}
+
+          <EventDateSelector groups={dateGroups} value={eventDate} onChange={setEventDate} label={`${sport.toUpperCase()} event date`} />
+
+          {isFb && <FootballIntel sport={sport} rows={footballIntel} />}
 
           {/* INDEX ROW */}
                     <div className="indices">
@@ -327,7 +335,7 @@ export default function HomeDesktop(props) {
           {(() => {
             if (!hasFull) return (
               <div className="panel topplay tp-muted">
-                <Lock title={"Today\u2019s top play is All-Access"} sub={<>The model{"\u2019"}s #1 edge, every day. <b>From $7/wk</b></>} navigate={navigate} />
+                <Lock title={`${eventDateLabel} top play is All-Access`} sub={<>The model{"\u2019"}s #1 edge, every event day. <b>From $7/wk</b></>} navigate={navigate} />
               </div>
             );
             const prov = sport === "nfl" || sport === "cfb";
@@ -335,7 +343,7 @@ export default function HomeDesktop(props) {
             if (!feat) return (
               <div className="panel topplay tp-muted">
                 <div className="phead"><div className="t"><span className="tp-dot" />TOP PLAY</div></div>
-                <div className="tp-empty">{sport === "nhl" ? "NHL board opens at the season \u2014 the model posts its top play here from day one." : sport === "nba" ? "NBA board goes live at tip-off." : "No play yet \u2014 the top edge posts as tonight\u2019s lines drop."}</div>
+                <div className="tp-empty">{sport === "nhl" ? "NHL board opens at the season \u2014 the model posts its top play here from day one." : sport === "nba" ? "NBA board goes live at tip-off." : (sport === "nfl" || sport === "cfb") ? "No play yet \u2014 the top edge posts as kickoff lines firm up." : "No play yet \u2014 the top edge posts as first-pitch lines firm up."}</div>
               </div>
             );
             const prv = edgePct(feat, sport);
@@ -383,7 +391,7 @@ export default function HomeDesktop(props) {
                       <div className="wpmid"><div className="wpp">{pk.pick}</div>{pk.game && <div className="wpg">{pk.game}</div>}</div>
                       {pk.odds != null && <div className="wpo">{formatOdds(pk.odds)}</div>}
                     </div>))
-                : <div className="empty">No active WizePlays right now &mdash; curated plays post before first pitch.</div>}
+                : <div className="empty">No active WizePlays right now &mdash; curated plays post before {sport === "nfl" || sport === "cfb" ? "kickoff" : sport === "nba" ? "tip-off" : sport === "nhl" ? "puck drop" : "first pitch"}.</div>}
           </div>
 
           {sport === "nba" && nbaStd.length > 0 ? (
@@ -421,7 +429,7 @@ export default function HomeDesktop(props) {
               ? <Lock title="Edges are an All-Access feature" sub={<>Every edge across the slate, ranked by conviction. <b>From $7/wk</b></>} navigate={navigate} />
               : rows.length === 0
                 /* WZ-MKTABS-2026-08-17 :: empty market -> one centered mono line, never a blank list */
-                ? <div className="mktempty">NO QUALIFYING EDGES TONIGHT</div>
+                ? <div className="mktempty">NO QUALIFYING EDGES ON THIS SLATE</div>
                 : (
                   <table className="tbl">
                     <thead><tr>
@@ -554,8 +562,8 @@ export default function HomeDesktop(props) {
             </div>
           )}
 
-          {/* PLAYER PROPS */}
-          <div className="panel">
+          {/* MLB player props stay MLB-only; football props have their own verified, sport-scoped page. */}
+          {sport === "mlb" && <div className="panel">
             <div className="phead">
               <div className="t">Player Props</div>
               <div className="ptabs">
@@ -597,7 +605,7 @@ export default function HomeDesktop(props) {
                   </tbody>
                 </table>
               </>}
-          </div>
+          </div>}
 
           {/* WEATHER FACTOR */}
           {wx.length > 0 && (

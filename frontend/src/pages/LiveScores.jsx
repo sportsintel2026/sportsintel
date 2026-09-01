@@ -19,6 +19,8 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { subscriptionApi, scoresApi, newsApi, edgesApi } from "../lib/api";
 import { gameDetailPath } from "../lib/gameDetail"; // WZ-DETAIL-SSOT-2026-07-17
+import EventDateSelector, { EVENT_DATE_CSS } from "../components/EventDateSelector";
+import { chooseEventDate, createLatestRequestGuard, eventDateGroups, eventDateKey, formatEventDate, scopeEdgeFeed } from "../lib/eventSlate";
 
 const LEAGUE_META = {
   mlb: { icon: "", title: "MLB Games", periodLabel: "Inn" },
@@ -40,6 +42,8 @@ export default function LiveScoresPage({ league = "mlb" }) {
   const [error, setError] = useState(false);
   const [refreshedAt, setRefreshedAt] = useState(null);
   const timer = useRef(null);
+  const scoresRequestGuard = useRef(createLatestRequestGuard());
+  const [eventDate, setEventDate] = useState(null);
 
   useEffect(() => { subscriptionApi.getMyPlan().then(setPlan).catch(() => {}); }, []);
 
@@ -72,29 +76,42 @@ export default function LiveScoresPage({ league = "mlb" }) {
   },[activeLeague,isDesktop]);
 
   const load = useCallback(async (showSpinner) => {
+    const token = scoresRequestGuard.current.begin(activeLeague);
     if (showSpinner) setLoading(true);
     setError(false);
     try {
       const d = await scoresApi.getScores(activeLeague);
+      if (!scoresRequestGuard.current.accepts(token, activeLeague)) return;
       setData(d);
       setRefreshedAt(new Date());
     } catch (e) {
       console.error("Failed to load scores:", e);
-      if (showSpinner) setError(true);
+      if (showSpinner && scoresRequestGuard.current.accepts(token, activeLeague)) setError(true);
     }
-    if (showSpinner) setLoading(false);
+    if (showSpinner && scoresRequestGuard.current.accepts(token, activeLeague)) setLoading(false);
   }, [activeLeague]);
 
   // initial load + 30s auto-refresh (silent)
   useEffect(() => {
     load(true);
     timer.current = setInterval(() => load(false), 30000);
-    return () => clearInterval(timer.current);
+    return () => { clearInterval(timer.current); scoresRequestGuard.current.invalidate(); };
   }, [load]);
 
-  const live = data?.live || [];
-  const upcoming = data?.upcoming || [];
-  const final = data?.final || [];
+  const allGames = [...(data?.live || []), ...(data?.upcoming || []), ...(data?.final || [])];
+  const dateGroups = eventDateGroups(allGames);
+  useEffect(() => {
+    if (!dateGroups.length) { setEventDate(null); return; }
+    const auto = chooseEventDate(allGames);
+    setEventDate((current) => {
+      const group = dateGroups.find((item) => item.date === current);
+      return (!current || !group || group.complete) ? auto : current;
+    });
+  }, [activeLeague, data]);
+  const onDay = (game) => !eventDate || eventDateKey(game) === eventDate;
+  const live = (data?.live || []).filter(onDay);
+  const upcoming = (data?.upcoming || []).filter(onDay);
+  const final = (data?.final || []).filter(onDay);
   const total = live.length + upcoming.length + final.length;
   const off = getOffSeason(activeLeague);
   // Filter chips mirror the MLB Games page (All / Live / Upcoming / Final).
@@ -120,11 +137,12 @@ export default function LiveScoresPage({ league = "mlb" }) {
       live={live} upcoming={upcoming} final={final} total={total} off={off}
       showLive={showLive} showPre={showPre} showFin={showFin} nothing={nothing}
       loading={loading} error={error} retry={()=>load(true)} refreshedAt={refreshedAt}
-      plan={plan} news={news} fbOdds={fbOdds} fbBoard={fbBoard}/>
+      plan={plan} news={news} fbOdds={fbOdds} fbBoard={fbBoard}
+      dateGroups={dateGroups} eventDate={eventDate} setEventDate={setEventDate}/>
   );
 
   return (
-    <div className="app"><style>{CSS}</style>
+    <div className="app"><style>{CSS+EVENT_DATE_CSS}</style>
       <div className="hd">
         <div className="hrow">
           <div className="logo">Wize<span className="w">Picks</span></div>
@@ -164,15 +182,16 @@ export default function LiveScoresPage({ league = "mlb" }) {
       <div className="chips">{FILTS.map(f => <b key={f} className={f === filter ? "on" : ""} onClick={() => setFilter(f)}>{f}</b>)}</div>
 
       <div id="wrap">
+        <EventDateSelector groups={dateGroups} value={eventDate} onChange={setEventDate} label={`${activeLeague.toUpperCase()} event date`} />
         <div className="seclbl" style={{marginTop:14}}>{meta.title.toUpperCase()}
           {refreshedAt && <span className="c" style={{marginLeft:"auto"}}>updated {refreshedAt.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"})} · auto-refreshes</span>}
         </div>
         <div className="subln">Live scores · <span className="hot">tap a game</span> for the box score &amp; full analysis</div>
 
-        {loading && <div className="estate"><div className="et">Loading today's games…</div><div className="es">Pulling the slate.</div></div>}
+        {loading && <div className="estate"><div className="et">Loading the event-day slate…</div><div className="es">Pulling the schedule.</div></div>}
         {!loading && error && <div className="estate"><div className="et">Couldn't load scores</div><div className="es" onClick={()=>load(true)} style={{cursor:"pointer",color:"var(--blue)"}}>Tap to retry</div></div>}
         {!loading && !error && total === 0 && (
-          <div className="estate"><div className="et">No games right now</div><div className="es">{off || `No ${activeLeague.toUpperCase()} games on the slate today.`}</div></div>
+          <div className="estate"><div className="et">No games right now</div><div className="es">{off || `No ${activeLeague.toUpperCase()} games on ${formatEventDate(eventDate)}.`}</div></div>
         )}
         {!loading && !error && total > 0 && (
           <>
@@ -367,7 +386,7 @@ const NEWS_CHIP = (it) => it.scratch ? ["SCR","c-red"] : it.status==="injury" ? 
 
 function ScoresTerminal({ activeLeague, meta, goSport, navigate, filter, setFilter, FILTS,
   live, upcoming, final: fin, total, off, showLive, showPre, showFin, nothing,
-  loading, error, retry, refreshedAt, plan, news, fbOdds, fbBoard }) {
+  loading, error, retry, refreshedAt, plan, news, fbOdds, fbBoard, dateGroups, eventDate, setEventDate }) {
 
   // WZ-SPORT-TERMINAL-2026-07-02 :: sport-first sections, mirroring the mobile nav.
   const [tab,setTab]=useState("games"); // WZ-SCORES-GAMESTAB-2026-07-16 :: land on games, not the redundant edges board
@@ -382,6 +401,7 @@ function ScoresTerminal({ activeLeague, meta, goSport, navigate, filter, setFilt
   useEffect(()=>{ const f=()=>setClock(new Date().toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit",timeZone:"America/New_York"})+" ET"); f(); const t=setInterval(f,30000); return ()=>clearInterval(t); },[]);
   const marketsLive = live.length>0;
   const hasFull = plan?.isAdmin===true || plan?.tier==="pro" || plan?.tier==="elite";
+  const activeFbBoard = fbBoard ? scopeEdgeFeed(fbBoard, eventDate) : fbBoard;
 
   // tape: live scores first, then upcoming, then headlines — terminal ticker feel
   const esc=(x)=>String(x??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
@@ -423,7 +443,7 @@ function ScoresTerminal({ activeLeague, meta, goSport, navigate, filter, setFilt
   );
 
   return (
-    <div className="wpterm2"><style>{CSS}</style><style>{TCSS2}</style>
+    <div className="wpterm2"><style>{CSS+EVENT_DATE_CSS}</style><style>{TCSS2}</style>
     <div className="wpterm">
       <div className="status">
         <div className="brand"><div className="logo">Wize<span className="b">Picks</span></div><div className="tag">TERMINAL</div></div>
@@ -457,6 +477,8 @@ function ScoresTerminal({ activeLeague, meta, goSport, navigate, filter, setFilt
             </div>
           </div>
 
+          <EventDateSelector groups={dateGroups} value={eventDate} onChange={setEventDate} label={`${activeLeague.toUpperCase()} event date`} />
+
           <div className="sectabs">{/* WZ-SPORT-TERMINAL-2026-07-02 */}
             {[["games","GAMES"],["odds","ODDS"],["news","NEWS"]].map(([k,lb])=>( /* WZ-SCORES-NAVUNIFY-2026-07-16 */
               <b key={k} className={tab===k?"on":""} onClick={()=>setTab(k)}>{lb}</b>
@@ -469,7 +491,7 @@ function ScoresTerminal({ activeLeague, meta, goSport, navigate, filter, setFilt
               <div className="panel"><div className="phead"><div className="t">Edge Board</div></div>
                 <div className="empty">The NHL model arrives with the season — edges will post here from day one.</div></div>
             );
-            const B=fbBoard||{};
+            const B=activeFbBoard||{};
             const rows=(ebMkt==="ml"?B.moneylineEdges:ebMkt==="spread"?B.spreadEdges:B.totalsEdges)||[];
             const priced=(()=>{ const o=Array.isArray(fbOdds)?fbOdds:[]; return {
               ml:o.filter(e=>e.h2h?.away!=null).length, spr:o.filter(e=>e.spreads?.awayLine!=null).length, tot:o.filter(e=>e.totals?.line!=null).length, n:o.length }; })();
@@ -486,10 +508,10 @@ function ScoresTerminal({ activeLeague, meta, goSport, navigate, filter, setFilt
                 <div className="seg">{[["ml","Moneyline"],["spread","Spread"],["totals","Totals"]].map(([m,lb])=>(<b key={m} className={ebMkt===m?"on":""} onClick={()=>setEbMkt(m)}>{lb}</b>))}</div>
                 <div className="right">provisional — 2025-seeded ratings, ungraded</div>
               </div>
-              {fbBoard===null && <div className="empty">Running the model…</div>}
+              {activeFbBoard===null && <div className="empty">Running the model…</div>}
               {/* WZ-WINNERS-REMOVED-2026-07-05 :: Winners tab + render removed; Edge Board only */}
               {ebMkt!=="winners" && <>
-              {fbBoard!==null && rows.length===0 && <div className="empty">No {ebMkt==="ml"?"moneyline":ebMkt} edges on this slate — the model agrees with the market here.</div>}
+              {activeFbBoard!==null && rows.length===0 && <div className="empty">No {ebMkt==="ml"?"moneyline":ebMkt} edges on this event-day slate — the model agrees with the market here.</div>}
               {rows.length>0 && (()=>{ /* WZ-EB-PARITY-2026-07-02 :: dashboard column parity */
                 // team abbr + logo lookup from the scoreboard feed (no hardcoded maps)
                 const pool=[...live,...upcoming,...fin].flatMap(g=>[g.away,g.home]).filter(Boolean);
@@ -499,9 +521,9 @@ function ScoresTerminal({ activeLeague, meta, goSport, navigate, filter, setFilt
                 const abbrOf=(full,m)=> m?.abbrev || String(full||"").split(" ").pop().slice(0,12);
                 const mkKey=ebMkt==="totals"?"total":ebMkt;
                 const bpKey=ebMkt==="ml"?"ml":ebMkt==="spread"?"spread":"total";
-                const bookFor=(e)=>{ const bp=(fbBoard.marketByGame||{})[e.gameId]?.bestPrices?.[bpKey]; if(!bp) return null;
+                const bookFor=(e)=>{ const bp=(activeFbBoard.marketByGame||{})[e.gameId]?.bestPrices?.[bpKey]; if(!bp) return null;
                   return e.side==="over"?bp.overBook : e.side==="under"?bp.underBook : e.side==="home"?bp.homeBook : bp.awayBook; };
-                const moveFor=(e)=>{ const mv=(fbBoard.marketMovers||[]).find(m=>m.matchup===e.matchup&&m.market===mkKey&&m.side===e.side); return mv||null; };
+                const moveFor=(e)=>{ const mv=(activeFbBoard.marketMovers||[]).find(m=>m.matchup===e.matchup&&m.market===mkKey&&m.side===e.side); return mv||null; };
                 const pickLabel=(e)=>{ const t=teamsFor(e); const ab=e.side==="over"||e.side==="under"?String(e.side).toUpperCase():abbrOf(e.side==="home"?t.home:t.away, e.side==="home"?t.hm:t.am);
                   if(ebMkt==="ml") return ab+" ML";
                   if(ebMkt==="spread") return ab+(e.line!=null?` ${e.line>0?"+"+e.line:e.line}`:"");
@@ -618,8 +640,8 @@ function ScoresTerminal({ activeLeague, meta, goSport, navigate, filter, setFilt
 
         <div className="rail">{/* WZ-DASH-PARITY-2026-07-02 :: dashboard-style rail */}
           <div className="panel">
-            <div className="phead"><div className="t">Live</div><div className="right">{live.length>0?<><span className="ldot"/>{live.length} now</>:"today"}</div></div>
-            {live.length===0 && upcoming.length===0 && <div className="empty">No {activeLeague.toUpperCase()} games today.</div>}
+            <div className="phead"><div className="t">Live</div><div className="right">{live.length>0?<><span className="ldot"/>{live.length} now</>:formatEventDate(eventDate,{compact:true})}</div></div>
+            {live.length===0 && upcoming.length===0 && <div className="empty">No {activeLeague.toUpperCase()} games on {formatEventDate(eventDate)}.</div>}
             {[...live.slice(0,4),...upcoming.slice(0,Math.max(0,6-live.length))].map((g,i)=>(
               <div key={i} className="lvrow">
                 <span className="lvtm">{g.away?.abbrev} @ {g.home?.abbrev}</span>
@@ -632,9 +654,9 @@ function ScoresTerminal({ activeLeague, meta, goSport, navigate, filter, setFilt
           {(activeLeague==="nfl"||activeLeague==="cfb") && <>
           <div className="panel" style={{marginTop:12}}>
             <div className="phead"><div className="t">Market Movers</div><div className="right">open → now</div></div>
-            {(!fbBoard||!Array.isArray(fbBoard.marketMovers)||fbBoard.marketMovers.length===0)
+            {(!activeFbBoard||!Array.isArray(activeFbBoard.marketMovers)||activeFbBoard.marketMovers.length===0)
               ? <div className="empty">Lines barely move this far out — movers fill in as the season nears.</div>
-              : fbBoard.marketMovers.slice(0,8).map((m,i)=>(
+              : activeFbBoard.marketMovers.slice(0,8).map((m,i)=>(
                 <div key={i} className="mvrow">
                   <span className={"mvd "+(m.dir==="up"?"up":"dn")}>{m.dir==="up"?"▲":"▼"}</span>
                   <span className="mvb"><b>{String(m.side||"").toUpperCase()} {String(m.market||"").toUpperCase()}{m.line!=null?` ${m.line>0?"+"+m.line:m.line}`:""}</b><span className="mvm">{m.matchup}</span></span>
@@ -1100,7 +1122,7 @@ function EmptyState({ icon, league }) {
   return (
     <div style={{ background: "var(--panel)", border: "1px solid #16202a", borderRadius: 14, padding: 48, textAlign: "center" }}>
       
-      <div style={{ fontSize: 16, fontWeight: 700 }}>No games scheduled today</div>
+      <div style={{ fontSize: 16, fontWeight: 700 }}>No games scheduled for this event date</div>
       <div style={{ fontSize: 13, color: "#9ca3af", marginTop: 6 }}>Check back when the next slate is posted.</div>
     </div>
   );

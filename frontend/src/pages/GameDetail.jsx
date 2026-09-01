@@ -6,6 +6,7 @@ import { useParams, useNavigate } from "react-router-dom";
 const PERF_API_BASE = import.meta.env.VITE_API_URL || "https://sportsintel-production.up.railway.app";
 import { useAuth } from "../hooks/useAuth";
 import { edgesApi, subscriptionApi, scoresApi, matchupsApi, liveApi, newsApi } from "../lib/api";
+import { eventDateKey, formatEventDate } from "../lib/eventSlate";
 
 const TEAMCOL = {
   ARI:"#A71930",ATL:"#CE1141",BAL:"#DF4601",BOS:"#BD3039",CHC:"#0E3386",CWS:"#27251F",CHW:"#27251F",
@@ -186,7 +187,9 @@ export default function GameDetailPage() {
 
   const title = (aAb && hAb) ? `${aAb} @ ${hAb}` : "Matchup";
   const venue = game?.venue || scoresGame?.venue || "";
-  const sub = st==="pre" ? [fmtTime(game?.time||scoresGame?.time), venue].filter(Boolean).join(" · ")
+  const gameDate = eventDateKey(game, allEdges?.date || null);
+  const eventLabel = formatEventDate(gameDate);
+  const sub = st==="pre" ? [eventLabel, fmtTime(game?.time||scoresGame?.time), venue].filter(Boolean).join(" · ")
             : st==="live" ? ["Live", venue].filter(Boolean).join(" · ")
             : ["Final", venue].filter(Boolean).join(" · ");
 
@@ -198,8 +201,10 @@ export default function GameDetailPage() {
       </div>
       <div className="sbody">
         {loading && <div className="estate"><div className="et">Loading matchup…</div></div>}
-        {!loading && !game && <div className="estate"><div className="et">Game not found</div><div className="es">It may have rolled off today's slate.</div></div>}
-        {!loading && game && st==="pre"   && <SheetPre   game={game} aAb={aAb} hAb={hAb} gEdges={gEdges} mlPick={mlPick} totPick={totPick} rlPick={rlPick} bestEdge={bestEdge} mr={mr} detail={detail} bvpData={bvpData} lineups={lineups} hasFull={hasFull} navigate={navigate} injA={injA} injH={injH} gameNews={(detail?.teamNews && detail.teamNews.length) ? detail.teamNews : gameNews}/>}
+        {!loading && !game && <div className="estate"><div className="et">Game not found</div><div className="es">It may have rolled off its event-day slate.</div></div>}
+        {!loading && game && st==="pre" && (
+          <SheetPre game={game} eventLabel={eventLabel} aAb={aAb} hAb={hAb} gEdges={gEdges} mlPick={mlPick} totPick={totPick} rlPick={rlPick} bestEdge={bestEdge} mr={mr} detail={detail} bvpData={bvpData} lineups={lineups} hasFull={hasFull} navigate={navigate} injA={injA} injH={injH} gameNews={(detail?.teamNews && detail.teamNews.length) ? detail.teamNews : gameNews}/>
+        )}
         {!loading && game && st==="live"  && <SheetLive  game={game} gameId={gameId} scoresGame={scoresGame} aAb={aAb} hAb={hAb} gEdges={gEdges} detail={detail}/>}
         {!loading && game && st==="final" && <SheetFinal game={game} scoresGame={scoresGame} aAb={aAb} hAb={hAb} bestEdge={bestEdge} detail={detail} venue={venue}/>}
       </div>
@@ -279,7 +284,7 @@ function wpReadout(aAb, hAb, wlA, wlH) {
   const diff = Math.abs(wlA - wlH);
   if (diff <= 4)  return <>Basically a coin flip {"\u2014"} the model leans <b>{lead} by a hair</b></>;
   if (diff <= 12) return <>The model leans <b>{lead}</b></>;
-  if (diff <= 24) return <>The model likes <b>{lead}</b> tonight</>;
+  if (diff <= 24) return <>The model likes <b>{lead}</b> in this matchup</>;
   return <>The model strongly favors <b>{lead}</b></>;
 }
 
@@ -363,7 +368,7 @@ function PitchingDuel({ aAb, hAb, aCol, hCol, pa, ph }) {
   </Block>;
 }
 
-function SheetPre({ game, aAb, hAb, gEdges, mlPick, totPick, rlPick, bestEdge, mr, detail, bvpData, lineups, hasFull, navigate, injA=[], injH=[], gameNews=[] }) {
+function SheetPre({ game, eventLabel, aAb, hAb, gEdges, mlPick, totPick, rlPick, bestEdge, mr, detail, bvpData, lineups, hasFull, navigate, injA=[], injH=[], gameNews=[] }) {
   const aCol=colFor(aAb), hCol=colFor(hAb);
   const ml = game.moneyline || {};
   const wlA = pct(ml.awayWinProb), wlH = pct(ml.homeWinProb);
@@ -404,7 +409,7 @@ function SheetPre({ game, aAb, hAb, gEdges, mlPick, totPick, rlPick, bestEdge, m
   return (<>
     <HeroCard game={game} aAb={aAb} hAb={hAb} aCol={aCol} hCol={hCol} wlA={wlA} wlH={wlH} venue={game.venue||""} timeStr={timeStr}/>
 
-    <Block label="THE MODEL'S NUMBERS" bx="tonight's projection">
+    <Block label="THE MODEL'S NUMBERS" bx={`${eventLabel} projection`}>
       <div className="projg">
         <div className="pcell"><div className="k">{aAb} RUNS</div><div className="v">{projA ?? "\u2014"}</div></div>
         <div className="pcell"><div className="k">{hAb} RUNS</div><div className="v">{projH ?? "\u2014"}</div></div>
@@ -487,7 +492,7 @@ function SheetPre({ game, aAb, hAb, gEdges, mlPick, totPick, rlPick, bestEdge, m
       </Block>;
     })()}
 
-    <Block label="TONIGHT'S CONDITIONS" bx={!w.indoor && w.forecastAtGameTime ? "at first pitch" : "conditions"}><div className="ctx">
+    <Block label="GAME CONDITIONS" bx={!w.indoor && w.forecastAtGameTime ? `${eventLabel} · at first pitch` : eventLabel}><div className="ctx">
       {venueChip(game.venue||scoresGame_venue(game))}
       <span className="ch">Runs <b>{parkTxt}</b></span>
       {parkHrTxt && <span className="ch">HR <b>{parkHrTxt}</b></span>}

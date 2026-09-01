@@ -158,7 +158,7 @@ export default function ConsensusPage() {
               <div style={{ fontSize: 28, marginBottom: 10 }}>🗓️</div>
               <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>No consensus plays right now</div>
               <p style={{ margin: 0, fontSize: 13, color: "#6b7280", lineHeight: 1.6 }}>
-                The model and today's Best Bets don't overlap on the current slate.
+                The model and the current slate's Best Bets don't overlap.
                 When a Best Bet matches a model edge, it shows up here.
               </p>
             </div>

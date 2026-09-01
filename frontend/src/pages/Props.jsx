@@ -4,8 +4,11 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
+import { useSport } from "../hooks/useSport";
 import { edgesApi, subscriptionApi, playerCardApi } from "../lib/api";
+import { formatEventDate } from "../lib/eventSlate";
 import TerminalShell from "./TerminalShell";
+import FootballProps from "./FootballProps";
 // WZ-PROPS-DESKTOP-2026-07-11 :: Props gains a desktop layout inside the shared Vault shell; mobile untouched.
 
 const TEAMCOL = {
@@ -34,6 +37,12 @@ function Avatar({ pid, initials, color, cls }) {
 }
 
 export default function PropsPage() {
+  const [sport] = useSport();
+  if (sport === "nfl" || sport === "cfb") return <FootballProps key={sport} sport={sport} />;
+  return <MLBPropsPage />;
+}
+
+function MLBPropsPage() {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
   const [plan, setPlan] = useState({ tier:"free", isAdmin:false });
@@ -163,7 +172,7 @@ export default function PropsPage() {
       {!hasFull ? <Gate navigate={navigate}/> : <>
         <div className="chips">{FILT.map(f=><b key={f} className={f===mfilter?"on":""} onClick={()=>setMfilter(f)}>{f}</b>)}</div>
         <div className="bar">
-          <span>{list.length} props {"\u00b7"} ranked by win%{nVal>0?` \u00b7 ${nVal} +VALUE`:""}</span>
+          <span>{formatEventDate(M.date)} {"\u00b7"} {list.length} props {"\u00b7"} ranked by win%{nVal>0?` \u00b7 ${nVal} +VALUE`:""}</span>
           <span className="sort"><b className={sortBy==="win"?"on":""} onClick={()=>setSortBy("win")}>Win %</b><b className={sortBy==="edge"?"on":""} onClick={()=>setSortBy("edge")}>Value</b></span>
         </div>
         <div id="wrap">
@@ -181,11 +190,11 @@ export default function PropsPage() {
                  A thin board is calibration doing its job (hits haircut live 07-02;
                  K unders-only + honest projections) — say so instead of looking broken. */
               const COPY={
-                Hits:["No hits plays right now","Hits props post a couple hours before first pitch and clear once games start. Check back when tonight's slate is upcoming."],
+                Hits:["No hits plays right now","Hits props post a couple hours before first pitch and clear once games start. Check back as this event-day slate approaches."],
                 K:["No strikeout plays right now","Strikeout props post from the model as starters and lines firm up. Check back closer to first pitch."],
-                HR:["No HR plays right now","Home-run props post a couple hours before first pitch and clear once games start. Check back when tonight's slate is upcoming."],
+                HR:["No HR plays right now","Home-run props post a couple hours before first pitch and clear once games start. Check back as this event-day slate approaches."],
                 TB:["No total-bases plays yet","TB rows post from the model's probability board as games firm up."],
-                All:["No props right now","Props post a couple hours before first pitch and clear once games start. Check back when tonight's slate is upcoming."],
+                All:["No props right now","Props post a couple hours before first pitch and clear once games start. Check back as this event-day slate approaches."],
               };
               const [t,d]=COPY[mfilter]||COPY.All;
               return <div className="estate"><div className="et">{t}</div><div className="es">{d}</div></div>; })()}
@@ -360,7 +369,7 @@ function PlayerSheet({ p, card, loading, onClose }) {
   const whyParts = [];
   if (meas.barrelPct!=null) whyParts.push(`${typeof meas.barrelPct==="number"?(meas.barrelPct*100).toFixed(1):meas.barrelPct}% barrel rate`);
   if (haveBB && pull>=45) whyParts.push(`${pull}% pull rate`);
-  if (f.platoonAdvantage) whyParts.push("a platoon edge tonight");
+  if (f.platoonAdvantage) whyParts.push("a platoon edge in this matchup");
   if (isK && pit.kPct!=null) whyParts.push(`a ${(pit.kPct*100).toFixed(0)}% strikeout rate`);
   if (isK && pit.whiffPct!=null) whyParts.push(`${(pit.whiffPct*100).toFixed(0)}% whiff rate`);
   if (!isK && park.factor) whyParts.push(`a ${park.factor} HR park`);
@@ -409,13 +418,13 @@ function PlayerSheet({ p, card, loading, onClose }) {
                 <div className="hpTo"><div className="v">{toHomer!=null?toHomer:"—"}<small>%</small></div><div className="l">TO HOMER</div></div>
               </div></div>
 
-              {oppP && <div className="hpTvs"><div className="l">Tonight vs <b>{oppP}</b></div><div className="hpBdg">{pHand && <span className="hpHand">{pHand}</span>}{platoon && <span className="hpPlat">{"\u25b2"} platoon edge</span>}</div></div>}
+              {oppP && <div className="hpTvs"><div className="l">This matchup vs <b>{oppP}</b></div><div className="hpBdg">{pHand && <span className="hpHand">{pHand}</span>}{platoon && <span className="hpPlat">{"\u25b2"} platoon edge</span>}</div></div>}
 
               <div className="hpSl">HAND VS HAND{bats?` · BATS ${bats}`:""}</div>
               <div className="hpHvh">
                 {splitOrder.map(([lbl,s,on],i)=>(
                   <div key={i} className={"hpHv"+(on?" on":"")}>
-                    {on && <div className="hpTn">TONIGHT</div>}
+                    {on && <div className="hpTn">MATCHUP</div>}
                     <div className="hpHl">vs {lbl}</div>
                     <div className="hpOps">{fmt3(opsOf(s))}</div><div className="hpOpl">OPS</div>
                     <div className="hpG4r">
