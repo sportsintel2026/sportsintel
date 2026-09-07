@@ -20,6 +20,7 @@ import { useAuth } from "../hooks/useAuth";
 import { subscriptionApi, scoresApi, newsApi, edgesApi } from "../lib/api";
 import { gameDetailPath } from "../lib/gameDetail"; // WZ-DETAIL-SSOT-2026-07-17
 import EventDateSelector, { EVENT_DATE_CSS } from "../components/EventDateSelector";
+import TeamLogo, { TEAM_LOGO_CSS } from "../components/TeamLogo";
 import { chooseEventDate, createLatestRequestGuard, eventDateGroups, eventDateKey, formatEventDate, scopeEdgeFeed } from "../lib/eventSlate";
 
 const LEAGUE_META = {
@@ -142,7 +143,7 @@ export default function LiveScoresPage({ league = "mlb" }) {
   );
 
   return (
-    <div className="app"><style>{CSS+EVENT_DATE_CSS}</style>
+    <div className="app"><style>{CSS+EVENT_DATE_CSS+TEAM_LOGO_CSS}</style>
       <div className="hd">
         <div className="hrow">
           <div className="logo">Wize<span className="w">Picks</span></div>
@@ -261,7 +262,7 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .gtop .ou{font-family:var(--mono);font-size:10px;color:var(--mut)}.gtop .ou b{color:#cdd7e1;font-weight:600}
 .team{display:flex;align-items:center;gap:10px;padding:9px 13px}
 .team+.team{border-top:1px solid rgba(255,255,255,.04)}
-.lg{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#1B2025;border:1px solid var(--line2);font-family:var(--disp);font-weight:800;font-size:9px;color:#fff;flex:0 0 auto}.lg img{width:21px;height:21px;object-fit:contain}
+.score-team-logo{width:28px;height:28px}
 .team .nm{font-family:var(--disp);font-weight:800;font-size:18px;color:#eef3f5;line-height:1}
 .team .rec{font-family:var(--mono);font-size:9px;color:var(--mut2);margin-top:2px}
 .team .tw{flex:1;min-width:0}
@@ -443,7 +444,7 @@ function ScoresTerminal({ activeLeague, meta, goSport, navigate, filter, setFilt
   );
 
   return (
-    <div className="wpterm2"><style>{CSS+EVENT_DATE_CSS}</style><style>{TCSS2}</style>
+    <div className="wpterm2"><style>{CSS+EVENT_DATE_CSS+TEAM_LOGO_CSS}</style><style>{TCSS2}</style>
     <div className="wpterm">
       <div className="status">
         <div className="brand"><div className="logo">Wize<span className="b">Picks</span></div><div className="tag">TERMINAL</div></div>
@@ -875,13 +876,13 @@ function GameCard({ g, league, meta, odds }) {
   return (
     <div className={"gc" + (isLive ? " live" : "")} onClick={() => { if (target) navigate(target); }} style={{ cursor: target ? "pointer" : "default" }}>
       <div className="gtop">{leftLabel}<span className="ou">{rightNote}</span></div>
-      <TeamRow t={g.away} showScore={isLive || isFinal} />
-      <TeamRow t={g.home} showScore={isLive || isFinal} />
+      <TeamRow t={g.away} showScore={isLive || isFinal} league={league} />
+      <TeamRow t={g.home} showScore={isLive || isFinal} league={league} />
       {odds && (odds.h2h?.away!=null || odds.spreads?.awayLine!=null || odds.totals?.line!=null) && (
         <div className="godds">{/* WZ-SCORES-ODDS-2026-07-02 :: desktop-only best-line strip */}
-          {odds.h2h?.away!=null && odds.h2h?.home!=null && <span className="gob"><i>ML</i>{fmtAm(odds.h2h.away)} / {fmtAm(odds.h2h.home)}</span>}
-          {odds.spreads?.awayLine!=null && <span className="gob"><i>SPR</i>{fmtLine(odds.spreads.awayLine)} {fmtAm(odds.spreads.away)}</span>}
-          {odds.totals?.line!=null && <span className="gob"><i>O/U</i>{odds.totals.line} · {fmtAm(odds.totals.over)}/{fmtAm(odds.totals.under)}</span>}
+          {odds.h2h?.away!=null && odds.h2h?.home!=null && <span className="gob"><i>ML</i>{fmtAm(odds.h2h.away)}{odds.h2h.awayBook ? ` ${odds.h2h.awayBook}` : ""} / {fmtAm(odds.h2h.home)}{odds.h2h.homeBook ? ` ${odds.h2h.homeBook}` : ""}</span>}
+          {odds.spreads?.awayLine!=null && <span className="gob"><i>SPR</i>{fmtLine(odds.spreads.awayLine)} {fmtAm(odds.spreads.away)}{odds.spreads.awayBook ? ` ${odds.spreads.awayBook}` : ""}</span>}
+          {odds.totals?.line!=null && <span className="gob"><i>O/U</i>{odds.totals.line} · {fmtAm(odds.totals.over)}{odds.totals.overBook ? ` ${odds.totals.overBook}` : ""}/{fmtAm(odds.totals.under)}{odds.totals.underBook ? ` ${odds.totals.underBook}` : ""}</span>}
         </div>
       )}
       {target && <div className="gfoot"><span className="lean"><span className="lb">{meta.title.replace(" Games","").toUpperCase()}</span></span><span className="go">View game {"\u203a"}</span></div>}
@@ -889,12 +890,12 @@ function GameCard({ g, league, meta, odds }) {
   );
 }
 
-function TeamRow({ t, showScore }) {
+function TeamRow({ t, showScore, league }) {
   if (!t) return null;
   const ab = t.abbrev || t.abbreviation || "";
   return (
     <div className="team">
-      <span className="lg">{t.logo ? <img src={t.logo} alt="" /> : ab.slice(0, 3)}</span>
+      <TeamLogo sport={league} team={t.name || ab} abbr={ab} logoUrl={t.logo || null} className="score-team-logo" />
       <div className="tw">
         <div className="nm">{ab}</div>
         {(t.name || t.record) && <div className="rec">{[t.name, t.record ? `(${t.record})` : ""].filter(Boolean).join(" \u00b7 ")}</div>}

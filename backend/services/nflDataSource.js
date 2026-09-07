@@ -458,7 +458,7 @@ async function buildTeamRatings(season = 2025) {
         const losses = recStat(stats, "losses");
         if (gp == null || pf == null || pa == null || gp < MIN_GAMES_FOR_RATING) return;
         raw[tm.id] = {
-          abbr: tm.abbreviation, name: tm.displayName,
+          id: String(tm.id), abbr: tm.abbreviation, name: tm.displayName,
           gp, pf, pa, wins, losses,
           diff: pf - pa,
           rawRating: (pf - pa) / gp, // points/game better than average

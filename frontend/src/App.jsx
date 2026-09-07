@@ -335,7 +335,7 @@ export default function App() {
           } />
           <Route path="/odds" element={
             <PrivateRoute>
-              <SportGate section="Market" allow={["mlb","nfl","cfb"]}><OddsPage /></SportGate>
+              <SportGate section="Market" allow={["mlb","nba","nfl","cfb"]}><OddsPage /></SportGate>
             </PrivateRoute>
           } />
           <Route path="/clv" element={

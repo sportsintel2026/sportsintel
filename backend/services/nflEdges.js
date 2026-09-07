@@ -320,6 +320,15 @@ async function runNFLSlate({ season = null, weeks = 1, phase = null } = {}) {
     // Carry the book-by-book line-shopping grid through so the Odds page renders
     // NFL's per-book table (ML / total / spread) exactly like MLB.
     pred.oddsGrid = ev.oddsGrid || null;
+    pred.marketBooks = {
+      moneyline: ev.h2h || null,
+      spread: ev.spreads || null,
+      total: ev.totals || null,
+    };
+    pred.teamIdentity = {
+      away: awayT ? { id: awayT.id || null, abbr: awayT.abbr || null, name: awayT.name || ev.awayTeam } : null,
+      home: homeT ? { id: homeT.id || null, abbr: homeT.abbr || null, name: homeT.name || ev.homeTeam } : null,
+    };
     return pred;
   });
 

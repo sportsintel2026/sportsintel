@@ -78,6 +78,7 @@ function buildNbaEdgesPayload(predictions) {
       neutralSite: !!g.neutralSite,
       totals: { projected: tot.projectedTotal ?? null },
       dataQuality: g.dataQuality,
+      oddsGrid: g.oddsGrid || null,
     });
 
     // ---- moneyline: pick the favored side (larger model-vs-fair edge), show its lean ----
@@ -98,6 +99,9 @@ function buildNbaEdgesPayload(predictions) {
           teamAbbr: pickHome ? homeAbbr : awayAbbr,
           modelProb,
           odds: pickHome ? ml.book.home : ml.book.away,
+          oppOdds: pickHome ? ml.book.away : ml.book.home,
+          book: g.marketBooks?.moneyline || null,
+          opposingBook: g.marketBooks?.moneyline || null,
           edge: edgePts,
           conviction, convictionScore,
           reason: `Model gives ${pickHome ? homeAbbr : awayAbbr} a ${Math.round(pickHome ? ml.homeWinProb : ml.awayWinProb)}% chance vs the market's ${Math.round(fairProb)}%.`,
@@ -118,6 +122,9 @@ function buildNbaEdgesPayload(predictions) {
         line: tot.line,
         projected: tot.projectedTotal,
         odds: tot.book ? (over ? tot.book.over : tot.book.under) : null,
+        oppOdds: tot.book ? (over ? tot.book.under : tot.book.over) : null,
+        book: g.marketBooks?.total || null,
+        opposingBook: g.marketBooks?.total || null,
         modelProb: null, // NBA totals model is a points projection, not a calibrated prob
         edge: edgePts,
         conviction, convictionScore,
@@ -140,6 +147,9 @@ function buildNbaEdgesPayload(predictions) {
         teamAbbr: pickHome ? homeAbbr : awayAbbr,
         line: pickHome ? sp.line : -sp.line,
         odds: pickHome ? sp.book.homePrice : sp.book.awayPrice,
+        oppOdds: pickHome ? sp.book.awayPrice : sp.book.homePrice,
+        book: g.marketBooks?.spread || null,
+        opposingBook: g.marketBooks?.spread || null,
         edge: edgePts,
         conviction, convictionScore,
         reason: `Model projects a ${Math.abs(sp.projectedMargin)}-pt ${sp.projectedMargin >= 0 ? "home" : "away"} margin vs the ${sp.line} spread.`,

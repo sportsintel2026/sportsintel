@@ -56,6 +56,55 @@ async function fetchNbaOdds() {
 
 const norm = (s) => (s || '').toLowerCase().trim();
 
+function extractOddsGrid(event) {
+  const home = norm(event.home_team);
+  const away = norm(event.away_team);
+  const books = [];
+  for (const bookmaker of event.bookmakers || []) {
+    const row = { book: bookmaker.title, awayML: null, homeML: null, awaySpread: null, awaySpreadPrice: null, homeSpread: null, homeSpreadPrice: null, totalLine: null, over: null, under: null };
+    for (const market of bookmaker.markets || []) {
+      if (market.key === 'h2h') {
+        for (const outcome of market.outcomes || []) {
+          if (norm(outcome.name) === away) row.awayML = outcome.price;
+          if (norm(outcome.name) === home) row.homeML = outcome.price;
+        }
+      } else if (market.key === 'spreads') {
+        for (const outcome of market.outcomes || []) {
+          if (norm(outcome.name) === away) { row.awaySpread = outcome.point; row.awaySpreadPrice = outcome.price; }
+          if (norm(outcome.name) === home) { row.homeSpread = outcome.point; row.homeSpreadPrice = outcome.price; }
+        }
+      } else if (market.key === 'totals') {
+        for (const outcome of market.outcomes || []) {
+          if (norm(outcome.name) === 'over') { row.totalLine = outcome.point; row.over = outcome.price; }
+          if (norm(outcome.name) === 'under') { row.totalLine = row.totalLine ?? outcome.point; row.under = outcome.price; }
+        }
+      }
+    }
+    if (Object.entries(row).some(([key, value]) => key !== 'book' && value != null)) books.push(row);
+  }
+  const mode = (values) => {
+    const counts = new Map();
+    for (const value of values.filter((value) => value != null)) counts.set(value, (counts.get(value) || 0) + 1);
+    return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+  };
+  const consensusTotalLine = mode(books.map((row) => row.totalLine));
+  const consensusAwaySpread = mode(books.map((row) => row.awaySpread));
+  const best = { awayML: null, homeML: null, over: null, under: null, awaySpread: null, homeSpread: null };
+  const take = (slot, price, book, extra = {}) => {
+    if (price == null) return;
+    if (best[slot] == null || price > best[slot].price) best[slot] = { price, book, ...extra };
+  };
+  for (const row of books) {
+    take('awayML', row.awayML, row.book); take('homeML', row.homeML, row.book);
+    if (row.totalLine === consensusTotalLine) { take('over', row.over, row.book); take('under', row.under, row.book); }
+    if (row.awaySpread === consensusAwaySpread) {
+      take('awaySpread', row.awaySpreadPrice, row.book, { line: row.awaySpread });
+      take('homeSpread', row.homeSpreadPrice, row.book, { line: row.homeSpread });
+    }
+  }
+  return { books, best, consensusTotalLine, consensusSpreadMag: consensusAwaySpread == null ? null : Math.abs(consensusAwaySpread) };
+}
+
 function extractLines(event) {
   const bk = (event.bookmakers || [])[0]; // v0.1: first book; consensus is v0.2
   if (!bk) return null;
@@ -63,6 +112,7 @@ function extractLines(event) {
   const away = norm(event.away_team);
   const out = {
     bookmaker: bk.title,
+    oddsGrid: extractOddsGrid(event),
     home: { ml: null, spread: null },
     away: { ml: null, spread: null },
     total: null,
@@ -179,17 +229,18 @@ async function generateNbaPredictions(opts = {}) {
         computeInjuryHaircut(g.home && g.home.injuries, g.home && g.home.id),
       ]);
     } catch (_) { /* leave both at 0 — safe */ }
-    predictions.push(
-      predictGame(g, lines, {
+    const prediction = predictGame(g, lines, {
         playoff: PLAYOFF_MODE,
         awayInjuryHaircut: awayInj.haircut,
         homeInjuryHaircut: homeInj.haircut,
         awayInjuryDetails: awayInj.details,
         homeInjuryDetails: homeInj.details,
-      })
-    );
+      });
+    prediction.oddsGrid = lines.oddsGrid || null;
+    prediction.marketBooks = { moneyline: lines.bookmaker, spread: lines.bookmaker, total: lines.bookmaker };
+    predictions.push(prediction);
   }
   return predictions;
 }
 
-module.exports = { generateNbaPredictions, fetchNbaOdds };
+module.exports = { generateNbaPredictions, fetchNbaOdds, _internal: { extractLines, extractOddsGrid, matchOdds } };

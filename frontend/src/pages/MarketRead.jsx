@@ -8,7 +8,7 @@
 // swipeable mobile carousel under Market Movers lives in Home.jsx.
 
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { edgesApi, subscriptionApi } from "../lib/api";
 import { useSport } from "../hooks/useSport";
 import { buildFootballIntel } from "../lib/footballIntel";
@@ -98,6 +98,7 @@ function marketReadFromFootball(resp) {
     modelById[gm.eventId] = {
       projWinnerSide: ml.modelMargin != null ? (ml.modelMargin > 0 ? "home" : "away") : null,
       homeTeam: gm.homeTeam, awayTeam: gm.awayTeam,
+      oddsBest: gm.oddsGrid?.best || null,
     };
   }
   const games = [];
@@ -116,7 +117,8 @@ function marketReadFromFootball(resp) {
       out.win = {
         tier: w.tier, favTeam: w.favTeam, favProb: w.favProb, centSpread: w.centSpread, nBooks: w.nBooks,
         bestPrice: w.favSide === "home" ? (bp.ml && bp.ml.home) : (bp.ml && bp.ml.away),
-        bestBook: null, move: null, model,
+        bestBook: w.favSide === "home" ? md.oddsBest?.homeML?.book : md.oddsBest?.awayML?.book,
+        move: null, model,
       };
     }
     if (mr.total) {
@@ -124,12 +126,54 @@ function marketReadFromFootball(resp) {
       out.total = {
         tier: t.tier, favSide: t.favSide, line: t.line, favProb: t.favProb, centSpread: t.centSpread, lineSplit: t.lineSplit,
         bestOver: bp.total && bp.total.over, bestUnder: bp.total && bp.total.under,
-        bestOverBook: null, bestUnderBook: null, model: null,
+        bestOverBook: md.oddsBest?.over?.book || null, bestUnderBook: md.oddsBest?.under?.book || null, model: null,
       };
     }
     if (out.win || out.total) games.push(out);
   }
   return { games };
+}
+
+function number(value, digits = 2) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed.toFixed(digits) : null;
+}
+
+function pitcherLine(pitcher) {
+  if (!pitcher?.name) return null;
+  const stats = [pitcher.hand ? `${pitcher.hand}HP` : null, number(pitcher.era) ? `${number(pitcher.era)} ERA` : null, number(pitcher.whip) ? `${number(pitcher.whip)} WHIP` : null].filter(Boolean);
+  return `${pitcher.name}${stats.length ? ` · ${stats.join(" · ")}` : ""}`;
+}
+
+function weatherLine(weather) {
+  if (!weather) return null;
+  if (weather.indoor) return "Indoor venue";
+  return weather.summary || [weather.tempF != null ? `${Math.round(Number(weather.tempF))}°F` : null, weather.windMph != null ? `${Math.round(Number(weather.windMph))} mph wind` : null, weather.isRaining ? "Rain risk" : null].filter(Boolean).join(" · ") || null;
+}
+
+function MlbIntel({ games = [] }) {
+  const cards = games.map((game) => {
+    const intel = game.intel || {};
+    const awayPitcher = pitcherLine(intel.pitchers?.away);
+    const homePitcher = pitcherLine(intel.pitchers?.home);
+    const awayPen = intel.bullpen?.away;
+    const homePen = intel.bullpen?.home;
+    const facts = [
+      (awayPitcher || homePitcher) && { label: "STARTERS", value: [awayPitcher, homePitcher].filter(Boolean).join(" / ") },
+      (intel.lineups?.away || intel.lineups?.home) && { label: "LINEUPS", value: [intel.lineups?.away?.source ? `${game.awayAbbr} ${intel.lineups.away.source}` : null, intel.lineups?.home?.source ? `${game.homeAbbr} ${intel.lineups.home.source}` : null].filter(Boolean).join(" · ") },
+      (awayPen || homePen) && { label: "BULLPENS", value: [awayPen?.era != null ? `${game.awayAbbr} ${number(awayPen.era)} ERA` : null, homePen?.era != null ? `${game.homeAbbr} ${number(homePen.era)} ERA` : null].filter(Boolean).join(" · ") },
+      weatherLine(intel.weather) && { label: "WEATHER", value: weatherLine(intel.weather) },
+      (intel.venue || intel.parkRunFactor != null) && { label: "PARK", value: [intel.venue, intel.parkRunFactor != null ? `${Number(intel.parkRunFactor) >= 1 ? "+" : ""}${Math.round((Number(intel.parkRunFactor) - 1) * 100)}% run environment` : null].filter(Boolean).join(" · ") },
+    ].filter(Boolean);
+    return { game, facts };
+  }).filter((card) => card.facts.length);
+  if (!cards.length) return null;
+  return <section className="approved-verified"><header><span>GAME INTEL · WHAT CHANGES THE BET</span></header><div>{cards.slice(0, 8).map(({ game, facts }) => <article key={game.gameId}><h2>{game.awayAbbr} <i>@</i> {game.homeAbbr}</h2>{facts.map((fact) => <p key={fact.label}><b>{fact.label}</b><span>{fact.value}</span></p>)}</article>)}</div></section>;
+}
+
+function VerifiedGroups({ groups = [] }) {
+  if (!groups.length) return null;
+  return <section className="approved-verified"><header><span>GAME INTEL · MODEL VS MARKET</span></header><div>{groups.slice(0, 10).map((group, index) => <article key={`${group.gl || "game"}-${index}`}><h2>{group.gl || "Verified game context"}</h2>{(group.items || []).map((item, itemIndex) => <p key={`${item.tag || "intel"}-${itemIndex}`}><b>{item.tag || "INTEL"}</b><span>{[item.tx, item.rd].filter(Boolean).join(" · ")}</span></p>)}</article>)}</div></section>;
 }
 
 function Card({ g, market }) {
@@ -177,6 +221,7 @@ export default function MarketReadPage() {
   const [plan, setPlan] = useState({ tier: "free", isAdmin: false });
   const hasFull = plan.isAdmin === true || plan.tier === "pro" || plan.tier === "elite";
   const navigate = useNavigate();
+  const location = useLocation();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [market, setMarket] = useState("win");
@@ -215,6 +260,7 @@ export default function MarketReadPage() {
   const has = (g) => market === "win" ? g.win : market === "cover" ? g.cover : g.total;
   const shown = games.filter(has);
   const footballIntel = buildFootballIntel(scopedFootballFeed, sport);
+  const carriedIntel = location.state?.sport === sport && Array.isArray(location.state?.intelGroups) ? location.state.intelGroups : [];
 
   return (
     <TerminalShell active="/market-read" plan={plan} navigate={navigate}>
@@ -228,6 +274,8 @@ export default function MarketReadPage() {
                 <FootballIntel sport={sport} rows={footballIntel} />
                 <section className="approved-pulse"><header><span>MARKET PULSE · WHAT CHANGED &amp; WHY</span></header>{(scopedFootballFeed?.marketMovers || []).length ? scopedFootballFeed.marketMovers.slice(0, 6).map((row, index) => <article key={index}><div><b>{row.matchup}</b><small>{String(row.market || "market").toUpperCase()} · {String(row.side || "").toUpperCase()}</small></div><strong>{row.open ?? "—"} → {row.now ?? "—"}</strong></article>) : <p>No verified line movement is available for this slate yet.</p>}</section>
               </>
+            : sport === "mlb" && (shown.length || carriedIntel.length) ? <>{shown.length ? <><section className="approved-gamegrid">{shown.map((g) => <Card key={g.gameId} g={g} market={market} />)}</section><div className="approved-tabs">{[["win","MONEYLINE"],["cover","RUN LINE"],["total","TOTAL"]].map(([key,label]) => <button key={key} className={market === key ? "on" : ""} onClick={() => setMarket(key)}>{label}</button>)}</div></> : null}{carriedIntel.length ? <VerifiedGroups groups={carriedIntel} /> : null}<MlbIntel games={games} /></>
+            : sport === "nba" && carriedIntel.length ? <VerifiedGroups groups={carriedIntel} />
             : shown.length ? <><section className="approved-gamegrid">{shown.map((g) => <Card key={g.gameId} g={g} market={market} />)}</section><div className="approved-tabs">{[["win","MONEYLINE"],["cover","RUN LINE"],["total","TOTAL"]].map(([key,label]) => <button key={key} className={market === key ? "on" : ""} onClick={() => setMarket(key)}>{label}</button>)}</div></>
               : <div className="approved-intel__empty">No verified market read is available for this slate yet.</div>}
         </div>
@@ -240,8 +288,10 @@ const APPROVED_CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&family=IBM+Plex+Mono:wght@500;600;700&family=Manrope:wght@500;600;700;800&display=swap');
 .approved-intel{min-height:100vh;background:#090a0c;color:#eeeae2;font-family:Manrope,Inter,sans-serif;padding:0 0 100px;overflow-x:hidden}.approved-intel *{box-sizing:border-box}.approved-intel__wrap{width:min(100% - 28px,920px);margin:0 auto;padding:20px 0}.approved-intel__head{padding-bottom:15px;border-bottom:1px solid #252620}.approved-intel__head>span,.approved-pulse header span{font:700 8px "IBM Plex Mono",monospace;letter-spacing:1.35px;color:#d2ad68}.approved-intel__head h1{margin:7px 0 4px;font:600 clamp(28px,5vw,40px)/1 Georgia,serif;letter-spacing:-.7px}.approved-intel__head p{max-width:620px;margin:0;color:#80817a;font-size:10.5px;line-height:1.55}.approved-gamegrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:14px}.approved-gamegrid .mrcard{border-color:#2a2b25;border-radius:10px;background:#101114}.approved-tabs{display:flex;gap:6px;margin-top:13px}.approved-tabs button{appearance:none;border:1px solid #2b2c26;border-radius:999px;background:#101114;color:#7d7e77;padding:7px 10px;font:700 8px "IBM Plex Mono",monospace;cursor:pointer}.approved-tabs button.on{border-color:#d2ad68;background:#d2ad68;color:#17140d}.approved-pulse{margin-top:14px;border:1px solid #2b2c26;border-radius:10px;background:#101114;padding:14px}.approved-pulse header{padding-bottom:10px;border-bottom:1px solid #252620}.approved-pulse article{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 0;border-bottom:1px solid #22231f}.approved-pulse article b{display:block;font-size:11px;overflow-wrap:anywhere}.approved-pulse article small{display:block;margin-top:3px;font:600 7px "IBM Plex Mono",monospace;color:#6f7069}.approved-pulse article strong{flex:0 0 auto;font:700 10px "IBM Plex Mono",monospace;color:#45d99d}.approved-pulse>p,.approved-intel__empty{padding:28px 12px;text-align:center;color:#74756e;font:600 9px/1.5 "IBM Plex Mono",monospace}.approved-intel__lock{margin-top:14px;border:1px solid rgba(210,173,104,.35);border-radius:10px;background:#101114;padding:28px 18px;text-align:center}.approved-intel__lock>span{font:700 8px "IBM Plex Mono",monospace;color:#d2ad68}.approved-intel__lock h2{margin:7px 0;font:600 23px Georgia,serif}.approved-intel__lock p{color:#7f8079;font-size:10.5px}.approved-intel__lock button{border:0;border-radius:8px;background:#d2ad68;color:#17140d;padding:10px 14px;font-weight:800;cursor:pointer}
 .approved-pulse>p,.approved-intel__empty{padding:17px 10px;font-size:8.5px}.approved-intel__lock{padding:24px 18px}.approved-intel__lock h2{font-size:22px}
+.approved-verified{margin-top:14px;border:1px solid #2b2c26;border-radius:10px;background:#101114;padding:14px}.approved-verified>header{padding-bottom:10px;border-bottom:1px solid #252620}.approved-verified>header span{font:700 8px "IBM Plex Mono",monospace;letter-spacing:1.35px;color:#d2ad68}.approved-verified>div{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:10px}.approved-verified article{min-width:0;border:1px solid #292b27;border-radius:8px;background:#0c0e0f;padding:11px}.approved-verified h2{margin:0 0 8px;font:800 15px "Barlow Condensed",sans-serif}.approved-verified h2 i{font-style:normal;color:#6d6e68}.approved-verified p{display:grid;grid-template-columns:60px minmax(0,1fr);gap:8px;margin:0;padding:7px 0;border-top:1px solid #22231f}.approved-verified p b{color:#d2ad68;font:700 6.5px "IBM Plex Mono",monospace}.approved-verified p span{color:#9a9b94;font:600 8px/1.45 "IBM Plex Mono",monospace;overflow-wrap:anywhere}
 @media(max-width:680px){.approved-gamegrid{grid-template-columns:1fr}}
-@media(max-width:360px){.approved-intel__wrap{width:calc(100% - 20px)}.approved-intel__head h1{font-size:26px}}
+@media(max-width:680px){.approved-verified>div{grid-template-columns:1fr}}
+@media(max-width:360px){.approved-intel__wrap{width:calc(100% - 20px)}.approved-intel__head h1{font-size:26px}.approved-verified p{grid-template-columns:52px minmax(0,1fr)}}
 `;
 
 const CSS = `

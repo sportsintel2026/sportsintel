@@ -99,6 +99,7 @@ const SPORTS={
 const edgePct=(e,sport)=> sport==="mlb" ? (e.edge??0)*100 : (e.edge??0);
 function fmtEdgeFor(e,sport){ const v=edgePct(e,sport); const s=v>=0?"+":""; if(sport==="nba"&&(isTotal(e)||e.line!=null)) return `${s}${v.toFixed(1)}`; return `${s}${v.toFixed(1)}%`; }
 function teams(m){ if(!m)return ["",""]; const p=String(m).split(/@|vs|·/i).map(s=>s.trim()).filter(Boolean); return [p[0]||"",p[1]||""]; }
+const feedGameId=(game)=>game?.id??game?.eventId??game?.gameId??null;
 // WZ-NFL-ABBR-2026-07-17 :: real NFL abbreviations, keyed by FULL team name (unique across every
 // sport, so this is safe to consult unconditionally). Fixes shortTeam's naive first-3-letters slice,
 // which collapsed New Orleans / New England / NY Giants+Jets all to "NEW", both LA teams to "LOS",
@@ -283,7 +284,7 @@ export default function HomePage(){
   const ratedGameCount=games.filter((game)=>game?.dataQuality==="rated").length;
   const histByKey={}; (oddsHist||[]).forEach(g=>{ histByKey[normName(g.away_team)+"|"+normName(g.home_team)]=g; });
   const findHist=(gm)=> gm?(histByKey[normName(gm.away)+"|"+normName(gm.home)]||null):null;
-  const seriesFor=(edge)=>{ const gm=games.find(x=>x.id===edge.gameId)||(preview?.games||[]).find(x=>x.id===edge.gameId); const h=findHist(gm); if(!h)return null; return (isTotal(edge)?h.total[edge.side]:h.ml[edge.side])||null; };
+  const seriesFor=(edge)=>{ const gm=games.find(x=>String(feedGameId(x))===String(edge.gameId))||(preview?.games||[]).find(x=>String(feedGameId(x))===String(edge.gameId)); const h=findHist(gm); if(!h)return null; return (isTotal(edge)?h.total[edge.side]:h.ml[edge.side])||null; };
   // Movement guardrail: per pick, compute open→now cent move on its OWN side and
   // nudge conviction one tier. _delta>0 = drifted longer (money OFF our side →
   // market fading the pick → downgrade ⚠). _delta<0 = shortened (money IN on our
@@ -359,7 +360,8 @@ export default function HomePage(){
   const topPropCards=(()=>{ const byP=(arr)=>[...(arr||[])].sort((a,b)=>(b.prob||0)-(a.prob||0)); const h=byP(propsByType.hits),k=byP(propsByType.ks),r=byP(propsByType.hr); const seen=new Set(),out=[]; const add=(p)=>{ if(p&&!seen.has(p.k)){ seen.add(p.k); out.push(p); } }; [h[0],k[0],r[0],h[1],k[1],r[1]].forEach(add); if(out.length<6) byP([...h,...k,...r]).forEach(p=>{ if(out.length<6) add(p); }); return out.slice(0,6).map(_tpMk); })();
   const parks=games.filter(g=>g.parkRunFactor!=null).slice(0,8);
   const upcoming=games.filter(g=>g.status!=="final").slice(0,6);
-  const abbrById={}; games.forEach(g=>{ abbrById[g.id]={a:g.awayAbbr||shortTeam(g.away||""),h:g.homeAbbr||shortTeam(g.home||"")}; });
+  const lookupGames=[...games,...(preview?.games||[])];
+  const abbrById={}; lookupGames.forEach(g=>{ const id=feedGameId(g); if(id!=null) abbrById[id]={a:g.awayAbbr||shortTeam(g.away||g.awayTeam||""),h:g.homeAbbr||shortTeam(g.home||g.homeTeam||"")}; });
   // WZ-WIZEPLAYS-LIST-2026-07-08 :: today's curated plays (rows are date-desc); empty -> empty state
   const wpTodayStr=new Date().toLocaleDateString("en-CA");
   // WZ-SLATE-STATE-2026-07-08 :: only show plays still pending -- finished/graded ones clear out
@@ -395,7 +397,7 @@ export default function HomePage(){
       };
     }
   }
-  const gameById={}; games.forEach(g=>{ if(g&&g.id!=null) gameById[g.id]=g; });
+  const gameById={}; lookupGames.forEach(g=>{ const id=feedGameId(g); if(id!=null) gameById[id]=g; });
   const kpiList=boardEdges||[];
   const kpiCount=kpiList.length;
   const kpiAvg=kpiCount?kpiList.reduce((s,x)=>s+(x.edge||0),0)/kpiCount:0;
@@ -460,7 +462,8 @@ export default function HomePage(){
   const pairOf=(x)=>{const ab=abbrById[x.gameId];const t=teams(x.matchup);const a=ab?ab.a:shortTeam(t[0]||"");const h=ab?ab.h:shortTeam(t[1]||"");return [[a,colFor(a,sport)],[h,colFor(h,sport)]];};
   const toBoard=(x,i)=>{const [a,h]=pairOf(x);const gm=gameById[x.gameId];const mr=mrByGame[x.gameId];
     const model=x.modelProb!=null?+(x.modelProb*100).toFixed(1):null;
-    const mkt=+(((impliedFromAmerican(x.odds)||0)*100)).toFixed(1);
+    const implied=impliedFromAmerican(x.odds);
+    const mkt=implied==null?null:+(implied*100).toFixed(1);
     const flags=[];
     // Top flag describes THE PICK, not the books' who-wins lean — surfacing the win
     // read here made value-dog edges (e.g. NYM ML at +160 while books favor PHI) read
@@ -477,7 +480,7 @@ export default function HomePage(){
       if(mr.total&&(mr.total.lean||mr.total.side||mr.total.favTeam))read.total=[mr.total.tier,String(mr.total.lean||mr.total.side||mr.total.favTeam).toUpperCase()+(mr.total.line!=null?" "+mr.total.line:""),formatOdds(mr.total.odds),!!mr.total.agrees];}
     const park=[];if(gm&&gm.parkRunFactor!=null)park.push((gm.parkRunFactor>1?"+":"")+Math.round((gm.parkRunFactor-1)*100)+"%");
     const wx=gm&&gm.weather&&gm.weather.tempF!=null?(Math.round(gm.weather.tempF)+"\u00b0F"+(gm.weather.windMph?" \u00b7 "+gm.weather.windMph+" mph":"")):null;
-    return {p:edgeLabel(x),mk:mkOf(x),cat:catOf(x),tier:(mkOf(x)==="ML"&&model!=null)?(model>=65?"LOCK":model>=58?"STRONG":model>=55?"LEAN":null):null,value:(mkOf(x)==="ML"&&(x.edge??0)>0),conv:convOf(x),edge:edgeNum(x),odds:formatOdds(x.odds),book:x.book||x.sportsbook||x.bestBook||null,mv:mvOf(x),delta:x._delta,clv:null,a,h,g:x.matchup,starts:gm&&gm.time?fmtTime(gm.time):null,model,mkt,flags:flags.length?flags:null,read,why:x.reason,park:park.length?park:null,wx,series:lineSeries[x.gameId+x.side]||null,gameId:x.gameId,seed:i};
+    return {p:edgeLabel(x),mk:mkOf(x),cat:catOf(x),tier:(mkOf(x)==="ML"&&model!=null)?(model>=65?"LOCK":model>=58?"STRONG":model>=55?"LEAN":null):null,value:(mkOf(x)==="ML"&&(x.edge??0)>0),conv:convOf(x),edge:edgeNum(x),odds:formatOdds(x.odds),book:x.book||x.sportsbook||x.bestBook||null,mv:mvOf(x),delta:x._delta,clv:null,a,h,g:x.fullMatchup||x.matchup,starts:gm&&(gm.time||gm.commenceTime)?fmtTime(gm.time||gm.commenceTime):null,model,mkt,flags:flags.length?flags:null,read,why:x.reason,park:park.length?park:null,wx,series:lineSeries[x.gameId+x.side]||null,gameId:x.gameId,teamIdentity:x.teamIdentity||gm?.teamIdentity||null,seed:i};
   };
   const allAdj=[...mlAdj,...totAdj,...spAdj];
   const sortBoard=byWinProb;  // WZ-BOARD-WINFIRST-2026-07-06 :: All tab uses the same winner-first order (win/cover prob leads).
@@ -513,6 +516,7 @@ export default function HomePage(){
     ...pvSpAdj.filter(x=>(x.edge??0)>0),
   ].sort(byWinProb) : [];
   const previewItems = bestPerGame(previewSrc.map(toBoard));
+  const renderedIntelGroups=intelGroups.length?intelGroups:(sport==="nba"?boardItems.slice(0,4).map((item)=>({gl:item.g,items:[{tag:"MODEL VS MARKET",tx:item.p,rd:[item.model!=null?`Model ${item.model.toFixed(1)}%`:null,item.mkt!=null?`market ${item.mkt.toFixed(1)}%`:null,item.book?`${item.odds} at ${item.book}`:item.odds,item.why].filter(Boolean).join(" · ")}]})):[]);
   const previewLabel = pv&&pv.date ? fmtSlate(pv.date).toUpperCase() : "";
   const boardDate = fmtSlateFull(eventDate || e.date || todayISO());
   // WZ-HERORANK-2026-08-07 :: ONE RANKING. The hero is now literally the #1 row of the same
@@ -630,6 +634,8 @@ export default function HomePage(){
     wpToday={wpToday}
     wpRecord={wpRecord}
     footballIntel={footballIntel}
+    intelGroups={renderedIntelGroups}
+    modelPerformance={modelRec}
     movers={moverItems}
     navigate={navigate}
   />;

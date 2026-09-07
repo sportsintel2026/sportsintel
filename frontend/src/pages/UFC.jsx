@@ -65,6 +65,7 @@ const CSS = `
 .ufc-pbmid .lbl{font-family:'IBM Plex Mono',monospace;font-size:7.5px;font-weight:700;letter-spacing:1px;color:#5B646C;text-transform:uppercase}
 .ufc-pbmid .who{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:16px;color:#C9A86A;letter-spacing:.2px;line-height:1.05;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ufc-pbmid .who .od{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;color:#99A2AA;margin-left:5px}
+.ufc-book{margin-top:3px;color:#747b80;font:600 7px/1.2 'IBM Plex Mono',monospace;letter-spacing:.45px;text-transform:uppercase}
 .ufc-pbright{flex:0 0 auto;text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:3px}
 .ufc-vbadge{font-family:'IBM Plex Mono',monospace;font-size:8px;font-weight:700;letter-spacing:.4px;color:#3FCB91;border:1px solid rgba(63,203,145,.5);background:rgba(63,203,145,.12);border-radius:4px;padding:1px 5px}
 .ufc-edge{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:700;color:#3FCB91}
@@ -305,6 +306,7 @@ function Bout({ b, main }) {
           <div className="ufc-pbmid">
             <div className="lbl">Our Pick</div>
             <div className="who">{b.pick}{b.odds != null ? <span className="od">{fmtOdds(b.odds)}</span> : null}</div>
+            {b.oddsSource ? <div className="ufc-book">{b.oddsSource}</div> : null}
           </div>
           <div className="ufc-pbright">
             {resChip ? <span className={"ufc-res " + resChip[0]}>{resChip[1]}</span> : (

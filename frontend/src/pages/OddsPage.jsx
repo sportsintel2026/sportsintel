@@ -7,6 +7,7 @@ import { useSport } from "../hooks/useSport";
 import { oddsApi, edgesApi, subscriptionApi } from "../lib/api";
 import TerminalShell from "./TerminalShell";
 import EventDateSelector, { EVENT_DATE_CSS } from "../components/EventDateSelector";
+import TeamLogo, { TEAM_LOGO_CSS } from "../components/TeamLogo";
 import { chooseEventDate, eventDateGroups, scopeEdgeFeed } from "../lib/eventSlate";
 // WZ-ODDS-DESKTOP-2026-07-11 :: Market Price gains a desktop layout inside the shared Vault shell; mobile untouched.
 
@@ -55,11 +56,6 @@ const fmtOdds = (a) => (a==null || isNaN(a)) ? "—" : (Math.round(Number(a))>0 
 const amCents = (o) => { if(o==null||isNaN(o)) return null; const n=Number(o); return n>=100?n-100:n<=-100?n+100:0; };
 const isTotalEdge = (e) => e.side==="over" || e.side==="under";
 
-function Logo({ ab, col }) {
-  const c = col || teamCol(ab);
-  return <span className="lg" style={{ background:`radial-gradient(circle at 50% 30%, ${c}, #0c1018 85%)`, boxShadow:`inset 0 0 0 1.5px ${c}` }}>{ab}</span>;
-}
-
 export default function MarketPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -86,17 +82,17 @@ export default function MarketPage() {
     let c = false;
     const load = async () => {
       try {
-        if (sport === "nfl" || sport === "cfb") {
+        if (sport === "nfl" || sport === "cfb" || sport === "nba") {
           // Football market data rides inside the edges feed (odds, edges, marketByGame,
           // marketMovers all in one). No separate odds/history/market-read calls.
-          const feed = await (sport === "cfb" ? edgesApi.getCFB() : edgesApi.getNFL()).catch(()=>null);
+          const feed = await (sport === "cfb" ? edgesApi.getCFB() : sport === "nfl" ? edgesApi.getNFL() : edgesApi.getNBA()).catch(()=>null);
           if (c) return;
           setOdds(null); setEdges(feed);
           // Build the Movers + Consensus view shapes from the feed.
           setOddsHist([]);
           // Consensus rows from marketByGame.
           const cons = [];
-          if (feed && feed.marketByGame) {
+          if ((sport === "nfl" || sport === "cfb") && feed && feed.marketByGame) {
             for (const id in feed.marketByGame) {
               const mb = feed.marketByGame[id]; const mr = mb && mb.marketRead; if (!mr) continue;
               cons.push({
@@ -158,6 +154,7 @@ export default function MarketPage() {
   const moverMatch = (x) => { if(x.matchup) return x.matchup; const g=games.find(gm=>gm.id===x.gameId); return g ? `${g.awayAbbr||shortTeam(g.away)} @ ${g.homeAbbr||shortTeam(g.home)}` : ""; };
 
   const isFb = sport === "nfl" || sport === "cfb";
+  const isGridFeed = isFb || sport === "nba";
   const scopedIds = new Set(games.map((game) => String(game.id ?? game.eventId ?? game.gameId)));
   const consensus = isFb ? (marketRead || []).filter((row) => scopedIds.has(String(row.gameId))) : (marketRead || []);
 
@@ -166,14 +163,16 @@ export default function MarketPage() {
   // the same card/sheet contract the MLB odds view uses, with football colors + abbrs
   // and a spread block (isFball flag turns on the ATS columns in the grid sheet).
   // CFB has no per-team color/abbr map (146 teams) so it uses shortTeam + a neutral chip.
-  const fbOddsGames = isFb
+  const gridOddsGames = isGridFeed
     ? (games || [])
         .filter(g => g.oddsGrid && Array.isArray(g.oddsGrid.books) && g.oddsGrid.books.length)
         .map(g => {
-          const aAb = sport === "cfb" ? shortTeam(g.awayTeam) : abbrNFL(g.awayTeam);
-          const hAb = sport === "cfb" ? shortTeam(g.homeTeam) : abbrNFL(g.homeTeam);
+          const awayName = g.awayTeam || g.away;
+          const homeName = g.homeTeam || g.home;
+          const aAb = sport === "cfb" ? shortTeam(awayName) : sport === "nfl" ? abbrNFL(awayName) : abbrOf(awayName);
+          const hAb = sport === "cfb" ? shortTeam(homeName) : sport === "nfl" ? abbrNFL(homeName) : abbrOf(homeName);
           return {
-            away: g.awayTeam, home: g.homeTeam,
+            away: awayName, home: homeName,
             awayAbbr: aAb, homeAbbr: hAb,
             awayCol: sport === "cfb" ? "#3a4a57" : nflCol(aAb),
             homeCol: sport === "cfb" ? "#3a4a57" : nflCol(hAb),
@@ -182,10 +181,12 @@ export default function MarketPage() {
             consensusSpreadMag: g.oddsGrid.consensusSpreadMag,
             books: g.oddsGrid.books,
             isFball: true,
+            sport,
+            teamIdentity: g.teamIdentity || null,
           };
         })
     : [];
-  const oddsList = isFb ? fbOddsGames : oddsGames;
+  const oddsList = isGridFeed ? gridOddsGames : oddsGames;
 
   const VIEWS = [["odds","Odds"],["movers","Movers"],["consensus","Consensus"]];
 
@@ -205,7 +206,7 @@ export default function MarketPage() {
 
   return (
     <TerminalShell active="/odds" plan={plan} navigate={navigate}>
-    <div className="app"><style>{CSS+EVENT_DATE_CSS}</style>
+    <div className="app"><style>{CSS+EVENT_DATE_CSS+TEAM_LOGO_CSS}</style>
       <div className="hd">
         <div className="hrow">
           <div className="logo">Wize<span className="w">Picks</span></div>
@@ -215,7 +216,7 @@ export default function MarketPage() {
         </div>
         <div className="sports">
           {[["MLB","mlb"],["NBA","nba"],["NHL","nhl"],["NFL","nfl"],["CFB","cfb"]].map(([lb,key])=>(
-            <b key={key} className={key===sport?"on":""} onClick={()=>{ if(key==="mlb"||key==="nfl"||key==="cfb"){ if(key!==sport){setSport(key);setLoading(true);setView(key==="cfb"?"odds":"movers");} } else if(key==="nba")navigate("/nba"); else navigate(`/${key}-games`); }}><span className="dot"/>{lb}</b>
+            <b key={key} className={key===sport?"on":""} onClick={()=>{ if(key==="mlb"||key==="nba"||key==="nfl"||key==="cfb"){ if(key!==sport){setSport(key);setLoading(true);setView((key==="cfb"||key==="nba")?"odds":"movers");} } else navigate(`/${key}-games`); }}><span className="dot"/>{lb}</b>
           ))}
         </div>
       </div>
@@ -236,6 +237,7 @@ export default function MarketPage() {
         )}
         {isFb && <div className="subnav">{VIEWS.map(v=><b key={v[0]} className={v[0]===view?"on":""} onClick={()=>setView(v[0])}>{v[1]}</b>)}</div>}
         {isFb && <EventDateSelector groups={dateGroups} value={eventDate} onChange={setEventDate} label={`${sport.toUpperCase()} event date`} />}
+        {sport==="nba" && <EventDateSelector groups={dateGroups} value={eventDate} onChange={setEventDate} label="NBA event date" />}
         {loading ? <div className="mvlist">{[0,1,2,3,4].map(i=>(
           <div key={i} className="skrow">
             <div className="sk skc"/>
@@ -247,7 +249,7 @@ export default function MarketPage() {
           </div>))}</div> : <>
           {view==="odds" && (oddsList.length ? <>
             <div className="cap">Best available price across all books for each game. Tap any game for the full book-by-book grid{isFb?" — moneyline, spread and total":""}.</div>
-            <div className="oddsgrp">{/* ODDSGRP-LEDGER-SURFACE-2026-06-27 */}{oddsList.map((g,i)=><OddsCard key={i} g={g} onOpen={()=>setSel(g)}/>)}</div>
+            <div className="oddsgrp">{/* ODDSGRP-LEDGER-SURFACE-2026-06-27 */}{oddsList.map((g,i)=><OddsCard key={i} g={g} sport={sport} onOpen={()=>setSel(g)}/>)}</div>
           </> : <div className="estate"><div className="et">{sport==="cfb"?"No CFB lines posted yet":sport==="nfl"?"No NFL lines posted yet":"No games posted"}</div><div className="es">Lines appear as books open.</div></div>)}
 
           {view==="movers" && (movers.length ? <>
@@ -257,7 +259,7 @@ export default function MarketPage() {
 
           {view==="consensus" && (consensus.length ? <>
             <div className="cap">What the books collectively lean — a read, not a guarantee. The dot shows whether our model agrees with the market.</div>
-            {consensus.map((g,i)=><ConsensusCard key={i} g={g} games={games}/>)}
+            {consensus.map((g,i)=><ConsensusCard key={i} g={g} games={games} sport={sport}/>)}
           </> : <div className="estate"><div className="et">No consensus yet</div><div className="es">Cross-book reads appear once lines are live.</div></div>)}
         </>}
       </div>
@@ -277,7 +279,7 @@ export default function MarketPage() {
   );
 }
 
-function OddsCard({ g, onOpen }) {
+function OddsCard({ g, sport, onOpen }) {
   // ODDSCARD-C2-LEDGER-2026-06-27 :: box-free ledger, centered gold-tucked names,
   // 4-segment best-price strip (away ML | home ML | OVER | UNDER). Logos removed;
   // full team names (g.away/g.home) read off the centered title order.
@@ -288,7 +290,7 @@ function OddsCard({ g, onOpen }) {
   const ut = cl!=null ? "U "+cl : "Under";
   return (
     <div className="oc" onClick={onOpen}>
-      <div className="mtt">{g.away} <span className="at">@</span> {g.home}</div>
+      <div className="mtt"><TeamLogo sport={sport} team={g.away} abbr={aAb} logoId={g.teamIdentity?.away?.id} /><span>{g.away} <i>@</i> {g.home}</span><TeamLogo sport={sport} team={g.home} abbr={hAb} logoId={g.teamIdentity?.home?.id} /></div>
       <div className="gbk">{nBooks} books</div>
       <div className="strip">
         <div className="seg"><div className="slab">{aAb}</div><div className="sval">{fmtOdds(best.awayML?.price)}</div><div className="sbook">{best.awayML?.book || "\u2014"}</div></div>
@@ -361,8 +363,9 @@ function MoverRow({ rank, pick, match, open, now, cents }) {
   );
 }
 
-function ConsensusCard({ g, games }) {
+function ConsensusCard({ g, games, sport }) {
   const aAb = g.awayAbbr || abbrOf(g.away || g.awayTeam || ""), hAb = g.homeAbbr || abbrOf(g.home || g.homeTeam || "");
+  const sourceGame = (games || []).find((game) => String(game.id ?? game.eventId ?? game.gameId) === String(g.gameId));
   const legs = [];
   if (g.win) { const w=g.win; const agrees = w.model ? !!w.model.agrees : !!w.agrees;
     legs.push(["Win", w.favTeam||w.team||w.side||"—", `${fmtOdds(w.consensus??w.odds)}${w.tier?" · "+w.tier:""}`, agrees]); }
@@ -374,7 +377,7 @@ function ConsensusCard({ g, games }) {
   if (!legs.length) return null;
   return (
     <div className="cc">
-      <div className="och"><div className="lgs"><Logo ab={aAb}/><Logo ab={hAb}/></div><div className="mt">{aAb} @ {hAb}</div></div>
+      <div className="och"><div className="lgs"><TeamLogo sport={sport} team={sourceGame?.awayTeam || sourceGame?.away || aAb} abbr={aAb} logoId={sourceGame?.teamIdentity?.away?.id}/><TeamLogo sport={sport} team={sourceGame?.homeTeam || sourceGame?.home || hAb} abbr={hAb} logoId={sourceGame?.teamIdentity?.home?.id}/></div><div className="mt">{aAb} @ {hAb}</div></div>
       {legs.map((r,i)=>(
         <div className="crow" key={i}>
           <span className={"cd "+(r[3]?"ag":"df")}/>
@@ -419,10 +422,8 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .oddsgrp{background:var(--panel);border:1px solid var(--line);border-radius:14px;margin:9px 4px 0;overflow:hidden}
 .oc{padding:13px 11px;border-top:1px solid var(--line);cursor:pointer}
 .oc:first-child{border-top:none}
-.lg{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#1B2025;border:1px solid var(--line2);font-family:var(--disp);font-weight:800;font-size:8px;color:#fff;flex:0 0 auto}.lg img{width:20px;height:20px;object-fit:contain}
-.lgs{display:flex}.lgs .lg{margin-left:-5px}.lgs .lg:first-child{margin-left:0}
-.oc .mtt{text-align:center;line-height:1.12;letter-spacing:.2px;font-family:var(--disp);font-weight:600;font-size:14.5px;color:var(--gold);opacity:.82}
-.oc .mtt .at{color:var(--mut2);opacity:.9;margin:0 3px}
+.lgs{display:flex}.lgs .team-logo{width:25px;height:25px;margin-left:-4px}.lgs .team-logo:first-child{margin-left:0}
+.oc .mtt{display:grid;grid-template-columns:28px minmax(0,1fr) 28px;align-items:center;gap:8px;text-align:center;line-height:1.12;letter-spacing:.2px;font-family:var(--disp);font-weight:600;font-size:14.5px;color:var(--gold);opacity:.9}.oc .mtt .team-logo{width:28px;height:28px}.oc .mtt span{min-width:0;overflow-wrap:anywhere}.oc .mtt i{color:var(--mut2);font-style:normal;margin:0 3px}
 .oc .gbk{font-family:var(--mono);font-size:9px;color:var(--mut2);text-align:center;margin-top:3px}
 .oc .strip{display:flex;align-items:flex-end;margin-top:10px}
 .oc .seg{flex:1;min-width:0;text-align:center;padding:0 2px}

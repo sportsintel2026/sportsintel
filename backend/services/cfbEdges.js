@@ -385,6 +385,10 @@ async function runCFBSlate({ season = null, weeks = 1 } = {}) {
     });
     pred.marketRead = ev.marketRead || null;
     pred.oddsGrid = ev.oddsGrid || null;
+    pred.teamIdentity = {
+      away: awayT ? { id: awayT.id || null, abbr: awayT.abbr || null, name: awayT.name || ev.awayTeam } : null,
+      home: homeT ? { id: homeT.id || null, abbr: homeT.abbr || null, name: homeT.name || ev.homeTeam } : null,
+    };
     return pred;
   });
 
