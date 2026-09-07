@@ -16,10 +16,12 @@ const ML_METHOD = "normal-margin-cdf-v1";
 const SPREAD_METHOD = "cfb-discrete-margin-pmf-v1";
 const SPREAD_KEY_STRENGTH = 1;
 
-function assertTeam(team, side) {
+function assertTeam(team, side, useUpdater) {
   if (!team || team.modelVersion !== TEAM_MODEL_VERSION) throw new Error(`${side} team is not an approved v3 team output`);
-  const offense = sharedMath.finite(team.offenseRating);
-  const defense = sharedMath.finite(team.defenseRating);
+  const offense = sharedMath.finite(useUpdater
+    ? team.offenseRating : team.features?.preseasonOffenseRating);
+  const defense = sharedMath.finite(useUpdater
+    ? team.defenseRating : team.features?.preseasonDefenseRating);
   const uncertainty = sharedMath.finite(team.uncertainty?.sd);
   if (offense == null || defense == null || uncertainty == null || uncertainty <= 0) {
     throw new Error(`${side} team v3 offense/defense/uncertainty is unavailable`);
@@ -35,8 +37,9 @@ function buildCfbGameShadowPredictionV3({ game = {}, homeTeam, awayTeam, neutral
     throw new Error("shadow prediction must be captured strictly before kickoff");
   }
   if (!new Set(["neutral", "non-neutral"]).has(neutralSiteStatus)) throw new Error("trusted neutral-site status is required");
-  const home = assertTeam(homeTeam, "home");
-  const away = assertTeam(awayTeam, "away");
+  const targetSeasonOutcomesUsed = homeTeam?.updaterActive === true && awayTeam?.updaterActive === true;
+  const home = assertTeam(homeTeam, "home", targetSeasonOutcomesUsed);
+  const away = assertTeam(awayTeam, "away", targetSeasonOutcomesUsed);
   const hfa = neutralSiteStatus === "neutral" ? 0 : HOME_FIELD_POINTS;
   const projectedHomeMargin = home.offense - away.defense - away.offense + home.defense + hfa;
   const homeWinProbability = sharedMath.normalCDF(projectedHomeMargin / BASE_GAME_SIGMA);
@@ -81,14 +84,15 @@ function buildCfbGameShadowPredictionV3({ game = {}, homeTeam, awayTeam, neutral
     provenance: Object.freeze({
       updaterVersion: UPDATER_VERSION,
       updateAsOf: homeTeam.updateAsOf,
+      targetSeasonOutcomesUsed,
       homeGamesUsed: homeTeam.gamesUsed,
       awayGamesUsed: awayTeam.gamesUsed,
-      homeCurrentSeasonWeight: homeTeam.currentSeasonWeight,
-      awayCurrentSeasonWeight: awayTeam.currentSeasonWeight,
-      homeOffenseRating: homeTeam.offenseRating,
-      homeDefenseRating: homeTeam.defenseRating,
-      awayOffenseRating: awayTeam.offenseRating,
-      awayDefenseRating: awayTeam.defenseRating,
+      homeCurrentSeasonWeight: targetSeasonOutcomesUsed ? homeTeam.currentSeasonWeight : 0,
+      awayCurrentSeasonWeight: targetSeasonOutcomesUsed ? awayTeam.currentSeasonWeight : 0,
+      homeOffenseRating: sharedMath.round(home.offense),
+      homeDefenseRating: sharedMath.round(home.defense),
+      awayOffenseRating: sharedMath.round(away.offense),
+      awayDefenseRating: sharedMath.round(away.defense),
     }),
   });
 }

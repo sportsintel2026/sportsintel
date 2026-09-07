@@ -442,6 +442,7 @@ async function buildTeamRatings(season = 2025) {
   // 3) each FBS team's record → raw points-diff rating, in concurrency-capped batches.
   const recordUrl = (id) => `${CORE}/teams/${id}/record`;
   const raw = {};
+  const completedGamesByTeam = {};
   for (let i = 0; i < fbsIds.length; i += RATINGS_BATCH) {
     const batch = fbsIds.slice(i, i + RATINGS_BATCH);
     await Promise.all(batch.map(async (id) => {
@@ -455,6 +456,7 @@ async function buildTeamRatings(season = 2025) {
         const gp = recStat(stats, "gamesPlayed");
         const pf = recStat(stats, "pointsFor");
         const pa = recStat(stats, "pointsAgainst");
+        if (gp != null && Number.isInteger(gp) && gp >= 0) completedGamesByTeam[String(id)] = gp;
         if (gp == null || pf == null || pa == null || gp < MIN_GAMES_FOR_RATING) return;
         const meta = nameById[String(id)] || {};
         raw[id] = {
@@ -469,7 +471,10 @@ async function buildTeamRatings(season = 2025) {
 
   const ratedIds = Object.keys(raw);
   if (ratedIds.length === 0) {
-    const empty = { season, teams: {}, rated: 0, fbsListed: fbsIds.length, note: "No FBS team has enough games yet — model stays market-only." };
+    const empty = {
+      season, teams: {}, rated: 0, fbsListed: fbsIds.length, completedGamesByTeam,
+      note: "No FBS team has enough games yet — model stays market-only.",
+    };
     cacheSet(key, empty, RATINGS_TTL_MS);
     return empty;
   }
@@ -592,7 +597,7 @@ async function buildTeamRatings(season = 2025) {
     ...(sosApplied
       ? { movCap: CFB_MOV_CAP, srsIters: CFB_SRS_ITERS, fcsLevel: CFB_FCS_LEVEL, sosWeight: SOS_WEIGHT }
       : { sosSkippedReason }),
-    teams: teamsOut, sosApplied,
+    teams: teamsOut, completedGamesByTeam, sosApplied,
     offenseDefense: {
       source: "existing-completed-fbs-schedules",
       ratedTeams: odFit.ratedTeams,

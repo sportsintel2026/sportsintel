@@ -45,6 +45,8 @@ const TEAM_TABLE = "cfb_team_preseason_snapshots";
 const INPUT_TABLE = "cfb_game_input_snapshots";
 const OUTPUT_TABLE = "cfb_game_shadow_predictions";
 const MARKET_SOURCE = "the-odds-api-us-best-price";
+const PROTOCOL_WEEK_ZERO_UTC = Object.freeze({ 2026: Date.UTC(2026, 7, 27) });
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 const V1_LANE = Object.freeze({
   modelVersion: MODEL_VERSION,
   teamModelVersion: TEAM_MODEL_VERSION,
@@ -80,6 +82,14 @@ function stableValue(value) {
 
 function sha256(value) {
   return crypto.createHash("sha256").update(JSON.stringify(stableValue(value))).digest("hex");
+}
+
+function protocolWeekForKickoff(kickoffAt, season = TARGET_SEASON) {
+  const kickoffMs = Date.parse(kickoffAt);
+  const startMs = PROTOCOL_WEEK_ZERO_UTC[Number(season)];
+  if (!Number.isFinite(kickoffMs) || !Number.isFinite(startMs)) return null;
+  const week = Math.floor((kickoffMs - startMs) / WEEK_MS);
+  return week >= 0 && week <= 20 ? week : null;
 }
 
 function snapshotForChallenger(row) {
@@ -261,7 +271,6 @@ function buildCandidate({
       parallelPair: {
         v1ModelVersion: V1_LANE.modelVersion,
         v1InputHash: pairedV1InputHash,
-        samePredictionAt: capturedAt,
         sameTeamSnapshotIds: true,
         sameMarketContext: true,
       },
@@ -287,7 +296,8 @@ function buildCandidate({
     neutral_site_status: neutralSiteStatus,
     input_status: status,
     game_context: {
-      week: event.week ?? null,
+      week: event.week != null && Number.isInteger(Number(event.week))
+        ? Number(event.week) : protocolWeekForKickoff(kickoffAt, TARGET_SEASON),
       homeTeam: event.homeTeam,
       awayTeam: event.awayTeam,
       homeEspnTeamId: String(homeSnapshot.espn_team_id),
@@ -307,7 +317,7 @@ function buildCandidate({
       homeFeatureCompleteness: homeTeam.featureCompleteness,
       awayFeatureCompleteness: awayTeam.featureCompleteness,
       identityMethod: "durable-espn-id-plus-exact-canonical-name",
-      targetSeasonOutcomesUsed: false,
+      targetSeasonOutcomesUsed: prediction.provenance?.targetSeasonOutcomesUsed === true,
     },
     home_current_season_weight: prediction.provenance?.homeCurrentSeasonWeight ?? 0,
     away_current_season_weight: prediction.provenance?.awayCurrentSeasonWeight ?? 0,
@@ -603,6 +613,7 @@ module.exports = {
   _internal: {
     stableValue,
     sha256,
+    protocolWeekForKickoff,
     snapshotForChallenger,
     buildExactIdentityIndex,
     trustedNeutralStatus,

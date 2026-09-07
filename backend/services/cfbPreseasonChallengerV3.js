@@ -118,6 +118,8 @@ function buildCfbPreseasonChallengerV3({ v1Challenger, odContext } = {}) {
       gamesUsed: currentGames,
       updaterActive,
       features: Object.freeze({
+        preseasonOffenseRating: round(preseasonOffense),
+        preseasonDefenseRating: round(preseasonDefense),
         priorOffenseRating: round(priorOffense),
         priorDefenseRating: round(priorDefense),
         priorOdGames: finite(record.od?.priorOdGames),
