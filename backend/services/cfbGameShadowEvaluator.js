@@ -6,7 +6,6 @@
 // tick and CFB grading workflows.
 
 const crypto = require("crypto");
-const { teamKey } = require("./teamKey");
 const { _internal: closingMath } = require("./cfbClosing");
 
 const EVALUATION_VERSION = "cfb-game-shadow-eval-v1-2026";
@@ -50,12 +49,6 @@ function stableValue(value) {
 
 function sha256(value) {
   return crypto.createHash("sha256").update(JSON.stringify(stableValue(value))).digest("hex");
-}
-
-function sameTeamName(a, b) {
-  const ka = teamKey(a, "cfb");
-  const kb = teamKey(b, "cfb");
-  return !!ka && ka === kb;
 }
 
 function safeProbability(value) {
@@ -140,12 +133,14 @@ function buildClosingObservation(shadow, usEvent, pinnacleEvents, capturedAt, in
   if (!Number.isFinite(quoteMs) || !Number.isFinite(predictionMs) || !Number.isFinite(kickoffMs)
       || quoteMs < predictionMs || quoteMs >= kickoffMs) return null;
   if (String(usEvent.eventId) !== String(shadow.game_id)) return null;
-  if (!sameTeamName(usEvent.homeTeam, shadow.home_team_name)
-      || !sameTeamName(usEvent.awayTeam, shadow.away_team_name)) return null;
-  if (inputContext && (
-    String(inputContext.homeTeam || "") !== String(usEvent.homeTeam || "")
-    || String(inputContext.awayTeam || "") !== String(usEvent.awayTeam || "")
-  )) return null;
+  const eventKickoffMs = Date.parse(usEvent.commenceTime);
+  if (!Number.isFinite(eventKickoffMs)
+      || Math.abs(eventKickoffMs - kickoffMs) > SCOREBOARD_KICKOFF_TOLERANCE_MS) return null;
+  if (!inputContext
+      || String(inputContext.homeEspnTeamId || "") !== String(shadow.home_espn_team_id)
+      || String(inputContext.awayEspnTeamId || "") !== String(shadow.away_espn_team_id)
+      || !String(inputContext.homeTeam || "").trim()
+      || !String(inputContext.awayTeam || "").trim()) return null;
 
   const us = normalizedMarketFields(usEvent, "us");
   const pinnacleEvent = closingMath.matchPinnacleEvent(usEvent, pinnacleEvents || []);
@@ -166,8 +161,8 @@ function buildClosingObservation(shadow, usEvent, pinnacleEvents, capturedAt, in
     observation_version: CLOSING_OBSERVATION_VERSION,
     quote_at: semantic.quoteAt,
     kickoff_at: new Date(kickoffMs).toISOString(),
-    event_home_team: usEvent.homeTeam,
-    event_away_team: usEvent.awayTeam,
+    event_home_team: inputContext.homeTeam,
+    event_away_team: inputContext.awayTeam,
     us_source: hasMarket(us, "us") ? US_CLOSE_SOURCE : null,
     ...us,
     pinnacle_source: hasMarket(pinnacle, "pinnacle") ? PINNACLE_CLOSE_SOURCE : null,

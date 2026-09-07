@@ -121,6 +121,8 @@ function blendRatings(prior, current, k = SEASON_BLEND_K) {
   for (const id of ids) {
     const pt = priTeams[id];
     const ct = curTeams[id];
+    const completedGames = Number(current?.completedGamesByTeam?.[id]);
+    const observedGames = Number.isInteger(completedGames) && completedGames >= 0 ? completedGames : 0;
     const gCur = ct ? (ct.gp || 0) : 0;
     if (gCur > 0 && ct.rating != null && pt && pt.rating != null) {
       const w = gCur / (gCur + k);
@@ -137,7 +139,7 @@ function blendRatings(prior, current, k = SEASON_BLEND_K) {
         priorOdGames: pt.odGames ?? null,
         currentOffenseRating: ct.inSeasonOffenseRating ?? null,
         currentDefenseRating: ct.inSeasonDefenseRating ?? null,
-        currentOdGames: ct.inSeasonOdGames ?? null,
+        currentOdGames: ct.inSeasonOdGames ?? observedGames,
       });
       blendedTeams++;
     } else if (gCur > 0 && ct.rating != null) {
@@ -147,7 +149,7 @@ function blendRatings(prior, current, k = SEASON_BLEND_K) {
         priorOffenseRating: null, priorDefenseRating: null, priorOdGames: null,
         currentOffenseRating: ct.inSeasonOffenseRating ?? null,
         currentDefenseRating: ct.inSeasonDefenseRating ?? null,
-        currentOdGames: ct.inSeasonOdGames ?? null,
+        currentOdGames: ct.inSeasonOdGames ?? observedGames,
       }); // new-to-FBS team: no prior to blend
     } else if (pt) {
       teams[id] = withRatingProvenance(pt, {
@@ -156,7 +158,7 @@ function blendRatings(prior, current, k = SEASON_BLEND_K) {
         priorOffenseRating: pt.offenseRating ?? null,
         priorDefenseRating: pt.defenseRating ?? null,
         priorOdGames: pt.odGames ?? null,
-        currentOffenseRating: null, currentDefenseRating: null, currentOdGames: 0,
+        currentOffenseRating: null, currentDefenseRating: null, currentOdGames: observedGames,
       });
     } else if (ct) {
       teams[id] = withRatingProvenance(ct, {
@@ -165,7 +167,7 @@ function blendRatings(prior, current, k = SEASON_BLEND_K) {
         priorOffenseRating: null, priorDefenseRating: null, priorOdGames: null,
         currentOffenseRating: ct.inSeasonOffenseRating ?? null,
         currentDefenseRating: ct.inSeasonDefenseRating ?? null,
-        currentOdGames: ct.inSeasonOdGames ?? null,
+        currentOdGames: ct.inSeasonOdGames ?? observedGames,
       });
     }
   }

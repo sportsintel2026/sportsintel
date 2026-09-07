@@ -16,6 +16,16 @@ const {
   buildCfbGameShadowPredictionV3,
 } = require("./cfbGameShadowChallengerV3");
 const { _internal: collector } = require("./cfbGameShadowCollector");
+const Module = require("module");
+const originalLoad = Module._load;
+Module._load = function loadForPureBlendTest(request, parent, isMain) {
+  if (request === "./oddsApi") return { getCFBMainOdds: async () => [], getCFBPinnacleClose: async () => [] };
+  if (request === "./cfbDataSource") return { buildTeamRatings: async () => ({ teams: {}, rated: 0 }) };
+  if (request === "@supabase/supabase-js") return { createClient: () => ({}) };
+  return originalLoad.call(this, request, parent, isMain);
+};
+const { _internal: cfbEdgesMath } = require("./cfbEdges");
+Module._load = originalLoad;
 
 const capturedAt = "2026-09-20T16:00:00.000Z";
 const kickoffAt = "2026-09-20T20:00:00.000Z";
@@ -55,13 +65,14 @@ const controls = Object.fromEntries(snapshots.map((row, index) => [String(row.es
   ratingSource: "prior-only",
   sosApplied: true,
 }]));
+const completedGames = [4, 0, 1, 2, 3, 5];
 const odTeams = Object.fromEntries(snapshots.map((row, index) => [String(row.espn_team_id), {
   priorOffenseRating: (index - 2.5) * 1.25,
   priorDefenseRating: (index - 2.5) * 0.75,
   priorOdGames: 12,
   currentOffenseRating: index === 0 ? 5 : null,
   currentDefenseRating: index === 0 ? 3 : null,
-  currentOdGames: index === 0 ? 4 : 0,
+  currentOdGames: completedGames[index],
 }]));
 const odContext = {
   asOf: capturedAt,
@@ -86,6 +97,7 @@ assert.strictEqual(v3.teams[0].updaterActive, true);
 assert.strictEqual(v3.teams[0].currentSeasonWeight, 0.5);
 assert.strictEqual(v3.teams[1].updaterActive, false);
 assert.strictEqual(v3.teams[1].currentSeasonWeight, 0);
+assert.deepStrictEqual(v3.teams.map((team) => team.gamesUsed), completedGames);
 assert.strictEqual(ARCHITECTURE.updaterMinimumGames, 4);
 assert.strictEqual(ARCHITECTURE.updaterPriorGames, 4);
 assert.strictEqual(v3.teams[0].features.quarterbackAdjustment, 0);
@@ -106,12 +118,45 @@ const game = buildCfbGameShadowPredictionV3({
 });
 assert.strictEqual(game.modelVersion, MODEL_VERSION);
 assert.strictEqual(game.experimentVersion, EXPERIMENT_VERSION);
+assert.strictEqual(game.provenance.targetSeasonOutcomesUsed, false);
+assert.strictEqual(game.provenance.homeCurrentSeasonWeight, 0);
+assert.strictEqual(game.provenance.awayCurrentSeasonWeight, 0);
 assert.ok(Math.abs(game.projectedHomeMargin
-  - (homeTeam.offenseRating - awayTeam.defenseRating
-    - awayTeam.offenseRating + homeTeam.defenseRating + 3)) < 1e-7);
-assert.ok(Math.abs(game.homeTeamRating - (homeTeam.offenseRating + homeTeam.defenseRating)) < 1e-7);
+  - (homeTeam.features.preseasonOffenseRating - awayTeam.features.preseasonDefenseRating
+    - awayTeam.features.preseasonOffenseRating + homeTeam.features.preseasonDefenseRating + 3)) < 1e-7);
+assert.ok(Math.abs(game.homeTeamRating
+  - (homeTeam.features.preseasonOffenseRating + homeTeam.features.preseasonDefenseRating)) < 1e-7);
 assert.strictEqual(game.provenance.homeGamesUsed, 4);
 assert.strictEqual(game.provenance.updateAsOf, capturedAt);
+
+const bothActiveOdContext = {
+  ...odContext,
+  teams: {
+    ...odTeams,
+    2: { ...odTeams[2], currentOffenseRating: 2, currentDefenseRating: 1, currentOdGames: 4 },
+  },
+};
+const bothActiveV3 = buildCfbPreseasonChallengerV3({ v1Challenger: v1, odContext: bothActiveOdContext });
+const activeGame = buildCfbGameShadowPredictionV3({
+  game: { gameId: "v3-active-game", predictionAt: capturedAt, kickoffAt },
+  homeTeam: bothActiveV3.teams.find((team) => team.team.espnTeamId === "1"),
+  awayTeam: bothActiveV3.teams.find((team) => team.team.espnTeamId === "2"),
+  neutralSiteStatus: "non-neutral",
+  market: { h2h: {}, spreads: {} },
+});
+assert.strictEqual(activeGame.provenance.targetSeasonOutcomesUsed, true);
+assert.ok(activeGame.provenance.homeCurrentSeasonWeight > 0);
+assert.ok(activeGame.provenance.awayCurrentSeasonWeight > 0);
+
+const priorRatings = { teams: Object.fromEntries(snapshots.slice(0, 5).map((row) => [String(row.espn_team_id), {
+  rating: 1, offenseRating: 0.5, defenseRating: 0.5, sosApplied: true,
+}])) };
+const earlyCurrent = { teams: {}, completedGamesByTeam: { 1: 0, 2: 1, 3: 2, 4: 3, 5: 4 } };
+const earlyBlend = cfbEdgesMath.blendRatings(priorRatings, earlyCurrent);
+assert.deepStrictEqual(
+  Object.keys(earlyBlend.teams).sort().map((id) => earlyBlend.teams[id].currentOdGames),
+  [0, 1, 2, 3, 4],
+);
 
 const event = {
   eventId: "v3-game",
@@ -136,7 +181,9 @@ assert.strictEqual(plan.v3Candidates.length, 1);
 assert.strictEqual(plan.v3Candidates[0].input.prediction_at, plan.candidates[0].input.prediction_at);
 assert.deepStrictEqual(plan.v3Candidates[0].prediction.market, plan.candidates[0].prediction.market);
 assert.strictEqual(plan.v3Candidates[0].input.game_context.shadowProvenance.updaterVersion, UPDATER_VERSION);
-assert.strictEqual(plan.v3Candidates[0].input.home_current_season_weight, 0.5);
+assert.strictEqual(plan.v3Candidates[0].input.game_context.week, 3);
+assert.strictEqual(plan.v3Candidates[0].input.quality.targetSeasonOutcomesUsed, false);
+assert.strictEqual(plan.v3Candidates[0].input.home_current_season_weight, 0);
 const withoutContext = collector.prepareCandidates({
   snapshots,
   usEvents: [event],

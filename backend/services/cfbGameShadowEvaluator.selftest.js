@@ -26,8 +26,8 @@ const shadow = Object.freeze({
   game_id: "odds-event-1",
   prediction_at: "2026-09-05T17:00:00.000Z",
   kickoff_at: "2026-09-05T19:30:00.000Z",
-  home_team_name: "Stanford Cardinal",
-  away_team_name: "UNLV Rebels",
+  home_team_name: "Stanford",
+  away_team_name: "UNLV",
   home_espn_team_id: "24",
   away_espn_team_id: "2439",
   projected_home_margin: 7,
@@ -40,6 +40,13 @@ const shadow = Object.freeze({
   home_cover_probability: 0.62,
   away_cover_probability: 0.38,
   spread_push_probability: 0.05,
+});
+
+const closingInputContext = Object.freeze({
+  homeTeam: "Stanford Cardinal",
+  awayTeam: "UNLV Rebels",
+  homeEspnTeamId: "24",
+  awayEspnTeamId: "2439",
 });
 
 function game(overrides = {}) {
@@ -166,50 +173,72 @@ test("away close metrics reversible", () => {
 test("closing observation exact identity", () => {
   const event = {
     eventId: shadow.game_id, commenceTime: shadow.kickoff_at,
-    homeTeam: shadow.home_team_name, awayTeam: shadow.away_team_name,
+    homeTeam: "Stanford Cardinal", awayTeam: "UNLV Rebels",
     h2h: { home: -130, away: 115, homeBook: "Book A", awayBook: "Book B" },
     spreads: { homeLine: -3, awayLine: 3, home: -110, away: -110, homeBook: "Book A", awayBook: "Book B" },
   };
-  const row = _internal.buildClosingObservation(shadow, event, [], "2026-09-05T18:00:00Z");
+  const row = _internal.buildClosingObservation(
+    shadow, event, [], "2026-09-05T18:00:00Z", closingInputContext,
+  );
   assert.ok(row);
   assert.strictEqual(row.game_id, shadow.game_id);
   assert.strictEqual(row.us_home_spread, -3);
+  assert.strictEqual(row.event_home_team, closingInputContext.homeTeam);
+  assert.strictEqual(row.event_away_team, closingInputContext.awayTeam);
 });
-test("closing observation requires exact original event orientation", () => {
+test("closing observation requires the durable input identity context", () => {
   const event = {
     eventId: shadow.game_id, commenceTime: shadow.kickoff_at,
-    homeTeam: shadow.home_team_name, awayTeam: shadow.away_team_name,
+    homeTeam: "Stanford Cardinal", awayTeam: "UNLV Rebels",
+    h2h: { home: -130, away: 115, homeBook: "Book A", awayBook: "Book B" },
+  };
+  assert.strictEqual(_internal.buildClosingObservation(
+    shadow, event, [], "2026-09-05T18:00:00Z", null,
+  ), null);
+});
+test("closing observation requires durable team orientation", () => {
+  const event = {
+    eventId: shadow.game_id, commenceTime: shadow.kickoff_at,
+    homeTeam: "Stanford Cardinal", awayTeam: "UNLV Rebels",
     h2h: { home: -130, away: 115, homeBook: "Book A", awayBook: "Book B" },
   };
   assert.strictEqual(_internal.buildClosingObservation(
     shadow, event, [], "2026-09-05T18:00:00Z",
-    { homeTeam: "Different Raw Name", awayTeam: shadow.away_team_name },
+    { ...closingInputContext, homeEspnTeamId: "2439", awayEspnTeamId: "24" },
   ), null);
 });
 test("incomplete or invalid market groups are omitted safely", () => {
   const event = {
     eventId: shadow.game_id, commenceTime: shadow.kickoff_at,
-    homeTeam: shadow.home_team_name, awayTeam: shadow.away_team_name,
+    homeTeam: "Stanford Cardinal", awayTeam: "UNLV Rebels",
     h2h: { home: -130, away: null, homeBook: "Book A", awayBook: "Book B" },
     spreads: { homeLine: -3, awayLine: 3.5, home: -110, away: -110, homeBook: "Book A", awayBook: "Book B" },
   };
-  assert.strictEqual(_internal.buildClosingObservation(shadow, event, [], "2026-09-05T18:00:00Z"), null);
+  assert.strictEqual(_internal.buildClosingObservation(
+    shadow, event, [], "2026-09-05T18:00:00Z", closingInputContext,
+  ), null);
 });
-test("closing observation side swap rejected", () => {
-  const event = { eventId: shadow.game_id, commenceTime: shadow.kickoff_at, homeTeam: shadow.away_team_name, awayTeam: shadow.home_team_name };
-  assert.strictEqual(_internal.buildClosingObservation(shadow, event, [], "2026-09-05T18:00:00Z"), null);
+test("closing observation wrong durable game id rejected", () => {
+  const event = { eventId: "different-game", commenceTime: shadow.kickoff_at, homeTeam: "Stanford Cardinal", awayTeam: "UNLV Rebels" };
+  assert.strictEqual(_internal.buildClosingObservation(
+    shadow, event, [], "2026-09-05T18:00:00Z", closingInputContext,
+  ), null);
 });
 test("closing observation at kickoff rejected", () => {
-  const event = { eventId: shadow.game_id, commenceTime: shadow.kickoff_at, homeTeam: shadow.home_team_name, awayTeam: shadow.away_team_name };
-  assert.strictEqual(_internal.buildClosingObservation(shadow, event, [], shadow.kickoff_at), null);
+  const event = { eventId: shadow.game_id, commenceTime: shadow.kickoff_at, homeTeam: "Stanford Cardinal", awayTeam: "UNLV Rebels" };
+  assert.strictEqual(_internal.buildClosingObservation(
+    shadow, event, [], shadow.kickoff_at, closingInputContext,
+  ), null);
 });
 test("closing observation before prediction rejected", () => {
   const event = {
     eventId: shadow.game_id, commenceTime: shadow.kickoff_at,
-    homeTeam: shadow.home_team_name, awayTeam: shadow.away_team_name,
+    homeTeam: "Stanford Cardinal", awayTeam: "UNLV Rebels",
     h2h: { home: -130, away: 115, homeBook: "Book A", awayBook: "Book B" },
   };
-  assert.strictEqual(_internal.buildClosingObservation(shadow, event, [], "2026-09-05T16:59:59Z"), null);
+  assert.strictEqual(_internal.buildClosingObservation(
+    shadow, event, [], "2026-09-05T16:59:59Z", closingInputContext,
+  ), null);
 });
 
 const root = path.resolve(__dirname, "..");
@@ -267,7 +296,7 @@ class FakeSupabase {
   constructor() {
     this.tables = {
       cfb_game_input_snapshots: [{ id: shadow.input_snapshot_id, game_context: {
-        homeTeam: shadow.home_team_name, awayTeam: shadow.away_team_name,
+        ...closingInputContext,
       } }],
       cfb_game_shadow_predictions: [shadow],
       cfb_game_shadow_closing_observations: [],
@@ -303,7 +332,7 @@ async function runPersistenceTests() {
   const db = new FakeSupabase();
   const event = {
     eventId: shadow.game_id, commenceTime: shadow.kickoff_at,
-    homeTeam: shadow.home_team_name, awayTeam: shadow.away_team_name,
+    homeTeam: "Stanford Cardinal", awayTeam: "UNLV Rebels",
     h2h: { home: -130, away: 115, homeBook: "Book A", awayBook: "Book B" },
     spreads: { homeLine: -3, awayLine: 3, home: -110, away: -110, homeBook: "Book A", awayBook: "Book B" },
   };
@@ -333,5 +362,9 @@ async function runPersistenceTests() {
 }
 
 runPersistenceTests()
-  .then(() => console.log(`cfbGameShadowEvaluator self-test passed: ${passed} assertions`))
+  .then(() => console.log("cfbGameShadowEvaluator self-test passed", {
+    assertions: passed,
+    mascotIdentityCloseFixture: { beforeStrictDisplayMatch: 0, afterDurableIdentityMatch: 1 },
+    providerCallsAdded: 0,
+  }))
   .catch((error) => { console.error(error); process.exitCode = 1; });

@@ -9,6 +9,7 @@ const {
   BENCHMARK_VERSION,
   PROTOCOL_VERSION,
   MAX_PAIR_DELTA_SECONDS,
+  MAX_KICKOFF_DELTA_SECONDS,
   PRIMARY_POPULATION,
   MIN_PROMOTION_GAMES,
   MIN_PROMOTION_WEEKS,
@@ -55,6 +56,9 @@ function shadow(overrides = {}) {
 function input(overrides = {}) {
   return {
     id: 20,
+    game_id: "odds-event-1",
+    prediction_at: at,
+    kickoff_at: kickoff,
     game_context: {
       week: 1,
       homeTeam: "Alpha",
@@ -176,6 +180,7 @@ function mustReject(fn, pattern) {
 assert.strictEqual(BENCHMARK_VERSION, "cfb-production-control-benchmark-v1-2026");
 assert.strictEqual(PROTOCOL_VERSION, "cfb-shadow-vs-control-protocol-v1-2026");
 assert.strictEqual(MAX_PAIR_DELTA_SECONDS, 300);
+assert.strictEqual(MAX_KICKOFF_DELTA_SECONDS, 900);
 assert.strictEqual(PRIMARY_POPULATION, "PAIRED_RATED_FBS");
 assert.strictEqual(MIN_PROMOTION_GAMES, 100);
 assert.strictEqual(MIN_PROMOTION_WEEKS, 4);
@@ -233,10 +238,33 @@ assert.strictEqual(_internal.orientFixedControl(marketOnly, "moneyline").rawProb
 assert.strictEqual(_internal.isPrimaryPopulation(marketOnlyLink), false);
 assert.strictEqual(_internal.orientFixedControl(fixedMoneyline({ raw_win_prob: null }), "moneyline"), null);
 
+// Provider display strings may include mascots while the immutable shadow uses
+// school-only names. Durable game/team IDs and orientation remain authoritative.
+const mascotNamedInput = input({ game_context: {
+  week: 1,
+  homeTeam: "Alpha Aces",
+  awayTeam: "Bravo Bears",
+  homeEspnTeamId: "1",
+  awayEspnTeamId: "2",
+} });
+const mascotMoneylineLink = _internal.buildBenchmarkLink({
+  shadow: shadow(), input: mascotNamedInput,
+  fixed: fixedMoneyline({ matchup: "Bravo Bears @ Alpha Aces" }),
+  selected: selectedMoneyline({ matchup: "Bravo Bears @ Alpha Aces" }), market: "moneyline",
+});
+const mascotSpreadLink = _internal.buildBenchmarkLink({
+  shadow: shadow(), input: mascotNamedInput,
+  fixed: fixedSpread({ matchup: "Bravo Bears @ Alpha Aces" }),
+  selected: selectedSpread({ matchup: "Bravo Bears @ Alpha Aces" }), market: "spread",
+});
+assert.strictEqual(mascotMoneylineLink.game_id, "odds-event-1");
+assert.strictEqual(mascotSpreadLink.game_id, "odds-event-1");
+
 // Exact identity, orientation, timing, version, and market-payload pairing.
 mustReject(() => _internal.buildBenchmarkLink({
-  shadow: shadow({ home_team_name: "Bravo", away_team_name: "Alpha" }),
-  input: input(), fixed, selected, market: "moneyline",
+  shadow: shadow(),
+  input: input({ game_context: { ...input().game_context, homeEspnTeamId: "2", awayEspnTeamId: "1" } }),
+  fixed, selected, market: "moneyline",
 }), /identity|orientation/);
 mustReject(() => _internal.buildBenchmarkLink({
   shadow: shadow({ game_id: "another-game" }), input: input(), fixed, selected, market: "moneyline",
@@ -251,6 +279,14 @@ mustReject(() => _internal.buildBenchmarkLink({
   shadow: shadow(), input: input(), fixed: fixedMoneyline({ snapshotted_at: lateAt }),
   selected: selectedMoneyline({ snapshotted_at: lateAt }), market: "moneyline",
 }), /time delta/);
+mustReject(() => _internal.buildBenchmarkLink({
+  shadow: shadow(), input: input({ prediction_at: "2026-08-31T13:25:01.000Z" }),
+  fixed, selected, market: "moneyline",
+}), /prediction timestamp/);
+mustReject(() => _internal.buildBenchmarkLink({
+  shadow: shadow(), input: input({ kickoff_at: "2026-08-31T17:15:01.000Z" }),
+  fixed, selected, market: "moneyline",
+}), /kickoff delta/);
 mustReject(() => _internal.buildBenchmarkLink({
   shadow: shadow(), input: input(), fixed: fixedMoneyline({ odds: -108 }), selected, market: "moneyline",
 }), /market context/);
@@ -293,10 +329,15 @@ for (const forbidden of [
 ]) assert.ok(!benchmarkSource.includes(forbidden), `benchmark contains forbidden surface ${forbidden}`);
 const challengerSource = fs.readFileSync(path.join(root, "cfbGameShadowChallenger.js"), "utf8");
 const modelSource = fs.readFileSync(path.join(root, "cfbModel.js"), "utf8");
+const repairSql = fs.readFileSync(path.join(root, "..", "..", "sql", "cfb_validation_pipeline_repair.sql"), "utf8");
 assert.ok(!challengerSource.includes("cfbControlBenchmark"));
 assert.ok(!challengerSource.includes("cfbGameShadowEvaluator"));
 assert.ok(!modelSource.includes("cfbControlBenchmark"));
 assert.ok(!modelSource.includes("cfbGameShadowEvaluator"));
+assert.ok(repairSql.includes("create or replace function public.guard_cfb_game_control_benchmark_link_insert()"));
+assert.strictEqual((repairSql.match(/fixed_row\.matchup <> shadow_row\.away_team_name/g) || []).length, 1);
+assert.ok(!repairSql.includes("input_row.game_context->>'homeTeam' <> shadow_row.home_team_name"));
+assert.ok(repairSql.includes("input_row.game_context->>'homeEspnTeamId' is distinct from shadow_row.home_espn_team_id"));
 
 const edgeSource = fs.readFileSync(path.join(root, "cfbEdges.js"), "utf8");
 assert.match(edgeSource, /Object\.defineProperty\(slate, "cfbControlContext", \{[\s\S]*?enumerable: false/);
@@ -309,4 +350,7 @@ assert.match(sql, /grant select, insert[\s\S]*to service_role/i);
 assert.doesNotMatch(sql, /grant\s+(update|delete|all)/i);
 assert.match(sql, /before update or delete[\s\S]*prevent_cfb_game_control_benchmark_link_mutation/i);
 
-console.log("cfbControlBenchmark self-test: PASS (40 protocol/identity/safety checks)");
+console.log("cfbControlBenchmark self-test: PASS", {
+  mascotIdentityFixture: { beforeStrictDisplayMatch: 0, afterDurableIdentityMatch: 2 },
+  providerCallsAdded: 0,
+});

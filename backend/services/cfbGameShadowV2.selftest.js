@@ -106,8 +106,9 @@ assert.deepStrictEqual(MEAN_ARCHITECTURE, {
   residualClipSd: 2,
 });
 
-// Both lanes use the same immutable source rows, timestamp, kickoff, orientation,
-// and market quote. Model-specific input rows differ only where the model does.
+// Both candidates are prepared from the same immutable source rows, timestamp,
+// kickoff, orientation, and market quote. Persisted v1 may deduplicate to an
+// older snapshot, so the v2 row must not claim an exact parallel timestamp.
 for (const field of [
   "game_id", "season", "game_date", "prediction_at", "kickoff_at",
   "contract_version", "home_team_snapshot_id", "away_team_snapshot_id",
@@ -117,10 +118,14 @@ assert.deepStrictEqual(v2.prediction.market, v1.prediction.market);
 assert.deepStrictEqual(v2.input.game_context.parallelPair, {
   v1ModelVersion: V1_GAME_VERSION,
   v1InputHash: v1.input.input_hash,
-  samePredictionAt: capturedAt,
   sameTeamSnapshotIds: true,
   sameMarketContext: true,
 });
+assert.ok(!Object.prototype.hasOwnProperty.call(v2.input.game_context.parallelPair, "samePredictionAt"));
+assert.strictEqual(_internal.protocolWeekForKickoff("2026-08-29T20:00:00Z"), 0);
+assert.strictEqual(_internal.protocolWeekForKickoff("2026-09-04T20:00:00Z"), 1);
+assert.strictEqual(_internal.protocolWeekForKickoff("2026-09-11T20:00:00Z"), 2);
+assert.strictEqual(_internal.protocolWeekForKickoff("invalid"), null);
 assert.notStrictEqual(v2.input.input_hash, v1.input.input_hash);
 assert.notStrictEqual(v2.prediction.projectedHomeMargin, v1.prediction.projectedHomeMargin);
 

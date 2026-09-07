@@ -20,6 +20,7 @@ const CONTROL_FIXED_MARKETS = Object.freeze({
   spread: "spread_shadow",
 });
 const MAX_PAIR_DELTA_SECONDS = 300;
+const MAX_KICKOFF_DELTA_SECONDS = 15 * 60;
 const PRIMARY_POPULATION = "PAIRED_RATED_FBS";
 const MIN_PROMOTION_GAMES = 100;
 const MIN_PROMOTION_WEEKS = 4;
@@ -36,6 +37,7 @@ const PROTOCOL = Object.freeze({
   ]),
   pairing: Object.freeze({
     maxDeltaSeconds: MAX_PAIR_DELTA_SECONDS,
+    maxKickoffDeltaSeconds: MAX_KICKOFF_DELTA_SECONDS,
     exactGameId: true,
     exactHomeAwayOrientation: true,
     exactMarketPayload: true,
@@ -174,13 +176,10 @@ function buildBenchmarkLink({ shadow, input, fixed, selected = null, market }) {
   if (!shadow || shadow.model_version !== SHADOW_MODEL_VERSION) throw new Error("invalid shadow version");
   if (!input || Number(input.id) !== Number(shadow.input_snapshot_id)) throw new Error("shadow/input mismatch");
   const context = input.game_context || {};
-  const expectedMatchup = `${shadow.away_team_name} @ ${shadow.home_team_name}`;
   if (String(fixed.game_id) !== String(shadow.game_id)
-      || fixed.matchup !== expectedMatchup
+      || String(input.game_id) !== String(shadow.game_id)
       || String(context.homeEspnTeamId) !== String(shadow.home_espn_team_id)
-      || String(context.awayEspnTeamId) !== String(shadow.away_espn_team_id)
-      || context.homeTeam !== shadow.home_team_name
-      || context.awayTeam !== shadow.away_team_name) {
+      || String(context.awayEspnTeamId) !== String(shadow.away_espn_team_id)) {
     throw new Error("control/shadow game identity or orientation mismatch");
   }
 
@@ -188,9 +187,17 @@ function buildBenchmarkLink({ shadow, input, fixed, selected = null, market }) {
   const shadowMs = Date.parse(shadow.prediction_at);
   const marketMs = Date.parse(shadow.market_quote_at);
   const kickoffMs = Date.parse(shadow.kickoff_at);
-  if (![controlMs, shadowMs, marketMs, kickoffMs].every(Number.isFinite)
+  const inputPredictionMs = Date.parse(input.prediction_at);
+  const inputKickoffMs = Date.parse(input.kickoff_at);
+  if (![controlMs, shadowMs, marketMs, kickoffMs, inputPredictionMs, inputKickoffMs].every(Number.isFinite)
       || controlMs >= kickoffMs || shadowMs >= kickoffMs || marketMs > shadowMs) {
     throw new Error("benchmark timestamps are not pre-kickoff");
+  }
+  if (input.prediction_at !== shadow.prediction_at) {
+    throw new Error("control and shadow do not share the required prediction timestamp");
+  }
+  if (Math.abs(inputKickoffMs - kickoffMs) / 1000 > MAX_KICKOFF_DELTA_SECONDS) {
+    throw new Error("control/shadow kickoff delta is excessive");
   }
   const deltaSeconds = (controlMs - shadowMs) / 1000;
   if (Math.abs(deltaSeconds) > MAX_PAIR_DELTA_SECONDS) throw new Error("control/shadow time delta is excessive");
@@ -331,7 +338,8 @@ async function linkCfbShadowControls(supabase, { gameIds = [] } = {}) {
   if (!inputIds.length) return Object.freeze({ considered: 0, linked: 0, duplicates: 0, unpaired: 0, ambiguous: 0, errors: 0 });
 
   const [inputResponse, controlResponse] = await Promise.all([
-    supabase.from("cfb_game_input_snapshots").select("id,game_context").in("id", inputIds),
+    supabase.from("cfb_game_input_snapshots")
+      .select("id,game_id,prediction_at,kickoff_at,game_context").in("id", inputIds),
     supabase.from("model_predictions").select(selectColumns())
       .eq("league", "cfb")
       .in("game_id", ids)
@@ -399,6 +407,7 @@ module.exports = {
   BENCHMARK_VERSION,
   PROTOCOL_VERSION,
   MAX_PAIR_DELTA_SECONDS,
+  MAX_KICKOFF_DELTA_SECONDS,
   PRIMARY_POPULATION,
   MIN_PROMOTION_GAMES,
   MIN_PROMOTION_WEEKS,
