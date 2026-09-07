@@ -10,16 +10,23 @@ const snapshot = {
   sport: "nfl",
   generatedAt: "2026-09-01T12:00:00.000Z",
   props: [
-    { sport: "nfl", eventDate: "2026-09-03", player: "Thursday Player" },
-    { sport: "nfl", eventDate: "2026-09-06", player: "Sunday Player" },
+    { sport: "nfl", eventDate: "2026-09-03", market: "rush_yds", player: "Thursday Player" },
+    { sport: "nfl", eventDate: "2026-09-06", market: "pass_yds", player: "Sunday Player" },
   ],
+};
+const cfbSnapshot = {
+  sport: "cfb",
+  generatedAt: "2026-09-01T12:00:00.000Z",
+  props: [{ sport: "cfb", eventDate: "2026-09-06", market: "anytime_td", player: "Exact College Player" }],
 };
 
 const originalLoad = Module._load;
 Module._load = function dependencyFreeLoad(request, parent, isMain) {
   if (request === "express") return { Router: () => router };
   if (request === "../middleware/accessGate") return { gateModelData };
-  if (request === "../services/nflPropsShadow") return { getLatestNflPropsSnapshot: () => snapshot };
+  if (request === "../services/nflPropsShadow") return {
+    getLatestFootballPropsSnapshot: (sport) => sport === "cfb" ? cfbSnapshot : snapshot,
+  };
   return originalLoad(request, parent, isMain);
 };
 require("./footballProps");
@@ -44,10 +51,12 @@ function invoke(params, query = {}) {
 const nfl = invoke({ sport: "nfl" }, { date: "2026-09-06" });
 assert.equal(nfl.statusCode, 200);
 assert.deepEqual(nfl.body.props.map((prop) => prop.player), ["Sunday Player"]);
+assert.deepEqual(nfl.body.supportedMarkets, ["pass_yds"]);
 
 const cfb = invoke({ sport: "cfb" });
 assert.equal(cfb.statusCode, 200);
-assert.deepEqual(cfb.body.props, []);
+assert.deepEqual(cfb.body.props.map((prop) => prop.player), ["Exact College Player"]);
+assert.deepEqual(cfb.body.supportedMarkets, ["anytime_td"]);
 assert.equal(cfb.body.verifiedOnly, true);
 
 const unsupported = invoke({ sport: "mlb" });

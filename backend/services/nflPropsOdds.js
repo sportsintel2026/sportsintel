@@ -1,18 +1,13 @@
 // WZ-NFLPROPSODDS-2026-07-05
-// nflPropsOdds.js  —  WizePicks NFL player-prop ODDS fetcher/parser (Phase 3, B-1).
+// nflPropsOdds.js — WizePicks NFL/CFB player-prop Odds API fetcher/parser.
 //
-// Fetches event-level NFL player-prop markets from The Odds API and normalizes them
-// into per-player lines the shadow logger can pair with a projection. Mirrors the
+// Fetches event-level football player-prop markets from The Odds API and normalizes
+// them into per-player lines the recorder can pair with a verified identity. Mirrors the
 // proven MLB prop pattern (parseHitsProps / parseTotalBasesProps): iterate
 // bookmakers -> markets (by key) -> outcomes, where outcome.description = player,
 // outcome.name = Over/Under, outcome.point = line, outcome.price = American odds;
 // keep the player's PRIMARY line (lowest line quoted with BOTH sides), first book wins.
-//
-// VERIFICATION STATUS: the fetch/parse plumbing is exercised live via the diagnostic
-// route, but NFL player props are not posted by books until ~preseason (first opener
-// ~Aug 7), so today this returns empty and the PARSER is verified offline against a
-// realistic fixture. When the first real NFL prop lands in August, re-run the route
-// and confirm the shape before the shadow logger relies on it ("wired != flowing").
+// Touchdown scorer and milestone offers keep their provider-native price structure.
 //
 // Isolated module (own axios, own helpers) so a bug here cannot destabilize the feed.
 // CommonJS. Node 18+.
@@ -21,18 +16,32 @@ const axios = require("axios");
 
 const ODDS_BASE = "https://api.the-odds-api.com/v4";
 const ODDS_API_KEY = process.env.ODDS_API_KEY;
-const NFL_SPORT = "americanfootball_nfl";
+const FOOTBALL_SPORTS = Object.freeze({
+  nfl: "americanfootball_nfl",
+  cfb: "americanfootball_ncaaf",
+});
 const TIMEOUT_MS = 9000;
 
-// internal market <-> The Odds API market key
-const MARKET_TO_ODDSKEY = {
-  pass_yds: "player_pass_yds",
-  rush_yds: "player_rush_yds",
-  receptions: "player_receptions",
-  rec_yds: "player_reception_yds",
-};
-const ODDSKEY_TO_MARKET = Object.fromEntries(Object.entries(MARKET_TO_ODDSKEY).map(([k, v]) => [v, k]));
-const ALL_ODDSKEYS = Object.values(MARKET_TO_ODDSKEY);
+// These are the active customer markets requested from the existing event-odds call.
+// Touchdown markets without a WizePicks projection remain verified market data only.
+const MARKET_SPECS = Object.freeze({
+  player_pass_yds: Object.freeze({ market: "pass_yds", offer: "over-under" }),
+  player_rush_yds: Object.freeze({ market: "rush_yds", offer: "over-under" }),
+  player_receptions: Object.freeze({ market: "receptions", offer: "over-under" }),
+  player_reception_yds: Object.freeze({ market: "rec_yds", offer: "over-under" }),
+  player_pass_tds: Object.freeze({ market: "pass_tds", offer: "over-under" }),
+  player_rush_tds: Object.freeze({ market: "rush_tds", offer: "over-under" }),
+  player_reception_tds: Object.freeze({ market: "rec_tds", offer: "over-under" }),
+  player_anytime_td: Object.freeze({ market: "anytime_td", offer: "yes-no" }),
+  player_1st_td: Object.freeze({ market: "first_td", offer: "yes-no" }),
+  player_last_td: Object.freeze({ market: "last_td", offer: "yes-no" }),
+  player_tds_over: Object.freeze({ market: "touchdown_milestone", offer: "milestone" }),
+});
+const ALL_ODDSKEYS = Object.keys(MARKET_SPECS);
+const MARKET_TO_ODDSKEY = Object.freeze(Object.fromEntries(Object.entries(MARKET_SPECS)
+  .map(([oddsKey, spec]) => [spec.market, oddsKey])));
+const ODDSKEY_TO_MARKET = Object.freeze(Object.fromEntries(Object.entries(MARKET_SPECS)
+  .map(([oddsKey, spec]) => [oddsKey, spec.market])));
 
 // ── implied-prob + de-vig (mirrors oddsApi.americanToImpliedProb exactly) ────────
 function americanToImplied(american) {
@@ -55,8 +64,52 @@ function parsePropLines(oddsJson) {
   const out = new Map(); // key `${market}::${player}` -> record (first book wins)
   for (const bm of (oddsJson && oddsJson.bookmakers) || []) {
     for (const m of bm.markets || []) {
-      const market = ODDSKEY_TO_MARKET[m.key];
-      if (!market) continue;
+      const spec = MARKET_SPECS[m.key];
+      if (!spec) continue;
+      const book = bm.title || bm.key;
+
+      if (spec.offer === "yes-no") {
+        const byPlayer = new Map();
+        for (const outcome of m.outcomes || []) {
+          const player = String(outcome.description || "").trim();
+          const side = String(outcome.name || "").trim().toLowerCase();
+          if (!player || outcome.price == null || (side !== "yes" && side !== "no")) continue;
+          if (!byPlayer.has(player)) byPlayer.set(player, {});
+          byPlayer.get(player)[side] = outcome.price;
+        }
+        for (const [player, quote] of byPlayer) {
+          if (quote.yes == null || quote.no == null) continue;
+          const key = `${spec.market}::${player}`;
+          if (out.has(key)) continue;
+          out.set(key, {
+            player, market: spec.market, line: null,
+            overOdds: quote.yes, underOdds: quote.no,
+            fairOverProb: devigOver(quote.yes, quote.no),
+            book, priceMode: "yes-no", overLabel: "YES", underLabel: "NO",
+          });
+        }
+        continue;
+      }
+
+      if (spec.offer === "milestone") {
+        for (const outcome of m.outcomes || []) {
+          const player = String(outcome.description || "").trim();
+          const side = String(outcome.name || "").trim().toLowerCase();
+          const point = Number(outcome.point);
+          if (!player || outcome.price == null || side !== "over" || !Number.isFinite(point)) continue;
+          const market = point === 1.5 ? "touchdowns_2_plus" : point === 2.5 ? "touchdowns_3_plus" : null;
+          if (!market) continue;
+          const key = `${market}::${player}`;
+          if (out.has(key)) continue;
+          out.set(key, {
+            player, market, line: point, overOdds: outcome.price, underOdds: null,
+            fairOverProb: null, book, priceMode: "over-only", overLabel: `${Math.ceil(point)}+`, underLabel: null,
+          });
+        }
+        continue;
+      }
+
+      const market = spec.market;
       // player -> line -> { over, under }
       const byPlayer = new Map();
       for (const o of m.outcomes || []) {
@@ -86,7 +139,10 @@ function parsePropLines(oddsJson) {
           overOdds: primary.over,
           underOdds: primary.under,
           fairOverProb: devigOver(primary.over, primary.under),
-          book: bm.title || bm.key,
+          book,
+          priceMode: "over-under",
+          overLabel: "OVER",
+          underLabel: "UNDER",
         });
       }
     }
@@ -103,17 +159,25 @@ async function oddsGet(path, params) {
   return { data: res.data, remaining: res.headers["x-requests-remaining"] || null };
 }
 
-async function fetchEventPropLines(eventId) {
-  const { data, remaining } = await oddsGet(`/sports/${NFL_SPORT}/events/${eventId}/odds`, {
+function sportKey(sport) {
+  return FOOTBALL_SPORTS[String(sport || "").toLowerCase()] || null;
+}
+
+async function fetchEventPropLines(eventId, sport = "nfl") {
+  const providerSport = sportKey(sport);
+  if (!providerSport) throw new Error(`unsupported football props sport: ${sport}`);
+  const { data, remaining } = await oddsGet(`/sports/${providerSport}/events/${eventId}/odds`, {
     regions: "us",
     markets: ALL_ODDSKEYS.join(","),
   });
   return { lines: parsePropLines(data), remaining };
 }
 
-// ── LIVE: list NFL events within a day window (the free /events call) ────────────
-async function listEventsWithin(daysAhead) {
-  const res = await axios.get(`${ODDS_BASE}/sports/${NFL_SPORT}/events`, {
+// ── LIVE: list football events within a day window (the free /events call) ───────
+async function listEventsWithin(daysAhead, sport = "nfl") {
+  const providerSport = sportKey(sport);
+  if (!providerSport) throw new Error(`unsupported football props sport: ${sport}`);
+  const res = await axios.get(`${ODDS_BASE}/sports/${providerSport}/events`, {
     timeout: TIMEOUT_MS,
     params: { apiKey: ODDS_API_KEY, dateFormat: "iso" },
   });
@@ -127,10 +191,12 @@ async function listEventsWithin(daysAhead) {
 
 // ── LIVE: aggregate normalized prop lines across the imminent slate ──────────────
 // daysAhead mirrors the shadow logger's imminence window. maxEvents caps credit spend.
-async function getNflPropLines({ daysAhead = 8, maxEvents = 16 } = {}) {
+async function getFootballPropLines({ sport = "nfl", daysAhead = 8, maxEvents = 16 } = {}) {
+  const league = String(sport || "").toLowerCase();
+  if (!sportKey(league)) return { ok: false, sport: league, error: "unsupported football props sport", lines: [] };
   if (!ODDS_API_KEY) return { ok: false, error: "ODDS_API_KEY not configured", lines: [] };
   let events = [];
-  try { events = await listEventsWithin(daysAhead); }
+  try { events = await listEventsWithin(daysAhead, league); }
   catch (e) { return { ok: false, error: `events list failed: ${e.message}`, lines: [] }; }
 
   const sampled = events.slice(0, maxEvents);
@@ -139,7 +205,7 @@ async function getNflPropLines({ daysAhead = 8, maxEvents = 16 } = {}) {
   let remaining = null;
   for (const ev of sampled) {
     try {
-      const { lines, remaining: rem } = await fetchEventPropLines(ev.id);
+      const { lines, remaining: rem } = await fetchEventPropLines(ev.id, league);
       if (rem != null) remaining = rem;
       byEvent[ev.id] = { matchup: `${ev.away} @ ${ev.home}`, commence: ev.commence, lines: lines.length };
       for (const ln of lines) allLines.push({ ...ln, eventId: ev.id, matchup: `${ev.away} @ ${ev.home}` });
@@ -153,6 +219,7 @@ async function getNflPropLines({ daysAhead = 8, maxEvents = 16 } = {}) {
 
   return {
     ok: true,
+    sport: league,
     daysAhead,
     eventsInWindow: events.length,
     eventsSampled: sampled.length,
@@ -160,11 +227,15 @@ async function getNflPropLines({ daysAhead = 8, maxEvents = 16 } = {}) {
     byMarket,
     creditsRemaining: remaining,
     note: allLines.length === 0
-      ? "No NFL player-prop lines posted in this window yet (expected until ~preseason opener ~Aug 7). Plumbing ran clean; re-verify shape when the first real line lands."
-      : "Normalized per-player prop lines. First book wins; primary (lowest fully-priced) line kept.",
+      ? `No ${league.toUpperCase()} player-prop lines were returned in this window.`
+      : "Normalized per-player prop lines. Each displayed price remains attached to its source book and line.",
     byEvent,
     lines: allLines,
   };
+}
+
+async function getNflPropLines(options = {}) {
+  return getFootballPropLines({ ...options, sport: "nfl" });
 }
 
 module.exports = {
@@ -172,7 +243,10 @@ module.exports = {
   devigOver,
   americanToImplied,
   fetchEventPropLines,
+  getFootballPropLines,
   getNflPropLines,
+  FOOTBALL_SPORTS,
+  MARKET_SPECS,
   MARKET_TO_ODDSKEY,
   ODDSKEY_TO_MARKET,
 };
