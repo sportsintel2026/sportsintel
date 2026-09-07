@@ -3,7 +3,7 @@ function edgeForGame(feed, gameId) {
     ...(feed.moneylineEdges || []).map((row) => ({ ...row, market: "Moneyline" })),
     ...(feed.spreadEdges || []).map((row) => ({ ...row, market: "Spread" })),
     ...(feed.totalsEdges || []).map((row) => ({ ...row, market: "Total" })),
-  ].filter((row) => String(row.gameId) === String(gameId));
+  ].filter((row) => String(row.gameId) === String(gameId) && Number.isFinite(Number(row.edge)) && Number(row.edge) >= 1);
   return all.sort((a, b) => (Number(b.modelProb) || 0) - (Number(a.modelProb) || 0))[0] || null;
 }
 
@@ -19,6 +19,9 @@ export function buildFootballIntel(feed, sport) {
   if (sport !== "nfl" && sport !== "cfb") return [];
   return (feed?.games || []).map((game) => {
     const gameId = String(game.eventId ?? game.id ?? game.gameId ?? "");
+    const matchupTeams = String(game.matchup || "").split(/\s+@\s+|\s+vs\.?\s+/i);
+    const awayTeam = game.awayTeam || matchupTeams[0] || null;
+    const homeTeam = game.homeTeam || matchupTeams[1] || null;
     const edge = edgeForGame(feed || {}, gameId);
     const quality = edge?.dataQuality || game.dataQuality || "unknown";
     const marketOnly = quality === "market-only" || edge?.isModelEdge === false;
@@ -37,7 +40,10 @@ export function buildFootballIntel(feed, sport) {
       : null;
     return {
       gameId,
-      matchup: game.matchup || `${game.awayTeam || "Away"} @ ${game.homeTeam || "Home"}`,
+      matchup: game.matchup || `${awayTeam || "Away"} @ ${homeTeam || "Home"}`,
+      awayTeam,
+      homeTeam,
+      teamIdentity: game.teamIdentity || null,
       commenceTime: game.commenceTime || null,
       dataQuality: quality,
       marketOnly,

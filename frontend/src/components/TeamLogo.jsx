@@ -82,10 +82,11 @@ function slugFromName(team, sport) {
   return null;
 }
 
-export function verifiedTeamLogoUrl({ sport, team, abbr }) {
+export function verifiedTeamLogoUrl({ sport, team, abbr, logoId, logoUrl }) {
+  if (logoUrl) return String(logoUrl);
   const league = ESPN_LEAGUE[sport];
   if (!league) return null;
-  let slug = slugFromName(team, sport);
+  let slug = logoId != null ? String(logoId).trim() : slugFromName(team, sport);
   if (!slug && sport !== "cfb") slug = normalized(abbr);
   if (!slug) return null;
   slug = NORMALIZE_ABBR[sport]?.[slug] || slug;
@@ -109,8 +110,8 @@ function fallbackText(team, abbr) {
   return String(team || "?").split(/\s+/).filter(Boolean).map((part) => part[0]).join("").slice(0, 3).toUpperCase();
 }
 
-export default function TeamLogo({ sport, team, abbr, className = "", color = "#55606b" }) {
-  const src = useMemo(() => verifiedTeamLogoUrl({ sport, team, abbr }), [sport, team, abbr]);
+export default function TeamLogo({ sport, team, abbr, logoId, logoUrl, className = "", color = "#55606b" }) {
+  const src = useMemo(() => verifiedTeamLogoUrl({ sport, team, abbr, logoId, logoUrl }), [sport, team, abbr, logoId, logoUrl]);
   const [failedSrc, setFailedSrc] = useState(null);
   const failed = !src || failedSrc === src;
   return <span className={`team-logo${failed ? " team-logo--fallback" : " team-logo--verified"}${className ? ` ${className}` : ""}`} style={{ "--team-logo-color": color }}>
@@ -120,5 +121,5 @@ export default function TeamLogo({ sport, team, abbr, className = "", color = "#
 }
 
 export const TEAM_LOGO_CSS = `
-.team-logo{--team-logo-color:#55606b;position:relative;display:grid;place-items:center;flex:0 0 auto;width:34px;height:34px;overflow:hidden}.team-logo__fallback{grid-area:1/1;color:#fff;font:800 8px/1 "IBM Plex Mono",monospace}.team-logo--fallback{border:1px solid color-mix(in srgb,var(--team-logo-color) 72%,white 8%);border-radius:50%;background:radial-gradient(circle at 35% 28%,color-mix(in srgb,var(--team-logo-color) 65%,white 8%),#0b0c0e 78%);box-shadow:inset 0 0 0 2px #0a0c0d}.team-logo--verified{border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.085),rgba(255,255,255,.035) 72%);padding:2px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.12)}.team-logo__image{grid-area:1/1;z-index:1;display:block;width:100%;height:100%;object-fit:contain;object-position:center;filter:drop-shadow(0 0 1px rgba(255,255,255,.24)) drop-shadow(0 1px 1px rgba(0,0,0,.52))}
+.team-logo{--team-logo-color:#55606b;position:relative;display:grid;place-items:center;flex:0 0 auto;width:34px;height:34px;overflow:visible}.team-logo__fallback{grid-area:1/1;color:#f4f1e9;font:800 9px/1 "IBM Plex Mono",monospace;letter-spacing:-.25px;text-shadow:0 1px 2px #000}.team-logo--verified{padding:2px}.team-logo__image{grid-area:1/1;z-index:1;display:block;width:100%;height:100%;object-fit:contain;object-position:center;filter:drop-shadow(0 0 1px rgba(255,255,255,.62)) drop-shadow(0 1px 1px rgba(0,0,0,.72))}
 `;

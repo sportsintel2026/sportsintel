@@ -3,6 +3,7 @@ import EventDateSelector, { EVENT_DATE_CSS } from "./EventDateSelector";
 import FootballIntel, { FOOTBALL_INTEL_CSS } from "./FootballIntel";
 import TeamLogo, { displayTeamName, TEAM_LOGO_CSS } from "./TeamLogo";
 import { sportStartLabel } from "../lib/eventSlate";
+import { collapseRepeatedTeamWords, presentationPickText } from "../lib/teamPresentation";
 
 const fmtPct = (value) => value == null ? "—" : `${Number(value).toFixed(1)}%`;
 const fmtEdge = (value) => value == null ? "—" : `${Number(value) >= 0 ? "+" : ""}${Number(value).toFixed(1)}%`;
@@ -12,19 +13,19 @@ function matchupParts(item) {
   return [parts[0] || item?.a?.[0] || "Away", parts[1] || item?.h?.[0] || "Home"];
 }
 
-function TeamMark({ team, tuple, sport }) {
+function TeamMark({ team, tuple, sport, identity }) {
   const abbr = tuple?.[0] || String(team || "?").split(/\s+/).map((part) => part[0]).join("").slice(0, 3);
-  return <TeamLogo sport={sport} team={team} abbr={abbr} color={tuple?.[1] || "#55606b"} className="aeb-teammark" />;
+  return <TeamLogo sport={sport} team={team} abbr={abbr} logoId={identity?.id} logoUrl={identity?.logo} color={tuple?.[1] || "#55606b"} className="aeb-teammark" />;
 }
 
 function Matchup({ item, sport, compact = false }) {
   const [rawAway, rawHome] = matchupParts(item);
-  const away = displayTeamName({ sport, team: rawAway, abbr: item.a?.[0] });
-  const home = displayTeamName({ sport, team: rawHome, abbr: item.h?.[0] });
+  const away = collapseRepeatedTeamWords(displayTeamName({ sport, team: rawAway, abbr: item.a?.[0] }));
+  const home = collapseRepeatedTeamWords(displayTeamName({ sport, team: rawHome, abbr: item.h?.[0] }));
   return <div className={`aeb-matchup${compact ? " aeb-matchup--compact" : ""}`}>
-    <div><TeamMark team={away} tuple={item.a} sport={sport} /><b>{away}</b></div>
+    <div><TeamMark team={away} tuple={item.a} sport={sport} identity={item.teamIdentity?.away} /><b>{away}</b></div>
     <span>AT</span>
-    <div><TeamMark team={home} tuple={item.h} sport={sport} /><b>{home}</b></div>
+    <div><TeamMark team={home} tuple={item.h} sport={sport} identity={item.teamIdentity?.home} /><b>{home}</b></div>
   </div>;
 }
 
@@ -34,10 +35,10 @@ function pickText(item, sport) {
   for (const [team, tuple] of [[rawAway, item?.a], [rawHome, item?.h]]) {
     const abbr = String(tuple?.[0] || "");
     if (abbr && raw.toUpperCase().startsWith(`${abbr.toUpperCase()} `)) {
-      return `${displayTeamName({ sport, team, abbr })}${raw.slice(abbr.length)}`;
+      return presentationPickText({ pick: raw, displayName: displayTeamName({ sport, team, abbr }), abbreviation: abbr });
     }
   }
-  return raw;
+  return collapseRepeatedTeamWords(raw);
 }
 
 function LockCard({ title, navigate }) {
@@ -71,15 +72,27 @@ function WizePlays({ rows, record, hasFull, planLoaded, navigate, sport }) {
       <header><div><span>CURATED · HAND REVIEWED</span><h2>WizePlays</h2></div><button onClick={() => navigate("/expert-picks")}>VIEW ALL ›</button></header>
       {!planLoaded ? <p className="aeb-quiet">Checking access…</p>
         : !hasFull ? <div className="aeb-wizelock"><p>Hand-reviewed plays are included with All-Access.</p><button onClick={() => navigate("/pricing")}>Unlock</button></div>
-        : <><div className="aeb-wizemetrics"><div><b>{rows?.length || 0}</b><span>ACTIVE TODAY</span></div><div><b>{hitRate == null ? "—" : `${hitRate}%`}</b><span>HISTORICAL HIT RATE</span></div><div><b>{record?.units == null ? "—" : `${record.units >= 0 ? "+" : ""}${record.units.toFixed(1)}u`}</b><span>TRACKED UNITS</span></div></div>{rows?.length ? rows.map((pick, index) => <button className="aeb-wizerow" key={`${pick.pick}-${index}`} onClick={() => navigate("/expert-picks")}><span>{pick.pick}</span><small>{pick.game || sport.toUpperCase()}</small><b>{pick.result ? String(pick.result).toUpperCase() : pick.odds || "VIEW"}</b></button>) : <p className="aeb-quiet">No active WizePlays right now. Curated plays post before {sportStartLabel(sport)}.</p>}</>}
+        : <><div className="aeb-wizemetrics"><div><b>{rows?.length || 0}</b><span>ACTIVE TODAY</span></div><div><b>{`${record?.wins || 0}-${record?.losses || 0}-${record?.pushes || 0}`}</b><span>VERIFIED W-L-P</span></div><div><b>{hitRate == null ? "—" : `${hitRate}%`}</b><span>HISTORICAL HIT RATE</span></div><div><b>{record?.units == null ? "—" : `${record.units >= 0 ? "+" : ""}${record.units.toFixed(1)}u`}</b><span>TRACKED UNITS</span></div></div>{rows?.length ? rows.map((pick, index) => <button className="aeb-wizerow" key={`${pick.pick}-${index}`} onClick={() => navigate("/expert-picks")}><span>{pick.pick}</span><small>{pick.game || sport.toUpperCase()}</small><b>{pick.result ? String(pick.result).toUpperCase() : pick.odds || "VIEW"}</b></button>) : <p className="aeb-quiet">No active WizePlays right now. Curated plays post before {sportStartLabel(sport)}.</p>}</>}
     </section>
   );
+}
+
+function VerifiedIntel({ groups = [] }) {
+  return <div className="aeb-verified-intel">{groups.slice(0, 4).map((group, groupIndex) => <article key={`${group.gl || "intel"}-${groupIndex}`}>
+    <header>{group.gl || "Verified game context"}</header>
+    {(group.items || []).slice(0, 3).map((item, index) => <div key={`${item.tag || "intel"}-${index}`}><span>{item.tag || "INTEL"}</span><p><b>{item.tx}</b>{item.rd ? ` · ${item.rd}` : ""}</p></div>)}
+  </article>)}</div>;
+}
+
+function ModelPerformance({ record }) {
+  if (!record?.graded) return null;
+  return <section className="aeb-performance"><header><span>VERIFIED MODEL PERFORMANCE</span><small>AUTHORITATIVE GRADED RESULTS</small></header><div><strong>{record.wins}-{record.losses}</strong><span>{record.graded} GRADED</span><strong>{record.winPct}%</strong><span>WIN RATE</span><strong>{record.units == null ? "—" : `${record.units >= 0 ? "+" : ""}${record.units.toFixed(1)}u`}</strong><span>POSTED-PRICE UNITS</span></div></section>;
 }
 
 export default function ApprovedEdgeBoard({
   sport, dateGroups, eventDate, setEventDate, eventDateLabel, games = [], ratedGameCount = 0,
   items = [], previewItems = [], itemsByMarket = {}, previewItemsByMarket = {}, hasFull, planLoaded, markets = [], wpToday = [], wpRecord,
-  footballIntel = [], movers = [], navigate,
+  footballIntel = [], intelGroups = [], modelPerformance = null, movers = [], navigate,
 }) {
   const [market, setMarket] = useState("ALL");
   const mainItems = useMemo(() => {
@@ -127,10 +140,12 @@ export default function ApprovedEdgeBoard({
         </section>}
 
         <WizePlays rows={wpToday} record={wpRecord} hasFull={hasFull} planLoaded={planLoaded} navigate={navigate} sport={sport} />
+        {hasFull && <ModelPerformance record={modelPerformance} />}
 
         <section className="aeb-intel-preview">
-          <header><span>MARKET &amp; INTEL</span><button onClick={() => navigate(`/market-read${sport === "mlb" ? "" : `?sport=${sport}`}`)}>OPEN FULL VIEW →</button></header>
+          <header><span>MARKET &amp; INTEL</span><button onClick={() => navigate(`/market-read${sport === "mlb" ? "" : `?sport=${sport}`}`, { state: { sport, intelGroups } })}>OPEN FULL VIEW →</button></header>
           {isFootball ? <FootballIntel sport={sport} rows={footballIntel} compact />
+            : intelGroups.length ? <VerifiedIntel groups={intelGroups} />
             : movers.length ? <div className="aeb-movers">{movers.slice(0, 3).map((mover, index) => <div key={index}><span>{mover.p || "Market move"}</span><small>{mover.g || ""}</small><b>{mover.mv ? `${mover.mv[0]} → ${mover.mv[1]}` : mover.odds || "—"}</b></div>)}</div>
               : <p className="aeb-quiet">Market movement and verified game context appear here as lines update.</p>}
         </section>
@@ -151,4 +166,5 @@ export const CSS = `
 /* Final approved team-identity detail layer. */
 .aeb-matchup>div{gap:10px}.aeb-matchup>div b{font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:800;line-height:1.02;letter-spacing:.12px;word-break:normal;overflow-wrap:break-word}.aeb-matchup>span{margin:3px 0 3px 46px;color:#797a73;letter-spacing:.55px}.aeb-teammark{width:37px;height:37px}.aeb-featurepick h2{font-family:'Barlow Condensed',sans-serif;font-size:clamp(22px,5.6vw,30px);line-height:1;letter-spacing:.12px}.aeb-featureprob{align-items:start}.aeb-featureprob b{font-family:'Barlow Condensed',sans-serif;font-size:18px;line-height:1;letter-spacing:.15px;white-space:nowrap}.aeb-row{grid-template-columns:23px minmax(0,1.32fr) minmax(92px,.9fr) 66px;min-height:88px}.aeb-rowteams .aeb-matchup>div{gap:7px}.aeb-rowteams .aeb-teammark{width:26px;height:26px}.aeb-rowteams .aeb-matchup>div b{font-size:13px;line-height:1}.aeb-rowteams .aeb-matchup>span{margin:2px 0 2px 33px}.aeb-rowteams>small{margin-top:6px}.aeb-rowpick>span{display:inline-block;border:1px solid rgba(210,173,104,.52);border-radius:4px;padding:2px 4px;font-size:6.5px}.aeb-rowpick h3{margin-top:5px;font-family:'Barlow Condensed',sans-serif;font-size:15px;line-height:1;letter-spacing:.12px}.aeb-rownums>b{font-family:'Barlow Condensed',sans-serif;font-size:15px;line-height:1}.aeb-rownums i{margin-top:4px;margin-bottom:4px}
 @media(max-width:374px){.aeb-featuregrid{grid-template-columns:minmax(0,.94fr) minmax(0,1.06fr)}.aeb-featurematch .aeb-teammark{width:29px;height:29px}.aeb-featurematch .aeb-matchup>div b{font-size:14px}.aeb-featurematch .aeb-matchup>span{margin-left:35px}.aeb-featurepick h2{font-size:18px}.aeb-featureprob b{font-size:15px}.aeb-row{grid-template-columns:18px minmax(0,1.13fr) minmax(82px,.84fr) 52px;gap:5px;padding-left:5px;padding-right:5px}.aeb-rowteams .aeb-teammark{width:22px;height:22px}.aeb-rowteams .aeb-matchup>div b{font-size:11.5px}.aeb-rowteams .aeb-matchup>span{margin-left:28px}.aeb-rowpick{padding-left:5px}.aeb-rowpick h3{font-size:12.5px}.aeb-rownums>b{font-size:12.5px}}
+.aeb-teammark{border:0;border-radius:0;background:transparent;box-shadow:none;color:#f4f1e9}.aeb-teammark.team-logo--fallback{border:0;border-radius:0;background:transparent;box-shadow:none}.aeb-wizemetrics{grid-template-columns:repeat(4,minmax(0,1fr))}.aeb-wizemetrics b{font-size:clamp(13px,3.6vw,19px)}.aeb-performance{margin-top:13px;border:1px solid #2e302b;border-radius:8px;background:#0f1212;overflow:hidden}.aeb-performance header{display:flex;justify-content:space-between;gap:12px;padding:11px 13px;border-bottom:1px solid #272923}.aeb-performance header span{font:700 8px 'IBM Plex Mono',monospace;letter-spacing:1px;color:#d2ad68}.aeb-performance header small{color:#8f9089;font:700 7px 'IBM Plex Mono',monospace}.aeb-performance>div{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));padding:12px}.aeb-performance strong,.aeb-performance span{display:block;text-align:center}.aeb-performance strong{font:800 17px 'Barlow Condensed',sans-serif;color:#e8e4da}.aeb-performance>div span{font:600 6.5px/1.4 'IBM Plex Mono',monospace;color:#75766f}.aeb-verified-intel{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:11px}.aeb-verified-intel article{min-width:0;border:1px solid #292b27;border-radius:7px;background:#0d1011;padding:10px}.aeb-verified-intel article>header{color:#ddd9d0;font:800 12px/1.2 'Barlow Condensed',sans-serif;overflow-wrap:anywhere}.aeb-verified-intel article>div{display:grid;grid-template-columns:auto minmax(0,1fr);gap:7px;margin-top:8px;padding-top:8px;border-top:1px solid #242621}.aeb-verified-intel article span{color:#d2ad68;font:700 6.5px 'IBM Plex Mono',monospace;letter-spacing:.6px}.aeb-verified-intel article p{margin:0;color:#878880;font:500 8px/1.45 'IBM Plex Mono',monospace;overflow-wrap:anywhere}.aeb-verified-intel article p b{color:#d3d0c7;font-weight:700}.aeb-performance+.aeb-intel-preview{margin-top:13px}@media(max-width:520px){.aeb-verified-intel{grid-template-columns:1fr}.aeb-wizemetrics>div{padding:0 3px}.aeb-wizemetrics span{font-size:5.5px}}
 `;

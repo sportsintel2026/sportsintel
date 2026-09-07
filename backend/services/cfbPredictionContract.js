@@ -225,6 +225,9 @@ function toCfbBoardEdge(game, market) {
     matchup: game.matchup,
     edge: Math.round(selected.edge * 1000) / 10,
     odds: selected.odds,
+    oppOdds: selected.opposingOdds,
+    book: selected.book,
+    opposingBook: selected.opposingBook,
     modelProb: selected.publishedProb,
     marketFairProb: selected.marketFairProb,
     line: selected.line,
@@ -234,6 +237,8 @@ function toCfbBoardEdge(game, market) {
     conviction: null,
     provisional: true,
   };
+  out.teamIdentity = game.teamIdentity || null;
+  out.fullMatchup = `${game.awayTeam || "Away"} @ ${game.homeTeam || "Home"}`;
   if (market !== "total") out.teamAbbr = selected.side === "home" ? game.homeTeam : game.awayTeam;
   return out;
 }

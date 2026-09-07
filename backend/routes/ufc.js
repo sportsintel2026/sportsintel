@@ -208,6 +208,7 @@ async function parseBout(bout, oddsMap) {
   let implBlue = impliedFromAny(rawBlue);
   let amRed = rawRed != null && Number.isFinite(Number(rawRed)) ? Number(rawRed) : null;
   let amBlue = rawBlue != null && Number.isFinite(Number(rawBlue)) ? Number(rawBlue) : null;
+  let oddsSource = implRed != null && implBlue != null ? "Cito posted line" : null;
   if (implRed == null || implBlue == null) {
     // WZ-UFCODDSJOIN-2026-08-03 :: the join was a single EXACT lookup on the fighter's full display
     // name, and it requires BOTH corners to hit -- one miss blanks the whole bout. On the 08-08
@@ -245,7 +246,7 @@ async function parseBout(bout, oddsMap) {
     };
     const oR = lookupOdds(red);
     const oB = lookupOdds(blue);
-    if (oR && oB) { implRed = oR.impl; implBlue = oB.impl; amRed = oR.american; amBlue = oB.american; }
+    if (oR && oB) { implRed = oR.impl; implBlue = oB.impl; amRed = oR.american; amBlue = oB.american; oddsSource = "Cross-book median"; }
   }
 
   const out = {
@@ -257,6 +258,7 @@ async function parseBout(bout, oddsMap) {
     titleBout: !!bout.titleBout,
     red, blue,
     pick: null, winPct: null, pickCorner: null, odds: null,
+    oddsSource,
     marketWinPct: null, edgePct: null, value: false,
     methodLean: null, // WZ-UFC-METHOD-2026-07-09 :: info-only KO/SUB/DEC read (no market to beat)
     // WZ-UFC-FACTORS-2026-07-27 :: scoreBout already returns the per-factor breakdown it used to
@@ -608,7 +610,7 @@ async function fetchOddsFallbackCard() {
         red: { name: A || "Fighter 1", record: "", headshot: null },
         blue: { name: B || "Fighter 2", record: "", headshot: null },
         weightClass: "", titleBout: false, cardSection: "Prelims", boutOrder: 0,
-        pick, winPct, pickCorner, odds, edgePct: null, time: ev.commence_time || "",
+        pick, winPct, pickCorner, odds, oddsSource: "Cross-book median", edgePct: null, time: ev.commence_time || "",
       };
     });
   } catch (_) {
