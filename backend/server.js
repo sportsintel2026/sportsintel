@@ -312,8 +312,8 @@ cron.schedule("20 9 * * *", async () => {
     await recordNFLPredictions(slate);
     // WZ-NFLPROPSSHADOW-CRON-2026-07-05 :: props shadow logger, same imminence gate;
     // no-op all offseason (bails before the roster crawl when no lines are posted).
-    const { recordNflPropShadow } = require("./services/nflPropsShadow");
-    const propShadow = await recordNflPropShadow({});
+    const { recordFootballProps } = require("./services/nflPropsShadow");
+    const propShadow = await recordFootballProps({ sport: "nfl" });
     if (propShadow && propShadow.logged) console.log(`[CRON] NFL prop-shadow logged ${propShadow.logged} rows`);
   } catch (err) {
     console.error("[CRON] NFL model-pick record failed:", err.message);
@@ -332,6 +332,11 @@ cron.schedule("25 9 * * *", async () => {
     const { recordCFBPredictions } = require("./services/predictionTracker");
     const slate = await runCFBSlate({ weeks: 1 });
     await recordCFBPredictions(slate);
+    // Reuse this existing once-daily CFB run for exact-identity player-prop snapshots.
+    // No customer request can trigger provider work, and no new schedule is added.
+    const { recordFootballProps } = require("./services/nflPropsShadow");
+    const props = await recordFootballProps({ sport: "cfb" });
+    if (props && props.verified) console.log(`[CRON] CFB verified props cached ${props.verified} rows`);
   } catch (err) {
     console.error("[CRON] CFB model-pick record failed:", err.message);
   }
@@ -487,6 +492,21 @@ app.listen(PORT, () => {
   // Warm the board cache ~15s after boot so the first post-deploy load is fast, not
   // cold. Delayed so the server is fully ready to serve its own warm request.
   setTimeout(warmEdgesCache, 15000);
+  // NFL props are a verified process-local snapshot. A deploy after the 9:20 ET
+  // recorder otherwise leaves paid customers on an empty board until the next day.
+  // Warm once after boot; customer requests still never trigger provider work.
+  setTimeout(() => {
+    try {
+      const { warmNflPropsSnapshotOnBoot } = require("./services/nflPropsShadow");
+      warmNflPropsSnapshotOnBoot()
+        .then((result) => {
+          if (result?.verified) console.log(`[STARTUP] NFL verified props cached ${result.verified} rows`);
+        })
+        .catch((error) => console.error("[STARTUP] NFL props warm failed:", error.message));
+    } catch (error) {
+      console.error("[STARTUP] NFL props warm unavailable:", error.message);
+    }
+  }, 30000);
 });
 
 module.exports = app;

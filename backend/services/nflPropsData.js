@@ -241,7 +241,13 @@ async function buildPlayerProjections({ season = 2025, teamLimit = 3 } = {}) {
         const items = Array.isArray(g.items) ? g.items : (g.id ? [g] : []);
         for (const a of items) {
           const pos = a.position && a.position.abbreviation;
-          if (a.id && PROJECTED_POSITIONS.has(pos)) roster.push({ id: a.id, name: a.fullName || a.displayName, pos, team: tm.abbreviation });
+          if (a.id && PROJECTED_POSITIONS.has(pos)) roster.push({
+            id: a.id,
+            name: a.fullName || a.displayName,
+            pos,
+            team: tm.abbreviation,
+            headshot: a.headshot?.href || null,
+          });
         }
       }
     } catch (_) { continue; }
@@ -256,7 +262,7 @@ async function buildPlayerProjections({ season = 2025, teamLimit = 3 } = {}) {
           const proj = projectPlayer(season2025, pl.pos);
           if (proj.eligibleMarkets.length === 0) { skippedNoMarket++; return; } // not a real market participant
           players.push({
-            id: pl.id, name: pl.name, team: pl.team, pos: pl.pos,
+            id: pl.id, name: pl.name, team: pl.team, pos: pl.pos, headshot: pl.headshot,
             gamesPlayed: season2025.gamesPlayed,
             markets: proj.eligibleMarkets,
             projected: proj.projected,
