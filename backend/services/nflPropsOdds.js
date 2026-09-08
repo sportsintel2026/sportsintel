@@ -56,6 +56,11 @@ function devigOver(overOdds, underOdds) {
   return Math.round((io / (io + iu)) * 1e4) / 1e4;
 }
 
+function isBetterAmericanPrice(candidate, current) {
+  const next = Number(candidate), existing = Number(current);
+  return Number.isFinite(next) && (!Number.isFinite(existing) || next > existing);
+}
+
 // ── PURE: parse an event-odds payload into normalized per-player prop lines ───────
 // Returns [{ player, market, line, overOdds, underOdds, fairOverProb, book }].
 // Per (market, player): keep the PRIMARY line (lowest line with both sides priced);
@@ -78,14 +83,22 @@ function parsePropLines(oddsJson) {
           byPlayer.get(player)[side] = outcome.price;
         }
         for (const [player, quote] of byPlayer) {
-          if (quote.yes == null || quote.no == null) continue;
+          // The live provider commonly publishes scorer markets as YES-only boards.
+          // Preserve the verified posted price without fabricating a NO counterprice
+          // or fair probability; use a two-way quote only when both sides exist.
+          if (quote.yes == null) continue;
+          const hasCounterprice = quote.no != null;
           const key = `${spec.market}::${player}`;
-          if (out.has(key)) continue;
+          const existing = out.get(key);
+          if (existing && (spec.market !== "anytime_td" || !isBetterAmericanPrice(quote.yes, existing.overOdds))) continue;
           out.set(key, {
             player, market: spec.market, line: null,
-            overOdds: quote.yes, underOdds: quote.no,
-            fairOverProb: devigOver(quote.yes, quote.no),
-            book, priceMode: "yes-no", overLabel: "YES", underLabel: "NO",
+            overOdds: quote.yes, underOdds: hasCounterprice ? quote.no : null,
+            fairOverProb: hasCounterprice ? devigOver(quote.yes, quote.no) : null,
+            book,
+            priceMode: hasCounterprice ? "yes-no" : "over-only",
+            overLabel: "YES",
+            underLabel: hasCounterprice ? "NO" : null,
           });
         }
         continue;

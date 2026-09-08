@@ -51,13 +51,16 @@ assert.equal(unsupported.rows.length, 0, "unsupported markets and inexact player
 const touchdown = buildShadowRows([
   { player: "Jordan Example", market: "pass_tds", line: 1.5, overOdds: 105, underOdds: -125, fairOverProb: 0.466, book: "Verified Book", priceMode: "over-under", eventId: "evt-1", matchup: "Arizona Cardinals @ Buffalo Bills" },
   { player: "Jordan Example", market: "anytime_td", line: null, overOdds: 145, underOdds: -175, fairOverProb: 0.391, book: "Verified Book", priceMode: "yes-no", overLabel: "YES", underLabel: "NO", eventId: "evt-1", matchup: "Arizona Cardinals @ Buffalo Bills" },
+  { player: "Jordan Example Jr.", market: "anytime_td", line: null, overOdds: 160, underOdds: null, fairOverProb: null, book: "Best Book", priceMode: "over-only", overLabel: "YES", underLabel: null, eventId: "evt-1", matchup: "Arizona Cardinals @ Buffalo Bills" },
 ], { "evt-1": { commence: "2026-09-13T17:00:00Z", matchup: "Arizona Cardinals @ Buffalo Bills" } }, [
   { id: "99", name: "Jordan Example", team: "ARI", pos: "QB", gamesPlayed: 17, projected: { pass_yds: 263.2 } },
 ]);
 assert.equal(touchdown.rows.length, 0, "unmodeled touchdown markets never create prediction-ledger rows");
 assert.deepEqual(touchdown.verifiedProps.map((prop) => prop.market), ["pass_tds", "anytime_td"]);
 assert.equal(touchdown.verifiedProps[0].modelEdge, null);
-assert.equal(touchdown.verifiedProps[1].priceMode, "yes-no");
+assert.equal(touchdown.verifiedProps[1].priceMode, "over-only");
+assert.equal(touchdown.verifiedProps[1].overOdds, 160);
+assert.equal(touchdown.verifiedProps[1].book, "Best Book", "one verified player identity keeps one Anytime TD card at the best price");
 
 const cfbPlayers = buildCfbRosterIdentities([
   { team_name: "Stanford", espn_team_id: "24", identity_status: "exact", snapshot_at: "2026-08-30T12:00:00Z", roster: { players: [{ id: "cfbd-1", firstName: "Exact", lastName: "Cardinal", position: "RB" }] } },
