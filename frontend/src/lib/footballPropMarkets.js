@@ -1,6 +1,6 @@
 const MARKET_DEFINITIONS = Object.freeze({
   pass_yds: { family: "passing", label: "Passing Yards" },
-  pass_tds: { family: "touchdowns", label: "Passing Touchdowns" },
+  pass_tds: { family: "passing", label: "Passing Touchdowns" },
   interceptions: { family: "passing", label: "Interceptions" },
   pass_attempts: { family: "passing", label: "Pass Attempts" },
   completions: { family: "passing", label: "Completions" },
@@ -10,13 +10,13 @@ const MARKET_DEFINITIONS = Object.freeze({
   rec_yds: { family: "receiving", label: "Receiving Yards" },
   receptions: { family: "receiving", label: "Receptions" },
   longest_reception: { family: "receiving", label: "Longest Reception" },
-  anytime_td: { family: "touchdowns", label: "Anytime Touchdown" },
-  rush_tds: { family: "touchdowns", label: "Rushing Touchdowns" },
-  rec_tds: { family: "touchdowns", label: "Receiving Touchdowns" },
-  touchdowns_2_plus: { family: "touchdowns", label: "2+ Touchdowns" },
-  touchdowns_3_plus: { family: "touchdowns", label: "3+ Touchdowns" },
-  first_td: { family: "touchdowns", label: "First Touchdown" },
-  last_td: { family: "touchdowns", label: "Last Touchdown" },
+  anytime_td: { family: "touchdowns", label: "Anytime TD Scorer" },
+  rush_tds: { family: "rushing", label: "Rushing Touchdowns" },
+  rec_tds: { family: "receiving", label: "Receiving Touchdowns" },
+  touchdowns_2_plus: { family: "touchdowns", label: "2+ TD Scorer" },
+  touchdowns_3_plus: { family: "touchdowns", label: "3+ TD Scorer" },
+  first_td: { family: "touchdowns", label: "First TD Scorer" },
+  last_td: { family: "touchdowns", label: "Last TD Scorer" },
 });
 
 const FAMILY_DEFINITIONS = Object.freeze([
@@ -42,7 +42,9 @@ export function availableFootballPropFamilies({ props = [], supportedMarkets = [
   if (markets.size === 0) return [];
   const families = [{ key: "all", label: "All" }];
   for (const family of FAMILY_DEFINITIONS) {
-    const familyMarkets = [...markets].filter((market) => (MARKET_DEFINITIONS[market]?.family || "other") === family.key);
+    const familyMarkets = [...markets].filter((market) => family.key === "touchdowns"
+      ? market === "anytime_td"
+      : (MARKET_DEFINITIONS[market]?.family || "other") === family.key);
     if (familyMarkets.length) families.push(family);
   }
   return families;
@@ -50,9 +52,11 @@ export function availableFootballPropFamilies({ props = [], supportedMarkets = [
 
 export function filterFootballProps(props, family) {
   const key = String(family || "all").toLowerCase();
-  return (props || []).filter((prop) => {
+  const filtered = (props || []).filter((prop) => {
     const market = footballPropMarket(prop?.market);
     if (!market) return false;
     return key === "all" || market.family === key;
   });
+  if (key !== "touchdowns") return filtered;
+  return filtered.filter((prop) => marketKey(prop?.market) === "anytime_td");
 }

@@ -62,6 +62,10 @@ function etDate(iso) {
 }
 function easternToday() { return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" }); }
 function round3(n) { return n == null ? null : Math.round(n * 1000) / 1000; }
+function isBetterAmericanPrice(candidate, current) {
+  const next = Number(candidate), existing = Number(current);
+  return Number.isFinite(next) && (!Number.isFinite(existing) || next > existing);
+}
 
 // Normalize a player name for matching book line <-> projection roster (Odds API vs
 // ESPN). Lowercase, drop periods/apostrophes, strip generational suffixes, collapse ws.
@@ -122,6 +126,7 @@ function buildShadowRows(lines, byEvent, projections, { sport = "nfl" } = {}) {
 
   const rows = [];
   const verifiedProps = [];
+  const anytimeByVerifiedIdentity = new Map();
   const unmatched = [];
   let matched = 0;
   for (const ln of lines || []) {
@@ -163,7 +168,7 @@ function buildShadowRows(lines, byEvent, projections, { sport = "nfl" } = {}) {
         k_rate: ln.fairOverProb ?? null,
       });
     }
-    verifiedProps.push({
+    const verifiedProp = {
       sport: league,
       eventId: String(ln.eventId),
       eventDate: gameDate,
@@ -191,7 +196,19 @@ function buildShadowRows(lines, byEvent, projections, { sport = "nfl" } = {}) {
       modelOverProb: round3(mProb),
       modelEdge: mProb == null || ln.fairOverProb == null ? null : round3(mProb - ln.fairOverProb),
       gamesUsed: proj.gamesPlayed ?? null,
-    });
+    };
+    if (ln.market === "anytime_td") {
+      const identityKey = `${verifiedProp.eventId}:${verifiedProp.playerId || playerKey(proj.name)}:anytime_td`;
+      const existingIndex = anytimeByVerifiedIdentity.get(identityKey);
+      if (existingIndex == null) {
+        anytimeByVerifiedIdentity.set(identityKey, verifiedProps.length);
+        verifiedProps.push(verifiedProp);
+      } else if (isBetterAmericanPrice(verifiedProp.overOdds, verifiedProps[existingIndex].overOdds)) {
+        verifiedProps[existingIndex] = verifiedProp;
+      }
+    } else {
+      verifiedProps.push(verifiedProp);
+    }
   }
   return { rows, verifiedProps, matched, unmatched };
 }

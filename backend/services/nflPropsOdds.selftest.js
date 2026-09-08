@@ -58,21 +58,18 @@ const lines = parsePropLines({
           key: "player_anytime_td",
           outcomes: [
             { description: "Exact Scorer", name: "Yes", price: 135 },
-            { description: "Exact Scorer", name: "No", price: -165 },
           ],
         },
         {
           key: "player_1st_td",
           outcomes: [
             { description: "Exact Scorer", name: "Yes", price: 900 },
-            { description: "Exact Scorer", name: "No", price: -1400 },
           ],
         },
         {
           key: "player_last_td",
           outcomes: [
             { description: "Exact Scorer", name: "Yes", price: 1000 },
-            { description: "Exact Scorer", name: "No", price: -1600 },
           ],
         },
         {
@@ -88,13 +85,19 @@ const lines = parsePropLines({
     {
       key: "book-b",
       title: "Book B",
-      markets: [{
-        key: "player_pass_yds",
-        outcomes: [
-          { description: "Exact Player", name: "Over", point: 249.5, price: 105 },
-          { description: "Exact Player", name: "Under", point: 249.5, price: -125 },
-        ],
-      }],
+      markets: [
+        {
+          key: "player_pass_yds",
+          outcomes: [
+            { description: "Exact Player", name: "Over", point: 249.5, price: 105 },
+            { description: "Exact Player", name: "Under", point: 249.5, price: -125 },
+          ],
+        },
+        {
+          key: "player_anytime_td",
+          outcomes: [{ description: "Exact Scorer", name: "Yes", price: 150 }],
+        },
+      ],
     },
   ],
 });
@@ -112,14 +115,30 @@ assert.deepEqual(lines.find((line) => line.market === "pass_yds"), {
   overLabel: "OVER",
   underLabel: "UNDER",
 }, "line and both prices stay paired to the selected book");
-assert.equal(lines.find((line) => line.market === "anytime_td").priceMode, "yes-no");
-assert.equal(lines.find((line) => line.market === "anytime_td").overOdds, 135);
+assert.equal(lines.find((line) => line.market === "anytime_td").overOdds, 150);
+assert.equal(lines.find((line) => line.market === "anytime_td").book, "Book B", "Anytime TD keeps the best verified price across books");
+assert.equal(lines.find((line) => line.market === "anytime_td").underOdds, null);
+assert.equal(lines.find((line) => line.market === "anytime_td").fairOverProb, null);
+assert.equal(lines.find((line) => line.market === "anytime_td").priceMode, "over-only", "provider YES-only scorer board remains honest one-sided market data");
+assert.equal(lines.find((line) => line.market === "first_td").priceMode, "over-only");
+assert.equal(lines.find((line) => line.market === "last_td").priceMode, "over-only");
 assert.equal(lines.find((line) => line.market === "touchdowns_2_plus").line, 1.5);
 assert.equal(lines.find((line) => line.market === "touchdowns_3_plus").line, 2.5);
 assert.equal(lines.some((line) => line.market === "touchdown_milestone"), false, "the provider-only milestone key never leaks into the customer contract");
 assert.equal(MARKET_TO_ODDSKEY.pass_tds, "player_pass_tds");
+assert.equal(MARKET_TO_ODDSKEY.rush_tds, "player_rush_tds");
+assert.equal(MARKET_TO_ODDSKEY.rec_tds, "player_reception_tds");
+assert.equal(MARKET_TO_ODDSKEY.anytime_td, "player_anytime_td");
+assert.equal(MARKET_TO_ODDSKEY.first_td, "player_1st_td");
+assert.equal(MARKET_TO_ODDSKEY.last_td, "player_last_td");
 assert.equal(MARKET_SPECS.player_anytime_td.offer, "yes-no");
 assert.deepEqual(FOOTBALL_SPORTS, { nfl: "americanfootball_nfl", cfb: "americanfootball_ncaaf" });
+
+const unsupportedMilestone = parsePropLines({ bookmakers: [{ key: "book-a", markets: [{
+  key: "player_tds_over",
+  outcomes: [{ description: "Milestone Scorer", name: "Over", point: 0.5, price: 125 }],
+}] }] });
+assert.deepEqual(unsupportedMilestone, [], "player_tds_over 0.5 is not relabeled as the provider's distinct player_anytime_td market");
 
 (async () => {
   const cfb = await getFootballPropLines({ sport: "cfb", daysAhead: 2, maxEvents: 1 });
