@@ -97,7 +97,7 @@ function routeFor(section, sport) {
   return section.to;
 }
 
-const HIDE_ON = ["/", "/login", "/signup", "/pricing", "/terms", "/privacy", "/reset-password"];
+const HIDE_ON = ["/", "/login", "/signup", "/pricing", "/terms", "/privacy", "/reset-password", "/nfl-picks", "/college-football-picks", "/mlb-picks", "/best-bets-today"];
 
 function useShell() {
   const { pathname, search } = useLocation();

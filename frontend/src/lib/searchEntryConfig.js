@@ -1,0 +1,48 @@
+export const SEARCH_ENTRY_PAGES = Object.freeze({
+  nfl: Object.freeze({
+    key: "nfl",
+    path: "/nfl-picks",
+    title: "NFL Picks This Week, Predictions & Best Bets | WizePicks",
+    description: "NFL picks this week with the current slate, kickoff times, sportsbook context, and public-safe WizePicks model coverage.",
+    h1: "NFL Picks This Week",
+    eyebrow: "NFL PICKS & PREDICTIONS",
+    lead: "Follow the current NFL event-day slate with kickoff times, market context, and the WizePicks model board. Qualified pick details stay protected under the same access rules as the main product.",
+    explainer: "WizePicks compares its NFL probability view with no-vig market prices, then records and grades qualifying decisions. Early-season and provisional signals are labeled honestly rather than presented as guarantees.",
+    sports: ["nfl"],
+  }),
+  cfb: Object.freeze({
+    key: "cfb",
+    path: "/college-football-picks",
+    title: "College Football Picks Today, Predictions & Best Bets | WizePicks",
+    description: "College football picks today with the current CFB slate, kickoff times, rated-versus-market context, and public-safe WizePicks coverage.",
+    h1: "College Football Picks Today",
+    eyebrow: "CFB PICKS & PREDICTIONS",
+    lead: "See the active college-football slate by event date, with real matchups, kickoff times, and honest rated-versus-market context from WizePicks.",
+    explainer: "CFB games are only treated as model-rated when the required team identity and rating inputs resolve. Unrated or FBS-versus-FCS matchups remain market-only and are never promoted as a WizePicks model edge.",
+    sports: ["cfb"],
+  }),
+  mlb: Object.freeze({
+    key: "mlb",
+    path: "/mlb-picks",
+    title: "MLB Picks Today, Predictions & Best Bets | WizePicks",
+    description: "MLB picks today with the current baseball slate, first-pitch times, matchup context, and public-safe WizePicks model coverage.",
+    h1: "MLB Picks Today",
+    eyebrow: "MLB PICKS & PREDICTIONS",
+    lead: "Track today’s MLB slate with first-pitch times, matchup context, and the current WizePicks model board, while protected pick details remain behind existing access controls.",
+    explainer: "The MLB board combines starting-pitcher, offense, bullpen, park, weather, and market information. Every published decision is recorded and graded; missing historical prices are not assigned fabricated monetary returns.",
+    sports: ["mlb"],
+  }),
+  best: Object.freeze({
+    key: "best",
+    path: "/best-bets-today",
+    title: "Best Bets Today – Model Picks, Odds & Betting Edges | WizePicks",
+    description: "Best bets today across NFL, college football, and MLB, with current slates, event times, market context, and public-safe WizePicks coverage.",
+    h1: "Best Bets Today",
+    eyebrow: "TODAY’S MODEL BOARD",
+    lead: "Start with the active NFL, college-football, and MLB slates in one place. WizePicks shows real event context publicly while keeping protected model picks under the product’s existing access rules.",
+    explainer: "A WizePicks edge is the gap between the published model probability and the market’s no-vig fair probability for the exact displayed side. The strongest-looking number is never a guarantee, and every published pick is graded.",
+    sports: ["nfl", "cfb", "mlb"],
+  }),
+});
+
+export const SEARCH_ENTRY_LIST = Object.freeze(Object.values(SEARCH_ENTRY_PAGES));
