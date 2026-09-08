@@ -10,9 +10,9 @@
 // so design, the age gate, auth, routing, and premium behavior are untouched.
 //
 // The title/description/canonical below MUST stay in sync with the useSeo() values in the page
-// components (SEO step 3), so the static HTML equals what the client renders. Open Graph /
-// Twitter tags (step 2) are intentionally left untouched and stay global. Any expected tag that
-// cannot be found is a hard error, so a
+// components (SEO step 3), so the static HTML equals what the client renders. Current sport,
+// rolling-slate, and matchup routes also receive route-specific public-safe Open Graph/Twitter
+// images built from this same feed snapshot. Any expected tag that cannot be found is a hard error, so a
 // change to the built head format fails the build loudly instead of shipping wrong metadata.
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -24,6 +24,7 @@ import {
   splitSeoMatchup,
   SEO_PHASE2_LIST,
 } from "../src/lib/seoPhase2Config.js";
+import { shareImagePath, writeShareCard } from "./share-card.mjs";
 
 const DIST = fileURLToPath(new URL("../dist/", import.meta.url));
 const SPORTS = ["nfl", "cfb", "mlb"];
@@ -188,6 +189,90 @@ function replaceOnce(html, re, replacement, label, file) {
   return html.replace(re, () => replacement);
 }
 
+function nestedBookNames(value, into = new Set()) {
+  if (!value || typeof value !== "object") return into;
+  for (const [key, child] of Object.entries(value)) {
+    if (/book$/i.test(key) && typeof child === "string" && child.trim()) into.add(child.trim());
+    else if (child && typeof child === "object") nestedBookNames(child, into);
+  }
+  return into;
+}
+
+function shareGameTime(game, fallbackDate) {
+  const value = game?.commenceTime || game?.startTimeUTC || game?.startTime || game?.scheduled || null;
+  if (value) {
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) return parsed.toLocaleString("en-US", {
+      weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+      timeZone: "America/New_York", timeZoneName: "short",
+    });
+  }
+  return [fallbackDate, game?.time].filter(Boolean).join(" · ") || "Current event slate";
+}
+
+function shareGameBooks(game) {
+  return [...nestedBookNames({
+    marketBooks: game?.marketBooks,
+    moneyline: game?.moneyline,
+    spread: game?.spread,
+    runLine: game?.runLine,
+    totals: game?.totals,
+  })].slice(0, 3);
+}
+
+function shareSpecForRoute(route) {
+  const sport = route.staticPhase2?.sport || (route.staticBody?.sports?.length === 1 ? route.staticBody.sports[0] : null);
+  if (!sport || !SPORTS.includes(sport)) return null;
+  const rolling = currentSeoPages.find((page) => page.kind === "slate" && page.sport === sport);
+  const sourcePage = route.staticPhase2 || rolling;
+  const games = sourcePage?.games || [];
+  let game = null;
+  if (route.staticPhase2?.kind === "matchup") {
+    game = (currentFeeds[sport]?.games || []).find((item) => String(item?.eventId ?? item?.gameId ?? item?.id ?? "") === route.staticPhase2.gameId) || null;
+  } else {
+    game = games[0] || null;
+  }
+  if (!game) return null;
+  const teams = splitSeoMatchup(game);
+  if (!teams.away || !teams.home) return null;
+  const books = shareGameBooks(game);
+  const marketLabel = sport === "mlb" ? "MONEYLINE · RUN LINE · TOTAL" : "MONEYLINE · SPREAD · TOTAL";
+  const base = {
+    sport: sport === "cfb" ? "COLLEGE FOOTBALL" : sport.toUpperCase(),
+    path: new URL(route.canonical).pathname,
+    matchup: `${teams.away} AT ${teams.home}`,
+    detail: shareGameTime(game, sourcePage?.date),
+    context: books.length ? `${marketLabel} · ${books.join(" · ")}` : `${marketLabel} · PUBLIC MARKET CONTEXT`,
+  };
+  if (route.staticPhase2?.kind === "matchup") return {
+    ...base, kind: "MATCHUP", eyebrow: "PUBLIC MATCHUP BREAKDOWN",
+    titleLines: [teams.away, teams.home], cta: "SEE THE FULL WIZEPICKS BREAKDOWN",
+  };
+  if (route.staticPhase2?.kind === "slate") return {
+    ...base, kind: sport === "mlb" ? "DAILY SLATE" : "WEEKLY SLATE",
+    eyebrow: `${games.length} CURRENT GAME${games.length === 1 ? "" : "S"}`,
+    title: route.staticPhase2.h1, cta: "UNLOCK THE FULL MODEL BOARD",
+  };
+  return {
+    ...base, kind: "SPORT HUB", eyebrow: "CURRENT PUBLIC-SAFE SLATE",
+    title: route.staticBody.h1, cta: "UNLOCK THE FULL MODEL BOARD",
+  };
+}
+
+function routeSocialMeta(html, route, imagePath) {
+  const image = `https://www.wizepicks.com${imagePath}`;
+  html = replaceOnce(html, /<meta property="og:url" content="[^"]*"\s*\/>/, `<meta property="og:url" content="${esc(route.canonical)}" />`, "og:url", route.out);
+  html = replaceOnce(html, /<meta property="og:title" content="[^"]*"\s*\/>/, `<meta property="og:title" content="${esc(route.title)}" />`, "og:title", route.out);
+  html = replaceOnce(html, /<meta property="og:description" content="[^"]*"\s*\/>/, `<meta property="og:description" content="${esc(route.description)}" />`, "og:description", route.out);
+  html = replaceOnce(html, /<meta property="og:image" content="[^"]*"\s*\/>/, `<meta property="og:image" content="${esc(image)}" />\n    <meta property="og:image:alt" content="${esc(route.title)}" />`, "og:image", route.out);
+  html = replaceOnce(html, /<meta property="og:image:width" content="[^"]*"\s*\/>/, `<meta property="og:image:width" content="1200" />`, "og:image:width", route.out);
+  html = replaceOnce(html, /<meta property="og:image:height" content="[^"]*"\s*\/>/, `<meta property="og:image:height" content="630" />`, "og:image:height", route.out);
+  html = replaceOnce(html, /<meta name="twitter:card" content="[^"]*"\s*\/>/, `<meta name="twitter:card" content="summary_large_image" />`, "twitter:card", route.out);
+  html = replaceOnce(html, /<meta name="twitter:title" content="[^"]*"\s*\/>/, `<meta name="twitter:title" content="${esc(route.title)}" />`, "twitter:title", route.out);
+  html = replaceOnce(html, /<meta name="twitter:description" content="[^"]*"\s*\/>/, `<meta name="twitter:description" content="${esc(route.description)}" />`, "twitter:description", route.out);
+  return replaceOnce(html, /<meta name="twitter:image" content="[^"]*"\s*\/>/, `<meta name="twitter:image" content="${esc(image)}" />\n    <meta name="twitter:image:alt" content="${esc(route.title)}" />`, "twitter:image", route.out);
+}
+
 function staticSearchBody(page) {
   const siblingLinks = SEARCH_ENTRY_LIST
     .map((item) => `<a href="${esc(item.path)}">${esc(item.h1)}</a>`)
@@ -262,6 +347,12 @@ for (const r of ROUTES) {
   html = replaceOnce(html, /<title>[\s\S]*?<\/title>/, `<title>${esc(r.title)}</title>`, "<title>", r.out);
   html = replaceOnce(html, /<meta name="description" content="[^"]*"\s*\/>/, `<meta name="description" content="${esc(r.description)}" />`, "description meta", r.out);
   html = replaceOnce(html, /<link rel="canonical" href="[^"]*"\s*\/>/, `<link rel="canonical" href="${esc(r.canonical)}" />`, "canonical link", r.out);
+  const shareSpec = shareSpecForRoute(r);
+  if (shareSpec) {
+    const imagePath = await writeShareCard(DIST, shareSpec);
+    if (imagePath !== shareImagePath(new URL(r.canonical).pathname)) throw new Error(`prerender: share path mismatch for ${r.out}`);
+    html = routeSocialMeta(html, r, imagePath);
+  }
   if (r.staticBody) {
     html = replaceOnce(html, /<div id="root"><\/div>/, `<div id="root">${staticSearchBody(r.staticBody)}</div>`, "root shell", r.out);
     html = replaceOnce(html, /<\/head>/, `<script id="wize-search-entry-jsonld" type="application/ld+json">${staticSearchSchema(r.staticBody)}</script>\n  </head>`, "head close", r.out);
