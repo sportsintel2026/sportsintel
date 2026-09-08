@@ -200,7 +200,13 @@ export default function SearchEntryPage({ pageKey }) {
     if (pageKey === "best") return dates.length ? `Active boards from ${formatEventDate(dates[0])}` : `Board status for ${formatEventDate(easternDate())}`;
     return dates[0] ? formatEventDate(dates[0]) : `Board status for ${formatEventDate(easternDate())}`;
   }, [config.sports, pageKey, state]);
-  const deeperPages = useMemo(() => config.sports.flatMap(seoPhase2ForSport), [config.sports]);
+  const deeperPages = useMemo(() => config.sports.flatMap((sport) => {
+    const pages = seoPhase2ForSport(sport, state[sport]?.feed);
+    const rolling = pages.filter((page) => page.kind === "slate").slice(0, 1);
+    const matchups = pages.filter((page) => page.kind === "matchup").slice(0, 3);
+    const performance = pages.filter((page) => page.kind === "performance");
+    return [...rolling, ...matchups, ...performance];
+  }), [config.sports, state]);
 
   return (
     <main className="se-root">

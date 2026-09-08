@@ -2,56 +2,29 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import TeamLogo, { TEAM_LOGO_CSS } from "../components/TeamLogo";
 import { edgesApi, performanceApi } from "../lib/api";
-import { eventDateKey, formatEventDate } from "../lib/eventSlate";
-import { SEO_PHASE2_BY_PATH, seoPhase2ForSport } from "../lib/seoPhase2Config";
+import {
+  currentSeoPageForPath,
+  seoGameId,
+  seoMatchupPath,
+  splitSeoMatchup,
+  SEO_PHASE2_BY_PATH,
+} from "../lib/seoPhase2Config";
 import { useSeo } from "../hooks/useSeo";
 
 const ORIGIN = "https://www.wizepicks.com";
 const SPORT_NAME = { nfl: "NFL", cfb: "College Football", mlb: "MLB" };
-const SPORT_PREFIX = { nfl: "/nfl", cfb: "/college-football", mlb: "/mlb" };
 const START_WORD = { nfl: "Kickoff", cfb: "Kickoff", mlb: "First pitch" };
 const loads = new Map();
 
-function loadSlate(sport, date) {
-  const key = `${sport}:${date || "current"}`;
+function loadSlate(sport) {
+  const key = `${sport}:current`;
   if (loads.has(key)) return loads.get(key);
-  const promise = sport === "mlb" && date ? edgesApi.getMLBPreview(date)
-    : sport === "nfl" ? edgesApi.getNFL()
+  const promise = sport === "nfl" ? edgesApi.getNFL()
       : sport === "cfb" ? edgesApi.getCFB()
         : edgesApi.getMLB();
   loads.set(key, promise);
   promise.catch(() => loads.delete(key));
   return promise;
-}
-
-function slug(value) {
-  return String(value || "")
-    .toLowerCase()
-    .replace(/&/g, " and ")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
-
-function splitMatchup(game) {
-  const parts = String(game?.matchup || "").split(" @ ");
-  return {
-    away: game?.awayTeam || game?.away || parts[0] || "Away team",
-    home: game?.homeTeam || game?.home || parts[1] || "Home team",
-  };
-}
-
-function gameId(game) {
-  return String(game?.eventId ?? game?.gameId ?? game?.id ?? "");
-}
-
-function gameDate(game, fallback) {
-  return eventDateKey(game, fallback || null);
-}
-
-function matchupPath(sport, game, fallback) {
-  const teams = splitMatchup(game);
-  const date = gameDate(game, fallback);
-  return date ? `${SPORT_PREFIX[sport]}/${slug(teams.away)}-vs-${slug(teams.home)}-prediction-odds-${date}` : null;
 }
 
 function gameStart(game, sport) {
@@ -87,7 +60,7 @@ function allEdges(feed) {
 }
 
 function edgeForGame(feed, game) {
-  const id = gameId(game);
+  const id = seoGameId(game);
   const matchup = String(game?.matchup || "");
   return allEdges(feed).find((row) => {
     const rowId = String(row?.gameId ?? row?.eventId ?? row?.id ?? "");
@@ -121,11 +94,11 @@ function useRobots(indexable) {
   }, [indexable]);
 }
 
-function useStructuredData(page, game) {
+function useStructuredData(page, game, indexable = true) {
   useEffect(() => {
-    if (!page) return undefined;
     const id = "wize-seo-phase2-jsonld";
     document.getElementById(id)?.remove();
+    if (!page || !indexable) return undefined;
     const script = document.createElement("script");
     script.id = id;
     script.type = "application/ld+json";
@@ -157,7 +130,7 @@ function useStructuredData(page, game) {
     });
     document.head.appendChild(script);
     return () => script.remove();
-  }, [game, page]);
+  }, [game, indexable, page]);
 }
 
 function PublicHeader() {
@@ -165,7 +138,7 @@ function PublicHeader() {
 }
 
 function PageFrame({ page, children }) {
-  return <main className="p2-root"><style>{PHASE2_CSS}</style><PublicHeader /><div className="p2-wrap">{children}<nav className="p2-footlinks" aria-label="Related WizePicks pages"><Link to={page.hub}>{page.hubLabel}</Link><Link to="/best-bets-today">Best bets today</Link><Link to={`/performance/${page.sport === "cfb" ? "college-football" : page.sport}`}>Performance</Link><Link to="/how-it-works">How WizePicks works</Link></nav></div></main>;
+  return <main className="p2-root"><style>{PHASE2_CSS}</style><PublicHeader /><div className="p2-wrap">{children}<nav className="p2-footlinks" aria-label="Related WizePicks pages"><Link to={page.hub}>{page.hubLabel}</Link><Link to="/best-bets-today">Best bets today</Link><Link to={`/performance/${page.sport === "cfb" ? "college-football" : page.sport}`}>Performance</Link><Link to="/signup">Unlock the member board</Link><Link to="/how-it-works">How WizePicks works</Link></nav></div></main>;
 }
 
 function pageForUnknownMatchup(sport, pathname) {
@@ -183,34 +156,29 @@ function pageForUnknownMatchup(sport, pathname) {
 
 export function SeoMatchupPage({ sport }) {
   const { pathname } = useLocation();
-  const frozen = SEO_PHASE2_BY_PATH[pathname] || null;
   const [state, setState] = useState({ loading: true, feed: null, error: null });
-  const initial = frozen || pageForUnknownMatchup(sport, pathname);
   useEffect(() => {
     let alive = true;
-    loadSlate(sport, initial.date).then((feed) => alive && setState({ loading: false, feed: feed || {}, error: null }))
+    loadSlate(sport).then((feed) => alive && setState({ loading: false, feed: feed || {}, error: null }))
       .catch((error) => alive && setState({ loading: false, feed: null, error }));
     return () => { alive = false; };
-  }, [initial.date, sport]);
+  }, [sport]);
 
-  const matchedGame = useMemo(() => (state.feed?.games || []).find((game) => matchupPath(sport, game, state.feed?.date) === pathname) || null, [pathname, sport, state.feed]);
-  const teams = matchedGame ? splitMatchup(matchedGame) : { away: initial.away, home: initial.home };
-  const page = useMemo(() => frozen || ({
-    ...initial,
-    away: teams.away,
-    home: teams.home,
-    h1: `${teams.away} vs. ${teams.home} Prediction & Odds`,
-    title: `${teams.away} vs. ${teams.home} Prediction & Odds${initial.date ? ` – ${formatEventDate(initial.date).replace(/^[A-Za-z]+, /, "")}` : ""} | WizePicks`,
-  }), [frozen, initial, teams.away, teams.home]);
-  const indexable = !!frozen && (!!matchedGame || state.loading);
+  const currentPage = useMemo(() => currentSeoPageForPath(sport, pathname, state.feed), [pathname, sport, state.feed]);
+  const matchedGame = useMemo(() => currentPage?.kind === "matchup"
+    ? (state.feed?.games || []).find((game) => seoGameId(game) === currentPage.gameId) || null
+    : null, [currentPage, state.feed]);
+  const page = currentPage?.kind === "matchup" ? currentPage : pageForUnknownMatchup(sport, pathname);
+  const teams = matchedGame ? splitSeoMatchup(matchedGame) : { away: page.away, home: page.home };
+  const indexable = !state.loading && !state.error && !!matchedGame;
   useSeo({ title: page.title, description: page.description, path: pathname });
   useRobots(indexable);
-  useStructuredData(page, matchedGame);
+  useStructuredData(page, matchedGame, indexable);
 
   const edge = matchedGame ? edgeForGame(state.feed, matchedGame) : null;
   const books = matchedGame ? [...bookNames(matchedGame.marketBooks || {})].slice(0, 4) : [];
   const marketOnly = matchedGame && String(matchedGame.dataQuality || "").toLowerCase().includes("market");
-  const related = (state.feed?.games || []).filter((game) => game !== matchedGame).slice(0, 4);
+  const related = (state.feed?.games || []).filter((game) => game !== matchedGame && seoMatchupPath(sport, game, state.feed?.date)).slice(0, 4);
 
   return <PageFrame page={page}>
     <section className="p2-hero"><span>{SPORT_NAME[sport]} MATCHUP</span><h1>{page.h1}</h1><p>Public matchup and market context from the active WizePicks slate. Protected probabilities and paid pick details stay behind the existing access rules.</p></section>
@@ -225,36 +193,36 @@ export function SeoMatchupPage({ sport }) {
         <div className="p2-context"><div><span>MARKETS</span><b>Moneyline · {sport === "mlb" ? "Run line" : "Spread"} · Total</b></div><div><span>SPORTSBOOK CONTEXT</span><b>{books.length ? books.join(" · ") : "Live market feed"}</b></div></div>
       </article>
       <section className="p2-verdict"><span>WIZEPICKS VERDICT</span>{marketOnly ? <><h2>MARKET ONLY</h2><p>This matchup does not have the independent rated inputs required for a WizePicks model-edge claim.</p></> : edge ? <><h2>{edge.pick || edge.teamAbbr || edge.side} · {edge.market}</h2><p>{edgeText(edge.edge)} edge for an authorized subscriber. The displayed side and market follow the current protected board.</p></> : state.feed?.teaser ? <><h2>MODEL DETAILS PROTECTED</h2><p>The matchup is public; qualified pick and probability details follow the existing subscription policy.</p></> : <><h2>PASS · INSUFFICIENT EDGE</h2><p>No qualifying WizePicks edge is published for this matchup on the current board.</p></>}</section>
-      {related.length > 0 && <section className="p2-related"><span>RELATED {SPORT_NAME[sport]} MATCHUPS</span><div>{related.map((game) => { const path = matchupPath(sport, game, state.feed?.date); const t = splitMatchup(game); return path ? <Link key={gameId(game) || path} to={path}>{t.away} at {t.home}<small>{gameStart(game, sport)}</small></Link> : null; })}</div></section>}
+      {related.length > 0 && <section className="p2-related"><span>RELATED {SPORT_NAME[sport]} MATCHUPS</span><div>{related.map((game) => { const path = seoMatchupPath(sport, game, state.feed?.date); const t = splitSeoMatchup(game); return path ? <Link key={seoGameId(game) || path} to={path}>{t.away} at {t.home}<small>{gameStart(game, sport)}</small></Link> : null; })}</div></section>}
     </>}
   </PageFrame>;
 }
 
 export function SeoSlatePage({ sport }) {
   const { pathname } = useLocation();
-  const page = SEO_PHASE2_BY_PATH[pathname];
   const [state, setState] = useState({ loading: true, feed: null, error: null });
   useEffect(() => {
     let alive = true;
-    loadSlate(sport, page?.date).then((feed) => alive && setState({ loading: false, feed: feed || {}, error: null }))
+    loadSlate(sport).then((feed) => alive && setState({ loading: false, feed: feed || {}, error: null }))
       .catch((error) => alive && setState({ loading: false, feed: null, error }));
     return () => { alive = false; };
-  }, [page?.date, sport]);
-  const indexable = !!page;
-  const safePage = page || {
+  }, [sport]);
+  const page = useMemo(() => currentSeoPageForPath(sport, pathname, state.feed), [pathname, sport, state.feed]);
+  const indexable = !state.loading && !state.error && page?.kind === "slate" && page.games.length > 0;
+  const safePage = page?.kind === "slate" ? page : {
     kind: "slate", sport, path: pathname, title: `${SPORT_NAME[sport]} Picks | WizePicks`,
     description: `Current public-safe ${SPORT_NAME[sport]} slate.`, h1: `${SPORT_NAME[sport]} Picks`, label: "CURRENT SLATE",
     hub: sport === "cfb" ? "/college-football-picks" : `/${sport}-picks`, hubLabel: `${SPORT_NAME[sport]} picks`,
   };
   useSeo({ title: safePage.title, description: safePage.description, path: pathname });
   useRobots(indexable);
-  useStructuredData(safePage, null);
-  const games = state.feed?.games || [];
+  useStructuredData(safePage, null, indexable);
+  const games = indexable ? page.games : [];
 
   return <PageFrame page={safePage}>
     <section className="p2-hero"><span>{safePage.label}</span><h1>{safePage.h1}</h1><p>A focused event-period page built from the active WizePicks slate. Matchups and timing are public; protected model outputs keep their existing access policy.</p></section>
     <section className="p2-board"><div className="p2-boardhead"><div><span>CURRENT BOARD</span><h2>{games.length} scheduled matchup{games.length === 1 ? "" : "s"}</h2></div><b>{state.feed?.teaser ? "PUBLIC PREVIEW" : "LIVE"}</b></div>
-      {state.loading ? <div className="p2-state">Loading the current slate…</div> : state.error ? <div className="p2-state">The live slate is temporarily unavailable.</div> : games.length === 0 ? <div className="p2-state">No useful current slate exists for this route, so it is not suitable for indexing.</div> : <div className="p2-list">{games.map((game) => { const t = splitMatchup(game); const path = matchupPath(sport, game, state.feed?.date); const books = [...bookNames(game.marketBooks || {})].slice(0, 2); return <article key={gameId(game) || `${t.away}-${t.home}`}><div className="p2-listteams"><TeamLogo sport={sport} team={t.away} abbr={game.awayAbbr} logoId={game?.teamIdentity?.away?.id || game.awayId} /><div><h3>{t.away} <i>at</i> {t.home}</h3><p>{gameStart(game, sport)}</p></div><TeamLogo sport={sport} team={t.home} abbr={game.homeAbbr} logoId={game?.teamIdentity?.home?.id || game.homeId} /></div><div className="p2-listmeta"><span>{books.length ? books.join(" · ") : "Active market context"}</span>{path && <Link to={path}>Matchup analysis →</Link>}</div></article>; })}</div>}
+      {state.loading ? <div className="p2-state">Loading the current slate…</div> : state.error ? <div className="p2-state">The live slate is temporarily unavailable.</div> : games.length === 0 ? <div className="p2-state">No useful current slate exists for this route, so it is not suitable for indexing.</div> : <div className="p2-list">{games.map((game) => { const t = splitSeoMatchup(game); const path = seoMatchupPath(sport, game, state.feed?.date); const books = [...bookNames(game.marketBooks || {})].slice(0, 2); return <article key={seoGameId(game) || `${t.away}-${t.home}`}><div className="p2-listteams"><TeamLogo sport={sport} team={t.away} abbr={game.awayAbbr} logoId={game?.teamIdentity?.away?.id || game.awayId} /><div><h3>{t.away} <i>at</i> {t.home}</h3><p>{gameStart(game, sport)}</p></div><TeamLogo sport={sport} team={t.home} abbr={game.homeAbbr} logoId={game?.teamIdentity?.home?.id || game.homeId} /></div><div className="p2-listmeta"><span>{books.length ? books.join(" · ") : "Active market context"}</span>{path && <Link to={path}>Matchup analysis →</Link>}</div></article>; })}</div>}
     </section>
     <section className="p2-copy"><span>ABOUT THIS {sport === "mlb" ? "DAILY" : "WEEKLY"} PAGE</span><h2>Useful slate context without thin archives</h2><p>This page represents a specific active {sport === "mlb" ? "event date" : "football week"}. WizePicks only indexes a period page when its production-shaped slate contains useful real matchups. It does not create empty archive pages or duplicate generic copy.</p></section>
   </PageFrame>;
