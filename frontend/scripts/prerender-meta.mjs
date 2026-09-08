@@ -18,6 +18,7 @@ import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { SEARCH_ENTRY_LIST } from "../src/lib/searchEntryConfig.js";
+import { SEO_PHASE2_LIST } from "../src/lib/seoPhase2Config.js";
 
 const DIST = fileURLToPath(new URL("../dist/", import.meta.url));
 
@@ -134,6 +135,13 @@ const ROUTES = [
     canonical: `https://www.wizepicks.com${page.path}`,
     staticBody: page,
   })),
+  ...SEO_PHASE2_LIST.map((page) => ({
+    out: `${page.path.slice(1)}/index.html`,
+    title: page.title,
+    description: page.description,
+    canonical: `https://www.wizepicks.com${page.path}`,
+    staticPhase2: page,
+  })),
 ];
 
 const esc = (s) =>
@@ -166,6 +174,32 @@ function staticSearchSchema(page) {
   }).replace(/</g, "\\u003c");
 }
 
+function staticPhase2Body(page) {
+  const hub = `<a href="${esc(page.hub)}">${esc(page.hubLabel)}</a>`;
+  const shared = `<p>${hub} · <a href="/best-bets-today">Best bets today</a> · <a href="/performance/${page.sport === "cfb" ? "college-football" : page.sport}">Performance</a></p>`;
+  if (page.kind === "matchup") {
+    return `<main data-seo-phase2-static="matchup"><header><a href="/">WizePicks</a></header><article><p>${esc(page.sport.toUpperCase())} MATCHUP</p><h1>${esc(page.h1)}</h1><p>${esc(page.description)}</p><h2>${esc(page.away)} at ${esc(page.home)}</h2><p>Event date: ${esc(page.date)}. Review the matchup, scheduled start time, sportsbook sources, and live market context. Qualified picks and exact probabilities remain protected by the existing WizePicks access policy.</p><h2>WizePicks verdict</h2><p>The active feed labels this matchup as a qualified pick, a pass for insufficient edge, or market-only when independent rated inputs are unavailable. The live result loads without exposing protected model data to public crawlers.</p>${shared}</article></main>`;
+  }
+  if (page.kind === "performance") {
+    return `<main data-seo-phase2-static="performance"><header><a href="/">WizePicks</a></header><article><p>AUTHORITATIVE GRADED RESULTS</p><h1>${esc(page.h1)}</h1><p>${esc(page.description)}</p><h2>Recorded model performance</h2><p>The live page reads the public aggregate performance endpoint backed by decisive graded results in the active prediction ledger. It reports wins, losses, units, ROI, and market-level results without inventing records. MLB monetary reporting excludes rows without trustworthy entry prices from ROI while retaining valid win/loss outcomes.</p><h2>Transparent methodology</h2><p>Results use the current sport-specific reset and publication methodology. Past performance does not guarantee future results.</p>${shared}</article></main>`;
+  }
+  return `<main data-seo-phase2-static="slate"><header><a href="/">WizePicks</a></header><article><p>${esc(page.label)}</p><h1>${esc(page.h1)}</h1><p>${esc(page.description)}</p><h2>Current ${esc(page.sport.toUpperCase())} slate</h2><p>This focused ${page.sport === "mlb" ? "daily" : "weekly"} page loads real matchups, event times, sportsbook context, and public-safe WizePicks verdicts from the active production feed. Protected picks and probabilities retain their existing access rules.</p><h2>No thin archives</h2><p>WizePicks indexes only useful current period pages with real event coverage rather than generating empty or duplicate archives.</p>${shared}</article></main>`;
+}
+
+function staticPhase2Schema(page) {
+  const primary = page.kind === "matchup"
+    ? { "@type": "SportsEvent", "@id": `https://www.wizepicks.com${page.path}#event`, url: `https://www.wizepicks.com${page.path}`, name: `${page.away} at ${page.home}`, startDate: page.startDate, eventStatus: "https://schema.org/EventScheduled", competitor: [{ "@type": "SportsTeam", name: page.away }, { "@type": "SportsTeam", name: page.home }] }
+    : { "@type": "CollectionPage", "@id": `https://www.wizepicks.com${page.path}#page`, url: `https://www.wizepicks.com${page.path}`, name: page.title, description: page.description };
+  return JSON.stringify({
+    "@context": "https://schema.org",
+    "@graph": [primary, { "@type": "BreadcrumbList", itemListElement: [
+      { "@type": "ListItem", position: 1, name: "WizePicks", item: "https://www.wizepicks.com/" },
+      { "@type": "ListItem", position: 2, name: page.hubLabel, item: `https://www.wizepicks.com${page.hub}` },
+      { "@type": "ListItem", position: 3, name: page.h1, item: `https://www.wizepicks.com${page.path}` },
+    ] }],
+  }).replace(/</g, "\\u003c");
+}
+
 const shell = await readFile(join(DIST, "index.html"), "utf8");
 
 for (const r of ROUTES) {
@@ -176,6 +210,10 @@ for (const r of ROUTES) {
   if (r.staticBody) {
     html = replaceOnce(html, /<div id="root"><\/div>/, `<div id="root">${staticSearchBody(r.staticBody)}</div>`, "root shell", r.out);
     html = replaceOnce(html, /<\/head>/, `<script id="wize-search-entry-jsonld" type="application/ld+json">${staticSearchSchema(r.staticBody)}</script>\n  </head>`, "head close", r.out);
+  }
+  if (r.staticPhase2) {
+    html = replaceOnce(html, /<div id="root"><\/div>/, `<div id="root">${staticPhase2Body(r.staticPhase2)}</div>`, "root shell", r.out);
+    html = replaceOnce(html, /<\/head>/, `<script id="wize-seo-phase2-jsonld" type="application/ld+json">${staticPhase2Schema(r.staticPhase2)}</script>\n  </head>`, "head close", r.out);
   }
   const outPath = join(DIST, r.out);
   await mkdir(dirname(outPath), { recursive: true });

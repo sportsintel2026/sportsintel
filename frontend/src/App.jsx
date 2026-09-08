@@ -42,6 +42,7 @@ import ParlayPage from "./pages/Parlay"; // WZ-SEO-PARLAY-ARTICLE-2026-08-17 :: 
 import OddsFormatsPage from "./pages/OddsFormats"; // WZ-SEO-ODDSFORMATS-ARTICLE-2026-08-17 :: public educational page
 import SportsBettingBeginnersPage from "./pages/SportsBettingBeginners"; // WZ-SEO-BEGINNERS-ARTICLE-2026-08-17 :: public educational page
 import SearchEntryPage from "./pages/SearchEntry";
+import { SeoMatchupPage, SeoPerformancePage, SeoSlatePage } from "./pages/SeoPhase2";
 import SportBar, { SportTabsHeader } from "./pages/SportNav"; // WIZEPICKS-SPORTNAV-2026-06-25
 import InstallNudge from "./pages/InstallNudge"; // WZ-GETAPP-2026-07-05 :: iOS "Get the app" nudge
 function PrivateRoute({ children }) {
@@ -247,6 +248,15 @@ export default function App() {
           <Route path="/college-football-picks" element={<SearchEntryPage pageKey="cfb" />} />
           <Route path="/mlb-picks" element={<SearchEntryPage pageKey="mlb" />} />
           <Route path="/best-bets-today" element={<SearchEntryPage pageKey="best" />} />
+          <Route path="/nfl-picks/:period" element={<SeoSlatePage sport="nfl" />} />
+          <Route path="/college-football-picks/:period" element={<SeoSlatePage sport="cfb" />} />
+          <Route path="/mlb-picks/:period" element={<SeoSlatePage sport="mlb" />} />
+          <Route path="/nfl/:slug" element={<SeoMatchupPage sport="nfl" />} />
+          <Route path="/college-football/:slug" element={<SeoMatchupPage sport="cfb" />} />
+          <Route path="/mlb/:slug" element={<SeoMatchupPage sport="mlb" />} />
+          <Route path="/performance/mlb" element={<SeoPerformancePage sport="mlb" league="mlb" />} />
+          <Route path="/performance/nfl" element={<SeoPerformancePage sport="nfl" league="nfl" />} />
+          <Route path="/performance/college-football" element={<SeoPerformancePage sport="cfb" league="cfb" />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/admin" element={
             <PrivateRoute>

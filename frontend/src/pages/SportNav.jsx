@@ -98,6 +98,7 @@ function routeFor(section, sport) {
 }
 
 const HIDE_ON = ["/", "/login", "/signup", "/pricing", "/terms", "/privacy", "/reset-password", "/nfl-picks", "/college-football-picks", "/mlb-picks", "/best-bets-today"];
+const PUBLIC_SEO_PREFIXES = ["/nfl/", "/college-football/", "/mlb/", "/nfl-picks/", "/college-football-picks/", "/mlb-picks/", "/performance/mlb", "/performance/nfl", "/performance/college-football"];
 
 function useShell() {
   const { pathname, search } = useLocation();
@@ -106,7 +107,7 @@ function useShell() {
     document.addEventListener("touchstart", tap, { passive: true }); // iOS: enable :active press feedback
     return () => { document.removeEventListener("touchstart", tap); };
   }, []);
-  const visible = !HIDE_ON.includes(pathname);
+  const visible = !HIDE_ON.includes(pathname) && !PUBLIC_SEO_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(prefix));
   return { visible, pathname, search };
 }
 
