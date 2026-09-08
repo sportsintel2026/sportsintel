@@ -11,16 +11,43 @@
 //
 // The title/description/canonical below MUST stay in sync with the useSeo() values in the page
 // components (SEO step 3), so the static HTML equals what the client renders. Open Graph /
-// Twitter tags (step 2) are intentionally left untouched and stay global. robots.txt and
-// sitemap.xml are not touched. Any expected tag that cannot be found is a hard error, so a
+// Twitter tags (step 2) are intentionally left untouched and stay global. Any expected tag that
+// cannot be found is a hard error, so a
 // change to the built head format fails the build loudly instead of shipping wrong metadata.
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { SEARCH_ENTRY_LIST } from "../src/lib/searchEntryConfig.js";
-import { SEO_PHASE2_LIST } from "../src/lib/seoPhase2Config.js";
+import {
+  buildCurrentSeoPages,
+  seoMatchupPath,
+  splitSeoMatchup,
+  SEO_PHASE2_LIST,
+} from "../src/lib/seoPhase2Config.js";
 
 const DIST = fileURLToPath(new URL("../dist/", import.meta.url));
+const SPORTS = ["nfl", "cfb", "mlb"];
+const PUBLIC_API = String(process.env.SEO_PUBLIC_API_URL || process.env.VITE_API_URL || "https://sportsintel-production.up.railway.app").replace(/\/$/, "");
+const FIXTURE_DIR = process.env.SEO_FEED_FIXTURE_DIR || null;
+
+async function loadCurrentFeed(sport) {
+  try {
+    if (FIXTURE_DIR) return JSON.parse(await readFile(join(FIXTURE_DIR, `${sport}.json`), "utf8"));
+    const response = await fetch(`${PUBLIC_API}/api/edges/${sport}`, {
+      headers: { accept: "application/json" },
+      signal: AbortSignal.timeout(30000),
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return await response.json();
+  } catch (error) {
+    console.warn(`prerender: excluding current ${sport} pages (${error.message})`);
+    return null;
+  }
+}
+
+const currentFeeds = Object.fromEntries(await Promise.all(SPORTS.map(async (sport) => [sport, await loadCurrentFeed(sport)])));
+const buildNow = process.env.SEO_PRERENDER_NOW ? new Date(process.env.SEO_PRERENDER_NOW) : new Date();
+const currentSeoPages = buildCurrentSeoPages(currentFeeds, buildNow);
 
 // out: path within dist/. "index.html" is "/"; "pricing/index.html" is served by Vercel at
 // "/pricing" (directory index), taking precedence over the SPA rewrite -- same mechanism that
@@ -142,6 +169,13 @@ const ROUTES = [
     canonical: `https://www.wizepicks.com${page.path}`,
     staticPhase2: page,
   })),
+  ...currentSeoPages.map((page) => ({
+    out: `${page.path.slice(1)}/index.html`,
+    title: page.title,
+    description: page.description,
+    canonical: `https://www.wizepicks.com${page.path}`,
+    staticPhase2: page,
+  })),
 ];
 
 const esc = (s) =>
@@ -158,7 +192,7 @@ function staticSearchBody(page) {
   const siblingLinks = SEARCH_ENTRY_LIST
     .map((item) => `<a href="${esc(item.path)}">${esc(item.h1)}</a>`)
     .join(" · ");
-  return `<main data-search-entry-static="${esc(page.key)}"><header><a href="/">WizePicks</a></header><article><p>${esc(page.eyebrow)}</p><h1>${esc(page.h1)}</h1><p>${esc(page.lead)}</p><h2>Current WizePicks slate</h2><p>Live event dates, matchup summaries, and public-safe market context load from the active WizePicks data feed. Protected probabilities and picks remain subject to the existing access policy.</p><h2>How WizePicks evaluates the board</h2><p>${esc(page.explainer)}</p><p><a href="/#perf">Performance history</a> · <a href="/how-it-works">How WizePicks works</a></p><nav aria-label="WizePicks sport hubs">${siblingLinks}</nav></article></main>`;
+  return `<main data-search-entry-static="${esc(page.key)}"><header><a href="/">WizePicks</a></header><article><p>${esc(page.eyebrow)}</p><h1>${esc(page.h1)}</h1><p>${esc(page.lead)}</p><h2>Current WizePicks slate</h2><p>Live event dates, matchup summaries, and public-safe market context load from the active WizePicks data feed. Protected probabilities and picks remain subject to the existing access policy.</p><h2>How WizePicks evaluates the board</h2><p>${esc(page.explainer)}</p><p><a href="/signup">Unlock the member board</a> · <a href="/#perf">Performance history</a> · <a href="/how-it-works">How WizePicks works</a></p><nav aria-label="WizePicks sport hubs">${siblingLinks}</nav></article></main>`;
 }
 
 function staticSearchSchema(page) {
@@ -176,14 +210,19 @@ function staticSearchSchema(page) {
 
 function staticPhase2Body(page) {
   const hub = `<a href="${esc(page.hub)}">${esc(page.hubLabel)}</a>`;
-  const shared = `<p>${hub} · <a href="/best-bets-today">Best bets today</a> · <a href="/performance/${page.sport === "cfb" ? "college-football" : page.sport}">Performance</a></p>`;
+  const shared = `<p>${hub} · <a href="/best-bets-today">Best bets today</a> · <a href="/performance/${page.sport === "cfb" ? "college-football" : page.sport}">Performance</a> · <a href="/signup">Unlock the member board</a></p>`;
   if (page.kind === "matchup") {
     return `<main data-seo-phase2-static="matchup"><header><a href="/">WizePicks</a></header><article><p>${esc(page.sport.toUpperCase())} MATCHUP</p><h1>${esc(page.h1)}</h1><p>${esc(page.description)}</p><h2>${esc(page.away)} at ${esc(page.home)}</h2><p>Event date: ${esc(page.date)}. Review the matchup, scheduled start time, sportsbook sources, and live market context. Qualified picks and exact probabilities remain protected by the existing WizePicks access policy.</p><h2>WizePicks verdict</h2><p>The active feed labels this matchup as a qualified pick, a pass for insufficient edge, or market-only when independent rated inputs are unavailable. The live result loads without exposing protected model data to public crawlers.</p>${shared}</article></main>`;
   }
   if (page.kind === "performance") {
     return `<main data-seo-phase2-static="performance"><header><a href="/">WizePicks</a></header><article><p>AUTHORITATIVE GRADED RESULTS</p><h1>${esc(page.h1)}</h1><p>${esc(page.description)}</p><h2>Recorded model performance</h2><p>The live page reads the public aggregate performance endpoint backed by decisive graded results in the active prediction ledger. It reports wins, losses, units, ROI, and market-level results without inventing records. MLB monetary reporting excludes rows without trustworthy entry prices from ROI while retaining valid win/loss outcomes.</p><h2>Transparent methodology</h2><p>Results use the current sport-specific reset and publication methodology. Past performance does not guarantee future results.</p>${shared}</article></main>`;
   }
-  return `<main data-seo-phase2-static="slate"><header><a href="/">WizePicks</a></header><article><p>${esc(page.label)}</p><h1>${esc(page.h1)}</h1><p>${esc(page.description)}</p><h2>Current ${esc(page.sport.toUpperCase())} slate</h2><p>This focused ${page.sport === "mlb" ? "daily" : "weekly"} page loads real matchups, event times, sportsbook context, and public-safe WizePicks verdicts from the active production feed. Protected picks and probabilities retain their existing access rules.</p><h2>No thin archives</h2><p>WizePicks indexes only useful current period pages with real event coverage rather than generating empty or duplicate archives.</p>${shared}</article></main>`;
+  const games = (page.games || []).map((game) => {
+    const teams = splitSeoMatchup(game);
+    const path = seoMatchupPath(page.sport, game, page.date);
+    return path && teams.away && teams.home ? `<li><a href="${esc(path)}">${esc(teams.away)} at ${esc(teams.home)}</a></li>` : "";
+  }).join("");
+  return `<main data-seo-phase2-static="slate"><header><a href="/">WizePicks</a></header><article><p>${esc(page.label)}</p><h1>${esc(page.h1)}</h1><p>${esc(page.description)}</p><h2>Current ${esc(page.sport.toUpperCase())} slate</h2><p>This focused ${page.sport === "mlb" ? "daily" : "weekly"} page lists real matchups, event times, sportsbook context, and public-safe WizePicks verdicts from the active production feed. Protected picks and probabilities retain their existing access rules.</p>${games ? `<ul>${games}</ul>` : ""}<h2>No thin archives</h2><p>WizePicks indexes only useful current period pages with real event coverage rather than generating empty or duplicate archives.</p>${shared}</article></main>`;
 }
 
 function staticPhase2Schema(page) {
@@ -198,6 +237,22 @@ function staticPhase2Schema(page) {
       { "@type": "ListItem", position: 3, name: page.h1, item: `https://www.wizepicks.com${page.path}` },
     ] }],
   }).replace(/</g, "\\u003c");
+}
+
+async function writeCurrentSitemap(pages) {
+  const sitemapPath = join(DIST, "sitemap.xml");
+  const sitemapSource = fileURLToPath(new URL("../public/sitemap.xml", import.meta.url));
+  let xml = await readFile(sitemapSource, "utf8");
+  const additions = pages
+    .filter((page) => !xml.includes(`<loc>https://www.wizepicks.com${page.path}</loc>`))
+    .map((page) => `  <url>\n    <loc>https://www.wizepicks.com${esc(page.path)}</loc>\n  </url>`)
+    .join("\n");
+  if (additions) {
+    if (!xml.includes("</urlset>")) throw new Error("prerender: sitemap.xml is missing </urlset>");
+    xml = xml.replace("</urlset>", `${additions}\n</urlset>`);
+  }
+  await writeFile(sitemapPath, xml, "utf8");
+  console.log(`prerender: sitemap includes ${pages.length} current rolling/matchup page(s).`);
 }
 
 const shell = await readFile(join(DIST, "index.html"), "utf8");
@@ -220,4 +275,5 @@ for (const r of ROUTES) {
   await writeFile(outPath, html, "utf8");
   console.log(`prerender: wrote ${r.out}`);
 }
+await writeCurrentSitemap(currentSeoPages);
 console.log(`prerender: done, ${ROUTES.length} route file(s).`);
