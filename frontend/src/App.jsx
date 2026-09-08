@@ -41,6 +41,7 @@ import BankrollPage from "./pages/Bankroll"; // WZ-SEO-BANKROLL-ARTICLE-2026-08-
 import ParlayPage from "./pages/Parlay"; // WZ-SEO-PARLAY-ARTICLE-2026-08-17 :: public educational page
 import OddsFormatsPage from "./pages/OddsFormats"; // WZ-SEO-ODDSFORMATS-ARTICLE-2026-08-17 :: public educational page
 import SportsBettingBeginnersPage from "./pages/SportsBettingBeginners"; // WZ-SEO-BEGINNERS-ARTICLE-2026-08-17 :: public educational page
+import SearchEntryPage from "./pages/SearchEntry";
 import SportBar, { SportTabsHeader } from "./pages/SportNav"; // WIZEPICKS-SPORTNAV-2026-06-25
 import InstallNudge from "./pages/InstallNudge"; // WZ-GETAPP-2026-07-05 :: iOS "Get the app" nudge
 function PrivateRoute({ children }) {
@@ -155,6 +156,10 @@ function LegalFooter() {
         <div className="wpf-links">
           <Link to="/about">About</Link><i/>
           <Link to="/how-it-works">How it works</Link><i/>
+          <Link to="/nfl-picks">NFL picks</Link><i/>
+          <Link to="/college-football-picks">CFB picks</Link><i/>
+          <Link to="/mlb-picks">MLB picks</Link><i/>
+          <Link to="/best-bets-today">Best bets</Link><i/>
           <Link to="/terms">Terms</Link><i/>
           <Link to="/privacy">Privacy</Link>
         </div>
@@ -168,7 +173,7 @@ function LegalFooter() {
 const WPF_CSS = `
 .wpf-root{background:#0A0B0D;border-top:1px solid #1B2025;padding:26px 20px 30px;font-family:Inter,system-ui,-apple-system,sans-serif}
 .wpf-inner{max-width:980px;margin:0 auto;text-align:center}
-.wpf-links{display:flex;align-items:center;justify-content:center;gap:14px;margin-bottom:14px}
+.wpf-links{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:14px;margin-bottom:14px}
 .wpf-links a{color:#C9A86A;font-size:13px;font-weight:600;text-decoration:none}
 .wpf-links a:hover{text-decoration:underline;text-underline-offset:2px}
 .wpf-links i{width:3px;height:3px;border-radius:50%;background:#3a414a;display:inline-block}
@@ -238,6 +243,10 @@ export default function App() {
           <Route path="/odds-formats-explained" element={<OddsFormatsPage />} />
           {/* WZ-SEO-BEGINNERS-ARTICLE-2026-08-17 :: public educational article (no auth) */}
           <Route path="/sports-betting-for-beginners" element={<SportsBettingBeginnersPage />} />
+          <Route path="/nfl-picks" element={<SearchEntryPage pageKey="nfl" />} />
+          <Route path="/college-football-picks" element={<SearchEntryPage pageKey="cfb" />} />
+          <Route path="/mlb-picks" element={<SearchEntryPage pageKey="mlb" />} />
+          <Route path="/best-bets-today" element={<SearchEntryPage pageKey="best" />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/admin" element={
             <PrivateRoute>

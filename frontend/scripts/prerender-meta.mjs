@@ -1,11 +1,12 @@
 // WZ-SEO-PRERENDER-2026-08-17 :: build-time per-route metadata prerender.
 //
 // Runs after `vite build`. Copies the built dist/index.html shell into one static HTML file
-// per public/indexable marketing route, swapping ONLY <title>, <meta name="description">, and
-// <link rel="canonical"> to that route's values. The body stays the empty <div id="root">
-// shell referencing the same hashed JS/CSS, so React boots exactly as before -- this injects
-// route-correct metadata into the INITIAL server-delivered HTML so crawlers that do not execute
-// JavaScript can see it. It renders no component and snapshots no DOM (no headless browser),
+// per public/indexable marketing route, swapping <title>, <meta name="description">, and
+// <link rel="canonical"> to that route's values. Search-entry routes also receive a small,
+// route-specific static body and JSON-LD so non-JavaScript crawlers do not see an empty SPA shell.
+// React replaces that initial root body with the live current-slate component when it boots.
+// This puts route-correct metadata into the initial server-delivered HTML so crawlers that do not
+// execute JavaScript can see it. The script snapshots no DOM and uses no headless browser,
 // so design, the age gate, auth, routing, and premium behavior are untouched.
 //
 // The title/description/canonical below MUST stay in sync with the useSeo() values in the page
@@ -16,6 +17,7 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { SEARCH_ENTRY_LIST } from "../src/lib/searchEntryConfig.js";
 
 const DIST = fileURLToPath(new URL("../dist/", import.meta.url));
 
@@ -125,6 +127,13 @@ const ROUTES = [
     description: "A beginner's guide to sports betting: how odds work, the main bet types (moneyline, spread, totals, parlays), reading odds as probability, the vig, finding value over picking winners, bankroll basics, and betting responsibly.",
     canonical: "https://www.wizepicks.com/sports-betting-for-beginners",
   },
+  ...SEARCH_ENTRY_LIST.map((page) => ({
+    out: `${page.path.slice(1)}/index.html`,
+    title: page.title,
+    description: page.description,
+    canonical: `https://www.wizepicks.com${page.path}`,
+    staticBody: page,
+  })),
 ];
 
 const esc = (s) =>
@@ -137,6 +146,26 @@ function replaceOnce(html, re, replacement, label, file) {
   return html.replace(re, () => replacement);
 }
 
+function staticSearchBody(page) {
+  const siblingLinks = SEARCH_ENTRY_LIST
+    .map((item) => `<a href="${esc(item.path)}">${esc(item.h1)}</a>`)
+    .join(" · ");
+  return `<main data-search-entry-static="${esc(page.key)}"><header><a href="/">WizePicks</a></header><article><p>${esc(page.eyebrow)}</p><h1>${esc(page.h1)}</h1><p>${esc(page.lead)}</p><h2>Current WizePicks slate</h2><p>Live event dates, matchup summaries, and public-safe market context load from the active WizePicks data feed. Protected probabilities and picks remain subject to the existing access policy.</p><h2>How WizePicks evaluates the board</h2><p>${esc(page.explainer)}</p><p><a href="/#perf">Performance history</a> · <a href="/how-it-works">How WizePicks works</a></p><nav aria-label="WizePicks sport hubs">${siblingLinks}</nav></article></main>`;
+}
+
+function staticSearchSchema(page) {
+  return JSON.stringify({
+    "@context": "https://schema.org",
+    "@graph": [
+      { "@type": "CollectionPage", "@id": `https://www.wizepicks.com${page.path}#page`, url: `https://www.wizepicks.com${page.path}`, name: page.title, description: page.description, isPartOf: { "@id": "https://www.wizepicks.com/#website" }, about: { "@type": "Thing", name: page.h1 } },
+      { "@type": "BreadcrumbList", itemListElement: [
+        { "@type": "ListItem", position: 1, name: "WizePicks", item: "https://www.wizepicks.com/" },
+        { "@type": "ListItem", position: 2, name: page.h1, item: `https://www.wizepicks.com${page.path}` },
+      ] },
+    ],
+  }).replace(/</g, "\\u003c");
+}
+
 const shell = await readFile(join(DIST, "index.html"), "utf8");
 
 for (const r of ROUTES) {
@@ -144,6 +173,10 @@ for (const r of ROUTES) {
   html = replaceOnce(html, /<title>[\s\S]*?<\/title>/, `<title>${esc(r.title)}</title>`, "<title>", r.out);
   html = replaceOnce(html, /<meta name="description" content="[^"]*"\s*\/>/, `<meta name="description" content="${esc(r.description)}" />`, "description meta", r.out);
   html = replaceOnce(html, /<link rel="canonical" href="[^"]*"\s*\/>/, `<link rel="canonical" href="${esc(r.canonical)}" />`, "canonical link", r.out);
+  if (r.staticBody) {
+    html = replaceOnce(html, /<div id="root"><\/div>/, `<div id="root">${staticSearchBody(r.staticBody)}</div>`, "root shell", r.out);
+    html = replaceOnce(html, /<\/head>/, `<script id="wize-search-entry-jsonld" type="application/ld+json">${staticSearchSchema(r.staticBody)}</script>\n  </head>`, "head close", r.out);
+  }
   const outPath = join(DIST, r.out);
   await mkdir(dirname(outPath), { recursive: true });
   await writeFile(outPath, html, "utf8");

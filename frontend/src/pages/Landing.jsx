@@ -554,6 +554,10 @@ export default function LandingPage(){
         <div className="flinks">
           <Link to="/about">About</Link><span className="fdot">·</span>
           <Link to="/how-it-works">How it works</Link><span className="fdot">·</span>
+          <Link to="/nfl-picks">NFL picks</Link><span className="fdot">·</span>
+          <Link to="/college-football-picks">CFB picks</Link><span className="fdot">·</span>
+          <Link to="/mlb-picks">MLB picks</Link><span className="fdot">·</span>
+          <Link to="/best-bets-today">Best bets</Link><span className="fdot">·</span>
           <Link to="/pricing">Pricing</Link><span className="fdot">·</span>
           <Link to="/login">Log in</Link><span className="fdot">·</span>
           <a href="mailto:wizepickshelp@gmail.com">Contact</a><span className="fdot">·</span>
