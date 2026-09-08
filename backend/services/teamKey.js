@@ -198,6 +198,8 @@ function schoolKey(normalized) {
 // odds-name -> espn-name aliases (both normalized). Carried verbatim from cfbEdges.js (verified
 // against the live /cfbratings dump 2026-06-22, not guessed). Extend only from real live misses.
 const CFB_ALIASES = {
+  "appalachian state mountaineers": "app state mountaineers",
+  "southern mississippi golden eagles": "southern miss golden eagles",
   "umass minutemen": "massachusetts minutemen",
   "sam houston state bearkats": "sam houston bearkats",
 };
