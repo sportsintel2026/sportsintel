@@ -236,7 +236,7 @@ export default function SearchEntryPage({ pageKey }) {
           <p>{config.explainer}</p>
           <p>Public visitors can review the active matchups and timing without a login. Qualified probabilities, exact picks, and paid model intelligence remain governed by the existing backend access policy.</p>
           <div className="se-actions">
-            <Link className="se-primary" to="/signup">See the full board</Link>
+            <Link className="se-primary" to="/signup">Unlock Full WizePicks</Link>
             <Link to="/#perf">Performance history</Link>
             <Link to="/how-it-works">How WizePicks works</Link>
           </div>
