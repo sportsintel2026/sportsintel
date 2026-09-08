@@ -41,6 +41,10 @@ export const edgesApi = {
   aiRead: (body) => apiFetch("/api/ai-read", { method: "POST", body: JSON.stringify(body) }), // WZ-FB-DETAIL-RICH-2026-07-16
   clearCache: () => apiFetch("/api/edges/cache", { method: "DELETE" }),
 };
+// Public, aggregate performance only. The backend builds this from authoritative graded rows.
+export const performanceApi = {
+  get: (league) => apiFetch(`/api/performance/${encodeURIComponent(league)}`),
+};
 // NEW — player batting card (expand-on-tap under a prop player), read-only
 export const playerCardApi = {
   getMLB: (playerId, opts = {}) => {
