@@ -35,7 +35,7 @@ async function loadCurrentFeed(sport) {
     if (FIXTURE_DIR) return JSON.parse(await readFile(join(FIXTURE_DIR, `${sport}.json`), "utf8"));
     const response = await fetch(`${PUBLIC_API}/api/edges/${sport}`, {
       headers: { accept: "application/json" },
-      signal: AbortSignal.timeout(30000),
+      signal: AbortSignal.timeout(90000),
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     return await response.json();
