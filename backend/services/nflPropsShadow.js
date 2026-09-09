@@ -31,6 +31,7 @@ const {
   toCustomerAnytimeTdSelection,
 } = require("./nflAnytimeTdRankings");
 const { getLatestNflTdContextByEvent } = require("./nflEdges");
+const { loadCurrentNflTdSlateContext } = require("./nflTdSlateContext");
 const { teamKey, cfbNorm, cfbSchoolKey } = require("./teamKey");
 
 const NFL_IMMINENT_DAYS = 7;
@@ -298,6 +299,16 @@ async function recordFootballProps({ sport = "nfl", daysAhead = NFL_IMMINENT_DAY
     if (Object.keys(contextByEvent).length === 0) {
       try { contextByEvent = getLatestNflTdContextByEvent(); }
       catch (_) { contextByEvent = {}; }
+    }
+    if (Object.keys(contextByEvent).length === 0) {
+      try {
+        const stored = await loadCurrentNflTdSlateContext();
+        contextByEvent = stored.contextByEvent || {};
+        if (stored.error) console.error("[FootballProps:nfl] persisted TD context unavailable:", stored.error);
+      } catch (error) {
+        console.error("[FootballProps:nfl] persisted TD context exception:", error.message);
+        contextByEvent = {};
+      }
     }
   }
   const predictionAt = new Date().toISOString();
