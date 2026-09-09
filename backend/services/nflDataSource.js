@@ -126,9 +126,12 @@ async function fetchScoreboard(dateStr) {
       competitionType: comp.type?.abbreviation || null,
       neutralSite: !!comp.neutralSite,
       venue: {
+        id: comp.venue?.id || null,
         name: comp.venue?.fullName || null,
         city: comp.venue?.address?.city || null,
         state: comp.venue?.address?.state || null,
+        country: comp.venue?.address?.country || null,
+        indoor: typeof comp.venue?.indoor === 'boolean' ? comp.venue.indoor : null,
       },
       home: teams.find((x) => x.homeAway === 'home') || null,
       away: teams.find((x) => x.homeAway === 'away') || null,

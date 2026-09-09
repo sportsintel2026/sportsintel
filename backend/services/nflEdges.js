@@ -301,6 +301,7 @@ async function runNFLSlate({ season = null, weeks = 1, phase = null } = {}) {
 
   let matched = 0, unmatched = 0;
   const unmatchedNames = new Set();
+  const marketCapturedAt = new Date().toISOString();
 
   const games = (events || []).map((ev) => {
     const homeT = resolveTeam(resolver, ev.homeTeam);
@@ -324,6 +325,15 @@ async function runNFLSlate({ season = null, weeks = 1, phase = null } = {}) {
     const nSite = neutralIdx ? neutralIdx.isNeutral(ev.awayTeam, ev.homeTeam) : null;
     if (nSite === true) ctx.neutralSite = true;
     const pred = predictGame(ev, ctx);
+    const espnGame = neutralIdx && typeof neutralIdx.resolveGame === "function"
+      ? neutralIdx.resolveGame(ev.awayTeam, ev.homeTeam) : null;
+    // Recording-only handoff for the NFL injury/weather shadow experiment. All
+    // inputs came from this exact slate run; non-enumerable keeps every customer
+    // response byte/shape-compatible and avoids a second odds/scoreboard fetch.
+    Object.defineProperty(pred, "_injuryWeatherShadowInput", {
+      value: { event: ev, baseContext: ctx, espnGame, marketCapturedAt },
+      enumerable: false,
+    });
     const priorSeason = ratings?.blend?.priorSeason ?? ratings?.season ?? season ?? null;
     const rate = (value, gamesPlayed) => value != null && gamesPlayed > 0
       ? Math.round((value / gamesPlayed) * 100) / 100 : null;
