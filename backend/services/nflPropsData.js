@@ -30,6 +30,7 @@
 // CommonJS. Requires Node 18+.
 
 const axios = require("axios");
+const { extractNflAvailability, attachUsageContext } = require("./nflAvailability");
 
 const ESPN_SITE = "https://site.api.espn.com/apis/site/v2/sports/football/nfl";
 const ESPN_CORE = "https://sports.core.api.espn.com/v2/sports/football/leagues/nfl";
@@ -254,6 +255,7 @@ async function buildPlayerProjections({ season = 2025, teamLimit = 3 } = {}) {
   if (teamLimit > 0) teams = teams.slice(0, teamLimit);
 
   const players = [];
+  const availabilityByIdentity = new Map();
   let statErrors = 0;
   let skippedNoMarket = 0;
 
@@ -265,6 +267,8 @@ async function buildPlayerProjections({ season = 2025, teamLimit = 3 } = {}) {
         const items = Array.isArray(g.items) ? g.items : (g.id ? [g] : []);
         for (const a of items) {
           const pos = a.position && a.position.abbreviation;
+          const availability = extractNflAvailability(a, tm);
+          if (availability) availabilityByIdentity.set(`${tm.id}:${a.id}`, availability);
           if (a.id && PROJECTED_POSITIONS.has(pos)) roster.push({
             id: a.id,
             name: a.fullName || a.displayName,
@@ -308,6 +312,10 @@ async function buildPlayerProjections({ season = 2025, teamLimit = 3 } = {}) {
     statErrors,
     skippedNoMarket,
     note: "v1.1: market-participant gated, honest nulls, thin-sample-only regression. 2025 season-average seed, shadow-only — publishes nothing. Over/Under dispersion is parametric pending a shadow-graded fit.",
+    availability: attachUsageContext([...availabilityByIdentity.values()], players, season)
+      .sort((a, b) => String(a.teamId).localeCompare(String(b.teamId))
+        || String(a.position).localeCompare(String(b.position))
+        || String(a.playerName).localeCompare(String(b.playerName))),
     players: players.sort((a, b) =>
       (b.projected.pass_yds || b.projected.rush_yds || b.projected.rec_yds || 0) -
       (a.projected.pass_yds || a.projected.rush_yds || a.projected.rec_yds || 0)),

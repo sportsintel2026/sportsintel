@@ -32,6 +32,7 @@ const {
 } = require("./nflAnytimeTdRankings");
 const { getLatestNflTdContextByEvent } = require("./nflEdges");
 const { loadCurrentNflTdSlateContext } = require("./nflTdSlateContext");
+const { collectNflInjuryWeatherShadow } = require("./nflInjuryWeatherShadow");
 const { teamKey, cfbNorm, cfbSchoolKey } = require("./teamKey");
 
 const NFL_IMMINENT_DAYS = 7;
@@ -283,8 +284,10 @@ async function recordFootballProps({ sport = "nfl", daysAhead = NFL_IMMINENT_DAY
   }
 
   // Only load identities when there are actually lines to match (in-season).
+  const projectionBundle = league === "nfl"
+    ? await buildPlayerProjections({ season: SEED_SEASON, teamLimit: 0 }) : null;
   const players = league === "nfl"
-    ? (await buildPlayerProjections({ season: SEED_SEASON, teamLimit: 0 })).players || []
+    ? projectionBundle?.players || []
     : await loadCfbRosterIdentities();
   const { rows, verifiedProps, tdCandidates, matched, unmatched } = buildShadowRows(
     oddsRes.lines, oddsRes.byEvent, players, { sport: league },
@@ -316,11 +319,38 @@ async function recordFootballProps({ sport = "nfl", daysAhead = NFL_IMMINENT_DAY
     ? buildAnytimeTdRankings({ candidates: tdCandidates, contextByEvent, predictionAt }) : [];
   const tdSelections = tdRankings.map(toCustomerAnytimeTdSelection).filter(Boolean);
 
+  // Shadow-only: reuse the exact slate plus the roster payload already fetched
+  // above. This adds no ESPN/Odds request and cannot alter customer predictions.
+  // Weather uses the shared cached service once per outdoor game during this
+  // existing daily recording cycle; no new schedule or customer-triggered work.
+  let injuryWeatherShadow = null;
+  if (league === "nfl" && !dryRun && Array.isArray(slate?.games) && slate.games.length) {
+    try {
+      injuryWeatherShadow = await collectNflInjuryWeatherShadow({
+        slate,
+        availability: projectionBundle?.availability || [],
+        availabilityMeta: {
+          source: "espn-roster-athlete-id",
+          roleUsageSeason: projectionBundle?.season ?? null,
+          teamsProbed: projectionBundle?.teamsProbed ?? null,
+          statErrors: projectionBundle?.statErrors ?? null,
+        },
+        predictionAt,
+      });
+      if (injuryWeatherShadow.errors?.length) {
+        console.error(`[FootballProps:nfl] injury/weather shadow errors: ${injuryWeatherShadow.errors.length}`);
+      }
+    } catch (error) {
+      injuryWeatherShadow = { contextsRecorded: 0, comparisonsRecorded: 0, error: error.message };
+      console.error("[FootballProps:nfl] injury/weather shadow exception:", error.message);
+    }
+  }
+
   if (dryRun) {
     return { dryRun: true, sport: league, linesSeen: oddsRes.lines.length, matched, verified: verifiedProps.length, wouldLog: rows.length, tdRankings: tdRankings.length, tdSelections: tdSelections.length, unmatchedSample: unmatched.slice(0, 15), sampleRows: rows.slice(0, 8), sampleProps: verifiedProps.slice(0, 8), sampleTdSelections: tdSelections.slice(0, 8) };
   }
   if (verifiedProps.length === 0) {
-    return { logged: 0, verified: 0, linesSeen: oddsRes.lines.length, matched, reason: "no exactly matched prop identities", unmatchedSample: unmatched.slice(0, 15) };
+    return { logged: 0, verified: 0, injuryWeatherShadow, linesSeen: oddsRes.lines.length, matched, reason: "no exactly matched prop identities", unmatchedSample: unmatched.slice(0, 15) };
   }
   latestVerifiedSnapshots[league] = { sport: league, generatedAt: predictionAt, props: verifiedProps, tdSelections };
 
@@ -338,7 +368,7 @@ async function recordFootballProps({ sport = "nfl", daysAhead = NFL_IMMINENT_DAY
   // Market-only CFB and unmodeled touchdown props are customer-readable snapshots,
   // never fabricated model_predictions rows.
   if (rows.length === 0) {
-    return { logged: 0, verified: verifiedProps.length, tdRankings: tdRankings.length, tdSelections: tdSelections.length, tdRecorded: tdRecording.recorded, linesSeen: oddsRes.lines.length, matched, unmatchedSample: unmatched.slice(0, 15) };
+    return { logged: 0, verified: verifiedProps.length, tdRankings: tdRankings.length, tdSelections: tdSelections.length, tdRecorded: tdRecording.recorded, injuryWeatherShadow, linesSeen: oddsRes.lines.length, matched, unmatchedSample: unmatched.slice(0, 15) };
   }
 
   try {
@@ -351,7 +381,7 @@ async function recordFootballProps({ sport = "nfl", daysAhead = NFL_IMMINENT_DAY
       return { logged: 0, error: error.message, linesSeen: oddsRes.lines.length, matched };
     }
     console.log(`[FootballProps:${league}] Snapshotted ${rows.length} prop-shadow rows (${matched} matched of ${oddsRes.lines.length} lines; dups ignored)`);
-    return { logged: rows.length, verified: verifiedProps.length, tdRankings: tdRankings.length, tdSelections: tdSelections.length, tdRecorded: tdRecording.recorded, linesSeen: oddsRes.lines.length, matched, unmatchedSample: unmatched.slice(0, 15) };
+    return { logged: rows.length, verified: verifiedProps.length, tdRankings: tdRankings.length, tdSelections: tdSelections.length, tdRecorded: tdRecording.recorded, injuryWeatherShadow, linesSeen: oddsRes.lines.length, matched, unmatchedSample: unmatched.slice(0, 15) };
   } catch (e) {
     console.error(`[FootballProps:${league}] exception:`, e.message);
     return { logged: 0, error: e.message, linesSeen: oddsRes.lines.length, matched };

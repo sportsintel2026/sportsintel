@@ -110,8 +110,9 @@ async function buildNeutralIndex({ fetchBoard, league, events }) {
     }
   }
 
-  // Returns true | false | null(unknown). Callers must treat null as "leave unset".
-  function isNeutral(awayName, homeName) {
+  // Resolve the already-fetched ESPN game without another scoreboard request.
+  // This is additive: isNeutral below retains its existing counters/semantics.
+  function findGame(awayName, homeName) {
     const k = matchupKey(awayName, homeName, null, league);
     let g = (k && k !== "|") ? (byKey.get(k) || null) : null;
     if (!g && isCfb) {
@@ -119,16 +120,33 @@ async function buildNeutralIndex({ fetchBoard, league, events }) {
       if (sk !== "|" && bySchool.has(sk)) {
         const cand = bySchool.get(sk);
         if (cand) g = cand;
-        else { meta.ambiguous++; meta.unresolved++; return null; }  // shared-campus name -> refuse to guess
+        else return null;  // shared-campus name -> refuse to guess
       }
     }
-    if (!g) { meta.unresolved++; return null; }
+    return g;
+  }
+
+  function resolveGame(awayName, homeName) {
+    return findGame(awayName, homeName);
+  }
+
+  // Returns true | false | null(unknown). Callers must treat null as "leave unset".
+  function isNeutral(awayName, homeName) {
+    const g = findGame(awayName, homeName);
+    if (!g) {
+      if (isCfb) {
+        const sk = `${cfbSchoolKey(awayName)}|${cfbSchoolKey(homeName)}`;
+        if (sk !== "|" && bySchool.has(sk) && bySchool.get(sk) === null) meta.ambiguous++;
+      }
+      meta.unresolved++;
+      return null;
+    }
     meta.resolved++;
     if (g.neutralSite === true) { meta.neutral++; return true; }
     return false;
   }
 
-  return { isNeutral, meta };
+  return { isNeutral, resolveGame, meta };
 }
 
 module.exports = { buildNeutralIndex, _internal: { etDate, shiftYmd } };

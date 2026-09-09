@@ -5,6 +5,8 @@ let liveProjectionFixture = { players: [] };
 let liveTdContextFixture = {};
 let oddsProviderCalls = 0;
 let projectionProviderCalls = 0;
+let injuryWeatherCollectorCalls = 0;
+let injuryWeatherCollectorArgs = null;
 const writesByTable = new Map();
 const originalLoad = Module._load;
 Module._load = function dependencyFreeLoad(request, parent, isMain) {
@@ -32,12 +34,20 @@ Module._load = function dependencyFreeLoad(request, parent, isMain) {
       loaded: Object.keys(liveTdContextFixture).length,
     }),
   };
+  if (request === "./nflInjuryWeatherShadow") return {
+    collectNflInjuryWeatherShadow: async (args) => {
+      injuryWeatherCollectorCalls++;
+      injuryWeatherCollectorArgs = args;
+      return { contextsRecorded: 1, comparisonsRecorded: 5, skipped: 0, errors: [] };
+    },
+  };
   return originalLoad(request, parent, isMain);
 };
 const {
   buildShadowRows,
   buildCfbRosterIdentities,
   getLatestNflPropsSnapshot,
+  recordFootballProps,
   warmNflPropsSnapshotOnBoot,
 } = require("./nflPropsShadow");
 Module._load = originalLoad;
@@ -135,6 +145,7 @@ liveOddsFixture = {
   byEvent: { "warm-event": { commence: "2026-09-13T17:00:00Z", matchup: "Arizona Cardinals @ Buffalo Bills" } },
 };
 liveProjectionFixture = {
+  availability: [{ playerId: "home-runner", teamId: "2", position: "RB" }],
   players: warmLines.slice(0, 11).map((line, index) => ({
     id: `player-${index}`,
     name: line.player,
@@ -175,6 +186,15 @@ liveTdContextFixture = {
   const second = await warmNflPropsSnapshotOnBoot();
   assert.deepEqual(second, { skipped: true, verified: 14 }, "an already-populated process is never warmed twice");
   assert.deepEqual({ oddsProviderCalls, projectionProviderCalls }, { oddsProviderCalls: 1, projectionProviderCalls: 1 }, "repeat warm also adds zero provider calls");
+  const scheduled = await recordFootballProps({ sport: "nfl", slate: { games: [{ eventId: "warm-event" }] } });
+  assert.equal(injuryWeatherCollectorCalls, 1, "injury/weather shadow runs only when the existing scheduled slate is supplied");
+  assert.deepEqual(injuryWeatherCollectorArgs.availability, liveProjectionFixture.availability,
+    "the collector reuses the exact roster availability bundle already fetched for props");
+  assert.equal(injuryWeatherCollectorArgs.availabilityMeta.teamsProbed, undefined,
+    "missing fixture metadata remains explicitly unavailable rather than guessed");
+  assert.deepEqual({ oddsProviderCalls, projectionProviderCalls }, { oddsProviderCalls: 2, projectionProviderCalls: 2 },
+    "shadow wiring adds no Odds or ESPN projection request beyond the existing recorder call");
+  assert.equal(scheduled.injuryWeatherShadow.comparisonsRecorded, 5);
   console.log("nflPropsShadow self-test passed");
 })().catch((error) => {
   console.error(error);

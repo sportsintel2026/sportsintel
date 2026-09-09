@@ -54,9 +54,11 @@ function isCacheValid(entry) {
   return (Date.now() - entry.fetchedAt) < (entry.ttl || CACHE_TTL_MS);
 }
 
-// Get weather for a venue (returns null if indoor or unknown venue)
-async function getWeatherForVenue(venueName, gameTimeISO) {
-  const venue = VENUE_COORDS[venueName];
+// Get weather for a venue. NFL reuses this cached client with an exact venue
+// coordinate supplied by its venue adapter; the default two-argument MLB path is
+// unchanged.
+async function getWeatherForVenue(venueName, gameTimeISO, options = {}) {
+  const venue = options.venue || VENUE_COORDS[venueName];
   if (!venue) {
     console.log(`[Weather] Unknown venue: ${venueName}`);
     return null;
@@ -69,7 +71,8 @@ async function getWeatherForVenue(venueName, gameTimeISO) {
     };
   }
 
-  const cacheKey = `${venueName}_${gameTimeISO || "now"}`;
+  const forecastDays = Math.max(1, Math.min(16, Number(options.forecastDays) || 2));
+  const cacheKey = `${venueName}_${venue.lat}_${venue.lon}_${gameTimeISO || "now"}_${forecastDays}`;
   const cached = cache.get(cacheKey);
   if (cached) {
     if (cached.promise) return cached.promise;      // a request is already in flight → wait on it (dedup)
@@ -88,7 +91,7 @@ async function getWeatherForVenue(venueName, gameTimeISO) {
           latitude: venue.lat,
         longitude: venue.lon,
         current: "temperature_2m,wind_speed_10m,wind_direction_10m,precipitation,weather_code",
-        ...(wantHourly ? { hourly: "temperature_2m,wind_speed_10m,wind_direction_10m,precipitation,weather_code", forecast_days: 2 } : {}),
+        ...(wantHourly ? { hourly: "temperature_2m,wind_speed_10m,wind_direction_10m,precipitation,weather_code", forecast_days: forecastDays } : {}),
         temperature_unit: "fahrenheit",
         wind_speed_unit: "mph",
         timezone: "auto",
@@ -136,12 +139,17 @@ async function getWeatherForVenue(venueName, gameTimeISO) {
       // wind_direction_10m is the FROM direction (meteorological convention). So windDir ≈
       // orientation means wind coming FROM center field → blowing IN toward home (suppresses);
       // windDir ≈ 180° opposite orientation means wind blowing OUT to CF (boosts HRs).
-      const relativeAngle = Math.abs(((windDir - venue.orientation + 540) % 360) - 180);
+      const hasOrientation = Number.isFinite(Number(venue.orientation));
+      const relativeAngle = hasOrientation
+        ? Math.abs(((windDir - venue.orientation + 540) % 360) - 180) : null;
       let windEffect;
       let windLabel;
       if (windMph < 5) {
         windEffect = "calm";
         windLabel = "Calm winds";
+      } else if (!hasOrientation) {
+        windEffect = "windy";
+        windLabel = `Wind ${windMph} mph`;
       } else if (relativeAngle < 45) {
         windEffect = "in"; // blowing toward home plate from CF — suppresses
         windLabel = `Wind blowing IN ${windMph} mph`;
@@ -161,6 +169,7 @@ async function getWeatherForVenue(venueName, gameTimeISO) {
 
       const conditions = describeWeatherCode(code);
       const isRaining = precip > 0.1;
+      const severeCondition = describeSevereCondition(code);
 
       result = {
         indoor: false,
@@ -173,6 +182,9 @@ async function getWeatherForVenue(venueName, gameTimeISO) {
         tempEffect, // "hot" | "cold" | "neutral"
         conditions,
         isRaining,
+        precipitation: precip == null ? null : Number(precip),
+        weatherCode: code == null ? null : Number(code),
+        severeCondition,
         forecastAtGameTime,
         summary: buildSummary({ tempF, windEffect, windMph, tempEffect, conditions, isRaining }),
       };
@@ -209,6 +221,16 @@ function describeWeatherCode(code) {
   return "Unknown";
 }
 
+function describeSevereCondition(code) {
+  const n = Number(code);
+  if (!Number.isFinite(n)) return null;
+  if (n >= 95) return "thunderstorm";
+  if ([75, 77, 85, 86].includes(n)) return "heavy-snow";
+  if ([66, 67].includes(n)) return "freezing-rain";
+  if ([65, 82].includes(n)) return "heavy-rain";
+  return null;
+}
+
 function buildSummary({ tempF, windEffect, windMph, tempEffect, conditions, isRaining }) {
   if (isRaining) return `🌧 Rain — game may be delayed`;
 
@@ -216,7 +238,8 @@ function buildSummary({ tempF, windEffect, windMph, tempEffect, conditions, isRa
   if (windMph >= 5) {
     if (windEffect === "out") summary += ` · 💨 Wind OUT (${windMph}mph — favors hitters)`;
     else if (windEffect === "in") summary += ` · 💨 Wind IN (${windMph}mph — favors pitchers)`;
-    else summary += ` · 💨 Cross wind ${windMph}mph`;
+    else if (windEffect === "cross") summary += ` · 💨 Cross wind ${windMph}mph`;
+    else summary += ` · 💨 Wind ${windMph}mph`;
   }
   if (tempEffect === "hot") summary += ` · 🔥 Warm air carries`;
   if (tempEffect === "cold") summary += ` · 🥶 Cold air suppresses`;
