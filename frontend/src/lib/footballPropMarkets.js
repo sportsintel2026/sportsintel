@@ -48,6 +48,22 @@ export function isFootballPropModeled(prop) {
     .every((value) => value != null && Number.isFinite(Number(value)));
 }
 
+export function isFootballPropPick(prop) {
+  if (!isFootballPropModeled(prop)) return false;
+  // modelEdge is stored on an Over basis. A negative value is therefore a
+  // positive selected-side edge on Under; an exact zero has no model edge.
+  const overBasisEdge = Number(prop.modelEdge);
+  const selectedPrice = overBasisEdge > 0 ? prop?.overOdds : prop?.underOdds;
+  return overBasisEdge !== 0
+    && prop?.line != null && Number.isFinite(Number(prop.line))
+    && String(prop?.book || "").trim().length > 0
+    && selectedPrice != null && Number.isFinite(Number(selectedPrice));
+}
+
+export function footballPropPickRows(props) {
+  return (Array.isArray(props) ? props : []).filter(isFootballPropPick);
+}
+
 export function footballPropBoardRows(props, board = "modeled") {
   const rows = Array.isArray(props) ? props : [];
   return board === "markets"
