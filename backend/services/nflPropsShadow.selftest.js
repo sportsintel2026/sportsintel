@@ -150,6 +150,7 @@ liveProjectionFixture = {
     id: `player-${index}`,
     name: line.player,
     team: "ARI",
+    teamId: "22",
     pos: index < 3 ? "QB" : index < 5 ? "RB" : "WR",
     gamesPlayed: 17,
     projected: { [line.market]: line.line + 1 },
@@ -182,6 +183,8 @@ liveTdContextFixture = {
     "existing core markets survive normalization and startup recording",
   );
   assert.equal((writesByTable.get("nfl_anytime_td_rankings_shadow") || []).length, 3, "all exact-identity TD candidates reach immutable shadow recording");
+  assert.equal((writesByTable.get("nfl_prop_customer_picks") || []).length, 12,
+    "startup recording snapshots the 11 modeled picks plus the one displayed TD selection");
   assert.deepEqual({ oddsProviderCalls, projectionProviderCalls }, { oddsProviderCalls: 1, projectionProviderCalls: 1 }, "durable context hydration adds zero provider calls");
   const second = await warmNflPropsSnapshotOnBoot();
   assert.deepEqual(second, { skipped: true, verified: 14 }, "an already-populated process is never warmed twice");

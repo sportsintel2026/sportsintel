@@ -13,6 +13,7 @@ import PerformancePage from "./pages/Performance";
 import PricingPage from "./pages/Pricing";
 import ResetPasswordPage from "./pages/ResetPassword";
 import AdminPage from "./pages/Admin";
+import NflPropsTrackerPage from "./pages/NflPropsTracker";
 import SettingsPage from "./pages/Settings";
 import ExpertPicksPage from "./pages/ExpertPicks";
 import ConsensusPage from "./pages/Consensus";
@@ -261,6 +262,11 @@ export default function App() {
           <Route path="/admin" element={
             <PrivateRoute>
               <AdminPage />
+            </PrivateRoute>
+          } />
+          <Route path="/admin/nfl-props" element={
+            <PrivateRoute>
+              <NflPropsTrackerPage />
             </PrivateRoute>
           } />
           <Route path="/dashboard" element={

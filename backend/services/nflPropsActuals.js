@@ -46,12 +46,27 @@ function valueByLabel(labels, stats, label) {
   return i >= 0 ? num((stats || [])[i]) : null;
 }
 
-function extractBoxscoreActuals(summaryJson) {
-  const byPlayer = {}; // normName -> { name, pass_yds, rush_yds, receptions, rec_yds }
+function extractBoxscorePlayerStats(summaryJson) {
+  const byPlayer = {};
+  const byPlayerId = {};
   const teams = (summaryJson && summaryJson.boxscore && summaryJson.boxscore.players) || [];
-  const ensure = (name) => {
+  const ensure = (name, playerId) => {
     const k = normalizeName(name);
-    if (!byPlayer[k]) byPlayer[k] = { name, pass_yds: null, rush_yds: null, receptions: null, rec_yds: null };
+    const id = playerId == null ? "" : String(playerId);
+    if (!byPlayer[k]) {
+      byPlayer[k] = {
+        playerId: id || null,
+        name,
+        pass_yds: null,
+        pass_tds: null,
+        rush_yds: null,
+        rush_tds: null,
+        receptions: null,
+        rec_yds: null,
+        rec_tds: null,
+      };
+    }
+    if (id) byPlayerId[id] = byPlayer[k];
     return byPlayer[k];
   };
   for (const t of teams) {
@@ -62,17 +77,27 @@ function extractBoxscoreActuals(summaryJson) {
         const nm = a.athlete && (a.athlete.displayName || a.athlete.fullName);
         if (!nm) continue;
         const stats = a.stats || [];
-        const rec = ensure(nm);
-        if (catName === "passing") rec.pass_yds = valueByLabel(labels, stats, "YDS");
-        else if (catName === "rushing") rec.rush_yds = valueByLabel(labels, stats, "YDS");
+        const rec = ensure(nm, a.athlete?.id);
+        if (catName === "passing") {
+          rec.pass_yds = valueByLabel(labels, stats, "YDS");
+          rec.pass_tds = valueByLabel(labels, stats, "TD");
+        } else if (catName === "rushing") {
+          rec.rush_yds = valueByLabel(labels, stats, "YDS");
+          rec.rush_tds = valueByLabel(labels, stats, "TD");
+        }
         else if (catName === "receiving") {
           rec.receptions = valueByLabel(labels, stats, "REC");
           rec.rec_yds = valueByLabel(labels, stats, "YDS");
+          rec.rec_tds = valueByLabel(labels, stats, "TD");
         }
       }
     }
   }
-  return byPlayer;
+  return { byName: byPlayer, byId: byPlayerId };
+}
+
+function extractBoxscoreActuals(summaryJson) {
+  return extractBoxscorePlayerStats(summaryJson).byName;
 }
 
 // ── LIVE: scoreboard for a date -> finished games ────────────────────────────────
@@ -152,6 +177,7 @@ async function probeActuals({ date = "20251207" } = {}) {
 
 module.exports = {
   extractBoxscoreActuals,
+  extractBoxscorePlayerStats,
   valueByLabel,
   fetchFinals,
   fetchSummary,
