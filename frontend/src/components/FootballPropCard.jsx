@@ -72,13 +72,15 @@ export default function FootballPropCard({ prop, sport = "nfl", compact = false,
   }
   const showModel = modelContext && modeled;
   const overLean = showModel && Number(prop.modelEdge) >= 0;
+  const selectedEdge = showModel ? Math.abs(Number(prop.modelEdge)) : null;
   const priceMode = prop.priceMode || "over-under";
   const probabilitySide = priceMode === "yes-no" ? "YES" : "OVER";
   const selectedLabel = overLean ? (prop.overLabel || "OVER") : (prop.underLabel || "UNDER");
   const selectedPrice = overLean ? prop.overOdds : prop.underOdds;
   const selectedLine = prop.line == null ? "" : ` ${prop.line}`;
+  const wagerMarket = String(market?.label || prop.market || "Player Prop").toUpperCase();
   const callout = showModel
-    ? `${selectedLabel}${selectedLine}`
+    ? `${selectedLabel}${selectedLine} ${wagerMarket}`
     : prop.market === "anytime_td" ? "ANYTIME TD" : priceMode === "yes-no" ? "YES / NO MARKET" : priceMode === "over-only" ? `${prop.overLabel || "OVER"} MARKET` : `O/U${selectedLine}`;
   const marketPrice = prop.overOdds;
 
@@ -102,24 +104,24 @@ export default function FootballPropCard({ prop, sport = "nfl", compact = false,
         <span className="fbprop__marketlabel">{market?.label || prop.market}</span>
         <strong className="fbprop__call">{callout}</strong>
         <div className="fbprop__support">
-          <b>{prop.book || "SPORTSBOOK"}</b>
-          <span>{showModel ? `${odds(selectedPrice)} model-side price` : `${odds(marketPrice)} posted price`}</span>
+          <b>{showModel ? odds(selectedPrice) : odds(marketPrice)}</b>
+          <span>· {prop.book || "SPORTSBOOK"}</span>
         </div>
       </div>
 
-      <div className={`fbprop__edge${showModel && Number(prop.modelEdge) >= 0 ? " is-positive" : showModel ? " is-negative" : ""}`}>
+      <div className={`fbprop__edge${showModel ? " is-positive" : ""}`}>
         <span>{showModel ? "MODEL EDGE" : "MARKET ONLY"}</span>
-        <strong>{showModel ? edge(prop.modelEdge) : odds(marketPrice)}</strong>
-        <small>{showModel ? "NOT QUALIFIED" : "NO MODEL PICK"}</small>
+        <strong>{showModel ? edge(selectedEdge) : odds(marketPrice)}</strong>
+        <small>{showModel ? "SELECTED SIDE" : "NO MODEL PICK"}</small>
       </div>
     </div>
 
     <div className="fbprop__quick">
       {showModel
-        ? <><div><span>MODEL PROJ.</span><b>{number(prop.projection)}</b></div><div><span>MODEL LEAN</span><b>{selectedLabel}{selectedLine}</b></div><div><span>EDGE</span><b>{edge(prop.modelEdge)}</b></div></>
+        ? <><div><span>MODEL PROJ.</span><b>{number(prop.projection)}</b></div><div><span>WIZEPICKS BET</span><b>{selectedLabel}{selectedLine}</b></div><div><span>EDGE</span><b>{edge(selectedEdge)}</b></div></>
         : <><div><span>STATUS</span><b>MARKET ONLY</b></div><div><span>BOOK</span><b>{prop.book || "—"}</b></div><div><span>PRICE</span><b>{odds(marketPrice)}</b></div></>}
     </div>
-    <footer><span>{showModel ? "MODELED PROP · NOT A QUALIFIED PICK" : "VERIFIED MARKET · NOT A PICK"}</span><i />{eventTime(prop)}<details><summary>Details</summary><div className="fbprop__detailbody"><div className={`fbprop__prices is-${priceMode}`} aria-label={`${prop.book || "Sportsbook"} aligned price`}>{priceMode === "over-only" ? <><PriceCell label={prop.overLabel || "OVER"} line={null} value={prop.overOdds} /><PriceCell label="COUNTERPRICE" line={null} value={null} subdued /></> : <><PriceCell label={prop.overLabel || "OVER"} line={prop.line} value={prop.overOdds} /><PriceCell label={prop.underLabel || "UNDER"} line={prop.line} value={prop.underOdds} /></>}</div>{showModel && <div className="fbprop__metrics"><div><span>MODEL {probabilitySide}</span><b>{pct(prop.modelOverProb)}</b></div><div><span>MARKET FAIR</span><b>{pct(prop.marketFairOverProb)}</b></div><div><span>PROJECTION SAMPLE</span><b>{prop.gamesUsed != null ? `${prop.gamesUsed} games` : "—"}</b></div></div>}</div></details></footer>
+    <footer><span>{showModel ? "WIZEPICKS PICK" : "VERIFIED MARKET · NOT A PICK"}</span><i />{eventTime(prop)}<details><summary>Details</summary><div className="fbprop__detailbody"><div className={`fbprop__prices is-${priceMode}`} aria-label={`${prop.book || "Sportsbook"} aligned price`}>{priceMode === "over-only" ? <><PriceCell label={prop.overLabel || "OVER"} line={null} value={prop.overOdds} /><PriceCell label="COUNTERPRICE" line={null} value={null} subdued /></> : <><PriceCell label={prop.overLabel || "OVER"} line={prop.line} value={prop.overOdds} /><PriceCell label={prop.underLabel || "UNDER"} line={prop.line} value={prop.underOdds} /></>}</div>{showModel && <div className="fbprop__metrics"><div><span>MODEL {probabilitySide}</span><b>{pct(prop.modelOverProb)}</b></div><div><span>MARKET FAIR</span><b>{pct(prop.marketFairOverProb)}</b></div><div><span>PROJECTION SAMPLE</span><b>{prop.gamesUsed != null ? `${prop.gamesUsed} games` : "—"}</b></div></div>}</div></details></footer>
   </article>;
 }
 

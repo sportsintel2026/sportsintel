@@ -4,7 +4,9 @@ import {
   footballPropBoardRows,
   filterFootballProps,
   footballPropMarket,
+  footballPropPickRows,
   isFootballPropModeled,
+  isFootballPropPick,
 } from "./footballPropMarkets.js";
 
 assert.equal(footballPropMarket("pass_yds").family, "passing");
@@ -44,6 +46,7 @@ assert.equal(filterFootballProps(props, "all").some((prop) => prop.player === "H
 const modeledOffer = {
   sport: "nfl", market: "pass_yds", player: "Qualified Passer",
   projection: 264.2, modelOverProb: 0.56, marketFairOverProb: 0.519, modelEdge: 0.041,
+  line: 249.5, overOdds: -108, underOdds: -112, book: "One Book",
 };
 const incompleteOffer = {
   sport: "nfl", market: "rush_yds", player: "Unqualified Runner",
@@ -56,6 +59,11 @@ const scorerOffer = {
 assert.equal(isFootballPropModeled(modeledOffer), true, "complete active core-model context identifies a modeled prop");
 assert.equal(isFootballPropModeled(incompleteOffer), false, "partial model context never becomes a modeled prop");
 assert.equal(isFootballPropModeled({ ...scorerOffer, projection: 1, modelOverProb: 0.7, modelEdge: 0.1 }), false, "touchdown scorer offers remain market-only in this release");
+assert.equal(isFootballPropPick(modeledOffer), true, "a positive Over-basis edge is a customer pick");
+assert.equal(isFootballPropPick({ ...modeledOffer, modelEdge: -0.031 }), true, "a negative Over-basis edge is a positive selected-side Under edge");
+assert.equal(isFootballPropPick({ ...modeledOffer, modelEdge: 0 }), false, "a zero-edge modeled row is not a customer pick");
+assert.equal(isFootballPropPick({ ...modeledOffer, modelEdge: -0.031, underOdds: null }), false, "a pick without its selected-side posted price is not customer-visible");
+assert.deepEqual(footballPropPickRows([modeledOffer, { ...modeledOffer, player: "Under Pick", modelEdge: -0.031 }, { ...modeledOffer, player: "No Edge", modelEdge: 0 }]).map((prop) => prop.player), ["Qualified Passer", "Under Pick"]);
 assert.deepEqual(footballPropBoardRows([modeledOffer, incompleteOffer, scorerOffer], "modeled").map((prop) => prop.player), ["Qualified Passer"]);
 assert.deepEqual(footballPropBoardRows([modeledOffer, incompleteOffer, scorerOffer], "markets").map((prop) => prop.player), ["Unqualified Runner", "Market Scorer"]);
 
