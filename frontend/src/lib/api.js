@@ -78,6 +78,14 @@ export const footballPropsApi = {
     return apiFetch(`/api/football-props/${encodeURIComponent(sport)}${qs}`);
   },
 };
+export const nflPropsTrackerApi = {
+  get: (filters = {}) => {
+    const q = new URLSearchParams();
+    for (const [key, value] of Object.entries(filters)) if (value != null && value !== "") q.set(key, value);
+    const qs = q.toString();
+    return apiFetch(`/api/nfl-props-tracker${qs ? `?${qs}` : ""}`);
+  },
+};
 // NEW — live scores (MLB + NBA): lists + per-game detail (innings/quarters + player stats)
 export const scoresApi = {
   getScores: (league) => apiFetch(`/api/scores/${league}`),

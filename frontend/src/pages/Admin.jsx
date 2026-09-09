@@ -245,6 +245,11 @@ export default function AdminPage() {
         <div className="plt"><b>MODEL PERFORMANCE</b><span>core record {"\u00b7"} ROI {"\u00b7"} CLV {"\u00b7"} by-market</span></div>
         <div className="plc">{"\u203a"}</div>
       </div>
+      <div className="perfbtn" onClick={()=>navigate("/admin/nfl-props")}>
+        <div className="pli">{"\u25c8"}</div>
+        <div className="plt"><b>NFL PROPS TRACKER</b><span>automatic record {"\u00b7"} units {"\u00b7"} ROI {"\u00b7"} by category</span></div>
+        <div className="plc">{"\u203a"}</div>
+      </div>
 
       <div className="blk"><div className="bl">WIZEPLAYS STUDIO <span className="bx">straight bets · auto-graded hourly</span></div>
         <div className="wprec">

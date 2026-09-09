@@ -20,9 +20,10 @@
 // CommonJS, Node 18+.
 
 const { createClient } = require("@supabase/supabase-js");
-const { extractBoxscoreActuals, fetchFinals, fetchSummary } = require("./nflPropsActuals");
+const { extractBoxscorePlayerStats, fetchFinals, fetchSummary } = require("./nflPropsActuals");
 const { normalizeName } = require("./nflPropsShadow");
 const { teamKey } = require("./teamKey"); // WZ-TEAMKEY-SSOT-2026-07-17
+const { TABLE: CUSTOMER_PICK_TABLE, gradeCustomerPick } = require("./nflPropsTracker");
 
 const SHADOW_TO_BASE = {
   player_pass_yds_shadow: "pass_yds",
@@ -102,15 +103,23 @@ function gradeShadowRow(row, actualsByNorm) {
 async function gradeNflPropShadows({ dryRun = false } = {}) {
   const supabase = db();
   const today = easternToday();
-  const { data: pending, error } = await supabase
-    .from("model_predictions")
-    .select("id, game_id, game_date, matchup, market, selection, line")
-    .eq("league", "nfl")
-    .in("market", SHADOW_MARKETS)
-    .is("result", null)
-    .lte("game_date", today);
+  const [{ data: pending, error }, { data: customerPending, error: customerError }] = await Promise.all([
+    supabase.from("model_predictions")
+      .select("id, game_id, game_date, matchup, market, selection, line")
+      .eq("league", "nfl")
+      .in("market", SHADOW_MARKETS)
+      .is("result", null)
+      .lte("game_date", today),
+    supabase.from(CUSTOMER_PICK_TABLE)
+      .select("id,event_id,event_date,matchup,player_id,player_name,category,side,line,odds")
+      .eq("result", "PENDING")
+      .lte("event_date", today),
+  ]);
   if (error) { console.error("[NflPropGrader] select error:", error.message); return dryRun ? { error: error.message } : 0; }
-  if (!pending || pending.length === 0) return dryRun ? { pending: 0, previews: [] } : 0;
+  if (customerError) console.error("[NflPropGrader] customer-pick select error:", customerError.message);
+  if ((!pending || pending.length === 0) && (!customerPending || customerPending.length === 0)) {
+    return dryRun ? { pending: 0, customerPending: 0, previews: [], customerPreviews: [] } : 0;
+  }
 
   const sbCache = {};
   const boxCache = {};
@@ -121,7 +130,7 @@ async function gradeNflPropShadows({ dryRun = false } = {}) {
   };
   const boxFor = async (eventId) => {
     if (boxCache[eventId] !== undefined) return boxCache[eventId];
-    try { boxCache[eventId] = extractBoxscoreActuals(await fetchSummary(eventId)); } catch { boxCache[eventId] = null; }
+    try { boxCache[eventId] = extractBoxscorePlayerStats(await fetchSummary(eventId)); } catch { boxCache[eventId] = null; }
     return boxCache[eventId];
   };
 
@@ -137,7 +146,7 @@ async function gradeNflPropShadows({ dryRun = false } = {}) {
     if (!game || !game.final) continue; // not found / not final yet -> stay pending
     const actuals = await boxFor(game.eventId);
     if (!actuals) continue;
-    const outcome = gradeShadowRow(p, actuals);
+    const outcome = gradeShadowRow(p, actuals.byName);
     if (!outcome) continue;
 
     if (dryRun) {
@@ -151,9 +160,42 @@ async function gradeNflPropShadows({ dryRun = false } = {}) {
     if (!upErr) graded++;
   }
 
-  if (dryRun) return { pending: pending.length, graded: previews.length, previews: previews.slice(0, 25) };
+  let customerGraded = 0;
+  const customerPreviews = [];
+  for (const p of customerPending || []) {
+    let game = null;
+    for (const d of [p.event_date, shiftYmd(p.event_date, -1), shiftYmd(p.event_date, 1)]) {
+      const games = await boardFor(d);
+      game = matchGame(p.matchup, games || []);
+      if (game) break;
+    }
+    if (!game || !game.final) continue;
+    const actuals = await boxFor(game.eventId);
+    if (!actuals) continue;
+    const outcome = gradeCustomerPick(p, actuals);
+    if (dryRun) {
+      customerPreviews.push({ player: p.player_name, category: p.category, side: p.side, line: p.line, ...outcome });
+      continue;
+    }
+    const { error: upErr } = await supabase.from(CUSTOMER_PICK_TABLE).update({
+      ...outcome,
+      result_source: "espn-game-summary",
+      graded_at: new Date().toISOString(),
+    }).eq("id", p.id).eq("result", "PENDING");
+    if (!upErr) customerGraded++;
+  }
+
+  if (dryRun) return {
+    pending: (pending || []).length,
+    graded: previews.length,
+    previews: previews.slice(0, 25),
+    customerPending: (customerPending || []).length,
+    customerGraded: customerPreviews.length,
+    customerPreviews: customerPreviews.slice(0, 25),
+  };
   if (graded) console.log(`[NflPropGrader] Graded ${graded} prop-shadow rows`);
-  return graded;
+  if (customerGraded) console.log(`[NflPropGrader] Graded ${customerGraded} customer-facing prop picks`);
+  return graded + customerGraded;
 }
 
 module.exports = {

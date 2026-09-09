@@ -33,6 +33,7 @@ const {
 const { getLatestNflTdContextByEvent } = require("./nflEdges");
 const { loadCurrentNflTdSlateContext } = require("./nflTdSlateContext");
 const { collectNflInjuryWeatherShadow } = require("./nflInjuryWeatherShadow");
+const { recordPublishedNflProps } = require("./nflPropsTracker");
 const { teamKey, cfbNorm, cfbSchoolKey } = require("./teamKey");
 
 const NFL_IMMINENT_DAYS = 7;
@@ -354,6 +355,21 @@ async function recordFootballProps({ sport = "nfl", daysAhead = NFL_IMMINENT_DAY
   }
   latestVerifiedSnapshots[league] = { sport: league, generatedAt: predictionAt, props: verifiedProps, tdSelections };
 
+  // Record the exact subset this snapshot exposes as WizePicks NFL picks. This is
+  // an immutable first-seen ledger only; it cannot alter selection or customer output.
+  let publishedPickRecording = { attempted: 0 };
+  if (league === "nfl") {
+    try {
+      publishedPickRecording = await recordPublishedNflProps({ verifiedProps, tdSelections, predictionAt });
+      if (publishedPickRecording.error) {
+        console.error("[FootballProps:nfl] customer-pick tracker write skipped:", publishedPickRecording.error);
+      }
+    } catch (error) {
+      publishedPickRecording = { attempted: 0, error: error.message };
+      console.error("[FootballProps:nfl] customer-pick tracker exception:", error.message);
+    }
+  }
+
   let tdRecording = { recorded: 0 };
   if (tdRankings.length > 0) {
     try {
@@ -368,7 +384,7 @@ async function recordFootballProps({ sport = "nfl", daysAhead = NFL_IMMINENT_DAY
   // Market-only CFB and unmodeled touchdown props are customer-readable snapshots,
   // never fabricated model_predictions rows.
   if (rows.length === 0) {
-    return { logged: 0, verified: verifiedProps.length, tdRankings: tdRankings.length, tdSelections: tdSelections.length, tdRecorded: tdRecording.recorded, injuryWeatherShadow, linesSeen: oddsRes.lines.length, matched, unmatchedSample: unmatched.slice(0, 15) };
+    return { logged: 0, verified: verifiedProps.length, tdRankings: tdRankings.length, tdSelections: tdSelections.length, tdRecorded: tdRecording.recorded, publishedPicks: publishedPickRecording.attempted, injuryWeatherShadow, linesSeen: oddsRes.lines.length, matched, unmatchedSample: unmatched.slice(0, 15) };
   }
 
   try {
@@ -381,7 +397,7 @@ async function recordFootballProps({ sport = "nfl", daysAhead = NFL_IMMINENT_DAY
       return { logged: 0, error: error.message, linesSeen: oddsRes.lines.length, matched };
     }
     console.log(`[FootballProps:${league}] Snapshotted ${rows.length} prop-shadow rows (${matched} matched of ${oddsRes.lines.length} lines; dups ignored)`);
-    return { logged: rows.length, verified: verifiedProps.length, tdRankings: tdRankings.length, tdSelections: tdSelections.length, tdRecorded: tdRecording.recorded, injuryWeatherShadow, linesSeen: oddsRes.lines.length, matched, unmatchedSample: unmatched.slice(0, 15) };
+    return { logged: rows.length, verified: verifiedProps.length, tdRankings: tdRankings.length, tdSelections: tdSelections.length, tdRecorded: tdRecording.recorded, publishedPicks: publishedPickRecording.attempted, injuryWeatherShadow, linesSeen: oddsRes.lines.length, matched, unmatchedSample: unmatched.slice(0, 15) };
   } catch (e) {
     console.error(`[FootballProps:${league}] exception:`, e.message);
     return { logged: 0, error: e.message, linesSeen: oddsRes.lines.length, matched };
