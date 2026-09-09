@@ -1,14 +1,24 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-import { supabase, edgesApi, wizePicksApi } from "../lib/api";
+import { supabase, edgesApi, footballPropsApi, wizePicksApi } from "../lib/api";
+import {
+  WIZEPLAY_PROP_MARKETS,
+  entryKey,
+  gameOddsQuote,
+  normalizeGameRows,
+  propOddsQuote,
+  propPickText,
+  propRowsForSport,
+  propSides,
+  validAmericanOdds,
+} from "../lib/wizePlayEntry";
 
 const API_BASE = import.meta.env.VITE_API_URL || "https://sportsintel-production.up.railway.app";
 const ADMIN_EMAIL = "r7002g@gmail.com";
 const todayISO = () => new Date().toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
 const fmtOdds = (o) => { const n = Number(o); if(!n||isNaN(n)) return String(o||""); return n>0?"+"+n:""+n; };
-const unitProfit = (o) => { const n = Number(o); if(!n||isNaN(n)) return 1; return n>0 ? n/100 : 100/Math.abs(n); };
-const resState = (r) => { const s = String(r==null?"":r).trim().toLowerCase(); if(s===""||s==="pending") return "pending"; if(s==="won"||s==="win") return "won"; if(s==="lost"||s==="loss") return "lost"; return "push"; };
+const resState = (r) => { const s = String(r==null?"":r).trim().toLowerCase(); if(s===""||s==="pending") return "pending"; if(s==="won"||s==="win") return "won"; if(s==="lost"||s==="loss") return "lost"; if(s==="void") return "void"; return "push"; };
 
 // WZ-ADMIN-ALLSPORTS-2026-07-13 :: WizePlays can be posted for any sport. The KEY here is the tag
 // STORED on the pick, so CFB stores "ncaafb" to match the WizePlays display filter (Home.jsx WP_SPORT)
@@ -33,6 +43,7 @@ export default function AdminPage() {
   const [picks, setPicks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [rec, setRec] = useState({ w:0, l:0, p:0, u:0 });
+  const [propProof, setPropProof] = useState(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -47,6 +58,14 @@ export default function AdminPage() {
   const [units, setUnits] = useState("");
   const [conv, setConv] = useState("Strong");
   const [write, setWrite] = useState("");
+  const [book, setBook] = useState("");
+  const [verifiedQuote, setVerifiedQuote] = useState(false);
+  const [feedPayload, setFeedPayload] = useState(null);
+  const [betKind, setBetKind] = useState("game");
+  const [props, setProps] = useState([]);
+  const [propCategory, setPropCategory] = useState("");
+  const [playerIdx, setPlayerIdx] = useState(-1);
+  const [propSide, setPropSide] = useState("");
   // WZ-ADMIN-ALLSPORTS-2026-07-13 :: "board" links a game (auto-grades); "manual" is typed for any sport.
   const [entryMode, setEntryMode] = useState("board");
   const [mMatchup, setMMatchup] = useState(""); // manual matchup, e.g. "KC @ BUF"
@@ -63,18 +82,10 @@ export default function AdminPage() {
   };
   const loadRecord = async () => {
     try {
-      const { data } = await supabase.from("expert_picks").select("picks");
-      let w=0,l=0,p=0,u=0;
-      for (const row of (data||[])) {
-        let arr=[]; try { arr = JSON.parse(row.picks||"[]"); } catch(_) {}
-        for (const pk of arr) {
-          const st = resState(pk.result); if (st==="pending") continue;
-          if (st==="won") { w++; u += (Number(pk.units)||1)*unitProfit(pk.odds); }
-          else if (st==="lost") { l++; u -= (Number(pk.units)||1); }
-          else p++;
-        }
-      }
-      setRec({ w, l, p, u: Math.round(u*10)/10 });
+      const data = await wizePicksApi.get();
+      const overall = data?.proof?.overall || {};
+      setRec({ w:overall.wins||0, l:overall.losses||0, p:overall.pushes||0, u:Number(overall.units)||0 });
+      setPropProof(data?.proof?.props || null);
     } catch(_) {}
   };
   useEffect(() => { if(isAdmin){ loadToday(); loadRecord(); } }, [isAdmin]);
@@ -86,74 +97,53 @@ export default function AdminPage() {
     const p = (SPORT_CFG[sport] || SPORT_CFG.mlb).feed();
     p.then(d => {
       if (cancelled) return;
-      const arr = Array.isArray(d) ? d : (d?.games || []);
-      // WZ-ADMIN-BOARDTEAMS-2026-07-13 :: MLB/NBA carry away/awayAbbr; football carries awayTeam/homeTeam
-      // (plus a "matchup" string). Read every variant, and DROP any game we can't name so an off-season
-      // feed (empty NFL/CFB/NHL rows) no longer shows a list of "? @ ?" -- it falls through to Manual.
-      const parseMU = (mu, i) => { const parts = String(mu||"").split(/@|vs/i).map(s=>s.trim()).filter(Boolean); return parts[i] || ""; };
-      const nameOf = (abbr, full, team, mu, i) => { for (const v of [abbr, full, team]) { const s = String(v==null?"":v).trim(); if (s && s !== "?") return s; } return parseMU(mu, i); };
-      const whenOf = (g) => g.time || (g.commenceTime ? new Date(g.commenceTime).toLocaleString([], { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" }) : "");
-      const list = arr.map(g => {
-        const away = nameOf(g.awayAbbr, g.away, g.awayTeam, g.matchup, 0);
-        const home = nameOf(g.homeAbbr, g.home, g.homeTeam, g.matchup, 1);
-        const t = whenOf(g);
-        return {
-          gameId: g.id || g.gameId || g.gamePk || g.eventId || "",
-          awayAbbr: away, homeAbbr: home,
-          label: `${away} @ ${home}${t ? " \u00b7 " + t : ""}`,
-          moneyline: g.moneyline || null,
-          totals: g.totals || null,
-          runLine: g.runLine || null,
-          spread: g.spread || null,
-        };
-      }).filter(g => g.awayAbbr && g.homeAbbr);
-      setGames(list); setGameIdx(-1); setSelection("");
+      setFeedPayload(d);
+      setGames(normalizeGameRows(d)); setGameIdx(-1); setSelection("");
     }).catch(()=>setGames([]));
     return () => { cancelled = true; };
   }, [sport, sheetOpen]);
 
-  // Auto-fill ODDS (and LINE) from the selected game's live edges data.
-  const numOr = (v) => (v==null||v===""||isNaN(Number(v))) ? null : Number(v);
-  const autoOdds = (g, mkt, sel) => {
-    if (!g) return { odds: null, line: null };
-    if (mkt==="moneyline") { const ml=g.moneyline||{}; return { odds: sel==="home"?ml.homeOdds:ml.awayOdds, line: null }; } // WP-PICKER-FIELDFIX-2026-06-27
-    if (mkt==="total")     { const t=g.totals||{};     return { odds: sel==="under"?t.underOdds:t.overOdds, line: t.line ?? null }; }
-    if (mkt==="run_line")  {
-      // WP-PICKER-RUNLINE-FIX-2026-06-27 — the model emits the correctly SIGNED run line
-      // per side (homeLine/awayLine: favorite -1.5, dog +1.5), so read it directly. The
-      // old code derived the sign from ml.home/ml.away — fields that don't exist on the
-      // edges payload (it's homeOdds/awayOdds) — so favorite detection silently failed and
-      // home always defaulted to -1.5 (e.g. SD, a home dog, wrongly showed -1.5).
-      const rl=g.runLine||{}, ml=g.moneyline||{};
-      let ln = sel==="home" ? rl.homeLine : rl.awayLine;
-      if (ln==null) { // fallback: derive sign from the moneyline, using the REAL field names
-        const hm=numOr(ml.homeOdds), aw=numOr(ml.awayOdds);
-        const homeFav = (hm!=null && aw!=null) ? hm < aw : null;        // more-negative ML = favorite
-        const sideFav = sel==="home" ? homeFav : (homeFav===null ? null : !homeFav);
-        const mag = 1.5;
-        ln = sideFav===null ? (sel==="home"?-mag:mag) : (sideFav ? -mag : mag);
-      }
-      return { odds: sel==="home"?rl.homeOdds:rl.awayOdds, line: ln };
-    }
-    if (mkt==="spread")    {
-      const sp=g.spread||{};
-      const mag = (sp.line!=null && !isNaN(Number(sp.line))) ? Math.abs(Number(sp.line)) : null;
-      return { odds: sel==="home"?sp.homeOdds:sp.awayOdds, line: mag==null?null:(sel==="home"?-mag:mag) };
-    }
-    return { odds: null, line: null };
-  };
   useEffect(() => {
-    const g = games[gameIdx];
-    if (!g || !selection) return;
-    const { odds: od, line: ln } = autoOdds(g, market, selection);
-    if (od!=null && od!=="") setOdds(String(od));
-    if (ln!=null) setLine(String(ln));
+    let cancelled = false;
+    if (!sheetOpen || betKind !== "prop") { setProps([]); return undefined; }
+    const load = sport === "nfl" ? footballPropsApi.getAdmin("nfl") : Promise.resolve(feedPayload);
+    load.then((payload) => {
+      if (cancelled) return;
+      setProps(propRowsForSport(sport, payload));
+      setPropCategory(""); setPlayerIdx(-1); setPropSide("");
+    }).catch(() => setProps([]));
+    return () => { cancelled = true; };
+  }, [sport, betKind, sheetOpen, feedPayload]);
+
+  const categoryProps = props.filter((prop) => prop.market === propCategory
+    && (!games[gameIdx] || String(prop.eventId) === String(games[gameIdx].gameId)));
+  const chosenProp = categoryProps[playerIdx] || null;
+  const availablePropMarkets = (WIZEPLAY_PROP_MARKETS[sport] || [])
+    .filter(([key]) => props.some((prop) => prop.market === key));
+
+  // Auto-fill exact best verified line/price/book. Missing quotes stay blank and
+  // explicitly enter manual fallback mode; no -110 or unnamed-book default exists.
+  useEffect(() => {
+    const current = betKind === "prop"
+      ? propOddsQuote(chosenProp, propSide)
+      : gameOddsQuote(games[gameIdx], market, selection);
+    if (current) {
+      setOdds(String(current.odds)); setBook(current.book); setVerifiedQuote(true);
+      setLine(current.line == null ? "" : String(current.line));
+    } else {
+      setOdds(""); setBook(""); setVerifiedQuote(false);
+      if (betKind === "prop" || market !== "moneyline") setLine("");
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gameIdx, market, selection]);
+  }, [gameIdx, market, selection, betKind, chosenProp, propSide]);
 
   const save = async (next) => {
     setSaving(true);
-    try { await supabase.from("expert_picks").upsert({ date: today, picks: JSON.stringify(next) }, { onConflict: "date" }); setPicks(next); }
+    try {
+      const { error } = await supabase.from("expert_picks").upsert({ date: today, picks: JSON.stringify(next) }, { onConflict: "date" });
+      if (error) throw error;
+      setPicks(next);
+    }
     catch(e) { alert("Save failed: " + (e?.message||e)); }
     setSaving(false);
   };
@@ -168,31 +158,70 @@ export default function AdminPage() {
   const publish = async () => {
     let pick;
     if (entryMode === "manual") {
-      // Manual: works for any sport, in or out of season. No gameId, so it grades by hand.
+      // Legacy free-text entry remains available for out-of-season sports, but it
+      // never receives an invented default price or an automatic-grade claim.
       if (!mPick.trim()) { alert("Enter the pick text (e.g. \"KC ML\", \"Over 45.5\", \"BUF -3.5\")."); return; }
-      if (needsLine && line==="") { alert("Enter the line."); return; }
+      if (needsLine && !Number.isFinite(Number(line))) { alert("Enter a valid line."); return; }
+      if (!validAmericanOdds(odds) || !book.trim()) { alert("Enter valid American odds and the exact sportsbook."); return; }
       const parts = String(mMatchup).split(/@|vs/i).map(s=>s.trim()).filter(Boolean);
       pick = {
-        type: "straight", sport, gameId: "", game: mMatchup.trim(),
+        type: "straight", kind: "game", sport, gameId: "", game: mMatchup.trim(),
         awayAbbr: (parts[0]||"").slice(0,4).toUpperCase(), homeAbbr: (parts[1]||"").slice(0,4).toUpperCase(),
         market, selection: "", line: line===""?null:Number(line),
-        pick: mPick.trim(), odds: odds || "-110", units: Number(units)||1,
-        conviction: conv, write: write.trim(), result: "",
+        pick: mPick.trim(), odds: Number(odds), book: book.trim(), oddsSource: "manual", units: Number(units)||1,
+        conviction: conv, write: write.trim(), result: "", autoGrade: false, submittedAt: new Date().toISOString(),
       };
     } else {
       const g = games[gameIdx] || {};
-      if (!selection) { alert("Pick a selection (side / over-under)."); return; }
-      if (needsLine && line==="") { alert("Enter the line."); return; }
-      pick = {
-        type: "straight", sport, gameId: g.gameId || "", game: g.label || "", awayAbbr: g.awayAbbr || "", homeAbbr: g.homeAbbr || "",
-        market, selection, line: line===""?null:Number(line),
-        pick: buildPickText(g), odds: odds || "-110", units: Number(units)||1,
-        conviction: conv, write: write.trim(), result: "",
+      if (!g.gameId) { alert("Select a game."); return; }
+      if (!validAmericanOdds(odds) || !book.trim()) { alert("Odds unavailable. Enter valid American odds and the exact sportsbook before publishing."); return; }
+      if (needsLine && !Number.isFinite(Number(line))) { alert("Enter the exact valid line."); return; }
+      const common = {
+        type: "straight", sport, gameId: g.gameId, gameDate: g.gameDate, commenceTime: g.commenceTime,
+        game: `${g.awayAbbr} @ ${g.homeAbbr}`, awayAbbr: g.awayAbbr, homeAbbr: g.homeAbbr,
+        odds: Number(odds), book: book.trim(), oddsSource: verifiedQuote ? "verified" : "manual",
+        units: Number(units)||1, conviction: conv, write: write.trim(), result: "", autoGrade: true,
+        submittedAt: new Date().toISOString(),
       };
+      if (betKind === "prop") {
+        if (!chosenProp || !propSide) { alert("Select a player, prop type, and outcome."); return; }
+        pick = {
+          ...common, kind: "prop", market: "prop", propCategory: chosenProp.market,
+          playerId: String(chosenProp.playerId || ""), playerName: chosenProp.player, team: chosenProp.team || null,
+          selection: propSide, line: line===""?null:Number(line),
+          pick: propPickText(chosenProp, propSide, line),
+          modelProjection: chosenProp.projection ?? null, modelEdge: chosenProp.modelEdge ?? null,
+        };
+      } else {
+        if (!selection) { alert("Pick a selection (side / over-under)."); return; }
+        pick = {
+          ...common, kind: "game", market, selection, line: line===""?null:Number(line), pick: buildPickText(g),
+        };
+      }
     }
-    await save([pick, ...picks]);
+    pick.entryKey = entryKey(pick);
+    let latestToday = picks;
+    let allRows = [];
+    try {
+      const { data, error } = await supabase.from("expert_picks").select("date,picks");
+      if (error) throw error;
+      allRows = data || [];
+      const latest = allRows.find((row) => row.date === today);
+      if (latest) latestToday = JSON.parse(latest.picks || "[]");
+    } catch (error) {
+      alert("Could not verify duplicate safety: " + (error?.message || error)); return;
+    }
+    const allExisting = allRows.flatMap((row) => {
+      try { const parsed = JSON.parse(row.picks || "[]"); return Array.isArray(parsed) ? parsed : []; }
+      catch (_) { return []; }
+    });
+    if (allExisting.some((existing) => (existing.entryKey || entryKey(existing)) === pick.entryKey)) {
+      alert("That exact WizePlay is already pending or recorded."); return;
+    }
+    await save([pick, ...latestToday]);
     setSheetOpen(false);
-    setSelection(""); setLine(""); setOdds(""); setUnits(""); setWrite(""); setGameIdx(-1); setMMatchup(""); setMPick("");
+    setSelection(""); setLine(""); setOdds(""); setBook(""); setUnits(""); setWrite(""); setGameIdx(-1); setMMatchup(""); setMPick("");
+    setPropCategory(""); setPlayerIdx(-1); setPropSide(""); setVerifiedQuote(false);
   };
 
   const gradePick = async (idx, result) => {
@@ -206,7 +235,10 @@ export default function AdminPage() {
   const winPct = (rec.w+rec.l)>0 ? (rec.w/(rec.w+rec.l)*100).toFixed(1) : "0.0";
 
   const marketSels = market==="total" ? [["over","Over"],["under","Under"]] : [["away","Away"],["home","Home"]];
-  const needsLine = market==="total" || market==="run_line" || market==="spread" || market==="puck_line";
+  const needsLine = betKind === "prop"
+    ? !["anytime_td", "home_run"].includes(chosenProp?.market)
+    : market==="total" || market==="run_line" || market==="spread" || market==="puck_line";
+  const currentPropSides = propSides(chosenProp);
 
   const runGrading = async () => {
     try { const j = await wizePicksApi.runGrading(); alert("Grading run.\n" + JSON.stringify(j).slice(0,300)); loadToday(); loadRecord(); }
@@ -226,11 +258,17 @@ export default function AdminPage() {
     return (
       <div className={"play"+(isActive?" pending":"")}>
         <div className="ph"><div className="ppick">{p.pick}<span className="u">{p.units}u @ {fmtOdds(p.odds)}</span></div><span className={"pst "+stCls}>{(isActive?"PENDING":st).toUpperCase()}</span></div>
-        <div className="pmu">{p.game}{p.conviction?` · ${p.conviction} conviction`:""}</div>
+        <div className="pmu">{p.game}{p.book?` · ${p.book}`:""}{p.oddsSource==="manual"?" · MANUAL ODDS":""}{p.conviction?` · ${p.conviction} conviction`:""}</div>
         {p.write ? <div className="pwrite">{p.write}</div> : null}
-        {isActive && <div className="grade"><b className="w" onClick={()=>gradePick(i,"win")}>Mark Won</b><b className="l" onClick={()=>gradePick(i,"loss")}>Mark Lost</b><b onClick={()=>gradePick(i,"push")}>Void</b></div>}
+        {isActive && !p.autoGrade && <div className="grade"><b className="w" onClick={()=>gradePick(i,"win")}>Mark Won</b><b className="l" onClick={()=>gradePick(i,"loss")}>Mark Lost</b><b onClick={()=>gradePick(i,"push")}>Void</b></div>}
       </div>
     );
+  };
+
+  const PropPerformanceRow = ({ label, value }) => {
+    const summary = value || {};
+    const net = Number(summary.units) || 0;
+    return <span><strong>{label}</strong> {summary.wins||0}-{summary.losses||0}-{summary.pushes||0} · {summary.winRate||0}% hit · {net>=0?"+":""}{net.toFixed(2)}u · {(Number(summary.roi)||0).toFixed(1)}% ROI · {summary.pending||0} pending</span>;
   };
 
   return (
@@ -257,6 +295,14 @@ export default function AdminPage() {
           <div className="r"><div className="k">UNITS</div><div className={"v "+(rec.u>=0?"g":"")}>{rec.u>=0?"+":""}{rec.u}u</div></div>
           <div className="r"><div className="k">WIN %</div><div className="v gold">{winPct}%</div></div>
         </div>
+        {propProof && <div className="proprec">
+          <b>PROP PERFORMANCE</b>
+          <PropPerformanceRow label="All Props" value={propProof.overall}/>
+          <PropPerformanceRow label="NFL Props" value={propProof.bySport?.nfl}/>
+          <PropPerformanceRow label="CFB Props" value={propProof.bySport?.cfb}/>
+          <PropPerformanceRow label="MLB Props" value={propProof.bySport?.mlb}/>
+          {Object.entries(propProof.byCategory||{}).map(([key,value])=><PropPerformanceRow key={key} label={key.replaceAll("_"," ")} value={value}/>)}
+        </div>}
         <div className="newbtn" onClick={()=>setSheetOpen(true)}><span style={{fontSize:18}}>+</span> New WizePlay</div>
         <div className="sub2">ACTIVE PLAYS</div>
         {loading ? <div className="placeholder">Loading…</div> : active.length ? active.map(o=><Play key={o.i} p={o.p} i={o.i} isActive/>) : <div className="placeholder">No active plays today. Add one above.</div>}
@@ -278,14 +324,18 @@ export default function AdminPage() {
         <div className="sheet open" style={{zIndex:61}}>
           <div className="shead"><div className="x" onClick={()=>setSheetOpen(false)}>{"\u2039"}</div><div className="t">New WizePlay</div></div>
           <div className="sbody">
-            <div className="fld"><label>SPORT</label><div className="segf">{SPORT_KEYS.map((k)=><b key={k} className={sport===k?"on":""} onClick={()=>{ setSport(k); setMarket(SPORT_CFG[k].markets[0][0]); setSelection(""); setLine(""); setGameIdx(-1); }}>{SPORT_CFG[k].label}</b>)}</div></div>
-            <div className="fld"><label>ENTRY</label><div className="segf">
-              <b className={entryMode==="board"?"on":""} onClick={()=>setEntryMode("board")}>From board</b>
-              <b className={entryMode==="manual"?"on":""} onClick={()=>setEntryMode("manual")}>Manual</b>
+            <div className="fld"><label>SPORT</label><div className="segf">{SPORT_KEYS.map((k)=><b key={k} className={sport===k?"on":""} onClick={()=>{ setSport(k); setMarket(SPORT_CFG[k].markets[0][0]); setBetKind("game"); setEntryMode("board"); setSelection(""); setPropCategory(""); setPlayerIdx(-1); setPropSide(""); setLine(""); setOdds(""); setBook(""); setGameIdx(-1); }}>{SPORT_CFG[k].label}</b>)}</div></div>
+            <div className="fld"><label>BET TYPE</label><div className="segf">
+              <b className={betKind==="game"?"on":""} onClick={()=>{setBetKind("game"); setPropCategory(""); setPlayerIdx(-1); setPropSide("");}}>Game</b>
+              {["nfl","ncaafb","mlb"].includes(sport) && <b className={betKind==="prop"?"on":""} onClick={()=>{setBetKind("prop"); setEntryMode("board"); setSelection("");}}>Player prop</b>}
             </div></div>
+            {betKind==="game" && <div className="fld"><label>ENTRY</label><div className="segf">
+              <b className={entryMode==="board"?"on":""} onClick={()=>setEntryMode("board")}>From board</b>
+              <b className={entryMode==="manual"?"on":""} onClick={()=>setEntryMode("manual")}>Legacy manual</b>
+            </div></div>}
             {entryMode==="board"
               ? <div className="fld"><label>GAME (auto-grades when linked)</label>
-                  <select value={gameIdx} onChange={e=>{setGameIdx(Number(e.target.value)); setSelection("");}}>
+                  <select value={gameIdx} onChange={e=>{setGameIdx(Number(e.target.value)); setSelection(""); setPlayerIdx(-1); setPropSide("");}}>
                     <option value={-1}>{games.length ? "Select a game…" : "No games loaded — switch to Manual"}</option>
                     {games.map((g,i)=><option key={i} value={i}>{g.label}</option>)}
                   </select>
@@ -294,7 +344,7 @@ export default function AdminPage() {
                   <div className="fld"><label>MATCHUP</label><input value={mMatchup} onChange={e=>setMMatchup(e.target.value)} placeholder="KC @ BUF"/></div>
                   <div className="fld"><label>PICK (shown to subscribers)</label><input value={mPick} onChange={e=>setMPick(e.target.value)} placeholder="KC ML  /  Over 45.5  /  BUF -3.5"/></div>
                 </>}
-            <div className="row2">
+            {betKind==="game" ? <div className="row2">
               <div className="fld"><label>MARKET</label><select value={market} onChange={e=>{setMarket(e.target.value); setSelection(""); setLine("");}}>
                 {(SPORT_CFG[sport]||SPORT_CFG.mlb).markets.map(([v,l])=><option key={v} value={v}>{l}</option>)}
               </select></div>
@@ -304,12 +354,28 @@ export default function AdminPage() {
                     {marketSels.map(([v,lbl])=><option key={v} value={v}>{v==="away"?(games[gameIdx]?.awayAbbr||"Away"):v==="home"?(games[gameIdx]?.homeAbbr||"Home"):lbl}</option>)}
                   </select></div>
                 : <div className="fld"><label>SELECTION</label><input value="" placeholder="typed in PICK above" disabled/></div>}
-            </div>
+            </div> : <>
+              <div className="fld"><label>PROP TYPE</label><select value={propCategory} onChange={e=>{setPropCategory(e.target.value); setPlayerIdx(-1); setPropSide("");}}>
+                <option value="">{availablePropMarkets.length ? "Select a prop…" : "No automatically gradeable props available"}</option>
+                {availablePropMarkets.map(([key,label])=><option key={key} value={key}>{label}</option>)}
+              </select></div>
+              {sport==="ncaafb" && <div className="oddsnote manual">CFB prop entry is disabled until an exact-identity automatic final-stat grader exists.</div>}
+              <div className="fld"><label>PLAYER</label><select value={playerIdx} onChange={e=>{setPlayerIdx(Number(e.target.value)); setPropSide("");}} disabled={!categoryProps.length}>
+                <option value={-1}>{categoryProps.length ? "Select a player…" : "No verified players for this game/market"}</option>
+                {categoryProps.map((prop,index)=><option key={`${prop.eventId}-${prop.playerId}-${index}`} value={index}>{prop.player}{prop.team?` · ${prop.team}`:""}</option>)}
+              </select></div>
+              <div className="fld"><label>SIDE / OUTCOME</label><select value={propSide} onChange={e=>setPropSide(e.target.value)} disabled={!currentPropSides.length}>
+                <option value="">—</option>
+                {currentPropSides.map(([key,label])=><option key={key} value={key}>{label}</option>)}
+              </select></div>
+            </>}
+            {entryMode==="board" && (selection || propSide) && <div className={`oddsnote ${verifiedQuote?"verified":"manual"}`}>{verifiedQuote ? `VERIFIED ODDS · ${book}` : "Odds unavailable · explicit manual fallback required"}</div>}
             <div className="row2">
-              {needsLine ? <div className="fld"><label>LINE</label><input value={line} onChange={e=>setLine(e.target.value)} placeholder="8.5 / -1.5" inputMode="decimal"/></div>
+              {needsLine ? <div className="fld"><label>LINE</label><input value={line} onChange={e=>setLine(e.target.value)} placeholder="8.5 / -1.5" inputMode="decimal" disabled={verifiedQuote}/></div>
                 : <div className="fld"><label>LINE</label><input value="" placeholder="—" disabled/></div>}
-              <div className="fld"><label>ODDS</label><input value={odds} onChange={e=>setOdds(e.target.value)} placeholder="-130"/></div>
+              <div className="fld"><label>ODDS</label><input value={odds} onChange={e=>setOdds(e.target.value)} placeholder="-130" disabled={verifiedQuote}/></div>
             </div>
+            <div className="fld"><label>SPORTSBOOK</label><input value={book} onChange={e=>setBook(e.target.value)} placeholder="Required when odds are unavailable" disabled={verifiedQuote}/></div>
             <div className="row2">
               <div className="fld"><label>UNITS</label><input value={units} onChange={e=>setUnits(e.target.value)} placeholder="1.5" inputMode="decimal"/></div>
               <div className="fld"><label>CONVICTION</label><div className="segf">{["Lean","Strong","Max"].map(c=><b key={c} className={conv===c?"on":""} onClick={()=>setConv(c)}>{c}</b>)}</div></div>
@@ -362,6 +428,9 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .wprec{display:flex;gap:9px;margin-bottom:11px}
 .wprec .r{flex:1;border:1px solid var(--line);border-radius:11px;background:#0d141b;padding:11px;text-align:center}
 .wprec .r .k{font-family:var(--mono);font-size:8px;color:var(--mut2);font-weight:600}.wprec .r .v{font-family:var(--disp);font-weight:800;font-size:22px;color:#fff;margin-top:3px}.wprec .r .v.g{color:var(--green)}.wprec .r .v.gold{color:var(--gold)}
+.proprec{display:flex;flex-direction:column;gap:4px;border:1px solid var(--line);border-radius:10px;background:#0d141b;padding:10px;margin:0 0 11px;font-family:var(--mono);font-size:8.5px;color:var(--mut)}
+.proprec b{font-family:var(--disp);font-size:11px;letter-spacing:.5px;color:var(--gold)}
+.proprec strong{color:#dbe4e2;text-transform:capitalize}
 .newbtn{text-align:center;font-family:var(--disp);font-weight:800;font-size:15px;color:#06090b;background:var(--gold);border-radius:11px;padding:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px}
 .sub2{font-family:var(--disp);font-weight:800;font-size:11px;letter-spacing:.6px;color:var(--mut2);margin:14px 0 0}
 .play{border:1px solid var(--line);border-radius:12px;background:#0d141b;padding:11px;margin-top:9px}
@@ -369,7 +438,7 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .play .ph{display:flex;align-items:center;gap:8px}
 .play .ppick{font-family:var(--disp);font-weight:800;font-size:17px;color:#fff}.play .ppick .u{font-family:var(--mono);font-size:11px;color:var(--gold);font-weight:600;margin-left:6px}
 .play .pst{margin-left:auto;font-family:var(--mono);font-size:9px;font-weight:700;border-radius:5px;padding:3px 8px;flex:0 0 auto}
-.pst.pending{color:var(--gold);background:rgba(243,185,79,.12)}.pst.won{color:var(--green);background:rgba(51,233,145,.14)}.pst.lost{color:var(--neg);background:rgba(255,93,77,.14)}.pst.push{color:var(--mut);background:#1a242e}
+.pst.pending{color:var(--gold);background:rgba(243,185,79,.12)}.pst.won{color:var(--green);background:rgba(51,233,145,.14)}.pst.lost{color:var(--neg);background:rgba(255,93,77,.14)}.pst.push,.pst.void{color:var(--mut);background:#1a242e}
 .play .pmu{font-family:var(--mono);font-size:9px;color:var(--mut2);margin-top:3px}
 .play .pwrite{font-size:11.5px;color:#aeb9c8;margin-top:8px;line-height:1.45}
 .play .grade{display:flex;gap:7px;margin-top:10px}
@@ -405,6 +474,10 @@ body{background:var(--bg);font-family:var(--ui);color:#e8eef0;-webkit-font-smoot
 .fld input,.fld textarea,.fld select{width:100%;background:#0e1620;border:1px solid var(--line2);border-radius:9px;padding:12px;color:#fff;font-family:var(--ui);font-size:14px}
 .fld textarea{min-height:74px;resize:vertical;font-size:13px;line-height:1.4}
 .fld input::placeholder,.fld textarea::placeholder{color:var(--mut2)}
+.fld input:disabled,.fld select:disabled{opacity:.75;color:#bac4cc}
+.oddsnote{font-family:var(--mono);font-size:9px;border-radius:8px;padding:8px 10px;margin:3px 0 8px}
+.oddsnote.verified{color:var(--green);border:1px solid rgba(51,233,145,.28);background:rgba(51,233,145,.07)}
+.oddsnote.manual{color:var(--gold);border:1px solid rgba(243,185,79,.28);background:rgba(243,185,79,.07)}
 .row2{display:flex;gap:9px}.row2 .fld{flex:1}
 .segf{display:flex;border:1px solid var(--line2);border-radius:9px;overflow:hidden}.segf b{flex:1;text-align:center;font-family:var(--disp);font-weight:700;font-size:13px;color:var(--mut);padding:10px;cursor:pointer}.segf b.on{background:#141d24;color:#fff}
 .pubbtn{margin-top:16px;text-align:center;font-family:var(--disp);font-weight:800;font-size:15px;color:#06090b;background:var(--gold);border-radius:11px;padding:14px;cursor:pointer}

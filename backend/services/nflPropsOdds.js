@@ -7,6 +7,8 @@
 // bookmakers -> markets (by key) -> outcomes, where outcome.description = player,
 // outcome.name = Over/Under, outcome.point = line, outcome.price = American odds;
 // keep the player's PRIMARY line (lowest line quoted with BOTH sides), first book wins.
+// A recording-only quote ladder is retained from that same response so an admin
+// WizePlay can use the best verified price at the consensus line without a new call.
 // Touchdown scorer and milestone offers keep their provider-native price structure.
 //
 // Isolated module (own axios, own helpers) so a bug here cannot destabilize the feed.
@@ -64,7 +66,8 @@ function isBetterAmericanPrice(candidate, current) {
 // ── PURE: parse an event-odds payload into normalized per-player prop lines ───────
 // Returns [{ player, market, line, overOdds, underOdds, fairOverProb, book }].
 // Per (market, player): keep the PRIMARY line (lowest line with both sides priced);
-// across books, the first book to fully price that market+player wins.
+// across books, the first book remains the public/default quote. All fully-priced
+// book/line pairs are also retained in `quotes` for exact admin line shopping.
 function parsePropLines(oddsJson) {
   const out = new Map(); // key `${market}::${player}` -> record (first book wins)
   for (const bm of (oddsJson && oddsJson.bookmakers) || []) {
@@ -160,7 +163,21 @@ function parsePropLines(oddsJson) {
         }
         if (!primary) continue;
         const key = `${market}::${player}`;
-        if (out.has(key)) continue; // first book wins
+        const bookQuote = {
+          book,
+          line: primary.line,
+          overOdds: primary.over,
+          underOdds: primary.under,
+        };
+        const existing = out.get(key);
+        if (existing) {
+          const quotes = [...(existing.quotes || []), bookQuote]
+            .filter((item, index, all) => all.findIndex((other) => other.book === item.book
+              && other.line === item.line && other.overOdds === item.overOdds
+              && other.underOdds === item.underOdds) === index);
+          out.set(key, { ...existing, quotes });
+          continue;
+        }
         out.set(key, {
           player,
           market,
@@ -172,6 +189,7 @@ function parsePropLines(oddsJson) {
           priceMode: "over-under",
           overLabel: "OVER",
           underLabel: "UNDER",
+          quotes: [bookQuote],
         });
       }
     }

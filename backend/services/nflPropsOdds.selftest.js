@@ -114,7 +114,12 @@ assert.deepEqual(lines.find((line) => line.market === "pass_yds"), {
   priceMode: "over-under",
   overLabel: "OVER",
   underLabel: "UNDER",
+  quotes: [
+    { book: "Book A", line: 249.5, overOdds: -108, underOdds: -112 },
+    { book: "Book B", line: 249.5, overOdds: 105, underOdds: -125 },
+  ],
 }, "line and both prices stay paired to the selected book");
+assert.equal(lines.find((line) => line.market === "pass_yds").quotes.length, 2, "normal props retain all verified book quotes from the existing response");
 assert.equal(lines.find((line) => line.market === "anytime_td").overOdds, 150);
 assert.equal(lines.find((line) => line.market === "anytime_td").book, "Book B", "Anytime TD keeps the best verified price across books");
 assert.equal(lines.find((line) => line.market === "anytime_td").underOdds, null);

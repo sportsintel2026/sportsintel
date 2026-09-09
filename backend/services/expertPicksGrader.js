@@ -1,203 +1,285 @@
-// services/expertPicksGrader.js — auto-grade Expert Picks STRAIGHT BETS that were
-// entered with the structured fields (gameId + market + selection) added in the
-// admin "AUTO-GRADE" block. Reads final scores from the SAME scores feed the
-// admin game-picker used (liveScores / ESPN, looked up by the stored ESPN event
-// id), settles win/loss/push, and writes `result` back into the pick JSON of the
-// expert_picks row. Parlays and free-text (un-linked) picks are left untouched.
-//
-// SAFETY (this is why it's safe to run repeatedly or trigger manually):
-//   - only ever touches a STRAIGHT bet that is MLB or NBA,
-//   - that has a gameId + market + selection,
-//   - that currently has NO result (still pending), and
-//   - whose game is FINAL.
-//   It never changes a pick that's already graded, and a finished game's result
-//   never changes — so the grader is idempotent. The worst a stray run can do is
-//   settle a pending pick of a finished game to its true result (which is the goal).
+// Automatic settlement for structured WizePlays. Game bets use the existing
+// ESPN scoreboard bridge; NFL and MLB props use the same official box-score
+// sources as their active model trackers. Only result fields are enriched.
 
 const { createClient } = require("@supabase/supabase-js");
-const { getGameDetail, getFinalScoreByMatchup } = require("./liveScores");
+const { getFinalScoreByMatchup } = require("./liveScores");
+const { extractBoxscorePlayerStats, fetchFinals, fetchSummary } = require("./nflPropsActuals");
+const { matchGame } = require("./nflPropsGrader");
+const { gradeCustomerPick } = require("./nflPropsTracker");
+const {
+  getGameStatusAndScore,
+  getGameHRHitters,
+  getGamePitcherStrikeouts,
+  getGameBatterHits,
+  normPlayerName,
+} = require("./mlbStatsApi");
+const { payout } = require("./priceMath");
 
-const GRADEABLE_LEAGUES = new Set(["mlb", "nba"]);
+const GAME_LEAGUES = new Set(["mlb", "nba", "nfl", "ncaafb", "cfb"]);
+const NFL_PROP_CATEGORIES = new Set(["pass_yds", "pass_tds", "rush_yds", "rec_yds", "receptions", "anytime_td"]);
+const MLB_PROP_CATEGORIES = new Set(["home_run", "pitcher_strikeouts", "hits"]);
 
 function supa() {
   return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 }
 
-// A pick counts as "pending" (ungraded) if its result is empty/null/"pending".
 function isPending(result) {
-  const r = String(result == null ? "" : result).trim().toLowerCase();
-  return r === "" || r === "pending";
+  const value = String(result == null ? "" : result).trim().toLowerCase();
+  return value === "" || value === "pending";
 }
 
-// YYYY-MM-DD for N days ago — a lower bound so we only scan recent rows.
 function sinceDate(days) {
-  const d = new Date();
-  d.setDate(d.getDate() - days);
-  return d.toISOString().slice(0, 10);
+  const date = new Date();
+  date.setDate(date.getDate() - days);
+  return date.toISOString().slice(0, 10);
 }
 
-// Pull the two final scores out of a getGameDetail() result.
-// Returns { away, home } numbers, or null if the game isn't final / no score yet.
-function finalScores(detail) {
-  if (!detail || detail.bucket !== "final") return null;
-  const ls = detail.lineScore || [];
-  const away = ls.find((c) => c.homeAway === "away");
-  const home = ls.find((c) => c.homeAway === "home");
-  if (!away || !home || away.total == null || home.total == null) return null;
-  return { away: Number(away.total), home: Number(home.total) };
+function eventDate(pick, rowDate) {
+  return String(pick?.gameDate || rowDate || "").slice(0, 10);
 }
 
-// Decide win/loss/push for one structured straight bet given final scores.
-// Returns "win" | "loss" | "push" | null (null = can't grade this one).
+function scoreboardLeague(sport) {
+  return String(sport || "").toLowerCase() === "ncaafb" ? "cfb" : String(sport || "").toLowerCase();
+}
+
 function settle(pick, scores) {
   const market = String(pick.market || "moneyline").toLowerCase();
-  const sel = String(pick.selection || "").toLowerCase();
+  const selection = String(pick.selection || "").toLowerCase();
   const { away, home } = scores;
-
   if (market === "moneyline") {
-    if (away === home) return "push"; // ties don't happen in MLB/NBA; be safe
-    const awayWon = away > home;
-    if (sel === "away") return awayWon ? "win" : "loss";
-    if (sel === "home") return awayWon ? "loss" : "win";
+    if (away === home) return "push";
+    if (selection === "away") return away > home ? "win" : "loss";
+    if (selection === "home") return home > away ? "win" : "loss";
     return null;
   }
-
+  if (market === "spread" || market === "run_line") {
+    const line = Number(pick.line);
+    if (!Number.isFinite(line) || !["away", "home"].includes(selection)) return null;
+    const margin = selection === "away" ? away - home : home - away;
+    const graded = margin + line;
+    return graded === 0 ? "push" : graded > 0 ? "win" : "loss";
+  }
   if (market === "total") {
     const line = Number(pick.line);
-    if (!Number.isFinite(line)) return null; // total with no line — can't grade
-    const combined = away + home;
-    if (combined === line) return "push";
-    const wentOver = combined > line;
-    if (sel === "over") return wentOver ? "win" : "loss";
-    if (sel === "under") return wentOver ? "loss" : "win";
-    return null;
+    if (!Number.isFinite(line)) return null;
+    const total = away + home;
+    if (total === line) return "push";
+    if (selection === "over") return total > line ? "win" : "loss";
+    if (selection === "under") return total < line ? "win" : "loss";
   }
-
-  return null; // unknown market (e.g. spread) — leave for manual grading
+  return null;
 }
 
-// Is this a structured, gradeable, still-pending straight bet?
+function pnlFor(result, odds, units = 1) {
+  const risk = Number.isFinite(Number(units)) && Number(units) > 0 ? Number(units) : 1;
+  if (result === "loss") return -risk;
+  if (result === "push" || result === "void") return 0;
+  if (result !== "win") return null;
+  const profit = payout(Number(odds));
+  return Number.isFinite(profit) ? Math.round(profit * risk * 1e6) / 1e6 : null;
+}
+
+function propCategorySupported(pick) {
+  const sport = String(pick?.sport || "").toLowerCase();
+  const category = String(pick?.propCategory || "").toLowerCase();
+  return sport === "nfl" ? NFL_PROP_CATEGORIES.has(category)
+    : sport === "mlb" ? MLB_PROP_CATEGORIES.has(category)
+      : false;
+}
+
+function isPropPick(pick) {
+  return pick?.kind === "prop";
+}
+
 function isGradeable(pick) {
-  return !!(
-    pick &&
-    pick.type === "straight" &&
-    GRADEABLE_LEAGUES.has(String(pick.sport || "").toLowerCase()) &&
-    pick.gameId &&
-    pick.market &&
-    pick.selection &&
-    isPending(pick.result)
-  );
+  if (!pick || pick.type !== "straight" || !pick.gameId || !isPending(pick.result)) return false;
+  if (isPropPick(pick)) {
+    return Boolean(pick.playerId && pick.playerName && pick.selection && propCategorySupported(pick));
+  }
+  return GAME_LEAGUES.has(String(pick.sport || "").toLowerCase()) && Boolean(pick.market && pick.selection);
 }
 
-// WZ-WIZEPLAYS-GRADE-DIAG-2026-07-17 :: for a STILL-PENDING pick that the auto-grader skips, say why
-// (so "not grading" stops being a silent mystery). Returns null if the pick is already graded or is
-// fully gradeable. Only the reasons a human can act on.
 function skipReason(pick) {
   if (!pick || typeof pick !== "object") return "malformed pick entry";
-  if (!isPending(pick.result)) return null;                 // already graded — nothing to explain
-  if (isGradeable(pick)) return null;                        // will be handled by the normal path
-  if (pick.type !== "straight") return `type is "${pick.type || "(none)"}" — only straight bets auto-grade (parlays/props aren't settled here)`;
+  if (!isPending(pick.result) || isGradeable(pick)) return null;
+  if (pick.type !== "straight") return `type is "${pick.type || "(none)"}"`;
+  if (!pick.gameId) return "missing structured game identity";
+  if (isPropPick(pick)) {
+    if (!pick.playerId || !pick.playerName) return "missing exact player identity";
+    if (!propCategorySupported(pick)) return `prop category "${pick.propCategory || "(none)"}" has no automatic official-stat grader`;
+    if (!pick.selection) return "missing prop side/outcome";
+  }
   const sport = String(pick.sport || "").toLowerCase();
-  if (!GRADEABLE_LEAGUES.has(sport)) return `sport "${pick.sport || "(none)"}" is not in the auto-grade set (${[...GRADEABLE_LEAGUES].join(", ")})`;
-  if (!pick.gameId) return "missing gameId (pick wasn't entered with the structured game link)";
+  if (!GAME_LEAGUES.has(sport)) return `sport "${pick.sport || "(none)"}" is not automatically gradeable`;
   if (!pick.market) return "missing market";
   if (!pick.selection) return "missing selection";
-  return "not gradeable (unknown reason)";
+  return "not gradeable";
 }
 
-// Main entry. { dryRun: true } (default) reads + reports but writes NOTHING.
-// { dryRun: false } writes settled results back into expert_picks.
-async function gradeExpertPicks({ dryRun = true, days = 14 } = {}) {
-  const supabase = supa();
-  const since = sinceDate(days);
+function gradeMlbPropActual(pick, box) {
+  if (!box?.ok) return null;
+  const player = normPlayerName(pick.playerName);
+  const side = String(pick.selection || "").toLowerCase();
+  let actual = null;
+  if (pick.propCategory === "home_run") actual = box.hr?.get(player);
+  else if (pick.propCategory === "pitcher_strikeouts") actual = box.ks?.get(player);
+  else if (pick.propCategory === "hits") actual = box.hits?.get(player);
+  if (actual == null) return { result: "void", finalStat: null, resultSource: "mlb-official-boxscore" };
+  if (pick.propCategory === "home_run") {
+    return { result: actual >= 1 ? "win" : "loss", finalStat: actual, resultSource: "mlb-official-boxscore" };
+  }
+  const line = Number(pick.line);
+  if (!Number.isFinite(line) || !["over", "under"].includes(side)) return null;
+  if (actual === line) return { result: "push", finalStat: actual, resultSource: "mlb-official-boxscore" };
+  const won = side === "over" ? actual > line : actual < line;
+  return { result: won ? "win" : "loss", finalStat: actual, resultSource: "mlb-official-boxscore" };
+}
 
-  const { data: rows, error } = await supabase
-    .from("expert_picks")
-    .select("date, picks")
-    .gte("date", since)
-    .order("date", { ascending: false });
+async function gradeExpertPicks({ dryRun = true, days = 14, client = supa() } = {}) {
+  const since = sinceDate(days);
+  const { data: rows, error } = await client.from("expert_picks").select("date, picks").gte("date", since).order("date", { ascending: false });
   if (error) throw new Error("load expert_picks: " + error.message);
 
   const decisions = [];
+  const nflBoards = new Map();
+  const nflBoxes = new Map();
+  const mlbStatus = new Map();
+  const mlbBoxes = new Map();
   let checked = 0, graded = 0, rowsChanged = 0, rowsWritten = 0;
+
+  const nflBoard = async (date) => {
+    if (!nflBoards.has(date)) {
+      try { nflBoards.set(date, await fetchFinals(date.replace(/-/g, ""))); }
+      catch (_) { nflBoards.set(date, null); }
+    }
+    return nflBoards.get(date);
+  };
+  const nflBox = async (eventId) => {
+    if (!nflBoxes.has(eventId)) {
+      try { nflBoxes.set(eventId, extractBoxscorePlayerStats(await fetchSummary(eventId))); }
+      catch (_) { nflBoxes.set(eventId, null); }
+    }
+    return nflBoxes.get(eventId);
+  };
+  const mlbBox = async (pick) => {
+    const id = String(pick.gameId);
+    const key = `${id}:${pick.propCategory}`;
+    if (!mlbBoxes.has(key)) {
+      let value;
+      if (pick.propCategory === "home_run") value = await getGameHRHitters(id);
+      else if (pick.propCategory === "pitcher_strikeouts") value = await getGamePitcherStrikeouts(id);
+      else value = await getGameBatterHits(id);
+      mlbBoxes.set(key, value);
+    }
+    return mlbBoxes.get(key);
+  };
 
   for (const row of rows || []) {
     let picks;
     try { picks = JSON.parse(row.picks || "[]"); } catch (_) { continue; }
     if (!Array.isArray(picks)) continue;
-
     let changed = false;
 
     for (const pick of picks) {
       if (!isGradeable(pick)) {
-        // WZ-WIZEPLAYS-GRADE-DIAG-2026-07-17 :: surface WHY a pending pick is being skipped.
-        const why = skipReason(pick);
-        if (why) decisions.push({ date: row.date, pick: pick && pick.pick, game: pick && pick.game, sport: pick && pick.sport, status: "skipped", reason: why });
+        const reason = skipReason(pick);
+        if (reason) decisions.push({ date: row.date, pick: pick?.pick, status: "skipped", reason });
         continue;
       }
       checked++;
-
-      // The stored gameId is the Odds-API edges id, which ESPN's id-keyed lookup
-      // can't resolve — so bridge to the final by the pick's date + team matchup
-      // (stable across feeds). Falls back through abbr → full-name as available.
-      let scores;
+      let outcome = null;
+      const date = eventDate(pick, row.date);
       try {
-        scores = await getFinalScoreByMatchup(
-          String(pick.sport).toLowerCase(),
-          row.date,
-          pick.awayAbbr || pick.away || "",
-          pick.homeAbbr || pick.home || ""
-        );
-      } catch (e) {
-        decisions.push({ date: row.date, pick: pick.pick, status: "lookup-failed", error: e.message });
+        if (isPropPick(pick) && String(pick.sport).toLowerCase() === "nfl") {
+          const board = await nflBoard(date);
+          const game = matchGame(pick.game, board || []);
+          if (!game || !game.final) {
+            decisions.push({ date, pick: pick.pick, status: "not-final-yet" });
+            continue;
+          }
+          const actuals = await nflBox(game.eventId);
+          if (!actuals) continue;
+          const gradedProp = gradeCustomerPick({
+            player_id: pick.playerId,
+            category: pick.propCategory,
+            side: pick.selection,
+            line: pick.line,
+            odds: pick.odds,
+          }, actuals);
+          outcome = {
+            result: String(gradedProp.result).toLowerCase(),
+            finalStat: gradedProp.final_stat,
+            resultSource: "espn-game-summary",
+          };
+        } else if (isPropPick(pick) && String(pick.sport).toLowerCase() === "mlb") {
+          const id = String(pick.gameId);
+          if (!mlbStatus.has(id)) mlbStatus.set(id, await getGameStatusAndScore(id));
+          const status = mlbStatus.get(id);
+          if (!status?.ok || status.abstractGameState !== "Final") {
+            decisions.push({ date, pick: pick.pick, status: "not-final-yet" });
+            continue;
+          }
+          outcome = gradeMlbPropActual(pick, await mlbBox(pick));
+        } else {
+          const scores = await getFinalScoreByMatchup(
+            scoreboardLeague(pick.sport), date, pick.awayAbbr || pick.away || "", pick.homeAbbr || pick.home || ""
+          );
+          if (!scores) {
+            decisions.push({ date, pick: pick.pick, status: "not-final-yet" });
+            continue;
+          }
+          const result = settle(pick, scores);
+          if (result) outcome = { result, finalStat: `${scores.away}-${scores.home}`, resultSource: "espn-scoreboard" };
+        }
+      } catch (gradeError) {
+        decisions.push({ date, pick: pick.pick, status: "lookup-failed", error: gradeError.message });
         continue;
       }
-
-      if (!scores) {
-        decisions.push({ date: row.date, pick: pick.pick, status: "not-final-yet" });
+      if (!outcome?.result) {
+        decisions.push({ date, pick: pick.pick, status: "could-not-settle" });
         continue;
       }
-
-      const result = settle(pick, scores);
-      if (!result) {
-        decisions.push({ date: row.date, pick: pick.pick, status: "could-not-settle", score: `${scores.away}-${scores.home}` });
-        continue;
-      }
-
-      decisions.push({
-        date: row.date,
-        pick: pick.pick,
-        game: pick.game,
-        market: pick.market,
-        selection: pick.selection,
-        line: pick.line != null ? pick.line : null,
-        finalScore: `away ${scores.away} – home ${scores.home}`,
-        result,
-        status: dryRun ? "WOULD-SET" : "SET",
-      });
+      const unitPnl = pnlFor(outcome.result, pick.odds, pick.units);
+      decisions.push({ date, pick: pick.pick, result: outcome.result, finalStat: outcome.finalStat, unitPnl, status: dryRun ? "WOULD-SET" : "SET" });
       graded++;
-      if (!dryRun) pick.result = result;
-      changed = true;
+      if (!dryRun) {
+        pick.result = outcome.result;
+        pick.finalStat = outcome.finalStat;
+        pick.unitPnl = unitPnl;
+        pick.resultSource = outcome.resultSource;
+        pick.gradedAt = new Date().toISOString();
+        changed = true;
+      }
     }
 
     if (changed) {
       rowsChanged++;
-      if (!dryRun) {
-        const { error: upErr } = await supabase
-          .from("expert_picks")
-          .update({ picks: JSON.stringify(picks) })
-          .eq("date", row.date);
-        if (upErr) decisions.push({ date: row.date, status: "write-failed", error: upErr.message });
-        else rowsWritten++;
-      }
+      const { error: updateError } = await client.from("expert_picks").update({ picks: JSON.stringify(picks) }).eq("date", row.date);
+      if (updateError) decisions.push({ date: row.date, status: "write-failed", error: updateError.message });
+      else rowsWritten++;
     }
   }
 
   const note = dryRun
     ? `DRY RUN — nothing written. Found ${graded} pending pick(s) on finished games that WOULD be graded.`
     : `Wrote ${graded} graded result(s) across ${rowsWritten} day(s).`;
-
   return { dryRun, since, checked, graded, rowsChanged, rowsWritten, note, decisions };
 }
 
-module.exports = { gradeExpertPicks };
+module.exports = {
+  gradeExpertPicks,
+  _test: {
+    GAME_LEAGUES,
+    NFL_PROP_CATEGORIES,
+    MLB_PROP_CATEGORIES,
+    eventDate,
+    gradeMlbPropActual,
+    isGradeable,
+    isPending,
+    pnlFor,
+    scoreboardLeague,
+    settle,
+    skipReason,
+  },
+};

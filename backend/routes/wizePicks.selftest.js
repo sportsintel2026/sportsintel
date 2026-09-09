@@ -14,9 +14,10 @@ const rows = [
   {
     date: "2026-08-28",
     picks: JSON.stringify([
-      { type: "straight", sport: "mlb", pick: "PRIVATE MLB PICK", odds: "+150", result: "win", analysis: "private analysis" },
+      { type: "straight", sport: "mlb", pick: "PRIVATE MLB PICK", odds: "+150", unitPnl: null, result: "win", analysis: "private analysis" },
       { type: "straight", sport: "nba", pick: "PRIVATE NBA PICK", odds: "-110", result: "loss" },
       { type: "straight", sport: "mlb", pick: "CURRENT PRIVATE PICK", odds: "-110", result: "" },
+      { type: "straight", kind: "prop", sport: "nfl", propCategory: "pass_yds", pick: "PRIVATE NFL PROP", odds: "+150", units: 2, unitPnl: 3, result: "win" },
       {
         type: "parlay",
         combinedOdds: null,
@@ -89,13 +90,19 @@ async function runHandler(user, client) {
   assert.strictEqual(JSON.stringify(proofPayload).includes("PRIVATE"), false);
   assert.deepStrictEqual(
     Object.keys(proofPayload.proof.overall).sort(),
-    ["losses", "pushes", "units", "winRate", "wins"],
+    ["losses", "pending", "pushes", "riskedUnits", "roi", "units", "voids", "winRate", "wins"],
   );
-  assert.strictEqual(proofPayload.proof.overall.wins, 2);
+  assert.strictEqual(proofPayload.proof.overall.wins, 3);
   assert.strictEqual(proofPayload.proof.overall.losses, 1);
   assert.strictEqual(proofPayload.proof.bySport.mlb.wins, 1);
-  assert.strictEqual(proofPayload.proof.bySport.nfl.wins, 1);
+  assert.strictEqual(proofPayload.proof.bySport.mlb.units, 1.5, "null stored P&L falls back to the posted price rather than zero");
+  assert.strictEqual(proofPayload.proof.bySport.nfl.wins, 2);
   assert.strictEqual(proofPayload.proof.bySport.cfb.wins, 1);
+  assert.strictEqual(proofPayload.proof.props.overall.wins, 1);
+  assert.strictEqual(proofPayload.proof.props.overall.units, 3);
+  assert.strictEqual(proofPayload.proof.props.overall.roi, 150);
+  assert.strictEqual(proofPayload.proof.props.bySport.nfl.wins, 1);
+  assert.strictEqual(proofPayload.proof.props.byCategory.pass_yds.wins, 1);
 
   const fullPayload = _test.buildPayload(rows, true);
   assert.strictEqual(fullPayload.access, "full");
