@@ -77,6 +77,10 @@ export const footballPropsApi = {
     const qs = date ? `?date=${encodeURIComponent(date)}` : "";
     return apiFetch(`/api/football-props/${encodeURIComponent(sport)}${qs}`);
   },
+  getAdmin: (sport, date) => {
+    const qs = date ? `?date=${encodeURIComponent(date)}` : "";
+    return apiFetch(`/api/football-props/admin/${encodeURIComponent(sport)}${qs}`);
+  },
 };
 export const nflPropsTrackerApi = {
   get: (filters = {}) => {
