@@ -23,6 +23,16 @@ const { buildTeamRatings } = require("./nflDataSource");
 const { predictGame } = require("./nflModel");
 const { teamKey } = require("./teamKey"); // WZ-TEAMKEY-SSOT-2026-07-17
 
+// Internal-only reuse point for the NFL props recorder. These values are produced
+// by the existing slate run from the same odds/rating snapshot; keeping them here
+// avoids another provider request. They are never enumerable on customer games.
+let latestNflTdContextByEvent = {};
+
+function getLatestNflTdContextByEvent() {
+  return Object.fromEntries(Object.entries(latestNflTdContextByEvent)
+    .map(([eventId, value]) => [eventId, JSON.parse(JSON.stringify(value))]));
+}
+
 // Normalize a team name for matching: lowercase, strip punctuation/extra spaces.
 function normName(s) {
   return String(s || "").toLowerCase().replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ").trim();
@@ -314,6 +324,29 @@ async function runNFLSlate({ season = null, weeks = 1, phase = null } = {}) {
     const nSite = neutralIdx ? neutralIdx.isNeutral(ev.awayTeam, ev.homeTeam) : null;
     if (nSite === true) ctx.neutralSite = true;
     const pred = predictGame(ev, ctx);
+    const priorSeason = ratings?.blend?.priorSeason ?? ratings?.season ?? season ?? null;
+    const rate = (value, gamesPlayed) => value != null && gamesPlayed > 0
+      ? Math.round((value / gamesPlayed) * 100) / 100 : null;
+    const tdContext = {
+      eventId: String(ev.eventId),
+      commenceTime: ev.commenceTime || null,
+      totalLine: ev.totals?.line ?? null,
+      homeSpreadLine: ev.spreads?.homeLine ?? null,
+      sourceSeason: priorSeason,
+      home: homeT && awayT ? {
+        teamId: String(homeT.id), team: ev.homeTeam,
+        offensePointsPerGame: rate(homeT.pf, homeT.gp),
+        opponentDefensePointsAllowedPerGame: rate(awayT.pa, awayT.gp),
+        projectedPoints: ctx.home?.projPoints ?? null,
+      } : null,
+      away: homeT && awayT ? {
+        teamId: String(awayT.id), team: ev.awayTeam,
+        offensePointsPerGame: rate(awayT.pf, awayT.gp),
+        opponentDefensePointsAllowedPerGame: rate(homeT.pa, homeT.gp),
+        projectedPoints: ctx.away?.projPoints ?? null,
+      } : null,
+    };
+    Object.defineProperty(pred, "_tdContext", { value: tdContext, enumerable: false });
     // Carry the books' Market Read (consensus lean) through onto the prediction so
     // the board can show it alongside the model's edge (facts vs model claim).
     pred.marketRead = ev.marketRead || null;
@@ -331,6 +364,10 @@ async function runNFLSlate({ season = null, weeks = 1, phase = null } = {}) {
     };
     return pred;
   });
+
+  latestNflTdContextByEvent = Object.fromEntries(games
+    .filter((game) => game?._tdContext?.eventId)
+    .map((game) => [String(game.eventId), game._tdContext]));
 
   return {
     season: ratings.season != null ? ratings.season : season,
@@ -361,7 +398,7 @@ async function runNFLSlate({ season = null, weeks = 1, phase = null } = {}) {
   };
 }
 
-module.exports = { runNFLSlate, captureNFLOddsTicks, getNFLMarketMovers, _internal: { normName, resolveTeam, buildResolver, nflPhaseFor, nflRegularSeasonStart, currentNflSeasonYear, blendRatings, buildBlendedTeamRatings, SEASON_BLEND_K, leaguePpgFrom, projPointsFor } };
+module.exports = { runNFLSlate, captureNFLOddsTicks, getNFLMarketMovers, getLatestNflTdContextByEvent, _internal: { normName, resolveTeam, buildResolver, nflPhaseFor, nflRegularSeasonStart, currentNflSeasonYear, blendRatings, buildBlendedTeamRatings, SEASON_BLEND_K, leaguePpgFrom, projPointsFor } };
 
 // ── NFL odds-tick snapshots (line-movement history) ──────────────────────────
 // Mirrors MLB captureOddsTicks but writes to its OWN table (nfl_odds_ticks) so the

@@ -13,6 +13,10 @@ const snapshot = {
     { sport: "nfl", eventDate: "2026-09-03", market: "rush_yds", player: "Thursday Player" },
     { sport: "nfl", eventDate: "2026-09-06", market: "pass_yds", player: "Sunday Player" },
   ],
+  tdSelections: [
+    { eventDate: "2026-09-03", eventId: "td-thu", player: "Thursday Scorer" },
+    { eventDate: "2026-09-06", eventId: "td-sun", player: "Sunday Scorer" },
+  ],
 };
 const cfbSnapshot = {
   sport: "cfb",
@@ -51,6 +55,7 @@ function invoke(params, query = {}) {
 const nfl = invoke({ sport: "nfl" }, { date: "2026-09-06" });
 assert.equal(nfl.statusCode, 200);
 assert.deepEqual(nfl.body.props.map((prop) => prop.player), ["Sunday Player"]);
+assert.deepEqual(nfl.body.tdSelections.map((row) => row.player), ["Sunday Scorer"]);
 assert.deepEqual(nfl.body.supportedMarkets, ["pass_yds"]);
 
 const cfb = invoke({ sport: "cfb" });

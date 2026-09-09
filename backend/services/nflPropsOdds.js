@@ -90,7 +90,22 @@ function parsePropLines(oddsJson) {
           const hasCounterprice = quote.no != null;
           const key = `${spec.market}::${player}`;
           const existing = out.get(key);
-          if (existing && (spec.market !== "anytime_td" || !isBetterAmericanPrice(quote.yes, existing.overOdds))) continue;
+          if (existing && spec.market !== "anytime_td") continue;
+          const bookQuote = {
+            book,
+            price: quote.yes,
+            counterPrice: hasCounterprice ? quote.no : null,
+            priceMode: hasCounterprice ? "yes-no" : "over-only",
+          };
+          const quotes = spec.market === "anytime_td"
+            ? [...(existing?.quotes || []), bookQuote]
+                .filter((item, index, all) => all.findIndex((other) => other.book === item.book && other.price === item.price && other.counterPrice === item.counterPrice) === index)
+                .sort((a, b) => Number(b.price) - Number(a.price))
+            : undefined;
+          if (existing && !isBetterAmericanPrice(quote.yes, existing.overOdds)) {
+            out.set(key, { ...existing, quotes });
+            continue;
+          }
           out.set(key, {
             player, market: spec.market, line: null,
             overOdds: quote.yes, underOdds: hasCounterprice ? quote.no : null,
@@ -99,6 +114,7 @@ function parsePropLines(oddsJson) {
             priceMode: hasCounterprice ? "yes-no" : "over-only",
             overLabel: "YES",
             underLabel: hasCounterprice ? "NO" : null,
+            ...(quotes ? { quotes } : {}),
           });
         }
         continue;
@@ -183,7 +199,7 @@ async function fetchEventPropLines(eventId, sport = "nfl") {
     regions: "us",
     markets: ALL_ODDSKEYS.join(","),
   });
-  return { lines: parsePropLines(data), remaining };
+  return { lines: parsePropLines(data), remaining, capturedAt: new Date().toISOString() };
 }
 
 // ── LIVE: list football events within a day window (the free /events call) ───────
@@ -218,10 +234,10 @@ async function getFootballPropLines({ sport = "nfl", daysAhead = 8, maxEvents = 
   let remaining = null;
   for (const ev of sampled) {
     try {
-      const { lines, remaining: rem } = await fetchEventPropLines(ev.id, league);
+      const { lines, remaining: rem, capturedAt } = await fetchEventPropLines(ev.id, league);
       if (rem != null) remaining = rem;
-      byEvent[ev.id] = { matchup: `${ev.away} @ ${ev.home}`, commence: ev.commence, lines: lines.length };
-      for (const ln of lines) allLines.push({ ...ln, eventId: ev.id, matchup: `${ev.away} @ ${ev.home}` });
+      byEvent[ev.id] = { matchup: `${ev.away} @ ${ev.home}`, commence: ev.commence, capturedAt, lines: lines.length };
+      for (const ln of lines) allLines.push({ ...ln, eventId: ev.id, matchup: `${ev.away} @ ${ev.home}`, quoteCapturedAt: capturedAt });
     } catch (e) {
       byEvent[ev.id] = { matchup: `${ev.away} @ ${ev.home}`, error: e.message };
     }

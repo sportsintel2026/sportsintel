@@ -313,7 +313,9 @@ cron.schedule("20 9 * * *", async () => {
     // WZ-NFLPROPSSHADOW-CRON-2026-07-05 :: props shadow logger, same imminence gate;
     // no-op all offseason (bails before the roster crawl when no lines are posted).
     const { recordFootballProps } = require("./services/nflPropsShadow");
-    const propShadow = await recordFootballProps({ sport: "nfl" });
+    // Reuse this exact slate's odds/rating context for the descriptive Anytime TD
+    // ranking. No additional main-odds or team-context provider request is made.
+    const propShadow = await recordFootballProps({ sport: "nfl", slate });
     if (propShadow && propShadow.logged) console.log(`[CRON] NFL prop-shadow logged ${propShadow.logged} rows`);
   } catch (err) {
     console.error("[CRON] NFL model-pick record failed:", err.message);
