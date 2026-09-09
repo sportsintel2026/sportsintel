@@ -10,9 +10,13 @@ router.get("/:sport", gateModelData, (req, res) => {
   const snapshot = getLatestFootballPropsSnapshot(sport);
   const requestedDate = typeof req.query.date === "string" ? req.query.date : null;
   const props = requestedDate ? snapshot.props.filter((prop) => prop.eventDate === requestedDate) : snapshot.props;
+  const tdSelections = requestedDate
+    ? (snapshot.tdSelections || []).filter((row) => row.eventDate === requestedDate)
+    : (snapshot.tdSelections || []);
   return res.json({
     ...snapshot,
     props,
+    tdSelections,
     supportedMarkets: [...new Set(props.map((prop) => prop.market).filter(Boolean))],
     ok: true,
     verifiedOnly: true,

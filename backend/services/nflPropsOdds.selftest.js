@@ -120,6 +120,10 @@ assert.equal(lines.find((line) => line.market === "anytime_td").book, "Book B", 
 assert.equal(lines.find((line) => line.market === "anytime_td").underOdds, null);
 assert.equal(lines.find((line) => line.market === "anytime_td").fairOverProb, null);
 assert.equal(lines.find((line) => line.market === "anytime_td").priceMode, "over-only", "provider YES-only scorer board remains honest one-sided market data");
+assert.deepEqual(lines.find((line) => line.market === "anytime_td").quotes, [
+  { book: "Book B", price: 150, counterPrice: null, priceMode: "over-only" },
+  { book: "Book A", price: 135, counterPrice: null, priceMode: "over-only" },
+], "Anytime TD keeps the all-book quote ladder while the card still uses the best price");
 assert.equal(lines.find((line) => line.market === "first_td").priceMode, "over-only");
 assert.equal(lines.find((line) => line.market === "last_td").priceMode, "over-only");
 assert.equal(lines.find((line) => line.market === "touchdowns_2_plus").line, 1.5);

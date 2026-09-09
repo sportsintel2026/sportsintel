@@ -25,6 +25,12 @@
 const { createClient } = require("@supabase/supabase-js");
 const { getFootballPropLines } = require("./nflPropsOdds");
 const { buildPlayerProjections, overProb } = require("./nflPropsData");
+const {
+  buildAnytimeTdRankings,
+  persistAnytimeTdRankings,
+  toCustomerAnytimeTdSelection,
+} = require("./nflAnytimeTdRankings");
+const { getLatestNflTdContextByEvent } = require("./nflEdges");
 const { teamKey, cfbNorm, cfbSchoolKey } = require("./teamKey");
 
 const NFL_IMMINENT_DAYS = 7;
@@ -47,8 +53,8 @@ const CUSTOMER_MARKETS = new Set([
 // Read-only customer snapshot populated by the EXISTING daily shadow run. The customer route
 // never calls a provider; an empty cache is an honest "not verified yet" state after a restart.
 const latestVerifiedSnapshots = {
-  nfl: { sport: "nfl", generatedAt: null, props: [] },
-  cfb: { sport: "cfb", generatedAt: null, props: [] },
+  nfl: { sport: "nfl", generatedAt: null, props: [], tdSelections: [] },
+  cfb: { sport: "cfb", generatedAt: null, props: [], tdSelections: [] },
 };
 
 function db() { return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY); }
@@ -65,6 +71,16 @@ function round3(n) { return n == null ? null : Math.round(n * 1000) / 1000; }
 function isBetterAmericanPrice(candidate, current) {
   const next = Number(candidate), existing = Number(current);
   return Number.isFinite(next) && (!Number.isFinite(existing) || next > existing);
+}
+
+function mergeAnytimeProp(existing, candidate) {
+  const best = isBetterAmericanPrice(candidate.overOdds, existing.overOdds) ? candidate : existing;
+  const quotes = [...(existing.quotes || []), ...(candidate.quotes || [])]
+    .filter((quote, index, all) => all.findIndex((other) => other.book === quote.book
+      && Number(other.price) === Number(quote.price)
+      && Number(other.counterPrice) === Number(quote.counterPrice)) === index)
+    .sort((a, b) => Number(b.price) - Number(a.price));
+  return { ...best, quotes, quoteCapturedAt: candidate.quoteCapturedAt || existing.quoteCapturedAt || null };
 }
 
 // Normalize a player name for matching book line <-> projection roster (Odds API vs
@@ -127,6 +143,7 @@ function buildShadowRows(lines, byEvent, projections, { sport = "nfl" } = {}) {
   const rows = [];
   const verifiedProps = [];
   const anytimeByVerifiedIdentity = new Map();
+  const anytimeProjectionByIdentity = new Map();
   const unmatched = [];
   let matched = 0;
   for (const ln of lines || []) {
@@ -182,6 +199,7 @@ function buildShadowRows(lines, byEvent, projections, { sport = "nfl" } = {}) {
       headshot: proj.headshot || null,
       teamLogoId: proj.teamLogoId || null,
       team: proj.team || null,
+      teamId: proj.teamId == null ? null : String(proj.teamId),
       position: proj.pos || null,
       market: ln.market,
       line: ln.line,
@@ -196,21 +214,29 @@ function buildShadowRows(lines, byEvent, projections, { sport = "nfl" } = {}) {
       modelOverProb: round3(mProb),
       modelEdge: mProb == null || ln.fairOverProb == null ? null : round3(mProb - ln.fairOverProb),
       gamesUsed: proj.gamesPlayed ?? null,
+      quoteCapturedAt: ln.quoteCapturedAt || evt.capturedAt || null,
+      quotes: Array.isArray(ln.quotes) ? ln.quotes.map((quote) => ({ ...quote })) : [],
     };
     if (ln.market === "anytime_td") {
       const identityKey = `${verifiedProp.eventId}:${verifiedProp.playerId || playerKey(proj.name)}:anytime_td`;
       const existingIndex = anytimeByVerifiedIdentity.get(identityKey);
+      anytimeProjectionByIdentity.set(identityKey, proj);
       if (existingIndex == null) {
         anytimeByVerifiedIdentity.set(identityKey, verifiedProps.length);
         verifiedProps.push(verifiedProp);
-      } else if (isBetterAmericanPrice(verifiedProp.overOdds, verifiedProps[existingIndex].overOdds)) {
-        verifiedProps[existingIndex] = verifiedProp;
+      } else {
+        verifiedProps[existingIndex] = mergeAnytimeProp(verifiedProps[existingIndex], verifiedProp);
       }
     } else {
       verifiedProps.push(verifiedProp);
     }
   }
-  return { rows, verifiedProps, matched, unmatched };
+  const tdCandidates = [...anytimeByVerifiedIdentity.entries()].map(([identityKey, index]) => ({
+    prop: verifiedProps[index],
+    baseline: anytimeProjectionByIdentity.get(identityKey)?.season2025 || null,
+    availability: anytimeProjectionByIdentity.get(identityKey)?.availability || null,
+  }));
+  return { rows, verifiedProps, tdCandidates, matched, unmatched };
 }
 
 function buildCfbRosterIdentities(snapshotRows = []) {
@@ -247,7 +273,7 @@ async function loadCfbRosterIdentities(supabase = db()) {
 }
 
 // ── LIVE: fetch lines + projections, build rows, upsert (dryRun returns rows) ─────
-async function recordFootballProps({ sport = "nfl", daysAhead = NFL_IMMINENT_DAYS, dryRun = false } = {}) {
+async function recordFootballProps({ sport = "nfl", daysAhead = NFL_IMMINENT_DAYS, dryRun = false, slate = null } = {}) {
   const league = String(sport || "").toLowerCase();
   if (league !== "nfl" && league !== "cfb") return { logged: 0, verified: 0, reason: "unsupported football props sport" };
   const oddsRes = await getFootballPropLines({ sport: league, daysAhead });
@@ -259,22 +285,49 @@ async function recordFootballProps({ sport = "nfl", daysAhead = NFL_IMMINENT_DAY
   const players = league === "nfl"
     ? (await buildPlayerProjections({ season: SEED_SEASON, teamLimit: 0 })).players || []
     : await loadCfbRosterIdentities();
-  const { rows, verifiedProps, matched, unmatched } = buildShadowRows(
+  const { rows, verifiedProps, tdCandidates, matched, unmatched } = buildShadowRows(
     oddsRes.lines, oddsRes.byEvent, players, { sport: league },
   );
+  let contextByEvent = {};
+  if (league === "nfl") {
+    if (Array.isArray(slate?.games)) {
+      contextByEvent = Object.fromEntries(slate.games
+        .filter((game) => game?._tdContext?.eventId)
+        .map((game) => [String(game.eventId), game._tdContext]));
+    }
+    if (Object.keys(contextByEvent).length === 0) {
+      try { contextByEvent = getLatestNflTdContextByEvent(); }
+      catch (_) { contextByEvent = {}; }
+    }
+  }
+  const predictionAt = new Date().toISOString();
+  const tdRankings = league === "nfl"
+    ? buildAnytimeTdRankings({ candidates: tdCandidates, contextByEvent, predictionAt }) : [];
+  const tdSelections = tdRankings.map(toCustomerAnytimeTdSelection).filter(Boolean);
 
   if (dryRun) {
-    return { dryRun: true, sport: league, linesSeen: oddsRes.lines.length, matched, verified: verifiedProps.length, wouldLog: rows.length, unmatchedSample: unmatched.slice(0, 15), sampleRows: rows.slice(0, 8), sampleProps: verifiedProps.slice(0, 8) };
+    return { dryRun: true, sport: league, linesSeen: oddsRes.lines.length, matched, verified: verifiedProps.length, wouldLog: rows.length, tdRankings: tdRankings.length, tdSelections: tdSelections.length, unmatchedSample: unmatched.slice(0, 15), sampleRows: rows.slice(0, 8), sampleProps: verifiedProps.slice(0, 8), sampleTdSelections: tdSelections.slice(0, 8) };
   }
   if (verifiedProps.length === 0) {
     return { logged: 0, verified: 0, linesSeen: oddsRes.lines.length, matched, reason: "no exactly matched prop identities", unmatchedSample: unmatched.slice(0, 15) };
   }
-  latestVerifiedSnapshots[league] = { sport: league, generatedAt: new Date().toISOString(), props: verifiedProps };
+  latestVerifiedSnapshots[league] = { sport: league, generatedAt: predictionAt, props: verifiedProps, tdSelections };
+
+  let tdRecording = { recorded: 0 };
+  if (tdRankings.length > 0) {
+    try {
+      tdRecording = await persistAnytimeTdRankings(db(), tdRankings);
+      if (tdRecording.error) console.error(`[FootballProps:${league}] Anytime TD ranking write skipped:`, tdRecording.error);
+    } catch (error) {
+      tdRecording = { recorded: 0, error: error.message };
+      console.error(`[FootballProps:${league}] Anytime TD ranking exception:`, error.message);
+    }
+  }
 
   // Market-only CFB and unmodeled touchdown props are customer-readable snapshots,
   // never fabricated model_predictions rows.
   if (rows.length === 0) {
-    return { logged: 0, verified: verifiedProps.length, linesSeen: oddsRes.lines.length, matched, unmatchedSample: unmatched.slice(0, 15) };
+    return { logged: 0, verified: verifiedProps.length, tdRankings: tdRankings.length, tdSelections: tdSelections.length, tdRecorded: tdRecording.recorded, linesSeen: oddsRes.lines.length, matched, unmatchedSample: unmatched.slice(0, 15) };
   }
 
   try {
@@ -287,7 +340,7 @@ async function recordFootballProps({ sport = "nfl", daysAhead = NFL_IMMINENT_DAY
       return { logged: 0, error: error.message, linesSeen: oddsRes.lines.length, matched };
     }
     console.log(`[FootballProps:${league}] Snapshotted ${rows.length} prop-shadow rows (${matched} matched of ${oddsRes.lines.length} lines; dups ignored)`);
-    return { logged: rows.length, verified: verifiedProps.length, linesSeen: oddsRes.lines.length, matched, unmatchedSample: unmatched.slice(0, 15) };
+    return { logged: rows.length, verified: verifiedProps.length, tdRankings: tdRankings.length, tdSelections: tdSelections.length, tdRecorded: tdRecording.recorded, linesSeen: oddsRes.lines.length, matched, unmatchedSample: unmatched.slice(0, 15) };
   } catch (e) {
     console.error(`[FootballProps:${league}] exception:`, e.message);
     return { logged: 0, error: e.message, linesSeen: oddsRes.lines.length, matched };
@@ -304,8 +357,12 @@ function getLatestNflPropsSnapshot() {
 
 function getLatestFootballPropsSnapshot(sport) {
   const league = String(sport || "").toLowerCase();
-  const snapshot = latestVerifiedSnapshots[league] || { sport: league, generatedAt: null, props: [] };
-  return { ...snapshot, props: snapshot.props.map((prop) => ({ ...prop })) };
+  const snapshot = latestVerifiedSnapshots[league] || { sport: league, generatedAt: null, props: [], tdSelections: [] };
+  return {
+    ...snapshot,
+    props: snapshot.props.map((prop) => ({ ...prop, quotes: (prop.quotes || []).map((quote) => ({ ...quote })) })),
+    tdSelections: (snapshot.tdSelections || []).map((row) => ({ ...row, reasons: [...(row.reasons || [])] })),
+  };
 }
 
 // The customer snapshot is intentionally process-local, so every deploy/restart begins

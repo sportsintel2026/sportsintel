@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import {
   availableFootballPropFamilies,
+  footballPropBoardRows,
   filterFootballProps,
   footballPropMarket,
+  isFootballPropModeled,
 } from "./footballPropMarkets.js";
 
 assert.equal(footballPropMarket("pass_yds").family, "passing");
@@ -38,6 +40,24 @@ assert.deepEqual(filterFootballProps(props, "rushing").map((prop) => prop.player
 assert.deepEqual(filterFootballProps(props, "receiving").map((prop) => prop.player), ["Receiver", "Receiving Score"]);
 assert.deepEqual(filterFootballProps(props, "touchdowns").map((prop) => prop.player), ["Scorer"], "the default Touchdowns board is exclusively the provider's Anytime TD Scorer market");
 assert.equal(filterFootballProps(props, "all").some((prop) => prop.player === "Hidden"), false, "unsupported markets stay hidden");
+
+const modeledOffer = {
+  sport: "nfl", market: "pass_yds", player: "Qualified Passer",
+  projection: 264.2, modelOverProb: 0.56, marketFairOverProb: 0.519, modelEdge: 0.041,
+};
+const incompleteOffer = {
+  sport: "nfl", market: "rush_yds", player: "Unqualified Runner",
+  projection: 74.2, modelOverProb: null, modelEdge: null,
+};
+const scorerOffer = {
+  sport: "nfl", market: "anytime_td", player: "Market Scorer",
+  projection: null, modelOverProb: null, modelEdge: null,
+};
+assert.equal(isFootballPropModeled(modeledOffer), true, "complete active core-model context identifies a modeled prop");
+assert.equal(isFootballPropModeled(incompleteOffer), false, "partial model context never becomes a modeled prop");
+assert.equal(isFootballPropModeled({ ...scorerOffer, projection: 1, modelOverProb: 0.7, modelEdge: 0.1 }), false, "touchdown scorer offers remain market-only in this release");
+assert.deepEqual(footballPropBoardRows([modeledOffer, incompleteOffer, scorerOffer], "modeled").map((prop) => prop.player), ["Qualified Passer"]);
+assert.deepEqual(footballPropBoardRows([modeledOffer, incompleteOffer, scorerOffer], "markets").map((prop) => prop.player), ["Unqualified Runner", "Market Scorer"]);
 
 assert.deepEqual(
   availableFootballPropFamilies({ supportedMarkets: ["first_td", "last_td", "touchdowns_2_plus", "touchdowns_3_plus"] }).map((family) => family.key),

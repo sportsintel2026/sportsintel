@@ -156,6 +156,30 @@ function marketEligible(season, market) {
   return v != null && v >= g.min;
 }
 
+// The Anytime-TD scorer layer ranks only players whose prior-season role is actually observed.
+// Passing touchdowns are intentionally excluded: a quarterback must personally run
+// or catch the score to settle an Anytime TD ticket.
+function tdBaselineEligible(season) {
+  if (!season || !(season.gamesPlayed >= MIN_GAMES)) return false;
+  return [season.rushAtt, season.targets, season.rushTds, season.recTds]
+    .some((value) => value != null && Number.isFinite(Number(value)) && Number(value) > 0);
+}
+
+// Read availability only from the same ESPN roster athlete already fetched for
+// identity/headshot resolution. No separate injury request or name join is added.
+function rosterAvailability(athlete) {
+  const injury = Array.isArray(athlete?.injuries) ? athlete.injuries[0] : null;
+  const raw = String(injury?.status || injury?.type?.description || "").trim();
+  if (!raw || /^active$/i.test(raw) || /^probable$/i.test(raw)) return null;
+  const lower = raw.toLowerCase();
+  const unavailable = /(^|\b)(out|doubtful|injured reserve|ir|pup|physically unable|suspend)/.test(lower);
+  return {
+    status: raw,
+    unavailable,
+    source: "espn-roster-athlete-id",
+  };
+}
+
 // ── PURE: project one stat's per-game mean, regressed only for thin samples ──────
 // Returns null if the underlying total is missing (NO prior fabrication) or the
 // sample is empty. A real total (even small/negative) is trusted, shrunk by sample.
@@ -246,7 +270,9 @@ async function buildPlayerProjections({ season = 2025, teamLimit = 3 } = {}) {
             name: a.fullName || a.displayName,
             pos,
             team: tm.abbreviation,
+            teamId: String(tm.id),
             headshot: a.headshot?.href || null,
+            availability: rosterAvailability(a),
           });
         }
       }
@@ -260,9 +286,10 @@ async function buildPlayerProjections({ season = 2025, teamLimit = 3 } = {}) {
           const season2025 = extractSeasonStats(stats);
           if (season2025.gamesPlayed == null || season2025.gamesPlayed < MIN_GAMES) return;
           const proj = projectPlayer(season2025, pl.pos);
-          if (proj.eligibleMarkets.length === 0) { skippedNoMarket++; return; } // not a real market participant
+          if (proj.eligibleMarkets.length === 0 && !tdBaselineEligible(season2025)) { skippedNoMarket++; return; }
           players.push({
-            id: pl.id, name: pl.name, team: pl.team, pos: pl.pos, headshot: pl.headshot,
+            id: pl.id, name: pl.name, team: pl.team, teamId: pl.teamId, pos: pl.pos,
+            headshot: pl.headshot, availability: pl.availability,
             gamesPlayed: season2025.gamesPlayed,
             markets: proj.eligibleMarkets,
             projected: proj.projected,
@@ -292,6 +319,8 @@ async function buildPlayerProjections({ season = 2025, teamLimit = 3 } = {}) {
 module.exports = {
   extractSeasonStats,
   marketEligible,
+  tdBaselineEligible,
+  rosterAvailability,
   projectStat,
   projectPlayer,
   overProb,

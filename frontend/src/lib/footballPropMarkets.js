@@ -26,6 +26,13 @@ const FAMILY_DEFINITIONS = Object.freeze([
   { key: "touchdowns", label: "Touchdowns" },
 ]);
 
+const MODEL_RECOMMENDATION_MARKETS = new Set([
+  "pass_yds",
+  "rush_yds",
+  "receptions",
+  "rec_yds",
+]);
+
 function marketKey(value) {
   return String(value || "").trim().toLowerCase();
 }
@@ -33,6 +40,19 @@ function marketKey(value) {
 export function footballPropMarket(value) {
   const key = marketKey(value);
   return MARKET_DEFINITIONS[key] ? { key, ...MARKET_DEFINITIONS[key] } : null;
+}
+
+export function isFootballPropModeled(prop) {
+  if (!MODEL_RECOMMENDATION_MARKETS.has(marketKey(prop?.market))) return false;
+  return [prop?.projection, prop?.modelOverProb, prop?.marketFairOverProb, prop?.modelEdge]
+    .every((value) => value != null && Number.isFinite(Number(value)));
+}
+
+export function footballPropBoardRows(props, board = "modeled") {
+  const rows = Array.isArray(props) ? props : [];
+  return board === "markets"
+    ? rows.filter((prop) => !isFootballPropModeled(prop))
+    : rows.filter(isFootballPropModeled);
 }
 
 export function availableFootballPropFamilies({ props = [], supportedMarkets = [] } = {}) {

@@ -12,6 +12,7 @@ Module._load = function dependencyFreeLoad(request, parent, isMain) {
     buildPlayerProjections: async () => liveProjectionFixture,
     overProb: (mean, line) => mean > line ? 0.6 : 0.4,
   };
+  if (request === "./nflEdges") return { getLatestNflTdContextByEvent: () => ({}) };
   return originalLoad(request, parent, isMain);
 };
 const {
@@ -38,7 +39,7 @@ assert.equal(built.verifiedProps[0].underOdds, -115);
 assert.equal(built.verifiedProps[0].modelEdge, 0.111);
 assert.equal(built.verifiedProps[0].opponent, "Buffalo Bills");
 assert.equal(built.verifiedProps[0].headshot, "https://example.test/jordan.png");
-assert.deepEqual(getLatestNflPropsSnapshot(), { sport: "nfl", generatedAt: null, props: [] }, "pure row construction does not publish a cache snapshot");
+assert.deepEqual(getLatestNflPropsSnapshot(), { sport: "nfl", generatedAt: null, props: [], tdSelections: [] }, "pure row construction does not publish a cache snapshot");
 
 const unsupported = buildShadowRows([
   { player: "Jordan Example", market: "unsupported_market", line: 1.5, overOdds: -105, underOdds: -115, fairOverProb: 0.489, book: "Verified Book", eventId: "evt-1" },
@@ -53,7 +54,7 @@ const touchdown = buildShadowRows([
   { player: "Jordan Example", market: "anytime_td", line: null, overOdds: 145, underOdds: -175, fairOverProb: 0.391, book: "Verified Book", priceMode: "yes-no", overLabel: "YES", underLabel: "NO", eventId: "evt-1", matchup: "Arizona Cardinals @ Buffalo Bills" },
   { player: "Jordan Example Jr.", market: "anytime_td", line: null, overOdds: 160, underOdds: null, fairOverProb: null, book: "Best Book", priceMode: "over-only", overLabel: "YES", underLabel: null, eventId: "evt-1", matchup: "Arizona Cardinals @ Buffalo Bills" },
 ], { "evt-1": { commence: "2026-09-13T17:00:00Z", matchup: "Arizona Cardinals @ Buffalo Bills" } }, [
-  { id: "99", name: "Jordan Example", team: "ARI", pos: "QB", gamesPlayed: 17, projected: { pass_yds: 263.2 } },
+  { id: "99", name: "Jordan Example", team: "ARI", teamId: "22", pos: "QB", gamesPlayed: 17, projected: { pass_yds: 263.2 }, season2025: { gamesPlayed: 17, rushAtt: 45, targets: 0, rushTds: 4, recTds: 0 } },
 ]);
 assert.equal(touchdown.rows.length, 0, "unmodeled touchdown markets never create prediction-ledger rows");
 assert.deepEqual(touchdown.verifiedProps.map((prop) => prop.market), ["pass_tds", "anytime_td"]);
@@ -61,6 +62,8 @@ assert.equal(touchdown.verifiedProps[0].modelEdge, null);
 assert.equal(touchdown.verifiedProps[1].priceMode, "over-only");
 assert.equal(touchdown.verifiedProps[1].overOdds, 160);
 assert.equal(touchdown.verifiedProps[1].book, "Best Book", "one verified player identity keeps one Anytime TD card at the best price");
+assert.equal(touchdown.tdCandidates.length, 1, "one durable player/event identity feeds one ranking candidate");
+assert.equal(touchdown.tdCandidates[0].baseline.rushTds, 4);
 
 const cfbPlayers = buildCfbRosterIdentities([
   { team_name: "Stanford", espn_team_id: "24", identity_status: "exact", snapshot_at: "2026-08-30T12:00:00Z", roster: { players: [{ id: "cfbd-1", firstName: "Exact", lastName: "Cardinal", position: "RB" }] } },
@@ -125,6 +128,7 @@ liveProjectionFixture = {
   const after = getLatestNflPropsSnapshot();
   assert.equal(warmed.verified, 11, "startup warm publishes every verified production-shaped row");
   assert.equal(after.props.length, 11);
+  assert.deepEqual(after.tdSelections, []);
   assert.deepEqual(
     [...new Set(after.props.map((prop) => prop.market))],
     ["pass_yds", "rush_yds", "receptions", "rec_yds"],
