@@ -2,17 +2,36 @@ const assert = require("assert");
 const Module = require("module");
 let liveOddsFixture = { ok: true, lines: [] };
 let liveProjectionFixture = { players: [] };
+let liveTdContextFixture = {};
+let oddsProviderCalls = 0;
+let projectionProviderCalls = 0;
+const writesByTable = new Map();
 const originalLoad = Module._load;
 Module._load = function dependencyFreeLoad(request, parent, isMain) {
   if (request === "@supabase/supabase-js") return { createClient: () => ({
-    from: () => ({ upsert: async () => ({ error: null }) }),
+    from: (table) => ({ upsert: async (rows) => {
+      writesByTable.set(table, [...(writesByTable.get(table) || []), ...rows]);
+      return { error: null };
+    } }),
   }) };
-  if (request === "./nflPropsOdds") return { getFootballPropLines: async () => liveOddsFixture };
+  if (request === "./nflPropsOdds") return { getFootballPropLines: async () => {
+    oddsProviderCalls++;
+    return liveOddsFixture;
+  } };
   if (request === "./nflPropsData") return {
-    buildPlayerProjections: async () => liveProjectionFixture,
+    buildPlayerProjections: async () => {
+      projectionProviderCalls++;
+      return liveProjectionFixture;
+    },
     overProb: (mean, line) => mean > line ? 0.6 : 0.4,
   };
   if (request === "./nflEdges") return { getLatestNflTdContextByEvent: () => ({}) };
+  if (request === "./nflTdSlateContext") return {
+    loadCurrentNflTdSlateContext: async () => ({
+      contextByEvent: JSON.parse(JSON.stringify(liveTdContextFixture)),
+      loaded: Object.keys(liveTdContextFixture).length,
+    }),
+  };
   return originalLoad(request, parent, isMain);
 };
 const {
@@ -105,20 +124,37 @@ const warmLines = Array.from({ length: 11 }, (_, index) => {
     matchup: "Arizona Cardinals @ Buffalo Bills",
   };
 });
+warmLines.push(
+  { player: "Home Runner", market: "anytime_td", line: null, overOdds: 120, underOdds: null, fairOverProb: null, book: "Book B", priceMode: "over-only", eventId: "warm-event", matchup: "Arizona Cardinals @ Buffalo Bills" },
+  { player: "Home Receiver", market: "anytime_td", line: null, overOdds: 100, underOdds: null, fairOverProb: null, book: "Book A", priceMode: "over-only", eventId: "warm-event", matchup: "Arizona Cardinals @ Buffalo Bills" },
+  { player: "Away Runner", market: "anytime_td", line: null, overOdds: 110, underOdds: null, fairOverProb: null, book: "Book A", priceMode: "over-only", eventId: "warm-event", matchup: "Arizona Cardinals @ Buffalo Bills" },
+);
 liveOddsFixture = {
   ok: true,
   lines: warmLines,
   byEvent: { "warm-event": { commence: "2026-09-13T17:00:00Z", matchup: "Arizona Cardinals @ Buffalo Bills" } },
 };
 liveProjectionFixture = {
-  players: warmLines.map((line, index) => ({
+  players: warmLines.slice(0, 11).map((line, index) => ({
     id: `player-${index}`,
     name: line.player,
     team: "ARI",
     pos: index < 3 ? "QB" : index < 5 ? "RB" : "WR",
     gamesPlayed: 17,
     projected: { [line.market]: line.line + 1 },
-  })),
+  })).concat([
+    { id: "home-runner", name: "Home Runner", team: "BUF", teamId: "2", pos: "RB", gamesPlayed: 17, projected: {}, season2025: { gamesPlayed: 17, rushAtt: 250, targets: 55, rushTds: 12, recTds: 2 } },
+    { id: "home-receiver", name: "Home Receiver", team: "BUF", teamId: "2", pos: "RB", gamesPlayed: 17, projected: {}, season2025: { gamesPlayed: 17, rushAtt: 4, targets: 140, rushTds: 0, recTds: 9 } },
+    { id: "away-runner", name: "Away Runner", team: "ARI", teamId: "22", pos: "RB", gamesPlayed: 17, projected: {}, season2025: { gamesPlayed: 17, rushAtt: 190, targets: 35, rushTds: 7, recTds: 1 } },
+  ]),
+};
+liveTdContextFixture = {
+  "warm-event": {
+    eventId: "warm-event", commenceTime: "2026-09-13T17:00:00Z",
+    totalLine: 47.5, homeSpreadLine: -3.5, sourceSeason: 2025,
+    home: { teamId: "2", team: "Buffalo Bills", offensePointsPerGame: 25, opponentDefensePointsAllowedPerGame: 24, projectedPoints: 26.5 },
+    away: { teamId: "22", team: "Arizona Cardinals", offensePointsPerGame: 21, opponentDefensePointsAllowedPerGame: 20, projectedPoints: 20.5 },
+  },
 };
 
 (async () => {
@@ -126,16 +162,19 @@ liveProjectionFixture = {
   assert.equal(before.props.length, 0, "a restarted process begins with an empty in-memory snapshot");
   const warmed = await warmNflPropsSnapshotOnBoot();
   const after = getLatestNflPropsSnapshot();
-  assert.equal(warmed.verified, 11, "startup warm publishes every verified production-shaped row");
-  assert.equal(after.props.length, 11);
-  assert.deepEqual(after.tdSelections, []);
+  assert.equal(warmed.verified, 14, "startup warm publishes every verified production-shaped row");
+  assert.equal(after.props.length, 14);
+  assert.deepEqual(after.tdSelections.map((row) => row.player), ["Home Runner"], "fresh startup hydrates exact durable slate context before TD v3 ranking");
   assert.deepEqual(
     [...new Set(after.props.map((prop) => prop.market))],
-    ["pass_yds", "rush_yds", "receptions", "rec_yds"],
+    ["pass_yds", "rush_yds", "receptions", "rec_yds", "anytime_td"],
     "existing core markets survive normalization and startup recording",
   );
+  assert.equal((writesByTable.get("nfl_anytime_td_rankings_shadow") || []).length, 3, "all exact-identity TD candidates reach immutable shadow recording");
+  assert.deepEqual({ oddsProviderCalls, projectionProviderCalls }, { oddsProviderCalls: 1, projectionProviderCalls: 1 }, "durable context hydration adds zero provider calls");
   const second = await warmNflPropsSnapshotOnBoot();
-  assert.deepEqual(second, { skipped: true, verified: 11 }, "an already-populated process is never warmed twice");
+  assert.deepEqual(second, { skipped: true, verified: 14 }, "an already-populated process is never warmed twice");
+  assert.deepEqual({ oddsProviderCalls, projectionProviderCalls }, { oddsProviderCalls: 1, projectionProviderCalls: 1 }, "repeat warm also adds zero provider calls");
   console.log("nflPropsShadow self-test passed");
 })().catch((error) => {
   console.error(error);

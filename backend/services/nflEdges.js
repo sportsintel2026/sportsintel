@@ -369,6 +369,19 @@ async function runNFLSlate({ season = null, weeks = 1, phase = null } = {}) {
     .filter((game) => game?._tdContext?.eventId)
     .map((game) => [String(game.eventId), game._tdContext]));
 
+  // Persist the exact context already computed by this normal slate run so a fresh
+  // process can rebuild Anytime TD rankings without another odds/rating fetch.
+  // Forced-season diagnostics never replace the current production context.
+  if (season == null && weeks === 1) {
+    try {
+      const { persistNflTdSlateContext } = require("./nflTdSlateContext");
+      const stored = await persistNflTdSlateContext({ games });
+      if (stored.error) console.error("[nflEdges] TD slate-context write skipped:", stored.error);
+    } catch (error) {
+      console.error("[nflEdges] TD slate-context persistence unavailable:", error.message);
+    }
+  }
+
   return {
     season: ratings.season != null ? ratings.season : season,
     weekWindow,
