@@ -327,6 +327,15 @@ async function runNFLSlate({ season = null, weeks = 1, phase = null } = {}) {
     const pred = predictGame(ev, ctx);
     const espnGame = neutralIdx && typeof neutralIdx.resolveGame === "function"
       ? neutralIdx.resolveGame(ev.awayTeam, ev.homeTeam) : null;
+    if (espnGame?.venue?.name) {
+      pred.venue = {
+        id: espnGame.venue.id || null,
+        name: espnGame.venue.name,
+        city: espnGame.venue.city || null,
+        state: espnGame.venue.state || null,
+        country: espnGame.venue.country || null,
+      };
+    }
     // Recording-only handoff for the NFL injury/weather shadow experiment. All
     // inputs came from this exact slate run; non-enumerable keeps every customer
     // response byte/shape-compatible and avoids a second odds/scoreboard fetch.

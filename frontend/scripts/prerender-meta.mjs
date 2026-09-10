@@ -19,6 +19,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { SEARCH_ENTRY_LIST } from "../src/lib/searchEntryConfig.js";
 import {
+  buildSeoPrimarySchema,
   buildCurrentSeoPages,
   seoMatchupPath,
   splitSeoMatchup,
@@ -311,9 +312,7 @@ function staticPhase2Body(page) {
 }
 
 function staticPhase2Schema(page) {
-  const primary = page.kind === "matchup"
-    ? { "@type": "SportsEvent", "@id": `https://www.wizepicks.com${page.path}#event`, url: `https://www.wizepicks.com${page.path}`, name: `${page.away} at ${page.home}`, startDate: page.startDate, eventStatus: "https://schema.org/EventScheduled", competitor: [{ "@type": "SportsTeam", name: page.away }, { "@type": "SportsTeam", name: page.home }] }
-    : { "@type": "CollectionPage", "@id": `https://www.wizepicks.com${page.path}#page`, url: `https://www.wizepicks.com${page.path}`, name: page.title, description: page.description };
+  const primary = buildSeoPrimarySchema(page);
   return JSON.stringify({
     "@context": "https://schema.org",
     "@graph": [primary, { "@type": "BreadcrumbList", itemListElement: [

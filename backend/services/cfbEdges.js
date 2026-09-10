@@ -370,6 +370,16 @@ async function runCFBSlate({ season = null, weeks = 1 } = {}) {
     const nSite = neutralIdx ? neutralIdx.isNeutral(ev.awayTeam, ev.homeTeam) : null;
     if (nSite === true) ctx.neutralSite = true;
     const pred = predictGame(ev, ctx);
+    const espnGame = neutralIdx && typeof neutralIdx.resolveGame === "function"
+      ? neutralIdx.resolveGame(ev.awayTeam, ev.homeTeam) : null;
+    if (espnGame?.venue?.name) {
+      pred.venue = {
+        name: espnGame.venue.name,
+        city: espnGame.venue.city || null,
+        state: espnGame.venue.state || null,
+        country: espnGame.venue.country || null,
+      };
+    }
     const ratingSnapshot = buildRatingSnapshot(
       ratings,
       homeT,
