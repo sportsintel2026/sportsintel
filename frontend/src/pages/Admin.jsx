@@ -289,7 +289,7 @@ export default function AdminPage() {
         <div className="plc">{"\u203a"}</div>
       </div>
 
-      <div className="blk"><div className="bl">WIZEPLAYS STUDIO <span className="bx">straight bets · auto-graded hourly</span></div>
+      <div className="blk"><div className="bl">WIZEPLAYS PERFORMANCE <span className="bx">straight bets · automatic grading</span></div>
         <div className="wprec">
           <div className="r"><div className="k">RECORD</div><div className="v">{rec.w}-{rec.l}-{rec.p}</div></div>
           <div className="r"><div className="k">UNITS</div><div className={"v "+(rec.u>=0?"g":"")}>{rec.u>=0?"+":""}{rec.u}u</div></div>

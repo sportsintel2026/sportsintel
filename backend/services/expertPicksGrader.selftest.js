@@ -2,6 +2,11 @@ const assert = require("assert");
 const { _test } = require("./expertPicksGrader");
 
 assert.equal(_test.scoreboardLeague("ncaafb"), "cfb");
+assert.equal(
+  _test.nflScoreboardDate({ gameDate: "2026-09-10", commenceTime: "2026-09-10T00:20:00Z" }, "2026-09-10"),
+  "2026-09-09",
+  "NFL finals use the US event date instead of the next-day UTC date",
+);
 assert.equal(_test.settle({ market: "moneyline", selection: "away" }, { away: 24, home: 20 }), "win");
 assert.equal(_test.settle({ market: "spread", selection: "home", line: -3 }, { away: 20, home: 23 }), "push");
 assert.equal(_test.settle({ market: "spread", selection: "away", line: 3.5 }, { away: 20, home: 23 }), "win");
