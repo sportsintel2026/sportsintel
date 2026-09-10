@@ -46,7 +46,11 @@ Module._load = function mockedLoad(request, parent, isMain) {
   };
   if (request === "./predictionTracker") return { FOOTBALL_IMMINENT_DAYS: 7 };
   if (request === "./footballVenue") return {
-    buildNeutralIndex: async () => ({ isNeutral: () => false, meta: { matched: 1, neutral: 0 } }),
+    buildNeutralIndex: async () => ({
+      isNeutral: () => false,
+      resolveGame: () => ({ venue: { name: "Allegiant Stadium", city: "Las Vegas", state: "NV" } }),
+      meta: { matched: 1, neutral: 0 },
+    }),
   };
   if (request === "@supabase/supabase-js") return { createClient: () => fakeSupabase };
   return originalLoad.call(this, request, parent, isMain);
@@ -65,6 +69,9 @@ const { toCfbBoardEdge, toCfbLedgerRow } = require("./cfbPredictionContract");
   assert.strictEqual(JSON.stringify(slate).includes("cfbControlContext"), false,
     "recorder-only context must not enter the customer payload");
   const game = slate.games[0];
+  assert.deepStrictEqual(game.venue, {
+    name: "Allegiant Stadium", city: "Las Vegas", state: "NV", country: null,
+  }, "the already-matched ESPN game should expose only verified venue metadata");
   assert.ok(game.cfbPredictionContract?.moneyline?.selected);
   assert.strictEqual(JSON.stringify(game).includes("cfbPredictionContract"), false);
   const side = game.cfbPredictionContract.moneyline.selected;

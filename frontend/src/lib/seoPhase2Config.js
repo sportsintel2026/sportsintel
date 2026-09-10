@@ -60,11 +60,59 @@ export function seoMatchupPath(sport, game, fallback = null) {
   return `${SEO_SPORT_PREFIX[sport]}/${seoSlug(teams.away)}-vs-${seoSlug(teams.home)}-prediction-odds-${date}`;
 }
 
-function isoStart(game) {
+export function seoEventStart(game) {
   const value = game?.commenceTime || game?.startTimeUTC || game?.startTime || game?.scheduled || null;
   if (!value) return null;
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
+function cleanVenueValue(value) {
+  const text = String(value || "").trim();
+  return text && !/^(tbd|unknown|venue tbd|to be determined)$/i.test(text) ? text : null;
+}
+
+export function seoEventLocation(game) {
+  const venue = game?.venue;
+  const name = cleanVenueValue(typeof venue === "string" ? venue : venue?.name || venue?.fullName);
+  if (!name) return null;
+  const location = { "@type": "Place", name };
+  if (venue && typeof venue === "object") {
+    const city = cleanVenueValue(venue.city);
+    const state = cleanVenueValue(venue.state);
+    const country = cleanVenueValue(venue.country);
+    if (city || state || country) {
+      location.address = {
+        "@type": "PostalAddress",
+        ...(city ? { addressLocality: city } : {}),
+        ...(state ? { addressRegion: state } : {}),
+        ...(country ? { addressCountry: country } : {}),
+      };
+    }
+  }
+  return location;
+}
+
+export function buildSeoPrimarySchema(page, game = null, origin = "https://www.wizepicks.com") {
+  if (page?.kind !== "matchup") {
+    return { "@type": "CollectionPage", "@id": `${origin}${page.path}#page`, url: `${origin}${page.path}`, name: page.title, description: page.description };
+  }
+  const startDate = game ? seoEventStart(game) : page.startDate;
+  const location = game ? seoEventLocation(game) : page.location;
+  if (!startDate || !location) {
+    return { "@type": "WebPage", "@id": `${origin}${page.path}#page`, url: `${origin}${page.path}`, name: page.title, description: page.description };
+  }
+  return {
+    "@type": "SportsEvent",
+    "@id": `${origin}${page.path}#event`,
+    url: `${origin}${page.path}`,
+    identifier: page.gameId,
+    name: `${page.away} at ${page.home}`,
+    startDate,
+    location,
+    eventStatus: "https://schema.org/EventScheduled",
+    competitor: [{ "@type": "SportsTeam", name: page.away }, { "@type": "SportsTeam", name: page.home }],
+  };
 }
 
 function dateNumber(value) {
@@ -85,7 +133,7 @@ export function usefulSeoGame(sport, game, fallback = null, now = new Date()) {
   const teams = splitSeoMatchup(game);
   const date = seoGameDate(game, fallback);
   return !!(["nfl", "cfb", "mlb"].includes(sport) && teams.away && teams.home && teams.away !== teams.home
-    && seoGameId(game) && (isoStart(game) || String(game?.time || "").trim()) && withinCurrentWindow(sport, date, now));
+    && seoGameId(game) && (seoEventStart(game) || String(game?.time || "").trim()) && withinCurrentWindow(sport, date, now));
 }
 
 function hubForSport(sport) {
@@ -113,7 +161,7 @@ export function buildSeoMatchupPage(sport, game, fallback = null, now = new Date
     title: `${teams.away} vs. ${teams.home} Prediction & Odds – ${label} | WizePicks`,
     description: `${teams.away} vs. ${teams.home} prediction, ${context}, and public-safe WizePicks analysis for ${label}.`,
     h1: `${teams.away} vs. ${teams.home} Prediction & Odds`, away: teams.away, home: teams.home,
-    date, startDate: isoStart(game), gameId: seoGameId(game), hub: hubForSport(sport), hubLabel: hubLabelForSport(sport),
+    date, startDate: seoEventStart(game), location: seoEventLocation(game), gameId: seoGameId(game), hub: hubForSport(sport), hubLabel: hubLabelForSport(sport),
   });
 }
 

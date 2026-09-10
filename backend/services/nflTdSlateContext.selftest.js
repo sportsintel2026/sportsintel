@@ -113,7 +113,11 @@ function readDb(data) {
       awayTeam: event.awayTeam, homeTeam: event.homeTeam,
       matchup: `${event.awayTeam} @ ${event.homeTeam}`,
     }) };
-    if (request === "./footballVenue") return { buildNeutralIndex: async () => ({ isNeutral: () => false, meta: {} }) };
+    if (request === "./footballVenue") return { buildNeutralIndex: async () => ({
+      isNeutral: () => false,
+      resolveGame: () => ({ venue: { id: "venue-1", name: "Verified Stadium", city: "Seattle", state: "WA", country: "USA" } }),
+      meta: {},
+    }) };
     if (request === "./predictionTracker") return { FOOTBALL_IMMINENT_DAYS: 7 };
     if (request === "./nflTdSlateContext") return { persistNflTdSlateContext: async (slate) => {
       persistedSlate = slate;
@@ -127,6 +131,9 @@ function readDb(data) {
   Module._load = originalLoad;
   assert.equal(mainOddsCalls, 1, "the normal slate run retains its existing single main-odds fetch");
   assert.equal(liveSlate.games.length, 1);
+  assert.deepEqual(liveSlate.games[0].venue, {
+    id: "venue-1", name: "Verified Stadium", city: "Seattle", state: "WA", country: "USA",
+  }, "the active slate should reuse its exact ESPN join for Event venue metadata");
   assert.ok(persistedSlate, "the normal production runNFLSlate flow persists TD context");
   assert.equal(persistedSlate.games[0]._tdContext.eventId, "event-live");
   assert.equal(persistedSlate.games[0]._tdContext.home.projectedPoints, 25.5);

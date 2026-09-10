@@ -3,6 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import TeamLogo, { TEAM_LOGO_CSS } from "../components/TeamLogo";
 import { edgesApi, performanceApi } from "../lib/api";
 import {
+  buildSeoPrimarySchema,
   currentSeoPageForPath,
   seoGameId,
   seoMatchupPath,
@@ -102,21 +103,7 @@ function useStructuredData(page, game, indexable = true) {
     const script = document.createElement("script");
     script.id = id;
     script.type = "application/ld+json";
-    const primary = page.kind === "matchup" ? {
-      "@type": "SportsEvent",
-      "@id": `${ORIGIN}${page.path}#event`,
-      name: `${page.away} at ${page.home}`,
-      startDate: game?.commenceTime || page.startDate,
-      eventStatus: "https://schema.org/EventScheduled",
-      url: `${ORIGIN}${page.path}`,
-      competitor: [{ "@type": "SportsTeam", name: page.away }, { "@type": "SportsTeam", name: page.home }],
-    } : {
-      "@type": "CollectionPage",
-      "@id": `${ORIGIN}${page.path}#page`,
-      url: `${ORIGIN}${page.path}`,
-      name: page.title,
-      description: page.description,
-    };
+    const primary = buildSeoPrimarySchema(page, game, ORIGIN);
     script.textContent = JSON.stringify({
       "@context": "https://schema.org",
       "@graph": [primary, {
