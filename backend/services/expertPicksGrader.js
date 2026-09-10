@@ -39,6 +39,17 @@ function eventDate(pick, rowDate) {
   return String(pick?.gameDate || rowDate || "").slice(0, 10);
 }
 
+function nflScoreboardDate(pick, rowDate) {
+  const kickoff = new Date(pick?.commenceTime || "");
+  if (!Number.isNaN(kickoff.getTime())) {
+    const parts = Object.fromEntries(new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit",
+    }).formatToParts(kickoff).filter((part) => part.type !== "literal").map((part) => [part.type, part.value]));
+    if (parts.year && parts.month && parts.day) return `${parts.year}-${parts.month}-${parts.day}`;
+  }
+  return eventDate(pick, rowDate);
+}
+
 function scoreboardLeague(sport) {
   return String(sport || "").toLowerCase() === "ncaafb" ? "cfb" : String(sport || "").toLowerCase();
 }
@@ -190,9 +201,11 @@ async function gradeExpertPicks({ dryRun = true, days = 14, client = supa() } = 
       checked++;
       let outcome = null;
       const date = eventDate(pick, row.date);
+      const sport = String(pick.sport || "").toLowerCase();
+      const lookupDate = sport === "nfl" ? nflScoreboardDate(pick, row.date) : date;
       try {
-        if (isPropPick(pick) && String(pick.sport).toLowerCase() === "nfl") {
-          const board = await nflBoard(date);
+        if (isPropPick(pick) && sport === "nfl") {
+          const board = await nflBoard(lookupDate);
           const game = matchGame(pick.game, board || []);
           if (!game || !game.final) {
             decisions.push({ date, pick: pick.pick, status: "not-final-yet" });
@@ -223,7 +236,7 @@ async function gradeExpertPicks({ dryRun = true, days = 14, client = supa() } = 
           outcome = gradeMlbPropActual(pick, await mlbBox(pick));
         } else {
           const scores = await getFinalScoreByMatchup(
-            scoreboardLeague(pick.sport), date, pick.awayAbbr || pick.away || "", pick.homeAbbr || pick.home || ""
+            scoreboardLeague(pick.sport), lookupDate, pick.awayAbbr || pick.away || "", pick.homeAbbr || pick.home || ""
           );
           if (!scores) {
             decisions.push({ date, pick: pick.pick, status: "not-final-yet" });
@@ -274,6 +287,7 @@ module.exports = {
     NFL_PROP_CATEGORIES,
     MLB_PROP_CATEGORIES,
     eventDate,
+    nflScoreboardDate,
     gradeMlbPropActual,
     isGradeable,
     isPending,
