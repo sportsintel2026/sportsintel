@@ -111,13 +111,15 @@ function MLBPropsPage() {
   const toP = (p, mk, unit) => ({
     pl: [ p.player || p.name || "—", initialsOf(p.player||p.name||""), teamCol(shortTeam(p.team||p.game||"")) ],
     g: p.game || p.team || "", pos: p.pos || p.position || "",
-    line: lineOf(p, unit), odds: formatOdds(p.odds), edge: (p.edge||0)*100,
+    line: lineOf(p, unit), odds: formatOdds(p.odds), edge: p.edge!=null ? p.edge*100 : null,
     mk, conv: convOf(p),
     // WZ-PROPS-WINFIX-2026-07-08 :: win% comes from the per-type prob fields (hrProb/hitsProb/kProb),
     // not modelProb -- HR/Hits/K props don't carry modelProb, which was zeroing the winners-first board.
     model: (()=>{ const m = p.hrProb ?? p.hitsProb ?? p.kProb ?? p.modelProb; return m!=null ? Math.round(m*100) : null; })(),
     mkt: p.marketProb!=null ? Math.round(p.marketProb*100) : (p.impliedProb!=null ? Math.round(p.impliedProb*100) : null),
-    gameId: p.gameId, id: p.playerId || p.id, teamRaw: p.team, pid: p.playerId
+    gameId: p.gameId, id: p.playerId || p.id, teamRaw: p.team, pid: p.playerId,
+    book: p.book || null, projection: mk === "K" ? (p.expectedKs ?? null) : null,
+    opposingPitcher: p.opposingPitcher || null,
   });
   // Total Bases: a CALIBRATED likelihood board (overProb is the validated signal — see
   // TB calibration, n=501). Unlike HR/Hits/K it is not edge-filtered or conviction-tiered,
@@ -126,13 +128,13 @@ function MLBPropsPage() {
   const toTB = (p) => ({
     pl: [ p.player || "—", initialsOf(p.player||""), teamCol(shortTeam(p.team||p.game||"")) ],
     g: p.game || p.team || "", pos: "",
-    line: lineOf({ line: p.line }, "TB"), odds: formatOdds(p.odds),
+    line: p.line==null ? "Over TB" : `Over ${p.line} TB`, odds: formatOdds(p.odds),
     edge: p.edgeOverShadow!=null ? p.edgeOverShadow*100 : null,
     mk: "TB", conv: "", lk: true,
     model: p.overProb!=null ? Math.round(p.overProb*100) : null,
     mkt: p.marketFairOver!=null ? Math.round(p.marketFairOver*100) : null,
     gameId: p.gameId, id: p.playerId, teamRaw: p.team, pid: p.playerId,
-    expTB: p.expTB ?? null,
+    expTB: p.expTB ?? null, book: p.book || null,
   });
   const allProps = [
     ...(M.hrPropEdges||[]).map(p => toP(p,"HR","HR")),
@@ -142,6 +144,8 @@ function MLBPropsPage() {
   ];
   const FILT = ["All","HR","Hits","K","TB"];
   const fmap = { HR:"HR", Hits:"HITS", K:"K", TB:"TB" };
+  const familyNames = { All:"All MLB Prop Families", HR:"Home Runs", Hits:"Hits", K:"Pitcher Strikeouts", TB:"Total Bases" };
+  const familyCounts = Object.fromEntries(FILT.map((f) => [f, f === "All" ? allProps.length : allProps.filter((p) => p.mk === fmap[f]).length]));
   let list = mfilter==="All" ? allProps : allProps.filter(p => p.mk === fmap[mfilter]);
   // WZ-PROPS-WINNERS-2026-07-08 :: winners-first, same as the moneyline board. Rank by model win%
   // by default (edge is a bonus, not the sort key and not a gate); "Value" re-ranks by edge for line
@@ -154,7 +158,7 @@ function MLBPropsPage() {
 
   return (
     <TerminalShell active="/props" plan={plan} navigate={navigate}>
-    <div className="app"><style>{CSS}</style>
+    <div className="app"><style>{CSS + BOARD_CSS}</style>
       <div className="hd">
         <div className="hrow">
           <div className="logo">Wize<span className="w">Picks</span></div>
@@ -169,23 +173,25 @@ function MLBPropsPage() {
         </div>
       </div>
 
-      {!hasFull ? <Gate navigate={navigate}/> : <>
-        <div className="chips">{FILT.map(f=><b key={f} className={f===mfilter?"on":""} onClick={()=>setMfilter(f)}>{f}</b>)}</div>
-        <div className="bar">
-          <span>{formatEventDate(M.date)} {"\u00b7"} {list.length} props {"\u00b7"} ranked by win%{nVal>0?` \u00b7 ${nVal} +VALUE`:""}</span>
-          <span className="sort"><b className={sortBy==="win"?"on":""} onClick={()=>setSortBy("win")}>Win %</b><b className={sortBy==="edge"?"on":""} onClick={()=>setSortBy("edge")}>Value</b></span>
+      {!hasFull ? <Gate navigate={navigate}/> : <main className="mlbprops">
+        <header className="mlbprops__head">
+          <div><span className="mlbprops__eyebrow">MLB · WIZEPICKS PROPS</span><h1>Player Props</h1></div>
+          <div className="mlbprops__status"><i/> MODEL BOARD</div>
+        </header>
+        <p className="mlbprops__intro">Model-supported MLB props, ranked with the exact wager and best posted price first. Tap any card for the complete player, pitcher, park, weather, and Statcast read.</p>
+        <div className="mlbprops__date" aria-label="Current MLB event date">
+          <span>EVENT-DATE SLATE</span><b>{formatEventDate(M.date)}</b><small>{M.games?.length || 0} game{M.games?.length===1?"":"s"}</small>
         </div>
-        <div id="wrap">
-          {loading ? <div className="plist">{[0,1,2,3,4,5].map(i=>(
-              <div key={i} className="skrow">
-                <div className="sk skav"/>
-                <div className="skb">
-                  <div className="sk" style={{width:(56-i*4)+"%",height:13}}/>
-                  <div className="sk" style={{width:(34-i*2)+"%",height:8,marginTop:6}}/>
-                </div>
-                <div className="sk" style={{width:40,height:20}}/>
-              </div>))}</div>
-            : list.length ? <div className="plist">{list.map((p,i)=><PropRow key={i} p={p} onOpen={openP}/>)}</div>
+        <div className="mlbprops__slate">
+          <div><h2>{formatEventDate(M.date)} MLB Props</h2><p>{allProps.length} props <i/> ranked by win%{nVal>0?<><i/>{nVal} +VALUE</>:null}</p></div>
+          <div className="mlbprops__sort" role="group" aria-label="Sort MLB props"><button type="button" className={sortBy==="win"?"on":""} onClick={()=>setSortBy("win")}>Win %</button><button type="button" className={sortBy==="edge"?"on":""} onClick={()=>setSortBy("edge")}>Value</button></div>
+        </div>
+        <div className="mlbprops__families" role="tablist" aria-label="MLB prop families">{FILT.map(f=><button type="button" role="tab" aria-selected={f===mfilter} key={f} className={f===mfilter?"on":""} onClick={()=>setMfilter(f)}><span>{f}</span><b>{familyCounts[f]}</b></button>)}</div>
+        <div className="mlbprops__familyline"><h3>{familyNames[mfilter]}</h3><span>Tap for complete MLB detail</span></div>
+        <div className="mlbprops__wrap">
+          {loading ? <div className="mlbprops__grid">{[0,1,2,3].map(i=>(
+              <div key={i} className="mlbprop mlbprop--loading"><div className="sk mlbprop__skav"/><div className="mlbprop__skbody"><div className="sk"/><div className="sk"/></div></div>))}</div>
+            : list.length ? <div className="mlbprops__grid">{list.map((p,i)=><PropRow key={`${p.mk}-${p.gameId||p.g}-${p.id||p.pl[0]}-${i}`} p={p} onOpen={openP}/>)}</div>
             : (()=>{ /* WZ-PROPS-EMPTY-2026-07-02 :: honest, market-aware empty states.
                  A thin board is calibration doing its job (hits haircut live 07-02;
                  K unders-only + honest projections) — say so instead of looking broken. */
@@ -199,7 +205,7 @@ function MLBPropsPage() {
               const [t,d]=COPY[mfilter]||COPY.All;
               return <div className="estate"><div className="et">{t}</div><div className="es">{d}</div></div>; })()}
         </div>
-      </>}
+      </main>}
 
       <nav className="nav">
         <a onClick={()=>navigate("/dashboard")}><span className="i"><svg className="dbars" viewBox="0 0 24 24" width="18" height="18"><rect x="2" y="13" width="4" height="5" rx="1"/><rect x="7.3" y="9" width="4" height="9" rx="1"/><rect x="12.6" y="11" width="4" height="7" rx="1"/><rect x="18" y="6" width="4" height="12" rx="1"/></svg></span>Dashboard</a>
@@ -217,21 +223,29 @@ function MLBPropsPage() {
 }
 
 function PropRow({ p, onOpen }) {
+  const marketLabel = p.mk === "HR" ? "Home Run" : p.mk === "HITS" ? "Hits" : p.mk === "K" ? "Strikeouts" : "Total Bases";
+  const projection = p.mk === "TB" ? p.expTB : p.projection;
+  const projectionLabel = p.mk === "TB" ? "Expected TB" : "Projection";
+  const modelLabel = p.mk === "TB" ? "Model Over" : "Model Win";
+  const edgeText = p.edge==null ? "—" : `${p.edge>=0?"+":""}${p.edge.toFixed(1)}%`;
   return (
-    <div className="prow" onClick={()=>onOpen(p)}>
-      <div className={"rail "+(p.conv||(p.lk?"lk":""))}/>
-      <Avatar pid={p.pid} initials={p.pl[1]} color={p.pl[2]} cls="av"/>
-      <div className="pinfo">
-        <div className="pn">{p.pl[0]}</div>
-        <div className="pmu">{p.g}{p.pos ? " · "+p.pos : ""}</div>
-        <div className="pline">{p.line}<span className="od">{p.odds}</span></div>
+    <button type="button" className={`mlbprop${p.lk?" is-likelihood":""}`} onClick={()=>onOpen(p)}>
+      <div className="mlbprop__main">
+        <div className="mlbprop__identity">
+          <Avatar pid={p.pid} initials={p.pl[1]} color={p.pl[2]} cls="mlbprop__portrait"/>
+          <div><span>{p.pos || "MLB"}{p.teamRaw?` · ${p.teamRaw}`:""}</span><h4>{p.pl[0]}</h4><p>{p.g}{p.opposingPitcher?` · vs ${p.opposingPitcher}`:""}</p></div>
+        </div>
+        <div className="mlbprop__wager"><span>{marketLabel}</span><strong>{p.line}</strong><p><b>{p.odds}</b> · {p.book || "BEST PRICE"}</p></div>
       </div>
-      <div className="pr">
-        <div className="ped">{p.model!=null?p.model+"%":"\u2014"}</div><div className="plb">MODEL WIN</div>
-        {!p.lk && p.edge!=null && p.edge>0 && <div className="pval">+VALUE</div>}
-        <div className={"ptag "+p.mk}>{p.mk}</div>
+      <div className="mlbprop__metrics" style={{gridTemplateColumns:`repeat(${projection!=null?5:4}, minmax(0, 1fr))`}}>
+        {projection!=null && <div><span>{projectionLabel}</span><b>{Number(projection).toFixed(1)}</b></div>}
+        <div><span>{modelLabel}</span><b>{p.model!=null?`${p.model}%`:"—"}</b></div>
+        <div><span>Market</span><b>{p.mkt!=null?`${p.mkt}%`:"—"}</b></div>
+        <div><span>Edge</span><b className={p.edge!=null&&p.edge>0?"good":p.edge!=null&&p.edge<0?"bad":""}>{edgeText}</b></div>
+        <div><span>Conviction</span><b>{p.conv?p.conv.toUpperCase():(p.lk?"LIKELIHOOD":"—")}</b></div>
       </div>
-    </div>
+      <footer><b>{p.mk}</b><i/>{p.lk?"CALIBRATED LIKELIHOOD":"MODEL PROP"}<em>VIEW MLB DETAIL +</em></footer>
+    </button>
   );
 }
 
@@ -516,7 +530,13 @@ function Gate({ navigate }) {
   </div>;
 }
 
-const CSS = `@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700;800&display=swap');
+const BOARD_CSS = `
+.mlbprops{box-sizing:border-box;width:min(100% - 28px,920px);margin:0 auto;padding:16px 0 104px;color:#eeeae2;font-family:Manrope,Inter,system-ui,sans-serif;overflow-x:hidden}.mlbprops *{box-sizing:border-box}.mlbprops__head{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;padding:2px 0 7px}.mlbprops__eyebrow{color:#d7ad58;font:700 8px/1.4 "IBM Plex Mono",monospace;letter-spacing:1.2px}.mlbprops h1{margin:4px 0 0;color:#f7f3e9;font:800 clamp(25px,5vw,34px)/1 Manrope,sans-serif;letter-spacing:-.8px}.mlbprops__status{color:#777a73;font:700 7px "IBM Plex Mono",monospace;letter-spacing:.7px;white-space:nowrap}.mlbprops__status i{display:inline-block;width:6px;height:6px;margin-right:5px;border-radius:50%;background:#43dd88;box-shadow:0 0 10px rgba(67,221,136,.5)}.mlbprops__intro{max-width:760px;margin:4px 0 10px;color:#85877f;font-size:9px;line-height:1.5}.mlbprops__date{display:flex;align-items:center;gap:10px;min-height:38px;margin-bottom:10px;border:1px solid #3a3d38;border-radius:8px;background:linear-gradient(180deg,rgba(215,173,88,.09),rgba(13,16,17,.98));padding:7px 10px;box-shadow:inset 0 -2px rgba(215,173,88,.72)}.mlbprops__date span{color:#868880;font:700 6px "IBM Plex Mono",monospace;letter-spacing:.7px}.mlbprops__date b{color:#e8c675;font:800 14px "Barlow Condensed",sans-serif;text-transform:uppercase}.mlbprops__date small{margin-left:auto;color:#85877f;font:700 6.5px "IBM Plex Mono",monospace}.mlbprops__slate{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;margin:0 1px 8px}.mlbprops__slate h2{margin:0;color:#f0ede6;font:800 19px/1.05 Manrope,sans-serif;text-transform:uppercase}.mlbprops__slate p{display:flex;align-items:center;gap:6px;margin:4px 0 0;color:#8b8e87;font:600 7px "IBM Plex Mono",monospace}.mlbprops__slate p i{width:3px;height:3px;border-radius:50%;background:#d7ad58}.mlbprops__sort{display:flex;overflow:hidden;border:1px solid #383b36;border-radius:6px}.mlbprops__sort button{appearance:none;border:0;background:#0e1112;color:#777a73;padding:7px 10px;font:700 6.5px "IBM Plex Mono",monospace;text-transform:uppercase;cursor:pointer}.mlbprops__sort button+button{border-left:1px solid #30332e}.mlbprops__sort button.on{background:#1b1d1a;color:#e8c675}.mlbprops__families{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:5px;margin-bottom:8px}.mlbprops__families button{appearance:none;display:flex;align-items:center;justify-content:space-between;gap:5px;min-width:0;min-height:38px;border:1px solid #353833;border-radius:7px;background:linear-gradient(180deg,#151719,#0e1011);color:#9a9c95;padding:6px 8px;font:700 7px "IBM Plex Mono",monospace;text-transform:uppercase;cursor:pointer}.mlbprops__families button b{display:grid;place-items:center;flex:0 0 auto;min-width:18px;height:18px;padding:0 4px;border-radius:9px;background:#1d201d;color:#aaa;font-size:7px}.mlbprops__families button.on{border-color:#d7ad58;background:linear-gradient(135deg,#e5c16d,#c69542);color:#181208}.mlbprops__families button.on b{background:#171208;color:#f2ce77}.mlbprops__familyline{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:11px 1px 7px}.mlbprops__familyline h3{margin:0;color:#d9d4ca;font:800 9px "IBM Plex Mono",monospace;letter-spacing:.8px;text-transform:uppercase}.mlbprops__familyline span{color:#6f726b;font:600 6.5px "IBM Plex Mono",monospace}.mlbprops__grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.mlbprop{--gold:#d7ad58;--green:#43dd88;appearance:none;position:relative;min-width:0;border:1px solid #454943;border-radius:8px;background:radial-gradient(circle at 10% 45%,rgba(215,173,88,.045),transparent 31%),linear-gradient(135deg,#111416,#090b0c 76%);color:#eeeae2;padding:0;text-align:left;overflow:hidden;box-shadow:0 12px 28px rgba(0,0,0,.22),inset 0 1px rgba(255,255,255,.025);cursor:pointer}.mlbprop:before{content:"";position:absolute;inset:0 0 auto;height:1px;background:linear-gradient(90deg,var(--gold),rgba(215,173,88,.18) 68%,var(--green));opacity:.88}.mlbprop:focus-visible{outline:2px solid #d7ad58;outline-offset:2px}.mlbprop__main{position:relative;z-index:1;display:grid;grid-template-columns:minmax(0,1fr) 128px;min-height:78px}.mlbprop__identity{display:grid;grid-template-columns:52px minmax(0,1fr);align-items:center;gap:9px;min-width:0;padding:8px 10px;border-right:1px solid #2d302c}.mlbprop__portrait{position:relative;width:50px;height:50px;border:1px solid #596273!important;border-radius:50%;overflow:hidden;background:radial-gradient(circle at 50% 28%,#35433d 0,#18221f 42%,#090c0b 80%)!important;box-shadow:inset 0 0 0 3px #0b0d0e,0 0 22px rgba(67,221,136,.07)!important;color:#d7ad58!important;align-items:flex-end!important}.mlbprop__portrait:after{content:"";position:absolute;z-index:2;inset:auto 10px 2px;height:2px;background:#43dd88;box-shadow:0 0 12px rgba(67,221,136,.75)}.mlbprop__portrait img{object-position:50% 12%}.mlbprop__identity>div:last-child{min-width:0}.mlbprop__identity span,.mlbprop__wager span,.mlbprop__metrics span,.mlbprop footer{font:700 6px/1.3 "IBM Plex Mono",monospace;letter-spacing:.58px;text-transform:uppercase}.mlbprop__identity span{color:#d7ad58}.mlbprop__identity h4{max-width:100%;margin:3px 0 4px;color:#f8f6f0;font:800 18px/.96 "Barlow Condensed",sans-serif;overflow-wrap:anywhere}.mlbprop__identity p{margin:0;color:#797b74;font:600 6px/1.35 "IBM Plex Mono",monospace;overflow-wrap:anywhere}.mlbprop__wager{display:flex;flex-direction:column;justify-content:center;min-width:0;padding:8px 9px}.mlbprop__wager span{color:#a9aaa3}.mlbprop__wager strong{display:block;margin-top:5px;color:#fff;font:800 18px/.95 "Barlow Condensed",sans-serif;letter-spacing:.2px;overflow-wrap:anywhere}.mlbprop__wager p{margin:6px 0 0;color:#898b84;font:600 6px "IBM Plex Mono",monospace;text-transform:uppercase;overflow-wrap:anywhere}.mlbprop__wager p b{color:#43dd88;font-size:9px}.mlbprop__metrics{position:relative;z-index:1;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border-top:1px solid #2d302c;background:rgba(9,11,12,.9)}.mlbprop__metrics>div{min-width:0;padding:6px 4px;text-align:center}.mlbprop__metrics>div+div{border-left:1px solid #292c28}.mlbprop__metrics span{display:block;color:#777a73;font-size:5.4px}.mlbprop__metrics b{display:block;margin-top:3px;color:#ece8df;font:800 11px/1 "Barlow Condensed",sans-serif;overflow-wrap:anywhere}.mlbprop__metrics b.good{color:#43dd88}.mlbprop__metrics b.bad{color:#e49a90}.mlbprop footer{position:relative;z-index:1;display:flex;align-items:center;gap:6px;min-width:0;min-height:25px;padding:5px 9px;border-top:1px solid #292c28;color:#74766f;font-size:5.5px}.mlbprop footer b{color:#d7ad58}.mlbprop footer i{width:3px;height:3px;border-radius:50%;background:#4c4f49}.mlbprop footer em{margin-left:auto;color:#c7a45f;font-style:normal;white-space:nowrap}.mlbprop--loading{display:flex;align-items:center;gap:10px;min-height:126px;padding:12px}.mlbprop__skav{width:50px;height:50px;border-radius:50%}.mlbprop__skbody{flex:1}.mlbprop__skbody .sk{width:65%;height:12px}.mlbprop__skbody .sk+.sk{width:44%;height:8px;margin-top:8px}
+@media(max-width:680px){.mlbprops{width:calc(100% - 22px);padding-top:12px}.mlbprops__head{align-items:flex-start;gap:8px;padding-bottom:5px}.mlbprops__status{margin-top:5px;font-size:6.5px}.mlbprops__intro{margin:3px 0 8px;font-size:8.4px}.mlbprops__date{min-height:34px;margin-bottom:8px;padding:6px 8px}.mlbprops__slate{margin-bottom:7px}.mlbprops__slate h2{font-size:17px}.mlbprops__slate p{gap:5px;font-size:6.6px}.mlbprops__sort button{padding:6px 8px;font-size:6px}.mlbprops__families{grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}.mlbprops__families button{min-height:34px;padding:5px 7px;font-size:6.4px}.mlbprops__familyline{margin-top:9px}.mlbprops__familyline span{display:none}.mlbprops__grid{grid-template-columns:1fr;gap:6px}.mlbprop__main{grid-template-columns:minmax(0,1fr) 108px;min-height:70px}.mlbprop__identity{grid-template-columns:46px minmax(0,1fr);gap:7px;padding:6px 7px}.mlbprop__portrait{width:43px;height:43px}.mlbprop__identity h4{font-size:16px;margin:2px 0 3px}.mlbprop__wager{padding:6px 7px}.mlbprop__wager strong{font-size:15px;margin-top:4px}.mlbprop__wager p{margin-top:5px;font-size:5.4px}.mlbprop__metrics>div{padding:4px 3px}.mlbprop__metrics span{font-size:5px}.mlbprop__metrics b{font-size:9.5px}.mlbprop footer{padding:4px 7px;font-size:5.2px}.estate{margin:28px 0}.mlbprop--loading{min-height:108px}}
+@media(max-width:350px){.mlbprops{width:calc(100% - 18px)}.mlbprops h1{font-size:23px}.mlbprops__date span{display:none}.mlbprops__slate{align-items:flex-start}.mlbprops__slate h2{font-size:15px}.mlbprops__slate p{font-size:5.9px}.mlbprops__families button{font-size:6px}.mlbprop__main{grid-template-columns:minmax(0,1fr) 96px}.mlbprop__identity{grid-template-columns:41px minmax(0,1fr);gap:6px}.mlbprop__portrait{width:39px;height:39px}.mlbprop__identity h4{font-size:14px}.mlbprop__wager strong{font-size:14px}.mlbprop footer em{font-size:4.8px}}
+`;
+
+const CSS = `@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700;800&family=Manrope:wght@500;600;700;800&display=swap');
 :root{--mono:'IBM Plex Mono',ui-monospace,monospace}
 .bbwrap{margin-top:2px}
 .bbbar{display:flex;height:13px;border-radius:7px;overflow:hidden;background:#0c1219}
