@@ -121,6 +121,7 @@ function marketSnapshot(event) {
     h2h: clone(event?.h2h || null),
     spreads: clone(event?.spreads || null),
     totals: clone(event?.totals || null),
+    fairMarket: clone(event?.fairMarket || null),
     h2hQuotes: clone(event?.h2hQuotes || null),
     oddsGrid: clone(event?.oddsGrid || null),
   };

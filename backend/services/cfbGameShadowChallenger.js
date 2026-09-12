@@ -4,7 +4,6 @@
 // dependency. Market prices describe comparison wagers only and never enter the
 // projected margin or independent moneyline probability.
 const { spreadCover } = require("./footballMargin");
-const { _internal: closingMath } = require("./cfbClosing");
 const { MODEL_VERSION: TEAM_MODEL_VERSION } = require("./cfbPreseasonChallenger");
 
 const MODEL_VERSION = "cfb-game-preseason-shadow-v1-2026";
@@ -50,19 +49,29 @@ function bookValue(value) {
   return text || null;
 }
 
+function coherentFair(market, marketName, side, line = null) {
+  const group = market?.fairMarket?.[marketName];
+  const value = finite(group?.[side]);
+  const fairLine = finite(group?.line);
+  if (line != null && (fairLine == null || Math.abs(fairLine - line) > 1e-9)) return null;
+  return value != null && value >= 0 && value <= 1 ? value : null;
+}
+
 function normalizedMarket(market = {}) {
   const h2h = market.h2h || {};
   const spreads = market.spreads || {};
   const homeMl = finite(h2h.home);
   const awayMl = finite(h2h.away);
-  const homeMlFair = closingMath.fair(homeMl, awayMl);
+  const homeMlFair = coherentFair(market, "moneyline", "home");
   const homeSpread = finite(spreads.homeLine);
   const awaySpread = finite(spreads.awayLine);
   const spreadAligned = homeSpread != null && awaySpread != null
     && Math.abs(homeSpread + awaySpread) < 1e-9;
   const homeSpreadOdds = spreadAligned ? finite(spreads.home) : null;
   const awaySpreadOdds = spreadAligned ? finite(spreads.away) : null;
-  const homeSpreadFair = closingMath.fair(homeSpreadOdds, awaySpreadOdds);
+  const homeSpreadFair = spreadAligned
+    ? coherentFair(market, "spread", "home", homeSpread)
+    : null;
   return Object.freeze({
     source: market.source || "the-odds-api-us-best-price",
     quoteAt: market.quoteAt || null,
@@ -189,5 +198,5 @@ module.exports = {
   ML_METHOD,
   SPREAD_METHOD,
   buildCfbGameShadowPrediction,
-  _internal: { finite, round, erf, normalCDF, probabilityPair, normalizedMarket },
+  _internal: { finite, round, erf, normalCDF, probabilityPair, coherentFair, normalizedMarket },
 };

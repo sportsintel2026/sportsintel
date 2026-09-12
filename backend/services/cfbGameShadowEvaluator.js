@@ -101,8 +101,18 @@ function normalizedMarketFields(event, prefix, fallbackBook = null) {
     && Math.abs(homeSpread + awaySpread) < 1e-9
     && homeSpreadOdds != null && awaySpreadOdds != null
     && homeSpreadBook && awaySpreadBook;
-  const mlFair = hasMl ? fairPair(homeMl, awayMl) : { home: null, away: null };
-  const spreadFair = hasSpread ? fairPair(homeSpreadOdds, awaySpreadOdds) : { home: null, away: null };
+  const sameMlBook = hasMl && homeMlBook === awayMlBook;
+  const sameSpreadBook = hasSpread && homeSpreadBook === awaySpreadBook;
+  const coherentMl = safeProbability(event?.fairMarket?.moneyline?.home);
+  const coherentSpread = safeProbability(event?.fairMarket?.spread?.home);
+  const coherentSpreadLine = finite(event?.fairMarket?.spread?.line);
+  const mlFair = coherentMl != null
+    ? { home: coherentMl, away: 1 - coherentMl }
+    : (sameMlBook ? fairPair(homeMl, awayMl) : { home: null, away: null });
+  const spreadFair = coherentSpread != null && coherentSpreadLine != null
+      && Math.abs(coherentSpreadLine - homeSpread) < 1e-9
+    ? { home: coherentSpread, away: 1 - coherentSpread }
+    : (sameSpreadBook ? fairPair(homeSpreadOdds, awaySpreadOdds) : { home: null, away: null });
   return {
     [`${prefix}_home_ml_odds`]: hasMl ? homeMl : null,
     [`${prefix}_away_ml_odds`]: hasMl ? awayMl : null,

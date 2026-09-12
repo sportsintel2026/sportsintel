@@ -11,6 +11,11 @@ const oddsEvent = {
   h2h: { away: +135, home: -145, awayBook: "Away Book", homeBook: "Home Book" },
   spreads: { awayLine: 3.5, away: -110, awayBook: "Away Spread", homeLine: -3.5, home: -110, homeBook: "Home Spread" },
   totals: { line: 52.5, over: -105, overBook: "Over Book", under: -115, underBook: "Under Book" },
+  fairMarket: {
+    moneyline: { home: 0.57, away: 0.43 },
+    spread: { home: 0.5, away: 0.5, line: -3.5 },
+    total: { over: 0.49, under: 0.51, line: 52.5 },
+  },
 };
 const ratings = {
   season: 2026, rated: 2, sosApplied: true,

@@ -18,7 +18,8 @@ const pin = {
 };
 const pick = {
   id: 1, game_id: "event-1", market: "moneyline", selection: "home",
-  line: null, odds: -150, opp_odds: +140, closing_captured_at: null,
+  line: null, odds: -150, opp_odds: +140, market_fair_prob: 0.5844,
+  closing_captured_at: null,
 };
 
 {

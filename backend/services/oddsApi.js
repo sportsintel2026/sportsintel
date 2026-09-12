@@ -3,6 +3,7 @@
 // Docs: https://the-odds-api.com/liveapi/guides/v4/
 
 const axios = require("axios");
+const { buildFootballFairMarket, coherentFairConsensus } = require("./footballFairMarket");
 // DEDUPE-DUP-EVENTS-2026-06-27 — schedule used to disambiguate duplicate same-matchup
 // events at the source (see dedupeDuplicateEvents). mlbStatsApi only requires axios, so
 // this is a one-directional import — no circular dependency.
@@ -437,6 +438,7 @@ function mrMedian(nums) {
   if (!n) return null;
   return n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2;
 }
+
 function mrTier(spreadPts) {
   if (spreadPts <= 1.5) return "Strong";
   if (spreadPts <= 3.5) return "Soft";
@@ -445,14 +447,13 @@ function mrTier(spreadPts) {
 function mrCentsVal(a) { return a >= 100 ? a : (200 + a); } // monotonic ¢ proxy for display
 
 function computeWinRead(quotes, awayTeam, homeTeam) {
+  const paired = coherentFairConsensus(quotes, {
+    firstKey: "away", secondKey: "home",
+  });
+  if (!paired || paired.pairCount < 2) return null;
   const awayP = quotes.map(q => q.away).filter(p => p != null);
   const homeP = quotes.map(q => q.home).filter(p => p != null);
-  if (awayP.length < 2 || homeP.length < 2) return null;
-  const awayImp = mrMedian(awayP.map(americanToImpliedProb));
-  const homeImp = mrMedian(homeP.map(americanToImpliedProb));
-  const sum = awayImp + homeImp;
-  if (!sum) return null;
-  const awayFair = awayImp / sum, homeFair = homeImp / sum;
+  const awayFair = paired.first, homeFair = paired.second;
   const favIsHome = homeFair >= awayFair;
   const favPrices = favIsHome ? homeP : awayP;
   const favImps = favPrices.map(americanToImpliedProb);
@@ -479,11 +480,13 @@ function computeTotalRead(totalsQuotes) {
   const consensusLine = Number(sortedLines[0][0]);
   const atLine = totalsQuotes.filter(q => q.line === consensusLine);
   if (atLine.length < 2) return null;
-  const overImp = mrMedian(atLine.map(q => americanToImpliedProb(q.over)));
-  const underImp = mrMedian(atLine.map(q => americanToImpliedProb(q.under)));
-  const sum = overImp + underImp;
-  if (!sum) return null;
-  const overFair = overImp / sum, underFair = underImp / sum;
+  const paired = coherentFairConsensus(atLine, {
+    firstKey: "over", secondKey: "under",
+    firstBookKey: "overBook", secondBookKey: "underBook",
+    line: consensusLine,
+  });
+  if (!paired) return null;
+  const overFair = paired.first, underFair = paired.second;
   const overFavored = overFair >= underFair;
   const sidePrices = atLine.map(q => overFavored ? q.over : q.under);
   const sideImps = sidePrices.map(americanToImpliedProb);
@@ -1308,11 +1311,13 @@ function computeFballCoverRead(spreadQuotes, awayTeam, homeTeam, consensusAwayLi
   const awayP = atLine.map(q => q.away).filter(p => p != null);
   const homeP = atLine.map(q => q.home).filter(p => p != null);
   if (awayP.length < 2 || homeP.length < 2) return null;
-  const awayImp = mrMedian(awayP.map(americanToImpliedProb));
-  const homeImp = mrMedian(homeP.map(americanToImpliedProb));
-  const sum = awayImp + homeImp;
-  if (!sum) return null;
-  const awayCover = awayImp / sum, homeCover = homeImp / sum;
+  const paired = coherentFairConsensus(atLine, {
+    firstKey: "away", secondKey: "home",
+    firstBookKey: "awayBook", secondBookKey: "homeBook",
+    line: consensusAwayLine,
+  });
+  if (!paired) return null;
+  const awayCover = paired.first, homeCover = paired.second;
   const awayFavored = awayCover >= homeCover;
   const chosenPrices = awayFavored ? awayP : homeP;
   const chosenProb = awayFavored ? awayCover : homeCover;
@@ -1445,7 +1450,7 @@ function buildFballGrid(ev) {
 // (eventId, commenceTime, homeTeam, awayTeam, h2h, totals, spreads, marketRead, h2hQuotes)
 // so downstream model/route code is sport-interchangeable. Now also carries oddsGrid
 // (the book-by-book line-shopping table) so the Odds page renders NFL like MLB.
-function parseFballOddsEvent(ev) {
+function parseFballOddsEvent(ev, { snapshotAt = null } = {}) {
   const h2h = { away: null, home: null, awayBook: null, homeBook: null };
   const totals = { line: null, over: null, under: null, overBook: null, underBook: null };
   const spreads = { awayLine: null, away: null, awayBook: null, homeLine: null, home: null, homeBook: null };
@@ -1468,7 +1473,11 @@ function parseFballOddsEvent(ev) {
         }
         if (awayOutcome && homeOutcome
             && plausibleFballMlOdds(awayOutcome.price) && plausibleFballMlOdds(homeOutcome.price)) {
-          h2hQuotes.push({ away: awayOutcome.price, home: homeOutcome.price, book: bm.title });
+          const book = bm.title || bm.key;
+          h2hQuotes.push({
+            away: awayOutcome.price, home: homeOutcome.price,
+            book, lastUpdate: bm.last_update || null,
+          });
         }
       } else if (m.key === "totals" && m.outcomes?.length >= 2) {
         const byPoint = new Map();
@@ -1482,7 +1491,11 @@ function parseFballOddsEvent(ev) {
         for (const [point, slot] of byPoint) {
           if (slot.over != null && slot.under != null
               && plausibleFballSideOdds(slot.over) && plausibleFballSideOdds(slot.under)) {
-            totalsQuotes.push({ line: point, over: slot.over, overBook: bm.title, under: slot.under, underBook: bm.title });
+            const book = bm.title || bm.key;
+            totalsQuotes.push({
+              line: point, over: slot.over, overBook: book,
+              under: slot.under, underBook: book, lastUpdate: bm.last_update || null,
+            });
           }
         }
       } else if (m.key === "spreads" && m.outcomes?.length >= 2) {
@@ -1503,9 +1516,11 @@ function parseFballOddsEvent(ev) {
           if (slot.awayLine != null && slot.homeLine != null
               && slot.awayLine === -slot.homeLine
               && plausibleFballSideOdds(slot.away) && plausibleFballSideOdds(slot.home)) {
+            const book = bm.title || bm.key;
             spreadQuotes.push({
-              awayLine: slot.awayLine, away: slot.away, awayBook: bm.title,
-              homeLine: slot.homeLine, home: slot.home, homeBook: bm.title,
+              awayLine: slot.awayLine, away: slot.away, awayBook: book,
+              homeLine: slot.homeLine, home: slot.home, homeBook: book,
+              lastUpdate: bm.last_update || null,
             });
           }
         }
@@ -1547,12 +1562,21 @@ function parseFballOddsEvent(ev) {
     cover: computeFballCoverRead(spreadQuotes, ev.away_team, ev.home_team, consensusAwayLine),
   };
 
+  const fairMarket = buildFootballFairMarket({
+    h2hQuotes,
+    spreadQuotes,
+    totalsQuotes,
+    consensusAwayLine,
+    consensusTotalLine: totals.line,
+    snapshotAt,
+  });
+
   return {
     eventId: ev.id,
     commenceTime: ev.commence_time,
     homeTeam: ev.home_team,
     awayTeam: ev.away_team,
-    h2h, totals, spreads, marketRead, h2hQuotes,
+    h2h, totals, spreads, marketRead, h2hQuotes, fairMarket,
     oddsGrid: buildFballGrid(ev),
   };
 }
@@ -1576,7 +1600,8 @@ async function getFballMainOdds(sportKey, { forceFresh = false } = {}) {
         oddsFormat: "american",
         dateFormat: "iso",
       });
-      const games = (data || []).map(parseFballOddsEvent);
+      const snapshotAt = new Date().toISOString();
+      const games = (data || []).map((event) => parseFballOddsEvent(event, { snapshotAt }));
       cache.set(cacheKey, { data: games, fetchedAt: Date.now() });
       return games;
     } catch (e) {
@@ -1788,4 +1813,8 @@ module.exports = {
   getMLBOddsComparison,
   clearOddsCache,
   getCacheStats,
+  _internal: {
+    parseFballOddsEvent,
+    coherentFairConsensus,
+  },
 };

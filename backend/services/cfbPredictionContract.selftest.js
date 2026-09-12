@@ -25,6 +25,11 @@ function event(home = "Stanford Cardinal", away = "California Golden Bears") {
     h2h: { home: -145, away: +135, homeBook: "Home Book", awayBook: "Away Book" },
     spreads: { home: -105, away: -115, homeLine: -3.5, awayLine: 3.5, homeBook: "Spread Home", awayBook: "Spread Away" },
     totals: { over: -102, under: -118, line: 48.5, overBook: "Over Book", underBook: "Under Book" },
+    fairMarket: {
+      moneyline: { home: 0.57, away: 0.43 },
+      spread: { home: 0.49, away: 0.51, line: -3.5 },
+      total: { over: 0.48, under: 0.52, line: 48.5 },
+    },
   };
 }
 

@@ -151,12 +151,21 @@ function trustedNeutralStatus(event, ledgerRows = []) {
 }
 
 function eventMarket(event, capturedAt) {
-  return Object.freeze({
+  const market = {
     source: MARKET_SOURCE,
     quoteAt: capturedAt,
     h2h: Object.freeze({ ...(event?.h2h || {}) }),
     spreads: Object.freeze({ ...(event?.spreads || {}) }),
-  });
+  };
+  if (event?.fairMarket) {
+    market.fairMarket = Object.freeze({
+      moneyline: event?.fairMarket?.moneyline
+        ? Object.freeze({ ...event.fairMarket.moneyline }) : null,
+      spread: event?.fairMarket?.spread
+        ? Object.freeze({ ...event.fairMarket.spread }) : null,
+    });
+  }
+  return Object.freeze(market);
 }
 
 function outputRow(candidate, input) {
