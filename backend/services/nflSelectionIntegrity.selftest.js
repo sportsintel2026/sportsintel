@@ -43,6 +43,17 @@ const game = {
     total: { overBook: "FanDuel", underBook: "DraftKings" },
   },
 };
+Object.defineProperty(game, "_nflBlendSnapshot", {
+  enumerable: false,
+  value: Object.freeze({
+    moneyline: Object.freeze({ rawModelProb: 0.743, marketFairProb: 0.805,
+      blend30Prob: 0.786, blend40Prob: 0.78, blend50Prob: 0.774 }),
+    spread: Object.freeze({ rawModelProb: 0.65, marketFairProb: 0.52,
+      blend30Prob: 0.55, blend40Prob: 0.56, blend50Prob: 0.57 }),
+    total: Object.freeze({ rawModelProb: 0.43, marketFairProb: 0.51,
+      blend30Prob: 0.49, blend40Prob: 0.48, blend50Prob: 0.47 }),
+  }),
+});
 
 const unchanged = JSON.stringify(game);
 const contract = buildNflSelectionContract(game);
@@ -78,6 +89,12 @@ for (const market of ["moneyline", "spread", "total"]) {
   assert.equal(row.opposing_book, board.opposingBook);
   assert.equal(row.model_version, NFL_SELECTION_MODEL_VERSIONS[market]);
   assert.equal(row.experiment_version, NFL_SELECTION_EXPERIMENT_VERSION);
+  assert.equal(row.raw_win_prob, selected.rawModelProb);
+  assert.equal(row.market_fair_prob, selected.marketFairProb);
+  assert.equal(row.nfl_blend_30_prob, selected.blend30Prob);
+  assert.equal(row.nfl_blend_40_prob, selected.blend40Prob);
+  assert.equal(row.nfl_blend_50_prob, selected.blend50Prob);
+  assert.equal(row.nfl_blend_40_prob, row.model_prob);
 }
 
 const noBooks = JSON.parse(JSON.stringify(game));
@@ -89,6 +106,12 @@ assert.deepEqual(
   [null, null, null, null],
   "recording provenance must be all complete or all null",
 );
+assert.deepEqual(
+  [noBookRow.raw_win_prob, noBookRow.market_fair_prob, noBookRow.nfl_blend_30_prob,
+    noBookRow.nfl_blend_40_prob, noBookRow.nfl_blend_50_prob],
+  [null, null, null, null, null],
+  "incomplete provenance must not leave a partial blend snapshot",
+);
 
 const rows = ["moneyline", "spread", "total"].map((market) => {
   const side = contract[market].selected;
@@ -96,6 +119,11 @@ const rows = ["moneyline", "spread", "total"].map((market) => {
     market,
     selection: side.selection,
     model_prob: side.modelProb,
+    raw_win_prob: side.rawModelProb,
+    market_fair_prob: side.marketFairProb,
+    nfl_blend_30_prob: side.blend30Prob,
+    nfl_blend_40_prob: side.blend40Prob,
+    nfl_blend_50_prob: side.blend50Prob,
     edge: side.edge,
     odds: side.odds,
     opp_odds: side.opposingOdds,

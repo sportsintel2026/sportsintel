@@ -5,11 +5,11 @@
 
 const { EDGE_ML, EDGE_SPREAD, EDGE_TOTAL } = require("./nflModel");
 
-const NFL_SELECTION_EXPERIMENT_VERSION = "nfl-side-aligned-selection-v1-2026-09-11";
+const NFL_SELECTION_EXPERIMENT_VERSION = "nfl-blend-30-40-50-v1-2026-09-11";
 const NFL_SELECTION_MODEL_VERSIONS = Object.freeze({
-  moneyline: "nfl-moneyline-w030-v1-2026-09-11",
-  spread: "nfl-spread-w030-v1-2026-09-11",
-  total: "nfl-total-w030-v1-2026-09-11",
+  moneyline: "nfl-moneyline-w040-v1-2026-09-11",
+  spread: "nfl-spread-w040-v1-2026-09-11",
+  total: "nfl-total-w040-v1-2026-09-11",
 });
 const NFL_SELECTION_THRESHOLDS = Object.freeze({
   moneyline: EDGE_ML,
@@ -44,9 +44,24 @@ function validBook(value) {
     && !/\p{Cc}/u.test(value);
 }
 
+function orientedBlendSnapshot(game, market, side) {
+  const snapshot = game?._nflBlendSnapshot?.[market];
+  if (!snapshot) return {};
+  const referenceSide = market === "total" ? "over" : "home";
+  const sameSide = side === referenceSide;
+  const orient = (value) => sameSide ? round(value) : complement(round(value));
+  return {
+    rawModelProb: orient(snapshot.rawModelProb),
+    blend30Prob: orient(snapshot.blend30Prob),
+    blend40Prob: orient(snapshot.blend40Prob),
+    blend50Prob: orient(snapshot.blend50Prob),
+  };
+}
+
 function makeSide({ game, market, side, modelProb, marketFairProb, odds, opposingOdds, book, opposingBook, line }) {
   const selectedModelProb = round(modelProb);
   const selectedMarketProb = round(marketFairProb);
+  const blend = orientedBlendSnapshot(game, market, side);
   const edge = selectedModelProb == null || selectedMarketProb == null
     ? null
     : round(selectedModelProb - selectedMarketProb);
@@ -70,6 +85,10 @@ function makeSide({ game, market, side, modelProb, marketFairProb, odds, opposin
     line: finite(line),
     dataQuality: game.dataQuality || null,
     qualifiedShadow,
+    rawModelProb: blend.rawModelProb ?? null,
+    blend30Prob: blend.blend30Prob ?? null,
+    blend40Prob: blend.blend40Prob ?? null,
+    blend50Prob: blend.blend50Prob ?? null,
     modelVersion: NFL_SELECTION_MODEL_VERSIONS[market],
     experimentVersion: NFL_SELECTION_EXPERIMENT_VERSION,
   });
@@ -166,6 +185,8 @@ function toNflBoardEdge(game, market) {
 function provenanceFields(side) {
   const complete = side && side.odds != null && side.opposingOdds != null
     && side.modelProb != null && side.marketFairProb != null && side.edge != null
+    && side.rawModelProb != null && side.blend30Prob != null
+    && side.blend40Prob != null && side.blend50Prob != null
     && side.book && side.opposingBook && side.modelVersion && side.experimentVersion;
   if (!complete) return {
     entry_book: null,
@@ -189,6 +210,8 @@ function toNflLedgerRow(game, gameDate, market, side) {
     : market === "spread"
       ? `${team} ${side.line > 0 ? "+" : ""}${side.line}`
       : `${side.side === "over" ? "Over" : "Under"} ${side.line}`;
+  const provenance = provenanceFields(side);
+  const completeProvenance = provenance.model_version != null;
   return {
     game_id: String(game.eventId),
     game_date: gameDate,
@@ -205,7 +228,12 @@ function toNflLedgerRow(game, gameDate, market, side) {
     conviction: null,
     conviction_score: null,
     line: side.line,
-    ...provenanceFields(side),
+    raw_win_prob: completeProvenance ? side.rawModelProb : null,
+    market_fair_prob: completeProvenance ? side.marketFairProb : null,
+    nfl_blend_30_prob: completeProvenance ? side.blend30Prob : null,
+    nfl_blend_40_prob: completeProvenance ? side.blend40Prob : null,
+    nfl_blend_50_prob: completeProvenance ? side.blend50Prob : null,
+    ...provenance,
   };
 }
 
@@ -216,6 +244,11 @@ function isFrozenControlRow(row) {
     && validBook(row?.entry_book)
     && validBook(row?.opposing_book)
     && finite(row?.model_prob) != null
+    && finite(row?.raw_win_prob) != null
+    && finite(row?.market_fair_prob) != null
+    && finite(row?.nfl_blend_30_prob) != null
+    && finite(row?.nfl_blend_40_prob) != null
+    && finite(row?.nfl_blend_50_prob) != null
     && finite(row?.edge) != null
     && finite(row?.odds) != null
     && finite(row?.opp_odds) != null;
@@ -260,7 +293,8 @@ function analyzeNflSelectionShadow(rows) {
 async function fetchNflSelectionShadowRows(supabase, { since = null, until = null } = {}) {
   const fields = [
     "game_id", "game_date", "created_at", "market", "selection", "line", "result",
-    "model_prob", "edge", "odds", "opp_odds", "entry_book", "opposing_book",
+    "model_prob", "raw_win_prob", "market_fair_prob", "nfl_blend_30_prob",
+    "nfl_blend_40_prob", "nfl_blend_50_prob", "edge", "odds", "opp_odds", "entry_book", "opposing_book",
     "model_version", "experiment_version",
   ].join(",");
   const rows = [];
@@ -292,5 +326,5 @@ module.exports = {
   provenanceFields,
   analyzeNflSelectionShadow,
   fetchNflSelectionShadowRows,
-  _internal: { finite, round, pctToFraction, complement, makeSide, isFrozenControlRow },
+  _internal: { finite, round, pctToFraction, complement, orientedBlendSnapshot, makeSide, isFrozenControlRow },
 };
