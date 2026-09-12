@@ -2,6 +2,13 @@ const crypto = require("crypto");
 const { createClient } = require("@supabase/supabase-js");
 const { predictGame } = require("./nflModel");
 const { getNflGameWeather } = require("./nflWeatherContext");
+const {
+  buildNflContext,
+  selectPredictionRows,
+  selectPreviousContexts,
+  persistContexts,
+} = require("./footballWeeklyContext");
+const { collectFootballNewsForGames } = require("./footballNewsContext");
 
 const CONTEXT_TABLE = "nfl_injury_weather_context_snapshots";
 const PREDICTION_TABLE = "nfl_injury_weather_shadow_predictions";
@@ -303,10 +310,39 @@ async function collectNflInjuryWeatherShadow({
   predictionAt = new Date().toISOString(),
   supabase = db(),
   weatherFetcher = getNflGameWeather,
+  weeklyContextStore = { selectPredictionRows, selectPreviousContexts, persistContexts },
+  newsCollector = collectFootballNewsForGames,
 } = {}) {
   const games = Array.isArray(slate?.games) ? slate.games : [];
+  const eventIds = games.map((game) => String(game?._injuryWeatherShadowInput?.event?.eventId || "")).filter(Boolean);
+  let newsResult = {
+    capturedAt: predictionAt, byEvent: {},
+    meta: { available: false, reason: "news-source-unavailable" },
+  };
+  const weeklyNewsErrors = [];
+  try {
+    newsResult = await newsCollector({ league: "nfl", records: games, availability });
+  } catch (error) {
+    weeklyNewsErrors.push(error.message);
+  }
+  const newsCapturedMs = Date.parse(newsResult?.capturedAt);
+  const predictionMs = Date.parse(predictionAt);
+  const weeklyCapturedAt = Number.isFinite(newsCapturedMs) && newsCapturedMs > predictionMs
+    ? new Date(newsCapturedMs).toISOString() : predictionAt;
+  let predictionRows = [];
+  let previousContexts = {};
+  const weeklyContextErrors = [];
+  try {
+    [predictionRows, previousContexts] = await Promise.all([
+      weeklyContextStore.selectPredictionRows(supabase, "nfl", eventIds),
+      weeklyContextStore.selectPreviousContexts(supabase, "nfl", eventIds, weeklyCapturedAt),
+    ]);
+  } catch (error) {
+    weeklyContextErrors.push({ stage: "context-input-read", error: error.message });
+  }
   let contextsRecorded = 0;
   let comparisonsRecorded = 0;
+  let weeklyContextsRecorded = 0;
   let skipped = 0;
   const errors = [];
   for (const game of games) {
@@ -321,11 +357,33 @@ async function collectNflInjuryWeatherShadow({
       if (!comparison) { skipped++; continue; }
       comparisonsRecorded += await insertComparison(supabase, comparison);
       contextsRecorded++;
+      if (!weeklyContextErrors.length) {
+        try {
+          const context = buildNflContext({
+            game,
+            comparison,
+            predictionRows,
+            previousContext: previousContexts[String(input.event.eventId)] || null,
+            capturedAt: weeklyCapturedAt,
+            newsItems: newsResult?.byEvent?.[String(input.event.eventId)] || [],
+            newsMeta: newsResult?.meta || null,
+          });
+          if (context) {
+            await weeklyContextStore.persistContexts(supabase, [context]);
+            weeklyContextsRecorded++;
+          }
+        } catch (error) {
+          weeklyContextErrors.push({ eventId: String(input.event.eventId), error: error.message });
+        }
+      }
     } catch (error) {
       errors.push({ eventId: String(input?.event?.eventId || "unknown"), error: error.message });
     }
   }
-  return { contextsRecorded, comparisonsRecorded, skipped, errors };
+  return {
+    contextsRecorded, comparisonsRecorded, weeklyContextsRecorded, skipped, errors,
+    weeklyContextErrors, weeklyNewsErrors,
+  };
 }
 
 module.exports = {
