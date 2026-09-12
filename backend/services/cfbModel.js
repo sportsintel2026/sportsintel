@@ -80,6 +80,18 @@ function devigPair(thisOdds, otherOdds) {
   return a / (a + b);
 }
 
+function coherentFair(ev, market, side, line = null) {
+  const group = ev?.fairMarket?.[market];
+  const raw = group?.[side];
+  if (raw == null || raw === "") return null;
+  if (line != null) {
+    const fairLine = group?.line == null || group.line === "" ? null : Number(group.line);
+    if (!Number.isFinite(fairLine) || Math.abs(fairLine - Number(line)) > 1e-9) return null;
+  }
+  const value = Number(raw);
+  return Number.isFinite(value) && value >= 0 && value <= 1 ? value : null;
+}
+
 // ── PLUGGABLE FACTOR SLOTS (same shape as NFL) ─────────────────────────────────
 // Power ratings + strength of schedule + conference strength all live here: once
 // ctx.home.rating / ctx.away.rating exist, the model's independent margin = diff.
@@ -123,8 +135,7 @@ function predictGame(ev, ctx = {}) {
 
   // ── MONEYLINE ────────────────────────────────────────────────────────────────
   const mlHome = ev.h2h?.home, mlAway = ev.h2h?.away;
-  let fairHomeProb = null;
-  if (mlHome != null && mlAway != null) fairHomeProb = devigPair(mlHome, mlAway);
+  const fairHomeProb = coherentFair(ev, "moneyline", "home");
 
   // Market-implied neutral margin. With a moneyline, anchor to the de-vig ML prob so
   // market-only mode reports ~0 ML edge. Fall back to the spread line when no ML
@@ -177,7 +188,7 @@ function predictGame(ev, ctx = {}) {
     const rawHomeCoverProb = spreadCover(modelMargin, CFB_SIGMA, sLine, "cfb", CFB_KEY_STRENGTH).homeCoverProb;
     const sprMargin = CFB_BLEND_ENABLED ? (CFB_W_MODEL * modelMargin + (1 - CFB_W_MODEL) * (-sLine)) : modelMargin;
     let { homeCoverProb, push: homePushProb } = spreadCover(sprMargin, CFB_SIGMA, sLine, "cfb", CFB_KEY_STRENGTH);
-    const fairHomeCover = devigPair(ev.spreads.home, ev.spreads.away);
+    const fairHomeCover = coherentFair(ev, "spread", "home", sLine);
     if (!hasRatings && fairHomeCover != null) homeCoverProb = fairHomeCover;
     out.spread = {
       line: sLine,
@@ -206,7 +217,7 @@ function predictGame(ev, ctx = {}) {
     const rawOverProb = normalCDF(((projTotal + refAdj) - tLine) / CFB_TOTAL_SIGMA);
     const blendedTotal = CFB_BLEND_ENABLED ? (CFB_W_MODEL * (projTotal + refAdj) + (1 - CFB_W_MODEL) * tLine) : (projTotal + refAdj);
     let overProb = normalCDF((blendedTotal - tLine) / CFB_TOTAL_SIGMA);
-    const fairOver = devigPair(ev.totals.over, ev.totals.under);
+    const fairOver = coherentFair(ev, "total", "over", tLine);
     const hasTotalOpinion = (ctx?.home?.projPoints != null && ctx?.away?.projPoints != null) || refAdj !== 0;
     if (!hasRatings && fairOver != null) overProb = fairOver;
     out.total = {
@@ -257,5 +268,5 @@ module.exports = {
   predictSlate,
   CFB_SIGMA, CFB_TOTAL_SIGMA, CFB_HFA_POINTS, CFB_W_MODEL,
   EDGE_ML, EDGE_SPREAD, EDGE_TOTAL,
-  _internal: { devigPair, normalCDF, probitApprox, ratingMargin },
+  _internal: { devigPair, coherentFair, normalCDF, probitApprox, ratingMargin },
 };

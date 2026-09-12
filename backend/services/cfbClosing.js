@@ -96,7 +96,9 @@ function buildClosingUpdate(pick, usEvent, pinnacleEvents, capturedAt) {
   const pin = pinnacleEvent ? closingQuote(pick, pinnacleEvent) : null;
   if (pin && pick.opp_odds != null) {
     const pinFair = fair(pin.thisOdds, pin.oppOdds);
-    const pickFair = fair(pick.odds, pick.opp_odds);
+    const pickFair = pick.market_fair_prob != null && Number.isFinite(Number(pick.market_fair_prob))
+      ? Number(pick.market_fair_prob)
+      : null;
     const pinClv = pinFair != null && pickFair != null ? round4(pinFair - pickFair) : null;
     update.pinnacle_closing_odds = pin.thisOdds;
     update.pinnacle_fair_prob = pinFair;
@@ -115,7 +117,7 @@ async function enrichCfbPredictionClosing(supabase, {
   const stats = { pending: 0, updated: 0, skipped: 0, errors: 0 };
   const { data, error } = await supabase
     .from("model_predictions")
-    .select("id,game_id,market,selection,line,odds,opp_odds,result,closing_captured_at")
+    .select("id,game_id,market,selection,line,odds,opp_odds,market_fair_prob,result,closing_captured_at")
     .eq("league", "cfb")
     .in("market", CFB_MARKETS)
     .eq("result", "pending");

@@ -70,6 +70,10 @@ const event = {
   homeTeam: "Alpha University",
   h2h: { away: 130, home: -140, awayBook: "Away Book", homeBook: "Home Book" },
   spreads: { awayLine: 3, homeLine: -3, away: -110, home: -110, awayBook: "Away Spread", homeBook: "Home Spread" },
+  fairMarket: {
+    moneyline: { home: 0.57, away: 0.43 },
+    spread: { home: 0.5, away: 0.5, line: -3 },
+  },
 };
 
 const plan = _internal.prepareCandidates({
@@ -87,7 +91,7 @@ const v2 = plan.v2Candidates[0];
 assert.strictEqual(v1.prediction.modelVersion, V1_GAME_VERSION);
 assert.strictEqual(v1.prediction.teamModelVersion, V1_TEAM_VERSION);
 assert.strictEqual(v1.prediction.baseGameSigma, V1_SIGMA);
-assert.strictEqual(v1.input.input_hash, "b199a2514f39bb171494bf7f26ff1f18144fb8cf078c9b445fbfb7627af8f19e");
+assert.strictEqual(v1.input.input_hash, "944635426b3f07e0a1e5ee05a7e6d74d3761fc5cb78e0ddf1dca1d4568b07266");
 assert.deepStrictEqual({
   margin: v1.prediction.projectedHomeMargin,
   sigma: v1.prediction.predictiveSigma,

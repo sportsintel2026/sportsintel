@@ -110,6 +110,18 @@ function devigPair(thisOdds, otherOdds) {
   return a / (a + b);
 }
 
+function coherentFair(ev, market, side, line = null) {
+  const group = ev?.fairMarket?.[market];
+  const raw = group?.[side];
+  if (raw == null || raw === "") return null;
+  if (line != null) {
+    const fairLine = group?.line == null || group.line === "" ? null : Number(group.line);
+    if (!Number.isFinite(fairLine) || Math.abs(fairLine - Number(line)) > 1e-9) return null;
+  }
+  const value = Number(raw);
+  return Number.isFinite(value) && value >= 0 && value <= 1 ? value : null;
+}
+
 // ── PLUGGABLE FACTOR SLOTS ─────────────────────────────────────────────────────
 // Each returns a POINTS adjustment to the home team's projected margin (+ favors
 // home). They return 0 until their data source is wired, so the model stays
@@ -174,8 +186,7 @@ function predictGame(ev, ctx = {}) {
 
   // ── MONEYLINE ────────────────────────────────────────────────────────────────
   const mlHome = ev.h2h?.home, mlAway = ev.h2h?.away;
-  let fairHomeProb = null;
-  if (mlHome != null && mlAway != null) fairHomeProb = devigPair(mlHome, mlAway);
+  const fairHomeProb = coherentFair(ev, "moneyline", "home");
 
   // Market-implied neutral margin. In MARKET-ONLY mode the model has no opinion of
   // its own, so it must anchor to the market and report ~0 edge — NOT surface the
@@ -248,7 +259,7 @@ function predictGame(ev, ctx = {}) {
     // cover sits ~70% on the market. The key-number push handling still applies to the blended margin.
     const sprMargin = NFL_BLEND_ENABLED ? (NFL_W_MODEL * modelMargin + (1 - NFL_W_MODEL) * (-sLine)) : modelMargin;
     const { homeCoverProb, push: homePushProb } = spreadCover(sprMargin, NFL_SIGMA, sLine, "nfl", NFL_KEY_STRENGTH);
-    const fairHomeCover = devigPair(ev.spreads.home, ev.spreads.away);
+    const fairHomeCover = coherentFair(ev, "spread", "home", sLine);
     out.spread = {
       line: sLine,
       homeCoverProb: r(homeCoverProb * 100),
@@ -284,7 +295,7 @@ function predictGame(ev, ctx = {}) {
     // launch dial, so an uncalibrated total opinion can't stray far from the sharp number.
     const blendedTotal = NFL_BLEND_ENABLED ? (NFL_W_MODEL * (projTotal + refAdj) + (1 - NFL_W_MODEL) * tLine) : (projTotal + refAdj);
     const overProb = normalCDF((blendedTotal - tLine) / NFL_TOTAL_SIGMA);
-    const fairOver = devigPair(ev.totals.over, ev.totals.under);
+    const fairOver = coherentFair(ev, "total", "over", tLine);
     const hasTotalOpinion = (ctx?.home?.projPoints != null && ctx?.away?.projPoints != null) || refAdj !== 0;
     out.total = {
       line: tLine,
@@ -344,5 +355,5 @@ module.exports = {
   // exported for tests / future tuning
   NFL_SIGMA, NFL_TOTAL_SIGMA, NFL_HFA_POINTS, NFL_W_MODEL,
   EDGE_ML, EDGE_SPREAD, EDGE_TOTAL,
-  _internal: { devigPair, normalCDF, probitApprox, ratingMargin },
+  _internal: { devigPair, coherentFair, normalCDF, probitApprox, ratingMargin },
 };
