@@ -15,6 +15,7 @@ const { teamKey, matchupKey, cfbSchoolKey } = require("./teamKey"); // WZ-TEAMKE
 const { rawProbabilityFor } = require("./mlbPredictionProvenance");
 const { buildSelectionProvenance } = require("./mlbMlRlValidation");
 const { toCfbLedgerRow } = require("./cfbPredictionContract");
+const { buildNflSelectionContract, toNflLedgerRow } = require("./nflSelectionIntegrity");
 const {
   recordMlbTotalsCalibration,
   captureMlbTotalsCalibrationClosing,
@@ -1263,58 +1264,13 @@ async function recordFootballPredictions(slate, league = "nfl") {
     // edge filter, and ratings resolve for effectively every NFL game and every FBS-vs-FBS CFB game.
     // The full slate including unrated games is already captured by the *_shadow rows below.
     // REVERT: restore `ml.value === true &&` and `(ml.pick === "home" || ml.pick === "away") &&`.
-    const ml = g.moneyline;
-    if (ml && ml.homeWinProb != null && ml.awayWinProb != null && ml.book) {
-      const home = (ml.homeWinProb ?? 0) >= (ml.awayWinProb ?? 0);
-      const sel = home ? "home" : "away";
-      rows.push({
-        game_id: String(g.eventId), game_date: gameDate, league, matchup,
-        market: "moneyline", selection: sel,
-        description: `${(home ? g.homeTeam : g.awayTeam)} ML`,
-        model_prob: round3((home ? ml.homeWinProb : ml.awayWinProb) / 100),
-        odds: home ? ml.book.home : ml.book.away,
-        edge: round3((ml.edge || 0) / 100),
-        confidence: null, conviction: null, conviction_score: null, line: null,
-      });
-    }
-
-    // Spread — line is that side's signed number (home line as-is, away line negated).
-    // WZ-FBRECORD-MATCHES-BOARD-2026-08-03 :: same fix, same reason. The board picks the spread side
-    // with `pickHome = (sp.homeCoverProb ?? 0) >= 50` and sorts by modelProb -- no edge gate.
-    const sp = g.spread;
-    if (sp && sp.homeCoverProb != null && sp.book && sp.line != null) {
-      const home = (sp.homeCoverProb ?? 0) >= 50;
-      const sel = home ? "home" : "away";
-      const line = home ? sp.line : -sp.line;
-      rows.push({
-        game_id: String(g.eventId), game_date: gameDate, league, matchup,
-        market: "spread", selection: sel,
-        description: `${(home ? g.homeTeam : g.awayTeam)} ${line > 0 ? "+" : ""}${line}`,
-        model_prob: round3((home ? sp.homeCoverProb : (100 - sp.homeCoverProb)) / 100),
-        odds: home ? sp.book.home : sp.book.away,
-        edge: round3((sp.edge || 0) / 100),
-        confidence: null, conviction: null, conviction_score: null, line,
-      });
-    }
-
-    // WZ-FBRECORD-MATCHES-BOARD-2026-08-03 :: same fix, same reason. The board picks the total side
-    // with `pickOver = (tot.overProb ?? 50) >= 50` and sorts by modelProb -- no edge gate. The old
-    // comment here claimed NFL totals echo the market so nothing logs; that is stale -- nflEdges
-    // feeds ctx.projPoints via projPointsFor, so the totals model has had a real opinion since
-    // WZ-NFLTOTALS-2026-07-05.
-    const tot = g.total;
-    if (tot && tot.overProb != null && tot.book && tot.line != null) {
-      const over = (tot.overProb ?? 50) >= 50;
-      const sel = over ? "over" : "under";
-      rows.push({
-        game_id: String(g.eventId), game_date: gameDate, league, matchup,
-        market: "total", selection: sel,
-        description: `${over ? "Over" : "Under"} ${tot.line}`,
-        model_prob: round3((over ? tot.overProb : (100 - tot.overProb)) / 100),
-        odds: over ? tot.book.over : tot.book.under,
-        edge: round3((tot.edge || 0) / 100),
-        confidence: null, conviction: null, conviction_score: null, line: tot.line,
-      });
+    // NFL board and ledger now consume one side-aligned contract. The winner-first
+    // side is unchanged; its model probability, fair market probability, odds and
+    // edge can no longer be mixed with the opposite/value side.
+    const contract = buildNflSelectionContract(g);
+    for (const market of ["moneyline", "spread", "total"]) {
+      const row = toNflLedgerRow(g, gameDate, market, contract?.[market]?.selected);
+      if (row) rows.push(row);
     }
   }
 
@@ -1354,35 +1310,39 @@ async function recordFootballPredictions(slate, league = "nfl") {
       continue;
     }
     const ml = g.moneyline, sp = g.spread, tot = g.total;
+    const contract = buildNflSelectionContract(g);
     const margin = (ml && ml.modelMargin != null) ? ml.modelMargin : null; // model's projected home margin
-    if (ml && ml.homeWinProb != null && ml.book && ml.book.home != null) {
+    const homeMl = contract?.moneyline?.sides?.home;
+    if (homeMl && homeMl.modelProb != null && homeMl.odds != null) {
       rows.push({
         game_id: String(g.eventId), game_date: gameDate, league, matchup,
         market: "moneyline_shadow", selection: "home",
         description: `SHADOW ${g.homeTeam || "home"} ML (full slate)`,
-        model_prob: round3(ml.homeWinProb / 100), odds: ml.book.home,
-        edge: round3((ml.edge || 0) / 100), confidence: null, conviction: null, conviction_score: null, line: null,
+        model_prob: homeMl.modelProb, odds: homeMl.odds, opp_odds: homeMl.opposingOdds,
+        edge: homeMl.edge, confidence: null, conviction: null, conviction_score: null, line: null,
         raw_win_prob: (ml.modelHomeWinProb != null) ? round3(ml.modelHomeWinProb / 100) : null,
         projected_margin: margin,
       });
     }
-    if (sp && sp.homeCoverProb != null && sp.line != null && sp.book && sp.book.home != null) {
+    const homeSpread = contract?.spread?.sides?.home;
+    if (homeSpread && homeSpread.modelProb != null && homeSpread.odds != null) {
       rows.push({
         game_id: String(g.eventId), game_date: gameDate, league, matchup,
         market: "spread_shadow", selection: "home",
         description: `SHADOW ${g.homeTeam || "home"} ${sp.line > 0 ? "+" : ""}${sp.line} (full slate)`,
-        model_prob: round3(sp.homeCoverProb / 100), odds: sp.book.home,
-        edge: round3((sp.edge || 0) / 100), confidence: null, conviction: null, conviction_score: null, line: sp.line,
+        model_prob: homeSpread.modelProb, odds: homeSpread.odds, opp_odds: homeSpread.opposingOdds,
+        edge: homeSpread.edge, confidence: null, conviction: null, conviction_score: null, line: homeSpread.line,
         projected_margin: margin,
       });
     }
-    if (tot && tot.overProb != null && tot.line != null && tot.book && tot.book.over != null) {
+    const overTotal = contract?.total?.sides?.over;
+    if (overTotal && overTotal.modelProb != null && overTotal.odds != null) {
       rows.push({
         game_id: String(g.eventId), game_date: gameDate, league, matchup,
         market: "total_shadow", selection: "over",
         description: `SHADOW Over ${tot.line} (full slate)`,
-        model_prob: round3(tot.overProb / 100), odds: tot.book.over,
-        edge: round3((tot.edge || 0) / 100), confidence: null, conviction: null, conviction_score: null, line: tot.line,
+        model_prob: overTotal.modelProb, odds: overTotal.odds, opp_odds: overTotal.opposingOdds,
+        edge: overTotal.edge, confidence: null, conviction: null, conviction_score: null, line: overTotal.line,
         projected: (tot.projTotal != null) ? tot.projTotal : null,
       });
     }

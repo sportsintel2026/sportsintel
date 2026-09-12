@@ -25,6 +25,10 @@ const {
   fetchMlbMlRlValidationRows,
   analyzeMlbMlRlValidation,
 } = require("../services/mlbMlRlValidation");
+const {
+  fetchNflSelectionShadowRows,
+  analyzeNflSelectionShadow,
+} = require("../services/nflSelectionIntegrity");
 
 // --- per-sport market config -------------------------------------------------
 // core  = team markets that count toward the overall record + CLV
@@ -2436,6 +2440,26 @@ router.get("/mlb-mlrl-validation", adminGuard, async (req, res) => {
     });
   } catch (error) {
     console.error("[Performance] MLB ML/RL validation failed:", error.message);
+    res.status(500).json({ ok: false, error: "Validation data unavailable" });
+  }
+});
+
+// Prospective, admin-only comparison of the unchanged NFL full-board selection
+// with the same selected sides filtered by the model's existing 3% edge gates.
+router.get("/nfl-selection-validation", adminGuard, async (req, res) => {
+  try {
+    const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+    const since = req.query.since && datePattern.test(String(req.query.since)) ? String(req.query.since) : null;
+    const until = req.query.until && datePattern.test(String(req.query.until)) ? String(req.query.until) : null;
+    const rows = await fetchNflSelectionShadowRows(db(), { since, until });
+    res.json({
+      ok: true,
+      filters: { since, until },
+      rows: rows.length,
+      ...analyzeNflSelectionShadow(rows),
+    });
+  } catch (error) {
+    console.error("[Performance] NFL selection validation failed:", error.message);
     res.status(500).json({ ok: false, error: "Validation data unavailable" });
   }
 });

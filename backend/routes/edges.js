@@ -97,6 +97,7 @@ const {
   isPreGame, // WZ-SLATESTATE-SSOT-2026-07-27 :: shared pre-game predicate
 } = require("../services/mlbStatsApi");
 const { canonAbbr } = require("../services/teamKey"); // WZ-TEAMKEY-SSOT-2026-07-17
+const { toNflBoardEdge } = require("../services/nflSelectionIntegrity");
 const {
   getMLBMainOdds,
   getMLBHRPropsForAllEvents,
@@ -1931,59 +1932,13 @@ router.get("/nfl", gatePicks, async (req, res) => {
     // renders NFL with no frontend special-casing. value:false rows are included
     // so the board isn't empty, but every edge is provisional (calibrated:false).
     const moneylineEdges = [], spreadEdges = [], totalsEdges = [];
-    const teamsOf = (matchup) => { const p = String(matchup || "").split(" @ "); return { away: p[0] || "", home: p[1] || "" }; };
     for (const g of allGames) {
-      const { away, home } = teamsOf(g.matchup);
-      const ml = g.moneyline;
-      if (ml && ml.edge != null && ml.fair) {
-        // WZ-WINNERSFIRST-2026-08-03 :: the SIDE was picked by whichever side carried the larger
-        // EDGE (our prob minus the fair price) -- i.e. wherever we disagreed with the market most.
-        // Edge is measured ANTI-predictive (gamma = -0.316, sign-stable), so this could publish a
-        // team we ourselves price to LOSE. MLB's moneyline board at line ~625 already uses the
-        // winners-first form; NFL/CFB were copied from an older template and never caught up.
-        const pickHome = (ml.homeWinProb ?? 0) >= (ml.awayWinProb ?? 0);
-        moneylineEdges.push({
-          gameId: g.eventId, side: pickHome ? "home" : "away",
-          matchup: g.matchup, teamAbbr: pickHome ? home : away,
-          edge: ml.edge, odds: pickHome ? ml.book?.home : ml.book?.away,
-          oppOdds: pickHome ? ml.book?.away : ml.book?.home,
-          book: pickHome ? g.marketBooks?.moneyline?.homeBook : g.marketBooks?.moneyline?.awayBook,
-          opposingBook: pickHome ? g.marketBooks?.moneyline?.awayBook : g.marketBooks?.moneyline?.homeBook,
-          modelProb: (pickHome ? ml.homeWinProb : ml.awayWinProb) / 100,
-          line: null, convictionScore: null, conviction: null,
-          provisional: true,
-        });
-      }
-      const sp = g.spread;
-      if (sp && sp.edge != null && sp.fair) {
-        const pickHome = (sp.homeCoverProb ?? 0) >= 50;
-        spreadEdges.push({
-          gameId: g.eventId, side: pickHome ? "home" : "away",
-          matchup: g.matchup, teamAbbr: pickHome ? home : away,
-          edge: sp.edge, odds: pickHome ? sp.book?.home : sp.book?.away,
-          oppOdds: pickHome ? sp.book?.away : sp.book?.home,
-          book: pickHome ? g.marketBooks?.spread?.homeBook : g.marketBooks?.spread?.awayBook,
-          opposingBook: pickHome ? g.marketBooks?.spread?.awayBook : g.marketBooks?.spread?.homeBook,
-          modelProb: (pickHome ? sp.homeCoverProb : (100 - sp.homeCoverProb)) / 100,
-          line: pickHome ? sp.line : -sp.line, convictionScore: null, conviction: null,
-          provisional: true,
-        });
-      }
-      const tot = g.total;
-      if (tot && tot.edge != null && tot.fair) {
-        const pickOver = (tot.overProb ?? 50) >= 50;
-        totalsEdges.push({
-          gameId: g.eventId, side: pickOver ? "over" : "under",
-          matchup: g.matchup,
-          edge: tot.edge, odds: pickOver ? tot.book?.over : tot.book?.under,
-          oppOdds: pickOver ? tot.book?.under : tot.book?.over,
-          book: pickOver ? g.marketBooks?.total?.overBook : g.marketBooks?.total?.underBook,
-          opposingBook: pickOver ? g.marketBooks?.total?.underBook : g.marketBooks?.total?.overBook,
-          modelProb: (pickOver ? tot.overProb : (100 - tot.overProb)) / 100,
-          line: tot.line, convictionScore: null, conviction: null,
-          provisional: true,
-        });
-      }
+      const ml = toNflBoardEdge(g, "moneyline");
+      const sp = toNflBoardEdge(g, "spread");
+      const tot = toNflBoardEdge(g, "total");
+      if (ml) moneylineEdges.push(ml);
+      if (sp) spreadEdges.push(sp);
+      if (tot) totalsEdges.push(tot);
     }
     // WZ-WINNERSFIRST-2026-08-03 :: winners lead, ranked by win% -- edge is NEVER the sort key.
     moneylineEdges.sort((a, b) => (b.modelProb ?? -1) - (a.modelProb ?? -1));
