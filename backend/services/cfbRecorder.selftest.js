@@ -110,8 +110,9 @@ Object.defineProperty(game, "cfbPredictionContract", { value: contract, enumerab
 (async () => {
   const controlCapturedAt = new Date().toISOString();
   const slate = { games: [game] };
+  const espnGamesByEvent = { [ev.eventId]: { gameId: "espn-cfb-recorder-1" } };
   Object.defineProperty(slate, "cfbControlContext", {
-    value: Object.freeze({ capturedAt: controlCapturedAt, usEvents: Object.freeze([ev]) }),
+    value: Object.freeze({ capturedAt: controlCapturedAt, usEvents: Object.freeze([ev]), espnGamesByEvent }),
     enumerable: false,
   });
   await recordCFBPredictions(slate);
@@ -134,6 +135,7 @@ Object.defineProperty(game, "cfbPredictionContract", { value: contract, enumerab
   assert.deepStrictEqual(pairedShadowArgs.usEvents, [ev]);
   assert.deepStrictEqual(pairedShadowArgs.pinnacleEvents, []);
   assert.strictEqual(pairedShadowArgs.capturedAt, controlCapturedAt);
+  assert.deepStrictEqual(pairedShadowArgs.espnGamesByEvent, espnGamesByEvent);
   assert.deepStrictEqual(pairedLinkArgs.gameIds, [ev.eventId]);
 
   // New rows keep the existing market/selection/line contract understood by the

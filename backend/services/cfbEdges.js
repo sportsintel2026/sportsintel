@@ -395,6 +395,12 @@ async function runCFBSlate({ season = null, weeks = 1 } = {}) {
     Object.defineProperty(pred, "cfbPredictionContract", {
       value: contract, enumerable: false, writable: false,
     });
+    // Recording-only handoff for the weekly context ledger. The ESPN game was
+    // already resolved for neutral-site/venue handling; retaining it here adds
+    // no provider work and never enters customer JSON.
+    Object.defineProperty(pred, "_weeklyContextInput", {
+      value: Object.freeze({ espnGame }), enumerable: false, writable: false,
+    });
     pred.marketRead = ev.marketRead || null;
     pred.oddsGrid = ev.oddsGrid || null;
     pred.teamIdentity = {
@@ -442,6 +448,9 @@ async function runCFBSlate({ season = null, weeks = 1 } = {}) {
       capturedAt: controlCapturedAt,
       usEvents: Object.freeze(events.slice()),
       odContext: buildOffenseDefenseContext(ratings, controlCapturedAt),
+      espnGamesByEvent: Object.freeze(Object.fromEntries(games
+        .filter((game) => game?.eventId)
+        .map((game) => [String(game.eventId), game?._weeklyContextInput?.espnGame || null]))),
     }),
     enumerable: false,
     writable: false,

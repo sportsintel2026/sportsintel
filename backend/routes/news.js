@@ -110,7 +110,7 @@ async function fetchEspn(league) {
     const real = imgs.find((i) => i.url && i.type !== "stitcher" && (i.width || 0) >= 300);
     const image = (real || imgs.find((i) => i.url) || {}).url || null;
     const ev = (a.categories || []).find((c) => c.type === "event" && c.description);
-    return {
+    const item = {
       id: `espn-${a.id}`,
       source: "espn",
       type,
@@ -123,6 +123,24 @@ async function fetchEspn(league) {
       game: null,
       playerName: null, headshot: null, status: null,
     };
+    // Recorder-only durable identity metadata. Non-enumerable means the active
+    // public news response remains byte/shape compatible when buildFeed spreads
+    // these objects into customer-facing rows.
+    Object.defineProperty(item, "_identityCategories", {
+      enumerable: false,
+      value: Object.freeze((a.categories || []).map((category) => Object.freeze({
+        id: category?.id == null ? null : String(category.id),
+        uid: category?.uid || null,
+        type: category?.type || null,
+        description: category?.description || null,
+        eventId: category?.eventId == null ? null : String(category.eventId),
+        teamId: category?.teamId == null && category?.team?.id == null
+          ? null : String(category.teamId ?? category.team.id),
+        athleteId: category?.athleteId == null && category?.athlete?.id == null
+          ? null : String(category.athleteId ?? category.athlete.id),
+      }))),
+    });
+    return item;
   }).filter((x) => x.headline && x.link);
 }
 
@@ -398,6 +416,49 @@ async function buildFeed(league) {
   return items;
 }
 
+// Shared raw source for the immutable football context recorder. It deliberately
+// reuses the active ESPN/RotoWire parsers above, batches each league once, and has
+// its own cache so adding games never adds per-game news calls.
+const contextNewsCache = {};
+const contextNewsInflight = {};
+const CONTEXT_NEWS_TTL_MS = 15 * 60 * 1000;
+async function getFootballContextNews(league) {
+  const key = String(league || "").toLowerCase();
+  if (key !== "nfl" && key !== "cfb") throw new Error("football context news supports nfl/cfb only");
+  const cached = contextNewsCache[key];
+  if (cached && (Date.now() - cached.at) < CONTEXT_NEWS_TTL_MS) {
+    return { ...cached.value, cached: true };
+  }
+  if (contextNewsInflight[key]) return contextNewsInflight[key];
+  contextNewsInflight[key] = (async () => {
+    const [espnResult, rotoResult] = await Promise.allSettled([fetchEspn(key), fetchRoto(key)]);
+    const capturedAt = new Date().toISOString();
+    const value = {
+      capturedAt,
+      items: [
+        ...(espnResult.status === "fulfilled" ? espnResult.value : []),
+        ...(rotoResult.status === "fulfilled" ? rotoResult.value : []),
+      ],
+      sources: {
+        espn: {
+          available: espnResult.status === "fulfilled",
+          capturedAt,
+          error: espnResult.status === "rejected" ? espnResult.reason?.message || "unavailable" : null,
+        },
+        rotowire: {
+          available: rotoResult.status === "fulfilled",
+          capturedAt,
+          error: rotoResult.status === "rejected" ? rotoResult.reason?.message || "unavailable" : null,
+        },
+      },
+    };
+    contextNewsCache[key] = { at: Date.now(), value };
+    return value;
+  })();
+  try { return await contextNewsInflight[key]; }
+  finally { delete contextNewsInflight[key]; }
+}
+
 router.get("/:league/injuries", async (req, res) => {
   const league = String(req.params.league || "").toLowerCase();
   const builder = league === "mlb" ? buildMlbInjuries : league === "nfl" ? buildNflInjuries : null;
@@ -445,3 +506,4 @@ router.get("/:league", async (req, res) => {
 });
 
 module.exports = router;
+module.exports.getFootballContextNews = getFootballContextNews;

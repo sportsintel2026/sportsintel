@@ -40,6 +40,12 @@ const {
   ML_METHOD: ML_METHOD_V3,
   SPREAD_METHOD: SPREAD_METHOD_V3,
 } = require("./cfbGameShadowChallengerV3");
+const {
+  buildCfbContext,
+  selectPreviousContexts,
+  persistContexts,
+} = require("./footballWeeklyContext");
+const { collectFootballNewsForGames } = require("./footballNewsContext");
 
 const TEAM_TABLE = "cfb_team_preseason_snapshots";
 const INPUT_TABLE = "cfb_game_input_snapshots";
@@ -502,7 +508,7 @@ async function selectLedgerRows(supabase, eventIds) {
   for (let index = 0; index < eventIds.length; index += 80) {
     const response = await supabase
       .from("model_predictions")
-      .select("game_id,neutral_site_status")
+      .select("id,game_id,game_date,league,market,selection,snapshotted_at,model_version,experiment_version,neutral_site_status")
       .eq("league", "cfb")
       .in("game_id", eventIds.slice(index, index + 80));
     if (response.error) throw new Error(response.error.message);
@@ -513,7 +519,7 @@ async function selectLedgerRows(supabase, eventIds) {
 
 async function collectCfbGameShadowPredictions(supabase, {
   usEvents = [], pinnacleEvents = [], capturedAt = new Date().toISOString(),
-  odContext = null,
+  odContext = null, espnGamesByEvent = {}, newsCollector = collectFootballNewsForGames,
 } = {}) {
   if (!supabase) throw new Error("Supabase client is required");
   // Accepted only to make the no-extra-call data flow explicit; v1 comparison is
@@ -522,7 +528,7 @@ async function collectCfbGameShadowPredictions(supabase, {
   void pinnacleEvents;
   const snapshotsResponse = await supabase
     .from(TEAM_TABLE)
-    .select("id,season,contract_version,snapshot_at,team_name,espn_team_id,cfbd_team_id,quarterback,roster,returning_production,transfers,talent,coaching,quality,input_hash")
+    .select("id,season,contract_version,snapshot_at,team_name,espn_team_id,cfbd_team_id,quarterback,roster,returning_production,transfers,talent,coaching,quality,sources,input_hash")
     .eq("season", TARGET_SEASON);
   if (snapshotsResponse.error) throw new Error(snapshotsResponse.error.message);
   const snapshots = snapshotsResponse.data || [];
@@ -551,6 +557,9 @@ async function collectCfbGameShadowPredictions(supabase, {
     v3InputSnapshotsCreated: 0,
     v3MarketComparisonUnavailable: 0,
     v3PersistenceErrors: 0,
+    weeklyContextsAttempted: 0,
+    weeklyContextErrors: [],
+    weeklyNewsErrors: [],
     skipped: plan.skipped,
   };
   for (const candidate of plan.candidates) {
@@ -597,6 +606,57 @@ async function collectCfbGameShadowPredictions(supabase, {
       stats.v3PersistenceErrors++;
       console.error(`[CFB Game Shadow v3] persistence failed game=${candidate.input.game_id}: ${error.message}`);
     }
+  }
+  // Normalize already-fetched CFB preseason/market/ESPN evidence into the shared
+  // weekly context ledger. This is isolated from all v1/v2/v3 writes and cannot
+  // affect prediction output when the new table is unavailable.
+  if (Object.keys(espnGamesByEvent || {}).length) try {
+    let newsResult = {
+      capturedAt, byEvent: {},
+      meta: { available: false, reason: "news-source-unavailable" },
+    };
+    try {
+      newsResult = await newsCollector({
+        league: "cfb",
+        records: (usEvents || []).map((event) => ({
+          event,
+          espnGame: espnGamesByEvent[String(event?.eventId || "")] || null,
+        })),
+        snapshots,
+      });
+    } catch (error) {
+      stats.weeklyNewsErrors.push(error.message);
+    }
+    const newsCapturedMs = Date.parse(newsResult?.capturedAt);
+    const predictionMs = Date.parse(capturedAt);
+    const weeklyCapturedAt = Number.isFinite(newsCapturedMs) && newsCapturedMs > predictionMs
+      ? new Date(newsCapturedMs).toISOString() : capturedAt;
+    const previous = await selectPreviousContexts(supabase, "cfb", eventIds, weeklyCapturedAt);
+    const identity = buildExactIdentityIndex(snapshots);
+    const contexts = [];
+    for (const event of usEvents || []) {
+      const homeKey = teamKey(event?.homeTeam);
+      const awayKey = teamKey(event?.awayTeam);
+      const homeSnapshot = identity.collisions.has(homeKey) ? null : identity.index.get(homeKey) || null;
+      const awaySnapshot = identity.collisions.has(awayKey) ? null : identity.index.get(awayKey) || null;
+      const eventId = String(event?.eventId || "");
+      const context = buildCfbContext({
+        event,
+        espnGame: espnGamesByEvent[eventId] || null,
+        homeSnapshot,
+        awaySnapshot,
+        predictionRows: ledgerRows,
+        previousContext: previous[eventId] || null,
+        capturedAt: weeklyCapturedAt,
+        newsItems: newsResult?.byEvent?.[eventId] || [],
+        newsMeta: newsResult?.meta || null,
+      });
+      if (context) contexts.push(context);
+    }
+    const persisted = await persistContexts(supabase, contexts);
+    stats.weeklyContextsAttempted = persisted.attempted;
+  } catch (error) {
+    stats.weeklyContextErrors.push(error.message);
   }
   return Object.freeze(stats);
 }

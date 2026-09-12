@@ -204,6 +204,27 @@ assert.equal(adjusted.neutralSite, true, "the challenger seam preserves every no
     },
   };
   let collectorWeatherCalls = 0;
+  let weeklyContextRows = [];
+  const weeklyContextStore = {
+    selectPredictionRows: async () => [{
+      game_id: "odds-event-1", game_date: "2099-09-13", league: "nfl",
+      market: "spread", selection: "Home Team -2.5", snapshotted_at: predictionAt,
+    }],
+    selectPreviousContexts: async () => ({}),
+    persistContexts: async (_db, rows) => { weeklyContextRows.push(...rows); return { attempted: rows.length }; },
+  };
+  const newsCollector = async () => ({
+    capturedAt: predictionAt,
+    byEvent: { "odds-event-1": [{
+      newsId: "nfl-news-1", source: "espn", publishedAt: "2099-09-08T15:00:00Z",
+      capturedAt: predictionAt, eventId: "odds-event-1", espnGameId: "espn-game-1",
+      teamId: "1", teamName: "Home Team", playerId: "qb-1", playerName: "Player qb-1",
+      position: "QB", unit: "quarterback", category: "injury/status update",
+      statusChange: "questionable", confidence: "high", confirmed: false,
+      unresolved: true, contextImpact: "unresolved", identityMethod: "espn-event-id+espn-team-id+espn-athlete-id",
+    }] },
+    meta: { available: true, received: 1, resolved: 1 },
+  });
   const result = await collectNflInjuryWeatherShadow({
     slate: { games: [gameFixture()] },
     availability,
@@ -211,8 +232,16 @@ assert.equal(adjusted.neutralSite, true, "the challenger seam preserves every no
     predictionAt,
     supabase,
     weatherFetcher: async () => { collectorWeatherCalls++; return weather; },
+    weeklyContextStore,
+    newsCollector,
   });
-  assert.deepEqual(result, { contextsRecorded: 1, comparisonsRecorded: 5, skipped: 0, errors: [] });
+  assert.deepEqual(result, {
+    contextsRecorded: 1, comparisonsRecorded: 5, weeklyContextsRecorded: 1,
+    skipped: 0, errors: [], weeklyContextErrors: [], weeklyNewsErrors: [],
+  });
+  assert.equal(weeklyContextRows.length, 1);
+  assert.equal(weeklyContextRows[0].prediction_keys.length, 1);
+  assert.equal(weeklyContextRows[0].structured_context.newsContext.items.length, 1);
   assert.equal(collectorWeatherCalls, 1, "one game produces one cached weather lookup, not one per challenger market");
   assert.equal((writes.get(CONTEXT_TABLE) || []).length, 1);
   assert.equal((writes.get(PREDICTION_TABLE) || []).length, 5);
@@ -220,6 +249,8 @@ assert.equal(adjusted.neutralSite, true, "the challenger seam preserves every no
   const duplicate = await collectNflInjuryWeatherShadow({
     slate: { games: [gameFixture()] }, availability, availabilityMeta, predictionAt, supabase,
     weatherFetcher: async () => { collectorWeatherCalls++; return weather; },
+    weeklyContextStore,
+    newsCollector,
   });
   assert.equal(duplicate.errors.length, 0);
   assert.equal((writes.get(CONTEXT_TABLE) || []).length, 1, "duplicate run cannot replace the first context snapshot");

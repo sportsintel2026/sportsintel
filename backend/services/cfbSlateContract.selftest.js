@@ -26,7 +26,10 @@ class Query {
   in() { return this; }
   is() { return this; }
   gt() { return this; }
-  lt() { return Promise.resolve({ error: null }); }
+  lt() { return this; }
+  order() { return this; }
+  limit() { return this; }
+  upsert() { return this; }
   insert() { return Promise.resolve({ error: null }); }
   delete() { return this; }
   update() { return this; }
