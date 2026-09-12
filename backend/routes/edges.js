@@ -2034,13 +2034,12 @@ router.get("/cfb", gatePicks, async (req, res) => {
     const slate = await runCFBSlate({ season, weeks });
 
     const allGames = slate.games || [];
-    const { toCfbBoardEdge } = require("../services/cfbPredictionContract");
+    const { toCfbQualifiedBoardEdge } = require("../services/cfbPredictionContract");
     const edges = [];
     for (const g of allGames) {
       for (const mkt of ["moneyline", "spread", "total"]) {
-        const m = g[mkt];
-        const selected = toCfbBoardEdge(g, mkt);
-        if (m && m.value && selected && !isBenched(mkt, "cfb")) { // WZ-FBALL-BENCH-2026-07-17 :: shown by default; hidden only if the guard flags this market as drifting
+        const selected = toCfbQualifiedBoardEdge(g, mkt);
+        if (selected && !isBenched(mkt, "cfb")) { // WZ-FBALL-BENCH-2026-07-17 :: shown by default; hidden only if the guard flags this market as drifting
           edges.push({
             matchup: g.matchup, market: mkt, edge: selected.edge,
             pick: selected.teamAbbr || selected.side, dataQuality: selected.dataQuality,
@@ -2053,9 +2052,9 @@ router.get("/cfb", gatePicks, async (req, res) => {
 
     const moneylineEdges = [], spreadEdges = [], totalsEdges = [];
     for (const g of allGames) {
-      const ml = toCfbBoardEdge(g, "moneyline");
-      const sp = toCfbBoardEdge(g, "spread");
-      const tot = toCfbBoardEdge(g, "total");
+      const ml = toCfbQualifiedBoardEdge(g, "moneyline");
+      const sp = toCfbQualifiedBoardEdge(g, "spread");
+      const tot = toCfbQualifiedBoardEdge(g, "total");
       if (ml) moneylineEdges.push(ml);
       if (sp) spreadEdges.push(sp);
       if (tot) totalsEdges.push(tot);

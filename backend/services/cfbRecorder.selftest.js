@@ -94,8 +94,8 @@ const ev = {
 const game = {
   eventId: ev.eventId, commenceTime, awayTeam: ev.awayTeam, homeTeam: ev.homeTeam,
   matchup: `${ev.awayTeam} @ ${ev.homeTeam}`, dataQuality: "rated",
-  moneyline: { homeWinProb: 56, awayWinProb: 44, modelHomeWinProb: 58, modelMargin: 4, fair: { home: 59, away: 41 }, book: { home: -145, away: +135 } },
-  spread: { line: -3.5, homeCoverProb: 54, modelHomeCoverProb: 57, fair: { home: 56, away: 44 }, book: { home: -105, away: -115 } },
+  moneyline: { homeWinProb: 63, awayWinProb: 37, modelHomeWinProb: 66, modelMargin: 4, fair: { home: 57, away: 43 }, book: { home: -145, away: +135 } },
+  spread: { line: -3.5, homeCoverProb: 54, modelHomeCoverProb: 57, fair: { home: 50, away: 50 }, book: { home: -105, away: -115 } },
   total: { line: 52.5, overProb: 48, modelOverProb: 45, projTotal: 51, fair: { over: 46, under: 54 }, book: { over: -102, under: -118 } },
 };
 const ratingSnapshot = {
@@ -116,17 +116,21 @@ Object.defineProperty(game, "cfbPredictionContract", { value: contract, enumerab
     enumerable: false,
   });
   await recordCFBPredictions(slate);
-  assert.strictEqual(recorded.length, 6);
+  assert.strictEqual(recorded.length, 8);
   const byMarket = Object.fromEntries(recorded.map((row) => [row.market, row]));
   assert.strictEqual(byMarket.moneyline.selection, contract.moneyline.selected.selection);
-  assert.strictEqual(byMarket.moneyline.edge, -0.03);
-  assert.strictEqual(byMarket.spread.edge, -0.02);
+  assert.strictEqual(byMarket.moneyline.edge, 0.06);
+  assert.strictEqual(byMarket.spread.edge, 0.04);
   assert.strictEqual(byMarket.total.selection, "under");
   assert.strictEqual(byMarket.total.edge, -0.02);
   assert.strictEqual(byMarket.moneyline.entry_book, "Home Book");
   assert.strictEqual(byMarket.moneyline.opposing_book, "Away Book");
   assert.strictEqual(byMarket.spread_shadow.selection, "home");
   assert.strictEqual(byMarket.total_shadow.selection, "over");
+  assert.strictEqual(byMarket.moneyline_customer.selection, contract.moneyline.selected.selection);
+  assert.strictEqual(byMarket.moneyline_customer.experiment_version, "cfb-qualified-customer-v1-2026-09-11");
+  assert.strictEqual(byMarket.spread_customer.selection, contract.spread.selected.selection);
+  assert.strictEqual(byMarket.total_customer, undefined);
   assert.strictEqual(upsertOptions.onConflict, "game_id,market,selection,game_date");
   assert.strictEqual(upsertOptions.ignoreDuplicates, true);
   assert.ok(recorded.every((row) => row.snapshotted_at === controlCapturedAt));
@@ -140,7 +144,7 @@ Object.defineProperty(game, "cfbPredictionContract", { value: contract, enumerab
 
   // New rows keep the existing market/selection/line contract understood by the
   // active CFB grader; provenance columns do not interfere with settlement.
-  pendingRows = [{ ...byMarket.moneyline, id: 1, result: "pending" }];
+  pendingRows = [{ ...byMarket.moneyline_customer, id: 1, result: "pending" }];
   const graded = await gradeFinishedGames();
   assert.strictEqual(graded, 1);
   assert.strictEqual(gradeUpdates.length, 1);
