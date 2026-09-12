@@ -14,7 +14,7 @@ const { getMLBMainOdds, getMLBPinnacleClose } = require("./oddsApi");
 const { teamKey, matchupKey, cfbSchoolKey } = require("./teamKey"); // WZ-TEAMKEY-SSOT-2026-07-17 / WZ-FBGRADE-TEAMKEY-2026-07-20
 const { rawProbabilityFor } = require("./mlbPredictionProvenance");
 const { buildSelectionProvenance } = require("./mlbMlRlValidation");
-const { toCfbLedgerRow } = require("./cfbPredictionContract");
+const { toCfbLedgerRow, toCfbCustomerLedgerRow } = require("./cfbPredictionContract");
 const { buildNflSelectionContract, toNflLedgerRow } = require("./nflSelectionIntegrity");
 const {
   recordMlbTotalsCalibration,
@@ -1227,9 +1227,13 @@ async function recordFootballPredictions(slate, league = "nfl") {
     if (league === "cfb") {
       for (const market of ["moneyline", "spread", "total"]) {
         const side = g.cfbPredictionContract?.[market]?.selected;
+        // Keep the existing selected-side control row for the frozen v1/v2/v3
+        // benchmark, and record the customer-published population separately.
         const row = toCfbLedgerRow(g, gameDate, market, market, side, false);
         if (row && !side.provenanceComplete) cfbIncompleteProvenance++;
         if (row) rows.push(row);
+        const customerRow = toCfbCustomerLedgerRow(g, gameDate, market);
+        if (customerRow) rows.push(customerRow);
       }
       continue;
     }
@@ -1949,7 +1953,7 @@ async function gradeFootball(supabase, pending, fetchBoard, league) {
   };
 
   for (const p of pending) {
-    const baseMarket = String(p.market || "").replace(/_shadow$/, ""); // WZ-FBALL-SLATE-SHADOW-2026-07-17 :: grade the full-slate *_shadow rows too
+    const baseMarket = String(p.market || "").replace(/_(?:shadow|customer)$/, ""); // grade full-board controls and separately tracked customer rows
     if (!TEAM.has(baseMarket)) continue;
     const parts = String(p.matchup || "").split(" @ ");
     if (parts.length !== 2) { miss.noMatchup++; continue; }   // need "Away @ Home" to match by name

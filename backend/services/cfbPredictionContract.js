@@ -4,10 +4,16 @@
 // precision before edge is derived, so `edge = model_prob - market_fair_prob` is exact.
 
 const CFB_EXPERIMENT_VERSION = "cfb-side-edge-provenance-v1-2026-08-30";
+const CFB_CUSTOMER_SELECTION_VERSION = "cfb-qualified-customer-v1-2026-09-11";
 const CFB_MODEL_VERSIONS = Object.freeze({
   moneyline: "cfb-moneyline-v1-2026-08-30",
   spread: "cfb-spread-v1-2026-08-30",
   total: "cfb-total-v1-2026-08-30",
+});
+const CFB_CUSTOMER_MARKETS = Object.freeze({
+  moneyline: "moneyline_customer",
+  spread: "spread_customer",
+  total: "total_customer",
 });
 
 const RATING_SOURCES = new Set(["prior-only", "blended", "current-only", "unavailable"]);
@@ -243,6 +249,23 @@ function toCfbBoardEdge(game, market) {
   return out;
 }
 
+// Customer publication is a strict projection of the existing model decision.
+// No threshold or market math lives here: `value` is the model's existing
+// qualification, while the other checks make the selected-side identity explicit.
+function isCfbQualifiedCustomerSelection(game, market) {
+  const selected = game?.cfbPredictionContract?.[market]?.selected;
+  return game?.[market]?.value === true
+    && validProb(selected?.marketFairProb)
+    && selected?.edge != null
+    && Number(selected.edge) > 0;
+}
+
+function toCfbQualifiedBoardEdge(game, market) {
+  return isCfbQualifiedCustomerSelection(game, market)
+    ? toCfbBoardEdge(game, market)
+    : null;
+}
+
 function ledgerProvenance(side) {
   if (!side?.provenanceComplete) return {};
   return {
@@ -289,17 +312,32 @@ function toCfbLedgerRow(game, gameDate, market, rowMarket, side, shadow = false)
   return row;
 }
 
+function toCfbCustomerLedgerRow(game, gameDate, market) {
+  if (!isCfbQualifiedCustomerSelection(game, market)) return null;
+  const side = game.cfbPredictionContract[market].selected;
+  const row = toCfbLedgerRow(game, gameDate, market, CFB_CUSTOMER_MARKETS[market], side, false);
+  if (!row) return null;
+  row.description = `CUSTOMER ${row.description}`;
+  if (row.experiment_version) row.experiment_version = CFB_CUSTOMER_SELECTION_VERSION;
+  return row;
+}
+
 function isRatedCfbGuardRow(row) {
   return String(row?.league || "").toLowerCase() !== "cfb" || row?.data_quality === "rated";
 }
 
 module.exports = {
   CFB_EXPERIMENT_VERSION,
+  CFB_CUSTOMER_SELECTION_VERSION,
   CFB_MODEL_VERSIONS,
+  CFB_CUSTOMER_MARKETS,
   buildCfbPredictionContract,
   applyCfbContractToPrediction,
   toCfbBoardEdge,
+  toCfbQualifiedBoardEdge,
+  isCfbQualifiedCustomerSelection,
   toCfbLedgerRow,
+  toCfbCustomerLedgerRow,
   ledgerProvenance,
   isRatedCfbGuardRow,
   _internal: { round3, pctToFraction, complement, sideEdge, provenanceIsComplete, makeSide, selectSide },

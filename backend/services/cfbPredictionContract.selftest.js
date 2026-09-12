@@ -1,11 +1,16 @@
 const assert = require("assert");
 const {
   CFB_EXPERIMENT_VERSION,
+  CFB_CUSTOMER_SELECTION_VERSION,
+  CFB_CUSTOMER_MARKETS,
   CFB_MODEL_VERSIONS,
   buildCfbPredictionContract,
   applyCfbContractToPrediction,
   toCfbBoardEdge,
+  toCfbQualifiedBoardEdge,
+  isCfbQualifiedCustomerSelection,
   toCfbLedgerRow,
+  toCfbCustomerLedgerRow,
   isRatedCfbGuardRow,
 } = require("./cfbPredictionContract");
 const { predictGame, CFB_W_MODEL, CFB_SIGMA, CFB_TOTAL_SIGMA, CFB_HFA_POINTS } = require("./cfbModel");
@@ -84,7 +89,40 @@ function attach(game, ev, snapshot = ratedSnapshot) {
   assert.strictEqual(row.raw_win_prob, 0.58);
   assert.strictEqual(row.model_version, CFB_MODEL_VERSIONS.moneyline);
   assert.strictEqual(row.experiment_version, CFB_EXPERIMENT_VERSION);
+  assert.strictEqual(isCfbQualifiedCustomerSelection(game, "moneyline"), false);
+  assert.strictEqual(toCfbQualifiedBoardEdge(game, "moneyline"), null);
+  assert.strictEqual(toCfbCustomerLedgerRow(game, "2026-08-31", "moneyline"), null);
   assert.strictEqual(JSON.stringify(game).includes("cfbPredictionContract"), false);
+}
+
+// Customer publication reuses value:true and also requires a valid selected-side
+// fair probability and positive aligned edge. The full control remains available.
+{
+  const ev = event();
+  const game = prediction();
+  game.moneyline.homeWinProb = 63;
+  game.moneyline.awayWinProb = 37;
+  game.moneyline.modelHomeWinProb = 66;
+  game.moneyline.fair = { home: 57, away: 43 };
+  const contract = attach(game, ev);
+  assert.strictEqual(game.moneyline.value, true);
+  assert.strictEqual(contract.moneyline.selected.edge, 0.06);
+  assert.strictEqual(isCfbQualifiedCustomerSelection(game, "moneyline"), true);
+  assert.strictEqual(toCfbQualifiedBoardEdge(game, "moneyline").side, "home");
+  const customer = toCfbCustomerLedgerRow(game, "2026-08-31", "moneyline");
+  assert.strictEqual(customer.market, CFB_CUSTOMER_MARKETS.moneyline);
+  assert.strictEqual(customer.experiment_version, CFB_CUSTOMER_SELECTION_VERSION);
+  assert.strictEqual(customer.selection, contract.moneyline.selected.selection);
+  assert.strictEqual(customer.edge, contract.moneyline.selected.edge);
+
+  const missingFairGame = { ...game, moneyline: { ...game.moneyline, value: true } };
+  Object.defineProperty(missingFairGame, "cfbPredictionContract", { value: Object.freeze({
+    ...contract,
+    moneyline: Object.freeze({ ...contract.moneyline, selected: Object.freeze({
+      ...contract.moneyline.selected, marketFairProb: null,
+    }) }),
+  }) });
+  assert.strictEqual(isCfbQualifiedCustomerSelection(missingFairGame, "moneyline"), false);
 }
 
 // UNLV regression: UNLV is the shown side and cannot inherit Memphis's +3% edge.
