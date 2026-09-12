@@ -21,13 +21,14 @@
  *
  * What it is NOT yet is CALIBRATED: no 2026 games have graded, so we don't know how
  * good that opinion is. That's handled in the open, not by hiding it:
- *   - the launch dial NFL_W_MODEL (0.30) anchors EVERY market ~70% to the sharp
+ *   - the launch dial NFL_W_MODEL (0.40) anchors EVERY market 60% to the sharp
  *     line, so a young opinion can't post a wild price;
  *   - every game is shadow-recorded and graded in-season (predictionTracker), read
  *     at /api/performance/fbcalib;
  *   - the calibration guard shows football by default and benches a market only if
  *     it actually drifts.
- * As the shadow sample proves the model out, raise NFL_W_MODEL toward 0.55.
+ * The former 30/70 launch blend and a 50/50 challenger are retained as
+ * prediction-time shadow outputs for prospective comparison.
  *
  * Deferred factors still drop in WITHOUT restructuring (each returns 0 until fed):
  *   - strengthOfSchedule / conferenceStrength                     → ratingMargin()
@@ -62,14 +63,17 @@ const NFL_HFA_POINTS = 2.5;
 // opinion counts vs the sharp de-vig market (Pinnacle), across ALL three markets (moneyline prob,
 // spread margin, total). It runs 0..1:
 //   0.00 = 100% market (pure Pinnacle, zero model influence, zero edge)
-//   0.30 = 30% model / 70% market  ← LAUNCH VALUE. A young, uncalibrated model can't post a wild
-//                                     number — every price hugs the sharp line. This is the
-//                                     playbook's heavy-market-blend launch setting.
+//   0.30 = 30% model / 70% market  ← frozen prospective shadow control
+//   0.40 = 40% model / 60% market  ← current customer value
+//   0.50 = 50% model / 50% market  ← prospective shadow challenger
 //   0.55 = 55% model / 45% market  ← the "proven" value (matches MLB/NBA); slide here as the
 //                                     shadow sample shows football is calibrated.
 //   1.00 = 100% model (ignore the market — only once truly trusted)
-// To let football earn more influence over the season, RAISE this number (0.30 → 0.40 → 0.55).
-const NFL_W_MODEL = 0.30;
+// These three weights are evaluated from the same prediction-time snapshot. Only
+// NFL_W_MODEL drives customer output; the other two are recording-only.
+const NFL_BLEND_CONTROL_WEIGHT = 0.30;
+const NFL_W_MODEL = 0.40;
+const NFL_BLEND_CHALLENGER_WEIGHT = 0.50;
 const NFL_BLEND_ENABLED = true;
 
 // Edge thresholds (probability points) before a pick is published. Conservative —
@@ -102,6 +106,19 @@ function erf(x) {
   return s * y;
 }
 function normalCDF(x) { return 0.5 * (1 + erf(x / Math.SQRT2)); }
+
+function blendValue(modelValue, marketValue, weight) {
+  return NFL_BLEND_ENABLED && marketValue != null
+    ? weight * modelValue + (1 - weight) * marketValue
+    : modelValue;
+}
+
+function requestedBlendWeight(options) {
+  const candidate = Number(options?.blendWeight);
+  return Number.isFinite(candidate) && candidate >= 0 && candidate <= 1
+    ? candidate
+    : NFL_W_MODEL;
+}
 
 // De-vig a two-way market to the fair probability of the FIRST side.
 function devigPair(thisOdds, otherOdds) {
@@ -160,7 +177,9 @@ function factorAdj(ctx) {
 // ── CORE: predict one game ─────────────────────────────────────────────────────
 // `ev` is a parsed odds event from oddsApi (h2h/totals/spreads/marketRead).
 // `ctx` is optional team context (ratings/history/etc.); absent today.
-function predictGame(ev, ctx = {}) {
+function predictGame(ev, ctx = {}, options = {}) {
+  const activeBlendWeight = requestedBlendWeight(options);
+  const blendSnapshot = {};
   const out = {
     eventId: ev.eventId,
     commenceTime: ev.commenceTime,
@@ -218,11 +237,19 @@ function predictGame(ev, ctx = {}) {
   }
 
   // blend toward de-vig market
-  let homeWinProb = modelHomeWinProb;
-  if (NFL_BLEND_ENABLED && fairHomeProb != null) {
-    homeWinProb = NFL_W_MODEL * modelHomeWinProb + (1 - NFL_W_MODEL) * fairHomeProb;
-  }
+  const homeWinProb = blendValue(modelHomeWinProb, fairHomeProb, activeBlendWeight);
   const awayWinProb = 1 - homeWinProb;
+
+  if (fairHomeProb != null) {
+    blendSnapshot.moneyline = Object.freeze({
+      referenceSide: "home",
+      rawModelProb: r(modelHomeWinProb, 3),
+      marketFairProb: r(fairHomeProb, 3),
+      blend30Prob: r(blendValue(modelHomeWinProb, fairHomeProb, NFL_BLEND_CONTROL_WEIGHT), 3),
+      blend40Prob: r(blendValue(modelHomeWinProb, fairHomeProb, NFL_W_MODEL), 3),
+      blend50Prob: r(blendValue(modelHomeWinProb, fairHomeProb, NFL_BLEND_CHALLENGER_WEIGHT), 3),
+    });
+  }
 
   out.moneyline = {
     homeWinProb: r(homeWinProb * 100),
@@ -255,11 +282,24 @@ function predictGame(ev, ctx = {}) {
     // the two-way (push-excluded) cover prob — directly comparable to the de-vigged book price below.
     // WZ-FBALL-BLEND-2026-07-17 :: anchor the margin toward the market before pricing the cover. The
     // spread line's implied margin is -sLine; the launch dial NFL_W_MODEL sets how far the model's own
-    // margin is trusted vs that sharp number, so a young model can't post a wild spread. At 0.30 the
-    // cover sits ~70% on the market. The key-number push handling still applies to the blended margin.
-    const sprMargin = NFL_BLEND_ENABLED ? (NFL_W_MODEL * modelMargin + (1 - NFL_W_MODEL) * (-sLine)) : modelMargin;
+    // margin is trusted vs that sharp number. The key-number push handling still applies to the
+    // blended margin.
+    const spreadAtWeight = (weight) => spreadCover(
+      blendValue(modelMargin, -sLine, weight), NFL_SIGMA, sLine, "nfl", NFL_KEY_STRENGTH,
+    );
+    const sprMargin = blendValue(modelMargin, -sLine, activeBlendWeight);
     const { homeCoverProb, push: homePushProb } = spreadCover(sprMargin, NFL_SIGMA, sLine, "nfl", NFL_KEY_STRENGTH);
     const fairHomeCover = coherentFair(ev, "spread", "home", sLine);
+    if (fairHomeCover != null) {
+      blendSnapshot.spread = Object.freeze({
+        referenceSide: "home",
+        rawModelProb: r(spreadAtWeight(1).homeCoverProb, 3),
+        marketFairProb: r(fairHomeCover, 3),
+        blend30Prob: r(spreadAtWeight(NFL_BLEND_CONTROL_WEIGHT).homeCoverProb, 3),
+        blend40Prob: r(spreadAtWeight(NFL_W_MODEL).homeCoverProb, 3),
+        blend50Prob: r(spreadAtWeight(NFL_BLEND_CHALLENGER_WEIGHT).homeCoverProb, 3),
+      });
+    }
     out.spread = {
       line: sLine,
       homeCoverProb: r(homeCoverProb * 100),
@@ -293,9 +333,23 @@ function predictGame(ev, ctx = {}) {
       ? Math.max(-3, Math.min(3, ctx.referees.totalAdj)) : 0;
     // WZ-FBALL-BLEND-2026-07-17 :: anchor the projected total toward the market line via the same
     // launch dial, so an uncalibrated total opinion can't stray far from the sharp number.
-    const blendedTotal = NFL_BLEND_ENABLED ? (NFL_W_MODEL * (projTotal + refAdj) + (1 - NFL_W_MODEL) * tLine) : (projTotal + refAdj);
+    const independentTotal = projTotal + refAdj;
+    const totalProbAtWeight = (weight) => normalCDF(
+      (blendValue(independentTotal, tLine, weight) - tLine) / NFL_TOTAL_SIGMA,
+    );
+    const blendedTotal = blendValue(independentTotal, tLine, activeBlendWeight);
     const overProb = normalCDF((blendedTotal - tLine) / NFL_TOTAL_SIGMA);
     const fairOver = coherentFair(ev, "total", "over", tLine);
+    if (fairOver != null) {
+      blendSnapshot.total = Object.freeze({
+        referenceSide: "over",
+        rawModelProb: r(totalProbAtWeight(1), 3),
+        marketFairProb: r(fairOver, 3),
+        blend30Prob: r(totalProbAtWeight(NFL_BLEND_CONTROL_WEIGHT), 3),
+        blend40Prob: r(totalProbAtWeight(NFL_W_MODEL), 3),
+        blend50Prob: r(totalProbAtWeight(NFL_BLEND_CHALLENGER_WEIGHT), 3),
+      });
+    }
     const hasTotalOpinion = (ctx?.home?.projPoints != null && ctx?.away?.projPoints != null) || refAdj !== 0;
     out.total = {
       line: tLine,
@@ -316,6 +370,10 @@ function predictGame(ev, ctx = {}) {
     }
   }
 
+  Object.defineProperty(out, "_nflBlendSnapshot", {
+    value: Object.freeze(blendSnapshot),
+    enumerable: false,
+  });
   return out;
 }
 
@@ -354,6 +412,7 @@ module.exports = {
   predictSlate,
   // exported for tests / future tuning
   NFL_SIGMA, NFL_TOTAL_SIGMA, NFL_HFA_POINTS, NFL_W_MODEL,
+  NFL_BLEND_CONTROL_WEIGHT, NFL_BLEND_CHALLENGER_WEIGHT,
   EDGE_ML, EDGE_SPREAD, EDGE_TOTAL,
-  _internal: { devigPair, coherentFair, normalCDF, probitApprox, ratingMargin },
+  _internal: { devigPair, coherentFair, normalCDF, probitApprox, ratingMargin, blendValue, requestedBlendWeight },
 };

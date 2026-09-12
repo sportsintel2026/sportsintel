@@ -197,8 +197,12 @@ function buildComparison({ game, availability = [], availabilityMeta = {}, weath
   if (!homeAvailability.length) adjustments.skipped.push("home-availability-roster-unavailable");
   if (!awayAvailability.length) adjustments.skipped.push("away-availability-roster-unavailable");
   const challengerContext = applyIndependentAdjustments(baseContext, adjustments);
-  const control = predictGame(event, clone(baseContext));
-  const challenger = predictGame(event, challengerContext);
+  // This experiment was frozen against the 30/70 production era. Keep its
+  // comparison population and stored model_version truthful while the customer
+  // model moves to 40/60; this is an internal option and makes no provider call.
+  const frozenBlend = { blendWeight: 0.30 };
+  const control = predictGame(event, clone(baseContext), frozenBlend);
+  const challenger = predictGame(event, challengerContext, frozenBlend);
   const market = marketSnapshot(event);
   const contextPayload = {
     eventId: String(event.eventId),
