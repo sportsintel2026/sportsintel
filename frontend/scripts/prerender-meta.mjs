@@ -29,6 +29,7 @@ import { shareImagePath, writeShareCard } from "./share-card.mjs";
 
 const DIST = fileURLToPath(new URL("../dist/", import.meta.url));
 const SPORTS = ["nfl", "cfb", "mlb"];
+const MAINTENANCE_MODE = true;
 const PUBLIC_API = String(process.env.SEO_PUBLIC_API_URL || process.env.VITE_API_URL || "https://sportsintel-production.up.railway.app").replace(/\/$/, "");
 const FIXTURE_DIR = process.env.SEO_FEED_FIXTURE_DIR || null;
 
@@ -47,7 +48,9 @@ async function loadCurrentFeed(sport) {
   }
 }
 
-const currentFeeds = Object.fromEntries(await Promise.all(SPORTS.map(async (sport) => [sport, await loadCurrentFeed(sport)])));
+const currentFeeds = MAINTENANCE_MODE
+  ? {}
+  : Object.fromEntries(await Promise.all(SPORTS.map(async (sport) => [sport, await loadCurrentFeed(sport)])));
 const buildNow = process.env.SEO_PRERENDER_NOW ? new Date(process.env.SEO_PRERENDER_NOW) : new Date();
 const currentSeoPages = buildCurrentSeoPages(currentFeeds, buildNow);
 
@@ -340,6 +343,16 @@ async function writeCurrentSitemap(pages) {
 }
 
 const shell = await readFile(join(DIST, "index.html"), "utf8");
+
+if (MAINTENANCE_MODE) {
+  for (const route of ROUTES) {
+    const outPath = join(DIST, route.out);
+    await mkdir(dirname(outPath), { recursive: true });
+    await writeFile(outPath, shell, "utf8");
+  }
+  console.log(`prerender: maintenance shell written to ${ROUTES.length} route file(s); live feeds were not requested.`);
+  process.exit(0);
+}
 
 for (const r of ROUTES) {
   let html = shell;
